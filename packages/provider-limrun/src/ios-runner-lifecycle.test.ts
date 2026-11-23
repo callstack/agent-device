@@ -153,7 +153,8 @@ test('a failed instance delete keeps only cleanup operations available until shu
       owner.bind({ device: device!, intent: { kind: 'ordinary' }, scope: limrunRuntimeScope });
     const releaseLease = async (leaseId: string) => {
       expect(leaseId).toBe(lease.leaseId);
-      await registration.runtime.leaseLifecycle.release!(lease);
+      const outcome = await registration.runtime.leaseLifecycle.release!(lease);
+      if (outcome?.release === 'unknown') throw outcome.error;
       return { success: true, exitCode: 0, stdout: '', stderr: '' };
     };
     await expect((await bind()).operations.shutdownTarget!({ releaseLease })).rejects.toMatchObject(

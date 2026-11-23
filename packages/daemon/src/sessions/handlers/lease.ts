@@ -1,9 +1,5 @@
 import { providerRuntimeAdmissionError } from '../provider-runtime-admission.ts';
-import {
-  recordProviderSession,
-  releaseLease,
-  type LeaseReleaseOutcome,
-} from '../../resources/lease-release.ts';
+import { recordProviderSession, releaseLease } from '../../resources/lease-release.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { LeaseEndReason } from '../lease-lifecycle.ts';
 import { resolveRequestSessionRef, type ResolveRequestSessionRef } from '../request-admission.ts';
@@ -15,6 +11,7 @@ import type {
   DevicePin,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
+  ProviderLeaseRelease,
 } from '@agent-device/contracts/device';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type {
@@ -38,6 +35,7 @@ import {
   resolveSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
+  LEASE_REASONS,
   isProviderInstanceEndedError,
   leaseDeviceKey,
   leaseProviderRequiringRuntime,
@@ -130,7 +128,12 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           providerRuntimeIds,
           pluginInventory,
         );
-        if (error) throw error;
+        if (error) {
+          leaseRegistry.assertNoEndingOverlap(
+            leaseScopeToAllocateRequest({ ...leaseScope, leaseProvider }),
+          );
+          throw error;
+        }
       }
       assertProviderCredentialsUnchanged(
         { leaseProvider, leaseBackend: leaseScope.leaseBackend },
@@ -144,6 +147,13 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         args.host,
       );
       const requestId = req.meta?.requestId;
+      const cancelAllocation = async () =>
+        await releaseAllocationForGoneRequester(
+          lease,
+          leaseLifecycleProvider,
+          leaseRegistry,
+          reused ? endSessionsForLease : undefined,
+        );
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
         // A hosted provider can take longer than the lease TTL to create its session; the work
@@ -159,27 +169,31 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
-          await settleFailedAllocation(
-            lease,
-            reused,
-            requestId,
-            leaseLifecycleProvider,
-            leaseRegistry,
-          );
+          if (!reused) {
+            const outcome = await settleFailedFirstAllocation(
+              lease,
+              error,
+              leaseRegistry,
+              leaseLifecycleProvider,
+            );
+            if (isRequestCanceled(requestId))
+              throw canceledAllocationError(
+                lease,
+                outcome,
+                !leaseRegistry.isLeaseEndPending(lease.leaseId),
+              );
+          } else if (isRequestCanceled(requestId)) throw await cancelAllocation();
           throw error;
         } finally {
+          if (!reused) leaseRegistry.finishProviderAllocation(lease.leaseId);
           work?.release();
         }
-        if (isRequestCanceled(requestId)) {
-          // The requester left while the provider was allocating; the lease it
-          // produced is real (and billed) and nobody will ever release it.
-          throw await releaseAllocationForGoneRequester(
-            lease,
-            leaseLifecycleProvider,
-            leaseRegistry,
-          );
-        }
-        const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease)) ?? lease;
+        if (isRequestCanceled(requestId)) throw await cancelAllocation();
+        const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease));
+        if (!allocated)
+          throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+            reason: LEASE_REASONS.notFound.reason,
+          });
         return {
           ok: true,
           data: {
@@ -196,28 +210,28 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       return await heartbeatLease(args, leaseScope);
     case 'lease_release': {
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
-      const lease = leaseRegistry.getLease(releaseRequest);
+      const lease = leaseRegistry.getLease(releaseRequest, true);
       assertTenantMayRelease(lease);
-      const outcome = await leaseRegistry.runDeviceMutation(
-        lease,
-        async () =>
-          await releaseLease(
-            leaseRegistry,
-            leaseLifecycleProvider,
-            lease,
-            releaseRequest,
-            leaseLifecycleContext(req, args.host),
-          ),
+      if (!lease) return { ok: true, data: { released: false } };
+      const options = { sessionsSettled: !endSessionsForLease, requestRelease: 'release' } as const;
+      await leaseRegistry.runDeviceMutation(
+        leaseRegistry.inspectActiveLease(lease.leaseId),
+        async () => {
+          leaseRegistry.beginLeaseEnd(lease, { ...options, providerRelease: 'pending' });
+        },
       );
-      // Outside the device mutation: ending a session waits for its execution locks, and a
-      // command holding them may itself be waiting for that mutation.
-      if (lease && outcome.registryReleased) await endSessionsForLease?.(lease.leaseId);
+      // Session teardown takes execution locks. A command holding them can wait on the mutation.
+      await endSessionsForLease?.(lease.leaseId);
+      const result = await releaseLease(leaseRegistry, leaseLifecycleProvider, lease, {
+        ...options,
+        context: leaseLifecycleContext(req, args.host),
+      });
       return {
         ok: true,
         data: {
-          // Wire field: the daemon's registry record; provider cleanup rides in `provider`.
-          released: outcome.registryReleased,
-          ...(outcome.provider ? { provider: outcome.provider } : {}),
+          released: !leaseRegistry.isLeaseEndPending(lease.leaseId),
+          ...leaseRegistry.leaseEndRefusal(lease.leaseId)?.details,
+          ...(result.provider ? { provider: result.provider } : {}),
         },
       };
     }
@@ -253,6 +267,7 @@ async function allocateOrRenewLease(
   const activeLeaseIds = new Set(leaseRegistry.listActiveLeases().map((entry) => entry.leaseId));
   const lease = leaseRegistry.allocateLease(
     pickedDeviceKey ? { ...request, deviceKey: pickedDeviceKey } : request,
+    leaseProviderRequiringRuntime(scope) !== undefined,
   );
   return { lease, reused: activeLeaseIds.has(lease.leaseId) };
 }
@@ -334,47 +349,46 @@ async function admitPinnedProxyLeaseDeviceKey(
   return deviceKey;
 }
 
-// A run's repeat allocation reuses its live lease; refusing that request must not end the
-// lease, or the provider session the first allocation created is left without an owner.
-// A requester that hung up owns nothing, so its canceled repeat allocation still releases.
-async function settleFailedAllocation(
+async function settleFailedFirstAllocation(
   lease: DeviceLease,
-  reused: boolean,
-  requestId: string | undefined,
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
-  leaseRegistry: LeaseRegistry,
-): Promise<void> {
-  if (!reused) {
-    leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
-    return;
+  error: unknown,
+  registry: LeaseRegistry,
+  provider: LeaseLifecycleProvider | undefined,
+): Promise<ProviderLeaseRelease> {
+  if (error instanceof AppError && error.details?.releaseStatus === 'confirmed') {
+    registry.beginLeaseEnd(lease, { sessionsSettled: true, providerRelease: 'confirmed' });
+    registry.confirmLeaseEnd(lease.leaseId, 'providerReleased');
+    return { release: 'confirmed' };
   }
-  if (isRequestCanceled(requestId)) {
-    throw await releaseAllocationForGoneRequester(lease, leaseLifecycleProvider, leaseRegistry);
-  }
+  return await settleAllocationRelease(lease, provider, registry, undefined).catch(
+    (releaseError: unknown): ProviderLeaseRelease => ({ release: 'unknown', error: releaseError }),
+  );
 }
 
-/**
- * Releases a lease that finished allocating after its requester was gone and
- * turns the outcome into the canceled-request error nobody is left to receive:
- * a throwing provider release is folded into `releaseError` rather than raised,
- * and the provider session counts as released only when it reported no
- * warnings — otherwise the error names what an operator must stop by hand.
- */
+async function settleAllocationRelease(
+  lease: DeviceLease,
+  provider: LeaseLifecycleProvider | undefined,
+  registry: LeaseRegistry,
+  endSessions: LeaseHandlerArgs['endSessionsForLease'],
+): Promise<ProviderLeaseRelease> {
+  if (!registry.beginLeaseEnd(lease, { sessionsSettled: !endSessions, providerRelease: 'pending' }))
+    return { release: 'unknown' };
+  const result = await releaseLease(registry, provider, lease, {
+    sessionsSettled: !endSessions,
+  }).catch((error: unknown) => ({ release: 'unknown', error }) as const);
+  if (result.release === 'unknown') registry.retryProviderLeaseEnd(lease);
+  else if (endSessions) void endSessions(lease.leaseId);
+  return result;
+}
+
 async function releaseAllocationForGoneRequester(
   lease: DeviceLease,
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
-  leaseRegistry: LeaseRegistry,
+  provider: LeaseLifecycleProvider | undefined,
+  registry: LeaseRegistry,
+  endSessions: LeaseHandlerArgs['endSessionsForLease'],
 ): Promise<AppError> {
-  const request = leaseReleaseRequestFor(lease);
-  let outcome: LeaseReleaseOutcome;
-  let releaseError: string | undefined;
-  try {
-    outcome = await releaseLease(leaseRegistry, leaseLifecycleProvider, lease, request);
-  } catch (error) {
-    releaseError = errorMessage(error);
-    outcome = { registryReleased: leaseRegistry.releaseLease(request).released };
-  }
-  return canceledAllocationError(lease, outcome, releaseError);
+  const outcome = await settleAllocationRelease(lease, provider, registry, endSessions);
+  return canceledAllocationError(lease, outcome, !registry.isLeaseEndPending(lease.leaseId));
 }
 
 async function heartbeatLease(
@@ -421,19 +435,18 @@ async function heartbeatLease(
 
 function canceledAllocationError(
   lease: DeviceLease,
-  outcome: LeaseReleaseOutcome,
-  releaseError: string | undefined,
+  outcome: ProviderLeaseRelease,
+  registryReleased: boolean,
 ): AppError {
   const providerSessionId = outcome.provider?.providerSessionId;
   const warnings = Array.isArray(outcome.provider?.warnings) ? outcome.provider.warnings : [];
-  // `released` answers the operator's question — is the billed session gone? —
-  // and is only true when the provider released without warnings or throwing.
-  const released = outcome.registryReleased && releaseError === undefined && warnings.length === 0;
+  const released = outcome.release === 'confirmed';
+  const releaseError = outcome.error === undefined ? undefined : errorMessage(outcome.error);
   return createRequestCanceledError({
     leaseId: lease.leaseId,
     leaseProvider: lease.leaseProvider,
     released,
-    registryReleased: outcome.registryReleased,
+    registryReleased,
     providerSessionId,
     ...(warnings.length > 0 ? { warnings } : {}),
     ...(releaseError !== undefined ? { releaseError } : {}),

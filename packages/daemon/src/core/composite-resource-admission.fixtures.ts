@@ -229,7 +229,14 @@ export async function resourceAdmissionWorld(
         pluginInventory: registry.inventory,
         shutdownProviderRuntimes: registry.close,
         ...((options.withLifecycleProvider ?? options.providerOwned)
-          ? { leaseLifecycleProvider: { release: providerRelease } }
+          ? {
+              leaseLifecycleProvider: {
+                release: async () => ({
+                  release: 'confirmed' as const,
+                  provider: await providerRelease(),
+                }),
+              },
+            }
           : {}),
         providerDeviceAdmission: Object.freeze({ isActive: () => options.providerOwned === true }),
         deviceRuntimeGateway: {

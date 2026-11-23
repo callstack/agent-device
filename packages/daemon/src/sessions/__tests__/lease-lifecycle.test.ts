@@ -112,7 +112,10 @@ test('releaseSessionLease releases with the stored session owner scope', async (
     session,
     leaseRegistry,
     leaseLifecycleProvider: {
-      release: async (lease) => ({ provider: lease.leaseProvider }),
+      release: async (lease) => ({
+        release: 'confirmed',
+        provider: { provider: lease.leaseProvider },
+      }),
     },
   });
 
@@ -137,7 +140,10 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
       clientId: lease.clientId,
     },
   });
-  const release = vi.fn(async () => ({ released: true }));
+  const release = vi.fn(async () => ({
+    release: 'confirmed' as const,
+    provider: { released: true },
+  }));
 
   const retained = await releaseSessionLease({
     session,
@@ -156,7 +162,10 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
 });
 
 test('releaseSessionLease ends no lease for a session that holds none', async () => {
-  const release = vi.fn(async () => ({ released: true }));
+  const release = vi.fn(async () => ({
+    release: 'confirmed' as const,
+    provider: { released: true },
+  }));
 
   const outcome = await releaseSessionLease({
     session: makeIosSession('default'),
@@ -190,7 +199,10 @@ test('releaseSessionLease retains provider session ownership for artifact lookup
     session,
     leaseRegistry,
     leaseLifecycleProvider: {
-      release: async () => ({ providerSessionId: 'bs-session-1' }),
+      release: async () => ({
+        release: 'confirmed',
+        provider: { providerSessionId: 'bs-session-1' },
+      }),
     },
   });
 
@@ -250,7 +262,7 @@ test('releaseSessionLease keeps the local lease when the provider release fails'
     }),
   ).rejects.toThrow('provider unavailable');
 
-  expect(leaseRegistry.listActiveLeases()).toEqual([lease]);
+  expect(leaseRegistry.isLeaseEndPending(lease.leaseId)).toBe(true);
 });
 
 function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {

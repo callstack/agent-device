@@ -10,6 +10,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { shouldLockSessionExecution } from '../../core/daemon-command-registry.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -216,6 +217,7 @@ export function createDaemonLifecycleAdmission(params: {
   inFlightRequestCount: () => number;
   /** Whether the daemon has yet to build the drain path `drain` runs. */
   startingUp: () => boolean;
+  startupRecovered?: Promise<void>;
   /** Starts the drain once, after sending the response. */
   drain: () => void;
   /** Who owns this process and may close it. */
@@ -279,6 +281,11 @@ export function createDaemonLifecycleAdmission(params: {
         return refuse(new AppError('UNAUTHORIZED', 'Invalid daemon token.'));
       }
       if (req.command === DAEMON_QUIESCE_COMMAND) return leave(req);
+      if (
+        params.startingUp() &&
+        (req.command === 'lease_allocate' || shouldLockSessionExecution(req.command))
+      )
+        await params.startupRecovered;
       return admitting ? await handler(req) : daemonShuttingDownResponse();
     },
   };

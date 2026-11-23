@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { deferred } from './platform-runtime-device-ready-http.fixtures.ts';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
@@ -16,6 +17,9 @@ import type { ProviderRuntimeComposition } from './provider-device-runtimes.ts';
 const limrunIo = vi.hoisted(() => ({
   listAssets: vi.fn(),
   createAndroidInstance: vi.fn(),
+  createIosInstance: vi.fn(),
+  deleteIosInstance: vi.fn(),
+  listIosInstances: vi.fn(),
 }));
 const rootPorts = vi.hoisted(() => {
   const applicationLifecycle = {
@@ -59,8 +63,19 @@ vi.mock('@limrun/api', () => ({
       delete: vi.fn(),
       list: vi.fn(),
     };
-    readonly iosInstances = { create: vi.fn(), delete: vi.fn(), list: vi.fn() };
+    readonly iosInstances = {
+      create: limrunIo.createIosInstance,
+      delete: limrunIo.deleteIosInstance,
+      list: limrunIo.listIosInstances,
+    };
   },
+}));
+
+vi.mock('@limrun/api/ios-client', () => ({
+  createInstanceClient: async () => ({
+    deviceInfo: { model: 'iPhone', osVersion: '18.0' },
+    disconnect: () => {},
+  }),
 }));
 
 vi.mock('./platform-runtime.ts', () => ({
@@ -173,3 +188,129 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
       assert.equal(rootPorts.applicationLifecycle.finalizeDaemonShutdown.mock.calls.length, 1);
   }
 });
+
+test.each(['failed allocation', 'late success after cancellation'] as const)(
+  'Limrun keeps an unresolved rental fenced after %s',
+  async (scenario) => {
+    const stateDir = mkdtempForTestSync('agent-device-limrun-allocation-fence-');
+    const limrun = createLimrunRuntime(
+      { apiKey: 'lim_test_key', runtimeInstance: 'allocation-fence' },
+      limrunTestDependencies,
+    );
+    rootPorts.providerComposition.mockResolvedValue({
+      runtimes: [limrun],
+      platformModules: [],
+      platforms: [],
+      inventory: [],
+      shutdown: async () => {
+        await limrun.shutdown();
+        return [];
+      },
+    });
+    const controller = new AbortController();
+    const canceled = deferred<void>();
+    const releaseSettled = deferred<void>();
+    const allocateProvider = limrun.leaseLifecycle.allocate!;
+    const releaseProvider = limrun.leaseLifecycle.release!;
+    vi.spyOn(limrun.leaseLifecycle, 'allocate').mockImplementation((lease, context) => {
+      context?.signal?.addEventListener('abort', () => canceled.resolve(), { once: true });
+      return allocateProvider(lease, context);
+    });
+    vi.spyOn(limrun.leaseLifecycle, 'release').mockImplementation(async (lease, context) => {
+      try {
+        return await releaseProvider(lease, context);
+      } finally {
+        releaseSettled.resolve();
+      }
+    });
+    const createEntered = deferred<void>();
+    const finishCreate = deferred<void>();
+    const deleteEntered = deferred<void>();
+    const finishDelete = deferred<void>();
+    limrunIo.createIosInstance.mockReset().mockImplementationOnce(async () => {
+      createEntered.resolve();
+      await finishCreate.promise;
+      return {
+        metadata: { id: 'exact-rental' },
+        status:
+          scenario === 'failed allocation'
+            ? {}
+            : {
+                apiUrl: 'https://region.limrun.example/v1/ios_test/api',
+                token: 'lim-test-token',
+              },
+      };
+    });
+    limrunIo.deleteIosInstance.mockReset().mockImplementation(async () => {
+      deleteEntered.resolve();
+      await finishDelete.promise;
+      throw new Error('provider delete unreachable');
+    });
+    const runtime = await startDaemonRuntime({
+      composeDeps: createDaemonRuntimeDeps,
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+    assert.ok(runtime?.httpPort);
+    const allocate = async (id: string, runId: string, signal?: AbortSignal) => {
+      const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+        method: 'POST',
+        signal,
+        headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          method: 'agent_device.lease.allocate',
+          params: {
+            session: 'agent-a',
+            tenantId: 'tenant-a',
+            runId,
+            backend: 'ios-instance',
+            leaseProvider: 'limrun',
+            deviceKey: 'ios:mobile:allocation-fence',
+          },
+        }),
+      });
+      return (await response.json()) as {
+        error?: { data?: { code?: string; details?: Record<string, unknown> } };
+      };
+    };
+    const attempt = allocate('initial-allocation', 'run-a', controller.signal);
+    void attempt.catch(() => undefined);
+    try {
+      await Promise.race([createEntered.promise, attempt]);
+      if (scenario === 'late success after cancellation') {
+        controller.abort();
+        await canceled.promise;
+      }
+      finishCreate.resolve();
+      await deleteEntered.promise;
+      assert.equal((await allocate('overlap-pending', 'run-b')).error?.data?.code, 'DEVICE_IN_USE');
+      finishDelete.resolve();
+      if (scenario === 'late success after cancellation') {
+        await assert.rejects(attempt, { name: 'AbortError' });
+        await releaseSettled.promise;
+      } else {
+        assert.ok((await attempt).error);
+      }
+      const refused = await allocate('overlap-unknown', 'run-b');
+      assert.equal(refused.error?.data?.code, 'DEVICE_IN_USE');
+      assert.equal(refused.error?.data?.details?.releaseReason, 'provider-release-unconfirmed');
+      assert.equal(limrunIo.createIosInstance.mock.calls.length, 1);
+      assert.ok(limrunIo.deleteIosInstance.mock.calls.every(([id]) => id === 'exact-rental'));
+    } finally {
+      finishCreate.resolve();
+      finishDelete.resolve();
+      limrunIo.deleteIosInstance.mockResolvedValue(undefined);
+      await runtime.close();
+    }
+  },
+);

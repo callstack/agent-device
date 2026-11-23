@@ -38,6 +38,12 @@ export type LeaseLifecycleContext = {
   deadline?: number;
 };
 
+export type ProviderLeaseRelease = {
+  release: 'confirmed' | 'unknown';
+  provider?: Record<string, unknown>;
+  error?: unknown;
+};
+
 export type LeaseLifecycleProvider = {
   allocate?: (
     lease: DeviceLease,
@@ -50,7 +56,7 @@ export type LeaseLifecycleProvider = {
   release?: (
     lease: DeviceLease,
     context?: LeaseLifecycleContext,
-  ) => Promise<Record<string, unknown> | undefined>;
+  ) => Promise<ProviderLeaseRelease | undefined>;
 };
 
 export type DeviceInventoryProvider = (

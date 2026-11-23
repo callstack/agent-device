@@ -3,7 +3,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { CloudArtifactsQuery } from '@agent-device/contracts/observability';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderLeaseRelease } from '@agent-device/contracts/device';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -321,7 +321,7 @@ test('artifacts refuses a provider session returned after release expiry retenti
   const lease = await allocateLease(world, 'tenant-a', 'run-a');
   world.lifecycle.release = async (releasedLease) => {
     now = releasedLease.expiresAt + 51;
-    return { providerSessionId: 'late-release-session' };
+    return { release: 'confirmed', provider: { providerSessionId: 'late-release-session' } };
   };
 
   await releaseLease(world, lease);
@@ -339,7 +339,7 @@ type World = {
   providerCalls: CloudArtifactsQuery[];
   lifecycle: {
     allocate: (lease: DeviceLease) => Promise<Record<string, unknown>>;
-    release: (lease: DeviceLease) => Promise<Record<string, unknown>>;
+    release: (lease: DeviceLease) => Promise<ProviderLeaseRelease>;
   };
 };
 
@@ -360,7 +360,10 @@ function createWorld(
     providerCalls,
     lifecycle: {
       allocate: async (lease) => ({ providerSessionId: `session-${lease.tenantId}` }),
-      release: async (lease) => ({ providerSessionId: `session-${lease.tenantId}` }),
+      release: async (lease) => ({
+        release: 'confirmed',
+        provider: { providerSessionId: `session-${lease.tenantId}` },
+      }),
     },
   };
 }

@@ -6,7 +6,6 @@ import {
   type ProviderLeaseReleaseOutcome,
 } from '../provider-lease-expiry.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { leaseReleaseRequestFor } from '../../resources/lease-registry-scope.ts';
 
 /**
  * The leases this finalizer was refused, by id. The shutdown summary reports these: a release its
@@ -33,24 +32,32 @@ export async function finalizeDaemonLeases(params: {
   leaseRegistry: LeaseRegistry;
   expiredProviderLeaseReleaser: ExpiredProviderLeaseReleaser;
   timeoutMs: number;
+  failedLeases?: ReadonlyMap<string, string[]>;
 }): Promise<DaemonLeaseReleaseSummary> {
   const { leaseRegistry, expiredProviderLeaseReleaser, timeoutMs } = params;
   const settlements = await Promise.all(
-    leaseRegistry.listActiveLeases().map(async (lease): Promise<LeaseReleaseSettlement> => {
-      try {
-        const outcome = await releaseWithinTimeout(
-          expiredProviderLeaseReleaser.release(lease),
-          timeoutMs,
-        );
-        // The daemon stops either way, so the registry entry goes with it. What carries a lease past this
-        // process is its recovery record and its diagnostic, never this registry.
-        leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
-        if (outcome === undefined) return { lease, timedOut: true };
-        return { lease, outcome };
-      } catch (error) {
-        return { lease, error };
-      }
-    }),
+    [...leaseRegistry.listActiveLeases(), ...leaseRegistry.pendingRequestedLeaseEnds()].map(
+      async (lease): Promise<LeaseReleaseSettlement> => {
+        const failedSteps = params.failedLeases?.get(lease.leaseId);
+        leaseRegistry.beginLeaseEnd(lease, {
+          sessionsSettled: !failedSteps,
+          providerRelease: 'pending',
+        });
+        if (failedSteps?.includes('device_claim'))
+          leaseRegistry.markLeaseReleaseUnknown(lease.leaseId, 'device-claim-release-unconfirmed');
+        else if (!failedSteps) leaseRegistry.confirmLeaseEnd(lease.leaseId, 'sessionsSettled');
+        try {
+          const outcome = await releaseWithinTimeout(
+            expiredProviderLeaseReleaser.release(lease),
+            timeoutMs,
+          );
+          if (outcome === undefined) return { lease, timedOut: true };
+          return { lease, outcome };
+        } catch (error) {
+          return { lease, error };
+        }
+      },
+    ),
   );
   const refused: string[] = [];
   for (const settlement of settlements) {

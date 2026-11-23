@@ -1,6 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import { retainOrphanedDeviceClaims } from '../../__tests__/support/device-claim-store.ts';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
@@ -78,7 +80,11 @@ import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import type { DaemonRuntimeDeps } from './daemon-runtime-deps.ts';
 import type { RpcBody } from './http-server-session-lease-touch.fixtures.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
-import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+  deviceClaimFilePath,
+} from '@agent-device/test-kit';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -107,17 +113,26 @@ const providerLease = {
   ttlMs: 100,
 } as const;
 
-async function startProviderDaemon(deps: Partial<DaemonRuntimeDeps>) {
+async function startProviderDaemon(deps: Partial<DaemonRuntimeDeps>, inheritedLease?: DeviceLease) {
   vi.useFakeTimers({
     toFake: ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
   });
   const stateDir = mkdtempForTestSync('agent-device-provider-lease-end-');
+  if (inheritedLease)
+    fs.writeFileSync(
+      `${stateDir}/live-provider-leases.json`,
+      JSON.stringify({
+        version: 1,
+        leases: [inheritedLease],
+      }),
+    );
   const runtime = await startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture({ providerRuntimeIds: ['limrun'], ...deps }),
     host: createTestHostEnvironment({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_CLAIMS_DIR: `${stateDir}/claims`,
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
         AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
@@ -134,25 +149,7 @@ async function heartbeatEnded(
   runtime: Awaited<ReturnType<typeof startProviderDaemon>>['runtime'],
   leaseId: string,
 ) {
-  const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'heartbeat',
-      method: 'agent_device.lease.heartbeat',
-      params: {
-        session: 'leased',
-        leaseId,
-        leaseProvider: providerLease.leaseProvider,
-        deviceKey: providerLease.deviceKey,
-        backend: providerLease.leaseBackend,
-        tenantId: providerLease.tenantId,
-        runId: providerLease.runId,
-      },
-    }),
-  });
-  const result = (await response.json()) as RpcBody;
+  const result = await leaseRpc(runtime, 'heartbeat', { leaseId });
   expect(result.error?.data?.details?.reason).toBe(LEASE_REASONS.instanceEnded.reason);
 }
 
@@ -170,11 +167,290 @@ async function closeProviderDaemon(
   return await shutdown;
 }
 
-test('a provider-ended heartbeat disposes its exact lease once and keeps the reservation until disposal', async () => {
+async function leaseRpc(
+  runtime: Awaited<ReturnType<typeof startProviderDaemon>>['runtime'],
+  method: 'allocate' | 'heartbeat' | 'release' | 'close',
+  params: Record<string, unknown> = {},
+): Promise<RpcBody> {
+  const scope = { ...providerLease, backend: providerLease.leaseBackend, ...params };
+  const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+    method: 'POST',
+    headers: {
+      connection: 'close',
+      authorization: `Bearer ${runtime.token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: method,
+      method: method === 'close' ? 'agent_device.command' : `agent_device.lease.${method}`,
+      params:
+        method === 'close'
+          ? { session: 'leased', command: 'close', positionals: [], meta: scope }
+          : { session: 'leased', ...scope },
+    }),
+  });
+  return (await response.json()) as RpcBody;
+}
+
+test('host DELETE ends logical leases and keeps refused provider releases fenced', async () => {
+  const release = vi
+    .fn()
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce({ release: 'unknown' })
+    .mockResolvedValueOnce({ release: 'confirmed' });
+  const { runtime, registry } = await startProviderDaemon({ leaseLifecycleProvider: { release } });
+  const logical = registry.allocateLease({ ...providerLease, leaseProvider: 'proxy' });
+  const rental = registry.allocateLease(providerLease);
+  const remove = async (leaseId: string) => {
+    const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/admin/leases/${leaseId}`, {
+      method: 'DELETE',
+      headers: { connection: 'close', authorization: `Bearer ${runtime.token}` },
+    });
+    return await response.json();
+  };
+  try {
+    expect(await remove(logical.leaseId)).toMatchObject({ ok: true, released: true });
+    expect(await remove(rental.leaseId)).toMatchObject({
+      ok: true,
+      released: false,
+      releaseStatus: 'unknown',
+      releaseReason: 'provider-release-unconfirmed',
+    });
+    expect(() => registry.allocateLease(providerLease)).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({ reason: 'DEVICE_LEASE_BUSY', releaseStatus: 'unknown' }),
+      }),
+    );
+    expect(await remove(rental.leaseId)).toMatchObject({ ok: true, released: true });
+    expect(release.mock.calls.map(([lease]) => lease.leaseId)).toEqual([
+      logical.leaseId,
+      rental.leaseId,
+      rental.leaseId,
+    ]);
+  } finally {
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test.each(['keyed first', 'keyless first', 'both keyed'] as const)(
+  'allocation fences keyed and keyless overlap while creating (%s)',
+  async (order) => {
+    const entered = barrier();
+    const created = barrier();
+    const allocate = vi.fn(async () => {
+      if (allocate.mock.calls.length === 1) {
+        entered.open();
+        await created.reached;
+      }
+      return {};
+    });
+    const { runtime } = await startProviderDaemon({
+      leaseLifecycleProvider: { allocate, release: async () => ({ release: 'confirmed' }) },
+    });
+    const first = leaseRpc(runtime, 'allocate', {
+      deviceKey: order === 'keyless first' ? undefined : providerLease.deviceKey,
+    });
+    try {
+      await entered.reached;
+      const overlap = await leaseRpc(runtime, 'allocate', {
+        deviceKey: order === 'keyed first' ? undefined : providerLease.deviceKey,
+      });
+      expect(overlap.error?.data?.details).toMatchObject({
+        reason: 'DEVICE_LEASE_BUSY',
+        releaseStatus: 'unknown',
+        allocationPhase: 'creating',
+      });
+      expect(overlap.error?.data?.details).not.toHaveProperty('releaseReason');
+      expect(allocate).toHaveBeenCalledTimes(1);
+    } finally {
+      created.open();
+      await first;
+      await closeProviderDaemon(runtime);
+    }
+  },
+);
+
+test('same-ID allocation cannot renew while an explicit release is awaiting its provider reply', async () => {
+  const entered = barrier();
+  const answer = barrier();
+  const release = vi.fn(async () => {
+    entered.open();
+    await answer.reached;
+    return { release: 'confirmed' as const };
+  });
+  const { runtime, registry } = await startProviderDaemon({
+    leaseLifecycleProvider: { release },
+  });
+  const leaseId = 'aabbccddaabbccddaabbccddaabbccdd';
+  registry.allocateLease({ ...providerLease, leaseId });
+  const ending = leaseRpc(runtime, 'release', { leaseId });
+  try {
+    await entered.reached;
+    const overlap = await leaseRpc(runtime, 'allocate', { leaseId });
+    expect(overlap.error?.data?.details).toMatchObject({
+      reason: 'DEVICE_LEASE_BUSY',
+      releaseStatus: 'unknown',
+    });
+  } finally {
+    answer.open();
+    await ending;
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test('a close retry admits the ending lease owner through the device mutation pass', async () => {
+  const dispatched = barrier();
+  const answer = barrier();
+  let pauseRetry = false;
+  const release = vi
+    .fn()
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'provider has not confirmed release'))
+    .mockImplementation(async () => {
+      if (pauseRetry) {
+        dispatched.open();
+        await answer.reached;
+      }
+      return { release: 'confirmed' };
+    });
+  const { runtime, registry, store } = await startProviderDaemon({
+    leaseLifecycleProvider: { release },
+  });
+  const lease = registry.allocateLease(providerLease);
+  store.publish('leased', makeIosSession('leased', { lease }));
+  const close = (runId = lease.runId) =>
+    leaseRpc(runtime, 'close', { leaseId: lease.leaseId, runId });
+  const host = { kind: 'host' } as const;
+  const holdScope = {
+    backend: lease.backend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: providerLease.deviceKey,
+  };
+  try {
+    expect(await close()).toMatchObject({ error: { data: { code: 'COMMAND_FAILED' } } });
+    expect(registry.inspectActiveLease(lease.leaseId)).toBeUndefined();
+    expect(await close('different-run')).toMatchObject({
+      error: { data: { code: 'UNAUTHORIZED' } },
+    });
+
+    await registry.putHumanControlHold(host, 'console', { scope: holdScope });
+    const renew = registry.inspectLeaseForClose(lease)?.heartbeatAt;
+    const blocked = await close();
+    expect(blocked.error?.data?.details?.reason).toBe('human_control_active');
+    expect(release).toHaveBeenCalledTimes(1);
+    registry.removeHumanControlHold(host, 'console');
+
+    pauseRetry = true;
+    await vi.advanceTimersByTimeAsync(10);
+    const retry = close();
+    await dispatched.reached;
+    expect(registry.inspectLeaseForClose(lease)?.heartbeatAt).toBe(renew);
+    const activation = registry.putHumanControlHold(host, 'console', { scope: holdScope });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(registry.listHumanControlHolds(host)).toMatchObject([{ state: 'activating' }]);
+    answer.open();
+    expect((await retry).result?.ok).toBe(true);
+    await expect(activation).resolves.toMatchObject({ state: 'active' });
+    expect(release).toHaveBeenCalledTimes(2);
+  } finally {
+    answer.open();
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test('an inherited scope is refused as release unknown when its runtime is missing', async () => {
+  const lease: DeviceLease = {
+    ...providerLease,
+    backend: providerLease.leaseBackend,
+    leaseId: 'aabbccddaabbccddaabbccddaabbccdd',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 2,
+  };
+  const { runtime } = await startProviderDaemon({ providerRuntimeIds: [] }, lease);
+  try {
+    const refused = await leaseRpc(runtime, 'allocate');
+    expect(refused.error?.data?.details).toMatchObject({
+      reason: 'DEVICE_LEASE_BUSY',
+      releaseStatus: 'unknown',
+      releaseReason: 'provider-runtime-unavailable',
+    });
+  } finally {
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test.each(['confirmed', 'unknown'] as const)(
+  'explicit release reports an unattributable claim with provider release %s',
+  async (providerRelease) => {
+    const { runtime, registry, store, stateDir } = await startProviderDaemon({
+      leaseLifecycleProvider: { release: async () => ({ release: providerRelease }) },
+    });
+    const lease = registry.allocateLease(providerLease);
+    const session = makeIosSession('leased', { lease });
+    const env = { ...process.env, AGENT_DEVICE_CLAIMS_DIR: `${stateDir}/claims` };
+    vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', env.AGENT_DEVICE_CLAIMS_DIR);
+    try {
+      const claim = await acquireDeviceClaim({
+        env,
+        device: session.device,
+        session: session.name,
+        workspace: stateDir,
+        stateDir,
+        reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+      });
+      assert.equal(claim.status, 'acquired');
+      if (claim.status !== 'acquired') return;
+      store.publish('leased', { ...session, deviceClaim: claim.ownership });
+      fs.writeFileSync(deviceClaimFilePath(claim.ownership.deviceKey), '{corrupt');
+      const release = await leaseRpc(runtime, 'release', { leaseId: lease.leaseId });
+      expect(release.error).toBeUndefined();
+      expect(release.result?.data).toMatchObject({
+        released: false,
+        releaseStatus: 'unknown',
+        releaseReason: 'device-claim-release-unconfirmed',
+      });
+      expect((await leaseRpc(runtime, 'allocate')).error?.data?.details).toMatchObject({
+        releaseStatus: 'unknown',
+        releaseReason: 'device-claim-release-unconfirmed',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await closeProviderDaemon(runtime);
+    }
+  },
+);
+
+test.each([undefined, 'proxy', 'cloud'])(
+  'a provider-ended heartbeat frees a lease with no provider runtime (%s)',
+  async (leaseProvider) => {
+    const { runtime, registry } = await startProviderDaemon({
+      leaseLifecycleProvider: {
+        heartbeat: async () => {
+          throw endedInstance();
+        },
+      },
+    });
+    const lease = registry.allocateLease({ ...providerLease, leaseProvider });
+    try {
+      const ended = await leaseRpc(runtime, 'heartbeat', { leaseId: lease.leaseId, leaseProvider });
+      expect(ended.error?.data?.details?.reason).toBe(LEASE_REASONS.instanceEnded.reason);
+      const overlap = await leaseRpc(runtime, 'allocate', { leaseProvider, runId: 'run-2' });
+      expect(overlap).toMatchObject({ result: { ok: true } });
+    } finally {
+      await closeProviderDaemon(runtime);
+    }
+  },
+);
+
+test('a provider-ended heartbeat fences its exact lease through disposal refusal and retry', async () => {
   const dispose = barrier();
   const release = vi.fn(async (_lease: DeviceLease) => {
-    await dispose.reached;
-    return undefined;
+    if (release.mock.calls.length === 1) {
+      await dispose.reached;
+      throw new Error('temporary disposal refusal');
+    }
+    return { release: 'confirmed' as const };
   });
   const { runtime, registry } = await startProviderDaemon({
     leaseLifecycleProvider: {
@@ -195,6 +471,16 @@ test('a provider-ended heartbeat disposes its exact lease once and keeps the res
     );
     dispose.open();
     await vi.advanceTimersByTimeAsync(0);
+    expect(() => registry.allocateLease(successor)).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({ releaseStatus: 'unknown' }),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([
+      lease.leaseId,
+      lease.leaseId,
+    ]);
     expect(registry.allocateLease(successor).leaseId).not.toBe(lease.leaseId);
   } finally {
     dispose.open();
@@ -208,7 +494,7 @@ test.each([false, true])(
     const entered = barrier();
     const reply = barrier();
     const stop = barrier();
-    const release = vi.fn(async (_lease: DeviceLease) => undefined);
+    const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
     let localStopReady = false;
     const { runtime, registry, store } = await startProviderDaemon({
       leaseLifecycleProvider: {
@@ -272,7 +558,7 @@ test.each([false, true])(
 test('shutdown releases expired leases after in-flight teardown and retained-host cleanup', async () => {
   const entered = barrier();
   const finish = barrier();
-  const release = vi.fn(async (_lease: DeviceLease) => undefined);
+  const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
   const cleanupSessionlessExecutionHost = vi.fn(async () => {});
   const { runtime, registry, store } = await startProviderDaemon({
     leaseLifecycleProvider: { release },
@@ -321,7 +607,7 @@ test('shutdown releases expired leases after in-flight teardown and retained-hos
 });
 
 test('expiry clears the hints for the app they were set for once across cleanup retries', async () => {
-  const release = vi.fn(async (_lease: DeviceLease) => undefined);
+  const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
   const clearRuntimeHints = vi.fn(async () => {});
   const { gateway, bind } = createLifecycleDeviceRuntimeGatewaySpies(async (device, signal) => ({
     ...(await applicationLifecycleRuntimeFixture(device, signal)),
@@ -367,7 +653,7 @@ test('expiry clears the hints for the app they were set for once across cleanup 
 });
 
 test('shutdown releases an expired rental whose local teardown failed', async () => {
-  const release = vi.fn(async (_lease: DeviceLease) => undefined);
+  const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
   const stopSnapshotHelper = vi.fn(async () => {
     throw new Error('snapshot helper still active');
   });
@@ -446,7 +732,7 @@ test.each(['closed', 'provider-runtime-unavailable'] as const)(
   async (reason) => {
     vi.useFakeTimers();
     const stateDir = mkdtempForTestSync('agent-device-daemon-lease-closed-');
-    const release = vi.fn(async (_lease: DeviceLease) => ({}));
+    const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
     let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | undefined;
     try {
       runtime = await startDaemonRuntime({
@@ -537,7 +823,7 @@ test('expiry reserves the provider device through a slow failed release and a su
     failFirstRelease = reject;
   });
   const release = vi
-    .fn(async (_lease: DeviceLease) => ({}))
+    .fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }))
     .mockImplementationOnce(async () => await firstRelease);
   const runtime = await startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture({
@@ -578,7 +864,14 @@ test('expiry reserves the provider device through a slow failed release and a su
     assertBusy();
     failFirstRelease(new Error('provider temporarily unavailable'));
     await vi.advanceTimersByTimeAsync(0);
-    assertBusy();
+    expect(() => registry.allocateLease(next)).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          releaseStatus: 'unknown',
+          releaseReason: 'provider-release-unconfirmed',
+        }),
+      }),
+    );
     await vi.advanceTimersByTimeAsync(1_000);
     assert.equal(release.mock.calls.length, 2);
     assert.notEqual(registry.allocateLease(next).leaseId, lease.leaseId);

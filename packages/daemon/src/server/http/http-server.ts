@@ -1,3 +1,4 @@
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 // The daemon's HTTP listener: what the socket answers when a request arrives.
 // `/health`, the auxiliary route dispatch (host admin, upload, artifacts,
 // request diagnostics), and the `/rpc` flow live here as one named unit per
@@ -95,6 +96,8 @@ const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
+  startupRecovered?: Promise<void>;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
   endSessionsForLease?: (leaseId: string) => Promise<void>;
   token?: string;
   /** Fixed public origin for upload tickets. */
@@ -171,6 +174,8 @@ export async function createDaemonHttpServer(options: {
         res,
         expectedToken: token,
         registry: options.leaseRegistry,
+        startupRecovered: options.startupRecovered,
+        leaseLifecycleProvider: options.leaseLifecycleProvider,
         endSessionsForLease: options.endSessionsForLease,
       })
     ) {

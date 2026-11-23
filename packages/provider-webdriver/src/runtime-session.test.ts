@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverRuntime, type CloudWebDriverRuntimeOptions } from './runtime.ts';
@@ -24,9 +24,10 @@ test('session allocation preserves its primary failure when provider cleanup als
     }),
   });
 
+  const lease = makeLease();
   try {
     await assert.rejects(
-      () => runtime.leaseLifecycle.allocate!(makeLease()),
+      () => runtime.leaseLifecycle.allocate!(lease),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.match(error.message, /create session failed/);
@@ -35,8 +36,9 @@ test('session allocation preserves its primary failure when provider cleanup als
       },
     );
     assert.equal(cleanupCalled, true);
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { release: 'unknown' });
   } finally {
-    await runtime.shutdown();
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 
@@ -45,9 +47,15 @@ test('session allocation preserves its primary failure when provider cleanup als
 // an operator can find and stop the maybe-orphaned billed session, rather than
 // this process guessing at REST cleanup of a session it never owned.
 test('a create-timeout surfaces provider evidence for the maybe-leaked session', async () => {
+  vi.useFakeTimers();
+  let entered!: () => void;
+  const createEntered = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
   globalThis.fetch = async (_input, init) =>
     await new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
+      entered();
     });
   const runtime = makeRuntime({
     provider: 'browserstack',
@@ -57,19 +65,21 @@ test('a create-timeout surfaces provider evidence for the maybe-leaked session',
   const lease = { ...makeLease(), leaseProvider: 'browserstack' };
 
   try {
-    await assert.rejects(
-      () => runtime.leaseLifecycle.allocate!(lease),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.details?.reason, 'provider_session_create_timeout');
-        assert.equal(error.details?.provider, 'browserstack');
-        assert.equal(error.details?.leaseId, lease.leaseId);
-        assert.match(String(error.details?.hint), new RegExp(lease.leaseId));
-        return true;
-      },
-    );
+    const rejected = assert.rejects(runtime.leaseLifecycle.allocate!(lease), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'provider_session_create_timeout');
+      assert.equal(error.details?.provider, 'browserstack');
+      assert.equal(error.details?.leaseId, lease.leaseId);
+      assert.match(String(error.details?.hint), new RegExp(lease.leaseId));
+      return true;
+    });
+    await createEntered;
+    await vi.advanceTimersByTimeAsync(40);
+    await rejected;
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { release: 'unknown' });
   } finally {
-    await runtime.shutdown();
+    vi.useRealTimers();
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 
@@ -98,11 +108,28 @@ test.each([
   try {
     await runtime.leaseLifecycle.allocate!(lease);
     assert.deepEqual(await runtime.leaseLifecycle.release!(lease), {
-      provider: 'webdriver-test',
-      providerSessionId: 'session-1',
+      release: 'confirmed',
+      provider: { provider: 'webdriver-test', providerSessionId: 'session-1' },
     });
   } finally {
     await runtime.shutdown();
+  }
+});
+
+test('a lost create response keeps the WebDriver rental unresolved', async () => {
+  globalThis.fetch = async () => {
+    throw new TypeError('connection closed after POST');
+  };
+  const runtime = makeRuntime({ requestPolicy: { retryAttempts: 0 } });
+  const lease = makeLease();
+  try {
+    await assert.rejects(
+      runtime.leaseLifecycle.allocate!(lease),
+      (error) => error instanceof AppError && error.details?.dispatched === 'unknown',
+    );
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { release: 'unknown' });
+  } finally {
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 

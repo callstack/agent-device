@@ -615,3 +615,39 @@ test('drain waits for a lease end whose teardown is already running', async () =
   await drain;
   expect(sessionStore.get('leased')).toBeUndefined();
 });
+
+test.each(['unattributable', 'unlink refused'] as const)(
+  'expired claim cleanup keeps its address fenced without retrying when %s',
+  async (failure) => {
+    const sessionStore = makeSessionStore();
+    const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
+    const teardown = vi.fn(async () => {
+      if (failure === 'unattributable') fs.writeFileSync(claimPath, '{');
+    });
+    const unlink = fs.unlinkSync;
+    const spy = vi.spyOn(fs, 'unlinkSync').mockImplementation((file) => {
+      if (failure === 'unlink refused' && file === claimPath)
+        throw Object.assign(new Error('unlink refused'), { code: 'EACCES' });
+      unlink(file);
+    });
+    const { ender } = leaseSessionEnd(sessionStore, teardown);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      await ender.end('lease-1', 'LEASE_EXPIRED');
+      expect(ender.closingAt('leased')?.address).toBe('leased');
+      expect(fs.existsSync(claimPath)).toBe(true);
+      vi.setSystemTime(Date.now() + 30_000);
+      await ender.retryPending();
+      expect(teardown).toHaveBeenCalledTimes(1);
+      expect(emitDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phase: 'lease_release_unknown',
+          data: { leaseId: 'lease-1', reason: 'device-claim-release-unconfirmed' },
+        }),
+      );
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  },
+);

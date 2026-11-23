@@ -61,7 +61,7 @@ test('a release the closed releaser refused is reported and not counted as compl
     runId: 'run-1',
     leaseProvider: 'browserstack',
   });
-  const release = vi.fn(async (_lease: DeviceLease) => ({}));
+  const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: { release },
     providerRuntimeIds: ['browserstack'],
@@ -81,9 +81,21 @@ test('a release the closed releaser refused is reported and not counted as compl
     );
 
     expect(release).not.toHaveBeenCalled();
-    // The daemon stops either way, so the registry entry goes; the summary and the log say this daemon
-    // never handed the device to its provider.
     expect(outcomes.refused).toEqual([lease.leaseId]);
+    expect(() =>
+      leaseRegistry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseProvider: 'browserstack',
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          releaseStatus: 'unknown',
+          releaseReason: 'provider-release-unconfirmed',
+        }),
+      }),
+    );
     expect(leaseRegistry.listActiveLeases()).toEqual([]);
     const rows = fs
       .readFileSync(logPath, 'utf8')
@@ -119,8 +131,8 @@ test('final drain joins a release that completes after the lease timeout', async
   });
   const release = vi.fn(
     () =>
-      new Promise<Record<string, unknown>>((resolve) => {
-        setTimeout(() => resolve({}), 1_500);
+      new Promise<{ release: 'confirmed' }>((resolve) => {
+        setTimeout(() => resolve({ release: 'confirmed' }), 1_500);
       }),
   );
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
@@ -163,8 +175,8 @@ test('a hung provider release does not starve another lease during shutdown', as
   });
   const release = vi.fn((lease: DeviceLease) =>
     lease.leaseId === hungLease.leaseId
-      ? new Promise<Record<string, unknown>>(() => {})
-      : Promise.resolve({}),
+      ? new Promise<{ release: 'confirmed' }>(() => {})
+      : Promise.resolve({ release: 'confirmed' as const }),
   );
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: { release },

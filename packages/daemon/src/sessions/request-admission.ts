@@ -244,9 +244,15 @@ function admitLease(
   options: Readonly<{ env: HostEnvironment['env']; inspectOnly?: boolean }>,
 ): DeviceLease {
   const admission = leaseScopeToHeartbeatRequest(resolveSessionLeaseScope(req, session));
-  const lease = options.inspectOnly
-    ? leaseRegistry.inspectLeaseAdmission(admission)
-    : renewAdmittedLease(leaseRegistry, admission);
+  const closeRetry =
+    req.command === 'close' && session?.lease?.leaseId === admission.leaseId
+      ? leaseRegistry.inspectCloseRetryAdmission(admission)
+      : undefined;
+  const lease =
+    closeRetry ??
+    (options.inspectOnly
+      ? leaseRegistry.inspectLeaseAdmission(admission)
+      : renewAdmittedLease(leaseRegistry, admission));
   assertMacOsAppLeaseAdmitsRequest(lease, req, session, options.env);
   if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
   return lease;

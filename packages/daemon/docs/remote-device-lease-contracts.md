@@ -25,8 +25,9 @@ The daemon sweeps for expired leases every second.
 A request can also trigger expiry.
 Both paths share one teardown for each expired session.
 The daemon keeps the lease reservation until session cleanup and any provider release are confirmed.
-If the provider refuses release and no recovery record exists, an overlapping allocation returns
-`DEVICE_LEASE_BUSY` with `releaseStatus: "unknown"`.
+If the daemon cannot confirm release, an overlapping allocation returns `DEVICE_LEASE_BUSY` with
+`releaseStatus: "unknown"` and a typed `releaseReason`.
+If the daemon cannot clear the exact device claim, it keeps the scope reserved and stops automatic session cleanup retries.
 If expiry wins, the old owner's request returns `LEASE_NOT_FOUND`.
 An owner `close` can report the confirmed lease end in `endedLeases` on that error.
 Only `open` with a separate valid lease can replace an expired session.
@@ -39,18 +40,18 @@ After daemon shutdown begins, no new lease-end teardown starts.
 Shutdown waits for any lease-end teardown that already started before it tears sessions down itself.
 
 A daemon that dies while it holds a provider lease leaves the rented device running on the provider side, and that device stays billed.
-Thus, the daemon journals the live leases of each provider that can recover an expired lease, in `live-provider-leases.json` in its state directory.
-A daemon that starts and finds this journal hands each lease in it to the expired-lease recovery of its provider, which ends the rented device.
+The daemon journals live provider leases in `live-provider-leases.json` in its state directory.
+At startup, allocation and session commands wait until the daemon adopts both journals, checks durable device claims, and gives providers time to recover each rental. Host lease PUT also waits. A recovered scope stays fenced when its provider cannot identify the rental or confirm its release.
 It reads both lease records only after it holds the daemon registration for the state directory, because until then they can belong to a daemon that is still running.
 The lease itself is not restored, and its controller connects again.
 A lease that leaves the registry for expiry stays in the journal until its expired-lease record is durable, and a journal write that fails is retried until this daemon shuts down.
 If a journal retry is pending, daemon shutdown makes one final journal write. It does not schedule another journal retry.
 A daemon that has shut down writes lease records only synchronously. It arms no timer for them, because a timer could fire after that daemon released its registration, when the records belong to the next daemon.
 After the daemon shuts its lease releaser down, that releaser refuses every further provider-backed release. It still writes the expired-lease record of a recoverable lease, so the next daemon inherits it. If no record names the lease, the daemon logs the refusal with its lease provider, because no daemon will end that device.
-Two routes still let the registry forget a provider lease while its device may be rented. The journal and expiry recovery both follow the registry, so neither covers it, and only the provider runtime still holding the device can end it:
-
-- A failed first allocation releases the registry entry without a provider release, while its provider start may still run.
-- An allocation that finishes after its requester left releases the registry entry even when the provider release throws.
+A failed or canceled first allocation keeps its reservation while the provider can still be creating or releasing the device.
+If creation succeeds after cancellation, the adapter releases the exact instance.
+If the provider cannot prove release, the reservation remains.
+Rentals without durable evidence require operator reconciliation. [#4972](https://github.com/callstack/agent-device/issues/4972) tracks the durable rental journal.
 
 When a request closes a session, the daemon ends the lease of that session, unless the lease was allocated with `retainOnClose`.
 The reply to that request reports each lease that it ended once, at response level, as `endedLeases: [{ leaseId, outcome: 'released' }]`.
@@ -164,9 +165,8 @@ Allocation is admitted work too.
 The registry records a lease before a hosted provider creates the session behind it.
 Creation of that session can take longer than the inactivity TTL of the lease.
 The allocation holds a work pass while the provider allocates, so its lease does not expire before delivery.
-The lease cannot expire during that allocation.
 If a successful allocation is still wanted by its requester, the inactivity TTL starts from the moment allocation completed.
-A requester that hung up preserves nothing, and its allocation is released as before.
+Cancellation ends the allocation work pass. The lease reservation still protects the device until release is confirmed.
 
 ## Human control
 

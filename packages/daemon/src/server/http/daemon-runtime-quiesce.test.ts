@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import fs from 'node:fs';
 import net from 'node:net';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -17,11 +18,14 @@ import * as shutdown from './server-shutdown.ts';
 const probe = vi.hoisted(() => ({
   /** Holds daemon startup after its servers listen, until released. */
   startupGate: undefined as Promise<void> | undefined,
+  startupDiagnostics: undefined as Promise<void> | undefined,
   store: undefined as import('../../core/session-store.ts').SessionStore | undefined,
   registry: undefined as import('../../resources/lease-registry.ts').LeaseRegistry | undefined,
   held: undefined as Promise<void> | undefined,
   entered: undefined as (() => void) | undefined,
   diagnosticFailure: undefined as Error | undefined,
+  allocateArrived: undefined as (() => void) | undefined,
+  hostBodyRead: undefined as (() => void) | undefined,
   handleRequest: undefined as import('../../core/daemon-request.ts').DaemonInvokeFn | undefined,
   idleReaps: 0,
 }));
@@ -46,7 +50,35 @@ vi.mock('./transport.ts', async (importOriginal) => {
     ...actual,
     createSocketServer: (handler: import('../../core/daemon-request.ts').DaemonInvokeFn) => {
       probe.handleRequest = handler;
-      return actual.createSocketServer(handler);
+      return actual.createSocketServer((request) => {
+        if (request.command === 'lease_allocate') probe.allocateArrived?.();
+        return handler(request);
+      });
+    },
+  };
+});
+
+vi.mock('../human-control-http.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../human-control-http.ts')>();
+  return {
+    ...actual,
+    readHostAdminJsonBody: async (...args: Parameters<typeof actual.readHostAdminJsonBody>) => {
+      const value = await actual.readHostAdminJsonBody(...args);
+      if (probe.hostBodyRead) queueMicrotask(probe.hostBodyRead);
+      return value;
+    },
+  };
+});
+
+vi.mock('./daemon-startup-diagnostics.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./daemon-startup-diagnostics.ts')>();
+  return {
+    ...actual,
+    flushDaemonStartupDiagnostics: async (
+      ...args: Parameters<typeof actual.flushDaemonStartupDiagnostics>
+    ) => {
+      await probe.startupDiagnostics;
+      await actual.flushDaemonStartupDiagnostics(...args);
     },
   };
 });
@@ -113,11 +145,14 @@ import { startDaemonRuntime } from './daemon-runtime.ts';
 
 afterEach(() => {
   probe.startupGate = undefined;
+  probe.startupDiagnostics = undefined;
   probe.held = undefined;
   probe.entered = undefined;
   probe.store = undefined;
   probe.registry = undefined;
   probe.diagnosticFailure = undefined;
+  probe.allocateArrived = undefined;
+  probe.hostBodyRead = undefined;
   probe.handleRequest = undefined;
   probe.idleReaps = 0;
   vi.useRealTimers();
@@ -417,7 +452,7 @@ test('a daemon holding a session, a repair session or a live lease refuses to qu
     });
     const withLease = await daemon.quiesce();
     expect(!withLease.ok && withLease.error.details).toMatchObject({ leases: 1 });
-    probe.registry!.releaseLease({ leaseId: lease.leaseId });
+    finishTestLease(probe.registry!, { leaseId: lease.leaseId });
 
     expect((await daemon.quiesce()).ok).toBe(true);
     expect(await daemon.exit).toBe(0);
@@ -594,17 +629,61 @@ test('an embedded runtime refuses a quiesce, because its host decides when it le
 test('a quiesce asked while the daemon is still starting up is refused as busy, then accepted', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-lifecycle-startup-');
   const paths = resolveDaemonPaths(stateDir);
+  let reportRecoveryStarted!: () => void;
+  let reportProviderRecovered!: () => void;
+  const recoveryStarted = new Promise<void>((resolve) => {
+    reportRecoveryStarted = resolve;
+  });
+  const providerRecovered = new Promise<void>((resolve) => {
+    reportProviderRecovered = resolve;
+  });
+  const inheritedLeaseId = '00112233445566778899aabbccddeeff';
+  fs.writeFileSync(
+    `${stateDir}/expired-provider-leases.json`,
+    JSON.stringify({
+      version: 1,
+      leases: [
+        {
+          leaseId: inheritedLeaseId,
+          tenantId: 'other-tenant',
+          runId: 'other-run',
+          backend: 'ios-instance',
+          leaseProvider: 'limrun',
+          createdAt: 1,
+          expiresAt: 2,
+          heartbeatAt: 1,
+        },
+      ],
+    }),
+  );
+  const recoveredDuringStartup = vi.fn(async () => {
+    reportRecoveryStarted();
+    await providerRecovered;
+  });
   let openGate: () => void = () => {};
   probe.startupGate = new Promise<void>((resolve) => {
     openGate = resolve;
   });
+  const registered = new Promise<void>((resolve) => {
+    probe.entered = resolve;
+  });
   const starting = startDaemonRuntime({
-    composeDeps: daemonRuntimeDepsFixture(),
+    startupProgress: {
+      report: (phase) => {
+        if (phase === 'registered') probe.entered?.();
+      },
+      close: () => {},
+    },
+    composeDeps: daemonRuntimeDepsFixture({
+      providerRuntimeIds: ['limrun'],
+      recoverableProviderIds: ['limrun'],
+      recoverExpiredLease: recoveredDuringStartup,
+    }),
     host: createTestHostEnvironment({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'socket',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
       },
     }),
@@ -612,13 +691,10 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
     stdout: { write: () => {} },
   });
   try {
-    // Published, listening, and still held inside startup.
-    for (let polls = 0; !fs.existsSync(paths.infoPath); polls += 1) {
-      if (polls >= 500) throw new Error('daemon did not publish daemon.json during startup');
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await Promise.all([registered, recoveryStarted]);
     const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as {
       port: number;
+      httpPort: number;
       token: string;
       pid: number;
       processStartTime?: string;
@@ -638,8 +714,57 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
       inFlightRequests: 0,
     });
 
-    openGate();
+    const allocateArrived = new Promise<void>((resolve) => {
+      probe.allocateArrived = resolve;
+    });
+    const hostBodyRead = new Promise<void>((resolve) => {
+      probe.hostBodyRead = resolve;
+    });
+    const hostLeaseId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const hostLease = fetch(`http://127.0.0.1:${info.httpPort}/admin/leases/${hostLeaseId}`, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${info.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseBackend: 'macos-app',
+        deviceKey: 'com.example.app@4242',
+      }),
+    });
+    const overlap = sendSocketRequest(info.port, {
+      token: info.token,
+      session: 'lease',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: { tenantId: 'tenant-a', runId: 'run-a', leaseBackend: 'ios-simulator' },
+    });
+    try {
+      await Promise.all([allocateArrived, hostBodyRead]);
+      expect(probe.registry?.inspectActiveLease(hostLeaseId)).toBeUndefined();
+      const ready = await sendSocketRequest(info.port, quiesceRequest);
+      expect(reasonOf(ready)).toBe('daemon-busy');
+    } finally {
+      openGate();
+    }
+    const stillRecovering = await sendSocketRequest(info.port, quiesceRequest);
+    expect(reasonOf(stillRecovering)).toBe('daemon-busy');
+    expect(probe.registry?.inspectActiveLease(hostLeaseId)).toBeUndefined();
+    reportProviderRecovered();
     const runtime = await starting;
+    expect(recoveredDuringStartup).toHaveBeenCalledOnce();
+    expect((await hostLease).status).toBe(200);
+    finishTestLease(probe.registry!, {
+      leaseId: hostLeaseId,
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      deviceKey: 'com.example.app@4242',
+    });
+    const allocation = await overlap;
+    expect(allocation.ok).toBe(true);
+    if (allocation.ok) {
+      const lease = allocation.data?.lease as { leaseId: string };
+      finishTestLease(probe.registry!, { leaseId: lease.leaseId });
+    }
     const exit = runtime.closed.then(() => 0);
     const again = await sendSocketRequest(info.port, quiesceRequest);
     expect(again).toEqual({ ok: true, data: { outcome: 'draining' } });
@@ -647,6 +772,67 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
     expect(fs.existsSync(paths.infoPath)).toBe(false);
   } finally {
     openGate();
+    reportProviderRecovered();
     await starting.then((runtime) => runtime?.close());
+  }
+});
+
+test('startup failure answers an allocation waiting on recovery and rolls back registration', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-startup-rollback-');
+  const paths = resolveDaemonPaths(stateDir);
+  const failure = new Error('startup diagnostic flush failed');
+  let failStartup!: (error: Error) => void;
+  probe.startupDiagnostics = new Promise<void>((_resolve, reject) => {
+    failStartup = reject;
+  });
+  let reportRegistered!: () => void;
+  const registered = new Promise<void>((resolve) => {
+    reportRegistered = resolve;
+  });
+  const allocationArrived = new Promise<void>((resolve) => {
+    probe.allocateArrived = resolve;
+  });
+  const starting = startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture(),
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'socket',
+      },
+    }),
+    startupProgress: {
+      report: (phase) => {
+        if (phase === 'registered') reportRegistered();
+      },
+      close: () => {},
+    },
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  }).catch((error: unknown) => error);
+  try {
+    await registered;
+    const { port, token } = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as {
+      port: number;
+      token: string;
+    };
+    const allocation = sendSocketRequest(port, {
+      token,
+      session: 'lease',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: { tenantId: 'tenant-a', runId: 'run-a', leaseBackend: 'ios-simulator' },
+    });
+    await allocationArrived;
+    failStartup(failure);
+    expect(await allocation).toMatchObject({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', details: { reason: 'daemon-startup-failed' } },
+    });
+    expect(await starting).toBe(failure);
+    expect(fs.existsSync(paths.infoPath)).toBe(false);
+    expect(fs.existsSync(paths.lockPath)).toBe(false);
+  } finally {
+    failStartup(failure);
   }
 });

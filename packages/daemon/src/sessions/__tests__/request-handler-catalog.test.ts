@@ -3,11 +3,11 @@ import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
-import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import {
   getDaemonCommandRoute,
@@ -267,7 +267,7 @@ test('lease release calls provider hook using the released lease without heartbe
     leaseLifecycleProvider: {
       release: async (releasedLease) => {
         releaseCalls.push(releasedLease.leaseId);
-        return { provider: releasedLease.leaseProvider };
+        return { release: 'confirmed', provider: { provider: releasedLease.leaseProvider } };
       },
     },
   });
@@ -382,7 +382,10 @@ test('a lease allocated for a requester that left is released, not registered', 
             },
             release: async (lease) => {
               released.push(lease.leaseId);
-              return { providerSessionId: `bs-${lease.leaseId}` };
+              return {
+                release: 'confirmed',
+                provider: { providerSessionId: `bs-${lease.leaseId}` },
+              };
             },
           },
         }),
@@ -400,6 +403,47 @@ test('a lease allocated for a requester that left is released, not registered', 
       leaseRegistry.getLease({ tenantId: 'tenant-a', runId: 'run-a', leaseId: released[0]! }),
       undefined,
     );
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+});
+
+test('a definitive create refusal does not dispatch release after the requester cancels', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const requestId = 'lease-alloc-gone-creation-refused';
+  const registration = registerRequestAbort(requestId);
+  const release = vi.fn(async () => {
+    throw new Error('provider unavailable');
+  });
+  try {
+    await expect(
+      handleLeaseCommands({
+        host: createTestHostEnvironment(),
+        req: leaseAllocateRequest(requestId),
+        sessionName: 'catalog-test',
+        sessionStore: makeSessionStore('agent-device-lease-gone-creation-refused-'),
+        leaseRegistry,
+        providerRuntimeIds: ['fake-provider'],
+        leaseLifecycleProvider: {
+          allocate: async () => {
+            markRequestCanceled(requestId);
+            throw new AppError('COMMAND_FAILED', 'provider rejected creation', {
+              releaseStatus: 'confirmed',
+            });
+          },
+          release,
+        },
+      }),
+    ).rejects.toMatchObject({ details: { released: true, registryReleased: true } });
+    expect(release).not.toHaveBeenCalled();
+    expect(() =>
+      leaseRegistry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseProvider: 'fake-provider',
+        leaseBackend: 'android-instance',
+      }),
+    ).not.toThrow();
   } finally {
     clearRequestAbortRegistration(registration);
   }
@@ -430,8 +474,11 @@ test('a failed provider release after cancellation is reported as unreleased wit
               return { providerSessionId: 'bs-live' };
             },
             release: async () => ({
-              providerSessionId: 'bs-live',
-              warnings: [{ code: 'WEBDRIVER_SESSION_DELETE_FAILED', message: 'HTTP 502' }],
+              release: 'unknown',
+              provider: {
+                providerSessionId: 'bs-live',
+                warnings: [{ code: 'WEBDRIVER_SESSION_DELETE_FAILED', message: 'HTTP 502' }],
+              },
             }),
           },
         }),
@@ -441,7 +488,7 @@ test('a failed provider release after cancellation is reported as unreleased wit
         // `released` is the operator's answer: the billed session is NOT confirmed
         // gone. Daemon bookkeeping is a separate, unambiguous key.
         assert.equal(details.released, false);
-        assert.equal(details.registryReleased, true);
+        assert.equal(details.registryReleased, false);
         assert.equal(details.providerSessionId, 'bs-live');
         assert.match(String(details.hint), /could NOT be confirmed released/);
         assert.match(String(details.hint), /bs-live/);
@@ -486,8 +533,21 @@ test('a throwing provider release after cancellation is reported as unreleased, 
         assert.ok(isRequestCanceledError(error), 'nobody is left to receive the release failure');
         const details = (error as AppError).details ?? {};
         assert.equal(details.released, false);
-        assert.equal(details.registryReleased, true);
+        assert.equal(details.registryReleased, false);
         assert.equal(details.releaseError, 'hub unreachable');
+        assert.throws(
+          () =>
+            leaseRegistry.allocateLease({
+              tenantId: 'tenant-a',
+              runId: 'run-a',
+              leaseProvider: 'fake-provider',
+              leaseBackend: 'android-instance',
+            }),
+          (refusal: unknown) =>
+            refusal instanceof AppError &&
+            refusal.details?.releaseStatus === 'unknown' &&
+            refusal.details.releaseReason === 'provider-release-unconfirmed',
+        );
         assert.match(String(details.hint), /could NOT be confirmed released/);
         return true;
       },

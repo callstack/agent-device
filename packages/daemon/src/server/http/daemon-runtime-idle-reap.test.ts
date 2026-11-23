@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
@@ -135,7 +136,7 @@ test('only a retained lease keeps the daemon runtime from self-reaping', async (
     await vi.advanceTimersByTimeAsync(80);
     assert.equal(closed, false);
 
-    registry!.releaseLease({ leaseId: retained.leaseId });
+    finishTestLease(registry!, { leaseId: retained.leaseId });
     await vi.advanceTimersByTimeAsync(80);
     await vi.runOnlyPendingTimersAsync();
     await exited;

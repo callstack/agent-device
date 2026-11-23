@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
@@ -62,7 +63,7 @@ test('allocateLease keeps a caller-chosen lease id and refuses any id it already
     (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
   );
 
-  assert.equal(registry.releaseLease({ leaseId: lease.leaseId }).released, true);
+  assert.equal(finishTestLease(registry, { leaseId: lease.leaseId }).released, true);
   assert.throws(
     () => registry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2', leaseId: chosen }),
     isLeaseIdInUse,
@@ -73,8 +74,8 @@ test('allocateLease keeps a caller-chosen lease id and refuses any id it already
     tenantId: 'tenant-d',
     runId: 'run-4',
   });
-  assert.equal(registry.releaseLease({ leaseId: minted.leaseId }).released, true);
-  assert.equal(registry.releaseLease({ leaseId: hostIssued.leaseId }).released, true);
+  assert.equal(finishTestLease(registry, { leaseId: minted.leaseId }).released, true);
+  assert.equal(finishTestLease(registry, { leaseId: hostIssued.leaseId }).released, true);
   for (const leaseId of [minted.leaseId, hostIssued.leaseId]) {
     assert.throws(
       () => registry.allocateLease({ tenantId: 'tenant-e', runId: 'run-5', leaseId }),
@@ -275,9 +276,9 @@ test('heartbeatLease extends active lease and releaseLease is idempotent', () =>
   assert.equal(heartbeat.heartbeatAt, 5_000);
   assert.equal(heartbeat.expiresAt, 25_000);
 
-  const released = registry.releaseLease({ leaseId: lease.leaseId });
+  const released = finishTestLease(registry, { leaseId: lease.leaseId });
   assert.deepEqual(released, { released: true, lease: heartbeat });
-  const releasedAgain = registry.releaseLease({ leaseId: lease.leaseId });
+  const releasedAgain = finishTestLease(registry, { leaseId: lease.leaseId });
   assert.deepEqual(releasedAgain, { released: false });
 });
 
@@ -290,7 +291,7 @@ test('heartbeat/release enforce optional tenant/run scope matching', () => {
     /Lease does not match tenant\/run scope/,
   );
   assert.throws(
-    () => registry.releaseLease({ leaseId: lease.leaseId, runId: 'run-2' }),
+    () => finishTestLease(registry, { leaseId: lease.leaseId, runId: 'run-2' }),
     /Lease does not match tenant\/run scope/,
   );
 });
@@ -513,7 +514,7 @@ test('heartbeat/release require owner scope for device-aware leases', () => {
   );
   assert.throws(
     () =>
-      registry.releaseLease({
+      finishTestLease(registry, {
         leaseId: lease.leaseId,
         tenantId: 'tenant-a',
         runId: 'run-1',
@@ -902,7 +903,7 @@ test('releasing a lease drops the work claims recorded against it', () => {
   const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-9' });
   const pass = registry.retainLeaseWork(lease, () => true);
 
-  registry.releaseLease({ leaseId: lease.leaseId });
+  finishTestLease(registry, { leaseId: lease.leaseId });
   pass.release();
 
   assert.deepEqual(inFlightClaimKeys(registry), []);

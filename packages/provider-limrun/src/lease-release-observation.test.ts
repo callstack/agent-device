@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   /** Instance deletes this runtime asked Limrun for; each waits for its case to answer it. */
   deletes: [] as Array<{ instanceId: string; report: () => void }>,
   creates: 0,
+  listedInstance: undefined as string | undefined,
+  deleteDispatched: undefined as (() => void) | undefined,
   clientStarts: 0,
   clientGate: undefined as Promise<void> | undefined,
   createGate: undefined as Promise<void> | undefined,
@@ -46,7 +48,10 @@ vi.mock('@limrun/api', () => ({
           },
         };
       },
-      list: vi.fn(async () => ({ getPaginatedItems: () => [] })),
+      list: vi.fn(async () => ({
+        getPaginatedItems: () =>
+          state.listedInstance ? [{ metadata: { id: state.listedInstance } }] : [],
+      })),
       // Every delete waits for its case to answer it, so a release can be held at its delete while the
       // local teardown it started beside has long since refused.
       delete: vi.fn(async (instanceId: string) => {
@@ -56,6 +61,7 @@ vi.mock('@limrun/api', () => ({
           report = answeredNow;
         });
         state.deletes.push({ instanceId, report });
+        state.deleteDispatched?.();
         await answered;
       }),
     };
@@ -114,7 +120,7 @@ test('a local teardown that refuses beside a pending delete is reported, not loo
 
     // The delete's confirmation is the release's answer; what the local teardown came to rides beside it
     // as the warning it is: a host resource this process could not put down.
-    const record = (await released) as Record<string, unknown>;
+    const record = (await released)?.provider as Record<string, unknown>;
     expect(record.limrunInstanceId).toBe('android-instance-1');
     const warnings = warningsOf(record);
     expect(warnings.map((warning) => warning.code)).toEqual(['LIMRUN_TEARDOWN_INCOMPLETE']);
@@ -161,7 +167,7 @@ test('release clears reverse mappings before disconnect closes their ADB endpoin
     const released = runtime.leaseLifecycle.release?.(lease);
     await vi.waitFor(() => expect(state.deletes).toHaveLength(1));
     state.deletes[0]?.report();
-    expect(await released).toMatchObject({ limrunInstanceId: 'android-instance-1' });
+    expect((await released)?.provider).toMatchObject({ limrunInstanceId: 'android-instance-1' });
     expect(removed).toHaveBeenCalledWith('tcp:18441');
     expect(state.disconnects - disconnectsBefore).toBe(1);
   } finally {
@@ -194,7 +200,7 @@ test('a capture close that refuses still leaves the delete it ran beside answere
 
       // The record's write ends with the tunnel's close, and that close refuses inside the disposal's
       // join window: the instance the delete confirmed is gone, and the release answers for it.
-      const record = (await released) as Record<string, unknown>;
+      const record = (await released)?.provider as Record<string, unknown>;
       expect(record.limrunInstanceId).toBe('android-instance-1');
       expect(state.captureCloses - captureClosesBefore).toBe(1);
       expect(warningsOf(record).map((warning) => warning.message)).toEqual([
@@ -240,13 +246,12 @@ test('a late create with failed local cleanup is freed by the normal take with c
   );
   try {
     await vi.waitFor(() => expect(state.creates - createsBefore).toBe(1));
-    const expired = Promise.resolve(runtime.leaseLifecycle.release?.(lease)).catch(
-      (error: unknown) => error,
-    );
+    const expired = runtime.leaseLifecycle.release?.(lease);
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(130_000);
     expect(await expired).toMatchObject({
-      details: { reason: 'limrun_instance_delete_unconfirmed' },
+      release: 'unknown',
+      error: { details: { reason: 'limrun_instance_delete_unconfirmed' } },
     });
     reportCreate();
     await vi.advanceTimersByTimeAsync(0);
@@ -263,7 +268,7 @@ test('a late create with failed local cleanup is freed by the normal take with c
     const release = runtime.leaseLifecycle.release?.(lease);
     state.deletes[0]?.report();
     await vi.advanceTimersByTimeAsync(0);
-    const record = (await release) as Record<string, unknown>;
+    const record = (await release)?.provider as Record<string, unknown>;
     expect(record.limrunInstanceId).toBe('android-instance-1');
     expect(warningsOf(record)).toMatchObject([
       {
@@ -323,7 +328,7 @@ test('a confirmed delete during creation still disconnects the late session with
     expect(state.deletes).toHaveLength(1);
     state.deletes[0]?.report();
     await vi.advanceTimersByTimeAsync(50_000);
-    expect(await released).toMatchObject({
+    expect((await released)?.provider).toMatchObject({
       limrunInstanceId: 'android-instance-1',
       warnings: [{ code: 'LIMRUN_TEARDOWN_INCOMPLETE' }],
     });
@@ -374,3 +379,32 @@ function androidLease(leaseId: string): DeviceLease {
 function testDependencies(): LimrunRuntimeDependencies {
   return stubLimrunRuntimeDependencies();
 }
+
+test('Limrun recovery carries a late labeled delete into the release result', async () => {
+  vi.useFakeTimers();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-late-recovery');
+  const dispatched = new Promise<void>((resolve) => {
+    state.deleteDispatched = resolve;
+  });
+  state.listedInstance = 'late-instance';
+  try {
+    const outcome = runtime.recoverExpiredLease!(lease).catch((error: unknown) => error);
+    await dispatched;
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(await outcome).toMatchObject({
+      details: { reason: 'limrun_instance_delete_unconfirmed' },
+    });
+    state.deletes[0]?.report();
+    state.listedInstance = undefined;
+    await expect(runtime.recoverExpiredLease!(lease)).resolves.toBeUndefined();
+    expect(state.deletes.map(({ instanceId }) => instanceId)).toEqual(['late-instance']);
+  } finally {
+    state.deletes.forEach(({ report }) => report());
+    state.deletes.length = 0;
+    state.listedInstance = undefined;
+    state.deleteDispatched = undefined;
+    await runtime.shutdown();
+    vi.useRealTimers();
+  }
+});

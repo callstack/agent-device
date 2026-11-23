@@ -8,7 +8,7 @@ import { BROWSERSTACK_PROVIDER, createBrowserStackRuntime } from './browserstack
 import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import { assertRpcOk } from './assertions.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -91,6 +91,7 @@ test('packaged Cloud WebDriver release still returns artifacts when session dele
 
     const data = assertRpcOk<{
       released?: boolean;
+      releaseStatus?: 'unknown';
       provider?: {
         provider?: string;
         providerSessionId?: string;
@@ -101,8 +102,18 @@ test('packaged Cloud WebDriver release still returns artifacts when session dele
         };
       };
     }>(release);
-    assert.equal(data.released, true);
+    assert.equal(data.released, false);
     assert.equal(data.provider?.provider, WEBDRIVER_PROVIDER);
+    assert.equal(data.releaseStatus, 'unknown');
+    const overlap = await daemon.callCommand('lease_allocate', [], leaseFlags(), {
+      meta: leaseMeta(),
+    });
+    const unconfirmed = assertRpcError(overlap, 500, 'DEVICE_IN_USE', /release is unknown/);
+    assert.equal(
+      (unconfirmed.details as Record<string, unknown>)?.releaseReason,
+      'provider-release-unconfirmed',
+    );
+
     assert.equal(data.provider?.providerSessionId, 'wd-1');
     assert.equal(data.provider?.warnings?.[0]?.code, 'WEBDRIVER_SESSION_DELETE_FAILED');
     assert.match(data.provider?.warnings?.[0]?.message ?? '', /stale webdriver session/);
