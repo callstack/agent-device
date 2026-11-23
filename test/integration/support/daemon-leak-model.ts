@@ -110,7 +110,9 @@ const EXPECTED_STATE_DIR_ENTRIES: readonly RegExp[] = [
 ];
 const CAPTURE_DESCRIPTOR_ENTRY = /^sessions\/[^/]+\/[^/]+\.resource\.json$/;
 const LEGACY_APP_LOG_MARKER_ENTRY = /^sessions\/[^/]+\/app-log\.pid$/;
-const DAEMON_LIVENESS_ENTRY = /^daemon\.(?:json|lock)$/;
+const DAEMON_LIVENESS_ENTRY = /^daemon\.(?:json|lock(?:\/owner\.json)?)$/;
+const LIFETIME_JOURNAL_ENTRY =
+  /^session-journals\/[0-9a-f-]{36}\/events\.ndjson(?:\.1|\.window\.json)?$/;
 
 export function evaluateDaemonLeaks(observation: DaemonLeakObservation): DaemonLeakSnapshot {
   const daemonPids = uniquePositivePids(observation.daemonPids);
@@ -221,6 +223,10 @@ const SPECIAL_STATE_CLASSIFIERS: readonly StateClassifier[] = [
   (entry) => (entry.kind === 'empty-directory' ? 'stray' : undefined),
   (entry) => (entry.path.endsWith('.tmp') ? 'stray' : undefined),
   (entry) => classifyOwnedProcessStateEntry(entry),
+  (entry, context) =>
+    context.phase === 'after-close' && LIFETIME_JOURNAL_ENTRY.test(entry.path)
+      ? 'expected'
+      : undefined,
   (entry, context) => classifyDaemonLivenessStateEntry(entry, context),
   (entry, context) => classifyCaptureStateEntry(entry, context),
 ];
