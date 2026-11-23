@@ -17,13 +17,13 @@ Start:
   It starts the session and returns the initial interactive snapshot with @refs.
   Do not probe first with devices, apps, appstate, snapshot, or screenshot.
   Unknown app id: devices, then apps, then open <discovered-id>. Never invent ids.
-  Resuming an existing session: continue from its current state; do not reopen it.
+  Existing session: continue from its current state; do not reopen it.
 
 Loop:
   press|click|fill|longpress <target> ... --settle
   hover <target> --settle (web only; reveals hover-gated UI)
   scroll <direction|top|bottom|refresh> [amount] --settle; back --settle
-    acts, waits for quiet, and prints the UI diff. Continue from that diff.
+    acts, waits for quiet, and prints the UI diff. Continue from it.
     Run snapshot -i only when the diff lacks the next target or did not settle.
   Verify a named expectation with the diff, wait text "...", wait <selector>, wait absent <selector>,
     is, or get. A bare screenshot is not verification.
@@ -36,7 +36,7 @@ Targets:
   Prefer refs, then id/label/role selectors. Selector keys: ${SELECTOR_KEY_NAMES.join(' ')}.
   Coordinates are last resort: after snapshot -i shows no semantic target, or a
     sparse/AX-unavailable warning says its refs and selectors are invalid.
-    Then screenshot, press <x> <y>, and re-snapshot on the changed screen.
+    Then screenshot, press <x> <y>, and re-snapshot.
 
 Rules:
   --settle is only for press/click/fill/longpress/hover/scroll/back; never open,
