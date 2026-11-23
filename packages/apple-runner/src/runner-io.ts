@@ -1,3 +1,4 @@
+import { captureDiagnosticTraceWriter } from './host.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,14 +21,28 @@ export async function getFreePort(): Promise<number> {
   });
 }
 
+export function bindRunnerTraceOutput(
+  path: string | undefined,
+): ((chunk: string) => void) | undefined {
+  const write = captureDiagnosticTraceWriter('runner');
+  if (!write) return path ? (chunk) => appendLogChunk(path, chunk) : undefined;
+  return (chunk) => {
+    try {
+      write(chunk);
+    } catch {
+      // A trace write must not interrupt runner startup or output.
+    }
+  };
+}
+
 export function logChunk(
   chunk: string,
   logPath?: string,
-  traceLogPath?: string,
+  writeTrace?: (chunk: string) => void,
   verbose?: boolean,
 ): void {
   if (logPath) appendLogChunk(logPath, chunk);
-  if (traceLogPath) appendLogChunk(traceLogPath, chunk);
+  writeTrace?.(chunk);
   if (verbose) {
     process.stderr.write(chunk);
   }

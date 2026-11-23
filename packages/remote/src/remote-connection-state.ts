@@ -47,6 +47,8 @@ export type RemoteConnectionState = {
   tenant: string;
   runId: string;
   leaseId?: string;
+  /** The lease that a close on this connection ended. `artifacts` sends it while no lease is held. */
+  endedLeaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
@@ -626,6 +628,7 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
     ]) &&
     hasOptionalStringFields(record, [
       'leaseId',
+      'endedLeaseId',
       'leaseBackend',
       'leaseProvider',
       'deviceKey',

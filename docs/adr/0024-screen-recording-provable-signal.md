@@ -287,7 +287,8 @@ Artifact cleanup is a separate, explicit decision (rule 6).
 Session teardown and failed-start rollback dispose through the backend under the fence.
 They do this only after the manifest records that no recoverable export is lost.
 
-A leased session's teardown that commits an export at a remote temp path registers it, and its telemetry, as downloadable artifacts of the lease's tenant (rule 1, #2281).
+A leased session's teardown that commits an export at a remote temp path registers it, and its telemetry, as downloadable artifacts of that lease (rule 1, #2281).
+Only a request that sends the id of the ended lease lists or downloads them (ADR 0007).
 The inventory names the session, and the usual delete-after-download and 15-minute expiry apply.
 A later `record stop` replay of that manifest serves the same artifact ids.
 If registration fails, teardown deletes the files.

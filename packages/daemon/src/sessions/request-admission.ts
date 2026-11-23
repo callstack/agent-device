@@ -186,8 +186,12 @@ export function assertRequestLeaseAdmission(
   }
   if (
     session === undefined &&
-    !requestLeaseScope.leaseId &&
-    hasSessionlessLeaseAdmissionExemption(req, options.providerAppCatalog)
+    hasSessionlessLeaseAdmissionExemption(
+      req,
+      requestLeaseScope.leaseId,
+      leaseRegistry,
+      options.providerAppCatalog,
+    )
   ) {
     return undefined;
   }
@@ -272,9 +276,15 @@ export function isConfinedToAppLease(
 
 function hasSessionlessLeaseAdmissionExemption(
   req: DaemonRequest,
+  leaseId: string | undefined,
+  leaseRegistry: LeaseRegistry,
   providerAppCatalog: ProviderAppCatalog | undefined,
 ): boolean {
   const exemption = resolveSessionlessLeaseAdmissionExemption(req);
+  if (exemption?.kind === 'ended-lease-output') {
+    return leaseId !== undefined && leaseRegistry.inspectActiveLease(leaseId) === undefined;
+  }
+  if (leaseId) return false;
   if (exemption?.kind === 'unconditional') return true;
   return (
     exemption?.kind === 'provider-app-catalog' &&

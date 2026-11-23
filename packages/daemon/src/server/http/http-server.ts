@@ -110,7 +110,10 @@ export async function createDaemonHttpServer(options: {
    * then does not exist and a remote caller is told the record is unavailable
    * rather than handed a daemon-host path.
    */
-  resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
+  resolveRequestDiagnosticsPath?: (
+    ref: DiagnosticsRecordRef,
+    directory: 'request-records' | 'requests-unleased',
+  ) => string;
   /**
    * Hears about a `/rpc` flow rejection this server answered itself, because no part of the flow
    * reached the answer. The daemon-level sinks live in the runtime, outside any request, so the

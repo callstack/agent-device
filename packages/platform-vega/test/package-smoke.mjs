@@ -35,22 +35,18 @@ function vegaStubSource(logFile) {
 }
 
 /**
- * The exec records a `--debug` request wrote, from the request records the daemon keeps under its
- * session dirs. Records are matched by the CLI command they belong to, so an empty answer means the
- * request traced no spawn at all rather than that its file was not found.
+ * Read the open record by its CLI-reported path. Use its directory to find follow-up records,
+ * which the daemon names independently and the CLI does not report on success.
  */
-function execRecordsOf(storeRoot, command) {
-  const sessionsDir = path.join(storeRoot, 'sessions');
-  if (!fs.existsSync(sessionsDir)) return [];
-  const requestFiles = fs
-    .readdirSync(sessionsDir)
-    .flatMap((session) => {
-      const requestsDir = path.join(sessionsDir, session, 'requests');
-      return fs.existsSync(requestsDir)
-        ? fs.readdirSync(requestsDir).map((request) => path.join(requestsDir, request))
-        : [];
-    })
-    .filter((file) => file.endsWith('.ndjson'));
+function execRecordsOf(openLogPath, command) {
+  const recordDir = path.dirname(openLogPath);
+  const requestFiles =
+    command === 'open'
+      ? [openLogPath]
+      : fs
+          .readdirSync(recordDir)
+          .filter((file) => file.endsWith('.ndjson'))
+          .map((file) => path.join(recordDir, file));
   return requestFiles
     .flatMap((file) => fs.readFileSync(file, 'utf8').split('\n'))
     .filter((line) => line.includes('"phase":"exec_command"'))
@@ -103,7 +99,7 @@ test('packed core discovers vega only after the managed platform is installed', 
   // The daemon environment is captured when the CLI starts it, so the stub directory has to be on
   // the PATH of the process that launches it.
   const stubEnv = () => ({ ...cliEnv, PATH: [stubBin, cliEnv.PATH].join(path.delimiter) });
-  // A `--debug` request writes its own exec records to the daemon log: the route proof below reads
+  // A `--debug` request writes its own exec records to its diagnostics record: the route proof reads
   // them back, which is what a spawn through the bundle's own host-kit copy cannot produce.
   const debugCli = (...args) =>
     execFileSync(
@@ -111,7 +107,6 @@ test('packed core discovers vega only after the managed platform is installed', 
       ['node_modules/agent-device/bin/agent-device.mjs', ...args, '--json', '--debug'],
       { cwd: scratch, env: stubEnv(), encoding: 'utf8', timeout: 120_000 },
     );
-  const storeRoot = env.AGENT_DEVICE_STATE_DIR;
   try {
     const [packed] = JSON.parse(
       exec('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], repo),
@@ -170,7 +165,11 @@ test('packed core discovers vega only after the managed platform is installed', 
       found.data.devices.map(({ id, platform }) => ({ id, platform })),
       [{ id: 'VirtualDevice', platform: 'vega' }],
     );
-    debugCli('open', 'com.example.app.main', '--platform', 'vega', '--target', 'tv');
+    const opened = JSON.parse(
+      debugCli('open', 'com.example.app.main', '--platform', 'vega', '--target', 'tv'),
+    );
+    const openLogPath = opened.data.requestLogPath;
+    assert.equal(typeof openLogPath, 'string', 'open must report its diagnostics record path');
     debugCli(
       'tv-remote',
       'press',
@@ -232,7 +231,7 @@ test('packed core discovers vega only after the managed platform is installed', 
       ['tv-remote', 10_120, 'button_press'],
       ['close', 30_000, 'device terminate-app'],
     ]) {
-      const records = execRecordsOf(storeRoot, command);
+      const records = execRecordsOf(openLogPath, command);
       const spawns = records.filter(
         (record) => record.data?.event === 'spawn' && record.data.timeoutMs === timeoutMs,
       );

@@ -32,13 +32,14 @@ export function statusCodeForNormalizedError(error: {
 export function sendRestJsonError(res: http.ServerResponse, normalized: NormalizedHttpError): void {
   res.statusCode = statusCodeForNormalizedError(normalized);
   res.setHeader('content-type', 'application/json');
-  const reason = normalized.details?.reason;
+  const { reason, field } = normalized.details ?? {};
   res.end(
     JSON.stringify({
       ok: false,
       error: normalized.message,
       code: normalized.code,
       ...(typeof reason === 'string' ? { reason } : {}),
+      ...(typeof field === 'string' ? { field } : {}),
       ...(normalized.hint !== undefined ? { hint: normalized.hint } : {}),
     }),
   );

@@ -12,7 +12,7 @@ import {
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
-import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import * as output from '../resources/artifact-tracking.ts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
@@ -291,12 +291,12 @@ export async function createRequestExecutionScope(params: {
   // trait under which an activity stamp can be written while holding that lock.
   const attachesToSession = shouldLockSessionExecution(command);
   const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
-  const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({
     sessionDir,
     session: sessionName,
-    requestId: scopedReq.meta?.requestId ?? diagnosticsMeta.requestId,
+    requestId: output.requestDiagnosticsRecordId(scopedReq),
+    directory: 'request-records',
   });
   const requestLogPath = requestLog.path;
   const runnerLogPath = resolveSessionRunnerLogPath(sessionDir);
@@ -713,7 +713,7 @@ function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
 export async function prepareLockedRequestScope(params: {
   scope: RequestExecutionScope;
   sessionStore: SessionStore;
-  trackDownloadableArtifact: TrackDownloadableArtifact;
+  trackDownloadableArtifact: output.TrackDownloadableArtifact;
 }): Promise<LockedRequestScopeResult> {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
@@ -752,7 +752,7 @@ export async function prepareLockedRequestScope(params: {
   const deliverRemoteScript = ignoresSessionLease(scope.command)
     ? (response: DaemonResponse) => response
     : remoteScriptVersionDelivery(sessionStore, scope.sessionName);
-  updateDiagnosticsScope({ traceLogPath: existingSession?.trace?.outPath });
+  updateDiagnosticsScope(output.requestTraceDiagnostics(lockedReq, existingRef, sessionStore));
   const finalize = (handled: DaemonResponse): DaemonResponse => {
     const response = deliverRemoteScript(handled);
     const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);

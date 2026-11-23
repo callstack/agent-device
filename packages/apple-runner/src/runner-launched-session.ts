@@ -4,7 +4,12 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { Deadline, emitDiagnostic } from './host.ts';
 import { disposeRunnerSession, waitForRunnerLaunchExit } from './runner-disposal.ts';
 import { mintRunnerToken } from './runner-contract.ts';
-import { logChunk, resolveRunnerLaunchLogPath, flushRunnerLogAppends } from './runner-io.ts';
+import {
+  bindRunnerTraceOutput,
+  logChunk,
+  resolveRunnerLaunchLogPath,
+  flushRunnerLogAppends,
+} from './runner-io.ts';
 import type { RunnerLauncher, RunnerLaunchObservation } from './runner-launcher.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import {
@@ -111,10 +116,11 @@ export async function launchRunnerSession(
     session.retention?.cancel();
   };
   void launch.exited.then(() => settled(), settled);
+  const writeTrace = bindRunnerTraceOutput(options.traceLogPath);
   observation.output = (async () => {
     for await (const text of launch.output) {
       output = (output + text).slice(-16_384);
-      logChunk(text, logPath, options.traceLogPath, options.verbose);
+      logChunk(text, logPath, writeTrace, options.verbose);
     }
   })().catch(async (error: unknown) => {
     observation.failure = error;

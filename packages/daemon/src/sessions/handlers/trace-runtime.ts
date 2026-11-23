@@ -2,6 +2,12 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { updateDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import {
+  admittedOutputLeaseVerifier,
+  leasedOutputRefusal,
+} from '../../resources/artifact-tracking.ts';
 import path from 'node:path';
 import {
   parseTraceAction,
@@ -39,18 +45,21 @@ function startTrace(
 ): DaemonResponse {
   const session = sessionStore.requireCurrent(ref);
   if (session.trace) return errorResponse('INVALID_ARGS', 'trace already in progress');
-  const outPath = expandSessionPath(
-    req.positionals?.[1] ?? sessionStore.defaultTracePath(session),
-    requestCwd(req, host),
-  );
+  const daemonOwned = req.internal?.publicNetworkOnly === true;
+  const outPath = daemonOwned
+    ? path.join(sessionStore.ensureSessionDir(ref.address), `trace-${randomUUID()}.log`)
+    : expandSessionPath(
+        req.positionals?.[1] ?? sessionStore.defaultTracePath(session),
+        requestCwd(req, host),
+      );
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.appendFileSync(outPath, '');
   session.trace = {
-    outPath,
+    ...(daemonOwned ? { remoteCaptureOutputPath: outPath } : { outPath }),
     startedAt: Date.now(),
     clientOutPath: req.meta?.clientArtifactPaths?.outPath,
-    ...(req.internal?.publicNetworkOnly ? { remoteCaptureOutputPath: outPath } : {}),
-    remoteCaptureTenantId: session.lease?.tenantId ?? req.meta?.tenantId,
+    remoteCaptureTenantId: req.internal?.admittedLease?.tenantId ?? req.meta?.tenantId,
+    leaseVerifier: admittedOutputLeaseVerifier(req),
   };
   recordSessionAction(sessionStore, ref, req, req.command, { action: 'start', outPath });
   return {
@@ -67,9 +76,12 @@ function stopTrace(
 ): DaemonResponse {
   const session = sessionStore.requireCurrent(ref);
   if (!session.trace) return errorResponse('INVALID_ARGS', 'no active trace');
+  const owner = session.trace.leaseVerifier ?? null;
+  if (owner && owner !== admittedOutputLeaseVerifier(req)) throw leasedOutputRefusal('Trace');
+  updateDiagnosticsScope({ traceLogPath: undefined });
   const outPath = relocateTraceOutput(
     requestCwd(req, host),
-    session.trace.outPath,
+    session.trace.remoteCaptureOutputPath ?? session.trace.outPath,
     req.positionals?.[1],
   );
   const daemonOwned = session.trace.remoteCaptureOutputPath === outPath;
@@ -98,6 +110,7 @@ function stopTrace(
       } satisfies TraceCommandResult,
       daemonOwned ? 'daemon' : 'caller',
       tenantId,
+      owner,
     ),
   };
 }

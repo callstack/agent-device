@@ -18,9 +18,10 @@ export function resolveSessionTestArtifactsRoot(sessionDir: string): string {
 export function resolveSessionRequestLogPath(
   sessionDir: string,
   requestId: string | undefined,
+  directory: 'requests' | 'request-records' | 'requests-unleased' = 'requests',
 ): string {
   const safeRequestId = safeSessionName(requestId && requestId.length > 0 ? requestId : 'unknown');
-  return path.join(sessionDir, 'requests', `${safeRequestId}.ndjson`);
+  return path.join(sessionDir, directory, `${safeRequestId}.ndjson`);
 }
 
 /**
@@ -32,9 +33,10 @@ export function resolveSessionRequestLog(params: {
   sessionDir: string;
   session: string;
   requestId: string | undefined;
+  directory?: 'request-records';
 }): { path: string; ref: DiagnosticsRecordRef } {
   return {
-    path: resolveSessionRequestLogPath(params.sessionDir, params.requestId),
+    path: resolveSessionRequestLogPath(params.sessionDir, params.requestId, params.directory),
     ref: {
       session: params.session,
       requestId: params.requestId && params.requestId.length > 0 ? params.requestId : 'unknown',

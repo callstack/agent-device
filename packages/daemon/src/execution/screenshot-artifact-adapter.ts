@@ -95,9 +95,7 @@ async function reserveCroppedOutput(
     visibility: 'client-visible',
     publish: async () => {
       try {
-        const contents = await fs.readFile(stagingPath);
-        signal?.throwIfAborted();
-        publishFileSync({ destination, contents, preserveExistingMode: true });
+        await writeScreenshotFile(stagingPath, destination, signal);
       } catch (error) {
         if (signal?.aborted) throw signal.reason;
         throw screenshotPublicationError(error, outputPath);
@@ -107,6 +105,32 @@ async function reserveCroppedOutput(
     },
     cleanup,
   };
+}
+
+export async function publishScreenshotFile(
+  source: string,
+  outputPath: string,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  try {
+    const destination = await resolveScreenshotDestination(outputPath);
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    await writeScreenshotFile(source, destination, signal);
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason;
+    if (error instanceof AppError) throw error;
+    throw screenshotPublicationError(error, outputPath);
+  }
+}
+
+async function writeScreenshotFile(
+  source: string,
+  destination: string,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const contents = await fs.readFile(source);
+  signal?.throwIfAborted();
+  publishFileSync({ destination, contents, preserveExistingMode: true });
 }
 
 async function resolveScreenshotDestination(outputPath: string): Promise<string> {

@@ -13,8 +13,9 @@ import type {
   DaemonResponseData,
 } from '@agent-device/kernel/contracts';
 import { isDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
-import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import { leaseVerifier, type TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
 import {
+  captureOutputLeaseVerifier,
   captureOutputOwnership,
   captureOutputTenantId,
   daemonDeliveredArtifact,
@@ -96,9 +97,14 @@ function registerDownloadableArtifacts(
   trackArtifact: TrackDownloadableArtifact,
 ): DaemonResponseData | undefined {
   if (!data) return data;
+  const admittedLeaseId = req.internal?.admittedLease?.leaseId;
+  const producer = captureOutputLeaseVerifier(data);
+  const admittedOwner = admittedLeaseId && leaseVerifier(admittedLeaseId);
+  const tenantId = captureOutputTenantId(data) ?? req.meta?.tenantId;
   const register = (artifact: PendingArtifact): DaemonArtifact => {
     const artifactPath = artifact.path as string;
     const delivered = daemonDeliveredArtifact(artifact);
+    const owner = delivered || producer === undefined ? admittedOwner : producer;
     return {
       field: artifact.field,
       // Omitted (not null/undefined-valued) when untyped, matching the
@@ -106,9 +112,8 @@ function registerDownloadableArtifacts(
       ...(artifact.artifactType !== undefined ? { artifactType: artifact.artifactType } : {}),
       artifactId: trackArtifact({
         artifactPath,
-        tenantId: delivered
-          ? delivered.tenantId
-          : (captureOutputTenantId(data) ?? req.meta?.tenantId),
+        tenantId: delivered ? delivered.tenantId : tenantId,
+        ...(owner ? { leaseVerifier: owner } : {}),
         artifactType: artifact.artifactType,
         fileName: artifact.fileName,
         ...(artifact.deleteAfterDownload === false ? { deleteAfterDownload: false } : {}),

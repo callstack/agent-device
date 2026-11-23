@@ -9,6 +9,8 @@ import {
   type StoredConnectionSeed,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+import { createAgentDeviceClient } from '@agent-device/client';
+import { materializeRemoteConnectionForCommand } from '../commands/connection-runtime.ts';
 import { forgetEndedConnectionLease } from './ended-lease.ts';
 import { primeProviderConnection } from './provider-policy.ts';
 
@@ -23,10 +25,10 @@ bindTestCommandHost();
 const LEASE_ID = 'abc123abc123abc1';
 const ENDED = [{ leaseId: LEASE_ID, outcome: 'released' }] as const;
 
-function storedLeaseIdAfter(
+function endLeaseOnConnection(
   response: DaemonResponse,
   overrides: Partial<StoredConnectionSeed> = {},
-): string | undefined {
+) {
   const { stateDir, remoteConfigPath } = connectionWorkspace('agent-device-ended-lease-');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
   seedConnectionState({
@@ -43,19 +45,27 @@ function storedLeaseIdAfter(
       ...overrides,
     },
   });
-  forgetEndedConnectionLease(
-    {
-      json: true,
-      help: false,
-      version: false,
-      stateDir,
-      remoteConfig: remoteConfigPath,
-      session: 'adc-proxy',
-    },
-    response,
-    createTestHostEnvironment(),
-  );
-  return readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId;
+  const flags = {
+    json: true,
+    help: false,
+    version: false,
+    stateDir,
+    remoteConfig: remoteConfigPath,
+    session: 'adc-proxy',
+  };
+  forgetEndedConnectionLease(flags, response, createTestHostEnvironment());
+  return { flags, state: readRemoteConnectionState({ stateDir, session: 'adc-proxy' }) };
+}
+
+function storedStateAfter(response: DaemonResponse, overrides: Partial<StoredConnectionSeed> = {}) {
+  return endLeaseOnConnection(response, overrides).state;
+}
+
+function storedLeaseIdAfter(
+  response: DaemonResponse,
+  overrides: Partial<StoredConnectionSeed> = {},
+): string | undefined {
+  return storedStateAfter(response, overrides)?.leaseId;
 }
 
 test('an ended lease is forgotten from a reply or its error details', () => {
@@ -66,13 +76,17 @@ test('an ended lease is forgotten from a reply or its error details', () => {
       error: { code: 'COMMAND_FAILED', message: 'failed', details: { endedLeases: [...ENDED] } },
     },
   ];
-  for (const reply of replies) assert.equal(storedLeaseIdAfter(reply), undefined);
+  for (const reply of replies) {
+    const stored = storedStateAfter(reply);
+    assert.equal(stored?.leaseId, undefined);
+    assert.equal(stored?.endedLeaseId, LEASE_ID);
+  }
 });
 
 test('the stored lease stays unless the reply ends that lease at response level', () => {
   const nestedStep = { step: 1, command: 'close', ok: true, data: { endedLeases: [...ENDED] } };
   const replies: DaemonResponse[] = [
-    { ok: true, data: { endedLeases: [{ leaseId: 'other-lease', outcome: 'released' }] } },
+    { ok: true, data: { endedLeases: [{ leaseId: 'f'.repeat(32), outcome: 'released' }] } },
     { ok: true, data: { endedLeases: [{ leaseId: LEASE_ID, outcome: 'retained' }] } },
     { ok: true, data: { endedLeases: { leaseId: LEASE_ID, outcome: 'released' } } },
     { ok: true, data: { lease: { leaseId: LEASE_ID, tenantId: 'proxy', runId: 'run' } } },
@@ -89,8 +103,29 @@ test('an ended host-allocated lease stays stored', async () => {
     storedLeaseIdAfter(reply, { leaseBackend: 'macos-app', platform: 'macos' }),
     LEASE_ID,
   );
-  assert.equal(storedLeaseIdAfter(reply, { leaseProvider: 'limrun' }), undefined);
+  const limrun = storedStateAfter(reply, { leaseProvider: 'limrun' });
+  assert.equal(limrun?.leaseId, undefined);
+  assert.equal(limrun?.endedLeaseId, undefined);
   for (const leaseProvider of [undefined, 'revyl', 'browserstack', 'custom-provider']) {
     assert.equal(storedLeaseIdAfter(reply, { leaseProvider }), LEASE_ID);
   }
+});
+
+test('artifacts still sends the lease that a close ended', async () => {
+  const { flags } = endLeaseOnConnection({ ok: true, data: { endedLeases: [...ENDED] } });
+  const host = createTestHostEnvironment();
+  const client = createAgentDeviceClient(
+    {},
+    {
+      host,
+      transport: async (request) => {
+        throw new Error(`unexpected daemon request: ${request.command}`);
+      },
+    },
+  );
+  const leaseIdFor = async (command: string) =>
+    (await materializeRemoteConnectionForCommand({ host, command, client, flags })).flags.leaseId;
+
+  assert.equal(await leaseIdFor('artifacts'), LEASE_ID);
+  assert.equal(await leaseIdFor('session'), undefined);
 });

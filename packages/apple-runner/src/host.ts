@@ -97,7 +97,10 @@ export type AppleRunnerHost = Pick<
   | 'isCommandTimeoutError'
   | 'commandDeveloperDir'
 > &
-  Pick<typeof HostDiagnostics, 'emitDiagnostic' | 'withDiagnosticTimer'> &
+  Pick<
+    typeof HostDiagnostics,
+    'captureDiagnosticTraceWriter' | 'emitDiagnostic' | 'withDiagnosticTimer'
+  > &
   Pick<typeof HostRetry, 'retryWithPolicy' | 'isEnvTruthy'> &
   Pick<
     typeof HostProcess,
@@ -196,6 +199,7 @@ export const isCommandTimeoutError = delegate('isCommandTimeoutError');
 export const commandDeveloperDir = delegate('commandDeveloperDir');
 export const hostEnvironment = delegate('hostEnvironment');
 export const shellQuote = delegate('shellQuote');
+export const captureDiagnosticTraceWriter = delegate('captureDiagnosticTraceWriter');
 export const emitDiagnostic = delegate('emitDiagnostic');
 export const withDiagnosticTimer = delegate('withDiagnosticTimer');
 export const retryWithPolicy = delegate('retryWithPolicy');

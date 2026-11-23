@@ -1,4 +1,12 @@
-import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
+import { randomUUID } from 'node:crypto';
+import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
+import { rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {
+  createDaemonScreenshotArtifactAdapter,
+  publishScreenshotFile,
+} from './screenshot-artifact-adapter.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
@@ -103,6 +111,10 @@ export async function resolveScreenshotGenericExecution(
         dispatchContext: execution.dispatchContext,
         flags: execution.request.flags,
         outPath: request.outPath,
+        clientPath: req.meta?.clientArtifactPaths?.path,
+        downloadable: Boolean(
+          req.internal?.publicNetworkOnly || req.meta?.clientArtifactPaths?.path,
+        ),
         runtime,
         cropOn,
         cropRun,
@@ -193,6 +205,8 @@ async function executeScreenshot(
     dispatchContext: DaemonCommandContext;
     flags: CommandFlags | undefined;
     outPath: string | undefined;
+    clientPath: string | undefined;
+    downloadable: boolean;
     runtime: BoundScreenshotRuntime;
     cropOn?: string;
     cropRun?: ScreenshotCropRun;
@@ -205,34 +219,62 @@ async function executeScreenshot(
     cropRun: params.cropRun,
     logPath: params.logPath,
   });
-  const captured = await captureScreenshotArtifact({
-    createCommandSurface: params.createCommandSurface,
-    session,
-    sessionName: params.sessionName,
-    outPath: params.outPath,
-    dispatchContext: params.dispatchContext,
-    captureScreenshot: runtime.captureScreenshot,
-    ...(crop ? { crop } : {}),
-  });
-  const warnings = [...(captured.warnings ?? []), ...(crop?.run?.warnings ?? [])];
-  return {
-    ...captured,
-    ...(warnings.length > 0 ? { warnings } : {}),
-    ...(await screenshotOverlayRefsField({
+  const publishedPath = params.outPath;
+  const privatePath =
+    params.downloadable && publishedPath
+      ? path.join(os.tmpdir(), `agent-device-screenshot-${randomUUID()}.png`)
+      : undefined;
+  try {
+    const captured = await captureScreenshotArtifact({
+      createCommandSurface: params.createCommandSurface,
       session,
-      cropOn: params.cropOn,
-      captureSnapshot: runtime.captureSnapshot,
-      screenshotPath: captured.path,
-      logPath: params.logPath,
+      sessionName: params.sessionName,
+      outPath: privatePath ?? publishedPath,
       dispatchContext: params.dispatchContext,
-    })),
-    ...(await readScreenshotResultMetadata({
-      device: session.device,
-      path: captured.path,
-      requestedPixelDensity: flags?.screenshotPixelDensity,
-      scale: flags?.screenshotScale,
-    })),
-  };
+      captureScreenshot: runtime.captureScreenshot,
+      ...(crop ? { crop } : {}),
+    });
+    const warnings = [...(captured.warnings ?? []), ...(crop?.run?.warnings ?? [])];
+    const result = {
+      ...captured,
+      ...(warnings.length > 0 ? { warnings } : {}),
+      ...(await screenshotOverlayRefsField({
+        session,
+        cropOn: params.cropOn,
+        captureSnapshot: runtime.captureSnapshot,
+        screenshotPath: captured.path,
+        logPath: params.logPath,
+        dispatchContext: params.dispatchContext,
+      })),
+      ...(await readScreenshotResultMetadata({
+        device: session.device,
+        path: captured.path,
+        requestedPixelDensity: flags?.screenshotPixelDensity,
+        scale: flags?.screenshotScale,
+      })),
+    };
+    if (!privatePath || !publishedPath) return result;
+    if (isRemoteTempArtifactPath(publishedPath, 'screenshot', '.png')) return result;
+    await publishScreenshotFile(privatePath, publishedPath, params.dispatchContext.signal);
+    return {
+      ...result,
+      path: publishedPath,
+      ...(result.message === undefined ? {} : { message: `Saved screenshot: ${publishedPath}` }),
+      artifacts: [
+        {
+          field: 'path',
+          artifactType: 'screenshot',
+          path: privatePath,
+          localPath: params.clientPath,
+          fileName: path.basename(params.clientPath ?? publishedPath),
+          displayRotation: result.displayRotation,
+        },
+      ],
+    };
+  } catch (error) {
+    if (privatePath) await rm(privatePath, { force: true });
+    throw error;
+  }
 }
 
 /** Present exactly when the admitted plan carries a crop and the snapshot binding to serve it. */

@@ -4,7 +4,12 @@ import { finalizeDaemonResponse } from '../request-finalization.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { DaemonArtifactType, DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DownloadableArtifactRegistration } from '../../resources/artifact-tracking.ts';
-import { asDaemonDeliveredArtifact } from '../../core/capture-output-ownership.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { leaseVerifier } from '../../resources/artifact-tracking.ts';
+import {
+  asDaemonDeliveredArtifact,
+  withCaptureOutputOwnership,
+} from '../../core/capture-output-ownership.ts';
 
 test('finalizeDaemonResponse preserves handler error hints from details', () => {
   const req: DaemonRequest = {
@@ -413,3 +418,47 @@ test.each([
     expect(registrations.map(({ tenantId }) => tenantId)).toEqual(['tenant-a']);
   },
 );
+
+test('a delivered script keeps the admitted lease alongside an unleased recording', () => {
+  const lease = new LeaseRegistry().allocateLease({ tenantId: 'tenant', runId: 'record' });
+  const tracked: DownloadableArtifactRegistration[] = [];
+  finalizeDaemonResponse(
+    {
+      token: 'token',
+      session: 'default',
+      command: 'record',
+      positionals: ['stop'],
+      internal: { admittedLease: lease },
+      meta: { tenantId: 'tenant' },
+    },
+    {
+      ok: true,
+      data: withCaptureOutputOwnership(
+        {
+          artifacts: [
+            { field: 'outPath', artifactType: 'screen-recording', path: '/daemon/video.mp4' },
+            asDaemonDeliveredArtifact(
+              {
+                field: 'savedScript',
+                artifactType: 'session-script',
+                path: '/daemon/session.ad',
+              },
+              'tenant',
+            ),
+          ],
+        },
+        'daemon',
+        undefined,
+        null,
+      ),
+    },
+    (entry) => {
+      tracked.push(entry);
+      return 'artifact';
+    },
+  );
+  expect(tracked.map((artifact) => [artifact.tenantId, artifact.leaseVerifier])).toEqual([
+    ['tenant', undefined],
+    ['tenant', leaseVerifier(lease.leaseId)],
+  ]);
+});

@@ -138,6 +138,28 @@ test('close with an explicit lease id but no session lease still requires an act
   );
 });
 
+test('record stop with no session runs without a lease only when the lease it names ended', () => {
+  const registry = new LeaseRegistry();
+  const scope = { tenantId: 'tenant-a', runId: 'run-1', leaseBackend: 'ios-instance' } as const;
+  const live = registry.allocateLease(scope);
+  const admit = (positionals: string[], leaseId: string) =>
+    assertRequestLeaseAdmission(
+      makeRequest({
+        command: 'record',
+        positionals,
+        meta: { ...scope, leaseId, sessionIsolation: 'tenant' },
+      }),
+      registry,
+      undefined,
+      { env: process.env },
+    );
+
+  // The handler checks the ended lease id against the owner of the export.
+  assert.equal(admit(['stop'], 'a'.repeat(32)), undefined);
+  assert.equal(admit(['stop'], live.leaseId)?.leaseId, live.leaseId);
+  assert.throws(() => admit(['start'], 'a'.repeat(32)), /Lease is not active/);
+});
+
 test('non-close commands on a tenant-isolated session still require a lease id', () => {
   const registry = new LeaseRegistry();
 
