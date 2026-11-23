@@ -227,14 +227,16 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   async prepareRentalRecovery(): Promise<void> {
     if (!this.limrun) return;
-    // The SDK can override the configured key and URL when building its request.
-    const { req } = await this.limrun.buildRequest({ method: 'get', path: '/' });
-    const authorization = req.headers.get('authorization');
-    if (!authorization) return;
-    this.rentalRecoveryPrincipal = providerRuntimeInstance(LIMRUN_PROVIDER, [
-      ['authorization', authorization],
-      ['baseUrl', this.limrun.baseURL],
-    ]);
+    // The SDK can override authorization and add account routing headers.
+    const request = await this.limrun
+      .buildRequest({ method: 'get', path: '/' })
+      .catch(() => undefined);
+    this.rentalRecoveryPrincipal = request?.req.headers.get('authorization')
+      ? providerRuntimeInstance(LIMRUN_PROVIDER, [
+          ['baseUrl', this.limrun.baseURL],
+          ['headers', JSON.stringify([...request.req.headers.entries()])],
+        ])
+      : undefined;
   }
 
   /**

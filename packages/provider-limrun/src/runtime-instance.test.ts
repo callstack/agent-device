@@ -89,12 +89,46 @@ test('rental recovery binds effective authorization and API URL independently of
     vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
     vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'Authorization: Bearer alternate-fixture-credential');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-a\nX-Route: region-a');
+    const routed = await principal({ LIMRUN_API_KEY: 'fixture-key' });
+    expect(routed).not.toBe(first);
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Route: region-a\nX-Account: account-a');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).toBe(routed);
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-b\nX-Route: region-a');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(routed);
     expect(
       await principal({
         LIM_IOS_INSTANCE_URL: 'https://attached.example.test',
         LIM_IOS_INSTANCE_TOKEN: 'fixture-token',
       }),
     ).toBeUndefined();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test('keeps Limrun registered when the SDK cannot build recovery proof', async () => {
+  const [provider] = limrunPlugin({
+    createDependencies: stubLimrunRuntimeDependencies,
+  }).contributes;
+  if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
+  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'Invalid Header Name: fixture');
+  try {
+    const setup = await provider.setup({
+      env: { LIMRUN_API_KEY: 'fixture-key' },
+      options: {},
+      clientVersion: 'test-version',
+      diagnostics: { emit: () => {} },
+      createError: (_code, message) => {
+        throw new Error(message);
+      },
+      runHostCommand: async () => {
+        throw new Error('Expected no host command');
+      },
+    });
+    if (!('runtime' in setup)) throw new Error('Expected a configured Limrun runtime');
+    expect(setup.runtime.provider).toBe('limrun');
+    expect(setup.runtime.rentalRecoveryPrincipal).toBeUndefined();
   } finally {
     vi.unstubAllEnvs();
   }

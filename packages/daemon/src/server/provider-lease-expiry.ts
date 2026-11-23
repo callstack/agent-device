@@ -494,8 +494,12 @@ export function createExpiredProviderLeaseReleaser(options: {
     });
   };
 
-  const retryPending = async (): Promise<void> => {
+  const retryRetirements = (): void => {
     for (const lease of pendingRetirements.values()) retireConfirmedRelease(lease);
+  };
+
+  const retryPending = async (): Promise<void> => {
+    retryRetirements();
     const attempts = [
       ...[...pendingLiveLeases.values()].map(ensureLiveReleaseAttempt),
       ...[...pendingRecoveryLeases.values()].map(ensureRecoveryReleaseAttempt),
@@ -580,6 +584,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       // A release that fails inside the budget is still a pending release: the
       // drain reports it, it never throws past the bounded window.
       await settleWithin(() => retryPending(), Math.max(0, timeoutMs)).catch(() => undefined);
+      retryRetirements();
       const result = {
         pending: [
           ...new Map([

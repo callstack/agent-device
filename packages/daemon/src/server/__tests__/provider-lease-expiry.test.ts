@@ -260,6 +260,38 @@ test('shutdown drain reports releases completed before and during its final retr
   }
 });
 
+test('shutdown drain retries retirement when a provider stop confirms during its wait', async () => {
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const release = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('temporary outage'))
+    .mockResolvedValueOnce({ release: 'confirmed' });
+  const onReleased = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
+    onReleased,
+  });
+
+  try {
+    await expect(releaser.release(lease)).resolves.toEqual({ status: 'retrying' });
+    releaser.beginShutdown();
+    await expect(releaser.drain(2_000)).resolves.toEqual({
+      pending: [],
+      unknown: [],
+      released: [lease],
+    });
+    expect(release).toHaveBeenCalledTimes(2);
+    expect(onReleased).toHaveBeenCalledTimes(2);
+  } finally {
+    releaser.shutdown();
+  }
+});
+
 test('a shutdown drain that settles inside its budget leaves no deadline timer behind', async () => {
   vi.useFakeTimers();
   const releaser = createExpiredProviderLeaseReleaser({
