@@ -36,8 +36,11 @@ export async function getReplayExecution(): Promise<ReplayExecution> {
 }
 
 async function recoverReplayPluginError(id: ReplayFormat, error: unknown): Promise<unknown> {
-  const { AppError } = await import('@agent-device/kernel/errors');
-  if (!(error instanceof AppError) || error.details?.reason !== 'plugin-not-installed')
+  const { AppError, PLUGIN_INSTALLATION_REASONS } = await import('@agent-device/kernel/errors');
+  if (
+    !(error instanceof AppError) ||
+    error.details?.reason !== PLUGIN_INSTALLATION_REASONS.notInstalled.reason
+  )
     return error;
   return await missingReplayBackend(id);
 }
@@ -79,7 +82,7 @@ export async function withReplayBackend<T>(
 
 /** A client/tooling scope owns its plugin registry until close. It never starts providers. */
 export async function openReplayBackend(id: ReplayBackendId, host: HostEnvironment) {
-  const { AppError } = await import('@agent-device/kernel/errors');
+  const { AppError, PLUGIN_INSTALLATION_REASONS } = await import('@agent-device/kernel/errors');
   const packageName = await backendPackage(id);
   const [{ storePluginCandidates }, { resolveProviderPlugins, startProviderRegistry }] =
     await Promise.all([
@@ -102,22 +105,24 @@ export async function openReplayBackend(id: ReplayBackendId, host: HostEnvironme
     return { backend, close: registry.close };
   } catch (error) {
     await registry.close();
-    if (error instanceof AppError && error.details?.reason === 'plugin-not-installed')
+    if (
+      error instanceof AppError &&
+      error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled.reason
+    )
       throw await missingReplayBackend(id);
     throw error;
   }
 }
 
 async function missingReplayBackend(id: ReplayFormat): Promise<AppError> {
-  const { AppError } = await import('@agent-device/kernel/errors');
+  const { AppError, PLUGIN_INSTALLATION_REASONS } = await import('@agent-device/kernel/errors');
   const packageName = await backendPackage(id);
   const installCommand = `agent-device plugins add ${packageName}`;
   return new AppError(
     'INVALID_ARGS',
     `Replay backend ${id} requires ${packageName}. Run ${installCommand}, then retry the original command with all its arguments.`,
     {
-      reason: (await import('@agent-device/contracts/plugin-installation'))
-        .PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
       backend: id,
       package: packageName,
       installCommand,

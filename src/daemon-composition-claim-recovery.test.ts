@@ -6,6 +6,7 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
+  createClaimRecoveryDisposalTracker,
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
   inspectDeviceClaimRecovery,
@@ -163,6 +164,7 @@ async function releaseThroughDaemonComposition(host: HostEnvironment, baseDir: s
       },
       openWebSessionNames: () => [],
     });
+    const disposals = createClaimRecoveryDisposalTracker();
     try {
       return await releaseProvenStaleDeviceClaims({
         selectors: {},
@@ -171,9 +173,11 @@ async function releaseThroughDaemonComposition(host: HostEnvironment, baseDir: s
           scope: createRecoveryPlatformScope(),
           composeGateway: deps.claimRecoveryGateway,
           beforeGateway: inspectDeviceClaimRecovery,
+          trackDisposal: disposals.track,
         }),
       });
     } finally {
+      await disposals.drain();
       await deps.shutdownProviderRuntimes();
     }
   });

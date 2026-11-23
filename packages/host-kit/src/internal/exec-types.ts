@@ -1,4 +1,7 @@
-import type { DetachedCommandExit, DetachedCommandLaunch } from '@agent-device/contracts/platform-runtime-host';
+import type {
+  DetachedCommandExit,
+  DetachedCommandLaunch,
+} from '@agent-device/contracts/platform-runtime-host';
 import type { ExecOptions, ExecResult } from './exec.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 

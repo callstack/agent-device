@@ -1,5 +1,5 @@
 import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import type { VegaCommandOptions, VegaCommandRunner } from './command-host.ts';
 
@@ -37,6 +37,11 @@ export function createVegaToolProvider(commands: VegaCommandRunner): VegaToolPro
   };
 }
 
+const VEGA_TOOL_PROVIDER_REFUSAL_REASONS = {
+  // A Vega CLI call reached the scope default without a host-bound provider.
+  adapterHostUnbound: { reason: 'vega-adapter-host-unbound' },
+} as const satisfies ReasonTable<'Vega CLI adapter'>;
+
 /**
  * The scope default for callers that name no provider. Every composed route (the plugin interactor
  * wrapper, doctor's toolbox-bound provider) enters its own provider before a command runs, so
@@ -46,7 +51,7 @@ export function createVegaToolProvider(commands: VegaCommandRunner): VegaToolPro
 function unboundVegaToolProvider(): VegaToolProvider {
   const refuse = async (): Promise<never> => {
     throw new AppError('COMMAND_FAILED', 'The Vega CLI provider is not bound to a host.', {
-      reason: 'vega-adapter-host-unbound',
+      reason: VEGA_TOOL_PROVIDER_REFUSAL_REASONS.adapterHostUnbound.reason,
     });
   };
   return {

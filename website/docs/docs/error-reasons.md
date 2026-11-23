@@ -66,6 +66,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `boot-owner-unverified` | The session found a stopped device, but its open did not prove it booted the device. |
 | `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
 | `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
@@ -76,14 +77,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `plugin-not-installed` | A command requires a plugin that is absent. |
+| `plugin-unavailable` | The selected plugin cannot supply the requested provider. |
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
 | `cloud_login_origin_mismatch` | The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued the stored CLI session, so the stored credential is not sent. Log in with the named origin, or unset the override. |
 | `cli_session_issuer_unverified` | The stored CLI session does not record the cloud that issued its credential, as a session saved by an older CLI does not, so the credential is not sent. Run agent-device auth login. |
 | `cloud_auth_redirect_refused` | A cloud auth request got a redirect it does not follow: to another origin, past the third hop, or to a missing Location or one with a username or password. Nothing was sent to the target. |
-| `plugin-unavailable` | The provider's plugin is present but cannot serve the provider; `details.failedPlugins` names what broke. |
-| `plugin-not-installed` | No plugin declares this provider; `details.installCommand` is the command that adds it. |
 
 ### `events`
 
@@ -174,6 +175,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `launch-console-owner-unadmitted` | --launch-console was asked for on an app-launch owner that cannot stream a console. |
+| `boot-owner-unverified` | The session found a stopped device, but its open did not prove it booted the device. |
 | `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
 | `claim-lost-during-open` | The device lost the claim this open was made with; close the session and open the device again. |
 | `runtime-hints-operation-missing` | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them. |
@@ -207,12 +209,27 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `plugin-not-installed` | A command requires a plugin that is absent. |
+| `plugin-unavailable` | The selected plugin cannot supply the requested provider. |
 | `duplicate_provider` | Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns. |
+| `duplicate_replay_backend` | Two plugins claim the same replay backend. |
+| `plugin-registry-closed` | A request tries to load a plugin after the registry closed. |
 | `incompatible_plugin` | The package exports no plugin entry or declares no provider contract this build can load. |
-| `plugin_load_failed` | The plugin's manifest or code could not be read, resolved, or loaded. |
+| `plugin_load_failed` | The plugin's metadata or code could not be read, resolved, or loaded. |
 | `plugin_setup_failed` | The plugin's `setup(host)` threw, or registering what it returned failed. |
 | `reserved_provider` | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`. |
-| `invalid_plugin` | The plugin package or what its code returns breaks the plugin contract: an invalid manifest, package version, provider id, credentials or connection, no default factory or `setup(host)`, or a runtime or WebDriver descriptor that lacks a required field. |
+| `invalid_plugin` | The plugin package or what its code returns breaks the plugin contract: an invalid package entry, package version, provider id, credentials or connection, no default factory or `setup(host)`, or a runtime or WebDriver descriptor that lacks a required field. |
+| `incompatible-plugin-api` | A plugin declares an unsupported API version or omits its API metadata. |
+| `node-below-floor` | The running Node version is below the minimum a plugin declares. |
+| `platform_host_missing` | A platform contribution requires a platform host for setup. |
+| `reserved_replay_backend` | A replay backend claims an id reserved for native execution. |
+| `duplicate_platform` | Two plugins claim the same platform family. |
+| `duplicate_replay_execution` | Two plugins claim the same replay execution id. |
+| `plugin_already_installed` | An install selects a plugin already installed. |
+| `artifact_integrity_mismatch` | The plugin archive changed during installation. |
+| `artifact_update_requires_remove` | Updating a local artifact requires removing the existing installation first. |
+| `plugin_cleanup_failed` | The plugin install and its staging cleanup both failed. |
+| `daemon-plugin-set-stale` | The daemon retains a plugin selection that changed on disk. |
 
 ### `prepare`
 
@@ -292,6 +309,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `replay_target_guard_mismatch` | Dispatch resolved a different node than the replay plan verified for this step. |
 | `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
 | `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
+| `plugin-not-installed` | A command requires a plugin that is absent. |
 | `maestro-test-failure` | A Maestro assertion or condition failed, so the replayed flow does not match the recording. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
@@ -394,6 +412,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
+| `plugin-not-installed` | A command requires a plugin that is absent. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
 | `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |
@@ -434,7 +453,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `vega-adapter-host-unbound` | A Vega CLI call reached the scope default: no caller composed a host-bound adapter first. |
+| `vega-adapter-host-unbound` | A Vega CLI call reached the scope default without a host-bound provider. |
 
 ### Android adb port reverse
 
@@ -636,6 +655,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `boot-owner-unverified` | The session found a stopped device, but its open did not prove it booted the device. |
 | `IOS_BOOT_TIMEOUT` | The iOS simulator did not finish booting within its budget. |
 | `IOS_RUNNER_CONNECT_TIMEOUT` | The XCTest runner did not accept a connection: xcodebuild exited before it was ready, or the connection timed out, was refused or dropped. |
 | `IOS_RUNNER_OWNED_BY_OTHER_DAEMON` | The XCTest runner for this device is owned by another agent-device daemon, or is still busy after this session's device lease was admitted. |
@@ -660,7 +680,6 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `invalid_device_pin` | A device-pin selector names a platform, device, udid, or serial the request cannot carry. |
-| `provider_instance_unallocated` | The provider connection has no allocated instance to route to. |
 
 ### Device selection
 
@@ -711,6 +730,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `command_output_limit` | A subprocess exceeded the maximum output the host buffers. |
 | `host_environment_unscoped` | A command needed the host environment and no `withCommandHost` scope wrapped the call. |
 | `xcrun-tool-not-found` | `xcrun` reported that the tool a command asked for is not in the selected developer dir. |
 
@@ -773,31 +793,39 @@ These reasons can come from more than one command.
 | `device-spec-unsupported` | The request picks a device by OS version, image tag, device mode, baseline, or class, and nothing on its path honours a spec. |
 | `device-spec-invalid` | A device-spec key was given a value of the wrong type. |
 | `provider-instance-ended` | The device instance behind the lease ended outside the daemon, which ends the lease with it. |
+| `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
+| `LEASE_OUTPUT_MISMATCH` | The request does not send the id of the lease that produced the artifact or diagnostics record. |
 | `DEVICE_LEASE_BUSY` | Another lease, or this tenant run, already holds the device; retry after that lease is released or expires. |
+| `LEASE_ID_TOO_SHORT` | A lease id that the caller chose on allocate has fewer than 32 hex digits (128 bits). |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |
 | `MACOS_APP_LEASE_DENIED` | A `macos-app` lease does not cover this request; `details.rule` names the limit. |
-| `provider-not-registered` | The lease names a provider this daemon has not registered; `details.failedPlugins` lists plugins that failed to load. |
 | `provider-credentials-changed` | The running daemon holds different provider credentials than this shell; stop the daemon and rerun. |
 | `PROVIDER_SESSION_NOT_OWNED` | The provider session belongs to another tenant. |
 | `MACOS_APP_LEASE_HOST_OWNED` | Only the host administrator releases a `macos-app` lease. |
 | `MACOS_APP_LEASE_HOST_ALLOCATED` | Only the host administrator allocates a `macos-app` lease. |
-| `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
 
 ### Limrun
 
 | Reason | Meaning |
 | --- | --- |
+| `limrun_api_unauthorized` | The account key was refused or lacks access to what was asked for. |
+| `limrun_api_not_found` | The account API has nothing under the identifier the request named. |
+| `limrun_api_rate_limited` | The account API is taking this key's requests too fast to answer them. |
+| `limrun_api_failed` | The account API refused the request for a reason with no separate recovery. |
+| `limrun_download_empty_body` | The instance answered the download with no body at all, so nothing could reach disk. |
+| `limrun_download_http_error` | The instance refused the download; its HTTP status answers for the refusal. |
+| `limrun_download_timeout` | The transfer's own deadline passed before the file reached disk. |
+| `limrun_download_failed` | The transfer failed before it could ask the instance for the file. |
+| `limrun_instance_command_failed` | The instance refused or could not answer the command; its text, with this session's credential removed, is the message. |
+| `limrun_file_response_invalid` | The instance returned an unreadable JSON reply for a simulator file operation. |
 | `limrun_xctest_slot_occupied` | Another XCTest run holds the simulator's one run slot. |
 | `limrun_runner_launch_failed` | The remote XCTest run could not be started, or its run stream never arrived. |
 | `limrun_runner_products_invalid` | The runner app or its manifest does not match the instance this client rented. |
 | `limrun_runner_upload_failed` | The runner app could not be staged on the instance. |
 | `limrun_runner_bind_address_missing` | The simulator never reported the address its HTTP forward listens on. |
 | `limrun_runner_snapshot_unavailable` | The runner's snapshot capture came back too sparse to act on after a failed or unbudgeted capture. |
-| `limrun_download_http_error` | The service answered the download with an error status; `details.statusCode` and `details.body` carry its reply. |
-| `limrun_download_timeout` | The download passed its deadline; `details.timeoutMs` is that deadline. |
-| `limrun_download_failed` | The transfer broke for a reason the service never answered with, kept in `details.cause`. |
 
 ### Limrun provider
 
@@ -859,6 +887,24 @@ These reasons can come from more than one command.
 | `signal-failed` | The host refused the signal, usually because another user owns the process. |
 | `exit-timeout` | SIGKILL was sent and nothing proved the process exited within the budget it was given. |
 | `identity-unverified` | Nothing confirmed the pid names the recorded process, so signalling it was refused. |
+
+### Provider credentials
+
+| Reason | Meaning |
+| --- | --- |
+| `missing_provider_credentials` | The host lacks the credential the provider requires to authenticate the request. |
+
+### Provider inventory
+
+| Reason | Meaning |
+| --- | --- |
+| `provider_instance_unallocated` | The provider connection has no live instance. Allocate one with open, boot, or leases.allocate. |
+
+### Provider runtime admission
+
+| Reason | Meaning |
+| --- | --- |
+| `provider-not-registered` | The daemon has no runtime for the requested provider. Inspect failedPlugins or install the named managed plugin. |
 
 ### Ref frames
 
@@ -929,7 +975,6 @@ These reasons can come from more than one command.
 | --- | --- |
 | `invalid_provider_app` | Revyl installs the app from a URL, so `--provider-app` cannot name a local file. |
 | `unsupported_platform` | Revyl rents an iOS simulator or an Android emulator, and the request names neither. |
-| `missing_provider_credentials` | No Revyl API key is set, so the provider cannot authenticate the request. |
 | `unsupported_app_artifact` | Revyl installs an iOS simulator build or an Android .apk, and the build is neither. |
 | `provider-app-not-launched` | The session runs no app, so a close or setting that names one has nothing to act on. |
 | `provider-viewport-unavailable` | The session reports no viewport, so a scroll distance or screenshot density has nothing to scale by. |

@@ -6,12 +6,9 @@ import {
   pluginConnectionNames,
   primePluginConnections,
 } from '@agent-device/plugins/connection';
-import {
-  PLUGIN_INSTALLATION_REASONS,
-  pluginInstallationHint,
-} from '@agent-device/contracts/plugin-installation';
+import { pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
 import { readVersion } from '@agent-device/host-kit/version';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, PLUGIN_INSTALLATION_REASONS } from '@agent-device/kernel/errors';
 import {
   getProviderPluginDeclaration,
   providerPluginAdmission,

@@ -1,5 +1,3 @@
-import { PLUGIN_REASONS, type PluginFailureReason } from './reasons.ts';
-import { PLUGIN_INSTALLATION_REASONS } from '@agent-device/contracts/plugin-installation';
 import type { PlatformHost, RegisteredPlatformSetup } from './platform.ts';
 import type { MacOsPlatformLeafRegistration } from '@agent-device/contracts/macos-platform-leaf';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -14,11 +12,17 @@ import type {
   ReplayBackendSetup,
   ReplayExecutionSetup,
 } from './replay-backend.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, PLUGIN_INSTALLATION_REASONS } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
-import type { Contribution, PluginConnection, ProviderContribution } from './contract.ts';
+import {
+  PLUGIN_REASONS,
+  type Contribution,
+  type PluginConnection,
+  type PluginFailureReason,
+  type ProviderContribution,
+} from './contract.ts';
 import type { RegisteredConnection } from './connection.ts';
 import { createPluginHost, createReplaySetupHost } from './host.ts';
 import {

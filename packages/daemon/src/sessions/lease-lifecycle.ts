@@ -186,7 +186,7 @@ async function endExpiredSessionForSuccessor(
   const successorLeaseId = successorScope.leaseId;
   if (!expiredLeaseId || !successorLeaseId || successorLeaseId === expiredLeaseId) return false;
   const canEndSession = () =>
-    params.sessionStore.resolveCurrent(ref)?.lease?.leaseId === expiredLeaseId &&
+    params.sessionStore.currentRefForLease(ref, expiredLeaseId) !== undefined &&
     !leaseRegistry.inspectActiveLease(expiredLeaseId) &&
     leaseRegistry.inspectActiveLease(successorLeaseId) !== undefined;
   if (!canEndSession()) return false;

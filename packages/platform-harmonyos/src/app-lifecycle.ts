@@ -39,6 +39,10 @@ interface HarmonyBundleDump {
   }>;
 }
 
+interface HarmonyArchiveModule {
+  app?: { bundleName?: string };
+}
+
 const HARMONY_APP_INVENTORY_TIMEOUT_MS = 60_000;
 const HARMONY_APP_METADATA_CONCURRENCY = 4;
 

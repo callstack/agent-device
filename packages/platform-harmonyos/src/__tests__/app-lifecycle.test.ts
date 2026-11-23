@@ -334,7 +334,10 @@ test('openHarmonyApp classifies the locked-screen launch refusal as open-not-for
   });
 
   await assert.rejects(
-    () => openHarmonyApp(foregroundHdc, DEVICE, 'com.example.application', { activity: 'EntryAbility' }),
+    () =>
+      openHarmonyApp(foregroundHdc, DEVICE, 'com.example.application', {
+        activity: 'EntryAbility',
+      }),
     (error: unknown) => {
       assert(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');

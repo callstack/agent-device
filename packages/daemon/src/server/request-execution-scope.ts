@@ -31,7 +31,6 @@ import {
   assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
   assertRequestTenantAdmission,
-  requestMayRecordSessionEvents,
   resolveRequestSessionName,
   resolveRequestSessionRef,
   type ResolveRequestSessionRef,
@@ -325,10 +324,10 @@ export async function createRequestExecutionScope(params: {
   let recordsRequestEvents = false;
   const recordStarted = (ts?: string): void => {
     if (recordsRequestEvents || !shouldRecordEventForRequest(scopedReq)) return;
-    if (!requestMayRecordSessionEvents(scopedReq, sessionStore.lookup(sessionName))) return;
-    recordsRequestEvents = true;
-    const started = buildRequestStartedEvent({ req: scopedReq });
-    sessionStore.recordEvent(sessionName, ts ? { ...started, ts } : started);
+    recordsRequestEvents = sessionStore.recordRequestEvent(scopedReq, sessionName, () => {
+      const started = buildRequestStartedEvent({ req: scopedReq });
+      return ts ? { ...started, ts } : started;
+    });
   };
   const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
     const reason = response.ok ? undefined : response.error.details?.reason;
@@ -336,9 +335,7 @@ export async function createRequestExecutionScope(params: {
       recordStarted(new Date(startedAtMs).toISOString());
     }
     if (!recordsRequestEvents) return;
-    if (!requestMayRecordSessionEvents(req, sessionStore.lookup(sessionName))) return;
-    sessionStore.recordEvent(
-      sessionName,
+    sessionStore.recordRequestEvent(req, sessionName, () =>
       buildRequestFinishedEvent({
         req,
         response,
@@ -889,7 +886,7 @@ export function createLeaseSessionEnd(params: {
   const pending = new Map<string, { reason: LeaseEndReason; nextRetryAt: number }>();
 
   const endLiveSessions = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
-    const refs = sessionStore.listRefs().filter((ref) => ref.session.lease?.leaseId === leaseId);
+    const refs = sessionStore.leasedSessionRefs(leaseId);
     await Promise.all(
       refs.map(
         async (ref) =>
@@ -898,9 +895,10 @@ export function createLeaseSessionEnd(params: {
             existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
             async () => {
               if (closing) return;
-              if (sessionStore.resolveCurrent(ref)?.lease?.leaseId !== leaseId) return;
+              const current = sessionStore.currentRefForLease(ref, leaseId);
+              if (!current) return;
               await endLeasedSession(
-                sessionStore.refresh(ref),
+                current,
                 sessionStore,
                 teardownSession,
                 reason,
@@ -957,7 +955,7 @@ export function createLeaseSessionEnd(params: {
       if (
         !closing &&
         sessionStore.listRetainedExecutionHosts(leaseId).length === 0 &&
-        !sessionStore.listRefs().some((ref) => ref.session.lease?.leaseId === leaseId)
+        sessionStore.leasedSessionRefs(leaseId).length === 0
       ) {
         pending.delete(leaseId);
       } else if (!closing) {

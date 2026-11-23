@@ -14,7 +14,6 @@ import {
 import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
   assertRequestHoldsSessionLease,
-  compareRequestLeaseClaims,
   findMissingProxyLeaseFields,
   resolveLeaseRefusalScope,
   resolveLeaseScope,
@@ -148,15 +147,6 @@ export function resolveRequestSessionRef(
 }
 
 export type ResolveRequestSessionRef = typeof resolveRequestSessionRef;
-
-/** Whether a request may write to the journal of its address: only a session it acts through. */
-export function requestMayRecordSessionEvents(
-  req: DaemonRequest,
-  ref: SessionRef | undefined,
-): boolean {
-  if (!ref?.session.lease) return true;
-  return !ignoresSessionLease(req.command) && !compareRequestLeaseClaims(req, ref.session.lease);
-}
 
 export function assertRequestLeaseAdmission(
   req: DaemonRequest,

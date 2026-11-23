@@ -1,4 +1,3 @@
-import { PLUGIN_REASONS } from './reasons.ts';
 import type { RegisteredPlatformSetup } from './platform.ts';
 import type { MacOsPlatformLeafRegistration } from '@agent-device/contracts/macos-platform-leaf';
 import { isPlatform, type Platform } from '@agent-device/kernel/device-identity';
@@ -17,7 +16,12 @@ import { isRecord } from '@agent-device/kernel/record';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
-import { PLUGIN_API_VERSION, ROUTING_PROVIDER_IDENTITIES, type Contribution } from './contract.ts';
+import {
+  PLUGIN_API_VERSION,
+  PLUGIN_REASONS,
+  ROUTING_PROVIDER_IDENTITIES,
+  type Contribution,
+} from './contract.ts';
 
 const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
 
@@ -90,7 +94,10 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
     contributionIdField: 'provider',
     rejectId: (id) =>
       ROUTING_PROVIDER_IDENTITIES.includes(id)
-        ? { reason: PLUGIN_REASONS.reservedProvider.reason, message: `Provider id is reserved for routing: ${id}` }
+        ? {
+            reason: PLUGIN_REASONS.reservedProvider.reason,
+            message: `Provider id is reserved for routing: ${id}`,
+          }
         : undefined,
     duplicateReason: PLUGIN_REASONS.duplicateProvider.reason,
     identityFor: (id) => ({ provider: id }),
@@ -105,7 +112,10 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
     rejectId: (id) =>
       isPlatform(id)
         ? undefined
-        : { reason: PLUGIN_REASONS.invalidPlugin.reason, message: `Unknown platform family: ${id}` },
+        : {
+            reason: PLUGIN_REASONS.invalidPlugin.reason,
+            message: `Unknown platform family: ${id}`,
+          },
     duplicateReason: PLUGIN_REASONS.duplicatePlatform.reason,
     identityFor: (id, appleOs) => ({
       platform: id,

@@ -797,8 +797,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     }
     if (terminationReason === undefined) return undefined;
     const { LEASE_REASONS } = await import('@agent-device/contracts/lease-scope');
-    // `terminationReason` is bounded and scrubbed by its reader; `readLimrunTerminationReason` is the only
-    // route that can name it here, so the published line is one line.
     throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
       reason: LEASE_REASONS.instanceEnded.reason,
       terminationReason,
@@ -992,8 +990,6 @@ async function readLimrunTerminationReason(
     if (answer.value.status.state !== 'terminated') return undefined;
     // The termination reason is the account API's own text, and this request carries the account key in
     // its header, so it goes through the same reader as an instance's error body before it is published.
-    // It is read here rather than imported at the top: the runtime façade keeps its merge-base closure
-    // (ADR-0027), and this is the only route that publishes the account API's text.
     const { safeTerminationReason } = await import('./error-text.ts');
     return safeTerminationReason(answer.value.status.terminationReason, [
       limrun.apiKey ?? undefined,
