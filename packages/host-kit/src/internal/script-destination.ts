@@ -6,7 +6,7 @@ import {
   requireWindowsScriptVolume,
   scriptEntryNameOrRefuse,
 } from './entry-name.ts';
-import { hostPathRules } from './path-resolution.ts';
+import { hostPathRules } from '../path-resolution.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   scriptAncestryFailure,

@@ -1,5 +1,77 @@
-export {
-  expandUserHomePath,
-  resolveUserConfigPath,
-  resolveUserPath,
-} from './internal/path-resolution.ts';
+import os from 'node:os';
+import path from 'node:path';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import type { EnvMap } from '@agent-device/kernel/source-value';
+
+/** The host-path refusals this module answers with. */
+const HOST_PATH_REASONS = {
+  // `AGENT_DEVICE_CLAIMS_DIR` is relative, so the shared device-claim store has no fixed home.
+  relativeClaimsDir: { reason: 'relative_claims_dir' },
+} as const satisfies ReasonTable<'host paths'>;
+
+type PathResolutionOptions = {
+  cwd?: string;
+  env?: EnvMap;
+};
+
+export function resolveHomeDirectory(env?: EnvMap): string {
+  return env?.HOME?.trim() || os.homedir();
+}
+
+export function expandUserHomePath(inputPath: string, options: PathResolutionOptions = {}): string {
+  if (inputPath === '~') return resolveHomeDirectory(options.env);
+  if (inputPath.startsWith('~/')) {
+    return hostPathRules().join(resolveHomeDirectory(options.env), inputPath.slice(2));
+  }
+  return inputPath;
+}
+
+export function resolveUserPath(
+  inputPath: string,
+  options: PathResolutionOptions & { cwd: string },
+): string {
+  const expandedPath = expandUserHomePath(inputPath, options);
+  const rules = hostPathRules();
+  if (rules.isAbsolute(expandedPath)) return expandedPath;
+  return rules.resolve(options.cwd, expandedPath);
+}
+
+/** The path rules of the host this runs on, read when asked, the way the destination rule reads its platform. */
+export function hostPathRules(): path.PlatformPath {
+  return process.platform === 'win32' ? path.win32 : path.posix;
+}
+
+/**
+ * The user's `config.json`, from `AGENT_DEVICE_HOME` or `~/.agent-device`.
+ *
+ * This lives beside the other expansions rather than in the CLI's config loader because it is the
+ * same question those two answer — a location named by the environment becomes an absolute path —
+ * and it answers it with nothing but `env`: no option schema, no flag grammar, no command facet.
+ * Plugin discovery needs the answer at daemon start and must not acquire the CLI's schema layer to
+ * get it (`packages/plugins/src/store.ts`), which is a 153-file zone rather than a path helper.
+ */
+export function resolveUserConfigPath(env: EnvMap): string {
+  const home = env.AGENT_DEVICE_HOME
+    ? expandUserHomePath(env.AGENT_DEVICE_HOME, { env })
+    : path.join(expandUserHomePath('~', { env }), '.agent-device');
+  if (!path.isAbsolute(home))
+    throw new AppError('INVALID_ARGS', 'AGENT_DEVICE_HOME must be absolute or ~/...');
+  return path.join(home, 'config.json');
+}
+
+export function resolveDeviceClaimRoot(env: EnvMap): string {
+  const override = env.AGENT_DEVICE_CLAIMS_DIR?.trim();
+  if (!override) return path.join(os.homedir(), '.agent-device', 'device-claims');
+  // The store is shared by every daemon on the host, so a directory that depends on where one of
+  // them happened to start is not a place they can agree on.
+  if (!path.isAbsolute(override)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `AGENT_DEVICE_CLAIMS_DIR must be an absolute path: ${override}`,
+      {
+        reason: HOST_PATH_REASONS.relativeClaimsDir.reason,
+      },
+    );
+  }
+  return path.resolve(override);
+}
