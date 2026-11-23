@@ -112,15 +112,14 @@ export function createLeaseSessionEnd(params: {
   };
   const settlements = new WeakMap<SessionRef['lifetime'], ExpirySettlement>();
   const daemonContext = new AsyncResource('LeaseExpiry');
-  const leaseSessions = (id: string) =>
-    sessionStore.listRefs().filter((ref) => ref.session.lease?.leaseId === id);
-
   const endLiveSessions = async (
     leaseId: string,
     reason: LeaseEndReason,
     attempted: Set<SessionRef['lifetime']>,
   ): Promise<void> => {
-    const refs = leaseSessions(leaseId).filter(({ lifetime }) => !attempted.has(lifetime));
+    const refs = sessionStore
+      .leasedSessionRefs(leaseId)
+      .filter(({ lifetime }) => !attempted.has(lifetime));
     await Promise.allSettled(
       refs.map(
         async (ref) =>
@@ -206,7 +205,7 @@ export function createLeaseSessionEnd(params: {
       if (
         !closing &&
         sessionStore.listRetainedExecutionHosts(leaseId).length === 0 &&
-        leaseSessions(leaseId).length === 0
+        sessionStore.leasedSessionRefs(leaseId).length === 0
       ) {
         pending.delete(leaseId);
       } else if (!closing) {
@@ -246,7 +245,7 @@ export function createLeaseSessionEnd(params: {
         },
       });
     };
-    for (const ref of leaseSessions(leaseId)) {
+    for (const ref of sessionStore.leasedSessionRefs(leaseId)) {
       closingRefs.set(ref.address, ref);
     }
     for (const ref of closingRefs.values()) {

@@ -1,4 +1,4 @@
-import { PROVIDER_INSTANCE_ENDED } from '@agent-device/contracts/lease-scope';
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
@@ -35,7 +35,7 @@ test.each([true, false])(
     const sessionStore = makeSessionStore('agent-device-provider-ended-settle-');
     const ref = sessionStore.publish('default', makeIosSession('default'));
     const failure = new AppError('COMMAND_FAILED', 'Provider device is gone', {
-      reason: exact ? PROVIDER_INSTANCE_ENDED : 'unconfirmed',
+      reason: exact ? LEASE_REASONS.instanceEnded.reason : 'unconfirmed',
     });
     const settle = settleExpiredSession({
       appLog: 'run',

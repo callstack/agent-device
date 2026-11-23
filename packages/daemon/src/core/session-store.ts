@@ -274,11 +274,6 @@ export class SessionStore {
     return this.listRefs().filter((ref) => ref.session.lease?.leaseId === leaseId);
   }
 
-  currentRefForLease(ref: SessionRef, leaseId: string): SessionRef | undefined {
-    if (this.resolveCurrent(ref)?.lease?.leaseId !== leaseId) return undefined;
-    return this.refresh(ref);
-  }
-
   getRuntimeHints(name: string): SessionRuntimeHints | undefined {
     return this.runtimeHints.get(name)?.hints;
   }
