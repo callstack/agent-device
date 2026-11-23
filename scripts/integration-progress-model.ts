@@ -272,9 +272,10 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['osVersion', 'imageTag', 'deviceMode', 'deviceBaseline', 'physical'],
     },
     {
-      // `takeover hold` rides the host-only admin HTTP surface, so no provider scenario reaches it.
-      name: 'takeover host hold',
-      owner: 'takeover command and host hold admin tests',
+      // `takeover hold` rides the admitted lease RPC, so no provider scenario reaches it;
+      // the hold refuses deviceKey because the admitted lease already names the device.
+      name: 'takeover lease hold',
+      owner: 'takeover command tests',
       keys: ['deviceKey', 'reason', 'ttlMs'],
     },
     {
