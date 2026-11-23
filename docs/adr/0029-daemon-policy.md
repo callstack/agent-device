@@ -5,7 +5,8 @@
 Accepted (2026-09-29). Amended (2026-11-04): `devices.allow` admits web session devices like app devices (ADR 0037).
 Amended (2026-11-14): plain close skips a denied implicit stop of a local simulator or emulator that this session's `open` booted (#4162).
 Amended (2026-11-20): a failed `open` stops the emulator its own host launched, and a denied `device-shutdown` keeps that launch running and reports why (#4764).
-Amended (2026-11-21): the capability gate covers every host that can tear down a launched Android emulator process, not only the shutdown capability, so readiness keeps its launch when policy denies `device-shutdown` (#4863).
+Amended (2026-11-21): the emulator host gates its own `terminate` with the capability gate, and the daemon's launched-process stop uses the request-level `deviceShutdownDenied` answer, so readiness keeps its launch when policy denies `device-shutdown` (#4863).
+Amended (2026-11-22): before a boot that failed stops the emulator it launched, the owning `open` answers whether another session or claim already holds that device, and a held emulator stays running (#4867).
 
 ## Rules at a glance
 
@@ -27,6 +28,7 @@ Amended (2026-11-21): the capability gate covers every host that can tear down a
      A plain close of a local simulator or emulator booted by this session's `open` skips the denied implicit stop, succeeds, and reports the kept local device.
      A failed `open` that launched a stopped emulator and published no session stops that launch through the launched-process owner, and asks nothing of the host when policy denies `device-shutdown`: the emulator stays running and the open's error reports `kept_running` with `failedOpenEmulatorCleanupReason: 'daemon-policy-denied'`.
      The host that launched an Android emulator applies this gate to its own terminate of that process, whichever request asked, so a boot that failed and a canceled boot both keep their launch running under a denied policy and report their own failure.
+     Before that terminate signals anything, the `open` whose boot has resolved the emulator's serial answers whether another session or device claim already holds it; a held device is never signaled, whichever reason failed the boot. A boot that failed before discovery named a serial stops its launch, as before: ownership is recorded under the serial, and settling that address would take an inventory pass under the canceled request's own signal. No other route answers that question, and neither does that earliest window; [issue #4993](https://github.com/callstack/agent-device/issues/4993) tracks giving both an answer from state that needs no inventory.
      A `close --shutdown` the caller asked for fails like any other denied request.
 4. Denials use `UNAUTHORIZED`, `details.reason: 'DAEMON_POLICY_DENIED'`, `retriable: false`, a hint, and the policy digest.
    They include `rule`: `command`, `device`, `capability`, or `lease`.

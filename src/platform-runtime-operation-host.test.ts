@@ -108,6 +108,31 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
+test('the composed emulator host carries the shutdown gate to its terminate', async () => {
+  // The one teardown a launched emulator's own host can perform must ask the operator's policy. A
+  // composition that dropped the argument here would let a denied daemon signal a launch (#4863).
+  const refusal = Object.assign(new Error('DAEMON_POLICY_DENIED'), {
+    details: { reason: 'DAEMON_POLICY_DENIED' },
+  });
+  const assertShutdownAllowed = vi.fn(() => {
+    throw refusal;
+  });
+  const host = createPlatformRuntimeHost({
+    host: createLiveTestHostEnvironment(),
+    stateDir: '/tmp/state',
+    sessionsDir: '/tmp/sessions',
+    resolveSessionArtifacts: () => ({
+      outputPath: '/tmp/sessions/one/app.log',
+      pidPath: '/tmp/sessions/one/app-log.pid',
+    }),
+    shutdownLoaders,
+    assertShutdownAllowed,
+    snapshot,
+  });
+
+  await expect(host.deviceReadiness.androidEmulator.terminate(4242)).rejects.toBe(refusal);
+});
+
 test('composes focused deployment executors instead of a cross-family deployment host', () => {
   const source = readFileSync(join(directory, 'platform-runtime-operation-host.ts'), 'utf8');
 

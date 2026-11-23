@@ -36,7 +36,11 @@ export async function ensureAndroidReady(
     return await ensureEmulatorReady(host, device, input, signal);
   }
   if (device.booted !== true) {
-    await waitForBoot(host, device.id, bootDeadlineAtMs(host, input), signal);
+    // A device already running at its own address: this request launched nothing, so the boot wait
+    // reports its spent budget to no one.
+    await waitForBoot(host, device.id, bootDeadlineAtMs(host, input), signal, {
+      budgetSpentWithBootRunning: false,
+    });
   }
   return { ...device, booted: true };
 }
@@ -61,15 +65,26 @@ async function ensureEmulatorReady(
         input.headless,
         deadlineAtMs - host.clock.now(),
       );
-  // Where the boot got to, so a failure after the emulator answered tells a spent boot budget
-  // apart from a late step that failed on its own.
-  let bootWaitDone = false;
+  // Where the boot wait got to. Only a boot wait that ran out the startup budget leaves the emulator
+  // coming up; a step that failed on its own does not, even past the deadline.
+  const bootWait: BootWaitProgress = { budgetSpentWithBootRunning: false };
+  // The device this boot last named: the AVD until the launched emulator answers, then its serial.
+  // Only a boot that got a serial can ask who owns the launch; the earlier window stops as base did.
+  let bootDevice: DeviceInfo = selected;
   try {
     const discovered =
       existing ??
-      (await waitForDiscovery(host, selected.name, request, input.serial, deadlineAtMs, signal));
-    await waitForBoot(host, discovered.id, deadlineAtMs, signal);
-    bootWaitDone = true;
+      (await waitForDiscovery(
+        host,
+        selected.name,
+        request,
+        input.serial,
+        deadlineAtMs,
+        signal,
+        bootWait,
+      ));
+    bootDevice = discovered;
+    await waitForBoot(host, discovered.id, deadlineAtMs, signal, bootWait);
     const refreshed = (await host.deviceReadiness.androidEmulator.discover(request, signal)).find(
       (candidate) => candidate.id === discovered.id,
     );
@@ -84,9 +99,15 @@ async function ensureEmulatorReady(
     }
     return ready;
   } catch (error) {
-    if (launchedPid !== undefined && !keepsBootAfterFailure(error, bootWaitDone, signal)) {
-      // This request's launch has no boot left to wait for: it goes with the failure, so no
-      // emulator is left running with no session to own it (#4847).
+    // A canceled request keeps nothing: the abort owner owns that decision.
+    const keepsBootRunning = !signal.aborted && bootWait.budgetSpentWithBootRunning;
+    if (
+      launchedPid !== undefined &&
+      !keepsBootRunning &&
+      !(await launchHeldByOtherOwner(input, bootDevice))
+    ) {
+      // This request's launch has no boot left to wait for and no other owner: it goes with the
+      // failure, so no emulator is left running with no session to own it (#4847).
       await terminateLaunch(host, launchedPid, error);
     }
     signal.throwIfAborted();
@@ -95,19 +116,54 @@ async function ensureEmulatorReady(
 }
 
 /**
- * Whether a failed boot leaves its emulator booting, and so leaves this request's launch running.
- * Only a boot-wait poller that ran out the startup budget answers yes; a canceled request always
- * answers no — the abort owner owns that decision.
+ * Whether somebody else already owns the emulator this boot was bringing up, which is the one answer
+ * that keeps this request's launch running whatever its own failure was: a second `open` that bound
+ * to the booting serial is using the emulator this request only started. Absent is the answer for a
+ * caller that reads no session or claim state, and a caller that fails to answer keeps the launch:
+ * ownership is settled by whoever can see it, never assumed away.
+ *
+ * Ownership is recorded under the emulator's serial, so only a boot that resolved one can ask. A boot
+ * that failed earlier stops its launch the way base did: settling that address would take one more
+ * inventory pass, and every inventory probe runs under the request's own signal, which a canceled
+ * request has already aborted — the pass could only ever fail. Issue #4993 tracks giving that window
+ * an answer from state that needs no inventory.
  */
-function keepsBootAfterFailure(
-  error: unknown,
-  bootWaitDone: boolean,
-  signal: AbortSignal,
-): boolean {
-  if (signal.aborted) return false;
-  if (bootWaitDone) return false;
-  const details = asAppError(error).details;
-  return details?.reason === BOOT_TIMEOUT_REASON || details?.bootBudgetSpent === true;
+async function launchHeldByOtherOwner(
+  input: EnsureReadyInput,
+  device: DeviceInfo,
+): Promise<boolean> {
+  const heldByOther = input.isAndroidEmulatorHeldByOther;
+  if (!heldByOther) return false;
+  if (!isRunningEmulator(device)) return false;
+  return await askHeldByOther(heldByOther, device);
+}
+
+async function askHeldByOther(
+  heldByOther: NonNullable<EnsureReadyInput['isAndroidEmulatorHeldByOther']>,
+  device: DeviceInfo,
+): Promise<boolean> {
+  try {
+    return await heldByOther(device);
+  } catch (error) {
+    emitOwnershipUnanswered(device.id, error);
+    return true;
+  }
+}
+
+/**
+ * Reports the ownership answer this stop could not get, so a kept launch is never silent. `reason` is
+ * the code for why no answer arrived; what the caller threw rides beside it, never inside it.
+ */
+function emitOwnershipUnanswered(deviceId: string, failure: unknown): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_emulator_launch_ownership_unanswered',
+    data: {
+      device: deviceId,
+      reason: 'ownership-query-failed',
+      error: failure instanceof Error ? failure.message : String(failure),
+    },
+  });
 }
 
 /**
@@ -165,6 +221,7 @@ async function waitForDiscovery(
   serial: string | undefined,
   deadline: number,
   signal: AbortSignal,
+  bootWait: BootWaitProgress,
 ): Promise<DeviceInfo> {
   while (host.clock.now() < deadline) {
     const devices = await host.deviceReadiness.androidEmulator.discover(request, signal);
@@ -172,6 +229,8 @@ async function waitForDiscovery(
     if (device && isRunningEmulator(device)) return device;
     await host.clock.sleep(POLL_MS, signal);
   }
+  // The launched emulator may still be coming up: the budget ran out before it answered.
+  bootWait.budgetSpentWithBootRunning = true;
   throw bootTimeoutError('Android emulator did not appear in time', { avdName, serial });
 }
 
@@ -180,6 +239,7 @@ async function waitForBoot(
   serial: string,
   deadline: number,
   signal: AbortSignal,
+  bootWait: BootWaitProgress,
 ): Promise<void> {
   const startedAtMs = host.clock.now();
   while (host.clock.now() < deadline) {
@@ -188,6 +248,8 @@ async function waitForBoot(
     if (observation.booted) return;
     // Retry/stop decisions consume the typed probe evidence, never message or stdout wording.
     if (observation.failure && !isTransientAndroidBootFailure(observation.failure)) {
+      // This probe's own failure ended a boot whose budget ran out: the emulator is still coming up.
+      if (host.clock.now() >= deadline) bootWait.budgetSpentWithBootRunning = true;
       throwBootProbeFailure(
         host,
         observation.failure,
@@ -198,8 +260,17 @@ async function waitForBoot(
     }
     await host.clock.sleep(POLL_MS, signal);
   }
+  bootWait.budgetSpentWithBootRunning = true;
   throw bootTimeoutError('Android device failed to finish booting', { serial });
 }
+
+/**
+ * Whether the boot wait itself ran out its startup budget with the emulator still coming up, which
+ * is the one answer that leaves it booting after a failure. The wait owns this: only it can tell its
+ * own spent budget apart from a later step that failed once the clock happened to be past the
+ * deadline.
+ */
+type BootWaitProgress = { budgetSpentWithBootRunning: boolean };
 
 type BootProbeObservation = Readonly<{ booted: boolean; failure?: AppError }>;
 
@@ -268,9 +339,6 @@ function throwBootProbeFailure(
     hint: bootFailureHint(reason),
     ...(failure.details ?? {}),
     reason,
-    // Says this probe's own failure ended a boot whose budget ran out, which is what separates it
-    // from a probe that failed with booting still ahead of it.
-    ...(budgetSpent ? { bootBudgetSpent: true } : {}),
   };
   throw buildAndroidBootError(failure, reason, budgetSpent, details);
 }
