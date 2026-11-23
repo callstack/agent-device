@@ -1,5 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
+  FIND_NO_MATCH_HINT,
   findBestMatchesByLocator,
   type FindAction,
   type FindLocator,
@@ -15,8 +16,6 @@ import type { SessionState } from '../../../core/session-state.ts';
 import { buildAmbiguousMatchError } from '../../selector-match-errors.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
-const FIND_NO_MATCH_HINT =
-  'Run snapshot -i to see current elements and refs, or scroll first if the element may be off-screen.';
 // A bare `find <text>` is this action, so an agent that meant a lookup learns the read form here.
 const FIND_CLICK_NO_MATCH_HINT = `${FIND_NO_MATCH_HINT} This find clicks its match; to look an element up without acting on it, use find text "..." exists.`;
 

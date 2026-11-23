@@ -1326,6 +1326,7 @@ An Apple runner that returns `COMMAND_ALREADY_FINISHED` cannot replay that comma
 - `malformed_request`: fix the client that built the request; resending it unchanged fails the same way.
 - `remote_daemon_unavailable`: the remote daemon did not answer its health check. Make it reachable, or clear `--daemon-base-url` or `AGENT_DEVICE_DAEMON_BASE_URL`. For a saved `connect` connection, run `disconnect` to return to the local daemon.
 - `webdriver_route_unsupported`: the device cloud's driver does not implement the route. The limit is the driver, not the device.
+- `find` with no match (`COMMAND_FAILED`, no reason): no `find` action ran. Run `snapshot -i` to see the current elements, or scroll first if the element may be off-screen.
 
 iOS runner refusals carry a typed `error.details.reason` too:
 

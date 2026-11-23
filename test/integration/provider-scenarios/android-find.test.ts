@@ -4,6 +4,7 @@ import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
+import { FIND_NO_MATCH_HINT } from '@agent-device/selectors';
 import { arrayEqual, assertCommandCall, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';
 import {
@@ -73,6 +74,19 @@ test('Provider-backed integration Android find flow covers refs, wait, ambiguity
       ...selection,
     });
     assert.equal(exists.found, true);
+
+    // The read-only no-match gets the acting route's recovery hint, without the click-only advice
+    // to switch to a lookup.
+    for (const args of [
+      ['label', 'Nowhere', 'exists'],
+      ['label', 'Nowhere', 'get', 'text'],
+      ['label', 'Nowhere', 'get', 'attrs'],
+    ]) {
+      const noMatch = (await daemon.callCommand('find', args, selection)).json?.error?.data;
+      assert.equal(noMatch?.code, 'COMMAND_FAILED', args.join(' '));
+      assert.equal(noMatch?.details?.dispatched, 'no', args.join(' '));
+      assert.equal(noMatch?.hint, FIND_NO_MATCH_HINT, args.join(' '));
+    }
 
     const pressFoundRef = await client.interactions.press({ ref: attrsPinnedRef, ...selection });
     assert.equal(pressFoundRef.x, 88);

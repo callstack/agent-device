@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
+import { FIND_NO_MATCH_HINT } from '@agent-device/selectors';
 import { KEYBOARD_COVERED_BAND_RECT, keyboardCoveredTabBarSnapshot } from '@agent-device/test-kit';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
@@ -789,7 +790,8 @@ test(
         ]);
 
         // A bare find is a click. Click and focus share resolveFindMatch, so this row also pins the
-        // click no-match: neither sends anything.
+        // click no-match: neither sends anything. Only the click hint points at the read-only form.
+        const noMatchHints: unknown[] = [];
         for (const args of [['label', 'Nowhere', 'focus'], ['Nowhere']]) {
           const noMatch = assertRpcError(
             await daemon.callCommand('find', args),
@@ -798,7 +800,12 @@ test(
             /find did not match any element/,
           );
           assert.equal(readErrorDetails(noMatch).dispatched, 'no');
+          noMatchHints.push(noMatch.hint);
         }
+        const [focusHint, clickHint] = noMatchHints;
+        assert.equal(focusHint, FIND_NO_MATCH_HINT);
+        assert.ok(typeof clickHint === 'string' && clickHint.startsWith(FIND_NO_MATCH_HINT));
+        assert.match(clickHint, /find text "\.\.\." exists/);
       },
     );
   },

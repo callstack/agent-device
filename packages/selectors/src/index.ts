@@ -37,6 +37,7 @@ import {
   parseFindArgs,
   parseFindSelectorExpression,
   FIND_LOCATORS,
+  FIND_NO_MATCH_HINT,
   FIND_VALUE_REQUIRED_MESSAGE,
   UNSUPPORTED_FIND_ACTION_HINT,
 } from './internal/find.ts';
@@ -96,6 +97,7 @@ export {
 
 export {
   FIND_LOCATORS,
+  FIND_NO_MATCH_HINT,
   FIND_VALUE_REQUIRED_MESSAGE,
   IS_PREDICATE_USAGE_HINT,
   IS_TEXT_VALUE_REQUIRED_MESSAGE,
