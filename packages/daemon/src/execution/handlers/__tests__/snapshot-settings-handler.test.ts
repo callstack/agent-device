@@ -392,6 +392,35 @@ test('settings usage hint documents canonical faceid states', async () => {
   }
 });
 
+// Positionals sent straight to the daemon skip the CLI reader, so the parse refusal must keep its
+// typed details and --app hint on this route too.
+test('settings permission with an app id in the mode slot keeps the --app hint', async () => {
+  const sessionStore = makeSessionStore();
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('default', 'settings', {
+      positionals: ['permission', 'deny', 'notifications', 'com.example.app'],
+    }),
+    sessionName: 'default',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.hint).toBe('Pass the app with --app com.example.app.');
+    expect(response.error.details).toMatchObject({
+      reason: 'setting_permission_app_positional',
+      dispatched: 'no',
+      permission: 'notifications',
+      app: 'com.example.app',
+    });
+  }
+});
+
 // #3179: an app-scoped change can name an app the session never opened. The app rides the request
 // input; the owner receives it as the resolved app id whether or not a session is bound.
 test('settings permission grant targets an explicit app with no session app bound', async () => {
