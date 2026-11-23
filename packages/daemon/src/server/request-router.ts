@@ -718,6 +718,7 @@ async function dispatchGenericForLockedScope(params: {
   const runtimeExecution = await resolveGenericRuntimeExecution({
     req: lockedScope.req,
     session,
+    lifetimeId: ref.lifetime.journalId,
     hostCwd: sessionStore.host.cwd,
     // `scroll` parses its distance/timing flags during admission, so the resolved context is
     // needed before the dispatcher builds its own.

@@ -5,7 +5,7 @@ import {
 } from '@agent-device/contracts/daemon-http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { PNG } from '@agent-device/capture-kit/png';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
@@ -21,11 +21,12 @@ import { finalizeDaemonResponse } from '../request-finalization.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
 import { successfulData, withHttp } from './http-output.fixtures.ts';
 
-test.each(['caller destination', 'remote placeholder'])(
+test.each(['caller destination', 'remote placeholder', 'public remote'])(
   'downloadable screenshots keep the published frame with a %s',
   async (destinationKind) => {
     const root = mkdtempForTestSync('immutable-screenshot-');
     const placeholder = destinationKind === 'remote placeholder';
+    const remote = destinationKind === 'public remote';
     const destination = placeholder
       ? buildRemoteTempArtifactPath('screenshot', '.png')
       : path.join(root, 'capture.png');
@@ -42,8 +43,10 @@ test.each(['caller destination', 'remote placeholder'])(
     const runtime = screenshotRuntimeFixture({
       onCapture: ({ outPath }) => {
         fs.writeFileSync(outPath, frames.shift()!);
+        return { displayRotation: 'landscape-left' };
       },
     });
+    const legacyRegistration = vi.fn(trackDownloadableArtifact);
     const handler = createRequestHandler({
       host: createTestHostEnvironment(),
       createCommandSurface: screenshotCommandSurface,
@@ -53,7 +56,7 @@ test.each(['caller destination', 'remote placeholder'])(
       leaseRegistry: new LeaseRegistry(),
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       deviceRuntimeGateway: runtime.gateway,
-      trackDownloadableArtifact,
+      trackDownloadableArtifact: legacyRegistration,
     });
     await withHttp(handler, async (post, base) => {
       const capture = { command: 'screenshot', session: 'capture', positionals: [destination] };
@@ -63,21 +66,52 @@ test.each(['caller destination', 'remote placeholder'])(
             ...capture,
             meta: { clientArtifactPaths: { path: '/client/first.png' } },
           },
-          false,
+          remote,
         ),
       );
-      if (!placeholder) {
+      let secondId: string | undefined;
+      if (remote) {
+        const second = successfulData(await post(capture));
+        secondId = second.artifacts?.[0]?.artifactId;
+        expect(secondId).toBeTypeOf('string');
+        expect(secondId).not.toBe(first.artifacts?.[0]?.artifactId);
+        expect(second.path).not.toBe(first.path);
+        expect(fs.readFileSync(second.path as string)).toEqual(replacement);
+      } else if (!placeholder) {
         const second = successfulData(await post(capture, false));
         expect(second.path).toBe(destination);
       }
       const artifactId = first.artifacts?.[0]?.artifactId;
       expect(artifactId).toBeTypeOf('string');
+      expect(first.artifacts?.[0]).toMatchObject({
+        field: 'path',
+        fileName: 'first.png',
+        localPath: '/client/first.png',
+      });
+      expect(first.artifacts?.[0]).not.toHaveProperty('path');
+      expect(legacyRegistration).not.toHaveBeenCalled();
+      const inventory = await fetch(`${base}/artifacts`, {
+        headers: { authorization: 'Bearer test-token' },
+      });
+      expect(inventory.status).toBe(200);
+      expect(await inventory.json()).toMatchObject({
+        artifacts: expect.arrayContaining([
+          expect.objectContaining({ id: artifactId, displayRotation: 'landscape-left' }),
+        ]),
+      });
       const download = await fetch(`${base}/artifacts/${artifactId}`, {
         headers: { authorization: 'Bearer test-token' },
       });
       expect(download.status).toBe(200);
       expect(Buffer.from(await download.arrayBuffer())).toEqual(original);
-      if (placeholder) expect(fs.existsSync(destination)).toBe(false);
+      if (secondId) {
+        const secondDownload = await fetch(`${base}/artifacts/${secondId}`, {
+          headers: { authorization: 'Bearer test-token' },
+        });
+        expect(secondDownload.status).toBe(200);
+        expect(Buffer.from(await secondDownload.arrayBuffer())).toEqual(replacement);
+      }
+      if (placeholder || remote) expect(fs.existsSync(destination)).toBe(false);
       else expect(fs.readFileSync(destination)).toEqual(replacement);
     });
   },

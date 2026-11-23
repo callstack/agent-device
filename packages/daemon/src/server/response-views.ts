@@ -73,7 +73,7 @@ const SCREENSHOT_DIGEST_NUMBER_FIELDS = [
  * `{ ref, label }`. The per-overlay geometry (`rect`/`overlayRect`/`center`) —
  * the token sink that `--overlay-refs` emits when many nodes are annotated — is
  * dropped and the list is capped. `artifacts` (the client's image-retrieval
- * handle, grafted on by request finalization) is preserved when present so the
+ * handle) is preserved when present so the
  * screenshot stays fetchable. `full` returns today's shape unchanged (nothing
  * richer is computed yet).
  */

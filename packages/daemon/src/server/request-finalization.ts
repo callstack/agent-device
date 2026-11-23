@@ -196,7 +196,10 @@ function registerDownloadableArtifacts(
   }
   const pendingArtifacts = collectPendingArtifacts(req, data);
   if (pendingArtifacts.length === 0) return data;
-  return { ...data, artifacts: pendingArtifacts.map(register) };
+  const committed = Array.isArray(data.artifacts)
+    ? data.artifacts.filter((artifact) => artifact?.artifactId && !artifact.path)
+    : [];
+  return { ...data, artifacts: [...committed, ...pendingArtifacts.map(register)] };
 }
 
 function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): PendingArtifact[] {
@@ -204,10 +207,6 @@ function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): 
   const artifacts: PendingArtifact[] = Array.isArray(data.artifacts) ? [...data.artifacts] : [];
   const hasField = (field: string): boolean =>
     artifacts.some((artifact) => artifact?.field === field);
-  if (!hasField('path')) {
-    const screenshot = pendingScreenshotArtifact(req, data);
-    if (screenshot) artifacts.push(screenshot);
-  }
   if (!hasField('outPath')) {
     const performance = pendingPerformanceArtifact(req, data);
     if (performance) artifacts.push(performance);
@@ -224,21 +223,6 @@ function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): 
         (artifact.field === 'fallbackScreenshotPath' && artifact.artifactType === 'screenshot')),
     ),
   );
-}
-
-function pendingScreenshotArtifact(
-  req: DaemonRequest,
-  data: DaemonResponseData,
-): PendingArtifact | undefined {
-  if (req.command !== 'screenshot' || typeof data.path !== 'string') return undefined;
-  return {
-    field: 'path',
-    artifactType: 'screenshot',
-    path: data.path,
-    localPath: req.meta?.clientArtifactPaths?.path,
-    fileName: path.basename(req.meta?.clientArtifactPaths?.path ?? data.path),
-    ...(isDeviceRotation(data.displayRotation) ? { displayRotation: data.displayRotation } : {}),
-  };
 }
 
 function pendingPerformanceArtifact(

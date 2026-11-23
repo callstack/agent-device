@@ -23,7 +23,7 @@ import { makeProviderRuntimeOwning } from '../__tests__/support/handlers/snapsho
 import { providerDeviceAdmissionFixture } from '../__tests__/support/provider-device-admission-fixture.ts';
 import { contextFromFlags } from '../core/context.ts';
 import type { GenericPlatformExecutionParams } from '../core/generic-leaf-execution.ts';
-import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
+import { resolveScreenshotGenericExecution as resolveScreenshot } from './screenshot-runtime.ts';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
@@ -31,6 +31,12 @@ import {
 import type { DaemonRequest } from '../index.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { screenshotCommandSurface as testCreateCommandSurface } from '../__tests__/support/screenshot-command-surface-fake.ts';
+
+function resolveScreenshotGenericExecution(
+  params: Omit<Parameters<typeof resolveScreenshot>[0], 'lifetimeId'>,
+) {
+  return resolveScreenshot({ ...params, lifetimeId: 'screenshot-test-lifetime' });
+}
 
 const unavailableCapture = Object.freeze({
   available: false,
