@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { capturePng as defaultPngCapture, filesDiffer } from './live-assertions.ts';
-import type { LiveContext } from './live-harness.ts';
+import type { AndroidLiveHarness, LiveContext } from './live-harness.ts';
 import type { RunStepOptions } from '../live-device-e2e/runtime.ts';
 
 // One launcher capture took 6.7 s on a hosted emulator, and 8.0 s behind an abandoned one: a
@@ -11,6 +11,12 @@ import type { RunStepOptions } from '../live-device-e2e/runtime.ts';
 const SURFACE_CAPTURE_TIMEOUT_MS = 15_000;
 const SURFACE_TRANSITION_TIMEOUT_MS = 2 * SURFACE_CAPTURE_TIMEOUT_MS;
 const SURFACE_TRANSITION_POLL_MS = 250;
+
+// Every hosted foreground read after Home answered in 193–443 ms and still named the fixture,
+// while the launcher was resumed about 1.5 s after the keyevent. The wait shares the surface
+// transition's deadline so a foreground verdict can never arrive before a pixel verdict would;
+// one read is capped well below it because an `appstate` read is a dumpsys, not a capture.
+const FOREGROUND_READ_TIMEOUT_MS = 5_000;
 
 /** A PNG capture step: `screenshot <outputPath> --scale 0.5` with harness step options. */
 export type PngCapture = (
@@ -104,4 +110,66 @@ function defaultCapture(
       allowFailure: true,
       timeoutMs: Math.min(remainingMs, SURFACE_CAPTURE_TIMEOUT_MS),
     });
+}
+
+/**
+ * Reads one `appstate` foreground answer and returns its foreground package, or `undefined` when
+ * the read answered nothing. Only a package the device actually names is reported.
+ */
+export type ForegroundRead = (attempt: number, remainingMs: number) => Promise<string | undefined>;
+
+/**
+ * Waits until the device's reported foreground package leaves `expectedPackage`, and returns the
+ * first different answer. `home` injects one keyevent and answers when the injection lands, before
+ * WindowManager has resumed the launcher: every hosted failure read the fixture 90–530 ms after
+ * the command finished while the launcher was resumed about 1.5 s after it. Each read is bounded
+ * below the wait's deadline, a read that resolves after the deadline is rejected as a late
+ * observation, and the wait fails at the deadline with the last observation if the foreground
+ * never leaves the package.
+ */
+export async function waitForForegroundLeaves(
+  context: LiveContext,
+  runStep: AndroidLiveHarness['runStep'],
+  expectedPackage: string,
+  readStep: string,
+  failure: string,
+  options: { read?: ForegroundRead } = {},
+): Promise<string> {
+  const read: ForegroundRead =
+    options.read ??
+    (async (attempt, remainingMs) => {
+      const result = await runStep(context, `${readStep} (attempt ${attempt})`, ['appstate'], {
+        allowFailure: true,
+        timeoutMs: Math.min(remainingMs, FOREGROUND_READ_TIMEOUT_MS),
+      });
+      const packageName: unknown = result.json?.data?.package;
+      return typeof packageName === 'string' && packageName.length > 0 ? packageName : undefined;
+    });
+  const deadline = Date.now() + SURFACE_TRANSITION_TIMEOUT_MS;
+  let lastObservation = 'no foreground read finished';
+  let attempt = 0;
+  for (
+    let remaining = SURFACE_TRANSITION_TIMEOUT_MS;
+    remaining > 0;
+    remaining = deadline - Date.now()
+  ) {
+    attempt += 1;
+    try {
+      const packageName = await read(attempt, remaining);
+      if (Date.now() >= deadline) {
+        lastObservation = `foreground read ${attempt} resolved after the deadline`;
+      } else if (packageName === undefined) {
+        lastObservation = `foreground read ${attempt} reported no package`;
+      } else if (packageName !== expectedPackage) {
+        return packageName;
+      } else {
+        lastObservation = `foreground read ${attempt} still reported ${packageName}`;
+      }
+    } catch (error) {
+      lastObservation = `foreground read ${attempt} failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    const pause = Math.min(SURFACE_TRANSITION_POLL_MS, deadline - Date.now());
+    if (pause > 0) await new Promise((resolve) => setTimeout(resolve, pause));
+  }
+  assert.fail(`${failure} within ${SURFACE_TRANSITION_TIMEOUT_MS}ms (${lastObservation})`);
 }

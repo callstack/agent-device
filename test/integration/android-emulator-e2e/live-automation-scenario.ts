@@ -24,7 +24,7 @@ import {
 } from './live-harness.ts';
 import { assertHumanSnapshotCompaction } from './live-snapshot-compaction.ts';
 import { waitForSnapshotDiffLines } from './live-snapshot-transition.ts';
-import { waitForSurfaceChange } from './live-surface-transition.ts';
+import { waitForForegroundLeaves, waitForSurfaceChange } from './live-surface-transition.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -279,8 +279,15 @@ async function assertHomeAndRecentsRestoration(
   const foreground = path.join(context.artifactDir, 'foreground.png');
   await capturePng(context, 'capture Android fixture foreground', foreground);
   await runStep(context, 'send Android fixture Home', ['home']);
-  const homeState = await runStep(context, 'read Android Home foreground state', ['appstate']);
-  assert.notEqual(homeState.json?.data?.package, context.appId, JSON.stringify(homeState.json));
+  // Home injects one keyevent and answers before WindowManager resumes the launcher, so the first
+  // appstate read can still name the fixture. The foreground must leave it before pixels are read.
+  await waitForForegroundLeaves(
+    context,
+    runStep,
+    context.appId,
+    'read Android Home foreground state',
+    'Android Home never moved the foreground off the fixture package',
+  );
   const home = path.join(context.artifactDir, 'home.png');
   // Home is dispatched before the launcher has drawn, so one capture can still show the fixture.
   await waitForSurfaceChange(

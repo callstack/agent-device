@@ -24,14 +24,23 @@ const RECENTS = Buffer.concat([PNG_SIGNATURE, Buffer.from('recents-surface')]);
  * runner under a step timeout: the capture would finish after `workMs`, but a forwarded
  * `options.timeoutMs` kills it first and returns a failure without writing the image. The
  * forwarded timeout of every screenshot call is recorded in `timeouts`.
+ *
+ * `staleForegroundReads` replays the observed Home race: the first that many `appstate` reads
+ * after `home` still name the fixture, the way a read taken while the launcher is being resumed
+ * does. `Infinity` is a foreground that never leaves the fixture.
  */
-function scriptedDevice(options: { script: Record<string, Buffer[]>; workMs: number }): {
+function scriptedDevice(options: {
+  script: Record<string, Buffer[]>;
+  workMs: number;
+  staleForegroundReads?: number;
+}): {
   runCli: LiveRunCli;
   timeouts: Record<string, (number | undefined)[]>;
 } {
   const attempts = new Map<string, number>();
   const timeouts: Record<string, (number | undefined)[]> = {};
   let foregroundPackage = APP_ID;
+  let staleForegroundReads = options.staleForegroundReads ?? 0;
   const runCli: LiveRunCli = (args, _env, cliOptions): Promise<CliJsonResult> => {
     const command = args[0];
     if (command === 'home') {
@@ -53,11 +62,13 @@ function scriptedDevice(options: { script: Record<string, Buffer[]>; workMs: num
       });
     }
     if (command === 'appstate') {
+      const reported = staleForegroundReads > 0 ? APP_ID : foregroundPackage;
+      if (staleForegroundReads > 0) staleForegroundReads -= 1;
       return Promise.resolve({
         status: 0,
         stdout: '',
         stderr: '',
-        json: { success: true, data: { package: foregroundPackage } },
+        json: { success: true, data: { package: reported } },
       });
     }
     if (command === 'screenshot') {
@@ -236,6 +247,64 @@ test('a wedged capture is cut at the forwarded remaining timeout and the scenari
   expect(
     context.stepHistory.filter((record) => record.commandName === 'screenshot').length,
   ).toBeGreaterThanOrEqual(homeTimeouts.length);
+});
+
+test('the scenario passes while Home keeps the foreground stale for the first reads', async () => {
+  // The hosted race: `home` answers, and every appstate read taken while WindowManager resumes the
+  // launcher still names the fixture. One read (the pre-fix route) fails; the wait rides it out.
+  const device = scriptedDevice({
+    script: {
+      'foreground.png': [FOREGROUND],
+      'home.png': [HOME],
+      'recents.png': [RECENTS],
+    },
+    workMs: 100,
+    staleForegroundReads: 3,
+  });
+  const { context, promise } = runScenarioWithDevice(device);
+  const result = await settle(promise);
+
+  expect(result.status).toBe('fulfilled');
+  const foregroundReads = context.stepHistory.filter(
+    (record) => record.commandName === 'appstate' && record.step.startsWith('read Android Home'),
+  );
+  expect(foregroundReads.map((record) => record.step)).toEqual([
+    'read Android Home foreground state (attempt 1)',
+    'read Android Home foreground state (attempt 2)',
+    'read Android Home foreground state (attempt 3)',
+    'read Android Home foreground state (attempt 4)',
+  ]);
+  expect(context.completedScenarios).toContain('smoke:home-recents-restoration');
+});
+
+test('the scenario fails at the deadline when Home never moves the foreground', async () => {
+  const device = scriptedDevice({
+    script: {
+      'foreground.png': [FOREGROUND],
+      'home.png': [HOME],
+      'recents.png': [RECENTS],
+    },
+    workMs: 100,
+    staleForegroundReads: Number.POSITIVE_INFINITY,
+  });
+  const { context, promise } = runScenarioWithDevice(device);
+  const result = await settle(promise);
+
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: {
+      message: expect.stringMatching(
+        /Android Home never moved the foreground off the fixture package within 30000ms.*foreground read \d+ still reported com\.callstack\.agentdevicelab/s,
+      ),
+    },
+  });
+  // The verdict is the foreground wait's: no Home-surface capture is ever attempted, so the lane
+  // cannot proceed to pixel comparisons on a foreground the device never confirmed.
+  expect(
+    context.stepHistory.filter(
+      (record) => record.commandName === 'screenshot' && record.step.includes('Home surface'),
+    ),
+  ).toHaveLength(0);
 });
 
 test('the scenario fails when Recents never differs from the Home surface', async () => {
