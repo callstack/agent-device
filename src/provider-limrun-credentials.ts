@@ -1,11 +1,11 @@
-import type { LimrunInstanceAccess } from '@agent-device/provider-limrun';
+import type { LimrunInstanceAccess, LimrunRuntimeOptions } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
 export type LimrunCredentials = Readonly<{
   apiKey?: string;
   region?: string;
-  iosModel?: 'iphone' | 'watch';
+  iosModel?: LimrunRuntimeOptions['iosModel'];
   keepAlive?: boolean;
   instances?: LimrunInstanceAccess;
   /** Directory the `--provider-network-logs` HAR files are written under. */
@@ -94,8 +94,13 @@ export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefine
     },
   };
   const iosModel = readValue(env, 'LIMRUN_IOS_MODEL');
-  if (iosModel !== undefined && iosModel !== 'watch' && iosModel !== 'iphone') {
-    throw new AppError('INVALID_ARGS', 'LIMRUN_IOS_MODEL must be iphone or watch.');
+  if (
+    iosModel !== undefined &&
+    iosModel !== 'watch' &&
+    iosModel !== 'iphone' &&
+    iosModel !== 'ipad'
+  ) {
+    throw new AppError('INVALID_ARGS', 'LIMRUN_IOS_MODEL must be iphone, ipad, or watch.');
   }
   return { apiKey, region, iosModel, keepAlive, instances: ios || android ? instances : undefined };
 }

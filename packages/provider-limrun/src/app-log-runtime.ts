@@ -96,14 +96,13 @@ export function createLimrunPlatformRuntimeOwner(
   const owner = providerRuntimeOwner('limrun', options.runtimeInstance);
   const ownsDevice = (device: DeviceInfo) =>
     isSupportedLimrunRuntimeDevice(device) && options.ownsDevice(device);
-  const hasLiveSession = (device: DeviceInfo) =>
-    ownsDevice(device) && options.hasLiveSession(device);
   return Object.freeze({
     owner,
     ownsDevice,
     inspectFacts: async (device) => {
-      if (hasLiveSession(device)) return limrunAppLogFacts(options, device);
-      return ownsDevice(device) && options.hasPendingRelease?.(device)
+      if (!ownsDevice(device)) return limrunUnavailableFacts(options, device);
+      if (options.hasLiveSession(device)) return limrunAppLogFacts(options, device);
+      return options.hasPendingRelease?.(device)
         ? limrunReleaseFacts(options, device)
         : limrunUnavailableFacts(options, device);
     },
@@ -114,10 +113,11 @@ export function createLimrunPlatformRuntimeOwner(
       if (!isSupportedLimrunRuntimeDevice(request.device)) {
         throw new AppError(
           'UNSUPPORTED_PLATFORM',
-          'Limrun app logs require an iOS or watchOS simulator or an Android emulator',
+          'Limrun app logs require an iOS, iPadOS, or watchOS simulator or an Android emulator',
         );
       }
-      const hasMatchingLiveSession = hasLiveSession(request.device);
+      const hasMatchingLiveSession =
+        options.ownsDevice(request.device) && options.hasLiveSession(request.device);
       const pendingRelease = options.hasPendingRelease?.(request.device) === true;
       if (request.intent.kind !== 'exact-owner' && !hasMatchingLiveSession && !pendingRelease) {
         throw new AppError(

@@ -278,7 +278,7 @@ for (const [version, tag] of [
         const apple = helper === 'ios' || helper === 'watchos';
         const sdk = helper === 'watchos' ? 'watchsimulator' : 'iphonesimulator';
         const f = fixture(sdk);
-        const output = path.join(f.root, `${helper}-${version}-${repository ? 'url' : 'null'}`);
+        const output = path.join(f.root, 'output');
         const script = apple ? 'package-ios-simulator-runner.sh' : 'package-android-helper.sh';
         const args = helper === 'ime' ? [version, output] : [version, tag, output];
         const result = run(
@@ -298,18 +298,17 @@ for (const [version, tag] of [
         assert.ok(manifestName);
         const manifest = JSON.parse(fs.readFileSync(path.join(output, manifestName), 'utf8'));
         assert.equal(manifest.version, version);
+        const assetUrl = (asset: string) =>
+          repository
+            ? `${f.env.GITHUB_SERVER_URL}/${repository}/releases/download/${tag}/${asset}`
+            : null;
         if (apple) {
           assert.equal(manifest.platform_target, sdk);
           assert.equal(manifest.release_tag, tag);
           assert.equal(manifest.bundle_name, String.raw`Runner "quoted" \ path`);
           assert.equal(manifest.bundle_id, 'com.example.runner');
           assert.equal(manifest.asset_name, `agent-device-${helper}-runner-${version}.app.tar.gz`);
-          assert.equal(
-            manifest.asset_url,
-            repository
-              ? `${f.env.GITHUB_SERVER_URL}/${repository}/releases/download/${tag}/${manifest.asset_name}`
-              : null,
-          );
+          assert.equal(manifest.asset_url, assetUrl(manifest.asset_name));
         } else {
           assert.equal(manifest.versionCode, 123);
           assert.equal(manifest.assetName, `agent-device-android-${helper}-helper-${version}.apk`);
@@ -317,12 +316,7 @@ for (const [version, tag] of [
             assert.equal(manifest.releaseTag, tag);
             assert.equal(manifest.minSdk, 23);
             assert.equal(manifest.targetSdk, 36);
-            assert.equal(
-              manifest.apkUrl,
-              repository
-                ? `${f.env.GITHUB_SERVER_URL}/${repository}/releases/download/${tag}/${manifest.assetName}`
-                : null,
-            );
+            assert.equal(manifest.apkUrl, assetUrl(manifest.assetName));
           } else {
             assert.equal(
               manifest.serviceComponent,

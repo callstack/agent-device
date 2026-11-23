@@ -1,8 +1,15 @@
 import Limrun from '@limrun/api';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
+import type { LimrunIosModel } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 import { limrunUserAgent } from './client-options.ts';
+
+const IOS_MODEL_NAMES: Record<LimrunIosModel, string> = {
+  iphone: 'Provider-selected iOS simulator',
+  ipad: 'iPad simulator',
+  watch: 'Apple Watch simulator',
+};
 
 export type LimrunConnectionVerification = ProviderConnectionVerification & {
   provider: 'limrun';
@@ -24,7 +31,7 @@ export type LimrunConnectionVerificationOptions = {
   instances?: LimrunInstanceAccess;
   platform: 'android' | 'ios';
   region?: string;
-  iosModel?: 'iphone' | 'watch';
+  iosModel?: LimrunIosModel;
 };
 
 /** Verifies the instance access for the platform when given, otherwise the organization API key. */
@@ -68,17 +75,17 @@ export async function verifyLimrunConnection(
     );
   }
   const platformName = options.platform === 'android' ? 'Android' : 'iOS';
-  const deviceKind = options.platform === 'android' ? 'emulator' : 'simulator';
+  const deviceName =
+    options.platform === 'android'
+      ? 'Provider-selected Android emulator'
+      : IOS_MODEL_NAMES[options.iosModel ?? 'iphone'];
   return {
     provider: 'limrun',
     service: 'Limrun',
     verificationMessage: `Credentials and ${platformName} instance access verified.`,
     device: {
       status: 'deferred',
-      name:
-        options.platform === 'ios' && options.iosModel === 'watch'
-          ? 'Apple Watch simulator'
-          : `Provider-selected ${platformName} ${deviceKind}`,
+      name: deviceName,
       platform: options.platform,
     },
     app: {

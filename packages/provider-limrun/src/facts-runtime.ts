@@ -6,7 +6,12 @@ import {
   PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
-import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  deviceShape,
+  isHandheldAppleSimulator,
+  isIosFamily,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -97,9 +102,13 @@ export function limrunLifecycleFacts(device: DeviceInfo, live: boolean) {
     prepareApplicationOpen: openTarget,
     openApplication: openTarget,
     applyRuntimeHints:
-      device.appleOs === 'ios' && openTarget.available ? available : runtimeHintsUnavailable,
+      isHandheldAppleSimulator(device) && openTarget.available
+        ? available
+        : runtimeHintsUnavailable,
     clearRuntimeHints:
-      device.appleOs === 'ios' && openTarget.available ? available : runtimeHintsUnavailable,
+      isHandheldAppleSimulator(device) && openTarget.available
+        ? available
+        : runtimeHintsUnavailable,
     closeApplication: closeTarget,
     finalizeApplicationClose: closeTarget,
     prepareAppleRunner:
@@ -218,7 +227,7 @@ export function limrunReleaseFacts(
       resolveOpenTarget: available,
       closeApplication: available,
       finalizeApplicationClose: available,
-      clearRuntimeHints: device.appleOs === 'ios' ? available : runtimeHintsUnavailable,
+      clearRuntimeHints: isHandheldAppleSimulator(device) ? available : runtimeHintsUnavailable,
       shutdownTarget: available,
     },
   };

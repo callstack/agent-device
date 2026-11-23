@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { createLimrunAndroidSession, type LimrunAndroidSession } from './android.ts';
 import { LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
-import { buildLimrunDevice, LIMRUN_PROFILE_FIELDS } from './device.ts';
+import { buildLimrunDevice, LIMRUN_PROFILE_FIELDS, type LimrunIosModel } from './device.ts';
 import { createLimrunIosSession, type LimrunIosSession } from './ios.ts';
 import {
   assertLimrunUploadedAppAccess,
@@ -36,7 +36,7 @@ type SessionAllocationParams = Readonly<{
     labels: Readonly<Record<string, string>>;
   }>;
   region?: string;
-  iosModel?: 'iphone' | 'watch';
+  iosModel?: LimrunIosModel;
   app?: LimrunAppAsset;
   dependencies: LimrunRuntimeDependencies;
 }>;

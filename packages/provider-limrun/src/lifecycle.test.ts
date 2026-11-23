@@ -85,7 +85,7 @@ const LIMRUN_LIFECYCLE_DENOMINATOR = [
         booted: true,
       },
       expected:
-        appleOs === 'ios' && kind === 'simulator' && target === 'mobile'
+        (appleOs === 'ios' || appleOs === 'ipados') && kind === 'simulator' && target === 'mobile'
           ? LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL
           : appleOs === 'watchos' && kind === 'simulator'
             ? { ...LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL, runtimeHints: false }

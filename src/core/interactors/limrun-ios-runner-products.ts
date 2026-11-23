@@ -30,64 +30,7 @@ export async function prepareLimrunRunnerProducts(input: {
   const products = path.join(input.directory, `runner-${randomUUID()}`);
   await fs.mkdir(products);
   const platform = input.platform ?? 'ios';
-  const sdk = platform === 'watchos' ? 'watchsimulator' : 'iphonesimulator';
-  let appPath = input.appPath;
-  if (!appPath) {
-    if (!/^\d+\.\d+\.\d+$/.test(input.version)) {
-      throw limrunRunnerError(
-        'productsInvalid',
-        `Nightly and development builds require AGENT_DEVICE_LIMRUN_${platform.toUpperCase()}_RUNNER_APP`,
-        {
-          hint: 'Point it at the simulator runner .app built from this agent-device checkout.',
-        },
-        'INVALID_ARGS',
-      );
-    }
-    const name = `agent-device-${platform}-runner-${input.version}`;
-    const release = `https://github.com/callstack/agent-device/releases/download/v${input.version}`;
-    const manifestPath = path.join(input.directory, 'manifest.json');
-    await downloadLimrunFile({
-      url: `${release}/${name}.manifest.json`,
-      headers: {},
-      destinationPath: manifestPath,
-      timeoutMs: 120_000,
-      signal: input.signal,
-    });
-    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as Record<string, unknown>;
-    if (
-      manifest.version !== input.version ||
-      manifest.platform_target !== sdk ||
-      typeof manifest.sha256 !== 'string' ||
-      !/^[a-f0-9]{64}$/.test(manifest.sha256)
-    ) {
-      throw limrunRunnerError('productsInvalid', `Invalid ${sdk} runner release manifest`);
-    }
-    const archivePath = path.join(input.directory, 'runner.tar.gz');
-    await downloadLimrunFile({
-      url: `${release}/${name}.app.tar.gz`,
-      headers: {},
-      destinationPath: archivePath,
-      timeoutMs: 120_000,
-      signal: input.signal,
-    });
-    input.signal.throwIfAborted();
-    const digest = createHash('sha256')
-      .update(await fs.readFile(archivePath, { signal: input.signal }))
-      .digest('hex');
-    if (digest !== manifest.sha256)
-      throw limrunRunnerError(
-        'productsInvalid',
-        `${platform === 'ios' ? 'iOS' : 'watchOS'} runner checksum mismatch`,
-      );
-    const extracted = path.join(input.directory, 'extracted');
-    await extractArchiveSafely({
-      archivePath,
-      outputRoot: extracted,
-      type: 'tgz',
-      signal: input.signal,
-    });
-    appPath = path.join(extracted, `${name}.app`);
-  }
+  const appPath = input.appPath ?? (await downloadReleaseRunner(input, platform));
   input.signal.throwIfAborted();
   if (
     !appPath.endsWith('.app') ||
@@ -138,6 +81,67 @@ export async function prepareLimrunRunnerProducts(input: {
   await fs.cp(appPath, path.join(products, 'Runner.app'), { recursive: true });
   await writeLimrunRunnerConfiguration(products, input.bindAddress, input.endpoint, platform);
   return products;
+}
+
+async function downloadReleaseRunner(
+  input: { directory: string; version: string; signal: AbortSignal },
+  platform: 'ios' | 'watchos',
+): Promise<string> {
+  const sdk = platform === 'watchos' ? 'watchsimulator' : 'iphonesimulator';
+  if (!/^\d+\.\d+\.\d+$/.test(input.version)) {
+    throw limrunRunnerError(
+      'productsInvalid',
+      `Nightly and development builds require AGENT_DEVICE_LIMRUN_${platform.toUpperCase()}_RUNNER_APP`,
+      {
+        hint: 'Point it at the simulator runner .app built from this agent-device checkout.',
+      },
+      'INVALID_ARGS',
+    );
+  }
+  const name = `agent-device-${platform}-runner-${input.version}`;
+  const release = `https://github.com/callstack/agent-device/releases/download/v${input.version}`;
+  const manifestPath = path.join(input.directory, 'manifest.json');
+  await downloadLimrunFile({
+    url: `${release}/${name}.manifest.json`,
+    headers: {},
+    destinationPath: manifestPath,
+    timeoutMs: 120_000,
+    signal: input.signal,
+  });
+  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+  if (
+    manifest.version !== input.version ||
+    manifest.platform_target !== sdk ||
+    typeof manifest.sha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(manifest.sha256)
+  ) {
+    throw limrunRunnerError('productsInvalid', `Invalid ${sdk} runner release manifest`);
+  }
+  const archivePath = path.join(input.directory, 'runner.tar.gz');
+  await downloadLimrunFile({
+    url: `${release}/${name}.app.tar.gz`,
+    headers: {},
+    destinationPath: archivePath,
+    timeoutMs: 120_000,
+    signal: input.signal,
+  });
+  input.signal.throwIfAborted();
+  const digest = createHash('sha256')
+    .update(await fs.readFile(archivePath, { signal: input.signal }))
+    .digest('hex');
+  if (digest !== manifest.sha256)
+    throw limrunRunnerError(
+      'productsInvalid',
+      `${platform === 'ios' ? 'iOS' : 'watchOS'} runner checksum mismatch`,
+    );
+  const extracted = path.join(input.directory, 'extracted');
+  await extractArchiveSafely({
+    archivePath,
+    outputRoot: extracted,
+    type: 'tgz',
+    signal: input.signal,
+  });
+  return path.join(extracted, `${name}.app`);
 }
 
 export async function writeLimrunRunnerConfiguration(

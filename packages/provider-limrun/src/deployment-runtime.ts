@@ -6,7 +6,7 @@ import {
   unavailableFact,
   PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   awaitLimrunDeploymentOperation,
@@ -48,12 +48,11 @@ export function limrunAppDeploymentFacts(
     materializeAppSource: deployment,
     deployMaterializedApp: deployment,
     uninstallApp: deployment,
-    sendPushNotification:
-      device.appleOs === 'ios'
-        ? deployment
-        : sessionActive
-          ? pushUnavailable
-          : deploymentUnavailable,
+    sendPushNotification: isHandheldAppleSimulator(device)
+      ? deployment
+      : sessionActive
+        ? pushUnavailable
+        : deploymentUnavailable,
   });
 }
 

@@ -3,6 +3,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 
+export type LimrunIosModel = 'iphone' | 'ipad' | 'watch';
 export type LimrunPlatform = 'ios' | 'android';
 
 export const LIMRUN_PROVIDER = 'limrun';

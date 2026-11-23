@@ -129,6 +129,10 @@ Open your app before taking a snapshot. Snapshots target the app you opened in t
 
 If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build's maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 27, because Limrun runs XCTest with Xcode 27. agent-device refuses a runner built with an older Xcode. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
 
+## Use an iPad simulator
+
+Set `LIMRUN_IOS_MODEL=ipad` before starting the daemon, then run `agent-device connect limrun --platform ios` and `agent-device boot`. In the Node.js SDK, pass `iosModel: 'ipad'`. For an existing iPad, set `LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN` before connecting. In both cases, `agent-device devices --json` reports `appleOs: "ipados"`. iPad uses the same simulator runner as iPhone.
+
 ## Use an Apple Watch simulator
 
 Limrun provides Apple Watch simulators through its iOS instance API. With `LIMRUN_API_KEY` set, select the Watch model before starting the daemon. To try the built-in Settings app, run these commands.

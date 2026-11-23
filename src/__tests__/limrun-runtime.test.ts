@@ -152,16 +152,7 @@ test('Limrun runtime identifies direct CLI usage when creating an instance', asy
     apiKey: 'lim_test_key',
   });
 
-  const lease: DeviceLease = {
-    leaseId: 'lease-a',
-    tenantId: 'team-a',
-    runId: 'run-a',
-    backend: 'ios-instance',
-    leaseProvider: 'limrun',
-    createdAt: 1,
-    heartbeatAt: 1,
-    expiresAt: 60_001,
-  };
+  const lease = iosLease('lease-a');
 
   try {
     const allocateLease = runtime.leaseLifecycle.allocate;
@@ -923,29 +914,35 @@ test('Limrun refuses to replace an owner port reverse on an attached Android ins
 });
 
 for (const attached of [false, true]) {
-  test(`Limrun identifies a ${attached ? 'pre-existing' : 'newly allocated'} Watch from its instance client`, async () => {
-    limrunMockState.iosModel = 'Apple Watch Series 11 (46mm)';
-    const runtime = new LimrunRuntime(
-      attached
-        ? { instances: { ios: ATTACHED_IOS } }
-        : { apiKey: 'lim_test_key', iosModel: 'watch' },
-    );
-    try {
-      const device = await allocateLimrunDevice(runtime, iosLease('lease-watch'));
-      assert.equal(device.appleOs, 'watchos');
-      assert.equal(device.name, limrunMockState.iosModel);
-      assert.ok(runtime.getInteractor(device));
-      if (attached) assert.equal(limrunMockState.iosCreate.mock.calls.length, 0);
-      else
-        expect(limrunMockState.iosCreate).toHaveBeenCalledWith(
-          expect.objectContaining({ spec: expect.objectContaining({ model: 'watch' }) }),
-          expect.anything(),
-        );
-    } finally {
-      limrunMockState.iosModel = 'iPhone';
-      await runtime.shutdown();
-    }
-  });
+  test.each([
+    { model: 'watch', name: 'Apple Watch Series 11 (46mm)', appleOs: 'watchos' },
+    { model: 'ipad', name: 'iPad Pro 11-inch (M4)', appleOs: 'ipados' },
+  ] as const)(
+    `Limrun identifies a ${attached ? 'pre-existing' : 'newly allocated'} $model from its instance client`,
+    async ({ model, name, appleOs }) => {
+      limrunMockState.iosModel = name;
+      const runtime = new LimrunRuntime(
+        attached
+          ? { instances: { ios: ATTACHED_IOS } }
+          : { apiKey: 'lim_test_key', iosModel: model },
+      );
+      try {
+        const device = await allocateLimrunDevice(runtime, iosLease(`lease-${model}`));
+        assert.equal(device.appleOs, appleOs);
+        assert.equal(device.name, limrunMockState.iosModel);
+        assert.ok(runtime.getInteractor(device));
+        if (attached) assert.equal(limrunMockState.iosCreate.mock.calls.length, 0);
+        else
+          expect(limrunMockState.iosCreate).toHaveBeenCalledWith(
+            expect.objectContaining({ spec: expect.objectContaining({ model }) }),
+            expect.anything(),
+          );
+      } finally {
+        limrunMockState.iosModel = 'iPhone';
+        await runtime.shutdown();
+      }
+    },
+  );
 }
 
 test('Limrun instance access wins over the API key for its platform only', async () => {
