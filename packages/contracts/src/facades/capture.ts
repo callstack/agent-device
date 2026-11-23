@@ -9,11 +9,14 @@ export type {
   AuditFindingKind,
   AuditNameDetail,
   AuditResult,
+  AuditScreenReaderOrder,
+  AuditScreenReaderWindowOrder,
   AuditSeverity,
   AuditSizeDetail,
   AuditSizeUnit,
   AuditSnapshotCommandResult,
 } from '../audit.ts';
+export { auditResultRefs } from '../audit.ts';
 export type { DiffSnapshotCommandResult, SnapshotDiffLine, SnapshotDiffSummary } from '../diff.ts';
 export {
   RETIRED_SCREENSHOT_MAX_SIZE,
@@ -87,15 +90,19 @@ export {
   readSnapshotTextInputGeometry,
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
+  attachSnapshotScreenReaderOrderEvidence,
   copySnapshotClickabilityEvidence,
+  copySnapshotScreenReaderOrderEvidence,
   readSnapshotClickabilityEvidence,
   readSnapshotOcclusionContextEvidence,
+  readSnapshotScreenReaderOrderEvidence,
 } from '../snapshot-private-evidence.ts';
 export type {
   SnapshotTextInputGeometry,
   AndroidSiblingOrderEvidence,
   SnapshotClickabilityEvidence,
   SnapshotOcclusionContextEvidence,
+  SnapshotScreenReaderOrderEvidence,
 } from '../snapshot-private-evidence.ts';
 export { readViewportDimensions } from '../viewport.ts';
 export type { ViewportCommandResult } from '../viewport.ts';

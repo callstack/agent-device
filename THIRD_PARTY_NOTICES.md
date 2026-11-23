@@ -44,3 +44,15 @@ Its wrapper scripts retain the upstream copyright notices for the original autho
 idb v1.5.2. Its MIT copyright notice and license are retained in
 [`apple/snapshot-bridge/LICENSE.idb`](apple/snapshot-bridge/LICENSE.idb), which also
 ships with the bridge in the npm package.
+
+## TalkBack traversal order
+
+`packages/platform-android/src/screen-reader-order.ts` is ported to TypeScript from
+[TalkBack](https://github.com/google/talkback/tree/229212fdf5842191d0a93fc95d9ca1423b346866),
+commit `229212fdf5842191d0a93fc95d9ca1423b346866`: `OrderedTraversalController`,
+`ReorderedChildrenIterator`, `NodeCachedBoundsCalculator`, and `WorkingTree`
+(Copyright (C) 2015 The Android Open Source Project), and the focus rules of
+`AccessibilityNodeInfoUtils` (Copyright (C) 2012 The Android Open Source Project).
+It is licensed under the [Apache License 2.0](LICENSES/Apache-2.0.txt).
+[`LICENSES/talkback.txt`](LICENSES/talkback.txt) lists the ported files and the changes. The
+build adds it and the Apache License 2.0 to the generated notice file whenever the port is bundled.

@@ -28,6 +28,7 @@ import {
   type AndroidUiHierarchy,
 } from './ui-hierarchy.ts';
 import { buildAndroidSnapshotClickabilityEvidence } from './snapshot-clickability.ts';
+import { buildAndroidScreenReaderOrderEvidence } from './snapshot-screen-reader-order.ts';
 import { resolveAndroidAdbProvider, type AndroidAdbProvider } from './adb-executor.ts';
 import { sleep } from './adb.ts';
 import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
@@ -189,6 +190,7 @@ export async function snapshotAndroid(
     return createAndroidSnapshotCapture(result, {
       clickability: buildAndroidSnapshotClickabilityEvidence(built),
       occlusionContext,
+      screenReaderOrder: () => buildAndroidScreenReaderOrderEvidence(tree, built),
     });
   } catch (error) {
     if (!isAndroidSnapshotPresentationFailure(error)) throw error;

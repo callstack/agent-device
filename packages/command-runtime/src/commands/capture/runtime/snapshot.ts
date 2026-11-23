@@ -1,5 +1,6 @@
 import {
   copySnapshotClickabilityEvidence,
+  copySnapshotScreenReaderOrderEvidence,
   publicSnapshotCaptureAnnotations,
   snapshotCaptureAnnotationsFrom,
   type AuditSnapshotCommandResult,
@@ -250,9 +251,12 @@ async function captureRuntimeSnapshot(
       ...(options.observeOnly === undefined ? {} : { observeOnly: options.observeOnly }),
     },
   );
-  const snapshot = copySnapshotClickabilityEvidence(
+  const snapshot = copySnapshotScreenReaderOrderEvidence(
     result.snapshot,
-    ensureSnapshotPresentationKey(result.snapshot, options),
+    copySnapshotClickabilityEvidence(
+      result.snapshot,
+      ensureSnapshotPresentationKey(result.snapshot, options),
+    ),
   );
   const annotations = snapshotCaptureAnnotationsFrom(result);
   const warningTime = now(runtime);

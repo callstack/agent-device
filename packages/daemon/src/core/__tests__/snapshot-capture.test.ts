@@ -1,6 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import { captureSnapshot, captureSnapshotData } from '../snapshot-capture.ts';
-import { summarizeSnapshotDiagnostics } from '@agent-device/contracts/capture';
+import {
+  attachSnapshotScreenReaderOrderEvidence,
+  readSnapshotScreenReaderOrderEvidence,
+  summarizeSnapshotDiagnostics,
+} from '@agent-device/contracts/capture';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_EMULATOR, buildNodes, IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit';
 import {
@@ -238,4 +242,26 @@ test('snapshot timing stats count the producer that served each capture', async 
     'simulator-ax-bridge': 2,
     'apple-runner': 1,
   });
+});
+
+test('captureSnapshot keeps the screen-reader order estimate on the built snapshot state', async () => {
+  captureSnapshotWithInteractor.mockClear();
+  const evidence = { windows: [{ nodeIndexes: [0], omittedStops: 0 }] };
+  captureSnapshotWithInteractor.mockResolvedValueOnce(
+    attachSnapshotScreenReaderOrderEvidence(
+      {
+        nodes: buildNodes([{ index: 0, type: 'android.widget.TextView', label: 'Title' }]),
+        backend: 'android',
+        producer: 'android-uiautomator',
+      },
+      () => evidence,
+    ),
+  );
+  const { snapshot } = await captureSnapshot({
+    device: ANDROID_EMULATOR,
+    session: undefined,
+    flags: {},
+    logPath: '/tmp/snapshot-capture-test.log',
+  });
+  expect(readSnapshotScreenReaderOrderEvidence(snapshot)).toBe(evidence);
 });

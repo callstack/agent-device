@@ -86,6 +86,40 @@ export function readAndroidSiblingOrder(node: AndroidNode): AndroidSiblingOrder 
   return siblingOrderByNode.get(node);
 }
 
+/**
+ * Helper-only inputs of the TalkBack order estimate (`screen-reader-order.ts`). They stay off the
+ * presented node, like sibling order. Absent on a capture from a helper that predates them.
+ */
+export type AndroidScreenReaderFacts = {
+  /** Capture-wide node id that `traversalBefore` and `traversalAfter` refer to. */
+  axId: number;
+  traversalBefore?: number;
+  traversalAfter?: number;
+  screenReaderFocusable: boolean;
+  /** `isImportantForAccessibility()`; absent below API 24. */
+  important?: boolean;
+  focusAction: boolean;
+  stateDescription: boolean;
+  collection: boolean;
+  range: boolean;
+};
+
+const screenReaderFactsByNode = new WeakMap<AndroidNode, AndroidScreenReaderFacts>();
+
+export function attachAndroidScreenReaderFacts(
+  node: AndroidNode,
+  facts: AndroidScreenReaderFacts | undefined,
+): AndroidNode {
+  if (facts) screenReaderFactsByNode.set(node, facts);
+  return node;
+}
+
+export function readAndroidScreenReaderFacts(
+  node: AndroidNode,
+): AndroidScreenReaderFacts | undefined {
+  return screenReaderFactsByNode.get(node);
+}
+
 /** A node a touch can act on. */
 function isTouchTarget(node: AndroidNode): boolean {
   return node.clickable;

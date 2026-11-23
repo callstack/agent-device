@@ -38,6 +38,18 @@ export type SnapshotOcclusionContextEvidence = {
   androidSiblingOrderByNodeIndex?: ReadonlyMap<number, AndroidSiblingOrderEvidence>;
 };
 
+/**
+ * TalkBack's swipe order estimated for each Android application window, as presented node indexes.
+ * A stop the presentation hides is listed by its first presented descendant that is not a stop.
+ */
+export type SnapshotScreenReaderOrderEvidence = {
+  windows: ReadonlyArray<{
+    nodeIndexes: readonly number[];
+    /** Stops with no presented node of their own or below them, left out of `nodeIndexes`. */
+    omittedStops: number;
+  }>;
+};
+
 /** Complete text-input geometry measured before iOS semantic projection; absent means unknown. */
 export type SnapshotTextInputGeometry = Readonly<{ rects: readonly Rect[] }>;
 
@@ -46,6 +58,8 @@ type SnapshotPrivateEvidence = {
   textInputGeometry?: SnapshotTextInputGeometry;
   clickability?: SnapshotClickabilityEvidence;
   occlusionContext?: SnapshotOcclusionContextEvidence;
+  /** Computed on first read: only `audit` reads it, so a regular snapshot never pays for it. */
+  screenReaderOrder?: () => SnapshotScreenReaderOrderEvidence | undefined;
 };
 
 const privateEvidenceBySnapshotObject = new WeakMap<object, SnapshotPrivateEvidence>();
@@ -130,6 +144,41 @@ export function readSnapshotOcclusionContextEvidence(
   owner: object | null | undefined,
 ): SnapshotOcclusionContextEvidence | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.occlusionContext : undefined;
+}
+
+/** Attaches the estimate as a computation that runs once, on the first read. */
+export function attachSnapshotScreenReaderOrderEvidence<T extends object>(
+  owner: T,
+  compute: () => SnapshotScreenReaderOrderEvidence | undefined,
+): T {
+  // Dropped after the run, so the capture tree it closes over is not kept with the snapshot.
+  let pending: typeof compute | undefined = compute;
+  let evidence: SnapshotScreenReaderOrderEvidence | undefined;
+  const screenReaderOrder = () => {
+    if (pending) {
+      evidence = pending();
+      pending = undefined;
+    }
+    return evidence;
+  };
+  return attachSnapshotPrivateEvidence(owner, { screenReaderOrder });
+}
+
+export function readSnapshotScreenReaderOrderEvidence(
+  owner: object | null | undefined,
+): SnapshotScreenReaderOrderEvidence | undefined {
+  return owner ? privateEvidenceBySnapshotObject.get(owner)?.screenReaderOrder?.() : undefined;
+}
+
+/** Carries the estimate without computing it. */
+export function copySnapshotScreenReaderOrderEvidence<T extends object>(
+  source: object | null | undefined,
+  target: T,
+): T {
+  const screenReaderOrder = source
+    ? privateEvidenceBySnapshotObject.get(source)?.screenReaderOrder
+    : undefined;
+  return screenReaderOrder ? attachSnapshotPrivateEvidence(target, { screenReaderOrder }) : target;
 }
 
 export function attachSnapshotTextInputGeometry<T extends object>(

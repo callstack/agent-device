@@ -5,9 +5,13 @@ import type {
   AuditFinding,
   AuditFindingKind,
   AuditResult,
+  AuditScreenReaderOrder,
   AuditSizeUnit,
 } from '@agent-device/contracts/capture';
-import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/snapshot-private-evidence';
+import {
+  readSnapshotClickabilityEvidence,
+  readSnapshotScreenReaderOrderEvidence,
+} from '@agent-device/contracts/snapshot-private-evidence';
 import { isNativeIosSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
@@ -149,7 +153,33 @@ function countSharedNames(
  * the nodes first; platforms that publish no tap fact audit the nodes as captured.
  */
 export function auditSnapshotState(snapshot: SnapshotState, context: AuditContext): AuditResult {
-  return auditSnapshot(withRetainedTapFacts(snapshot), context);
+  const audit = auditSnapshot(withRetainedTapFacts(snapshot), context);
+  const screenReaderOrder = estimatedScreenReaderOrder(snapshot);
+  if (!screenReaderOrder) return audit;
+  return {
+    ...audit,
+    screenReaderOrder,
+    limitations: [...audit.limitations, SCREEN_READER_ORDER_LIMITATION],
+  };
+}
+
+const SCREEN_READER_ORDER_LIMITATION =
+  "The screen-reader order is estimated from TalkBack 16.2's rules, not observed. It leaves out auto-scroll, scrolling past the screen, the order across windows, and web content.";
+
+/** The producer's TalkBack order estimate as refs, without windows that hold no stop. */
+function estimatedScreenReaderOrder(snapshot: SnapshotState): AuditScreenReaderOrder | undefined {
+  const evidence = readSnapshotScreenReaderOrderEvidence(snapshot);
+  if (!evidence) return undefined;
+  const refByIndex = new Map(
+    snapshot.nodes.flatMap((node) => (node.ref ? [[node.index, `@${node.ref}`] as const] : [])),
+  );
+  const windows = evidence.windows.flatMap(({ nodeIndexes, omittedStops }) => {
+    const refs = nodeIndexes.flatMap((index) => refByIndex.get(index) ?? []);
+    const omitted = omittedStops + nodeIndexes.length - refs.length;
+    if (refs.length === 0 && omitted === 0) return [];
+    return [{ refs, ...(omitted > 0 ? { omittedStops: omitted } : {}) }];
+  });
+  return windows.length > 0 ? { estimatedFrom: 'talkback-16.2', windows } : undefined;
 }
 
 function withRetainedTapFacts(snapshot: SnapshotState): readonly SnapshotNode[] {

@@ -4,6 +4,7 @@ import { createAgentDevice } from '../../../runtime.ts';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { attachSnapshotScreenReaderOrderEvidence } from '@agent-device/contracts/capture';
 
 test('runtime audit appends native issues without altering heuristic findings or assigning native refs', async () => {
   const nativeAuditFindings = [
@@ -55,4 +56,28 @@ test('runtime audit appends native issues without altering heuristic findings or
     result.findings.filter((finding) => finding.kind === 'native'),
     nativeAuditFindings,
   );
+});
+
+test('runtime audit reports the backend capture screen-reader order as refs', async () => {
+  const snapshot = attachSnapshotScreenReaderOrderEvidence(
+    makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Title' },
+        { index: 1, depth: 0, type: 'android.widget.Button', label: 'Save' },
+      ],
+      { backend: 'android', producer: 'android-uiautomator' },
+    ),
+    () => ({ windows: [{ nodeIndexes: [1, 0], omittedStops: 0 }] }),
+  );
+  const device = createAgentDevice({
+    backend: { platform: 'android', captureSnapshot: async () => ({ snapshot }) },
+    artifacts: createLocalArtifactAdapter(),
+    sessions: { get: () => undefined, set: () => {} },
+    policy: localCommandPolicy(),
+  });
+  const result = await device.capture.auditSnapshot({});
+  assert.deepEqual(result.screenReaderOrder, {
+    estimatedFrom: 'talkback-16.2',
+    windows: [{ refs: ['@e2', '@e1'] }],
+  });
 });

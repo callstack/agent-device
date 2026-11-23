@@ -143,7 +143,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   ],
   accessibility: [
     'Audit findings are advisory heuristics',
-    'This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance',
+    'This tool does not measure color contrast or iOS focus order, and does not give a compliance verdict. Do not claim compliance',
     '2. Run agent-device audit, then agent-device snapshot -i',
     'Visit every tab, pushed screen, sheet, dialog, and empty, error, and loading state',
     'Large text: first run agent-device settings text-size to record the current size.',

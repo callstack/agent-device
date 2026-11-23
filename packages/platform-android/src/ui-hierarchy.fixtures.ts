@@ -13,6 +13,7 @@ import {
   type AndroidUiHierarchySnapshotOptions,
 } from './mechanics.ts';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { buildAndroidScreenReaderOrderEvidence } from './snapshot-screen-reader-order.ts';
 
 /**
  * Reconstructs the `AndroidUiHierarchy` tree `buildUiHierarchySnapshot` expects
@@ -102,7 +103,8 @@ export function parseUiHierarchy(
   maxNodes: number | undefined,
   options: AndroidUiHierarchySnapshotOptions,
 ): ReturnType<typeof createAndroidSnapshotCapture> {
-  const built = buildUiHierarchySnapshot(parseUiHierarchyTree(xml), maxNodes, options);
+  const tree = parseUiHierarchyTree(xml);
+  const built = buildUiHierarchySnapshot(tree, maxNodes, options);
   const { sourceNodes: _sourceNodes, occlusionContext, ...snapshot } = built;
   return createAndroidSnapshotCapture(
     {
@@ -113,6 +115,7 @@ export function parseUiHierarchy(
     {
       clickability: buildAndroidSnapshotClickabilityEvidence(built),
       occlusionContext,
+      screenReaderOrder: () => buildAndroidScreenReaderOrderEvidence(tree, built),
     },
   );
 }

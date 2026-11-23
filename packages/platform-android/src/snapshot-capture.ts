@@ -2,9 +2,11 @@ import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producer
 import {
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
+  attachSnapshotScreenReaderOrderEvidence,
   type AndroidSnapshotBackendMetadata,
   type SnapshotClickabilityEvidence,
   type SnapshotOcclusionContextEvidence,
+  type SnapshotScreenReaderOrderEvidence,
 } from '@agent-device/contracts/capture';
 import type {
   RawSnapshotNode,
@@ -23,6 +25,7 @@ const androidCaptureEvidence = Symbol('androidSnapshotCaptureEvidence');
 type AndroidCaptureEvidence = Readonly<{
   clickability: Extract<SnapshotClickabilityEvidence, { provider: 'android-helper' }>;
   occlusionContext?: SnapshotOcclusionContextEvidence;
+  screenReaderOrder?: () => SnapshotScreenReaderOrderEvidence | undefined;
 }>;
 
 type AndroidSnapshotCaptureData = Readonly<{
@@ -89,6 +92,9 @@ export function androidSnapshotPublicationInput(
   attachSnapshotClickabilityEvidence(publication, evidence.clickability);
   if (evidence.occlusionContext) {
     attachSnapshotOcclusionContextEvidence(publication, evidence.occlusionContext);
+  }
+  if (evidence.screenReaderOrder) {
+    attachSnapshotScreenReaderOrderEvidence(publication, evidence.screenReaderOrder);
   }
   return publication;
 }

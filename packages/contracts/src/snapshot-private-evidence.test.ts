@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   attachSnapshotClickabilityEvidence,
+  attachSnapshotScreenReaderOrderEvidence,
   copySnapshotClickabilityEvidence,
+  copySnapshotScreenReaderOrderEvidence,
   readSnapshotClickabilityEvidence,
+  readSnapshotScreenReaderOrderEvidence,
 } from './snapshot-private-evidence.ts';
 
 test('retains exact evidence without adding enumerable snapshot or node fields', () => {
@@ -37,4 +40,21 @@ test('copies evidence across internal snapshot construction without serializing 
 
   assert.deepEqual(readSnapshotClickabilityEvidence(target), evidence);
   assert.deepEqual(JSON.parse(JSON.stringify(target)), { nodes: [] });
+});
+
+test('computes the screen-reader order once on the first read, not on copy', () => {
+  const source = {};
+  const target = {};
+  const evidence = { windows: [{ nodeIndexes: [0], omittedStops: 0 }] };
+  let runs = 0;
+  attachSnapshotScreenReaderOrderEvidence(source, () => {
+    runs += 1;
+    return evidence;
+  });
+  copySnapshotScreenReaderOrderEvidence(source, target);
+  assert.equal(runs, 0);
+
+  assert.equal(readSnapshotScreenReaderOrderEvidence(target), evidence);
+  assert.equal(readSnapshotScreenReaderOrderEvidence(source), evidence);
+  assert.equal(runs, 1);
 });

@@ -207,7 +207,8 @@ Use this when asked for an accessibility review, a11y audit, or a screen-reader 
 
 Scope:
   Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, controls of one role that share one accessible name, and covered controls.
-  This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance.
+  On Android, audit also prints an estimated TalkBack swipe order. It is an estimate, not observed TalkBack behavior.
+  This tool does not measure color contrast or iOS focus order, and does not give a compliance verdict. Do not claim compliance.
 
 Loop for each screen:
   1. Open the app: agent-device open <app>. Run mkdir -p ./a11y-output once.
@@ -235,7 +236,8 @@ Additional manual checks:
   Dark mode: first note the current mode from a screenshot. Then run agent-device settings appearance dark, then screenshot each key screen. Look for low-contrast text and icons by eye.
     At the end, set the noted mode again. For example, if the noted mode was light, run agent-device settings appearance light.
   If settings refuses on this device, such as a physical iPhone, list large text and dark mode as not done.
-  Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
+  Screen reader order and labels: on Android, compare audit's estimated TalkBack order with the visual order. On iOS, read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
+    Report an order problem as a likely problem to check with the screen reader on a device, not as a confirmed failure.
     Audit reports a name that controls of one role share. Check by hand that each label names its target ("Save Lemon Herb Rice", not "Save"), even when it is unique, and that controls of different roles do not share one name. A control must expose its state (selected, checked, disabled).
   Gesture-only actions: every swipe or long-press action needs another way to reach it, such as a visible control or an accessibility action.
     On the iOS simulator, agent-device snapshot -i --actions names the custom actions that a merged element hides.
