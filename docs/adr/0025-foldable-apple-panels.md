@@ -284,6 +284,10 @@ Before the amendment, one run read 175.1° one stream after Book and 130° two s
 If the budget ends at another pose, refuse with `fold-pose-unverified` and the observed angle.
 If it ends at unsettled `half-open`, refuse with `fold-pose-unsettled`.
 A verified response includes the angle and lit panel's point size.
+The guest switches panel power after the hinge stop, so the first panel read can name the panel lit before the fold.
+The reported panel must therefore be the panel that the verified pose lights: `primary` when closed, the other panel in every other pose.
+Panel reads repeat for up to 5 seconds until that panel is lit. If it is not lit by then, the response omits `screen`.
+The pose only selects which measured panel to accept. The panel table remains the only source of the panel.
 That point size tells an agent its refs are stale.
 
 A single-panel simulator is refused before mutation with `single-panel-device`.

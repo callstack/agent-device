@@ -12,8 +12,11 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 
 import {
+  IOS_FOLD_PANEL_READ_INTERVAL_MS,
+  IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS,
   IOS_FOLD_POSE_READ_INTERVAL_MS,
   IOS_FOLD_POSE_SETTLE_ATTEMPTS,
   IOS_FOLD_POSE_STABLE_DEGREES,
@@ -74,9 +77,10 @@ export async function setAppleFoldPose(
   });
 
   const hingeAngleDegrees = await awaitHingePose(device, helper, pose, options.signal, targetAngle);
-  const litPanel = await readLitPanel(device, helper, options.signal);
+  const verifiedPose = foldPoseForHingeAngle(hingeAngleDegrees)!;
+  const litPanel = await awaitPoseLitPanel(device, helper, verifiedPose, options.signal);
   return {
-    pose: foldPoseForHingeAngle(hingeAngleDegrees)!,
+    pose: verifiedPose,
     hingeAngleDegrees,
     ...(litPanel ? { screen: screenReport(litPanel) } : {}),
   };
@@ -288,6 +292,31 @@ function unsettledPoseError(
       hint: POSE_UNSETTLED_HINT,
     },
   );
+}
+
+/**
+ * Reads the lit panel until it is the panel the verified pose lights: the `primary` panel when
+ * closed and the other panel in every other pose (ADR 0025). The hinge reaches its stop before the
+ * guest switches panel power, so the first read can still name the panel lit before the fold. A
+ * pose that already lit its panel settles on that first read.
+ */
+async function awaitPoseLitPanel(
+  device: DeviceInfo,
+  helper: FoldHelper,
+  pose: FoldPose,
+  signal: AbortSignal | undefined,
+): Promise<AppleDeviceDisplay | undefined> {
+  // CONSERVATIVE: Wait for the pose's panel so that `screen` never names the panel lit before the
+  // fold. When the deadline passes first, `screen` is omitted as unconfirmed. Revisit only if the
+  // panel table reports the switch together with the hinge stop.
+  const { settled, value } = await pollUntilSettled({
+    probe: () => readLitPanel(device, helper, signal),
+    settled: (panel) => panel !== undefined && panel.primary === (pose === 'closed'),
+    deadline: Deadline.fromTimeoutMs(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS),
+    intervalMs: IOS_FOLD_PANEL_READ_INTERVAL_MS,
+    signal,
+  });
+  return settled ? value : undefined;
 }
 
 async function readLitPanel(
