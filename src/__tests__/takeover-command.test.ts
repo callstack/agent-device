@@ -224,4 +224,14 @@ test('takeover hold output names the release command', () => {
     renderTakeoverHold(HUMAN_CONTROL_HOLD, 'remote-session'),
     /takeover release operator-1 --session remote-session/,
   );
+  assert.ok(
+    renderTakeoverHold(HUMAN_CONTROL_HOLD, 'qa team').includes(
+      "Release with: agent-device takeover release operator-1 --session 'qa team'\n",
+    ),
+  );
+  assert.ok(
+    renderTakeoverHold(HUMAN_CONTROL_HOLD, '--json').includes(
+      'Release with: agent-device takeover release operator-1 --session=--json\n',
+    ),
+  );
 });

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { HumanControlHold } from '@agent-device/contracts/client';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { writeCommandOutput } from './shared.ts';
@@ -141,7 +142,11 @@ export function renderTakeoverStarted(hold: HumanControlHold): string {
 
 export function renderTakeoverHold(hold: HumanControlHold, session?: string): string {
   const target = hold.scope.deviceKey;
-  const sessionFlag = session ? ` --session ${session}` : '';
+  const sessionFlag = session
+    ? session.startsWith('-')
+      ? ` --session=${shellQuoteIfNeeded(session)}`
+      : ` --session ${shellQuoteIfNeeded(session)}`
+    : '';
   return [
     `Human control active for ${target}.`,
     `Agent interactions are paused. Release with: agent-device takeover release ${hold.id}${sessionFlag}`,
