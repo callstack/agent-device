@@ -85,9 +85,8 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */
     timeoutMs?: number;
     /**
-     * Wait up to n milliseconds (100-120000) while another session holds the device, then fail
-     * with DEVICE_IN_USE. A claim held by another workspace fails at once. The wait extends this
-     * command's timeout.
+     * Wait 100-120000 ms for a busy device or expired session cleanup. Return DEVICE_IN_USE if
+     * still busy. Claims from other workspaces fail at once. This extends the command timeout.
      */
     waitMs?: number;
     // Editor documentation for a public type: a `.d.ts` is read where no

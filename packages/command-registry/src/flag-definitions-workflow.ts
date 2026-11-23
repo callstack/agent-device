@@ -98,7 +98,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--wait <ms>',
     usageDescription: 'Open: limit the wait for a busy device or expired session cleanup to n ms',
     inputDescription:
-      "Wait up to n milliseconds (100-120000) for a busy device or expired session cleanup. If the device stays busy, return DEVICE_IN_USE. A claim held by another workspace fails at once. The wait extends this command's timeout.",
+      'Wait 100-120000 ms for a busy device or expired session cleanup. Return DEVICE_IN_USE if still busy. Claims from other workspaces fail at once. This extends the command timeout.',
     projectConfig: false,
     recorded: false,
   },
