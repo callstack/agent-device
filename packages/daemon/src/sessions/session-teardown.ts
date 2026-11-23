@@ -1,4 +1,3 @@
-import { isProviderInstanceEndedError } from '@agent-device/contracts/lease-scope';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isCompletedDurableCaptureError } from '@agent-device/capture-kit/durable-capture';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -228,7 +227,9 @@ export async function settleExpiredSession(
   try {
     await request.finalizeApplication();
   } catch (error) {
-    if (!request.providerEnded || !isProviderInstanceEndedError(error)) throw error;
+    if (!request.providerEnded) throw error;
+    const { isProviderInstanceEndedError } = await import('@agent-device/contracts/lease-scope');
+    if (!isProviderInstanceEndedError(error)) throw error;
   }
 }
 
