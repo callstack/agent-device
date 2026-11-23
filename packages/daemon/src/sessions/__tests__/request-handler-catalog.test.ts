@@ -7,7 +7,7 @@ import { test } from 'vitest';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
-import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import {
   getDaemonCommandRoute,
@@ -488,6 +488,19 @@ test('a throwing provider release after cancellation is reported as unreleased, 
         assert.equal(details.released, false);
         assert.equal(details.registryReleased, true);
         assert.equal(details.releaseError, 'hub unreachable');
+        assert.throws(
+          () =>
+            leaseRegistry.allocateLease({
+              tenantId: 'tenant-a',
+              runId: 'run-a',
+              leaseProvider: 'fake-provider',
+              leaseBackend: 'android-instance',
+            }),
+          (refusal: unknown) =>
+            refusal instanceof AppError &&
+            refusal.details?.releaseStatus === 'unknown' &&
+            refusal.details.releaseReason === 'provider-release-unconfirmed',
+        );
         assert.match(String(details.hint), /could NOT be confirmed released/);
         return true;
       },

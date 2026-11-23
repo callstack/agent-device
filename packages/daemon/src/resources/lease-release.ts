@@ -1,3 +1,4 @@
+import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
 import type {
   DeviceLease,
   LeaseLifecycleContext,
@@ -20,9 +21,27 @@ export async function releaseLease(
   request: ReleaseLeaseRequest,
   context?: LeaseLifecycleContext,
 ): Promise<LeaseReleaseOutcome> {
-  const provider = lease ? await leaseLifecycleProvider?.release?.(lease, context) : undefined;
-  if (lease) recordProviderSession(leaseRegistry, lease, provider);
-  return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
+  if (!lease) return { registryReleased: false };
+  const provider = await releaseProviderRental(leaseLifecycleProvider, lease, context);
+  recordProviderSession(leaseRegistry, lease, provider);
+  if (provider?.releaseStatus === 'unknown') {
+    leaseRegistry.beginProviderLeaseEnd(lease.leaseId, true);
+    leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');
+    return { registryReleased: true, provider };
+  }
+  const registryReleased = leaseRegistry.releaseLease(request).released;
+  if (!registryReleased) leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased');
+  return { registryReleased, provider };
+}
+
+export async function releaseProviderRental(
+  provider: LeaseLifecycleProvider | undefined,
+  lease: DeviceLease,
+  context?: LeaseLifecycleContext,
+): Promise<Record<string, unknown> | undefined> {
+  if (!provider?.release && leaseProviderRequiringRuntime(lease))
+    return { releaseStatus: 'unknown' };
+  return await provider?.release?.(lease, context);
 }
 
 export function recordProviderSession(

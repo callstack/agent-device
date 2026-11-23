@@ -792,6 +792,7 @@ These reasons can come from more than one command.
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_OUTPUT_MISMATCH` | The request does not send the id of the lease that produced the artifact or diagnostics record. |
 | `DEVICE_LEASE_BUSY` | Another lease, or this tenant run, already holds the device; retry after that lease is released or expires. |
+| `provider-release-unconfirmed` | The provider could not confirm that it ended the rental. |
 | `LEASE_ID_TOO_SHORT` | A lease id that the caller chose on allocate has fewer than 32 hex digits (128 bits). |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |

@@ -2,6 +2,7 @@ import { providerRuntimeAdmissionError } from '../provider-runtime-admission.ts'
 import {
   recordProviderSession,
   releaseLease,
+  releaseProviderRental,
   type LeaseReleaseOutcome,
 } from '../../resources/lease-release.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -38,6 +39,7 @@ import {
   resolveSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
+  LEASE_REASONS,
   isProviderInstanceEndedError,
   leaseDeviceKey,
   leaseProviderRequiringRuntime,
@@ -159,13 +161,22 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
-          await settleFailedAllocation(
-            lease,
-            reused,
-            requestId,
-            leaseLifecycleProvider,
-            leaseRegistry,
-          );
+          if (isRequestCanceled(requestId)) {
+            throw await releaseAllocationForGoneRequester(
+              lease,
+              leaseLifecycleProvider,
+              leaseRegistry,
+              reused ? endSessionsForLease : undefined,
+            );
+          }
+          if (!reused) {
+            await settleAllocationRelease(
+              lease,
+              leaseLifecycleProvider,
+              leaseRegistry,
+              undefined,
+            ).catch(() => undefined);
+          }
           throw error;
         } finally {
           work?.release();
@@ -177,9 +188,14 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             lease,
             leaseLifecycleProvider,
             leaseRegistry,
+            reused ? endSessionsForLease : undefined,
           );
         }
-        const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease)) ?? lease;
+        const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease));
+        if (!allocated)
+          throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+            reason: LEASE_REASONS.notFound.reason,
+          });
         return {
           ok: true,
           data: {
@@ -334,47 +350,42 @@ async function admitPinnedProxyLeaseDeviceKey(
   return deviceKey;
 }
 
-// A run's repeat allocation reuses its live lease; refusing that request must not end the
-// lease, or the provider session the first allocation created is left without an owner.
-// A requester that hung up owns nothing, so its canceled repeat allocation still releases.
-async function settleFailedAllocation(
+async function settleAllocationRelease(
   lease: DeviceLease,
-  reused: boolean,
-  requestId: string | undefined,
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
-  leaseRegistry: LeaseRegistry,
-): Promise<void> {
-  if (!reused) {
-    leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
-    return;
-  }
-  if (isRequestCanceled(requestId)) {
-    throw await releaseAllocationForGoneRequester(lease, leaseLifecycleProvider, leaseRegistry);
+  provider: LeaseLifecycleProvider | undefined,
+  registry: LeaseRegistry,
+  endSessions: LeaseHandlerArgs['endSessionsForLease'],
+): Promise<LeaseReleaseOutcome> {
+  if (!registry.beginProviderLeaseEnd(lease.leaseId, !endSessions))
+    return { registryReleased: false };
+  try {
+    const result = await releaseProviderRental(provider, lease);
+    recordProviderSession(registry, lease, result);
+    if (result?.releaseStatus === 'unknown')
+      registry.markExpiredProviderReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');
+    else registry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased');
+    if (endSessions) void endSessions(lease.leaseId);
+
+    return { registryReleased: true, provider: result };
+  } catch (error) {
+    registry.markExpiredProviderReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');
+    registry.retryProviderLeaseEnd(lease);
+    throw error;
   }
 }
 
-/**
- * Releases a lease that finished allocating after its requester was gone and
- * turns the outcome into the canceled-request error nobody is left to receive:
- * a throwing provider release is folded into `releaseError` rather than raised,
- * and the provider session counts as released only when it reported no
- * warnings — otherwise the error names what an operator must stop by hand.
- */
 async function releaseAllocationForGoneRequester(
   lease: DeviceLease,
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
-  leaseRegistry: LeaseRegistry,
+  provider: LeaseLifecycleProvider | undefined,
+  registry: LeaseRegistry,
+  endSessions: LeaseHandlerArgs['endSessionsForLease'],
 ): Promise<AppError> {
-  const request = leaseReleaseRequestFor(lease);
-  let outcome: LeaseReleaseOutcome;
-  let releaseError: string | undefined;
   try {
-    outcome = await releaseLease(leaseRegistry, leaseLifecycleProvider, lease, request);
+    const outcome = await settleAllocationRelease(lease, provider, registry, endSessions);
+    return canceledAllocationError(lease, outcome, undefined);
   } catch (error) {
-    releaseError = errorMessage(error);
-    outcome = { registryReleased: leaseRegistry.releaseLease(request).released };
+    return canceledAllocationError(lease, { registryReleased: true }, errorMessage(error));
   }
-  return canceledAllocationError(lease, outcome, releaseError);
 }
 
 async function heartbeatLease(
@@ -428,7 +439,11 @@ function canceledAllocationError(
   const warnings = Array.isArray(outcome.provider?.warnings) ? outcome.provider.warnings : [];
   // `released` answers the operator's question — is the billed session gone? —
   // and is only true when the provider released without warnings or throwing.
-  const released = outcome.registryReleased && releaseError === undefined && warnings.length === 0;
+  const released =
+    outcome.registryReleased &&
+    releaseError === undefined &&
+    outcome.provider?.releaseStatus !== 'unknown' &&
+    warnings.length === 0;
   return createRequestCanceledError({
     leaseId: lease.leaseId,
     leaseProvider: lease.leaseProvider,

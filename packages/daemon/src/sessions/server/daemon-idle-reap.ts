@@ -10,6 +10,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { shouldLockSessionExecution } from '../../core/daemon-command-registry.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -279,6 +280,18 @@ export function createDaemonLifecycleAdmission(params: {
         return refuse(new AppError('UNAUTHORIZED', 'Invalid daemon token.'));
       }
       if (req.command === DAEMON_QUIESCE_COMMAND) return leave(req);
+      if (
+        params.startingUp() &&
+        (req.command === 'lease_allocate' || shouldLockSessionExecution(req.command))
+      ) {
+        return refuse(
+          new AppError('COMMAND_FAILED', 'Daemon startup recovery is in progress.', {
+            reason: DAEMON_LIFECYCLE_REASONS.busy.reason,
+            startingUp: true,
+            retriable: true,
+          }),
+        );
+      }
       return admitting ? await handler(req) : daemonShuttingDownResponse();
     },
   };

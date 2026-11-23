@@ -170,10 +170,13 @@ async function closeProviderDaemon(
   return await shutdown;
 }
 
-test('a provider-ended heartbeat disposes its exact lease once and keeps the reservation until disposal', async () => {
+test('a provider-ended heartbeat fences its exact lease through disposal refusal and retry', async () => {
   const dispose = barrier();
   const release = vi.fn(async (_lease: DeviceLease) => {
-    await dispose.reached;
+    if (release.mock.calls.length === 1) {
+      await dispose.reached;
+      throw new Error('temporary disposal refusal');
+    }
     return undefined;
   });
   const { runtime, registry } = await startProviderDaemon({
@@ -195,6 +198,16 @@ test('a provider-ended heartbeat disposes its exact lease once and keeps the res
     );
     dispose.open();
     await vi.advanceTimersByTimeAsync(0);
+    expect(() => registry.allocateLease(successor)).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({ releaseStatus: 'unknown' }),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([
+      lease.leaseId,
+      lease.leaseId,
+    ]);
     expect(registry.allocateLease(successor).leaseId).not.toBe(lease.leaseId);
   } finally {
     dispose.open();
@@ -578,7 +591,14 @@ test('expiry reserves the provider device through a slow failed release and a su
     assertBusy();
     failFirstRelease(new Error('provider temporarily unavailable'));
     await vi.advanceTimersByTimeAsync(0);
-    assertBusy();
+    expect(() => registry.allocateLease(next)).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          releaseStatus: 'unknown',
+          releaseReason: 'provider-release-unconfirmed',
+        }),
+      }),
+    );
     await vi.advanceTimersByTimeAsync(1_000);
     assert.equal(release.mock.calls.length, 2);
     assert.notEqual(registry.allocateLease(next).leaseId, lease.leaseId);

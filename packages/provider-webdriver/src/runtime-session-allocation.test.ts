@@ -413,7 +413,7 @@ test('an artifact callback that never answers holds neither the lease nor shutdo
 /**
  * A provider's own cleanup is the half of disposal the hub's `DELETE` does not cover, and a custom one
  * has no bound either. Once its budget runs out this manager cannot learn whether the resource was
- * handed back, so it says so and lets the lease be used again rather than holding it forever.
+ * handed back, so the release reports uncertainty and retains the lease.
  */
 test('a provider cleanup that outlives its budget ends the disposal as uncertain', async () => {
   const hub = startWebDriverHub();
@@ -447,22 +447,17 @@ test('a provider cleanup that outlives its budget ends the disposal as uncertain
     assert.deepEqual(warningCodes(value?.warnings), ['PROVIDER_CLEANUP_FAILED']);
     assert.match(String(warningMessages(value?.warnings)[0]), /40ms/);
 
-    // The lease is the next caller's again, and a later session this manager can end still ends cleanly.
-    assertResolvedWith(
+    assert.equal(value?.releaseStatus, 'unknown');
+    assertRejectedWith(
       await settle(() => runtime.leaseLifecycle.allocate!(lease)),
-      'session-2',
-      'a cleanup whose outcome is unknown may not keep the lease',
+      'provider_session_release_in_progress',
+      { leaseId: lease.leaseId },
     );
-    assert.deepEqual(
-      await settle(() => runtime.shutdown()),
-      { status: 'resolved', value: undefined },
-      'only a session the provider would not end may fail a close',
-    );
-    assert.deepEqual(hub.created, ['session-1', 'session-2']);
-    assert.deepEqual(hub.deleted, ['session-1', 'session-2']);
+    assert.deepEqual(hub.created, ['session-1']);
+    assert.deepEqual(hub.deleted, ['session-1']);
   } finally {
     answerCleanup?.();
-    await runtime.shutdown();
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 
@@ -489,7 +484,7 @@ test('a release the provider refused reports the session left running', async ()
     assert.deepEqual(hub.deleted, []);
   } finally {
     hub.allowDeletes();
-    await runtime.shutdown();
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 
@@ -532,27 +527,11 @@ test('a create the hub refused still answers when its provider cleanup hangs', a
     assert.equal(details.status, 500, 'the hub refusal is what the caller is told');
     assert.match(String(details.cleanupError), /did not answer within 40ms/);
 
-    // The lease is the next caller's again: an allocation issued after the hung cleanup reaches the hub
-    // and is refused for the hub's own refusal, not for a teardown that never finishes. And a close does
-    // not wait on a callback it gave up on.
-    const nextAllocation = await settle(() => runtime.leaseLifecycle.allocate!(lease));
-    assert.equal(nextAllocation.status, 'rejected', describe(nextAllocation));
-    const nextDetails = ((nextAllocation as Readonly<{ error: AppError }>).error.details ??
-      {}) as Record<string, unknown>;
-    assert.equal(
-      nextDetails.status,
-      500,
-      'the lease is free, so this caller hears the hub again rather than a contention refusal',
-    );
-    assert.deepEqual(
-      await settle(() => runtime.shutdown()),
-      { status: 'resolved', value: undefined },
-      'a create cleanup this manager gave up on may not hold a close',
-    );
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { releaseStatus: 'unknown' });
     assert.deepEqual(hub.created, []);
   } finally {
     answerCleanup?.();
-    await runtime.shutdown();
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 
@@ -601,7 +580,7 @@ test('a shutdown that could not stop two sessions names both refusals', async ()
     );
   } finally {
     hub.allowDeletes();
-    await runtime.shutdown();
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 
@@ -642,7 +621,7 @@ test('a session shutdown could not stop fails the shutdown and the refused alloc
   } finally {
     hub.allowDeletes();
     await preparation.answerHeld();
-    await runtime.shutdown();
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 

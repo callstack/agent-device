@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { deferred } from '../platform-runtime-device-ready-http.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -956,5 +957,25 @@ test('Limrun runtimes keep their hosts in concurrent deferred Android callbacks'
     expect(results.map((app) => app?.appId)).toEqual(['com.first', 'com.second']);
   } finally {
     await Promise.all(runtimes.map((runtime) => runtime.shutdown()));
+  }
+});
+
+test('Limrun restart requires evidence of the rental and deletes an attributed instance once', async () => {
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
+  const lease = iosLease('lease-recovered');
+  const lookup = deferred<LimrunInstancePage>();
+  limrunMockState.iosList.mockImplementationOnce(() => lookup.promise);
+  try {
+    const recovery = runtime.recoverExpiredLease!(lease);
+    lookup.resolve({ getPaginatedItems: () => [] });
+    await expect(recovery).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+    expect(limrunMockState.iosDelete).not.toHaveBeenCalled();
+    limrunMockState.iosList.mockResolvedValueOnce({
+      getPaginatedItems: () => [{ metadata: { id: 'recovered-instance' } }],
+    });
+    await runtime.recoverExpiredLease!(lease);
+    expect(limrunMockState.iosDelete.mock.calls.map(([id]) => id)).toEqual(['recovered-instance']);
+  } finally {
+    await runtime.shutdown();
   }
 });

@@ -373,10 +373,22 @@ export async function releaseLimrunLease(
   limrun: Limrun | undefined,
   lease: DeviceLease,
   disposal: Promise<LimrunDisposalOutcome> | undefined,
+  requireEvidence = false,
 ): Promise<LimrunReleaseRecord | undefined> {
   // No disposal means this runtime holds nothing for the lease: it was never allocated here, or its disposal
   // confirmed and gave it back. What the lease has under its labels is the recovery route's.
-  if (disposal === undefined) return await releaseLabeledInstances(limrun, lease);
+  if (disposal === undefined) {
+    const released = await releaseLabeledInstances(limrun, lease);
+    if (!released && requireEvidence)
+      throwUnconfirmedDelete(
+        'Limrun lease release is unknown',
+        {},
+        undefined,
+        'Reconcile the rental using its lease label.',
+        undefined,
+      );
+    return released;
+  }
   const outcome = await disposal;
   if (outcome.cleanup === 'uncertain') throw releaseLeftInstanceRunning(lease.leaseId, outcome);
   if (outcome.instanceId === undefined) return undefined;

@@ -25,6 +25,7 @@ export type Admission =
   | { kind: 'replan' }
   | {
       kind: 'need-settlement';
+      leaseId: string;
       settlement: ExpirySettlement;
       ownerLeaseId?: string;
       successorIsCurrent?: () => boolean;
@@ -84,6 +85,7 @@ export function createLeaseSessionEnd(params: {
   cleanupSessionlessExecutionHost: PlatformResourceCleanup['cleanupSessionlessExecutionHost'];
   withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
   confirmExpiredSessions?: (leaseId: string) => boolean;
+  onClaimReleaseUnconfirmed?: (leaseId: string) => void;
 }): LeaseSessionEnd {
   const { sessionStore, executionLocks, teardownSession } = params;
   let closing = false;
@@ -92,7 +94,7 @@ export function createLeaseSessionEnd(params: {
     string,
     {
       reason: LeaseEndReason;
-      nextRetryAt: number;
+      nextRetryAt?: number;
       provider?: ExpiryProviderSettlement;
     }
   >();
@@ -175,7 +177,7 @@ export function createLeaseSessionEnd(params: {
               )
                 return;
               attempted.add(ref.lifetime);
-              await endLeasedSession(
+              const outcome = await endLeasedSession(
                 sessionStore.refresh(ref),
                 sessionStore,
                 (currentRef) => teardownForLeaseEnd(currentRef, reason),
@@ -187,6 +189,16 @@ export function createLeaseSessionEnd(params: {
                   data: { session: ref.address, error: errorMessage(error) },
                 }),
               );
+              if (outcome === 'claim-release-unconfirmed') {
+                const currentEnd = pending.get(leaseId);
+                if (currentEnd) delete currentEnd.nextRetryAt;
+                params.onClaimReleaseUnconfirmed?.(leaseId);
+                emitDiagnostic({
+                  level: 'warn',
+                  phase: 'lease_release_unknown',
+                  data: { leaseId, reason: 'device-claim-release-unconfirmed' },
+                });
+              }
             },
           ),
       ),
@@ -249,6 +261,9 @@ export function createLeaseSessionEnd(params: {
     } finally {
       if (cleanupConfirmed(leaseId)) {
         pending.delete(leaseId);
+        if (reason === 'LEASE_RELEASED' && !provider) params.confirmExpiredSessions?.(leaseId);
+      } else if (pending.get(leaseId)?.nextRetryAt === undefined) {
+        provider?.allowRelease();
       } else if (!closing) {
         pending.set(leaseId, {
           reason,
@@ -386,7 +401,8 @@ export function createLeaseSessionEnd(params: {
     retryPending: async () => {
       await Promise.all(
         Array.from(pending, async ([leaseId, { reason, nextRetryAt }]) => {
-          if (!inFlight.has(leaseId) && Date.now() >= nextRetryAt) await end(leaseId, reason);
+          if (!inFlight.has(leaseId) && nextRetryAt !== undefined && Date.now() >= nextRetryAt)
+            await end(leaseId, reason);
         }),
       );
     },

@@ -78,6 +78,7 @@ type WebDriverLeaseEntry = {
   session: WebDriverProviderSession | undefined;
   /** Which route took this lease from its allocation, and the one disposal that owns its session. */
   taken: WebDriverLeaseTake | undefined;
+  createReleaseUnknown?: true;
 };
 
 /**
@@ -199,16 +200,15 @@ export class WebDriverSessionManager {
     if (entry === undefined) return undefined;
     const take = this.take(entry, 'release');
     const outcome = await take.disposal;
-    // A create that failed billed nothing, and gave back what its preparation had already rented.
-    if (outcome.session === undefined) return undefined;
-    // The artifact report is joined here, after the lease has been given back and the billed session is
-    // known to be ended: a slow plugin lookup may delay this answer, and nothing that runs against the
-    // lease.
+    if (outcome.session === undefined)
+      return outcome.cleanup === 'uncertain' ? { releaseStatus: 'unknown' } : undefined;
+    // Report artifacts even when the provider refused release.
     const artifacts = await take.artifacts;
     return {
       provider: this.options.provider,
       providerSessionId: outcome.session.providerSessionId,
       ...outcome.cleanupPayload,
+      ...(outcome.cleanup === 'uncertain' ? { releaseStatus: 'unknown' } : {}),
       ...(outcome.warnings.length > 0 ? { warnings: outcome.warnings } : {}),
       ...(artifacts ? { cloudArtifacts: artifacts } : {}),
     };
@@ -285,9 +285,17 @@ export class WebDriverSessionManager {
         rentSession(session);
       },
       (error: unknown) => {
-        // The create billed nothing and gave back what its preparation rented, so the lease is free
-        // again as soon as nobody is left to dispose anything for it.
-        if (entry.taken === undefined && this.entriesByLeaseId.get(lease.leaseId) === entry) {
+        if (
+          error instanceof AppError &&
+          (error.details?.reason === WEBDRIVER_SESSION_REASONS.sessionCreateTimeout.reason ||
+            error.details?.cleanupError !== undefined)
+        )
+          entry.createReleaseUnknown = true;
+        if (
+          !entry.createReleaseUnknown &&
+          !entry.taken &&
+          this.entriesByLeaseId.get(lease.leaseId) === entry
+        ) {
           this.entriesByLeaseId.delete(lease.leaseId);
         }
         refuseSession(error);
@@ -373,7 +381,10 @@ export class WebDriverSessionManager {
           : this.safeListArtifacts(outcome.session, true).catch(() => undefined);
       // Whatever the create rented is now ended, or was never rented, so this entry owns nothing and the
       // lease is free again.
-      if (this.entriesByLeaseId.get(entry.lease.leaseId) === entry) {
+      if (
+        outcome.cleanup !== 'uncertain' &&
+        this.entriesByLeaseId.get(entry.lease.leaseId) === entry
+      ) {
         this.entriesByLeaseId.delete(entry.lease.leaseId);
       }
       reportDisposal(outcome);
@@ -400,7 +411,12 @@ export class WebDriverSessionManager {
   private async disposeTakenEntry(entry: WebDriverLeaseEntry): Promise<WebDriverDisposalOutcome> {
     const session = entry.session ?? (await entry.creation.catch(() => undefined));
     entry.session = session;
-    if (session === undefined) return { cleanup: 'none', session: undefined, warnings: [] };
+    if (session === undefined)
+      return {
+        cleanup: entry.createReleaseUnknown ? 'uncertain' : 'none',
+        session: undefined,
+        warnings: [],
+      };
     this.releasedProviderSessionIdsByLeaseId.set(entry.lease.leaseId, session.providerSessionId);
     const warnings: CloudWebDriverReleaseWarning[] = [];
     let cleanupPayload: Record<string, unknown> | undefined;

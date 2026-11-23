@@ -341,6 +341,7 @@ export async function createRequestExecutionScope(params: {
       return {
         kind: 'need-settlement',
         settlement,
+        leaseId: lease.leaseId,
         successorIsCurrent,
         ownerLeaseId: successorIsCurrent ? undefined : lease.leaseId,
       };
@@ -379,7 +380,7 @@ export async function createRequestExecutionScope(params: {
         throw inactiveLease();
       }
       if (!attempt.successorIsCurrent?.()) throw inactiveLease();
-      if (!settled) throw deviceLeaseBusyError();
+      if (!settled) throw leaseRegistry.leaseEndRefusal(attempt.leaseId) ?? deviceLeaseBusyError();
       return attempt.successorIsCurrent;
     };
     let requestExecutionLocks: ReturnType<typeof createRequestExecutionLocks> | undefined;

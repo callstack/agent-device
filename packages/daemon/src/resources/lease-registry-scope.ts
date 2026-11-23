@@ -20,6 +20,8 @@ export const DEVICE_LEASE_REASONS = {
   // Another lease, or this tenant run, already holds the device; retry after that lease is released
   // or expires.
   busy: { reason: 'DEVICE_LEASE_BUSY' },
+  // The provider could not confirm that it ended the rental.
+  releaseUnconfirmed: { reason: 'provider-release-unconfirmed' },
 } as const satisfies ReasonTable<'leases'>;
 
 export type LeaseRegistryOptions = {
@@ -29,7 +31,10 @@ export type LeaseRegistryOptions = {
   maxLeaseTtlMs?: number;
   providerSessionRetentionMs?: number;
   now?: () => number;
-  onLeaseExpired?: (lease: DeviceLease, reason?: 'PROVIDER_INSTANCE_ENDED') => void;
+  onLeaseExpired?: (
+    lease: DeviceLease,
+    reason?: 'PROVIDER_INSTANCE_ENDED' | 'LEASE_RELEASED',
+  ) => void;
   /**
    * Called with every live provider lease after a provider lease is issued or leaves the registry, so
    * the daemon can journal what a crash would otherwise forget. An expired lease leaves only after
@@ -393,11 +398,19 @@ export function leaseOwnTtlMs(lease: Pick<DeviceLease, 'expiresAt' | 'heartbeatA
   return lease.expiresAt - lease.heartbeatAt;
 }
 
-export function deviceLeaseBusyError(activeLease?: DeviceLease, releaseUnknown = false): AppError {
+export type ReleaseUnknownReason =
+  | 'provider-release-unconfirmed'
+  | 'provider-runtime-unavailable'
+  | 'device-claim-release-unconfirmed';
+
+export function deviceLeaseBusyError(
+  activeLease?: DeviceLease,
+  releaseUnknown?: ReleaseUnknownReason,
+): AppError {
   return new AppError(
     'DEVICE_IN_USE',
     releaseUnknown
-      ? 'Provider lease release is unknown'
+      ? 'Lease release is unknown'
       : activeLease
         ? 'Device is already leased'
         : 'Expired lease cleanup is pending',
@@ -415,7 +428,11 @@ export function deviceLeaseBusyError(activeLease?: DeviceLease, releaseUnknown =
       ...(releaseUnknown
         ? {
             releaseStatus: 'unknown',
-            hint: 'Contact the daemon operator to reconcile the provider release.',
+            releaseReason: releaseUnknown,
+            hint:
+              releaseUnknown === 'device-claim-release-unconfirmed'
+                ? 'Contact the daemon operator to reconcile the device claim.'
+                : 'Contact the daemon operator to reconcile the provider release.',
           }
         : {}),
     },

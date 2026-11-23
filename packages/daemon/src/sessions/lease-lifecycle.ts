@@ -57,12 +57,17 @@ export async function endLeasedSession(
   sessionStore: SessionStore,
   teardownSession: SessionTeardown,
   env: HostEnvironment['env'],
-): Promise<void> {
+): Promise<'claim-release-unconfirmed' | undefined> {
   const claim = ref.session.deviceClaim;
   await teardownSession(ref);
   const current = sessionStore.resolveCurrent(ref);
   if (!current || current.deviceClaim !== claim) return;
-  if ((await clearDeviceClaim(claim, env)) === 'unattributable') return;
+  try {
+    if ((await clearDeviceClaim(claim, env)) === 'unattributable')
+      return 'claim-release-unconfirmed';
+  } catch {
+    return 'claim-release-unconfirmed';
+  }
   sessionStore.finalizeRepairTeardown(ref);
   sessionStore.retire(ref);
 }

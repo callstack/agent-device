@@ -182,7 +182,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         leaseBackend: lease.backend,
       });
     }
-    await this.release(lease);
+    await this.release(lease, true);
   };
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
@@ -570,6 +570,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       // The session is recorded in the step that answers for it, so every later step of this allocation
       // fails with its handles still owned: the instance client and the host ADB endpoint are released by
       // whoever ends this lease, whether or not the allocation ever answered.
+      owner.createSubmitted = true;
       const session =
         platform === 'ios'
           ? await allocateLimrunIosSession(params, rent)
@@ -668,14 +669,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return disposal;
   }
 
-  /**
-   * Hands one taken owner to the module that ends what it stands for. The disposal may ask only two things of
-   * this runtime — delete one instance and end one lease's capture — so it never reaches back into the routes
-   * that allocate and read one, and the lease is still given back by the take that started this disposal.
-   */
   private async disposeOwner(owner: LimrunLeaseOwner): Promise<LimrunDisposalOutcome> {
-    const { disposeLimrunLeaseOwner } = await import('./lease-release.ts');
-    return await disposeLimrunLeaseOwner(this.disposalHost, owner);
+    const { disposeLimrunLeaseOwner, releaseLimrunLease } = await import('./lease-release.ts');
+    const outcome = await disposeLimrunLeaseOwner(this.disposalHost, owner);
+    if (outcome.cleanup !== 'none' || !owner.createSubmitted) return outcome;
+    await releaseLimrunLease(this.limrun, owner.lease, undefined, true);
+    return { ...outcome, cleanup: 'confirmed' };
   }
 
   private readonly disposalHost: LimrunDisposalHost = {
@@ -800,13 +799,15 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     });
   }
 
-  private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
-    // The take happens in this step, before anything is loaded: the release owns the lease from here, and no
-    // await in between can let the allocation still waiting on its create answer ahead of it.
+  private async release(
+    lease: DeviceLease,
+    requireEvidence = false,
+  ): Promise<Record<string, unknown> | undefined> {
+    // Take this lease before importing the release module.
     const owner = this.leases.get(lease.leaseId);
     const disposal = owner === undefined ? undefined : this.take(owner, 'release');
     const { releaseLimrunLease } = await import('./lease-release.ts');
-    return await releaseLimrunLease(this.limrun, lease, disposal);
+    return await releaseLimrunLease(this.limrun, lease, disposal, requireEvidence);
   }
 
   private orgClient(operation: string, hint?: string): Limrun {

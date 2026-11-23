@@ -638,6 +638,15 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
       inFlightRequests: 0,
     });
 
+    const overlap = await sendSocketRequest(info.port, {
+      token: info.token,
+      session: 'lease',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: { tenantId: 'tenant-a', runId: 'run-a', leaseBackend: 'ios-simulator' },
+    });
+    expect(reasonOf(overlap)).toBe('daemon-busy');
+
     openGate();
     const runtime = await starting;
     const exit = runtime.closed.then(() => 0);

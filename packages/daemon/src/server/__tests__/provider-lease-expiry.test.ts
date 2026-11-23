@@ -145,11 +145,29 @@ test('retries a persisted expired provider lease after daemon restart', async ()
     expect(release).toHaveBeenCalledTimes(1);
     firstDaemon.shutdown();
 
+    const registry = new LeaseRegistry();
     const daemonWithoutLimrun = createExpiredProviderLeaseReleaser({
       ...options,
       recoverableProviderIds: [],
+      onRecovered: (lease) => registry.reserveExpiredLease(lease, true),
+      onReleaseUnknown: (lease, reason) =>
+        registry.markExpiredProviderReleaseUnknown(lease.leaseId, reason),
     });
     await daemonWithoutLimrun.recoverInherited();
+    expect(() =>
+      registry.allocateLease({
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseProvider: lease.leaseProvider,
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          releaseStatus: 'unknown',
+          releaseReason: 'provider-runtime-unavailable',
+        }),
+      }),
+    );
     expect(release).toHaveBeenCalledTimes(1);
     daemonWithoutLimrun.shutdown();
 

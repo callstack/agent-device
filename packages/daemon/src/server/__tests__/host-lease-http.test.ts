@@ -131,6 +131,27 @@ test('DELETE revokes the lease so the next admission fails and ends its session'
   );
 });
 
+test('host DELETE leaves a provider rental reserved', async (t) => {
+  await withServer(t, async (origin, registry) => {
+    const request = {
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      leaseBackend: 'ios-instance' as const,
+      leaseProvider: 'limrun',
+      deviceKey: 'ios:mobile:fixture',
+    };
+    const lease = registry.allocateLease(request);
+    const response = await fetch(`${origin}${HOST_LEASE_HTTP_PREFIX}/${lease.leaseId}`, {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer daemon-token' },
+    });
+    assert.equal(((await response.json()) as { released: boolean }).released, false);
+    assert.throws(() => registry.allocateLease({ ...request, runId: 'overlap' }), {
+      code: 'DEVICE_IN_USE',
+    });
+  });
+});
+
 test('/health names macos-app among the lease backends only on a macOS host', async (t) => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
   try {

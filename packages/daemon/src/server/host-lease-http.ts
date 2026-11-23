@@ -79,7 +79,9 @@ async function handleHostLeaseRoute(
     }
     case 'remove': {
       const leaseId = normalizeRequiredLeaseId(route.leaseId);
-      const lease = registry.listActiveLeases().find((entry) => entry.leaseId === leaseId);
+      const lease = registry
+        .listActiveLeases()
+        .find((entry) => entry.leaseId === leaseId && isMacOsAppLease(entry));
       const released = lease
         ? registry.releaseLease(leaseReleaseRequestFor(lease)).released
         : false;

@@ -284,6 +284,9 @@ async function startDaemonRuntimeOnHost(
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
     onRecovered: (lease) => leaseRegistry.reserveExpiredLease(lease, true),
+    needsProviderRelease: (lease) => leaseRegistry.needsProviderRelease(lease.leaseId),
+    onReleaseUnknown: (lease, reason) =>
+      leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId, reason),
     onReleased: (lease) => {
       if (leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased'))
         leaseSessionEnd.forgetClosing(lease.leaseId);
@@ -297,7 +300,7 @@ async function startDaemonRuntimeOnHost(
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease, reason) => {
-      if (!leaseRegistry.reserveExpiredLease(lease)) return;
+      if (reason !== 'LEASE_RELEASED' && !leaseRegistry.reserveExpiredLease(lease)) return;
       let finishProvider!: () => void;
       const providerEnd = new Promise<void>((resolve) => {
         finishProvider = resolve;
@@ -311,11 +314,12 @@ async function startDaemonRuntimeOnHost(
         allowRelease,
       });
       void expiredProviderLeaseReleaser
-        .release(lease, sessionsEnd)
+        .release(
+          lease,
+          sessionsEnd.then(() => leaseRegistry.awaitDeviceMutations(lease)),
+        )
         .then(
           (outcome) => {
-            if (outcome.status === 'refused' && !outcome.durable)
-              leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId);
             // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
             // request, so this report goes to the daemon log rather than a request scope.
             const event = leaseReleaseDiagnosticEvent(lease, outcome);
@@ -326,6 +330,10 @@ async function startDaemonRuntimeOnHost(
             }
           },
           (error: unknown) => {
+            leaseRegistry.markExpiredProviderReleaseUnknown(
+              lease.leaseId,
+              'provider-release-unconfirmed',
+            );
             void emitDaemonDiagnostic(logPath, 'provider_lease_release_outcome_failed', {
               leaseId: lease.leaseId,
               error: error instanceof Error ? error.message : String(error),
@@ -486,6 +494,8 @@ async function startDaemonRuntimeOnHost(
     teardownSession: settleIdleExpiredSession,
     cleanupSessionlessExecutionHost: deps.platformResourceCleanup.cleanupSessionlessExecutionHost,
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
+    onClaimReleaseUnconfirmed: (leaseId) =>
+      leaseRegistry.markExpiredProviderReleaseUnknown(leaseId, 'device-claim-release-unconfirmed'),
     confirmExpiredSessions: (leaseId) =>
       leaseRegistry.confirmExpiredLeaseEnd(leaseId, 'sessionsSettled'),
   });
@@ -678,9 +688,9 @@ async function startDaemonRuntimeOnHost(
       error: error instanceof Error ? error.message : String(error),
     }).catch(() => undefined);
   });
-  options.startupProgress?.report('recovery-finished');
   const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
     await import('./server-startup.ts');
+  options.startupProgress?.report('recovery-finished');
   const { servers, socketPort, httpPort } = await openDaemonServers(
     daemonServerMode,
     {
@@ -725,8 +735,6 @@ async function startDaemonRuntimeOnHost(
   options.startupProgress?.close();
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
   await reportPluginStartupFailures(logPath, deps.pluginInventory);
-  // After publication: publishDaemonInfo truncates daemon.log, so anything
-  // written before it is lost — including reconciliation diagnostics.
   await reconcileDeviceClaimsForDaemonStartup(
     logPath,
     createOwnerScopedDeviceClaimReconciler({

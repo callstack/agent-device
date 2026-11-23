@@ -81,9 +81,21 @@ test('a release the closed releaser refused is reported and not counted as compl
     );
 
     expect(release).not.toHaveBeenCalled();
-    // The daemon stops either way, so the registry entry goes; the summary and the log say this daemon
-    // never handed the device to its provider.
     expect(outcomes.refused).toEqual([lease.leaseId]);
+    expect(() =>
+      leaseRegistry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseProvider: 'browserstack',
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          releaseStatus: 'unknown',
+          releaseReason: 'provider-release-unconfirmed',
+        }),
+      }),
+    );
     expect(leaseRegistry.listActiveLeases()).toEqual([]);
     const rows = fs
       .readFileSync(logPath, 'utf8')
