@@ -122,6 +122,8 @@ jobs:
             [ -z "$missing" ] || { printf 'Not installed:\n%s\n' "$missing"; return 1; }
           }
           mkdir -p ~/apt-archives
+          # apt resolves the local .debs only when it also finds them in its own archive directory.
+          sudo cp -n ~/apt-archives/*.deb /var/cache/apt/archives/ 2>/dev/null || true
           printf 'APT cached install start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           if compgen -G "$HOME/apt-archives/*.deb" > /dev/null \
             && sudo apt-get install -y --no-install-recommends --no-download "${APT_OPTS[@]}" "$HOME"/apt-archives/*.deb \
@@ -131,7 +133,6 @@ jobs:
           fi
           echo "::notice::Cached Linux desktop packages do not cover the package set; refreshing the apt index."
           echo "refreshed=true" >> "$GITHUB_OUTPUT"
-          sudo cp -n ~/apt-archives/*.deb /var/cache/apt/archives/ 2>/dev/null || true
           # A killed refresh starts over, so a slow mirror needs one window long enough to finish.
           apt_bounded 60 2 update
           apt_bounded 75 3 install -y --no-install-recommends --download-only "${PACKAGES[@]}"
