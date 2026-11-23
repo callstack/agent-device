@@ -452,7 +452,12 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'loop',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
-    daemon: { route: 'snapshot', refFrameEffect: 'preserve', appLease: 'allowed' },
+    daemon: {
+      route: 'snapshot',
+      refFrameEffect: 'preserve',
+      appLease: 'allowed',
+      sessionObservation: (req) => req.flags?.snapshotObserveOnly === true,
+    },
     // First Apple snapshot on a device can sit behind runner startup; --timeout
     // widens the envelope, and a timeout must not tear down the daemon.
     timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },

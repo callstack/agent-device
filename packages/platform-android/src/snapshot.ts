@@ -3,6 +3,7 @@ import {
   normalizeError,
   toAppErrorCode,
   type NormalizedError,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import path from 'node:path';
 import { isPositiveFiniteRect, unionRects } from '@agent-device/kernel/rect';
@@ -30,8 +31,10 @@ import {
 import { buildAndroidSnapshotClickabilityEvidence } from './snapshot-clickability.ts';
 import { resolveAndroidAdbProvider, type AndroidAdbProvider } from './adb-executor.ts';
 import { sleep } from './adb.ts';
-import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
-import { readAndroidHelperStderrDiagnostic } from './instrumentation-helper.ts';
+import {
+  buildAndroidSnapshotHelperCaptureOptions,
+  formatAndroidSnapshotHelperFailureReason,
+} from './snapshot-helper-capture.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
@@ -108,6 +111,11 @@ const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
  * a busy screen run a snapshot past the daemon request envelope.
  */
 const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
+const SNAPSHOT_HELPER_READ_REASONS = {
+  // The shared helper cannot answer this read; only its owner can replace it.
+  sessionUnavailable: { reason: 'android-snapshot-helper-session-unavailable' },
+} as const satisfies ReasonTable<'android snapshot helper read'>;
+
 /**
  * The diagnostic phase of a capture through the snapshot helper's persistent session. Its
  * `data.transport` names the session transport, and `data.answered` is false when the session
@@ -336,7 +344,10 @@ async function captureAndroidUiHierarchyWithHelper(
   artifact: AndroidSnapshotHelperArtifact,
 ): Promise<AndroidUiHierarchyCapture> {
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
-  const releaseHelperSession = await releasesHelperSessionAfterCapture(options, helperDeviceKey);
+  const daemonOwnsHelper =
+    options.helperSessionScope === 'daemon-session' && options.transient === undefined;
+  const ownsHelperSession =
+    daemonOwnsHelper || (await getLiveAndroidSnapshotHelperSession(helperDeviceKey)) === undefined;
   try {
     return await captureAndroidHelperContentWithinWindow({
       options,
@@ -344,9 +355,10 @@ async function captureAndroidUiHierarchyWithHelper(
       adbProvider: resolveAndroidAdbProvider(device, options.helperAdb),
       artifact,
       helperDeviceKey,
+      ownsHelperSession,
     });
   } finally {
-    if (releaseHelperSession) {
+    if (ownsHelperSession && daemonOwnsHelper === false) {
       await stopAndroidSnapshotHelperSession(helperDeviceKey);
     }
   }
@@ -362,6 +374,7 @@ async function captureAndroidHelperContentWithinWindow(params: {
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   helperDeviceKey: string;
+  ownsHelperSession: boolean;
 }): Promise<AndroidUiHierarchyCapture> {
   const { options } = params;
   const recaptureDeadlineMs = resolveContentRecaptureDeadlineMs(options);
@@ -376,7 +389,7 @@ async function captureAndroidHelperContentWithinWindow(params: {
       artifact: params.artifact,
       adb: params.adb,
       signal: options.signal,
-      retireHelper: options.transient === undefined,
+      retireHelper: params.ownsHelperSession && options.transient === undefined,
     });
   let previousDecision: AndroidHelperContentRecoveryDecision | undefined;
   for (let attempt = 0; ; attempt += 1) {
@@ -407,32 +420,18 @@ function resolveContentRecaptureDeadlineMs(options: AndroidSnapshotOptions): num
   );
 }
 
-/** A transient read keeps a session it found running and releases one it had to start. */
-async function releasesHelperSessionAfterCapture(
-  options: AndroidSnapshotOptions,
-  helperDeviceKey: string,
-): Promise<boolean> {
-  if (options.transient)
-    return (await getLiveAndroidSnapshotHelperSession(helperDeviceKey)) === undefined;
-  return options.helperSessionScope !== 'daemon-session';
-}
-
-/** A transient read never installs the helper; it uses one that is already current. */
-function resolveHelperInstallPolicy(
-  options: AndroidSnapshotOptions,
-): AndroidSnapshotHelperInstallPolicy {
-  return options.transient
-    ? 'current-only'
-    : (options.helperInstallPolicy ?? 'missing-or-outdated');
-}
-
 async function installAndroidSnapshotHelper(
   options: AndroidSnapshotOptions,
   adb: AndroidAdbExecutor,
   adbProvider: AndroidAdbProvider,
   artifact: AndroidSnapshotHelperArtifact,
   deviceKey: string,
+  ownsHelperSession: boolean,
 ): Promise<AndroidSnapshotHelperInstallResult> {
+  const installPolicy =
+    ownsHelperSession && options.transient === undefined
+      ? (options.helperInstallPolicy ?? 'missing-or-outdated')
+      : 'current-only';
   const install = await withDiagnosticTimer(
     'android_snapshot_helper_install',
     async () =>
@@ -441,14 +440,14 @@ async function installAndroidSnapshotHelper(
         adbProvider,
         artifact,
         deviceKey,
-        installPolicy: resolveHelperInstallPolicy(options),
+        installPolicy,
         timeoutMs: HELPER_INSTALL_TIMEOUT_MS,
         signal: options.signal,
       }),
     {
       packageName: artifact.manifest.packageName,
       versionCode: artifact.manifest.versionCode,
-      installPolicy: resolveHelperInstallPolicy(options),
+      installPolicy,
     },
   );
   emitDiagnostic({
@@ -473,6 +472,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   helperDeviceKey: string;
+  ownsHelperSession: boolean;
 }): Promise<AndroidSnapshotHelperOutput> {
   const { signal, adb, adbProvider, artifact, helperDeviceKey } = params;
   const captureOptions = buildAndroidSnapshotHelperCaptureOptions({
@@ -483,6 +483,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     signal,
   });
   captureOptions.idleWait = params.idleWait;
+  captureOptions.ownsHelperSession = params.ownsHelperSession;
   let sessionCapture: AndroidSnapshotHelperOutput | undefined;
   // A helper that reached a ready session was started, so a refused start after it is not #4109.
   let sessionReady = false;
@@ -505,8 +506,14 @@ async function captureAndroidUiHierarchyFromHelper(params: {
       }),
     );
     if (sessionCapture) return sessionCapture;
+    if (params.ownsHelperSession === false) {
+      throw new AppError('COMMAND_FAILED', 'The active Android helper cannot serve this read.', {
+        reason: SNAPSHOT_HELPER_READ_REASONS.sessionUnavailable.reason,
+      });
+    }
   } catch (error) {
     signal?.throwIfAborted();
+    if (params.ownsHelperSession === false) throw error;
     if (isAndroidSnapshotHelperRuntimeOccupiedError(error)) {
       throw error;
     }
@@ -581,6 +588,7 @@ async function captureAndroidHelperContentAttempt(params: {
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   helperDeviceKey: string;
+  ownsHelperSession: boolean;
   attempt: number;
   previousContentReason: AndroidContentRecoveryReason | undefined;
 }): Promise<AndroidHelperContentAttempt> {
@@ -593,6 +601,7 @@ async function captureAndroidHelperContentAttempt(params: {
       adbProvider,
       artifact,
       helperDeviceKey,
+      params.ownsHelperSession,
     );
     if (install.installed) {
       await stopAndroidSnapshotHelperSession(helperDeviceKey);
@@ -604,20 +613,19 @@ async function captureAndroidHelperContentAttempt(params: {
       adbProvider,
       artifact,
       helperDeviceKey,
+      ownsHelperSession: params.ownsHelperSession,
     });
     helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
   } catch (error) {
     options.signal?.throwIfAborted();
     if (isAndroidSnapshotHelperNotCurrentError(error)) throw error;
-    return {
-      outcome: 'captured',
-      capture: await rejectAndroidHelperCaptureFailure({
-        error,
-        helperDeviceKey,
-        artifact,
-        adb,
-      }),
-    };
+    return await rejectAndroidHelperCaptureFailure({
+      error,
+      helperDeviceKey,
+      artifact,
+      adb,
+      ownsHelperSession: params.ownsHelperSession,
+    });
   }
 
   const content = classifyAndroidHelperContent(helperCapture.xml, helperCapture.metadata, {
@@ -665,7 +673,7 @@ async function rejectAndroidHelperContentUnavailable(params: {
   artifact: AndroidSnapshotHelperArtifact;
   adb: AndroidAdbExecutor;
   signal?: AbortSignal;
-  /** A transient capture does not own the helper, so its content verdict leaves the helper alone. */
+  /** Only the helper owner may retire it after an unusable capture. */
   retireHelper: boolean;
 }): Promise<never> {
   emitDiagnostic({
@@ -709,8 +717,11 @@ async function rejectAndroidHelperCaptureFailure(params: {
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
   adb: AndroidAdbExecutor;
+  ownsHelperSession: boolean;
 }): Promise<never> {
   const failureReason = formatAndroidSnapshotHelperFailureReason(params.error);
+  if (!params.ownsHelperSession)
+    throw androidSnapshotHelperCaptureError(params.error, failureReason);
   emitDiagnostic({
     level: 'error',
     phase: 'android_snapshot_helper_failed',
@@ -730,20 +741,6 @@ async function rejectAndroidHelperCaptureFailure(params: {
     versionCode: params.artifact.manifest.versionCode,
   });
   throw androidSnapshotHelperCaptureError(params.error, failureReason);
-}
-
-function formatAndroidSnapshotHelperFailureReason(error: unknown): string {
-  const normalized = normalizeError(error);
-  const helperMessage = readHelperMessage(normalized.details?.helper);
-  if (helperMessage && helperMessage !== normalized.message) {
-    return `${normalized.message}: ${helperMessage}`;
-  }
-  if (helperMessage) return helperMessage;
-  // The cause line comes from the same diagnostic the details carry: a helper stream can hold
-  // snapshot text, so an unfiltered line must not become the reason (#4026).
-  const stderr = readAndroidHelperStderrDiagnostic(normalized.details?.stderr)?.stderr;
-  const firstLine = stderr?.split('\n').find((line) => line !== '');
-  return firstLine ? `${normalized.message}: ${firstLine}` : normalized.message;
 }
 
 function androidSnapshotHelperCaptureError(error: unknown, reason: string): AppError {
@@ -812,12 +809,6 @@ function liftedWireFields(normalized: NormalizedError): Record<string, string | 
   if (normalized.retriable !== undefined) fields.retriable = normalized.retriable;
   if (normalized.supportedOn !== undefined) fields.supportedOn = normalized.supportedOn;
   return fields;
-}
-
-function readHelperMessage(helper: unknown): string | undefined {
-  if (!helper || typeof helper !== 'object' || !('message' in helper)) return undefined;
-  const message = String(helper.message).trim();
-  return message && message !== 'null' ? message : undefined;
 }
 
 async function resolveAndroidSnapshotHelperArtifact(
