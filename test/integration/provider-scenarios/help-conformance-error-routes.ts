@@ -281,7 +281,9 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
     fs.writeFileSync(
       deviceClaimFilePath('local:android:none:emulator-5554'),
       JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
+        claimOwnerKind: 'open-session',
+        unleasedLocal: true,
         deviceKey: 'local:android:none:emulator-5554',
         device: { ...identity, name: androidDevice.name },
         session: 'checkout',

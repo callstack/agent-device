@@ -75,6 +75,19 @@ The daemon refuses remote reads of legacy records with no proof of owner.
 
 The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-device-lease-contracts.md), [daemon client](../../packages/daemon-client/docs/remote-device-leases.md), [provider lease table](../../packages/provision-kit/docs/remote-device-leases.md), and [device specification](../../packages/contracts/docs/lease-device-spec.md) documentation.
 
+### Session name visibility
+
+Use the same session visibility rule for `session list`, `doctor`, wait progress, and contention errors.
+If a public-network request has no tenant isolation, show only sessions that match its scope and lease proof.
+If a request has tenant isolation, show only sessions in its tenant.
+If a session has a lease, require that lease's id and check the supplied scope labels before showing the name.
+If a local request needs device recovery, it can see an unleased local holder in a different workspace.
+If a claim has no live session that holds its exact token, require a stored unleased local designation to name the holder during local device recovery.
+If the rule hides a holder, give the caller the public contention reason.
+If a claim diagnostic has no session visibility decision, include only public device and contention details.
+Before session-derived admission for `doctor`, apply the visibility rule to the session reference.
+If `doctor` has no visible session, use detached checks.
+
 ## Rationale
 
 - Device-aware ownership makes contention recoverable before platform execution and keeps provider and device identity in scope.

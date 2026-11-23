@@ -1,3 +1,4 @@
+import { GENERIC_IN_USE_MESSAGE } from '../../core/session-recovery-hints.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   isApplePlatform,
@@ -9,6 +10,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import {
   deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
+  type DeviceClaim,
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
@@ -42,6 +44,8 @@ export function buildDeviceClaimInspectionCommand(
   ].join(' ');
 }
 
+type CanNameClaimOwner = (owner: DeviceClaim) => boolean;
+
 /**
  * The single construction of the foreign-claim refusal. `open` returns it as a
  * response; the request-scope binding seam throws it, because a
@@ -50,8 +54,10 @@ export function buildDeviceClaimInspectionCommand(
 export function deviceClaimConflictError(
   device: DeviceInfo,
   conflict: InspectedDeviceClaim,
+  canNameOwner: CanNameClaimOwner,
 ): AppError {
-  const owner = conflict.claim;
+  const held = conflict.claim;
+  const owner = held && canNameOwner(held) ? held : undefined;
   // A provably dead owner has an exact recovery: settle its resources and
   // release the claim. Everything else gets inspection, never a mutation.
   const recoveryCommand = buildDeviceClaimInspectionCommand(
@@ -66,7 +72,9 @@ export function deviceClaimConflictError(
     'DEVICE_IN_USE',
     owner
       ? `${publicPlatform} device ${owner.device.id} is owned by session "${owner.session}" in workspace "${owner.workspace}".`
-      : `${device.name} has an ownership claim that could not be verified.`,
+      : held
+        ? GENERIC_IN_USE_MESSAGE
+        : `${device.name} has an ownership claim that could not be verified.`,
     {
       reason: conflictReason(conflict.classification),
       classification: conflict.classification,
@@ -93,8 +101,9 @@ export function deviceClaimConflictError(
 export function buildDeviceClaimConflictError(
   device: DeviceInfo,
   conflict: InspectedDeviceClaim,
+  canNameOwner: CanNameClaimOwner,
 ): DaemonResponse {
-  return claimRefusalResponse(deviceClaimConflictError(device, conflict));
+  return claimRefusalResponse(deviceClaimConflictError(device, conflict, canNameOwner));
 }
 
 function claimRefusalResponse(error: AppError): DaemonResponse {

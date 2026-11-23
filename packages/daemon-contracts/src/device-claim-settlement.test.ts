@@ -660,7 +660,8 @@ test('takes a live foreign claim whose device rebooted after the claim was taken
   const stateDir = path.join(root, 'owner-state');
   await seedForeignLiveClaim(root, stateDir);
   publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
-  const bootedAtMs = storedClaim().createdAtMs + 1;
+  const previous = storedClaim();
+  const bootedAtMs = previous.createdAtMs + 1;
   let reconciledSession: string | undefined;
 
   const second = await acquireDeviceClaim({
@@ -682,6 +683,7 @@ test('takes a live foreign claim whose device rebooted after the claim was taken
     session: 'cwd:/w:default',
     workspace: '/w',
     stateDir,
+    ownerToken: previous.ownerToken,
     bootedAtMs,
   });
   assert.equal(reconciledSession, 'cwd:/w:default');

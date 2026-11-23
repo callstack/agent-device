@@ -19,6 +19,7 @@ import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
 } from '../../../__tests__/support/device-claim-store.ts';
+import { deviceClaimConflictError } from '../device-claim-conflict.ts';
 import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
 import {
   abandonDeviceClaim,
@@ -59,6 +60,8 @@ function makeAdmission(
     workspace: callerCwd ?? '/worktrees/current',
     callerCwd: callerCwd ?? undefined,
     resolveScopeRoot: resolveCallerScopeRoot,
+    claimConflictError: (device, conflict) =>
+      deviceClaimConflictError(device, conflict, () => true),
     stateDir,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
     observation,
@@ -596,6 +599,8 @@ test("a failed release abandons the claim in the host's claims directory, not th
     workspace: '/worktrees/current',
     callerCwd: '/worktrees/current',
     resolveScopeRoot: resolveCallerScopeRoot,
+    claimConflictError: (device, conflict) =>
+      deviceClaimConflictError(device, conflict, () => true),
     stateDir,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
@@ -820,6 +825,7 @@ test('the request scope admits a transient command only in the session whose cla
     session: 'owning-session',
     workspace: '/worktrees/current',
     stateDir,
+    unleasedLocal: true,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
 
@@ -876,6 +882,7 @@ test('the request scope covers the implicit workspace session that routed to the
     session: routedAddress,
     workspace,
     stateDir,
+    unleasedLocal: true,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
 

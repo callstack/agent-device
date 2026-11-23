@@ -5,6 +5,7 @@ import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
+import { SessionCoordinator } from '../../../core/session-store.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type {
   BindDeviceRuntime,
@@ -34,7 +35,7 @@ vi.mock('../session-doctor-metro.ts', () => ({
 test('doctor app checks retain runtime admission failures as a failed target-app check', async () => {
   const sessionName = 'doctor-app-runtime-failure';
   const sessionStore = makeSessionStore('agent-device-doctor-app-runtime-');
-  sessionStore.publish(sessionName, {
+  const ref = sessionStore.publish(sessionName, {
     name: sessionName,
     device: LINUX_DEVICE,
     createdAt: Date.now(),
@@ -47,16 +48,18 @@ test('doctor app checks retain runtime admission failures as a failed target-app
     throw new AppError('COMMAND_FAILED', 'runtime binding should not be reached');
   });
 
+  const req = {
+    token: 't',
+    session: sessionName,
+    command: 'doctor',
+    positionals: [],
+    flags: { session: sessionName, targetApp: 'com.example.app' },
+  };
   const response = await handleDoctorCommand({
     host: createTestHostEnvironment(),
     hostDiagnostics: hostDiagnosticsFixture(),
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'doctor',
-      positionals: [],
-      flags: { session: sessionName, targetApp: 'com.example.app' },
-    },
+    req,
+    doctorSession: new SessionCoordinator(sessionStore).authorize(req, ref, () => true),
     sessionName,
     sessionStore,
     inspectFacts,
@@ -139,23 +142,25 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
   };
   const sessionName = 'doctor-harmony-app-runtime';
   const sessionStore = makeSessionStore('agent-device-doctor-harmony-');
-  sessionStore.publish(sessionName, {
+  const ref = sessionStore.publish(sessionName, {
     name: sessionName,
     device: harmonyDevice,
     createdAt: Date.now(),
     actions: [],
   });
 
+  const req = {
+    token: 't',
+    session: sessionName,
+    command: 'doctor',
+    positionals: [],
+    flags: { session: sessionName, targetApp: 'com.example.application' },
+  };
   const response = await handleDoctorCommand({
     host: createTestHostEnvironment(),
     hostDiagnostics: hostDiagnosticsFixture(),
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'doctor',
-      positionals: [],
-      flags: { session: sessionName, targetApp: 'com.example.application' },
-    },
+    req,
+    doctorSession: new SessionCoordinator(sessionStore).authorize(req, ref, () => true),
     sessionName,
     sessionStore,
     inspectFacts,

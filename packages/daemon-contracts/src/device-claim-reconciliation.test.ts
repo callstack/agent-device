@@ -7,6 +7,10 @@ import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
+import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
@@ -377,12 +381,33 @@ test.each(['.', '..'])(
       shutdown: async () => {},
     } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
     const retained = { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
-    expect(inspectDeviceClaimRecovery(claim)).toEqual(retained);
-    const reconcile = createDeviceClaimReconciler({ gateway, scope });
-    await expect(settleVerifiedOrphanedClaim(claim, reconcile, env)).resolves.toEqual(retained);
-    await expect(
-      reconcile(claim, { status: 'inspectable', recoveryKinds: [], ownedResources: [] }),
-    ).resolves.toEqual(retained);
+    const logPath = path.join(stateDir, 'diagnostics.ndjson');
+    await withDiagnosticsScope(
+      { session: 'default', requestId: 'req-claim', command: 'open', debug: false, logPath },
+      async () => {
+        expect(inspectDeviceClaimRecovery(claim)).toEqual(retained);
+        const reconcile = createDeviceClaimReconciler({ gateway, scope });
+        await expect(settleVerifiedOrphanedClaim(claim, reconcile, env)).resolves.toEqual(retained);
+        await expect(
+          reconcile(claim, { status: 'inspectable', recoveryKinds: [], ownedResources: [] }),
+        ).resolves.toEqual(retained);
+        flushDiagnosticsToSessionFile({ force: true });
+      },
+    );
+    const failures = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> })
+      .filter((entry) => entry.phase === 'device_claim_orphan_reconciliation_failed');
+    expect(failures.length).toBeGreaterThan(0);
+    for (const { data } of failures) {
+      expect(data).toEqual({
+        deviceKey: claim.deviceKey,
+        reason: 'durable-resource-reconciliation-failed',
+        errorKind: expect.any(String),
+      });
+    }
     expect(bind).not.toHaveBeenCalled();
     expect(fs.readFileSync(outside, 'utf8')).toBe('{');
     expect(fs.readFileSync(claimPath)).toEqual(claimEvidence);
