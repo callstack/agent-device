@@ -259,12 +259,12 @@ type SkewedHealthLink = Readonly<{
 
 /**
  * The refusal for a remote link on another RPC protocol. It names both versions and the side to
- * upgrade. `proxy` names the proxy when the skewed link is the daemon behind it.
+ * upgrade. `proxy` carries the proxy's service when the skewed link is the daemon behind it.
  */
 export function incompatibleRemoteProtocolError(
   daemonBaseUrl: string,
   link: SkewedHealthLink,
-  proxy: string | undefined,
+  proxy: Readonly<{ service?: string }> | undefined,
 ): AppError {
   const clientVersion = readVersion();
   const upgradeSide: ProtocolUpgradeSide =
@@ -274,11 +274,12 @@ export function incompatibleRemoteProtocolError(
         ? 'client-and-proxy'
         : 'client';
   const service = link.service ?? 'daemon';
-  const remote = proxy ? `the ${service} behind ${proxy}` : `the remote ${service}`;
+  const proxyName = proxy?.service ?? 'the proxy';
+  const remote = proxy ? `the ${service} behind ${proxyName}` : `the remote ${service}`;
   const upgradeTarget = {
     remote: proxy ? remote : 'the remote host',
     client: 'this client',
-    'client-and-proxy': `this client and on ${proxy}`,
+    'client-and-proxy': `this client and on ${proxyName}`,
   }[upgradeSide];
   const remoteVersion = link.version ? `runs ${link.version}` : 'does not report its version';
   return new AppError(

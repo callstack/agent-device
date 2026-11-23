@@ -65,12 +65,17 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:51f17269ac0a02116ba8af33c9884b10b74f78bcb54c40f77dd887f1f08d8246",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:75226219f3d2475b59b297593346879c5211f56530a45494ff696b435e002bce",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
+    "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_SERVICES": "sha256:3e9d09c1e78adf1d537aa22053e2dee7d35a33d37942721701476a0c06dff52b",
+    "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_VERSION": "sha256:8dd8e36dc936523cf38bba3ed3737a6199431c35b7ce04e1441aaa2c8a186993",
+    "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_VERSION_MAX_LENGTH": "sha256:0357d7c75ccb6fefe7ec901c7937bc795a2e66c4082c90fed27b4baf10c16416",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:96a79a8ff5a078916ee7bffed1d9624d0ba9c0dcbd8e2c55f9abf37fccfef744",
+    "packages/daemon-client/src/daemon-client-transport.ts#isHealthService": "sha256:ffd2c774e0efca5e5d2b01f9d37fe9b76aaf5e7569e07d9208fe667473771c10",
     "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
-    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:b709f88901784e767a542acc27d90ba080e7b016e85d6053a59df3495454ae3b",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:c4f638b4df43f572e105b6f8df578fe90ebf64cb56002e4d029a109bdbc167d1",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
-    "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:7da1eb056fd2a73b298c1b076bf1704da30b8fe56aa6a52317bdbaf894b1ee05",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthVersion": "sha256:856bd74aa8b2f205b6b30855755f16391015bffc1b6a323f618b51c26e749bfd",
+    "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bf9ca0ecb9dc00f18d0bf4acab30d544d680246b8cdacbc50f684db182b6f23b",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:9f72097ae602ee8040c7a42104d682e4ea6b4c5999aa653a72b3cf47d4f5b81d",
@@ -302,8 +307,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth",
-      "digest": "sha256:7da1eb056fd2a73b298c1b076bf1704da30b8fe56aa6a52317bdbaf894b1ee05",
-      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. #3178 threads the caller's optional AbortSignal through so a canceled call cuts a probe already in flight instead of waiting it out: the signal is client-local, never serialized, and the GET /health request and payload are unchanged. The mismatch refusal now names both versions and the side to upgrade in its message, with a new hint and a client-local upgradeSide detail; the comparison it makes, the /health request, and the refusal's code and existing detail fields are unchanged, and nothing new is serialized."
+      "digest": "sha256:bf9ca0ecb9dc00f18d0bf4acab30d544d680246b8cdacbc50f684db182b6f23b",
+      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. #3178 threads the caller's optional AbortSignal through so a canceled call cuts a probe already in flight instead of waiting it out: the signal is client-local, never serialized, and the GET /health request and payload are unchanged. The mismatch refusal now names both versions and the side to upgrade in its message, with a new hint and a client-local upgradeSide detail; the comparison it makes, the /health request, and the refusal's code and existing detail fields are unchanged, and nothing new is serialized. It now flags the proxy link explicitly, carrying only the proxy's service, rather than inferring it from that name, so a proxy reporting an empty service is still named as a proxy; the comparison and the /health request are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
@@ -367,8 +372,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink",
-      "digest": "sha256:b709f88901784e767a542acc27d90ba080e7b016e85d6053a59df3495454ae3b",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object."
+      "digest": "sha256:c4f638b4df43f572e105b6f8df578fe90ebf64cb56002e4d029a109bdbc167d1",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object. The service and version now reach error messages, so readHealthLink keeps a service only when it is one the DaemonHealthPayload contract names and a version only when it is version-shaped and at most 64 characters; anything else reads as absent. Released daemons and proxies report exactly those, so their payloads parse unchanged, and the /health request is unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",
