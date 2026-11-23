@@ -761,24 +761,20 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return {
       limrun,
       lease,
-      metadata: this.buildInstanceMetadata(lease),
+      metadata: {
+        displayName: `agent-device-${lease.tenantId}-${lease.runId}`,
+        labels: {
+          tenantId: lease.tenantId,
+          runId: lease.runId,
+          leaseId: lease.leaseId,
+          provider: lease.leaseProvider ?? LIMRUN_PROVIDER,
+          source: LIMRUN_CLIENT_ID,
+        },
+      },
       region: this.options.region,
       iosModel: this.options.iosModel,
       app,
       dependencies: this.dependencies,
-    };
-  }
-
-  private buildInstanceMetadata(lease: DeviceLease) {
-    return {
-      displayName: `agent-device-${lease.tenantId}-${lease.runId}`,
-      labels: {
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        leaseId: lease.leaseId,
-        provider: lease.leaseProvider ?? LIMRUN_PROVIDER,
-        source: LIMRUN_CLIENT_ID,
-      },
     };
   }
 

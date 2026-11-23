@@ -90,6 +90,7 @@ test('the plugin declares its provider and the credential variables per lease ba
     variables: [
       'LIMRUN_API_KEY',
       'LIMRUN_REGION',
+      'LIMRUN_IOS_MODEL',
       'LIM_IOS_INSTANCE_URL',
       'LIM_IOS_INSTANCE_TOKEN',
       'LIM_ANDROID_INSTANCE_URL',
@@ -100,6 +101,7 @@ test('the plugin declares its provider and the credential variables per lease ba
       'ios-instance': [
         'LIMRUN_API_KEY',
         'LIMRUN_REGION',
+        'LIMRUN_IOS_MODEL',
         'LIM_IOS_INSTANCE_URL',
         'LIM_IOS_INSTANCE_TOKEN',
       ],
@@ -167,7 +169,11 @@ test('verify runs its own SDK check over scoped credentials, version and platfor
 test('setup builds the runtime over the credentials, host and HAR directory it was given', async () => {
   const stateDir = mkdtempForTestSync('limrun-plugin-state-');
   const host = {
-    ...pluginHost({ LIMRUN_API_KEY: 'lim_test_key', LIMRUN_KEEP_ALIVE: '1' }),
+    ...pluginHost({
+      LIMRUN_API_KEY: 'lim_test_key',
+      LIMRUN_KEEP_ALIVE: '1',
+      LIMRUN_IOS_MODEL: 'ipad',
+    }),
     stateDir,
   };
   const dependencies = stubDependencies();
@@ -183,6 +189,7 @@ test('setup builds the runtime over the credentials, host and HAR directory it w
       options: {
         apiKey: 'lim_test_key',
         region: undefined,
+        iosModel: 'ipad',
         keepAlive: true,
         instances: undefined,
         networkHarDir: path.join(stateDir, 'network-har'),
