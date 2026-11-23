@@ -58,9 +58,14 @@ test('rental recovery binds routing but ignores generated client and SDK telemet
     }),
   }).contributes;
   if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
+  let customHeaders: string | undefined;
+  const setCustomHeaders = (headers: string | undefined) => {
+    customHeaders = headers;
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', headers);
+  };
   const principal = async (env: Record<string, string>, clientVersion = '1.0.0') => {
     const setup = await provider.setup({
-      env,
+      env: { LIMRUN_CUSTOM_HEADERS: customHeaders, ...env },
       options: {},
       clientVersion,
       diagnostics: { emit: () => {} },
@@ -84,7 +89,7 @@ test('rental recovery binds routing but ignores generated client and SDK telemet
       return built;
     });
   vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
-  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', undefined);
+  setCustomHeaders(undefined);
   try {
     const first = await principal({ LIMRUN_API_KEY: 'fixture-key', LIMRUN_IOS_MODEL: 'iphone' });
     expect(first).toMatch(/^principal-[a-f0-9]{64}$/);
@@ -102,18 +107,18 @@ test('rental recovery binds routing but ignores generated client and SDK telemet
     vi.stubEnv('LIMRUN_BASE_URL', 'https://b.example.test');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
     vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
-    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'Authorization: Bearer alternate-fixture-credential');
+    setCustomHeaders('Authorization: Bearer alternate-fixture-credential');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
-    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-a\nX-Route: region-a');
+    setCustomHeaders('X-Account: account-a\nX-Route: region-a');
     const routed = await principal({ LIMRUN_API_KEY: 'fixture-key' });
     expect(routed).not.toBe(first);
-    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Route: region-a\nX-Account: account-a');
+    setCustomHeaders('X-Route: region-a\nX-Account: account-a');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).toBe(routed);
-    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-b\nX-Route: region-a');
+    setCustomHeaders('X-Account: account-b\nX-Route: region-a');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(routed);
-    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'User-Agent: operator-route-a');
+    setCustomHeaders('User-Agent: operator-route-a');
     const customAgent = await principal({ LIMRUN_API_KEY: 'fixture-key' });
-    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'User-Agent: operator-route-b');
+    setCustomHeaders('User-Agent: operator-route-b');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(customAgent);
     expect(
       await principal({
@@ -132,10 +137,11 @@ test('keeps Limrun registered when the SDK cannot build recovery proof', async (
     createDependencies: stubLimrunRuntimeDependencies,
   }).contributes;
   if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
-  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'Invalid Header Name: fixture');
+  const customHeaders = 'Invalid Header Name: fixture';
+  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', customHeaders);
   try {
     const setup = await provider.setup({
-      env: { LIMRUN_API_KEY: 'fixture-key' },
+      env: { LIMRUN_API_KEY: 'fixture-key', LIMRUN_CUSTOM_HEADERS: customHeaders },
       options: {},
       clientVersion: 'test-version',
       diagnostics: { emit: () => {} },

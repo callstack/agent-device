@@ -108,7 +108,9 @@ export type LimrunRuntime = ProviderDeviceRuntime & {
 };
 
 export type LimrunRuntimeRegistration = Readonly<{
-  runtime: LimrunRuntime & { prepareRentalRecovery(): Promise<void> };
+  runtime: LimrunRuntime & {
+    prepareRentalRecovery(customHeaders: string | undefined): Promise<void>;
+  };
   platformModule: PlatformRuntimeProviderModule;
 }>;
 
@@ -142,7 +144,6 @@ export function createLimrunRuntime(
 
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly limrun: Limrun | undefined;
-  private readonly rentalRoutingHeaders: readonly string[];
   /**
    * A lease has an owner from the step it is allocated until the one disposal of it confirms. Allocate,
    * join, release, recovery, shutdown and every reader of a live session go through this one map, so an
@@ -218,7 +219,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     }
     this.options = options;
     this.dependencies = dependencies;
-    this.rentalRoutingHeaders = limrunCustomHeaderNames(process.env.LIMRUN_CUSTOM_HEADERS);
     this.limrun = options.apiKey
       ? new Limrun({
           apiKey: options.apiKey,
@@ -228,7 +228,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       : undefined;
   }
 
-  async prepareRentalRecovery(): Promise<void> {
+  async prepareRentalRecovery(customHeaders: string | undefined): Promise<void> {
     if (!this.limrun) return;
     // The SDK can override authorization and add account routing headers.
     const request = await this.limrun
@@ -238,7 +238,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       ? resolveLimrunRentalRecoveryPrincipal(
           this.limrun.baseURL,
           request.req.headers,
-          this.rentalRoutingHeaders,
+          limrunCustomHeaderNames(customHeaders),
         )
       : undefined;
   }

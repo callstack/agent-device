@@ -71,7 +71,7 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
             dependencies,
             { includePlatformModule: true },
           );
-          await registration.runtime.prepareRentalRecovery();
+          await registration.runtime.prepareRentalRecovery(host.env.LIMRUN_CUSTOM_HEADERS);
           return registration;
         },
       },
