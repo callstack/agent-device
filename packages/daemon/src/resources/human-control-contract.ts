@@ -1,14 +1,11 @@
+import { normalizeLeaseProvider } from '@agent-device/kernel/contracts';
 import type {
   HumanControlHold,
   HumanControlHoldOptions,
   HumanControlHoldScope,
 } from '@agent-device/contracts/client';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import {
-  normalizeDeviceKey,
-  normalizeLeaseBackend,
-  normalizeLeaseProvider,
-} from './lease-registry-scope.ts';
+import { normalizeDeviceKey, normalizeLeaseBackend } from './lease-registry-scope.ts';
 
 const HUMAN_CONTROL_REASONS = {
   // A human holds the device, so state-changing commands are refused while the hold is active;

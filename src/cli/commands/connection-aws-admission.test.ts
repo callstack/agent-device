@@ -56,16 +56,88 @@ test.each(['missing', 'failed'] as const)(
         updatedAt: now,
       },
     });
-    for (const argv of [
+    const status = await runCliCapture(
       ['connection', 'status', '--state-dir', stateDir, '--json'],
-      ['snapshot', '--state-dir', stateDir, '--json'],
-    ]) {
-      const result = await runCliCapture(argv, opts);
-      assert.equal(result.code, 1, result.stdout);
-      assert.equal(JSON.parse(result.stdout).error?.code, 'UNSUPPORTED_OPERATION', result.stdout);
-      assert.equal(JSON.parse(result.stdout).error?.details?.reason, expected, result.stdout);
-      assert.deepEqual(result.calls, []);
-      assert.doesNotMatch(result.stdout, /install-from-source|leaseId.*pending/);
+      opts,
+    );
+    assert.equal(status.code, null, status.stdout);
+    assert.deepEqual(status.calls, []);
+    const snapshot = await runCliCapture(['snapshot', '--state-dir', stateDir, '--json'], opts);
+    assert.equal(snapshot.code, 1, snapshot.stdout);
+    assert.equal(JSON.parse(snapshot.stdout).error?.code, 'UNSUPPORTED_OPERATION', snapshot.stdout);
+    assert.equal(JSON.parse(snapshot.stdout).error?.details?.reason, expected, snapshot.stdout);
+    assert.deepEqual(snapshot.calls, []);
+  },
+);
+
+test.each([undefined, 'arn:aws:devicefarm:us-west-2:123:upload:demo'])(
+  'configured AWS Device Farm connect gives guidance based on the effective app ARN %s',
+  async (awsAppArn) => {
+    const { home, env } = pluginHome();
+    const stateDir = path.join(home, 'state');
+    const remoteConfigPath = path.join(home, 'aws remote.json');
+    const daemonBaseUrl = 'https://daemon.example.test';
+    const token = 'adc_live_aws_profile_test_token';
+    const profile = {
+      leaseProvider: 'aws-device-farm',
+      leaseBackend: 'android-instance',
+      platform: 'android',
+      awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
+      awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device:device-a',
+    };
+    fs.writeFileSync(remoteConfigPath, JSON.stringify(profile));
+    const argv = [
+      'connect',
+      '--remote-config',
+      remoteConfigPath,
+      '--daemon-base-url',
+      daemonBaseUrl,
+      '--daemon-auth-token',
+      token,
+      '--tenant',
+      'override-team',
+      '--run-id',
+      'override-run',
+      '--state-dir',
+      stateDir,
+      '--session',
+      'checkout',
+      '--json',
+      ...(awsAppArn ? ['--aws-app-arn', awsAppArn] : []),
+    ];
+    const result = await runCliCapture(argv, { cwd: home, env });
+    assert.ok(!result.stdout.includes(token));
+    assert.equal(result.code, null, result.stdout + result.stderr);
+    assert.deepEqual(result.calls, []);
+    const { data } = JSON.parse(result.stdout);
+    assert.equal(data.verification.status, 'configured');
+    assert.deepEqual(data.leasePreparation.nextSteps, data.nextSteps);
+    if (awsAppArn) {
+      assert.deepEqual(data.nextSteps, [
+        'agent-device open <package-id> --relaunch --session checkout',
+      ]);
+    } else {
+      assert.equal(data.app.status, 'missing');
+      assert.match(data.leasePreparation.message, /awsAppArn/);
+      assert.deepEqual(data.nextSteps, ['Repeat your original connect invocation with --force.']);
+      fs.writeFileSync(
+        remoteConfigPath,
+        JSON.stringify({
+          ...profile,
+          awsAppArn: 'arn:aws:devicefarm:us-west-2:123:upload:demo',
+        }),
+      );
+      const reconnect = await runCliCapture([...argv, '--force'], { cwd: home, env });
+      assert.equal(reconnect.code, null, reconnect.stdout + reconnect.stderr);
+      assert.deepEqual(reconnect.calls, []);
+      assert.ok(!reconnect.stdout.includes(token));
+      assert.deepEqual(JSON.parse(reconnect.stdout).data.nextSteps, [
+        'agent-device open <package-id> --relaunch --session checkout',
+      ]);
+      const connection = readRemoteConnectionState({ stateDir, session: 'checkout' });
+      assert.equal(connection?.tenant, 'override-team');
+      assert.equal(connection?.runId, 'override-run');
+      assert.equal(connection?.remoteConfigHash, hashRemoteConfigFile(remoteConfigPath));
     }
   },
 );

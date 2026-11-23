@@ -19,6 +19,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
 import {
+  canonicalLeaseProvider,
   leaseBackendForPlatform,
   platformForLeaseBackend,
   type LeaseBackend,
@@ -329,7 +330,7 @@ function claimSessionRecord(options: { stateDir: string; session: string }): {
       'The saved connection belongs to a different session.',
     );
   }
-  if (isRemoteConnectionState(file.record)) return { statePath, state: file.record };
+  if (isRemoteConnectionState(file.record)) return { statePath, state: normalizeStoredProvider(file.record) };
   warnInvalidRecord(options.session, statePath);
   removeRemoteConnectionStateFile(options, statePath);
   return { statePath, state: null };
@@ -340,9 +341,14 @@ function observedRemoteConnectionState(
   recordPath: string,
   record: Record<string, unknown>,
 ): RemoteConnectionState | null {
-  if (isRemoteConnectionState(record)) return record;
+  if (isRemoteConnectionState(record)) return normalizeStoredProvider(record);
   warnInvalidRecord(session, recordPath);
   return null;
+}
+
+function normalizeStoredProvider(record: RemoteConnectionState): RemoteConnectionState {
+  if (record.leaseProvider === undefined) return record;
+  return { ...record, leaseProvider: canonicalLeaseProvider(record.leaseProvider) };
 }
 
 function warnInvalidRecord(session: string, recordPath: string): void {
@@ -388,7 +394,10 @@ export function writeRemoteConnectionState(options: {
     session: options.state.session,
   });
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  writeJsonFile(statePath, options.state);
+  writeJsonFile(statePath, {
+    ...options.state,
+    leaseProvider: canonicalLeaseProvider(options.state.leaseProvider),
+  });
   options.onSessionRecordCommitted?.();
   writeJsonFile(activeConnectionStatePath(options.stateDir), { session: options.state.session });
 }

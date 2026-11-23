@@ -1,3 +1,4 @@
+import { providerRuntimeAdmissionError } from '../provider-runtime-admission.ts';
 import {
   recordProviderSession,
   releaseLease,
@@ -27,7 +28,6 @@ import {
   leaseReleaseRequestFor,
   normalizeDeviceKey,
   normalizeLeaseBackend,
-  normalizeLeaseProvider,
   normalizeRequiredLeaseId,
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -47,13 +47,8 @@ import {
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { platformForLeaseBackend } from '@agent-device/kernel/contracts';
-import {
-  AppError,
-  createRequestCanceledError,
-  errorMessage,
-  type ReasonTable,
-} from '@agent-device/kernel/errors';
+import { normalizeLeaseProvider, platformForLeaseBackend } from '@agent-device/kernel/contracts';
+import { AppError, createRequestCanceledError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../../resources/artifact-tracking.ts';
@@ -61,9 +56,6 @@ import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/p
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 const LEASE_HANDLER_REASONS = {
-  // The lease names a provider this daemon has not registered; `details.failedPlugins` lists
-  // plugins that failed to load.
-  providerNotRegistered: { reason: 'provider-not-registered' },
   // The running daemon holds different provider credentials than this shell; stop the daemon and
   // rerun.
   providerCredentialsChanged: { reason: 'provider-credentials-changed' },
@@ -125,7 +117,16 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       // The registry stores the trimmed, validated id, so every admission check reads that id:
       // " testmu " names testmu, and a malformed id is INVALID_ARGS as everywhere else.
       const leaseProvider = normalizeLeaseProvider(leaseScope.leaseProvider);
-      assertProviderRuntimeRegistered(leaseProvider, providerRuntimeIds ?? [], failedPlugins ?? []);
+      const provider = leaseProviderRequiringRuntime({ leaseProvider });
+      if (provider !== undefined) {
+        const error = providerRuntimeAdmissionError(
+          provider,
+          'allocation',
+          providerRuntimeIds,
+          failedPlugins,
+        );
+        if (error) throw error;
+      }
       assertProviderCredentialsUnchanged(
         { leaseProvider, leaseBackend: leaseScope.leaseBackend },
         req.meta?.providerCredentialFingerprint,
@@ -451,46 +452,6 @@ function leaseLifecycleContext(req: DaemonRequest, host: HostEnvironment): Lease
     cwd: requestCwd(req, host),
     ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
   };
-}
-
-function assertProviderRuntimeRegistered(
-  leaseProvider: string | undefined,
-  registeredProviders: readonly string[],
-  failedPlugins: readonly PluginInventoryEntry[],
-): void {
-  const provider = leaseProviderRequiringRuntime({ leaseProvider });
-  if (provider === undefined || registeredProviders.includes(provider)) return;
-  // A plugin that failed before its provider id was known could have been this provider.
-  const failures = failedPlugins.flatMap((plugin) =>
-    plugin.state === 'failed' &&
-    plugin.backend === undefined &&
-    plugin.platform === undefined &&
-    (plugin.provider === provider || plugin.provider === undefined)
-      ? [
-          {
-            ...(plugin.provider === undefined ? {} : { provider: plugin.provider }),
-            ...(plugin.package === undefined ? {} : { package: plugin.package }),
-            code: plugin.error.code,
-            ...(plugin.error.reason === undefined ? {} : { reason: plugin.error.reason }),
-            message: plugin.error.message,
-          },
-        ]
-      : [],
-  );
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    `Provider "${provider}" is not available in this daemon runtime.`,
-    {
-      reason: LEASE_HANDLER_REASONS.providerNotRegistered.reason,
-      provider,
-      registeredProviders: [...registeredProviders],
-      ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint:
-        failures.length > 0
-          ? `Fix the plugin that failed to register (see failedPlugins or agent-device daemon status), restart the daemon, then retry lease allocation.`
-          : `Restart the daemon with ${provider} configured, then retry lease allocation.`,
-    },
-  );
 }
 
 function assertProviderCredentialsUnchanged(

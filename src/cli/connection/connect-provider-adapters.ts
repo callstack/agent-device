@@ -1,5 +1,8 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
+import type {
+  ProviderConnectionResource,
+  ProviderConnectionVerification,
+} from '@agent-device/contracts/remote';
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
@@ -9,8 +12,9 @@ import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
+  admitProviderForRoute,
   isConnectProviderName,
-  primeProviderConnection,
+  providerRouteForConnection,
   type ConnectProvider,
 } from './provider-policy.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
@@ -29,7 +33,7 @@ export type ConfiguredConnectionVerification = {
   provider?: never;
   project?: never;
   device?: never;
-  app?: never;
+  app?: ProviderConnectionResource;
 };
 
 export type ConnectVerification = ProviderConnectionVerification | ConfiguredConnectionVerification;
@@ -100,16 +104,19 @@ export async function resolveConnectProviderProfile(options: {
       env,
     });
     const leaseProvider = resolved.profile.leaseProvider;
-    await primeProviderConnection(leaseProvider, env);
-    return {
-      flags: {
-        ...profileToCliFlags(resolved.profile),
-        ...options.flags,
-        remoteConfig: resolved.resolvedPath,
-      },
-      remoteConfigPath: resolved.resolvedPath,
-      ...(isConnectProviderName(leaseProvider, env) ? { provider: leaseProvider } : {}),
+    const flags = {
+      ...profileToCliFlags(resolved.profile),
+      ...options.flags,
+      remoteConfig: resolved.resolvedPath,
     };
+    const route = providerRouteForConnection({ daemonBaseUrl: flags.daemonBaseUrl, env });
+    await admitProviderForRoute(leaseProvider, route, env);
+    const provider =
+      isConnectProviderName(leaseProvider, env) &&
+      (route === 'drives-connection' || builtinConnectAdapter(leaseProvider))
+        ? leaseProvider
+        : undefined;
+    return { flags, remoteConfigPath: resolved.resolvedPath, provider };
   }
   const provider =
     options.provider ?? (shouldUseProxyConnectShortcut(options.flags) ? 'proxy' : 'cloud');

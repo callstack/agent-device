@@ -116,7 +116,8 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   remote: [
     'connect -> install/open -> commands -> close -> disconnect',
     'BrowserStack, AWS Device Farm, and TestMu AI create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name, ARN, or lt:// id',
-    'AWS Device Farm cannot install after allocation. If connect reports no attached app, run its printed reconnect command',
+    'AWS Device Farm cannot install after allocation. If local verification reports no attached app, run the printed reconnect command with --session <name> --force before open',
+    'With an AWS Device Farm profile that uses a remote daemon, set awsAppArn in the profile and repeat your original connect invocation with --force',
     'Do not run devices as a pre-open catalog probe for direct providers',
     'MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect',
   ],
