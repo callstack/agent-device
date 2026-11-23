@@ -45,7 +45,10 @@ export function measureSessionAuthorityOverlay(
     ) {
       shape.add(edge.file);
     }
-    if (edge.target === SESSION_STORE_AUTHORITY_TARGET && edge.symbols.includes('SessionStore')) {
+    if (
+      edge.target === SESSION_STORE_AUTHORITY_TARGET &&
+      (edge.wholeModule || edge.symbols.includes('SessionStore'))
+    ) {
       authority.add(edge.file);
     }
   }

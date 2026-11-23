@@ -29,6 +29,8 @@ export type ImportEdge = {
    * dynamic imports that do not destructure named bindings.
    */
   symbols: readonly string[];
+  /** A module namespace binding, an unqualified import type, or a wildcard re-export. */
+  wholeModule?: true;
   /**
    * The `symbols` written with a per-specifier `type` marker (`import { type A, b } from …`). Those
    * names are erased at runtime, so a rule that polices what an import loads judges the rest. An edge
@@ -195,12 +197,6 @@ function literalSpecifier(node: unknown): string | undefined {
 
 type LocatedImportEdge = { edge: ImportEdge; start: number };
 
-function importedName(node: unknown): string | undefined {
-  if (node === null || typeof node !== 'object') return undefined;
-  const record = node as Record<string, unknown>;
-  return record.type === 'Identifier' && typeof record.name === 'string' ? record.name : undefined;
-}
-
 /** The named symbols of an import or re-export, and the subset marked `type` per specifier. */
 function namedSymbols(
   specifiers: readonly Record<string, unknown>[],
@@ -208,7 +204,7 @@ function namedSymbols(
 ): Readonly<{ symbols: string[]; typeSymbols: string[] }> {
   const kindField = importedField === 'imported' ? 'importKind' : 'exportKind';
   const names = specifiers.flatMap((specifier) => {
-    const name = importedName(specifier[importedField]);
+    const name = propertyName(specifier[importedField]);
     const isNamed =
       specifier.type === (importedField === 'imported' ? 'ImportSpecifier' : 'ExportSpecifier');
     return isNamed && name !== undefined
@@ -225,7 +221,7 @@ function namedSymbols(
 function importTypeSourceName(qualifier: unknown): string | undefined {
   if (qualifier === null || typeof qualifier !== 'object') return undefined;
   const record = qualifier as Record<string, unknown>;
-  if (record.type === 'Identifier') return importedName(qualifier);
+  if (record.type === 'Identifier') return propertyName(qualifier);
   return record.type === 'TSQualifiedName' ? importTypeSourceName(record.left) : undefined;
 }
 
@@ -244,6 +240,7 @@ function staticImportEdge(
   specifierNode: unknown,
   typeOnly: boolean,
   names: Readonly<{ symbols: string[]; typeSymbols: string[] }>,
+  wholeModule = false,
 ): ImportEdge | null {
   const spec = literalSpecifier(specifierNode);
   if (spec === undefined) return null;
@@ -255,6 +252,7 @@ function staticImportEdge(
     line: sourceLine(source, start),
     symbols: names.symbols,
     typeSymbols: names.typeSymbols,
+    ...(wholeModule ? { wholeModule: true } : {}),
   };
 }
 
@@ -299,6 +297,7 @@ export function parseImports(source: string): ImportEdge[] {
         node.source,
         specifierTypeOnly(node, specifiers, 'importKind'),
         namedSymbols(specifiers, 'imported'),
+        specifiers.some((specifier) => specifier.type === 'ImportNamespaceSpecifier'),
       );
     } else if (node.type === 'ExportNamedDeclaration' && node.source) {
       const specifiers = Array.isArray(node.specifiers)
@@ -312,16 +311,25 @@ export function parseImports(source: string): ImportEdge[] {
         namedSymbols(specifiers, 'local'),
       );
     } else if (node.type === 'ExportAllDeclaration') {
-      edge = staticImportEdge(source, node, node.source, node.exportKind === 'type', {
-        symbols: [],
-        typeSymbols: [],
-      });
+      edge = staticImportEdge(
+        source,
+        node,
+        node.source,
+        node.exportKind === 'type',
+        { symbols: [], typeSymbols: [] },
+        true,
+      );
     } else if (node.type === 'TSImportType') {
       const sourceName = importTypeSourceName(node.qualifier);
-      edge = staticImportEdge(source, node, node.source, true, {
-        symbols: sourceName === undefined ? [] : [sourceName],
-        typeSymbols: sourceName === undefined ? [] : [sourceName],
-      });
+      const symbols = sourceName === undefined ? [] : [sourceName];
+      edge = staticImportEdge(
+        source,
+        node,
+        node.source,
+        true,
+        { symbols, typeSymbols: symbols },
+        node.qualifier == null,
+      );
     }
     if (edge) located.push({ edge, start });
   });
