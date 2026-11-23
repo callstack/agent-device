@@ -429,9 +429,10 @@ test('fold worst-case ledger covers the client envelope with the daemon-result m
   assertWithinEnvelope(measured, envelopeMs!, REQUIRED_DAEMON_RESULT_MARGIN_MS);
 
   // A named pose waits for its panel after the hinge settles. Its worst case settles the hinge on
-  // the last read it allows, then polls a panel table whose lit panel never matches the pose. Each
-  // poll read ends by the poll deadline, so one read that spends its whole budget is the poll's
-  // worst case, and the ledger records that one read.
+  // the last read it allows, then polls a panel table whose lit panel never matches the pose. The
+  // ledger charges every call its full timeout, so this run bounds one panel read that spends the
+  // whole poll budget, not a poll of several shorter reads. Such a poll costs no more: each read's
+  // timeout ends at the poll deadline (`pose.test.ts`), and a read that times out ends the poll.
   const poseCalibration = await runFoldLedgerScenario({
     hingeAngleAt: () => 170,
     withVirtualClock: false,

@@ -17,6 +17,11 @@ vi.mock('./fold-helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./fold-helper.ts')>();
   return { ...actual, createFoldHelper: vi.fn(() => FOLD_HELPER) };
 });
+vi.mock('../core/config.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/config.ts')>()),
+  // Distinct from the lit-panel read interval, so the poll tests tell the two apart.
+  IOS_FOLD_PANEL_LAST_READ_MS: 1_000,
+}));
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
   return { ...actual, emitDiagnostic: vi.fn() };
@@ -31,6 +36,7 @@ import {
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import {
+  IOS_FOLD_PANEL_LAST_READ_MS,
   IOS_FOLD_PANEL_READ_INTERVAL_MS,
   IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS,
   IOS_FOLD_POSE_READ_INTERVAL_MS,
@@ -234,7 +240,52 @@ test('omits the screen when the panel lit before the fold is still lit at the de
     hingeAngleDegrees: 180,
   });
   const panelReads = mockInventory.mock.calls.length - 1;
-  expect(panelReads).toBe(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS / IOS_FOLD_PANEL_READ_INTERVAL_MS + 1);
+  expect(panelReads).toBe(
+    (IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS - IOS_FOLD_PANEL_LAST_READ_MS) /
+      IOS_FOLD_PANEL_READ_INTERVAL_MS +
+      1,
+  );
+});
+
+test('ends the timeout of every lit-panel read at the panel settle deadline', async () => {
+  // Each read answers after 300 ms and still names the pre-fold panel, so the poll runs to its end.
+  const reads: { startMs: number; timeoutMs: number }[] = [];
+  mockInventory
+    .mockResolvedValueOnce(duoInventory('outer'))
+    .mockImplementation(async (_device, options) => {
+      reads.push({ startMs: Date.now(), timeoutMs: options.timeoutMs! });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return duoInventory('outer');
+    });
+  mockHinge.mockResolvedValue(180);
+
+  await expect(foldOnFakeClock({ pose: 'open' })).resolves.not.toHaveProperty('screen');
+  expect(reads.length).toBeGreaterThan(1);
+  const pollStartMs = reads[0]!.startMs;
+  // The last read starts early enough to answer, and every read's timeout ends at the deadline.
+  expect(reads.at(-1)!.timeoutMs).toBeGreaterThanOrEqual(IOS_FOLD_PANEL_LAST_READ_MS);
+  expect(reads.map(({ startMs, timeoutMs }) => startMs + timeoutMs - pollStartMs)).toEqual(
+    reads.map(() => IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS),
+  );
+});
+
+test('bounds a lit-panel read that starts after the panel settle deadline', async () => {
+  // A stalled host moves the clock past the deadline while the poll sleeps before its next read.
+  const timeouts: number[] = [];
+  mockInventory
+    .mockResolvedValueOnce(duoInventory('outer'))
+    .mockImplementation(async (_device, options) => {
+      timeouts.push(options.timeoutMs!);
+      if (timeouts.length === 1) {
+        setTimeout(() => vi.setSystemTime(Date.now() + IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS), 10);
+      }
+      return duoInventory('outer');
+    });
+  mockHinge.mockResolvedValue(180);
+
+  await expect(foldOnFakeClock({ pose: 'open' })).resolves.not.toHaveProperty('screen');
+  // A zero exec timeout would mean no timeout at all.
+  expect(timeouts).toEqual([IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS, 1]);
 });
 
 test.each<[string, AppleDisplayInventory]>([

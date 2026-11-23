@@ -15,6 +15,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 
 import {
+  IOS_FOLD_PANEL_LAST_READ_MS,
   IOS_FOLD_PANEL_READ_INTERVAL_MS,
   IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS,
   IOS_FOLD_POSE_READ_INTERVAL_MS,
@@ -315,15 +316,22 @@ async function awaitPoseLitPanel(
   // CONSERVATIVE: The guest switches panel power after the hinge stop, so the first read can name
   // the panel lit before the fold; wait for the pose's panel and omit `screen` at the deadline.
   // Revisit only if the panel table reports the switch together with the hinge stop.
-  const deadline = Deadline.fromTimeoutMs(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS);
+  const startedAtMs = Date.now();
+  const settleDeadline = Deadline.fromTimeoutMs(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS, startedAtMs);
+  const lastReadStart = Deadline.fromTimeoutMs(
+    IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS - IOS_FOLD_PANEL_LAST_READ_MS,
+    startedAtMs,
+  );
   const { value } = await pollUntilSettled({
-    // The time left on the deadline bounds each read, so the poll costs about one full read.
+    // Each read's timeout ends at the settle deadline, so the poll costs about one full read, plus
+    // the 1 s kill grace when a read times out. A zero exec timeout means no timeout, so a read that
+    // starts after the deadline still gets 1 ms.
     probe: () =>
       readGuestPanelTable(device, helper, signal, {
-        timeoutMs: Math.max(deadline.remainingMs(), IOS_FOLD_PANEL_READ_INTERVAL_MS),
+        timeoutMs: Math.max(settleDeadline.remainingMs(), 1),
       }),
     settled: (inventory) => !hasMeasuredPanelPower(inventory) || posePanel(inventory) !== undefined,
-    deadline,
+    deadline: lastReadStart,
     intervalMs: IOS_FOLD_PANEL_READ_INTERVAL_MS,
     signal,
   });

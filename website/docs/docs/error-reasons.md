@@ -127,10 +127,12 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `fold-posture-unsupported` | The emulator profile has no device state for the requested pose; `details.supportedPoses` lists the poses it has. |
 | `fold-keyframes-unsupported` | Android poses fixed postures only, so fold keyframes are refused. |
 | `fold-posture-dispatch-failed` | The Android emulator console refused the posture command. |
+| `fold-posture-dispatch-timed-out` | The Android emulator console did not answer the posture command in time, so the posture may have applied. |
 | `fold-lock-screen-persists` | The lock screen that folding raised on Android did not stay dismissed. |
 | `fold-hinge-angle-unreadable` | The Android emulator console returned no hinge angle. |
 | `fold-helper-build-failed` | The iOS simulator fold helper could not be built with the selected Xcode. |
 | `fold-hid-dispatch-failed` | The fold helper could not send the hinge pose to the iOS simulator. |
+| `fold-hid-dispatch-timed-out` | The fold helper did not finish sending the hinge pose in time, so the pose may have applied. |
 | `fold-hinge-angle-no-sample` | An iOS simulator hinge read returned no usable sample; `details` say why. |
 | `fold-pose-dispatched-unverified` | The iOS simulator received the pose, but the first hinge read returned no sample to verify it. |
 | `fold-angle-unverified` | The iOS simulator hinge did not reach the angle of the final keyframe. |

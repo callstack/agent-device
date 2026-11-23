@@ -14,6 +14,8 @@ import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cac
 export const FOLD_HELPER_REASONS = {
   // The fold helper could not send the hinge pose to the iOS simulator.
   hidDispatchFailed: { reason: 'fold-hid-dispatch-failed' },
+  // The fold helper did not finish sending the hinge pose in time, so the pose may have applied.
+  hidDispatchTimedOut: { reason: 'fold-hid-dispatch-timed-out' },
   // An iOS simulator hinge read returned no usable sample; `details` say why.
   hingeAngleNoSample: { reason: 'fold-hinge-angle-no-sample' },
 } as const satisfies ReasonTable<'fold'>;
@@ -131,7 +133,11 @@ export function createFoldHelper(device: DeviceInfo): FoldHelper {
       const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);
       await run(
         ['set', payload],
-        { signal, timeoutMs: durationMs + 10_000, failure: DISPATCH_FAILURE },
+        {
+          signal,
+          timeoutMs: durationMs + 10_000,
+          failure: typeof pose === 'string' ? POSE_DISPATCH_FAILURE : KEYFRAMES_DISPATCH_FAILURE,
+        },
         () => true,
       );
     },
@@ -173,10 +179,28 @@ type ModeFailure = ModeFailureShape &
     timedOut?: ModeFailureShape;
   }>;
 
-const DISPATCH_FAILURE: ModeFailure = {
-  message: 'Unable to send the simulator hinge pose',
-  details: { reason: FOLD_HELPER_REASONS.hidDispatchFailed.reason },
-};
+/** The set-mode failure; `retry` says what sending the same request again does. */
+function dispatchFailure(retry: string): ModeFailure {
+  return {
+    message: 'Unable to send the simulator hinge pose',
+    details: { reason: FOLD_HELPER_REASONS.hidDispatchFailed.reason },
+    timedOut: {
+      message: 'Timed out sending the simulator hinge pose; the pose may have applied',
+      details: {
+        reason: FOLD_HELPER_REASONS.hidDispatchTimedOut.reason,
+        dispatched: 'unknown',
+        hint: `Check the pose with a screenshot or snapshot. ${retry}`,
+      },
+    },
+  };
+}
+
+const POSE_DISPATCH_FAILURE = dispatchFailure(
+  'A retry sends the pose again and reads the hinge back.',
+);
+const KEYFRAMES_DISPATCH_FAILURE = dispatchFailure(
+  'A retry replays the motion from its first keyframe.',
+);
 
 const ROTATE_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator orientation',

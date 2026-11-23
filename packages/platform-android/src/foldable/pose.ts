@@ -1,5 +1,6 @@
 import type { FoldPose, SetFoldPoseInput } from '@agent-device/contracts/device';
 import { FOLD_REASONS, type SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -33,6 +34,9 @@ const ANDROID_FOLD_REASONS = {
   keyframesUnsupported: { reason: 'fold-keyframes-unsupported' },
   // The Android emulator console refused the posture command.
   postureDispatchFailed: { reason: 'fold-posture-dispatch-failed' },
+  // The Android emulator console did not answer the posture command in time, so the posture may
+  // have applied.
+  postureDispatchTimedOut: { reason: 'fold-posture-dispatch-timed-out' },
   // The lock screen that folding raised on Android did not stay dismissed.
   lockScreenPersists: { reason: 'fold-lock-screen-persists' },
   // The Android emulator console returned no hinge angle.
@@ -55,6 +59,8 @@ const KEYFRAMES_HINT =
   'The emulator console poses the hinge at fixed angles only; request closed, half-open, or open.';
 const POSTURE_DISPATCH_HINT =
   'The emulator console refused the posture. Check that the AVD is a foldable profile (hw.sensor.hinge=yes), then retry.';
+const POSTURE_TIMEOUT_HINT =
+  'Check the pose with a screenshot or `adb shell cmd device_state print-state`. A retry sends the posture again and waits for its device state.';
 const POSE_UNVERIFIED_HINT =
   'The emulator console accepted the posture, but the guest did not commit the matching device state. Read it directly with `adb shell cmd device_state print-state` to see which state the emulator holds.';
 const HINGE_ANGLE_HINT =
@@ -163,7 +169,11 @@ async function sendEmulatorPosture(
   postureId: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  const sent = await runEmulatorConsole(device, ['posture', postureId], signal);
+  const sent = await runEmulatorConsole(device, ['posture', postureId], signal).catch(
+    (error: unknown) => {
+      throw postureTimeoutError(device, pose, error, signal);
+    },
+  );
   if (sent.refusal !== undefined) {
     throw new AppError('COMMAND_FAILED', `Unable to set the emulator posture for ${pose}`, {
       deviceId: device.id,
@@ -172,6 +182,28 @@ async function sendEmulatorPosture(
       hint: POSTURE_DISPATCH_HINT,
     });
   }
+}
+
+/** A console that answers late may still apply the posture, so its timeout is not an unsent posture. */
+function postureTimeoutError(
+  device: DeviceInfo,
+  pose: FoldPose,
+  error: unknown,
+  signal: AbortSignal | undefined,
+): unknown {
+  if (signal?.aborted || !isCommandTimeoutError(error)) return error;
+  return new AppError(
+    'COMMAND_FAILED',
+    `Timed out setting the emulator posture for ${pose}; the posture may have applied`,
+    {
+      ...error.details,
+      deviceId: device.id,
+      reason: ANDROID_FOLD_REASONS.postureDispatchTimedOut.reason,
+      dispatched: 'unknown',
+      hint: POSTURE_TIMEOUT_HINT,
+    },
+    error,
+  );
 }
 
 /**

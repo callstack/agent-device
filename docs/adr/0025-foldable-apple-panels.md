@@ -289,7 +289,7 @@ A verified response includes the angle and lit panel's point size.
 The guest switches panel power after the hinge stop, so the first panel read can name the panel lit before the fold.
 Amendment (2026-11-23): for a named pose, the reported panel must be the measured panel that the pose lights.
 That panel is `primary` for `closed` and the other panel for `half-open` and `open`, the only poses with panel measurements.
-Panel reads repeat until a short deadline, and each read ends by that deadline. Then the response omits `screen`.
+Panel reads repeat until a short deadline, and each read's timeout ends at that deadline. Then the response omits `screen`.
 An unresolved table, or a table in which no panel reports measured power, cannot show the switch, so it ends the reads.
 A custom keyframe angle keeps one panel read, because no panel measurement exists for interior angles.
 This is an explicit exception to the rejected pose-to-panel map below: the pose selects among measured panels and never supplies a panel.
