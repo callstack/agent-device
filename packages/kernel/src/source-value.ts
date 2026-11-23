@@ -91,8 +91,9 @@ export function parseSourceValue(
 }
 
 /**
- * The values an enum or numeric definition accepts, worded the same for a CLI flag, an env var,
- * and a config key: `integer from 100 to 120000`, `number >= 0.01`, `one of: auto, socket`.
+ * The values an enum or numeric definition accepts, as an env var or a config key reads them:
+ * `integer from 100 to 120000`, `number >= 0.01`, `one of: auto, socket`. A CLI int flag floors a
+ * fraction instead of refusing it, so its parser words the bounds as a number rounded down.
  */
 export function describeAcceptedValues(definition: SourceValueDefinition): string {
   if (definition.type === 'enum') return `one of: ${definition.enumValues?.join(', ')}`;

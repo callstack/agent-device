@@ -28,7 +28,8 @@ test('parseArgs rejects invalid record --fps range', () => {
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      error.message === 'Invalid fps: 0. Expected integer from 1 to 120.',
+      error.message ===
+        'Invalid fps: 0. Expected number from 1 to 120 (rounded down to an integer).',
   );
 });
 
@@ -37,17 +38,17 @@ test('parseArgs names the accepted values of a refused flag value', () => {
     [
       ['open', 'com.example.app', '--wait', '240000'],
       { flag: '--wait', min: 100, max: 120000 },
-      'Expected integer from 100 to 120000.',
+      'Expected number from 100 to 120000 (rounded down to an integer).',
     ],
     [
       ['open', 'com.example.app', '--wait=soon'],
       { flag: '--wait', min: 100, max: 120000 },
-      'Expected integer from 100 to 120000.',
+      'Expected number from 100 to 120000 (rounded down to an integer).',
     ],
     [
-      ['open', 'com.example.app', '--timeout', '0'],
+      ['open', 'com.example.app', '--timeout', '0.5'],
       { flag: '--timeout', min: 1, max: undefined },
-      'Expected integer >= 1.',
+      'Expected number >= 1 (rounded down to an integer).',
     ],
     [
       ['screenshot', './shot.png', '--scale', '2'],
@@ -74,6 +75,11 @@ test('parseArgs names the accepted values of a refused flag value', () => {
       `expected ${argv.join(' ')} to be refused with its accepted values`,
     );
   }
+});
+
+test('parseArgs floors an in-range fractional value of an integer flag', () => {
+  const parsed = parseArgs(['open', 'com.example.app', '--timeout', '1.5'], { strictFlags: true });
+  assert.equal(parsed.flags.timeoutMs, 1);
 });
 
 test('parseArgs refuses a record option the chosen action never reads', () => {
@@ -349,7 +355,7 @@ test('invalid range errors are deterministic', () => {
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      error.message === 'Invalid depth: -1. Expected integer >= 0.',
+      error.message === 'Invalid depth: -1. Expected number >= 0 (rounded down to an integer).',
   );
 });
 

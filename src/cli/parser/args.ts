@@ -339,9 +339,14 @@ const FLAG_VALUE_REFUSAL_REASONS = {
 } as const satisfies ReasonTable<'command flags'>;
 
 function invalidFlagValue(definition: FlagDefinition, token: string, value: string): AppError {
+  // An int flag takes any number in range and floors it, so `--timeout 1.5` is accepted.
+  const accepted =
+    definition.type === 'int'
+      ? `${describeAcceptedValues({ ...definition, type: 'number' })} (rounded down to an integer)`
+      : describeAcceptedValues(definition);
   return new AppError(
     'INVALID_ARGS',
-    `Invalid ${labelForFlag(token)}: ${value}. Expected ${describeAcceptedValues(definition)}.`,
+    `Invalid ${labelForFlag(token)}: ${value}. Expected ${accepted}.`,
     {
       reason: FLAG_VALUE_REFUSAL_REASONS.invalid.reason,
       flag: token,
