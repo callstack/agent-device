@@ -349,7 +349,7 @@ test('an app-only close with stored hints selects no runtime-hint cleanup siblin
   expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(1);
   expect(mockDispatch).toHaveBeenCalledOnce();
   expect(clearRuntimeHintsFixture).not.toHaveBeenCalled();
-  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints).toEqual({
     platform: 'android',
     metroHost: '10.0.2.2',
   });

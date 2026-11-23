@@ -260,6 +260,7 @@ export type LaunchConfirmationAbsent = Readonly<{
 }>;
 
 type OpenApplicationOutcomeBase = Readonly<{
+  /** The app the open reached. The daemon reads it only when the input carried no `appBundleId`. */
   appBundleId?: string;
   /**
    * The app target already held the foreground when the open dispatched, so the platform's launch

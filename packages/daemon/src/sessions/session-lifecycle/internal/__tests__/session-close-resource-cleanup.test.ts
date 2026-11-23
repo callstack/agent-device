@@ -334,7 +334,7 @@ test('close cannot retire a replacement session while its provider release waits
       data: { provider: { releasedBy: 'provider' } },
     });
     expect(sessionStore.requireCurrent(successor)).toBe(successor.session);
-    expect(sessionStore.getRuntimeHints(address)).toEqual({ metroPort: 9090 });
+    expect(sessionStore.getRuntimeHints(address)?.hints).toEqual({ metroPort: 9090 });
     expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
   } finally {
     release();

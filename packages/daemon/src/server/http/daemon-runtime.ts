@@ -420,7 +420,7 @@ async function startDaemonRuntimeOnHost(
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     const sessionName = ref.address;
     const runtimeHints = runtimeHintsClearInput(
-      sessionStore.getStoredRuntimeHints(sessionName),
+      sessionStore.getRuntimeHints(sessionName),
       session.appBundleId,
     );
     await teardownSessionResources({

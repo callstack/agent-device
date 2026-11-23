@@ -251,7 +251,7 @@ test.each(['rebuild', 'retire'] as const)(
       }
     } else {
       expect(result).toMatchObject({ error: { details: { reason: 'session_lifetime_ended' } } });
-      expect(store.getRuntimeHints('default')).toEqual({ metroPort: 8083 });
+      expect(store.getRuntimeHints('default')?.hints).toEqual({ metroPort: 8083 });
     }
   },
 );

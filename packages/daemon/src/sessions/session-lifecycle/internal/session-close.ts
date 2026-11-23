@@ -324,10 +324,7 @@ export async function handleSessionCloseCommands(
     clearRuntimeHints:
       req.internal?.closeAppOnly !== true &&
       requiresRuntimeHintsClear(
-        runtimeHintsClearInput(
-          sessionStore.getStoredRuntimeHints(sessionName),
-          session.appBundleId,
-        ),
+        runtimeHintsClearInput(sessionStore.getRuntimeHints(sessionName), session.appBundleId),
       ),
     inspectFacts: params.inspectFacts,
     platformServices: params.platformServices,

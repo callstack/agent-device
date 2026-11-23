@@ -232,11 +232,7 @@ export class SessionStore {
     return Array.from(this.sessions, ([address, entry]) => this.captureRef(address, entry));
   }
 
-  getRuntimeHints(name: string): SessionRuntimeHints | undefined {
-    return this.runtimeHints.get(name)?.hints;
-  }
-
-  getStoredRuntimeHints(name: string): StoredRuntimeHints | undefined {
+  getRuntimeHints(name: string): StoredRuntimeHints | undefined {
     return this.runtimeHints.get(name);
   }
 

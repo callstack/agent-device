@@ -467,13 +467,13 @@ test.each([false, true])(
       values: retired ? {} : { metroHost: 'scoped.example', metroPort: '8082' },
     });
     expect(sessionStore.resolveCurrent(publicRef)).toBe(publicRef.session);
-    expect(sessionStore.getRuntimeHints('default')).toEqual({
+    expect(sessionStore.getRuntimeHints('default')?.hints).toEqual({
       metroHost: 'public.example',
       metroPort: 8083,
     });
     if (successor) {
       expect(sessionStore.resolveCurrent(successor)).toBe(successor.session);
-      expect(sessionStore.getRuntimeHints(address)).toEqual({
+      expect(sessionStore.getRuntimeHints(address)?.hints).toEqual({
         metroHost: 'successor.example',
         metroPort: 8084,
       });

@@ -292,7 +292,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   const current = sessionStore.resolveCurrent(ref);
   const session = current ?? ref.session;
   const runtimeHints = runtimeHintsClearInput(
-    current ? sessionStore.getStoredRuntimeHints(ref.address) : undefined,
+    current ? sessionStore.getRuntimeHints(ref.address) : undefined,
     session.appBundleId,
   );
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);

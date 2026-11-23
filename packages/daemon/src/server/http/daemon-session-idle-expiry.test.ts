@@ -444,7 +444,7 @@ test('an idle settle cannot finalize or retire a replacement at its scoped addre
       assert.equal(successor.session.scriptPublication.status, 'complete');
     }
     assert.equal(successor.session.actions.length, 0);
-    assert.equal(sessionStore.getRuntimeHints(address)?.metroPort, 9090);
+    assert.equal(sessionStore.getRuntimeHints(address)?.hints?.metroPort, 9090);
     assert.equal(sessionStore.readIdleExpiryTombstone(address), undefined);
   } finally {
     release();
