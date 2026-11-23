@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 /** Single source of truth for the discriminator the Apple owner sets and the MCP schema advertises. */
 export const FOLD_SCREEN_COORDINATE_SPACE = 'native-panel' as const;
@@ -213,6 +213,44 @@ export function parseHardwareButtonPositionals(positionals: readonly string[]): 
   }
   return parseHardwareButton(positionals[0]);
 }
+
+// ---- Lock screen -----------------------------------------------------------------------------
+// Lives beside the rotation vocabulary for the reason the hardware-button names do: every entry
+// that parses one command positional already evaluates this module, and a module of its own would
+// join their eager closures (scripts/__tests__/eager-closure-budgets.ts).
+
+/**
+ * The `lock-screen` actions, in command order. Each selects one system-button cell, the way
+ * `keyboard <status|dismiss|enter>` selects a keyboard-family cell.
+ */
+export const LOCK_SCREEN_ACTIONS = ['lock', 'unlock'] as const;
+export type LockScreenAction = (typeof LOCK_SCREEN_ACTIONS)[number];
+
+/** The CLI synopsis tail naming the accepted actions. */
+export const LOCK_SCREEN_USAGE = `<${LOCK_SCREEN_ACTIONS.join('|')}>`;
+
+/**
+ * Owns the whole `lock-screen` positional contract: exactly one action, matched exactly. The CLI
+ * reader and the daemon resolver both call this, so an unknown action refuses with `INVALID_ARGS`
+ * before any device dispatch.
+ */
+export function parseLockScreenPositionals(positionals: readonly string[]): LockScreenAction {
+  const normalized = positionals.length === 1 ? positionals[0]!.toLowerCase() : undefined;
+  const action = LOCK_SCREEN_ACTIONS.find((candidate) => candidate === normalized);
+  if (action) return action;
+  throw new AppError(
+    'INVALID_ARGS',
+    `lock-screen requires exactly one action: ${LOCK_SCREEN_ACTIONS.join(', ')}.`,
+  );
+}
+
+/** The `lock-screen` reasons that both the Android and the Apple owner raise. */
+export const LOCK_SCREEN_REASONS = {
+  // The lock needs a PIN, pattern, password, or passcode, so unlock typed nothing and left it locked.
+  secureLock: { reason: 'lock-screen-secure' },
+  // The lock or unlock was sent, but the device still reports the previous lock state.
+  stateUnverified: { reason: 'lock-screen-unverified' },
+} as const satisfies ReasonTable<'lock-screen'>;
 
 // ---- Hinge pose ------------------------------------------------------------------------------
 // Lives beside the rotation vocabulary because every entry that reads one device pose already

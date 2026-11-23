@@ -399,6 +399,35 @@ test.each([
   },
 );
 
+// The runner locks through XCUIDevice's simulator-only lock button, so the iPhone and iPad
+// simulator leaf is the only one admitted. A physical iPhone or iPad hears the kind refusal; every
+// other OS hears the leaf refusal, whichever kind it runs as.
+test.each([
+  ...Object.entries(leavesWithoutWatch).map(
+    ([name, device]) =>
+      [name, device, name === 'ios' || name === 'ipados' ? 'available' : 'leaf'] as const,
+  ),
+  ['ios physical device', appleDevice({ kind: 'device' }), 'kind'] as const,
+  ['ipados physical device', appleDevice({ kind: 'device', appleOs: 'ipados' }), 'kind'] as const,
+])('classifies the lock-screen facts for the %s leaf', async (_name, device, verdict) => {
+  const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  for (const operation of ['lockScreen', 'unlockScreen'] as const) {
+    expectOperationAvailability(binding, operation, verdict === 'available');
+    if (verdict === 'available') continue;
+    expect(binding.facts.operations[operation]).toMatchObject({
+      reason: verdict === 'kind' ? 'unsupported-device-kind' : 'unsupported-platform-leaf',
+    });
+  }
+});
+
 test.each(Object.entries(leavesWithoutWatch))(
   'classifies the fold fact for the %s leaf',
   async (_name, device) => {

@@ -1,7 +1,12 @@
 import { expect, test, vi } from 'vitest';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { HARDWARE_BUTTON_NAMES, parseHardwareButtonPositionals } from './device-rotation.ts';
+import {
+  HARDWARE_BUTTON_NAMES,
+  LOCK_SCREEN_ACTIONS,
+  parseHardwareButtonPositionals,
+  parseLockScreenPositionals,
+} from './device-rotation.ts';
 import {
   SYSTEM_BUTTONS,
   SYSTEM_BUTTON_LABELS,
@@ -28,6 +33,8 @@ test('an omitted button reports the family denial, a named one its own cell', ()
     appSwitcher: unsupported,
     actionButton: unsupported,
     shake: unsupported,
+    lockScreen: unsupported,
+    unlockScreen: unsupported,
     volumeUp: unsupported,
     volumeDown: unsupported,
     power: unsupported,
@@ -168,4 +175,22 @@ test('the shared Android hardware-button rule admits phones and refuses TV and s
       hint: 'hardware-button is supported on Android emulators and physical devices.',
     }),
   );
+});
+
+// `lock-screen` takes exactly one action, matched exactly, and an unknown one refuses before any
+// device dispatch.
+test('the lock-screen positional helper enforces arity and the exact action', () => {
+  expect(LOCK_SCREEN_ACTIONS.map((action) => parseLockScreenPositionals([action]))).toEqual([
+    'lock',
+    'unlock',
+  ]);
+  expect(parseLockScreenPositionals(['UNLOCK'])).toBe('unlock');
+  for (const positionals of [[], ['lock', 'unlock'], ['locked'], [''], ['sleep']] as const) {
+    expect(() => parseLockScreenPositionals(positionals)).toThrowError(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        message: 'lock-screen requires exactly one action: lock, unlock.',
+      }),
+    );
+  }
 });

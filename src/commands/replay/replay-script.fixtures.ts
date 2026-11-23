@@ -182,6 +182,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   'trigger-app-event': GENERIC_REPLAY_LINE,
   'tv-remote': GENERIC_REPLAY_LINE,
   'hardware-button': GENERIC_REPLAY_LINE,
+  'lock-screen': GENERIC_REPLAY_LINE,
   uninstall: GENERIC_REPLAY_LINE,
   viewport: GENERIC_REPLAY_LINE,
   audit: { waived: 'audit reports one observation and is never recorded in replay scripts' },

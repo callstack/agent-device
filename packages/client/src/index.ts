@@ -220,6 +220,8 @@ export function createAgentDeviceClient(
         await executeCommand<CommandResult<'tv-remote'>>('tv-remote', options),
       hardwareButton: async (options) =>
         await executeCommand<CommandResult<'hardware-button'>>('hardware-button', options),
+      lockScreen: async (options) =>
+        await executeCommand<CommandResult<'lock-screen'>>('lock-screen', options),
       telephony: async (options) =>
         await executeCommand<CommandResult<'telephony'>>('telephony', options),
       reactNative: async (options) => await executeCommand('react-native', options),

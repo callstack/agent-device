@@ -458,6 +458,18 @@ export type Interactor = {
    */
   shake?(): Promise<void>;
   /**
+   * Optional (parity with `shake`): shows the lock screen and returns once the device reports it
+   * locked; a device already locked returns without a dispatch. An owner without a lock control
+   * leaves it undefined, and its fact refuses `lock-screen lock` before binding.
+   */
+  lockScreen?(): Promise<void>;
+  /**
+   * Optional (parity with `lockScreen`): dismisses the lock screen back to whatever was in front
+   * and returns once the device reports it unlocked. It never enters a credential: a lock that
+   * asks for a PIN, pattern, password, or passcode is refused with `lock-screen-secure`.
+   */
+  unlockScreen?(): Promise<void>;
+  /**
    * Optional (parity with `home`): presses the physical volume-up key once, a control phone
    * owners with a volume button carry. An owner without it leaves it undefined; its fact refuses
    * the press before binding, and the system-button binder fails closed rather than resolving an

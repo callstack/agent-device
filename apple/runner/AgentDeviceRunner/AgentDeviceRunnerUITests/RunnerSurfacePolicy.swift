@@ -11,8 +11,9 @@ extension CommandType {
   var surfacePolicy: RunnerSurfacePolicy {
     switch self {
     case .mouseClick, .remotePress, .desktopScroll, .snapshotBridge, .home, .rotate,
-      .actionButton, .volumeUp, .volumeDown, .keyboardReturn, .recordStop, .status, .uptime,
-      .appState, .pasteboardWrite, .activate, .terminate, .targetReset, .shutdown:
+      .actionButton, .volumeUp, .volumeDown, .lockScreen, .unlockScreen, .keyboardReturn,
+      .recordStop, .status, .uptime, .appState, .pasteboardWrite, .activate, .terminate,
+      .targetReset, .shutdown:
       return .none
     case .tap, .longPress, .drag, .type, .swipe, .scroll, .findText, .querySelector, .readText,
       .snapshot, .accessibilityAudit, .backInApp, .gesture, .gestureViewport, .appSwitcher,

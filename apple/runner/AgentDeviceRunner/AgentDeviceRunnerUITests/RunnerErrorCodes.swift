@@ -29,6 +29,8 @@ extension RunnerTests {
     static let keyboardDismissUnavailable = "KEYBOARD_DISMISS_UNAVAILABLE"
     static let keyboardReturnUnavailable = "KEYBOARD_RETURN_UNAVAILABLE"
     static let hardwareControlUnavailable = "HARDWARE_CONTROL_UNAVAILABLE"
+    static let lockScreenUnverified = "LOCK_SCREEN_UNVERIFIED"
+    static let lockScreenSecure = "LOCK_SCREEN_SECURE"
     static let inAppBackControlUnavailable = "IN_APP_BACK_CONTROL_UNAVAILABLE"
     static let nativeAuditUnavailable = "NATIVE_AUDIT_UNAVAILABLE"
     static let nativeAuditBlockedByAlert = "NATIVE_AUDIT_BLOCKED_BY_ALERT"

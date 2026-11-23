@@ -54,8 +54,12 @@ export {
   HARDWARE_BUTTON_NAME_LABELS,
   HARDWARE_BUTTON_USAGE,
   parseHardwareButtonPositionals,
+  LOCK_SCREEN_ACTIONS,
+  LOCK_SCREEN_REASONS,
+  LOCK_SCREEN_USAGE,
+  parseLockScreenPositionals,
 } from '../device-rotation.ts';
-export type { HardwareButton, HardwareButtonName } from '../device-rotation.ts';
+export type { HardwareButton, HardwareButtonName, LockScreenAction } from '../device-rotation.ts';
 export {
   TELEPHONY_ACTIONS,
   TELEPHONY_CALL_ACTIONS,

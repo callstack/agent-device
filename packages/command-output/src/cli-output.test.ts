@@ -58,6 +58,7 @@ const FORMATTER_COMMANDS = [
   'install-from-source',
   'is',
   'keyboard',
+  'lock-screen',
   'logs',
   'longpress',
   'metro',

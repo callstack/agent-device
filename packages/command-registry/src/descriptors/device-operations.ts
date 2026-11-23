@@ -39,6 +39,7 @@ import {
   hardwareButtonRuntimePlanUses,
   homeRuntimeUse,
   hoverRuntimeUses,
+  lockScreenRuntimePlanUses,
   longPressRuntimeUses,
   orientationRuntimePlanUses,
   pressRuntimeUses,
@@ -628,6 +629,20 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       // the session app, and settling would re-capture the app the press leaves alone (#3848).
       ...GENERIC_MUTATING_COMMAND_TRAITS,
       platformExecution: { kind: 'device-runtime', uses: hardwareButtonRuntimePlanUses },
+    },
+    {
+      name: 'lock-screen',
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/lock-screen.ts'] as const }
+        : {}),
+      catalog: { group: 'public', key: 'lockScreen' },
+      frameworkTier: 'extended',
+      // The first positional selects the lockScreen or unlockScreen cell, the way hardware-button
+      // selects a key; admission binds exactly that one fact. No post-action observation is
+      // declared: settling would re-capture, and so re-foreground, the session app over the lock
+      // screen this command shows.
+      ...GENERIC_MUTATING_COMMAND_TRAITS,
+      platformExecution: { kind: 'device-runtime', uses: lockScreenRuntimePlanUses },
     },
     {
       name: 'install-from-source',

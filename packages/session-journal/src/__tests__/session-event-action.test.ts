@@ -333,6 +333,17 @@ test('record and trace events expose only bounded artifact basenames', () => {
   });
 });
 
+test('lock-screen action events name the verified lock state', () => {
+  const lock = action('lock-screen', { action: 'lock-screen', state: 'locked' });
+  assert.equal(buildActionSummary(lock), 'Locked the screen');
+  assert.equal(
+    buildActionSummary(action('lock-screen', { action: 'lock-screen', state: 'unlocked' })),
+    'Unlocked the screen',
+  );
+  assert.equal(buildActionSummary(action('lock-screen', {})), 'Changed the lock screen');
+  assert.deepEqual(buildActionDetails(lock), { command: 'lock-screen', state: 'locked' });
+});
+
 test('telephony action events name the simulated event and carry neither number nor text', () => {
   const sms = action(
     'telephony',

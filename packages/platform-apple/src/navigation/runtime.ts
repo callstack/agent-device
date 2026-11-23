@@ -208,6 +208,25 @@ function appleShakeFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'simulator' ? available : shakeKindUnavailable;
 }
 
+const lockScreenKindUnavailable = Object.freeze({
+  available: false,
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+  hint: 'lock-screen is supported on iPhone and iPad simulators only.',
+} as const);
+const lockScreenOsUnavailable = Object.freeze({
+  available: false,
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+  hint: 'lock-screen is supported on iPhone and iPad simulators and Android phones and tablets only.',
+} as const);
+/**
+ * The runner locks through XCUIDevice's private lock button and verifies SpringBoard's lock
+ * state. Only the iPhone and iPad simulator leaf is admitted: no physical device run backs it.
+ */
+function appleLockScreenFact(device: DeviceInfo): RuntimeOperationFact {
+  if (!isHandheldAppleDevice(device)) return lockScreenOsUnavailable;
+  return device.kind === 'simulator' ? available : lockScreenKindUnavailable;
+}
+
 const volumeButtonOsUnavailable = Object.freeze({
   available: false,
   reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
@@ -231,8 +250,8 @@ function appleVolumeButtonFact(device: DeviceInfo): RuntimeOperationFact {
 }
 
 /**
- * The navigation cells: back, home, app-switcher, action-button, shake, orientation, tv-remote, and
- * keyboard status/dismiss/enter.
+ * The navigation cells: back, home, app-switcher, action-button, shake, lock-screen, orientation,
+ * tv-remote, and keyboard status/dismiss/enter.
  */
 export function appleNavigationFacts(device: DeviceInfo) {
   return Object.freeze({
@@ -243,6 +262,8 @@ export function appleNavigationFacts(device: DeviceInfo) {
       appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
       actionButton: appleActionButtonFact(device),
       shake: appleShakeFact(device),
+      lockScreen: appleLockScreenFact(device),
+      unlockScreen: appleLockScreenFact(device),
       // Power is the family denial: Apple exposes no public power/lock button press to XCUITest,
       // on any kind or OS, so no cell overrides it.
       volumeUp: appleVolumeButtonFact(device),

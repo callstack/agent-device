@@ -43,6 +43,9 @@ export type RunnerCommand = {
     | 'actionButton'
     | 'volumeUp'
     | 'volumeDown'
+    // Shows or dismisses the lock screen, and answers only once SpringBoard reports that state.
+    | 'lockScreen'
+    | 'unlockScreen'
     | 'keyboardDismiss'
     | 'keyboardReturn'
     // Reads the software keyboard and the focused field's return key. A read: it reports what is on

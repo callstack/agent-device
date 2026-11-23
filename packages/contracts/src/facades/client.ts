@@ -128,6 +128,7 @@ export type {
   FoldCommandOptions,
   DoctorCommandOptions,
   HardwareButtonCommandOptions,
+  LockScreenCommandOptions,
   HomeCommandOptions,
   KeyboardCommandOptions,
   OrientationCommandOptions,

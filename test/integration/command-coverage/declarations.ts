@@ -20,6 +20,7 @@ import {
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE,
   ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
+  ANDROID_LOCK_SCREEN_CONTRACT_EVIDENCE,
   ANDROID_SHAKE_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TELEPHONY_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
@@ -28,6 +29,7 @@ import {
   APPLE_ACTION_BUTTON_FACT_EVIDENCE,
   APPLE_HARDWARE_BUTTON_FACT_EVIDENCE,
   APPLE_HOVER_DENIAL_EVIDENCE,
+  APPLE_LOCK_SCREEN_FACT_EVIDENCE,
   APPLE_NAVIGATION_FACTS_EVIDENCE,
   APPLE_SHAKE_FACT_EVIDENCE,
   LINUX_HOVER_DENIAL_EVIDENCE,
@@ -1491,6 +1493,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       LINUX_RUNTIME_EVIDENCE.path,
       LINUX_RUNTIME_EVIDENCE.test,
       'the exact-owner runtime fact refuses a hardware-button press on every Linux leaf',
+    ),
+  },
+  [C.lockScreen]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_LOCK_SCREEN_CONTRACT_EVIDENCE,
+      'the Android emulator locks with KEYCODE_SLEEP, unlocks with KEYCODE_WAKEUP and wm dismiss-keyguard, and refuses a PIN lock before sending anything',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'test/integration/provider-scenarios/ios-lock-screen.test.ts',
+      'Provider-backed integration iOS lock-screen sends lockScreen and unlockScreen to the runner without activating the app',
+      'the iOS simulator leaf sends the lock and unlock runner commands without activating the session app',
+    ),
+    macos: macos.contract(
+      APPLE_LOCK_SCREEN_FACT_EVIDENCE.path,
+      APPLE_LOCK_SCREEN_FACT_EVIDENCE.test,
+      'the exact-owner runtime fact refuses lock-screen on the macOS host leaf',
+    ),
+    tvos: tvos.contract(
+      APPLE_LOCK_SCREEN_FACT_EVIDENCE.path,
+      APPLE_LOCK_SCREEN_FACT_EVIDENCE.test,
+      'the exact-owner runtime fact refuses lock-screen on the tvOS leaf',
+    ),
+    web: web.contract(
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
+      'the exact-owner runtime fact refuses lock-screen on the web target',
+    ),
+    linux: linux.contract(
+      LINUX_RUNTIME_EVIDENCE.path,
+      LINUX_RUNTIME_EVIDENCE.test,
+      'the exact-owner runtime fact refuses lock-screen on the Linux desktop',
     ),
   },
   [C.fold]: {

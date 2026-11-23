@@ -321,6 +321,18 @@ last two press nothing. The host maps each to the code its command already refus
 (the first two to `UNSUPPORTED_OPERATION`, the macOS back refusal to the `COMMAND_FAILED` a code-less
 reply produced) and publishes its `details.reason`.
 
+`lockScreen` and `unlockScreen` answer only once SpringBoard's `com.apple.springboard.lockstate`
+reports the requested state; a lock also waits for the lock screen's date view or cover sheet
+window, and an unlock for `com.apple.springboard.hasBlankedScreen` to report the screen on. A swipe
+on a dark screen unlocks SpringBoard but leaves the screen off, so `unlockScreen` wakes a dark
+screen with the lock button before it swipes. The verification window starts after the lock button press or the unlock swipe returns,
+and the runner reads the state once more after its last wait. `LOCK_SCREEN_UNVERIFIED` means the
+state did not change in time, and `LOCK_SCREEN_SECURE` means the unlock swipe raised a passcode
+prompt, which the runner leaves unanswered. Either can follow a dispatch, so the host reports
+`details.dispatched: "unknown"` with `details.reason` `lock-screen-unverified` or
+`lock-screen-secure`. A runtime without XCUIDevice's lock button answers
+`HARDWARE_CONTROL_UNAVAILABLE` before pressing anything.
+
 `data` is command-specific. Common fields include snapshot nodes, text lookup results, gesture timing, visibility metadata, and screenshot or recording output details.
 
 Capture-plan snapshots carry `snapshotViewport`, the acquisition's declared viewport evidence.

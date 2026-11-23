@@ -89,6 +89,7 @@ import type {
   TransformGestureOptions,
   TvRemoteCommandOptions,
   HardwareButtonCommandOptions,
+  LockScreenCommandOptions,
   TypeTextOptions,
   ViewportCommandOptions,
   WaitCommandOptions,
@@ -122,6 +123,7 @@ export type AgentDeviceCommandClient = {
   hardwareButton: (
     options: HardwareButtonCommandOptions,
   ) => Promise<CommandResult<'hardware-button'>>;
+  lockScreen: (options: LockScreenCommandOptions) => Promise<CommandResult<'lock-screen'>>;
   telephony: (options: TelephonyCommandOptions) => Promise<CommandResult<'telephony'>>;
   wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
