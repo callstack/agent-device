@@ -408,6 +408,7 @@ async function startDaemonRuntimeOnHost(
     const outcomes = await Promise.all(
       sessionsToStop.map(async (ref) => await teardownDaemonSession(ref).catch(() => false)),
     );
+    await sessionStore.flushJournalRemovals();
     const closedCount = outcomes.filter(Boolean).length;
     return { closed: closedCount, failed: outcomes.length - closedCount };
   };

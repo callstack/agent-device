@@ -23,10 +23,7 @@ import {
 } from '@agent-device/kernel/contracts';
 import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
-import {
-  claimRequestDiagnosticsRecord,
-  type TrackDownloadableArtifact,
-} from '../resources/artifact-tracking.ts';
+import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
 import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
@@ -39,7 +36,6 @@ import {
   countDiagnosticEventsByPhase,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
-  getDiagnosticsMeta,
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
@@ -81,7 +77,10 @@ import {
 import { isConfinedToAppLease } from '../sessions/request-admission.ts';
 import {
   enrichDaemonError,
+  finalizeDaemonResponse,
+  finalizeThrownRequestError,
   idleExpiredIfTombstoned,
+  installDetachedRequestDiagnostics,
   repairExpiredIfTombstoned,
 } from './request-finalization.ts';
 import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
@@ -224,6 +223,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   }
 
   async function handleRequestOnLedger(req: DaemonRequest): Promise<DaemonResponse> {
+    if (!timingSafeStringEqual(req.token, token)) return unauthorizedResponse();
     const start = Date.now();
     const debug = Boolean(req.meta?.debug || req.flags?.verbose);
     return await withDiagnosticsScope(
@@ -236,7 +236,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         traceLogPath: undefined,
       },
       async () => {
-        claimRequestDiagnosticsRecord(req);
+        installDetachedRequestDiagnostics(req, sessionStore);
         const run = async () =>
           await withCommandHost(
             { host, requestEnv: requestCommandEnv(req) },
@@ -250,7 +250,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               ? await run()
               : await withRequestDeadline(req.meta!.requestId!, timeoutMs, run);
         } catch (error) {
-          response = finalizeThrownRequestError(error);
+          response = redactForMacOsAppLease(req, undefined, finalizeThrownRequestError(error));
         }
         if (!response.ok) {
           // ADR 0012 decision 6, R7 (C5a): a command that finds no session but
@@ -280,21 +280,19 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   }
 
   async function runRequestWithinScope(req: DaemonRequest): Promise<DaemonResponse> {
-    if (!timingSafeStringEqual(req.token, token)) {
-      return unauthorizedResponse();
-    }
     registerParameterizedFillDiagnosticValue(req);
-    const invalidRecordingFlags = recordingFlagsResponse(req);
-    if (invalidRecordingFlags) return invalidRecordingFlags;
-    const invalidCustomActionFlags = customActionFlagsResponse(req);
-    if (invalidCustomActionFlags) return invalidCustomActionFlags;
-    // Validate save-script before dispatch can launch or tear down a backend.
-    const invalidSaveScript = saveScriptFlagResponse(req, sessionStore.host.cwd);
-    if (invalidSaveScript) return invalidSaveScript;
-    // A device spec is honoured only by a backend in front of this daemon, which strips it; one that
-    // reaches here is refused before admission, so no lease is recorded and no device is picked.
-    const unsupportedDeviceSpec = deviceSpecFlagsResponse(req);
-    if (unsupportedDeviceSpec) return unsupportedDeviceSpec;
+    const refusal =
+      recordingFlagsResponse(req) ??
+      customActionFlagsResponse(req) ??
+      saveScriptFlagResponse(req, sessionStore.host.cwd) ??
+      deviceSpecFlagsResponse(req);
+    if (refusal) {
+      return redactForMacOsAppLease(
+        req,
+        undefined,
+        finalizeDaemonResponse(req, refusal, trackDownloadableArtifact),
+      );
+    }
 
     if (req.command === 'replay' || req.command === 'test') {
       try {
@@ -302,7 +300,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           await import('@agent-device/replay-port/replay-plugin-admission');
         await requireReplayPlugins(req);
       } catch (error) {
-        return finalizeThrownRequestError(error);
+        return redactForMacOsAppLease(req, undefined, finalizeThrownRequestError(error));
       }
     }
 
@@ -782,24 +780,6 @@ function canRunReplayActionInCurrentScope(
   parentScope: LockedRequestScope,
 ): boolean {
   return req.session === parentScope.sessionName && canRunReplayScopedAction(req.command);
-}
-
-function finalizeThrownRequestError(error: unknown): DaemonResponse {
-  emitDiagnostic({
-    level: 'error',
-    phase: 'request_failed',
-    data: {
-      error: error instanceof Error ? error.message : String(error),
-    },
-  });
-  const details = getDiagnosticsMeta();
-  const flushed = flushDiagnosticsToSessionFile({ force: true });
-  const normalizedError = normalizeError(error, {
-    diagnosticId: details.diagnosticId,
-    logPath: flushed?.path,
-    diagnosticsRecord: flushed?.ref,
-  });
-  return { ok: false, error: normalizedError };
 }
 
 async function finalizeRequestBindingCleanup(

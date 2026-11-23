@@ -58,6 +58,14 @@ export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' |
 };
 
 type ReadSessionEventLogOptions = { cursor?: string; limit?: number | string };
+export type BoundJournal = Readonly<{
+  read(options?: ReadSessionEventLogOptions): Promise<SessionEventLogPage>;
+  beginRequest(
+    req: DaemonRequest,
+    startedAtMs: number,
+  ): (req: DaemonRequest, response: DaemonResponse) => void;
+}>;
+
 type RawSessionEventLogEntry = Record<string, unknown> &
   Pick<SessionEventLogEntry, 'version' | 'ts' | 'session' | 'kind'>;
 
@@ -90,6 +98,14 @@ export async function flushSessionEventLogWrites(eventLogPath?: string): Promise
     ? pendingEventLogWrites.get(eventLogPath)?.pending
     : Promise.all([...pendingEventLogWrites.values()].map((queue) => queue.pending));
   await pending;
+}
+
+/** Removes a lifetime's journal after its owner has revoked all access. */
+export async function removeSessionEventLog(eventLogPath: string): Promise<void> {
+  await flushSessionEventLogWrites(eventLogPath);
+  const directory = path.dirname(eventLogPath);
+  ensuredEventLogDirs.delete(directory);
+  fs.rmSync(directory, { recursive: true, force: true });
 }
 
 type EventLogFailureReason =

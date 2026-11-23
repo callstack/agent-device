@@ -81,13 +81,11 @@ This also applies to recording-only and snapshot-only sessions.
 To use a different lease, close the session with its current credentials and then open it under the new lease.
 If you try to change the lease of a live session with `open`, the daemon returns `LEASE_SESSION_MISMATCH` before launch.
 The daemon checks the lease id before the request reads, changes, or ends the session.
-A request writes request events to the session journal only after that check. Thus, a request that is refused for the session lease id writes none, and it does not stamp session activity.
-If a command writes request events and the request has access to an existing session, the daemon records its start before it runs the command.
-When a lock-exempt `doctor`, `capabilities`, or `artifacts` command runs its handler, the daemon records the start after the handler checks the session lease.
-If a check refuses the request before the handler reads the session, the daemon can record both events at finish after it checks access to the journal.
-A request that sends the lease id of the session and is refused later, for example a `batch` after the lease deadline, can write its events.
-The daemon checks the lease again when a lock-exempt command or `apps` reads the session.
-If the lock-exempt command has access to the session and can take the session lock immediately, it can refresh the recording.
+The request writes events only to the journal of the session lifetime it acts through.
+If a request is refused before admission, its diagnostics go to a separate request record.
+An expired `batch` refused with `LEASE_NOT_FOUND` also gets a separate request record.
+To read a refused request's record remotely, use the locator in the error and send the lease ID that the request presented, if it presented one.
+If a lock-exempt command can take the session lock immediately, it can refresh the recording for the session lifetime it was admitted to use.
 A `test` suite reads, records, and closes an attempt session only with the lease id that the suite sent.
 After the lease deadline, a request that holds the session lock and sends the lease id of the session ends that session.
 A request that sends a different active lease, and that lease admission accepts for a new session, also ends that expired session under its locks. It then runs as the new owner. Its reply and its diagnostics do not name the expired lease.
@@ -117,7 +115,9 @@ A downloadable screenshot or xctrace result has its own daemon-owned path. A wri
 The daemon names each request diagnostics record. The name carries the owner of the record: the lease id that the request sent, or that it sent none.
 The request id of the caller names no record. A nested request uses the parent's record only when both requests send the same lease id or both send no lease id.
 A caller that sent a lease id reads only its own records, also the record of a request that a leased session refused.
-New records are stored in the session's `request-records` directory. The diagnostics route serves legacy records only from the host-verified directory.
+The daemon stores routed records in the session's `request-records` directory.
+Before session routing, the daemon uses the tenant's request diagnostics directory.
+The diagnostics route serves legacy records only from the host-verified directory.
 A recording manifest keeps the lease that started the recording, or that no lease started it.
 `record stop` returns a completed export to a request that sends that lease id, also after the lease ended. Such a request needs no active lease.
 A recording that still runs needs a request that is admitted under that lease.
@@ -226,6 +226,7 @@ The confinement has these parts:
 - For every request except `open` and the `batch` envelope, an existing session that is the leased app.
 
 Thus, a request that names no session cannot fall back to the host Mac.
+The daemon keeps the diagnostics record on the host. The reply omits its path and locator.
 `open` requires the native app backend (ADR 0031), because XCTest posts screen events that can land outside the app's window.
 Before each admitted request, a pid-pinned lease is checked against the running process.
 A session opened under the lease binds the app device of the leased bundle, not the Mac (ADR 0035).

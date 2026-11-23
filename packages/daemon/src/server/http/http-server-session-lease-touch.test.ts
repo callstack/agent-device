@@ -17,6 +17,7 @@ import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import {
+  deferred,
   startDaemon,
   TENANT,
   SESSION,
@@ -332,6 +333,50 @@ test('devices still checks the recording of a session that holds no lease', asyn
   );
 });
 
+test('devices returns inventory detached when recording-health preparation loses its session', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  const { sessionName, sessionStore, observeRunnerSession, send } = daemon;
+  const session = makeIosAppSession(sessionName, { sessionScope: { kind: 'tenant', id: TENANT } });
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    runnerSessionId: 'runner-0',
+  });
+  const original = sessionStore.publish(sessionName, session);
+  const observed = deferred();
+  const resume = deferred();
+  observeRunnerSession.mockImplementationOnce(async () => {
+    observed.resolve();
+    await resume.promise;
+    return { alive: true, sessionId: 'runner-0' };
+  });
+
+  const devices = send('devices', [], {});
+  try {
+    await Promise.race([
+      observed.promise,
+      devices.then((response) => {
+        throw new Error(
+          `Devices finished before recording health was read: ${JSON.stringify(response)}`,
+        );
+      }),
+    ]);
+    expect(sessionStore.retire(original)).toBe(true);
+    sessionStore.publish(sessionName, makeIosAppSession(sessionName));
+  } finally {
+    resume.resolve();
+  }
+
+  const inventory = await devices;
+  expect(inventory.result, JSON.stringify(inventory)).toMatchObject({
+    ok: true,
+    data: { devices: [expect.objectContaining({ id: 'sim-1' })] },
+  });
+  const events = await send('events', [], {});
+  expect(events.result?.ok).toBe(true);
+  expect(events.result?.data?.events).toEqual([]);
+});
+
 test('devices with no lease id stays detached from a leased session and its recording', async () => {
   if (!world) return;
   const { session } = world.publishLeasedSession(world.sessionName);
@@ -355,7 +400,7 @@ test('devices with no lease id stays detached from a leased session and its reco
   );
 });
 
-test('events shows the start and failed finish of a policy-refused capabilities request', async () => {
+test('a pre-admission policy refusal leaves the current journal empty', async () => {
   if (!world) return;
   await world.close();
   world = await startDaemon(
@@ -368,15 +413,7 @@ test('events shows the start and failed finish of a policy-refused capabilities 
 
   const events = await world.send('events', [], {});
   expect(events.result?.ok).toBe(true);
-  expect(events.result?.data?.events).toMatchObject([
-    { command: 'capabilities', kind: 'request.started' },
-    {
-      command: 'capabilities',
-      kind: 'request.finished',
-      status: 'error',
-      details: { code: 'UNAUTHORIZED' },
-    },
-  ]);
+  expect(events.result?.data?.events).toEqual([]);
 });
 
 test('events shows the start and failed finish when an invalidated recording blocks capabilities', async () => {
@@ -404,21 +441,13 @@ test('events shows the start and failed finish when an invalidated recording blo
   ]);
 });
 
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
-
 test.each([
   { scenario: 'leased', leased: true, openBeforeDispatch: false },
   { scenario: 'unleased', leased: false, openBeforeDispatch: false },
   { scenario: 'opened leased before dispatch', leased: true, openBeforeDispatch: true },
   { scenario: 'opened unleased before dispatch', leased: false, openBeforeDispatch: true },
 ])(
-  'events shows the doctor start for a session that is $scenario while the toolchain check is pending',
+  'doctor writes only to its admitted journal when the session is $scenario',
   async ({ leased, openBeforeDispatch }) => {
     const daemon = world;
     if (!daemon) return;
@@ -461,18 +490,38 @@ test.each([
       const events = await daemon.send('events', [], scope);
 
       expect(events.result?.ok).toBe(true);
-      expect(events.result?.data?.events).toContainEqual(
-        expect.objectContaining({ command: 'doctor', kind: 'request.started' }),
-      );
+      const started = expect.objectContaining({ command: 'doctor', kind: 'request.started' });
+      if (openBeforeDispatch) expect(events.result?.data?.events).not.toContainEqual(started);
+      else expect(events.result?.data?.events).toContainEqual(started);
     } finally {
       releaseToolchain.resolve();
       await doctor;
     }
     expect((await doctor).result?.ok).toBe(true);
-    expect(await daemon.requestEvents(sessionName, 'doctor')).toEqual([
-      'request.started',
-      'request.finished',
-    ]);
+    expect(await daemon.requestEvents(sessionName, 'doctor')).toEqual(
+      openBeforeDispatch ? [] : ['request.started', 'request.finished'],
+    );
+  },
+);
+
+test.each(['doctor', 'capabilities', 'artifacts'] as const)(
+  '%s leaves no events on a replacement with the same lease',
+  async (command) => {
+    const daemon = world;
+    if (!daemon) return;
+    const { sessionName, sessionStore, owner, hooks } = daemon;
+    const original = daemon.publishLeasedSession(sessionName);
+    hooks.beforeDispatch = () => {
+      hooks.beforeDispatch = undefined;
+      expect(sessionStore.retire(original)).toBe(true);
+      daemon.publishLeasedSession(sessionName);
+    };
+
+    await daemon.send(command, [], owner);
+
+    const events = await daemon.send('events', [], owner);
+    expect(events.result?.ok).toBe(true);
+    expect(events.result?.data?.events).toEqual([]);
   },
 );
 
@@ -492,7 +541,12 @@ test.each([
       publishLeasedSession(sessionName);
     };
 
-    expectLeaseIdRefusal(await world.send(command, [], scope));
+    const response = await world.send(command, [], scope);
+    if (command === 'events') {
+      expect(response.error?.data?.code).toBe('SESSION_NOT_FOUND');
+    } else {
+      expectLeaseIdRefusal(response);
+    }
 
     expect(world.hostDiagnostics.deviceChecks).not.toHaveBeenCalled();
     expect(world.runtime.inspectFacts).not.toHaveBeenCalled();
@@ -501,6 +555,54 @@ test.each([
     if (!sendsOtherLease) expect(await world.requestEvents(sessionName)).toEqual([]);
   },
 );
+
+test('close and reopen at one address give a second lease a fresh journal', async () => {
+  if (!world) return;
+  const { owner, send } = world;
+  const opened = await send('open', ['com.example.app'], owner);
+  expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+  const firstPath = String(opened.result?.data?.eventLogPath);
+  const firstPage = await send('events', ['1'], owner);
+  expect(firstPage.result?.data).toMatchObject({
+    path: firstPath,
+    limit: 1,
+    nextCursor: '1',
+    events: [{ command: 'open', kind: 'request.started' }],
+  });
+
+  const closed = await send('close', [], owner);
+  expect(closed.result?.ok, JSON.stringify(closed)).toBe(true);
+  await world.sessionStore.flushJournalRemovals();
+  expect(fs.existsSync(path.dirname(firstPath))).toBe(false);
+  const secondOwner = world.allocateOtherClient();
+  const reopened = await send('open', ['com.example.app'], secondOwner);
+  expect(reopened.result?.ok, JSON.stringify(reopened)).toBe(true);
+  const secondPage = await send('events', [], secondOwner);
+  expect(secondPage.result?.data).toMatchObject({
+    path: reopened.result?.data?.eventLogPath,
+    events: [
+      { command: 'open', kind: 'request.started' },
+      { command: 'open', kind: 'action.recorded' },
+      { command: 'open', kind: 'request.finished' },
+    ],
+  });
+  expect(secondPage.result?.data?.path).not.toBe(firstPath);
+  expectLeaseIdRefusal(await send('events', [], owner));
+  expect((await send('close', [], secondOwner)).result?.ok).toBe(true);
+
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    const lease = world.allocateOtherClient();
+    const fresh = await send('open', ['com.example.app'], lease);
+    expect(fresh.result?.ok, JSON.stringify(fresh)).toBe(true);
+    const journalPath = String(fresh.result?.data?.eventLogPath);
+    expect((await send('events', [], lease)).result?.data?.events).toHaveLength(3);
+    expect(fs.existsSync(journalPath)).toBe(true);
+    expect((await send('close', [], lease)).result?.ok).toBe(true);
+    await world.sessionStore.flushJournalRemovals();
+    expect(fs.existsSync(path.dirname(journalPath))).toBe(false);
+  }
+  expect(fs.existsSync(path.dirname(path.dirname(firstPath)))).toBe(false);
+});
 
 test.each(['doctor', 'capabilities', 'artifacts'] as const)(
   '%s leaves no start when a leased replacement opens before the handler read',

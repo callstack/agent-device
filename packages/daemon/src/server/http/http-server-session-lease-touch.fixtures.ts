@@ -48,6 +48,14 @@ export type RpcBody = {
   };
 };
 
+export function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 export async function startDaemon(daemonPolicy?: DaemonPolicy) {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-session-lease-touch-');
@@ -194,9 +202,11 @@ export async function startDaemon(daemonPolicy?: DaemonPolicy) {
       await Promise.all(expiryEnds);
     },
     requestEvents: async (address: string, command?: string) => {
-      await sessionStore.flushEvents(address);
+      const ref = sessionStore.lookup(address);
+      if (!ref) return [];
+      await sessionStore.flushEvents(ref);
       return sessionStore
-        .readEvents(address)
+        .readEvents(ref)
         .events.filter(
           (event) =>
             event.kind.startsWith('request.') &&

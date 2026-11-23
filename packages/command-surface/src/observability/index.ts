@@ -33,7 +33,7 @@ const AUDIO_PROBE_ACTION_VALUES = ['start', 'status', 'stop'] as const;
 const logsCommandDescription =
   'Session app log info, start/stop streaming, diagnostics, and markers. On iOS physical devices, starting the stream relaunches the session app and reports relaunched: true, and stopping the stream ends the app.';
 const eventsCommandDescription =
-  'Read the daemon-owned session event timeline as paged JSON-friendly entries';
+  'Read paged events for an active session. Start with a fresh cursor after you close and reopen it.';
 const networkCommandDescription = 'Dump recent HTTP(s) traffic parsed from the session app log';
 const audioCommandDescription =
   'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Probe actions start sampling, report its status, or stop sampling.';

@@ -19,7 +19,7 @@ import {
   getDiagnosticsMeta,
   updateDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { AppError, errorMessage, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
   type DaemonCommandContext,
   contextFromFlags as contextFromFlagsWithLog,
@@ -38,7 +38,7 @@ import {
   scopeRequestSession,
   withTenantAdmissionOnRoutingError,
 } from '../sessions/request-admission.ts';
-import { isBoundedCompositeRequest, LEASE_ADMISSION_REASONS } from '../core/lease-context.ts';
+import { isBoundedCompositeRequest } from '../core/lease-context.ts';
 import {
   admitRequestLeaseForLockedScope,
   cleanupExpiredLeasedSession,
@@ -68,7 +68,11 @@ import {
   withRequestExecutionLockKeys,
 } from './request-execution-locks.ts';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
-import { assertSameOpenOwner, type SessionStore } from '../core/session-store.ts';
+import {
+  assertSameOpenOwner,
+  SessionCoordinator,
+  type SessionStore,
+} from '../core/session-store.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
 import { retainSuccessorLeaseWork, runAdmittedLeaseWork } from './request-lease-work.ts';
@@ -79,9 +83,8 @@ import {
   shouldValidateSessionSelector,
 } from '../core/daemon-command-registry.ts';
 import {
-  buildRequestFinishedEvent,
-  buildRequestStartedEvent,
   shouldRecordEventForRequest,
+  type BoundJournal,
 } from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry, RetainedLeaseWork } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -140,7 +143,6 @@ const requestScopeFinalizers = new WeakMap<
   RequestExecutionScope,
   (response: DaemonResponse) => DaemonResponse
 >();
-const HANDLER_JOURNAL_START_COMMANDS = new Set(['doctor', 'capabilities', 'artifacts']);
 
 export type RequestExecutionScope = AsyncDisposable & {
   /** The environment and working directory of the daemon serving this request. */
@@ -148,19 +150,14 @@ export type RequestExecutionScope = AsyncDisposable & {
   req: DaemonRequest;
   command: string;
   sessionName: string;
+  admittedRef?: SessionRef;
   requestLogPath: string;
   runnerLogPath: string;
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
-  /** For a request without the session lock: runs `task` under it, unless a request holds it. */
-  tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
-  /** Resolves an authorized session and starts the journal for a lock-exempt request. */
-  resolveSessionRef(
-    req: DaemonRequest,
-    ref: SessionRef | undefined,
-    phase?: 'handler',
-  ): SessionRef | undefined;
-  /** Writes the request-finished event, unless the request may not write to its session. */
+  /** Takes an available session lock and runs `task` if the admitted lifetime is still live. */
+  tryRunUnderSessionLock(ref: SessionRef, task: () => Promise<void>): Promise<void>;
+  bindJournal(req: DaemonRequest, ref: SessionRef | undefined): DaemonRequest;
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
@@ -271,32 +268,21 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  // These handlers recheck the current session after the scope's provisional reads.
-  const startsAtHandlerRead = !attachesToSession && HANDLER_JOURNAL_START_COMMANDS.has(command);
-  let recordStartAtFinish = true;
-  let recordsRequestEvents = false;
-  const recordStarted = (ts?: string): void => {
-    if (recordsRequestEvents || !shouldRecordEventForRequest(scopedReq)) return;
-    recordsRequestEvents = sessionStore.recordRequestEvent(scopedReq, sessionName, () => {
-      const started = buildRequestStartedEvent({ req: scopedReq });
-      return ts ? { ...started, ts } : started;
-    });
+  const coordinator = new SessionCoordinator(sessionStore);
+  let finishEvent: ReturnType<BoundJournal['beginRequest']> | undefined;
+  const startJournal = (journal: BoundJournal): void => {
+    if (finishEvent || !shouldRecordEventForRequest(scopedReq)) return;
+    finishEvent = journal.beginRequest(scopedReq, startedAtMs);
   };
-  const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
-    const reason = response.ok ? undefined : response.error.details?.reason;
-    if (recordStartAtFinish && reason !== LEASE_ADMISSION_REASONS.sessionMismatch.reason) {
-      recordStarted(new Date(startedAtMs).toISOString());
-    }
-    if (!recordsRequestEvents) return;
-    sessionStore.recordRequestEvent(req, sessionName, () =>
-      buildRequestFinishedEvent({
-        req,
-        response,
-        durationMs: Math.max(0, Date.now() - startedAtMs),
-      }),
-    );
+  scopedReq = {
+    ...scopedReq,
+    internal: { ...scopedReq.internal, onJournalPublished: startJournal },
   };
-  try {
+  const recordFinished: RequestExecutionScope['recordFinished'] = (req, response) =>
+    finishEvent?.(req, response);
+  return await planExecutionScope();
+
+  async function planExecutionScope(): Promise<RequestExecutionScope> {
     const devicePin = scopedReq.meta?.devicePin;
     const pinPolicy = devicePin
       ? await import('@agent-device/device-selection/device-selection-resolver')
@@ -382,10 +368,12 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
       retainDeviceExecutionLock: async (deviceId) =>
         await requestExecutionLocks.retainDevice(deviceId),
-      tryRunUnderSessionLock: async (task) => {
+      tryRunUnderSessionLock: async (ref, task) => {
         const key = sessionExecutionLockKey(sessionName);
-        if (!executionLocks.has(key))
-          await withRequestExecutionLockKeys(executionLocks, [key], task);
+        if (executionLocks.has(key)) return;
+        await withRequestExecutionLockKeys(executionLocks, [key], async () => {
+          if (sessionStore.resolveCurrent(ref)) await task();
+        });
       },
       bindDevice: runtimeBindings.bindDevice,
       inspectFacts: runtimeBindings.inspectFacts,
@@ -393,12 +381,14 @@ export async function createRequestExecutionScope(params: {
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
-      resolveSessionRef(req, ref, phase) {
-        const resolved = resolveRequestSessionRef(req, ref);
-        if (startsAtHandlerRead && phase !== 'handler') return resolved;
-        if (startsAtHandlerRead || resolved) recordStartAtFinish = !resolved;
-        if (resolved && !attachesToSession) recordStarted();
-        return resolved;
+      bindJournal(req, ref) {
+        if (!ref) return req;
+        const { journal } = coordinator.authorize(req, ref, () => true);
+        if (command === 'events') {
+          return { ...req, internal: { ...req.internal, readSessionEvents: journal.read } };
+        }
+        startJournal(journal);
+        return req;
       },
       recordFinished,
       runAdmitted: async (task) => {
@@ -426,14 +416,12 @@ export async function createRequestExecutionScope(params: {
             sessionName,
             holdDeviceLock: scope.retainDeviceExecutionLock,
             admission: params,
-            resolveSessionRef: scope.resolveSessionRef,
             onSuccessorAdmitted: (lease) => {
               const retained = retainSuccessorLeaseWork(leaseRegistry, scopedReq, lease);
               scopedReq = retained.req;
               successorWork = retained.work;
             },
           });
-          if (attachesToSession) recordStarted();
           const session = existingRef?.session;
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
@@ -499,6 +487,7 @@ export async function createRequestExecutionScope(params: {
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
           await cleanupExpiredLeasedSession({ ...expiry, ref: existingRef });
+          scope.admittedRef = existingRef;
           if (!successorWork) {
             scopedReq = admitRequestLeaseForLockedScope({
               env: params.host.env,
@@ -509,7 +498,8 @@ export async function createRequestExecutionScope(params: {
               providerAppCatalog: params.providerAppCatalog,
               pluginInventory: params.pluginInventory,
               daemonPolicy: params.daemonPolicy,
-              resolveSessionRef: scope.resolveSessionRef,
+              resolveSessionRef: (req, ref) =>
+                (scope.admittedRef = resolveRequestSessionRef(req, ref)),
             });
           }
           scope.req = scopedReq;
@@ -566,15 +556,6 @@ export async function createRequestExecutionScope(params: {
       return response;
     });
     return scope;
-  } catch (error) {
-    recordFinished(scopedReq, {
-      ok: false,
-      error: normalizeError(error, {
-        diagnosticId: getDiagnosticsMeta().diagnosticId,
-        logPath: requestLogPath,
-      }),
-    });
-    throw error;
   }
 }
 
@@ -665,6 +646,22 @@ function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
   };
 }
 
+function preparedSessionRef(
+  ref: SessionRef | undefined,
+  scope: RequestExecutionScope,
+  sessionStore: SessionStore,
+  canDetach: boolean,
+): SessionRef | undefined {
+  if (!ref) return undefined;
+  scope.throwIfCanceled();
+  if (canDetach) {
+    if (!sessionStore.resolveCurrent(ref)) return undefined;
+  } else {
+    sessionStore.requireCurrent(ref);
+  }
+  return sessionStore.refresh(ref);
+}
+
 export async function prepareLockedRequestScope(params: {
   scope: RequestExecutionScope;
   sessionStore: SessionStore;
@@ -673,31 +670,23 @@ export async function prepareLockedRequestScope(params: {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
-  const readSessionRef = (): SessionRef | undefined =>
-    scope.resolveSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
-  // A request that holds the session lock keeps the lifetime that it captures here.
-  let seededRef = readSessionRef();
-  if (scope.command === 'open' && seededRef) assertSameOpenOwner(scope.req, seededRef.session);
-  if (!shouldLockSessionExecution(scope.command)) {
-    // Refresh only while holding the session lock. Yield to any request that already holds it.
-    await scope.tryRunUnderSessionLock(async () => {
-      const ref = readSessionRef();
-      if (ref) await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
+  const ref = scope.admittedRef;
+  if (scope.command === 'open' && ref) assertSameOpenOwner(scope.req, ref.session);
+  const refreshHealth = scope.command !== 'events';
+  const canDetach = refreshHealth && !shouldLockSessionExecution(scope.command);
+  if (ref && canDetach) {
+    await scope.tryRunUnderSessionLock(ref, async () => {
+      await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
     });
-    seededRef = readSessionRef();
-  } else if (seededRef && scope.command !== 'batch' && scope.command !== 'replay') {
+  } else if (ref && refreshHealth && scope.command !== 'batch' && scope.command !== 'replay') {
     // A composite's resource health is checked by its admitted steps; the outer read can invalidate a durable recording.
-    await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
-  }
-  if (seededRef) {
-    scope.throwIfCanceled();
-    sessionStore.requireCurrent(seededRef);
+    await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
   }
   const binding = prepareLockedRequestBinding({
     req: scope.req,
-    existingRef: seededRef ? sessionStore.refresh(seededRef) : undefined,
+    existingRef: preparedSessionRef(ref, scope, sessionStore, canDetach),
   });
-  const lockedReq = binding.req;
+  const lockedReq = scope.bindJournal(binding.req, binding.existingRef);
   // `scope.sessionName` is the resolved store key, so `existingRef` carries the address every
   // recovery producer below must name — `existingRef.session.name` is only the public name.
   const existingRef = binding.existingRef;
@@ -744,7 +733,10 @@ export async function prepareLockedRequestScope(params: {
       logPath,
       existingSession,
       existingRef,
-      resolveSessionRef: (req, ref) => scope.resolveSessionRef(req, ref, 'handler'),
+      resolveSessionRef: (req, ref) => {
+        const resolved = resolveRequestSessionRef(req, ref);
+        return resolved?.lifetime === existingRef?.lifetime ? resolved : undefined;
+      },
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
       platformServices: scope.platformServices,
@@ -757,10 +749,7 @@ export async function prepareLockedRequestScope(params: {
         ({
           ...contextFromFlags(flags, appBundleId, traceLogPath),
           // Handlers may update surface during the request, so read the current session state.
-          surface: (seededRef
-            ? sessionStore.resolveCurrent(seededRef)
-            : sessionStore.get(scope.sessionName)
-          )?.surface,
+          surface: existingRef ? sessionStore.resolveCurrent(existingRef)?.surface : undefined,
         }) satisfies DaemonCommandContext,
     },
   };

@@ -90,7 +90,7 @@ Network:
   network log is a supported alias, but network dump --include headers is the clearest plan form. Do not write network log headers.
 
 Events:
-  Use events for a compact session timeline without dumping full app logs.
+  Use events to read the active session's timeline. Start with a fresh cursor after you close and reopen it.
     agent-device events
     agent-device events 50 100
   Events preserve command names, status, durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and structural action details such as scroll distance/direction, safe refs, and coordinates. User-entered text, clipboard contents, push/event payloads, selector values, free-form flags/messages/paths, and raw unknown command arguments are omitted or replaced with content-free placeholders. --no-record suppresses action.recorded entries, but request start/finish entries still record command, status, and timing.

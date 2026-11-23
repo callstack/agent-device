@@ -661,11 +661,13 @@ test('prepareLockedRequestScope preserves existing-session selector validation',
   });
 
   await expect(
-    prepareLockedRequestScope({
-      scope,
-      sessionStore,
-      trackDownloadableArtifact: () => 'artifact-id',
-    }),
+    scope.runLocked(() =>
+      prepareLockedRequestScope({
+        scope,
+        sessionStore,
+        trackDownloadableArtifact: () => 'artifact-id',
+      }),
+    ),
   ).rejects.toThrow(/already bound to android device "Pixel" \(emulator-5554\).*--platform=ios/i);
 });
 
@@ -689,11 +691,13 @@ test('prepareLockedRequestScope blocks commands for invalidated recordings befor
   const result = await withDiagnosticsScope(
     { command: 'snapshot', logPath: LOG_PATH },
     async () =>
-      await prepareLockedRequestScope({
-        scope,
-        sessionStore,
-        trackDownloadableArtifact: () => 'artifact-id',
-      }),
+      await scope.runLocked(() =>
+        prepareLockedRequestScope({
+          scope,
+          sessionStore,
+          trackDownloadableArtifact: () => 'artifact-id',
+        }),
+      ),
   );
 
   expect(result.type).toBe('response');
@@ -714,11 +718,13 @@ test('prepareLockedRequestScope passes the session runner log path into handler 
     leaseRegistry: new LeaseRegistry(),
   });
 
-  const result = await prepareLockedRequestScope({
-    scope,
-    sessionStore,
-    trackDownloadableArtifact: () => 'artifact-id',
-  });
+  const result = await scope.runLocked(() =>
+    prepareLockedRequestScope({
+      scope,
+      sessionStore,
+      trackDownloadableArtifact: () => 'artifact-id',
+    }),
+  );
 
   expect(result.type).toBe('scope');
   if (result.type === 'scope') {
@@ -743,13 +749,15 @@ test('prepareLockedRequestScope streams ordinary diagnostics into the active tra
   });
 
   await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, async () => {
-    const result = await prepareLockedRequestScope({
-      scope,
-      sessionStore,
-      trackDownloadableArtifact: () => 'artifact-id',
+    await scope.runLocked(async () => {
+      const result = await prepareLockedRequestScope({
+        scope,
+        sessionStore,
+        trackDownloadableArtifact: () => 'artifact-id',
+      });
+      expect(result.type).toBe('scope');
+      emitDiagnostic({ phase: 'trace_regression_canary' });
     });
-    expect(result.type).toBe('scope');
-    emitDiagnostic({ phase: 'trace_regression_canary' });
   });
 
   expect(fs.readFileSync(tracePath, 'utf8')).toContain('"phase":"trace_regression_canary"');
