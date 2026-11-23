@@ -550,6 +550,34 @@ test('setIosSetting reset-keychain resets the whole simulator keychain', async (
   );
 });
 
+test.for([
+  ['wifi', 'off'],
+  ['airplane', 'on'],
+] as const)(
+  'setIosSetting %s %s warns that only the status bar changed',
+  async ([setting, state]) => {
+    await withFakeAppleTool(
+      (args) => {
+        if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+        if (args[0] === 'simctl' && args[1] === 'status_bar') return '';
+        return unexpectedArgs(args);
+      },
+      async () => {
+        const result = await setIosSetting(
+          IOS_TEST_SIMULATOR,
+          setting,
+          state,
+          undefined,
+          undefined,
+          process.env,
+        );
+        assert.ok(Array.isArray(result?.warnings));
+        assert.equal(result.warnings.length, 1);
+      },
+    );
+  },
+);
+
 test('setIosSetting reset-keychain rejects unsupported state', async () => {
   await withFakeAppleTool(
     (args) => {

@@ -1734,6 +1734,7 @@ Device settings:
 
 - `settings animations off` (Android) stabilizes runs with heavy animation. Turn animations back on afterwards.
 - `settings bluetooth` and `settings mobile-data` are Android only and need adb. `settings bluetooth` needs Android 8.1 or newer, and `settings airplane` needs Android 11 or newer. Connectivity takes a moment to settle, so poll the app instead of asserting offline behavior at once.
+- On iOS simulators, `settings wifi` and `settings airplane` change only the status bar, and the output prints a warning that says so. The simulator keeps using the Mac's network, so these settings cannot test offline behavior.
 - Pair `settings mobile-data on` with `settings wifi off` to move a session, such as a video stream, from Wi-Fi to cellular. On a multi-SIM device, or one without an active SIM, the command can fail even when the switch took effect.
 - `settings text-size` without a category reads the current size. It works on iPhone and iPad simulators and on Android. A running app picks up a new size only after `open <app> --relaunch`.
 
