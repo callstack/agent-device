@@ -24,6 +24,7 @@ import {
   DAEMON_INSTANCE_REASONS,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
+  type DaemonHealthPayload,
 } from '@agent-device/contracts/daemon-http';
 import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import {
@@ -365,8 +366,8 @@ function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' |
 
 function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
   return {
-    service: readHealthLabel(parsed.service),
-    version: readHealthLabel(parsed.version),
+    service: isHealthService(parsed.service) ? parsed.service : undefined,
+    version: readHealthVersion(parsed.version),
     rpcProtocolVersion:
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
@@ -377,19 +378,25 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
   };
 }
 
-const HEALTH_LABEL_MAX_CHARS = 64;
+// The remote picks what /health says and agents read the refusal built from it, so only a service
+// the contract names and a version-shaped string are kept; anything else reads as absent.
+const HEALTH_SERVICES: Readonly<Record<DaemonHealthPayload['service'], true>> = {
+  'agent-device-daemon': true,
+  'agent-device-proxy': true,
+};
+const HEALTH_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const HEALTH_VERSION_MAX_LENGTH = 64;
 
-/**
- * A remote-reported name or version, made safe to print in a message: no control characters, which
- * a terminal would act on, no format, line or paragraph separators or lone surrogates, which spoof
- * or break how it reads, and a bounded length. Undefined when nothing printable is left.
- */
-function readHealthLabel(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const label = Array.from(value.replaceAll(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, ''))
-    .slice(0, HEALTH_LABEL_MAX_CHARS)
-    .join('');
-  return label || undefined;
+function isHealthService(value: unknown): value is DaemonHealthPayload['service'] {
+  return typeof value === 'string' && Object.hasOwn(HEALTH_SERVICES, value);
+}
+
+function readHealthVersion(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    value.length <= HEALTH_VERSION_MAX_LENGTH &&
+    HEALTH_VERSION.test(value)
+    ? value
+    : undefined;
 }
 
 export async function sendRequest(
