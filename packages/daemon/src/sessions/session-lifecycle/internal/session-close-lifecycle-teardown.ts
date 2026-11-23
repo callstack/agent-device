@@ -90,7 +90,7 @@ export async function runSessionCloseTeardown(params: {
         inspectSessionLeaseRetainedOnClose({ session, leaseRegistry: params.leaseRegistry }),
       )),
   });
-  const configuredRuntimeHints = sessionStore.getStoredRuntimeHints(sessionName);
+  const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
   const resourceStops = sessionResourceStopSteps({
     ref,
     sessionStore,

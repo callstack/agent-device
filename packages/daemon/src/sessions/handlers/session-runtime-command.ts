@@ -3,8 +3,8 @@ import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
-import { SessionStore } from '../../core/session-store.ts';
-import type { SessionRef } from '../../core/session-state.ts';
+import { SessionStore, type StoredRuntimeHints } from '../../core/session-store.ts';
+import type { SessionRef, SessionRuntimeHints } from '../../core/session-state.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import {
@@ -76,23 +76,23 @@ export async function handleRuntimeCommand(params: {
   }
   const ref = sessionStore.lookup(sessionName);
   const session = ref?.session;
-  const current = sessionStore.getRuntimeHints(sessionName);
+  const stored = sessionStore.getRuntimeHints(sessionName);
   if (action === 'clear') {
     return await clearRuntimeCommand({
       sessionName,
       sessionStore,
       ref,
-      current,
+      stored,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
   }
   if (action === 'show') {
-    return showRuntimeCommand(sessionName, current);
+    return showRuntimeCommand(sessionName, stored?.hints);
   }
 
-  return setRuntimeCommand({ req, sessionName, sessionStore, session, current });
+  return setRuntimeCommand({ req, sessionName, sessionStore, session, stored });
 }
 
 async function readGestureViewport(params: {
@@ -133,15 +133,14 @@ async function clearRuntimeCommand(params: {
   sessionName: string;
   sessionStore: SessionStore;
   ref: SessionRef | undefined;
-  current: ReturnType<SessionStore['getRuntimeHints']>;
+  stored: StoredRuntimeHints | undefined;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { sessionName, sessionStore, ref, current, inspectFacts, bindDevice, platformServices } =
+  const { sessionName, sessionStore, ref, stored, inspectFacts, bindDevice, platformServices } =
     params;
   const session = ref ? sessionStore.requireCurrent(ref) : undefined;
-  const stored = sessionStore.getStoredRuntimeHints(sessionName);
   if (session && requiresRuntimeHintsClear(runtimeHintsClearInput(stored, session.appBundleId))) {
     const admission = await admitClearRuntime({
       device: session.device,
@@ -158,14 +157,14 @@ async function clearRuntimeCommand(params: {
       runtimeHintsClearInput(stored, currentSession.appBundleId),
     );
   }
-  const cleared = ref ? sessionStore.clearRuntimeHints(ref) : Boolean(current);
+  const cleared = ref ? sessionStore.clearRuntimeHints(ref) : Boolean(stored);
   if (!ref) sessionStore.setRuntimeHints(sessionName, undefined);
   return { ok: true, data: { session: sessionName, cleared } };
 }
 
 function showRuntimeCommand(
   sessionName: string,
-  current: ReturnType<SessionStore['getRuntimeHints']>,
+  current: SessionRuntimeHints | undefined,
 ): DaemonResponse {
   return {
     ok: true,
@@ -188,9 +187,10 @@ function setRuntimeCommand(params: {
   sessionName: string;
   sessionStore: SessionStore;
   session: ReturnType<SessionStore['get']>;
-  current: ReturnType<SessionStore['getRuntimeHints']>;
+  stored: StoredRuntimeHints | undefined;
 }): DaemonResponse {
-  const { req, sessionName, sessionStore, session, current } = params;
+  const { req, sessionName, sessionStore, session, stored } = params;
+  const current = stored?.hints;
   // approach (b): resolve the session's PUBLIC leaf platform (ios/macos), never the
   // internal `apple`, so the legacy `--platform ios` selector still matches.
   const sessionLeaf = sessionLeafPlatform(session);
@@ -214,11 +214,7 @@ function setRuntimeCommand(params: {
       'runtime set requires at least one hint such as --metro-host, --metro-port, --bundle-url, or --launch-url.',
     );
   }
-  sessionStore.setRuntimeHints(
-    sessionName,
-    nextRuntime,
-    sessionStore.getStoredRuntimeHints(sessionName)?.appId,
-  );
+  sessionStore.setRuntimeHints(sessionName, nextRuntime, stored?.appId);
   return {
     ok: true,
     data: {

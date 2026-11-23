@@ -26,7 +26,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { requestCwd } from '../../../core/context.ts';
-import type { SessionRef, SessionState } from '../../../core/session-state.ts';
+import type { SessionRef, SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
@@ -267,7 +267,7 @@ export async function completeOpenCommand(params: {
   appName?: string;
   surface: SessionSurface;
   appBundleId?: string;
-  runtimeHints: ReturnType<SessionStore['getRuntimeHints']>;
+  runtimeHints: SessionRuntimeHints | undefined;
   lifecycle: OpenApplicationRuntime;
   applyRuntimeHints?: RuntimeHintApplyOperation;
   existingRef?: SessionRef;

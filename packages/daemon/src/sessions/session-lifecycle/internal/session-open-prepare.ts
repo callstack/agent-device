@@ -124,7 +124,7 @@ export function resolveOpenRuntimeHintPlan(params: {
   const runtimeResult = tryResolveOpenRuntimeHints(params);
   if (!runtimeResult.ok) return { type: 'response', response: runtimeResult };
   const { runtime, previousRuntime, replacedStoredRuntime } = runtimeResult.data;
-  const previousRuntimeAppId = params.sessionStore.getStoredRuntimeHints(params.sessionName)?.appId;
+  const previousRuntimeAppId = params.sessionStore.getRuntimeHints(params.sessionName)?.appId;
   return {
     type: 'plan',
     plan: {

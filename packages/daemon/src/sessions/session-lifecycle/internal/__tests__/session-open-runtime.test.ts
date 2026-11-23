@@ -316,8 +316,8 @@ test('open --metro-port alone defaults the host to 10.0.2.2 on an Android emulat
 
   expect(response?.ok).toBe(true);
   expect(runtimeApplyCalls).toEqual([{ host: '10.0.2.2', port: '8084' }]);
-  expect(sessionStore.getRuntimeHints(sessionName)?.metroHost).toBe('10.0.2.2');
-  expect(sessionStore.getRuntimeHints(sessionName)?.metroPort).toBe(8084);
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints?.metroHost).toBe('10.0.2.2');
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints?.metroPort).toBe(8084);
 });
 
 test('open --metro-port alone defaults the host to 127.0.0.1 on an iOS simulator', async () => {
@@ -350,7 +350,7 @@ test('open --metro-port alone defaults the host to 127.0.0.1 on an iOS simulator
 
   expect(response?.ok).toBe(true);
   expect(runtimeApplyCalls).toEqual([{ host: '127.0.0.1', port: '8084' }]);
-  expect(sessionStore.getRuntimeHints(sessionName)?.metroHost).toBe('127.0.0.1');
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints?.metroHost).toBe('127.0.0.1');
 });
 
 test('open --metro-port alone stays host-ambiguous on a physical Android device', async () => {
@@ -384,8 +384,8 @@ test('open --metro-port alone stays host-ambiguous on a physical Android device'
 
   expect(response?.ok).toBe(true);
   expect(runtimeApplyCalls).toEqual([{ host: undefined, port: '8084' }]);
-  expect(sessionStore.getRuntimeHints(sessionName)?.metroHost).toBeUndefined();
-  expect(sessionStore.getRuntimeHints(sessionName)?.metroPort).toBe(8084);
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints?.metroHost).toBeUndefined();
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints?.metroPort).toBe(8084);
 });
 
 test('open --relaunch allows Android package names ending with apk-like suffix', async () => {

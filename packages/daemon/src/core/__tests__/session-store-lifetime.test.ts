@@ -73,7 +73,7 @@ test('address reuse with the same record still starts a different lifetime', () 
   assert.throws(() => store.update(old, { appName: 'Stale' }), ended);
   assert.equal(store.retire(old), false);
   assert.equal(store.get(ADDRESS), session);
-  assert.equal(store.getRuntimeHints(ADDRESS)?.metroPort, 8082);
+  assert.equal(store.getRuntimeHints(ADDRESS)?.hints?.metroPort, 8082);
   assert.equal(store.retire(successor), true);
   assert.equal(store.getRuntimeHints(ADDRESS), undefined);
 });

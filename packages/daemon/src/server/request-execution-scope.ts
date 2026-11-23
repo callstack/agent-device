@@ -652,7 +652,7 @@ async function teardownExpiredSession(params: {
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
   const sessionName = ref.address;
   const runtimeHints = runtimeHintsClearInput(
-    sessionStore.getStoredRuntimeHints(ref.address),
+    sessionStore.getRuntimeHints(ref.address),
     session.appBundleId,
   );
   let primaryError: unknown;

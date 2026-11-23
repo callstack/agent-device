@@ -165,7 +165,7 @@ test('open runtime payload replaces stored session runtime atomically', async ()
     { appId: 'com.example.demo', host: '10.0.0.10', port: '8081', launchUrl: undefined },
   ]);
   expect(dispatchCalls).toEqual([{ command: 'open', positionals: ['Demo'] }]);
-  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints).toEqual({
     platform: 'android',
     metroHost: '10.0.0.10',
     metroPort: 8081,
@@ -245,7 +245,7 @@ test('open runtime payload clears stale applied transport hints before launch', 
     'dispatch:open:Demo',
     'dispatch:open:myapp://fresh',
   ]);
-  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints).toEqual({
     platform: 'android',
     metroHost: undefined,
     metroPort: undefined,
@@ -340,7 +340,7 @@ test('open runtime payload rejects malformed runtime objects without mutating se
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toBe('open runtime must be an object.');
   }
-  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints).toEqual({
     platform: 'android',
     metroHost: '10.0.0.10',
     metroPort: 8081,
@@ -384,7 +384,7 @@ test('open runtime payload does not persist replacement when launch fails', asyn
     }),
   ).rejects.toThrow(expect.objectContaining({ code: 'COMMAND_FAILED', message: 'launch failed' }));
 
-  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints).toEqual({
     platform: 'android',
     metroHost: '10.0.0.10',
     metroPort: 8081,
@@ -565,7 +565,7 @@ test('a retired reopen cannot write hints or actions to the same record republis
   await refusal;
   expect(store.requireCurrent(successor)).toBe(session);
   expect(session.actions).toEqual([]);
-  expect(store.getRuntimeHints(ref.address)?.metroHost).toBe('successor-host');
+  expect(store.getRuntimeHints(ref.address)?.hints?.metroHost).toBe('successor-host');
 });
 
 test('a provisional open refuses a successor before native launch', async () => {

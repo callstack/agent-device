@@ -182,7 +182,7 @@ export function createReplaySession(
   const reads = {
     get: () => store.get(name),
     lookup: () => store.lookup(name),
-    getRuntimeHints: () => store.getRuntimeHints(name),
+    getRuntimeHints: () => store.getRuntimeHints(name)?.hints,
     ensureSessionDir: () => store.ensureSessionDir(name),
   };
   let captureCell:

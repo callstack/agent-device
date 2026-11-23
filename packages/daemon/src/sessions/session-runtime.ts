@@ -242,8 +242,8 @@ export function bindStoredRuntimeHintsToApp(
   sessionName: string,
   appId: string | undefined,
 ): void {
-  const runtime = sessionStore.getRuntimeHints(sessionName);
-  if (runtime && appId) sessionStore.setRuntimeHints(sessionName, runtime, appId);
+  const stored = sessionStore.getRuntimeHints(sessionName);
+  if (stored && appId) sessionStore.setRuntimeHints(sessionName, stored.hints, appId);
 }
 
 /** Stored hints apply to the app they are bound to, or to any app while they are unbound. */
@@ -261,7 +261,7 @@ function resolveSessionRuntimeHints(
   device?: DeviceInfo,
   platform?: RuntimePlatform,
 ): SessionRuntimeHints | undefined {
-  const runtime = sessionStore.getRuntimeHints(sessionName);
+  const runtime = sessionStore.getRuntimeHints(sessionName)?.hints;
   if (!runtime) return undefined;
   const boundPlatform = device ? publicPlatformString(device) : undefined;
   const deviceRuntimePlatform = toRuntimePlatform(boundPlatform) ?? platform;
@@ -298,7 +298,7 @@ function resolveOpenRuntimeHints(params: {
   const runtimePlatform = device
     ? toRuntimePlatform(publicPlatformString(device))
     : params.platform;
-  const previousRuntime = sessionStore.getRuntimeHints(sessionName);
+  const previousRuntime = sessionStore.getRuntimeHints(sessionName)?.hints;
   const explicitRuntime = normalizeExplicitRuntimeHints({
     runtime: req.runtime,
     sessionName,
