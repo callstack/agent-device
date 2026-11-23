@@ -48,6 +48,9 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    */
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
+  sessionAuthorityActive?: () => boolean;
+  onLifetimePublished?: (address: string, lifetime: object) => void;
+  onSessionPublished?: (commitScript: (response: DaemonResponse) => DaemonResponse) => void;
   /**
    * Lease labels the caller sent that an intake adapter replaced or collapsed: the tenant that HTTP
    * attestation replaced, and an RPC alias that lost to its sibling. Admission compares them too.

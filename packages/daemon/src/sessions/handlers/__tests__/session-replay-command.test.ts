@@ -19,6 +19,7 @@ import { makeIosSession } from '../../../__tests__/support/session-factories.ts'
 import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
+  withTestSessionLock,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import type { EndedLeaseLedger } from '../../../core/request-ended-leases.ts';
 import { lifecycleOperationsSpy } from '../../../__tests__/support/lifecycle-operations-spy.ts';
@@ -57,6 +58,7 @@ test('replay test handler threads the complete video owner into the application 
       status: 'retained' as const,
       reason: 'handler-test' as const,
     }),
+    withSessionExecutionLock: withTestSessionLock,
     platformResourceCleanup: platformResourceCleanupFixture(),
   };
 
@@ -142,6 +144,7 @@ test.each([false, true])(
         status: 'retained' as const,
         reason: 'handler-test' as const,
       }),
+      withSessionExecutionLock: withTestSessionLock,
       platformResourceCleanup: platformResourceCleanupFixture(),
     };
 

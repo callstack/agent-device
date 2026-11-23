@@ -28,6 +28,7 @@ function rejectedTestCommand(flags: CommandFlags) {
         );
       },
     },
+    runAttempt: async (_name, _requestId, task) => await task(),
     cleanupSession: async () => {},
   };
   return { command, invoke, createSession };

@@ -63,16 +63,16 @@ import {
 } from '../sessions/open-device-contention-wait.ts';
 import {
   createRequestExecutionLocks,
+  createSessionExecutionLock,
   withRequestExecutionLockKeys,
 } from './request-execution-locks.ts';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
+import { assertSameOpenOwner, type SessionStore } from '../core/session-store.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
-import { remoteScriptVersionDelivery } from '../core/session-script-publication-capability.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
 import { retainSuccessorLeaseWork, runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
-  ignoresSessionLease,
   resolveCommandAndroidAvdSelection,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
@@ -84,7 +84,6 @@ import {
   shouldRecordEventForRequest,
 } from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry, RetainedLeaseWork } from '../resources/lease-registry.ts';
-import { type SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
@@ -228,6 +227,7 @@ export type LockedRequestScope = {
   sessionName: string;
   logPath: string;
   existingSession: SessionState | undefined;
+  existingRef: SessionRef | undefined;
   resolveSessionRef: ResolveRequestSessionRef;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
@@ -726,10 +726,9 @@ export async function prepareLockedRequestScope(params: {
     scope.resolveSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
   // A request that holds the session lock keeps the lifetime that it captures here.
   let seededRef = readSessionRef();
+  if (scope.command === 'open' && seededRef) assertSameOpenOwner(scope.req, seededRef.session);
   if (!shouldLockSessionExecution(scope.command)) {
-    // Without the session lock, an open can attach a lease to this session while the runner is
-    // observed. Thus the refresh takes the lock and reads the session again. It yields to a
-    // request that holds the lock, which checks the recording itself.
+    // Refresh only while holding the session lock. Yield to any request that already holds it.
     await scope.tryRunUnderSessionLock(async () => {
       const ref = readSessionRef();
       if (ref) await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
@@ -752,14 +751,9 @@ export async function prepareLockedRequestScope(params: {
   // recovery producer below must name — `existingRef.session.name` is only the public name.
   const existingRef = binding.existingRef;
   const existingSession = existingRef?.session;
-  // A command that ignores the session lease delivers no script of the session at its address.
-  const deliverRemoteScript = ignoresSessionLease(scope.command)
-    ? (response: DaemonResponse) => response
-    : remoteScriptVersionDelivery(sessionStore, scope.sessionName);
   updateDiagnosticsScope(output.requestTraceDiagnostics(lockedReq, existingRef, sessionStore));
   const finalize = (handled: DaemonResponse): DaemonResponse => {
-    const response = deliverRemoteScript(handled);
-    const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);
+    const finalized = finalizeDaemonResponse(lockedReq, handled, trackDownloadableArtifact);
     scope.recordFinished(lockedReq, finalized);
     return finalized;
   };
@@ -798,6 +792,7 @@ export async function prepareLockedRequestScope(params: {
       sessionName: scope.sessionName,
       logPath,
       existingSession,
+      existingRef,
       resolveSessionRef: (req, ref) => scope.resolveSessionRef(req, ref, 'handler'),
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
@@ -845,6 +840,10 @@ function contextFromRequestFlags(
 }
 
 /** The idle reaper shares these locks so expiry cannot tear down an active request. */
+export function leaseRegistrySessionExecutionLock(leaseRegistry: LeaseRegistry) {
+  return createSessionExecutionLock(getLeaseRegistryExecutionLocks(leaseRegistry));
+}
+
 export function getLeaseRegistryExecutionLocks(
   leaseRegistry: LeaseRegistry,
 ): Map<string, Promise<unknown>> {

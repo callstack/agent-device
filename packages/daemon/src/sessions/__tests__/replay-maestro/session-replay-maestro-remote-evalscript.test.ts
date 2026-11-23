@@ -1,3 +1,4 @@
+import { withTestSessionLock } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -158,6 +159,7 @@ async function runWithTestNetworkFlag(publicNetworkOnly: boolean | undefined) {
     retainDeviceExecutionLock: async () => {},
     throwIfCanceled: () => {},
     platformResourceCleanup: platformResourceCleanupFixture(),
+    withSessionExecutionLock: withTestSessionLock,
   } as unknown as SessionCommandParams);
 
   if (!response) throw new Error('Expected replay test response');

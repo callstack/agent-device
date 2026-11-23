@@ -11,6 +11,7 @@ import type { RefFrame } from '../core/ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
 
 type InternalObservationLineage = Readonly<{
   ref: SessionRef;
@@ -26,6 +27,7 @@ type BoundInternalObservationSession = Readonly<{
   sessionStore: SessionStore;
   ref: SessionRef | undefined;
   signal?: AbortSignal;
+  isActive?: () => boolean;
 }>;
 
 /**
@@ -37,7 +39,11 @@ export function bindInternalObservationAuthority(
   params: BoundInternalObservationSession,
 ): ReplayObservationAuthority {
   return {
-    store: (snapshot) => storeInternalObservation(params, snapshot),
+    store: (snapshot) => {
+      params.signal?.throwIfAborted();
+      if (params.isActive?.() === false) throw createRequestCanceledError();
+      return storeInternalObservation(params, snapshot);
+    },
     finalize: (evidence, projection) =>
       finalizeClientRefPublication({
         ...params,
@@ -91,6 +97,7 @@ function finalizeClientRefPublication(params: {
   evidence: ReplayObservationEvidence;
   projection: ReplayRefPublicationProjection;
   signal?: AbortSignal;
+  isActive?: () => boolean;
 }): ReplayRefPublicationResult {
   const lineage = evidenceLineage.get(params.evidence);
   // Evidence is a one-shot capability. Consume it before every outcome,
@@ -101,7 +108,8 @@ function finalizeClientRefPublication(params: {
   if (refs.size === 0) return { published: false, reason: 'empty' };
   if (params.signal?.aborted === true) return { published: false, reason: 'cancelled' };
 
-  const session = lineage && resolveCurrentLineage(params, lineage);
+  const session =
+    params.isActive?.() !== false && lineage && resolveCurrentLineage(params, lineage);
   if (!lineage || !session) {
     return { published: false, reason: 'stale-capture' };
   }

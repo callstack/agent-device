@@ -5,7 +5,11 @@ import { expect, test } from 'vitest';
 import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { publishDaemonRegistration } from '@agent-device/test-kit';
-import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
+import {
+  resourceAdmissionWorld,
+  assertRpcOk,
+  publishLeasedFixture,
+} from './composite-resource-admission.fixtures.ts';
 import { seedExistingCapture } from './composite-resource-existing.fixtures.ts';
 
 test.each(['perf-capture', 'trace-log'] as const)(
@@ -72,14 +76,7 @@ test('bounded close may release a local lease when the daemon has no provider re
   const world = await resourceAdmissionWorld();
   try {
     const lease = world.leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
-    world.sessionStore.update(world.ref, {
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        backend: lease.backend,
-      },
-    });
+    publishLeasedFixture(world, lease);
     assertRpcOk(await world.call('batch', [], { batchSteps: [{ command: 'close' }] }));
     expect(world.providerRelease).not.toHaveBeenCalled();
     expect(world.leaseRegistry.inspectLeaseForClose(lease)).toBeUndefined();
@@ -156,15 +153,7 @@ test.each([false, true])(
         leaseProvider: 'fixture',
         retainOnClose: true,
       });
-      world.sessionStore.update(world.ref, {
-        lease: {
-          leaseId: lease.leaseId,
-          tenantId: lease.tenantId,
-          runId: lease.runId,
-          backend: lease.backend,
-          leaseProvider: 'fixture',
-        },
-      });
+      publishLeasedFixture(world, lease);
       if (shutdownAvailable) {
         const facts = await world.inspectFacts();
         world.inspectFacts.mockResolvedValue({
