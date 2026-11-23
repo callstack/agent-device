@@ -2864,7 +2864,7 @@ Exact behavior: `agent-device help gesture`.
 * Touch platforms refuse `hover`; use `longpress` for a hold. For `hover` on the web, see [Web Automation](#web-automation).
 * `swipe` is a quick throw. `gesture pan` is a deliberate timed drag with one pointer, or two with `--pointer-count 2`. `gesture fling` is a fast directional throw. To update old scripts, see [Rewrite old gesture commands](/docs/migrating-gestures).
 * `gesture pan --hold-ms <ms>` holds one pointer before it moves, for drag handles that expose no element and so no ref, such as reorder grips.
-* `gesture drag source destination` holds one pointer from a selector or ref to another. It and `--hold-ms` work on Android touch devices and iOS/iPadOS only.
+* `gesture drag source destination` holds one pointer from a selector or ref to another. It refuses coordinates; for a coordinate drag, use `gesture pan <x> <y> <dx> <dy> [ms] --hold-ms <ms>`. It and `--hold-ms` work on Android touch devices and iOS/iPadOS only.
 * `gesture pinch`, `gesture rotate`, `gesture transform`, and two-finger `gesture pan` work in Android, iOS, and iPadOS app sessions. iOS sessions through a WebDriver provider refuse them. A path that does not fit the viewport fails instead of being clamped. Use `orientation` to rotate the device.
 * `swipe` and `gesture` coordinates use the units `snapshot` reports: points on Apple platforms, not screenshot pixels. A gesture that leaves the viewport fails with `GESTURE_TRAJECTORY_OUT_OF_BOUNDS`, and the message names the viewport size and the first point outside it.
 * `gesture tap` touches 2 to 5 points at once in Android and iOS/iPadOS app sessions. WebDriver providers refuse it unless they declare `tapGesture` support. Three or more fingers can trigger iOS system gestures such as undo, so verify app state afterwards. Use `press` for one finger.
@@ -4877,6 +4877,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `fill_record_as_requires_armed_recording`   | `fill --record-as` needs an armed script recording; open a session with `--save-script` first.                                  |
 | `fill_text_stdin_unparameterized_recording` | `fill --text-stdin` needs `--record-as` or `--no-record` while a recording is armed, so the stdin text stays out of the script. |
 | `android_test_ime_rebind_unconfirmed`       | The test IME rebind could not be confirmed, so the focused field may have no input session.                                     |
+| `fill_target_missing`                       | Only the text arrived: one value that is no target, or a blank target before the text.                                          |
 | `fill_text_stdin_tty`                       | stdin is a terminal, so the command would wait for input no one is piping.                                                      |
 | `fill_text_stdin_too_large`                 | The piped input passed the byte limit of 64 KiB.                                                                                |
 | `fill_text_stdin_empty`                     | The piped input decoded to an empty string.                                                                                     |
@@ -4910,6 +4911,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason                             | Meaning                                                                                     |
 | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `drag_endpoint_is_coordinates`     | A gesture drag endpoint is a number or an “x y” point; drag takes a ref or a selector.      |
 | `GESTURE_TAP_DUPLICATE_POINT`      | Two tap contacts share coordinates, so one contact would press where another already rests. |
 | `GESTURE_PATH_TOO_SHORT`           | The gesture path has fewer usable samples than any recognizable motion needs.               |
 | `GESTURE_PATH_INVALID_TIMELINE`    | The path’s sample timeline is not ordered and finite, so no clock can play it back.         |
@@ -5315,6 +5317,12 @@ These reasons can come from more than one command.
 | `ARCHIVE_NESTING_LIMIT`        | The archive nests deeper than the allowed archive-within-archive depth.                          |
 | `ARCHIVE_UNSAFE_ENTRY`         | The archive holds a link, a special file, or an encrypted entry.                                 |
 | `ARCHIVE_UNSAFE_PATH`          | An archive entry’s name is absolute, escaping, or otherwise not one relative path.               |
+
+### Command flags
+
+| Reason               | Meaning                                                                                      |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| `flag_value_invalid` | The value is not a number, falls outside the flag’s range, or is not one of its enum values. |
 
 ### Daemon lifecycle
 
