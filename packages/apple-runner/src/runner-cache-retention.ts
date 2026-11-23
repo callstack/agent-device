@@ -28,7 +28,7 @@ export function resolveRunnerCacheKeepCount(
 /**
  * Removes the keyed runner caches beside `currentDerived` that no runner can use any more: not the
  * current key, not among the most recently used, idle for a day, not held by a build, and not named
- * by a live runner lease. Keys only multiply, because a runner source change or an Xcode update
+ * by a live runner lease or a launch's pending tree hold. Keys only multiply, because a runner source change or an Xcode update
  * mints a new one and the old one can never match again.
  *
  * Returns the evicted cache roots. Nothing is evicted when `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH`
