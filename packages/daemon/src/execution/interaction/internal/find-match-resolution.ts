@@ -1,6 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   FIND_NO_MATCH_HINT,
+  FIND_NO_MATCH_MESSAGE,
   findBestMatchesByLocator,
   type FindAction,
   type FindLocator,
@@ -83,7 +84,7 @@ export function resolveFindMatch(params: {
       ok: false,
       // Nothing was dispatched: a bare `find` defaults to click, which would otherwise read as a
       // mutation that may have reached the device.
-      response: errorResponse('COMMAND_FAILED', 'find did not match any element', {
+      response: errorResponse('COMMAND_FAILED', FIND_NO_MATCH_MESSAGE, {
         dispatched: 'no',
         hint: action === 'click' ? FIND_CLICK_NO_MATCH_HINT : FIND_NO_MATCH_HINT,
       }),

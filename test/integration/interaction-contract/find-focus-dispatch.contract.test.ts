@@ -776,6 +776,7 @@ test(
         runnerSnapshotEntry(twinFormTree()),
         runnerSnapshotEntry(KEYBOARD_TREE),
         runnerSnapshotEntry(KEYBOARD_TREE),
+        runnerSnapshotEntry(KEYBOARD_TREE),
       ],
       async (daemon) => {
         const ambiguous = assertRpcError(
@@ -790,9 +791,14 @@ test(
         ]);
 
         // A bare find is a click. Click and focus share resolveFindMatch, so this row also pins the
-        // click no-match: neither sends anything. Only the click hint points at the read-only form.
+        // click no-match: neither sends anything. The read-only `exists` row takes the selector
+        // runtime instead and must refuse the same way. Only the click hint points at the read form.
         const noMatchHints: unknown[] = [];
-        for (const args of [['label', 'Nowhere', 'focus'], ['Nowhere']]) {
+        for (const args of [
+          ['label', 'Nowhere', 'focus'],
+          ['Nowhere'],
+          ['label', 'Nowhere', 'exists'],
+        ]) {
           const noMatch = assertRpcError(
             await daemon.callCommand('find', args),
             500,
@@ -802,8 +808,9 @@ test(
           assert.equal(readErrorDetails(noMatch).dispatched, 'no');
           noMatchHints.push(noMatch.hint);
         }
-        const [focusHint, clickHint] = noMatchHints;
+        const [focusHint, clickHint, existsHint] = noMatchHints;
         assert.equal(focusHint, FIND_NO_MATCH_HINT);
+        assert.equal(existsHint, FIND_NO_MATCH_HINT);
         assert.ok(typeof clickHint === 'string' && clickHint.startsWith(FIND_NO_MATCH_HINT));
         assert.match(clickHint, /find text "\.\.\." exists/);
       },

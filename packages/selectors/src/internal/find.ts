@@ -173,7 +173,8 @@ export type ParsedFindArgs = {
 /** Shared by `checkFindArgs` and `findCommand`, which validates already-parsed options. */
 export const FIND_VALUE_REQUIRED_MESSAGE = 'find requires a value';
 
-/** Shared by the acting and read-only `find` no-match refusals, so their recovery cannot drift. */
+/** Shared by the acting and read-only `find` no-match refusals, so their wording cannot drift. */
+export const FIND_NO_MATCH_MESSAGE = 'find did not match any element';
 export const FIND_NO_MATCH_HINT =
   'Run snapshot -i to see current elements and refs, or scroll first if the element may be off-screen.';
 
