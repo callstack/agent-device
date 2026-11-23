@@ -81,11 +81,14 @@ export function readGesturePayload(input: unknown): GesturePayload {
     };
   }
   if (kind === 'pinch') {
-    return {
-      kind,
-      scale: readNumber(record, 'scale'),
-      origin: readOptionalPoint(record, 'origin'),
-    };
+    const scale = readNumber(record, 'scale');
+    if (record.element === undefined) {
+      return { kind, scale, origin: readOptionalPoint(record, 'origin') };
+    }
+    if (record.origin !== undefined) {
+      throw new AppError('INVALID_ARGS', 'gesture pinch takes an element or an origin, not both');
+    }
+    return { kind, scale, element: readNonEmptyString(record, 'element') };
   }
   if (kind === 'rotate') {
     if (record.velocity !== undefined) {

@@ -257,6 +257,19 @@ test('pinch and rotate syntax rejects a partial origin', () => {
   });
 });
 
+test('pinch takes an element in place of an origin and keeps it through replay', () => {
+  for (const element of ['@e17', 'label=Photo']) {
+    const payload = gesturePayloadFromPositionals(['pinch', '2', element]);
+    assert.deepEqual(payload, { kind: 'pinch', scale: 2, element });
+    assert.deepEqual(gesturePayloadToPositionals(payload), ['pinch', '2', element]);
+    assert.deepEqual(normalizeGestureCommandInput(payload), {
+      intent: 'pinch',
+      element,
+      scale: 2,
+    });
+  }
+});
+
 test('swipe is fling sugar', () => {
   assert.deepEqual(normalizePublicGesture({ kind: 'swipe', preset: 'left' }), {
     gesture: { intent: 'fling', preset: 'left' },

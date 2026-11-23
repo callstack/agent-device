@@ -170,6 +170,13 @@ test('tap-only inputs are refused on other gesture kinds', () => {
   });
 });
 
+test('pinch refuses an element together with an origin', () => {
+  assert.throws(
+    () => readGesturePayload({ kind: 'pinch', scale: 2, element: '@e17', origin: { x: 1, y: 2 } }),
+    { code: 'INVALID_ARGS', message: 'gesture pinch takes an element or an origin, not both' },
+  );
+});
+
 test('pan accepts a hold before the move', () => {
   assert.deepEqual(
     readGesturePayload({

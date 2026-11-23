@@ -44,6 +44,8 @@ const COMMAND_ALIAS_SUGGESTIONS: Record<string, CommandAliasSuggestion> = {
   get_text: { command: 'get', example: 'get text' },
   'open-url': { command: 'open', example: 'open <url>' },
   'close-session': { command: 'close', example: 'close' },
+  pinch: { command: 'gesture', example: 'gesture pinch <scale> <@ref|selector>' },
+  zoom: { command: 'gesture', example: 'gesture pinch <scale> <@ref|selector>' },
 };
 
 /**
