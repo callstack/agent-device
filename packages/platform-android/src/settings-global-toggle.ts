@@ -22,6 +22,10 @@ export const ANDROID_GLOBAL_TOGGLE_REASONS = {
   mobileDataNotApplied: { reason: 'mobile-data-not-applied' },
   // The device answered the mobile-data read-back with a value that is neither 0 nor 1.
   mobileDataUnreadable: { reason: 'mobile-data-unreadable' },
+  // The device kept the screen turning off after `svc power stayon` accepted the request.
+  keepAwakeNotApplied: { reason: 'keep-awake-not-applied' },
+  // The device answered the keep-awake read-back with a value that is not a stay-on mask.
+  keepAwakeUnreadable: { reason: 'keep-awake-unreadable' },
 } as const satisfies ReasonTable<'settings'>;
 
 /** The reason spellings a global-toggle read-back publishes, as `error.details.reason`. */
@@ -36,8 +40,13 @@ export type AndroidToggleState = 'enabled' | 'disabled';
  * by polling the row until it holds the requested state.
  */
 export type AndroidGlobalToggle<Key extends string = string> = Readonly<{
-  /** The `svc` service name: `svc <service> enable|disable`. */
+  /** The `svc` service name: `svc <service> enable|disable`, or `svc <service> <writeArgs...>` */
   service: string;
+  /**
+   * The words after the service when the toggle's `svc` spelling is not `enable|disable`, such as
+   * `stayon true`. Omit it for the default `enable|disable` words.
+   */
+  writeArgs?: (enabled: boolean) => readonly string[];
   /** The `settings global` row the system service persists the switch in. */
   row: string;
   /** How the toggle is named in failure messages. */
@@ -67,11 +76,13 @@ export async function setAndroidGlobalToggle<Key extends string>(
   if (signal?.aborted) throw discloseDispatch(createRequestCanceledError(), 'no');
   const requested: AndroidToggleState = enabled ? 'enabled' : 'disabled';
   try {
-    const result = await runAndroidShell(
-      device,
-      ['svc', toggle.service, enabled ? 'enable' : 'disable'],
-      { allowFailure: true, signal },
-    );
+    const writeArgs = toggle.writeArgs
+      ? toggle.writeArgs(enabled)
+      : [enabled ? 'enable' : 'disable'];
+    const result = await runAndroidShell(device, ['svc', toggle.service, ...writeArgs], {
+      allowFailure: true,
+      signal,
+    });
     if (result.exitCode !== 0) {
       throw androidAdbResultError(
         `Failed to turn Android ${toggle.label} ${enabled ? 'on' : 'off'}`,

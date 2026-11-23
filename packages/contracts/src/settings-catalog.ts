@@ -121,7 +121,7 @@ export const SETTINGS = {
     forms: [{ kind: 'on-off' }],
     app: 'input',
     appScope: { mobile: 'device-level' },
-    help: 'Android holds its screen on while the device charges (svc power stayon), so a device on battery can still sleep; the write survives a reboot. HarmonyOS raises its screen-off timeout to the largest value the power tool accepts; a reboot clears that override. off restores the timeout the system setting holds. --app is refused.',
+    help: 'Android holds its screen on while the device charges (svc power stayon true writes the charging mask, false clears it and does not restore a mask a user set), so a device on battery can still sleep; the write survives a reboot and outlives the session, so run off when the hold ends. HarmonyOS raises its screen-off timeout to the largest value the power tool accepts; a reboot clears that override. off restores the timeout the system setting holds. --app is refused.',
   },
   location: {
     forms: [
