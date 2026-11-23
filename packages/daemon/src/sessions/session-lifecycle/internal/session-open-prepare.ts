@@ -31,7 +31,7 @@ type OpenCommandDetails = {
 };
 
 /**
- * Applied hints that this open replaces with a different transport, paired with the admitted clear.
+ * Applied hints that this open replaces with new transport hints, paired with the admitted clear.
  * The open clears them after its launch succeeds, unless it binds the new hints to the same app.
  */
 export type ReplacedRuntimeHints = Readonly<{

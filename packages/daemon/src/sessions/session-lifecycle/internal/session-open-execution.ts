@@ -36,6 +36,7 @@ import {
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import {
   AppError,
+  asAppError,
   createRequestCanceledError,
   readDispatchDisclosure,
   type ReasonTable,
@@ -137,6 +138,30 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim, req: DaemonR
     `Took the device from session "${tookOver.session}" in workspace "${tookOver.workspace}": ` +
     'that device rebooted after its claim was taken, so its app and runner were already gone.'
   );
+}
+
+/**
+ * After the launch, the app the new hints bind to is the only one that keeps native hints. The
+ * open already succeeded, so a failed removal from the replaced app becomes a warning, as close
+ * treats its own clear as cleanup.
+ */
+async function clearReplacedRuntimeHints(
+  replaced: ReplacedRuntimeHints | undefined,
+  openedAppId: string | undefined,
+): Promise<string | undefined> {
+  if (!replaced || replaced.applied.appId === openedAppId) return undefined;
+  try {
+    await replaced.clear(runtimeHintsClearInput(replaced.applied, undefined));
+    return undefined;
+  } catch (error) {
+    const message = asAppError(error).message;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'open_replaced_runtime_hints_clear_failed',
+      data: { appId: replaced.applied.appId, error: message },
+    });
+    return `The earlier runtime hints could not be removed from ${replaced.applied.appId}: ${message}`;
+  }
 }
 
 /** What the caller's `open` output says about the launch-confirmation probe on this outcome. */
@@ -354,11 +379,10 @@ export async function completeOpenCommand(params: {
       if (!effectsConfirmedOrUndispatched) markUnconfirmedRelaunch();
       throw error;
     });
-  sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
-  // The hints were applied to the prepared id, and a later open compares the binding with the id
-  // it prepares. Without a prepared id, as for a deep link with no current app, the app the launch
-  // reports is the one a later open names.
-  const runtimeHintsAppId = appBundleId ?? outcome.appBundleId;
+  // One id feeds the session and the hint binding, so a later open compares one resolution. Each
+  // platform reports the prepared id back when there is one; Android reports the app it saw for a
+  // target without one, such as a deep link with no current app.
+  sessionAppBundleId ??= outcome.appBundleId;
   const timing: OpenTiming = { ...outcome.timing };
   const preparedSelection = markSelectionBootOccurred(selection);
   const startupSample = openTarget
@@ -374,11 +398,10 @@ export async function completeOpenCommand(params: {
   }
 
   requireOpenSessionAdmission(sessionStore, sessionName, openDispatchRef);
-  if (replacedRuntimeHints && replacedRuntimeHints.applied.appId !== runtimeHintsAppId) {
-    await replacedRuntimeHints.clear(
-      runtimeHintsClearInput(replacedRuntimeHints.applied, undefined),
-    );
-  }
+  const replacedRuntimeHintsWarning = await clearReplacedRuntimeHints(
+    replacedRuntimeHints,
+    sessionAppBundleId,
+  );
   if (existingRef) {
     markDeferredInteractionOutcome({
       session: sessionStore.requireCurrent(existingRef),
@@ -421,6 +444,7 @@ export async function completeOpenCommand(params: {
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim, req));
   }
+  if (replacedRuntimeHintsWarning) appendResponseWarning(openResult, replacedRuntimeHintsWarning);
   if (outcome.launchConfirmation === 'unanswered') {
     appendResponseWarning(
       openResult,
@@ -454,9 +478,9 @@ export async function completeOpenCommand(params: {
   const nextSession = sessionStore.requireCurrent(nextRef);
   markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
   if (req.runtime !== undefined) {
-    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, runtimeHintsAppId);
+    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, sessionAppBundleId);
   } else if (runtimeHints) {
-    bindStoredRuntimeHintsToApp(sessionStore, sessionName, runtimeHintsAppId);
+    bindStoredRuntimeHintsToApp(sessionStore, sessionName, sessionAppBundleId);
   }
   applyOrdinaryScriptRecordingOpenOutcome({
     session: nextSession,

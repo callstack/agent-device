@@ -472,24 +472,32 @@ function bindReportingOpenedApp(appBundleId: string): BindDevice {
 }
 
 test.each([
-  { storedBy: 'open flags', runtime: { metroPort: 8081 } },
-  { storedBy: 'runtime hints set before the first open', runtime: undefined },
+  { storedBy: 'open flags', runtime: { metroPort: 8081 }, reopen: 'com.example.metro' },
+  {
+    storedBy: 'runtime hints set before the first open',
+    runtime: undefined,
+    reopen: 'com.example.metro',
+  },
+  { storedBy: 'open flags', runtime: { metroPort: 8081 }, reopen: 'myapp://home' },
 ])(
-  'hints stored by $storedBy apply again on a reopen when the open reports another app id',
-  async ({ runtime }) => {
+  'hints stored by $storedBy apply again on a reopen of $reopen when the open reports another app id',
+  async ({ runtime, reopen }) => {
     const sessionStore = makeSessionStore();
     const session = 'runtime-hints-outcome-id';
     const applies = recordRuntimeHintApplies();
     mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
     if (!runtime) sessionStore.setRuntimeHints(session, { platform: 'android', metroPort: 8081 });
     const reportsOtherAppId = bindReportingOpenedApp('com.example.foreground');
-    for (const hints of [runtime, undefined]) {
+    for (const [target, hints] of [
+      ['com.example.metro', runtime],
+      [reopen, undefined],
+    ] as const) {
       const opened = await runSessionCommand(
         sessionStore,
         {
           session,
           command: 'open',
-          positionals: ['com.example.metro'],
+          positionals: [target],
           flags: { platform: 'android' },
           ...(hints ? { runtime: hints } : {}),
         },
@@ -745,7 +753,11 @@ test.each([
     opened: 'another app with the same hints',
     first: undefined,
     second: { target: 'com.example.other', metroPort: 8081 },
-    effects: ['apply com.example.metro 8081', 'apply com.example.other 8081'],
+    effects: [
+      'apply com.example.metro 8081',
+      'apply com.example.other 8081',
+      'clear com.example.metro 8081',
+    ],
   },
   {
     opened: 'the same app with different hints',
@@ -760,7 +772,7 @@ test.each([
     effects: ['apply com.example.other 8082'],
   },
 ])(
-  'an open of $opened clears the replaced hints only when they differ on another app',
+  'an open of $opened clears the replaced hints only from another app',
   async ({ first, second, effects }) => {
     const result = await openTwiceWithHints('runtime-hints-replaced', second, undefined, first);
 
@@ -772,6 +784,33 @@ test.each([
     });
   },
 );
+
+test('an open of another app reports a warning when the replaced hints cannot be removed', async () => {
+  const sessionStore = makeSessionStore();
+  const session = 'runtime-hints-replaced-clear-fails';
+  mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+  const open = async (target: string, metroPort: number) =>
+    await runSessionCommand(sessionStore, {
+      session,
+      command: 'open',
+      positionals: [target],
+      flags: { platform: 'android' },
+      runtime: { metroPort },
+    });
+
+  await open('com.example.metro', 8081);
+  mockClearRuntimeHints.mockRejectedValueOnce(new Error('prefs write failed'));
+  const opened = await open('com.example.other', 8082);
+
+  expect(opened.ok).toBe(true);
+  expect(opened.ok ? opened.data?.warnings : undefined).toEqual([
+    expect.stringContaining('com.example.metro'),
+  ]);
+  expect(sessionStore.getRuntimeHints(session)).toMatchObject({
+    appId: 'com.example.other',
+    hints: { metroPort: 8082 },
+  });
+});
 
 test('a failed launch of another app keeps the replaced hints on the app they were applied to', async () => {
   const launchFails: BindDevice = async (device, use) => {

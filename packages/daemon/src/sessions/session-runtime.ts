@@ -4,7 +4,6 @@ import {
   type RuntimeHintValues,
   type RuntimeHintsApplicationInput,
   hasRuntimeTransportHintValues,
-  sameRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
@@ -370,21 +369,15 @@ function clearsRemovedRuntimeTransportBeforeOpen(params: RemovedRuntimeHintsPoli
   );
 }
 
-/**
- * The applied hints that this open replaces with a different transport. Identical transport hints
- * leave nothing stale on the app they were applied to.
- */
+/** The applied hints that this open replaces with new transport hints. */
 export function replacedAppliedRuntimeTransport(
   params: RemovedRuntimeHintsPolicyInput,
 ): AppliedRuntimeHints | undefined {
-  const { previous, runtime } = params;
+  const { previous } = params;
   if (!params.replacedStoredRuntime || previous?.appId === undefined) return undefined;
-  const previousValues = runtimeHintValues(previous.hints);
-  const values = runtimeHintValues(runtime);
-  if (!hasRuntimeTransportHintValues(previousValues) || !hasRuntimeTransportHintValues(values)) {
+  if (!hasRuntimeTransportHints(previous.hints) || !hasRuntimeTransportHints(params.runtime)) {
     return undefined;
   }
-  if (sameRuntimeTransportHintValues(previousValues, values)) return undefined;
   return { hints: previous.hints, appId: previous.appId };
 }
 
