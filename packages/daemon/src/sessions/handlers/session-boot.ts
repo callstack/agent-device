@@ -1,5 +1,6 @@
 import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { PROVIDER_INVENTORY_REASONS } from '@agent-device/contracts/device';
 import { resolveDeviceReadinessRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { asAppError } from '@agent-device/kernel/errors';
@@ -80,7 +81,7 @@ async function resolveBootTargetSelection(
       headless &&
       !hasAndroidAvdIdentity(flags.device, session?.device) &&
       appError.code === 'DEVICE_NOT_FOUND' &&
-      appError.details?.reason !== 'provider_instance_unallocated'
+      appError.details?.reason !== PROVIDER_INVENTORY_REASONS.instanceUnallocated.reason
     ) {
       return {
         refusal: errorResponse(

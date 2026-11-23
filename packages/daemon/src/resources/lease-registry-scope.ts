@@ -7,7 +7,11 @@ import {
   leaseProviderRequiringRuntime,
   normalizeLeaseId,
 } from '@agent-device/contracts/lease-scope';
-import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contracts';
+import {
+  normalizeLeaseProvider,
+  readLeaseBackend,
+  type LeaseBackend,
+} from '@agent-device/kernel/contracts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { LEASE_FIELD_NORMALIZERS, type SessionLease } from '../core/lease-context.ts';
@@ -179,25 +183,12 @@ export function normalizeDeviceKey(raw: string | undefined): string | undefined 
 }
 
 function normalizeClientId(raw: string | undefined): string | undefined {
-  return normalizeAgentIdentifier(raw, 'clientId', 'client id', 128);
-}
-
-export function normalizeLeaseProvider(raw: string | undefined): string | undefined {
-  return normalizeAgentIdentifier(raw, 'leaseProvider', 'lease provider', 64);
-}
-
-function normalizeAgentIdentifier(
-  raw: string | undefined,
-  field: 'clientId' | 'leaseProvider',
-  label: string,
-  maxLength: number,
-): string | undefined {
   if (raw === undefined) return undefined;
-  const value = LEASE_FIELD_NORMALIZERS[field](raw);
+  const value = LEASE_FIELD_NORMALIZERS.clientId(raw);
   if (value) return value;
   throw new AppError(
     'INVALID_ARGS',
-    `Invalid ${label}. Use 1-${String(maxLength)} chars: letters, numbers, dot, underscore, hyphen.`,
+    'Invalid client id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
   );
 }
 

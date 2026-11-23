@@ -1,3 +1,4 @@
+import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -68,8 +69,7 @@ export const connectCommand: ClientCommandHandler = async ({
     cwd: host.cwd,
     env: host.env,
   }).baseDir;
-  await primeProviderConnection(positionals[0], host.env);
-  const provider = readConnectProvider(positionals, host.env);
+  const provider = await readConnectProvider(positionals, host.env);
   assertConnectProviderUsage(provider, flags);
   const resolved = await resolveConnectProviderProfile({
     provider,
@@ -115,7 +115,7 @@ export const connectCommand: ClientCommandHandler = async ({
     host,
   );
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state, host);
-  const readiness = presentConnectReadiness(state, verification, host.env);
+  const readiness = presentConnectReadiness(state, verification, host.env, connectFlags);
 
   await writeCommandOutput(
     connectFlags,
@@ -493,15 +493,16 @@ function formatProviderReleaseWarning(warning: unknown): string | undefined {
   return `Provider release warning${code}: ${entry.message}`;
 }
 
-function readConnectProvider(
+async function readConnectProvider(
   positionals: string[],
   env: NodeJS.ProcessEnv,
-): ConnectProvider | undefined {
-  const provider = positionals[0];
+): Promise<ConnectProvider | undefined> {
+  const provider = canonicalLeaseProvider(positionals[0]);
   if (provider === undefined) return undefined;
   if (positionals.length > 1) {
     throw new AppError('INVALID_ARGS', 'connect accepts at most one provider positional.');
   }
+  await primeProviderConnection(provider, env);
   if (isConnectProviderName(provider, env)) {
     return provider;
   }

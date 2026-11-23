@@ -1,3 +1,8 @@
+import {
+  AWS_DEVICE_FARM,
+  BROWSERSTACK,
+  LIMRUN,
+} from '@agent-device/contracts/provider-plugin-catalog';
 import { getReplayPluginInstallation } from '@agent-device/ad-script';
 import { gestureHelpTopic } from './cli-help-gestures.ts';
 import { selectorsHelpTopic } from './cli-help-selectors.ts';
@@ -27,13 +32,7 @@ import { renderCliHelpOverview } from './cli-help-overview.ts';
 import { foldableHelpTopic } from './cli-help-foldable.ts';
 import { reactNativeHelpTopic } from './cli-help-react-native.ts';
 import { TV_PLUGIN_FLOWS } from './cli-help-tv.ts';
-import {
-  AWS_DEVICE_FARM,
-  BROWSERSTACK,
-  LIMRUN,
-  providerPluginHelp,
-  providerPluginInstallCommand,
-} from '../provider-plugin-catalog.ts';
+import { providerPluginHelp, providerPluginInstallCommand } from '../provider-plugin-catalog.ts';
 
 const CONFIGURATION_LINES = [
   'Default config files: ~/.agent-device/config.json (or <AGENT_DEVICE_HOME>/config.json), ./agent-device.json (project-safe defaults only).',
@@ -499,7 +498,8 @@ After direct-provider connect:
   Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
   BrowserStack, AWS Device Farm, and TestMu AI create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name, ARN, or lt:// id.
   Before provider allocation, apps lists compatible uploaded app assets without creating an instance when the selected provider exposes a catalog. open <exact-asset-name> creates the instance with that asset, resolves its installed app id, and launches it. install remains available when the app comes from a fresh local path or URL.
-  AWS Device Farm cannot install after allocation. If connect reports no attached app, run its printed reconnect command, which includes --session <name> --force, before open.
+  AWS Device Farm cannot install after allocation. If local verification reports no attached app, run the printed reconnect command with --session <name> --force before open.
+  With an AWS Device Farm profile that uses a remote daemon, set awsAppArn in the profile and repeat your original connect invocation with --force before open.
   Do not run devices as a pre-open catalog probe for direct providers; it can allocate the deferred provider session. Limrun is the exception for apps: before allocation it lists uploaded assets for the selected platform.
 
 Device cloud interfaces:
@@ -630,7 +630,7 @@ Rules:
   Node SDK integrations in 0.22 pass an explicit { env, cwd } host to Android host ADB helpers, archive inspection, and Metro preparation. resolveRemoteConfigProfile requires env; createLocalArtifactAdapter requires cwd. CLI and MCP entry points capture their process host.
   Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. TestMu AI uses LT_USERNAME and LT_ACCESS_KEY. Revyl uses REVYL_API_KEY, with REVYL_API_URL to point at another Revyl backend. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
   A local daemon keeps the Limrun, BrowserStack, TestMu AI, and Revyl credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.
-  A lease for a provider the daemon has no runtime for refuses with UNSUPPORTED_OPERATION, reason provider-not-registered, and lists the registered providers, plus the plugins that failed to register as failedPlugins; no lease is recorded. Restart the daemon with the provider configured. Provider-less leases, proxy, and cloud need no provider runtime.
+  A lease for a provider the daemon has no runtime for refuses with UNSUPPORTED_OPERATION, reason provider-not-registered, and lists the registered providers, plus the plugins that failed to register as failedPlugins; no lease is recorded. For an absent managed provider, the error includes its package and install command. Install the package on the daemon host and restart the daemon. If you embed the runtime, call the plugin factory and pass its result when you recreate it. Provider-less leases, proxy, and cloud need no provider runtime.
   Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
   connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
   To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
