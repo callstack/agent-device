@@ -204,7 +204,7 @@ describe('state-dir residue rules', () => {
       'lifetime journal window',
       file('session-journals/33cd82c9-f0a4-4908-bf80-d1aa073c145d/events.ndjson.window.json'),
       AFTER_SHUTDOWN,
-      'expected',
+      'stray',
     ],
     [
       'request diagnostics',
