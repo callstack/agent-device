@@ -10,9 +10,9 @@ import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import {
   buildRuntimeHints,
   countConfiguredRuntimeHints,
-  hasRuntimeTransportHints,
   mergeRuntimeHints,
-  runtimeHintValues,
+  requiresRuntimeHintsClear,
+  runtimeHintsClearInput,
   toRuntimePlatform,
 } from '../session-runtime.ts';
 import type {
@@ -141,7 +141,8 @@ async function clearRuntimeCommand(params: {
   const { sessionName, sessionStore, ref, current, inspectFacts, bindDevice, platformServices } =
     params;
   const session = ref ? sessionStore.requireCurrent(ref) : undefined;
-  if (hasRuntimeTransportHints(current) && session?.appBundleId) {
+  const stored = sessionStore.getStoredRuntimeHints(sessionName);
+  if (session && requiresRuntimeHintsClear(runtimeHintsClearInput(stored, session.appBundleId))) {
     const admission = await admitClearRuntime({
       device: session.device,
       inspectFacts,
@@ -153,10 +154,9 @@ async function clearRuntimeCommand(params: {
     // the mutation boundary, after admission and immediately before the bound package effect.
     const currentSession = sessionStore.requireCurrent(ref!);
     expireRefFrame(currentSession);
-    await admission.runtime.operations.clearRuntimeHints({
-      appId: currentSession.appBundleId,
-      values: runtimeHintValues(current),
-    });
+    await admission.runtime.operations.clearRuntimeHints(
+      runtimeHintsClearInput(stored, currentSession.appBundleId),
+    );
   }
   const cleared = ref ? sessionStore.clearRuntimeHints(ref) : Boolean(current);
   if (!ref) sessionStore.setRuntimeHints(sessionName, undefined);
@@ -217,7 +217,7 @@ function setRuntimeCommand(params: {
   sessionStore.setRuntimeHints(
     sessionName,
     nextRuntime,
-    sessionStore.getRuntimeHintsAppId(sessionName),
+    sessionStore.getStoredRuntimeHints(sessionName)?.appId,
   );
   return {
     ok: true,

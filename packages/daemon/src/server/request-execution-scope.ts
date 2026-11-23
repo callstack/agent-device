@@ -83,7 +83,7 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { teardownSessionResources } from '../sessions/session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
-import { runtimeHintValues } from '../sessions/session-runtime.ts';
+import { runtimeHintsClearInput } from '../sessions/session-runtime.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -647,7 +647,10 @@ async function teardownExpiredSession(params: {
   const { ref, sessionStore, inspectFacts, bindDevice, platformCleanup } = params;
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
   const sessionName = ref.address;
-  const runtimeHints = runtimeHintValues(sessionStore.getRuntimeHints(ref.address));
+  const runtimeHints = runtimeHintsClearInput(
+    sessionStore.getStoredRuntimeHints(ref.address),
+    session.appBundleId,
+  );
   let primaryError: unknown;
   try {
     await teardownSessionResources({

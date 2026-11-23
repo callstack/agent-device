@@ -57,6 +57,7 @@ import {
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import {
   applyRuntimeHintsFixture,
+  clearRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
   resolveOpenTargetFixture,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
@@ -79,6 +80,7 @@ bindTestCommandHost();
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
+const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFixture);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const mockResolveOpenTarget = vi.mocked(resolveOpenTargetFixture);
 
@@ -562,3 +564,47 @@ test('runtime set keeps edited hints bound to the app an open applied them to', 
     { appId: 'com.example.metro', host: '10.0.2.2', port: '8082' },
   ]);
 });
+
+test.each([
+  { clearer: 'close', req: { command: 'close', positionals: [], flags: {} } },
+  { clearer: 'runtime clear', req: { command: 'runtime', positionals: ['clear'], flags: {} } },
+  {
+    clearer: 'an open with only a launch URL',
+    req: {
+      command: 'open',
+      positionals: ['com.example.other'],
+      flags: { platform: 'android' as const },
+      runtime: { launchUrl: 'otherapp://home' },
+    },
+  },
+])(
+  '$clearer clears stored hints from the app they are bound to after another app opened',
+  async ({ req }) => {
+    const sessionStore = makeSessionStore();
+    const session = 'runtime-hints-clear-bound-app';
+    mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+    for (const [target, runtime] of [
+      ['com.example.metro', { metroPort: 8081 }],
+      ['com.google.android.apps.photos', undefined],
+    ] as const) {
+      const opened = await runSessionCommand(sessionStore, {
+        session,
+        command: 'open',
+        positionals: [target],
+        flags: { platform: 'android' },
+        ...(runtime ? { runtime } : {}),
+      });
+      expect(opened.ok).toBe(true);
+    }
+
+    const response = await runSessionCommand(sessionStore, { session, ...req });
+
+    expect(response.ok).toBe(true);
+    expect(mockClearRuntimeHints).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        appId: 'com.example.metro',
+        values: { metroHost: '10.0.2.2', metroPort: '8081' },
+      }),
+    );
+  },
+);

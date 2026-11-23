@@ -5,13 +5,13 @@ import type {
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { settleWithin, type SettleWithinOutcome } from '@agent-device/host-kit/settle-within';
 import type { DaemonServer } from './transport.ts';
-import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { RuntimeHintsApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { SessionStore } from '../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
-import { runtimeHintValues } from '../../sessions/session-runtime.ts';
+import { runtimeHintsClearInput } from '../../sessions/session-runtime.ts';
 
 const DAEMON_SHUTDOWN_TIMEOUT_MS = 5_000;
 const DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS = 5_000;
@@ -277,7 +277,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   platformCleanup: PlatformResourceCleanup;
   finalizeApplicationLifecycle?: (
     session: SessionState,
-    runtimeHints: RuntimeHintValues,
+    runtimeHints: RuntimeHintsApplicationInput,
   ) => Promise<void>;
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
 }): Promise<boolean> {
@@ -291,8 +291,9 @@ export async function teardownDaemonSessionForShutdown(params: {
   } = params;
   const current = sessionStore.resolveCurrent(ref);
   const session = current ?? ref.session;
-  const runtimeHints = runtimeHintValues(
-    current ? sessionStore.getRuntimeHints(ref.address) : undefined,
+  const runtimeHints = runtimeHintsClearInput(
+    current ? sessionStore.getStoredRuntimeHints(ref.address) : undefined,
+    session.appBundleId,
   );
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
   // The ownership-fenced app-log side effect must settle while this process
