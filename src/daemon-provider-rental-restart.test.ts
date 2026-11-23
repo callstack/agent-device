@@ -359,48 +359,57 @@ test('a provider with legacy-only recovery receives the original lease ID after 
   }
 });
 
-test('an exact ID that could not be written prevents allocation from settling successfully', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-rental-record-instance-');
-  const journalPath = path.join(stateDir, 'provider-rentals.json');
-  const stop = vi.fn(async () => ({ release: 'unknown' as const }));
-  const daemon = await startRentalDaemon(stateDir, 'recover', () => {}, {
-    leaseLifecycleProvider: {
-      allocate: async (_lease, context) => {
-        context?.rental?.beforeCreate(fakeRentalKey);
-        context?.rental?.rented(fakeInstanceId);
-        return { providerSessionId: fakeInstanceId };
-      },
-      release: stop,
-    },
-  });
-  const rename = fs.renameSync;
-  const failure = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
-    if (to === journalPath && fs.readFileSync(from, 'utf8').includes(fakeInstanceId))
-      throw new Error('Exact ID publication unavailable.');
-    rename(from, to);
-  });
-  try {
-    expect(await send(daemon, 'lease_allocate', scope)).toMatchObject({
-      ok: false,
-      error: { message: expect.stringContaining('Exact ID publication unavailable') },
+test.each(['live', 'legacy'] as const)(
+  'an exact ID write failure blocks allocation and retries through %s release',
+  async (releasePath) => {
+    const stateDir = mkdtempForTestSync('agent-device-rental-record-instance-');
+    const journalPath = path.join(stateDir, 'provider-rentals.json');
+    const stop = vi.fn(async () => ({ release: 'unknown' as const }));
+    const legacy = releasePath === 'legacy';
+    const legacyStop = vi.fn(async () => {
+      throw new Error('Legacy release is unavailable.');
     });
-    expect(stop).toHaveBeenCalled();
-    expect(await send(daemon, 'lease_allocate', { ...scope, leaseId: undefined })).toMatchObject({
-      ok: false,
-      error: { code: 'DEVICE_IN_USE', details: { releaseStatus: 'unknown' } },
-    });
-    expect(fs.readFileSync(journalPath, 'utf8')).not.toContain(fakeInstanceId);
-    failure.mockRestore();
-    await vi.waitFor(
-      () => {
-        expect(JSON.parse(fs.readFileSync(journalPath, 'utf8')).rentals).toMatchObject([
-          { releaseOnRestart: { reconciliationKey: fakeRentalKey, instanceId: fakeInstanceId } },
-        ]);
+    const daemon = await startRentalDaemon(stateDir, 'recover', () => {}, {
+      providerRentalPolicy: () => ({ legacyRecovery: legacy }),
+      ...(legacy ? { recoverExpiredLease: legacyStop } : {}),
+      leaseLifecycleProvider: {
+        allocate: async (_lease, context) => {
+          context?.rental?.beforeCreate(fakeRentalKey);
+          context?.rental?.rented(fakeInstanceId);
+          return { providerSessionId: fakeInstanceId };
+        },
+        release: stop,
       },
-      { timeout: 4_000 },
-    );
-  } finally {
-    failure.mockRestore();
-    await daemon.runtime.close();
-  }
-});
+    });
+    const rename = fs.renameSync;
+    const failure = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (to === journalPath && fs.readFileSync(from, 'utf8').includes(fakeInstanceId))
+        throw new Error('Exact ID publication unavailable.');
+      rename(from, to);
+    });
+    try {
+      expect(await send(daemon, 'lease_allocate', scope)).toMatchObject({
+        ok: false,
+        error: { message: expect.stringContaining('Exact ID publication unavailable') },
+      });
+      expect(legacy ? legacyStop : stop).toHaveBeenCalled();
+      expect(await send(daemon, 'lease_allocate', { ...scope, leaseId: undefined })).toMatchObject({
+        ok: false,
+        error: { code: 'DEVICE_IN_USE', details: { releaseStatus: 'unknown' } },
+      });
+      expect(fs.readFileSync(journalPath, 'utf8')).not.toContain(fakeInstanceId);
+      failure.mockRestore();
+      await vi.waitFor(
+        () => {
+          expect(JSON.parse(fs.readFileSync(journalPath, 'utf8')).rentals).toMatchObject([
+            { releaseOnRestart: { reconciliationKey: fakeRentalKey, instanceId: fakeInstanceId } },
+          ]);
+        },
+        { timeout: 4_000 },
+      );
+    } finally {
+      failure.mockRestore();
+      await daemon.runtime.close();
+    }
+  },
+);

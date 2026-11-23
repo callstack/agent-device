@@ -449,6 +449,7 @@ export function createExpiredProviderLeaseReleaser(options: {
         : recoverLegacy &&
           (() => recoverLegacy(legacyLeaseId ? { ...lease, leaseId: legacyLeaseId } : lease));
     return startReleaseAttempt(lease.leaseId, key, async () => {
+      options.providerRentals?.retryPendingInstance(lease);
       const released =
         options.needsProviderRelease?.(lease) === false ||
         (await releaseExpiredProviderLease(recover, lease));
