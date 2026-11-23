@@ -26,6 +26,14 @@ export function hasRuntimeTransportHintValues(values: RuntimeHintValues): boolea
   return RUNTIME_TRANSPORT_HINT_KEYS.some((key) => values[key] !== undefined);
 }
 
+/** True when both payloads name the same bundle transport. */
+export function sameRuntimeTransportHintValues(
+  left: RuntimeHintValues,
+  right: RuntimeHintValues,
+): boolean {
+  return RUNTIME_TRANSPORT_HINT_KEYS.every((key) => left[key] === right[key]);
+}
+
 /** Request-scoped runner/diagnostic context, without daemon request types. */
 export type ApplicationLifecycleExecution = Readonly<{
   /**

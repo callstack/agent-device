@@ -346,6 +346,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       appBundleId: details.details.appBundleId,
       appName: details.details.appName,
       runtimeHints: details.details.runtime,
+      replacedRuntimeHints: details.details.replacedRuntimeHints,
       lifecycle: admission.runtime,
       applyRuntimeHints: admission.applyRuntimeHints,
       surface: surfaceResult,

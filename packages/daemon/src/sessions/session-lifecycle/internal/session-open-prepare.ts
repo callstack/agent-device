@@ -9,9 +9,11 @@ import type { SessionRuntimeHints, SessionState } from '../../../core/session-st
 import { SessionStore, type StoredRuntimeHints } from '../../../core/session-store.ts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import {
+  type AppliedRuntimeHints,
   hasRuntimeTransportHints,
   mayClearRemovedRuntimeTransportHints,
   maybeClearRemovedRuntimeTransportHints,
+  replacedAppliedRuntimeTransport,
   RUNTIME_HINTS_REASONS,
   storedRuntimeHintsForApp,
   tryResolveOpenRuntimeHints,
@@ -25,7 +27,17 @@ type OpenCommandDetails = {
   appBundleId?: string;
   appName?: string;
   runtime: SessionRuntimeHints | undefined;
+  replacedRuntimeHints?: ReplacedRuntimeHints;
 };
+
+/**
+ * Applied hints that this open replaces with a different transport, paired with the admitted clear.
+ * The open clears them after its launch succeeds, unless it binds the new hints to the same app.
+ */
+export type ReplacedRuntimeHints = Readonly<{
+  applied: AppliedRuntimeHints;
+  clear: ClearRuntimeHints;
+}>;
 
 export type PreparedOpenCommandDetailsResult =
   | { type: 'response'; response: DaemonResponse }
@@ -189,6 +201,13 @@ export async function prepareOpenCommandDetails(params: {
     existingAppBundleId: existingSession?.appBundleId,
     foreground,
   });
+  const policy = {
+    replacedStoredRuntime: runtimeHintPlan.replacedStoredRuntime,
+    previous: runtimeHintPlan.previous,
+    runtime: runtimeHintPlan.runtime,
+    session: existingSession,
+  };
+  let replacedRuntimeHints: ReplacedRuntimeHints | undefined;
   if (runtimeHintPlan.clearRemovedRuntimeHints) {
     if (!clearRuntimeHints) {
       // prepareApplicationOpen above may already have booted the device — a device-reaching
@@ -203,14 +222,9 @@ export async function prepareOpenCommandDetails(params: {
         },
       );
     }
-    await maybeClearRemovedRuntimeTransportHints({
-      replacedStoredRuntime: runtimeHintPlan.replacedStoredRuntime,
-      previous: runtimeHintPlan.previous,
-      runtime: runtimeHintPlan.runtime,
-      session: existingSession,
-      appId: appBundleId,
-      clearRuntimeHints,
-    });
+    await maybeClearRemovedRuntimeTransportHints({ ...policy, clearRuntimeHints });
+    const applied = replacedAppliedRuntimeTransport(policy);
+    if (applied) replacedRuntimeHints = { applied, clear: clearRuntimeHints };
   }
 
   return {
@@ -225,6 +239,7 @@ export async function prepareOpenCommandDetails(params: {
             runtimeHintPlan.previous?.appId,
             appBundleId,
           ),
+      replacedRuntimeHints,
     },
   };
 }

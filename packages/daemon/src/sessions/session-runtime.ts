@@ -4,6 +4,7 @@ import {
   type RuntimeHintValues,
   type RuntimeHintsApplicationInput,
   hasRuntimeTransportHintValues,
+  sameRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
@@ -354,32 +355,58 @@ type RemovedRuntimeHintsPolicyInput = Readonly<{
   session: SessionState | undefined;
 }>;
 
+/** Stored hints that an open applied to an app; that app keeps their native transport. */
+export type AppliedRuntimeHints = StoredRuntimeHints & Readonly<{ appId: string }>;
+
+/**
+ * An open without transport hints removes the transport of the stored hints it replaces before it
+ * launches.
+ */
+function clearsRemovedRuntimeTransportBeforeOpen(params: RemovedRuntimeHintsPolicyInput): boolean {
+  return (
+    params.replacedStoredRuntime &&
+    !hasRuntimeTransportHints(params.runtime) &&
+    requiresRuntimeHintsClear(removedRuntimeHintsClearInput(params))
+  );
+}
+
+/**
+ * The applied hints that this open replaces with a different transport. Identical transport hints
+ * leave nothing stale on the app they were applied to.
+ */
+export function replacedAppliedRuntimeTransport(
+  params: RemovedRuntimeHintsPolicyInput,
+): AppliedRuntimeHints | undefined {
+  const { previous, runtime } = params;
+  if (!params.replacedStoredRuntime || previous?.appId === undefined) return undefined;
+  const previousValues = runtimeHintValues(previous.hints);
+  const values = runtimeHintValues(runtime);
+  if (!hasRuntimeTransportHintValues(previousValues) || !hasRuntimeTransportHintValues(values)) {
+    return undefined;
+  }
+  if (sameRuntimeTransportHintValues(previousValues, values)) return undefined;
+  return { hints: previous.hints, appId: previous.appId };
+}
+
 /**
  * Whether an open may have to remove the native transport of the stored hints it replaces.
- * Admission runs before the open resolves its app, so new transport hints admit the clear whenever
- * the replaced hints are bound to an app.
+ * Admission runs before the open resolves its app, so it admits the clear for replaced applied
+ * hints whichever app the open reaches.
  */
 export function mayClearRemovedRuntimeTransportHints(
   params: RemovedRuntimeHintsPolicyInput,
 ): boolean {
   return (
-    params.replacedStoredRuntime &&
-    requiresRuntimeHintsClear(removedRuntimeHintsClearInput(params)) &&
-    (!hasRuntimeTransportHints(params.runtime) || params.previous?.appId !== undefined)
+    clearsRemovedRuntimeTransportBeforeOpen(params) ||
+    replacedAppliedRuntimeTransport(params) !== undefined
   );
 }
 
-/** New transport hints overwrite the replaced ones on their bound app; another app is cleared. */
 export async function maybeClearRemovedRuntimeTransportHints(
   params: RemovedRuntimeHintsPolicyInput &
-    Readonly<{
-      /** The app this open resolved for its target. */
-      appId: string | undefined;
-      clearRuntimeHints(input: RuntimeHintsApplicationInput): Promise<void>;
-    }>,
+    Readonly<{ clearRuntimeHints(input: RuntimeHintsApplicationInput): Promise<void> }>,
 ): Promise<void> {
-  if (!mayClearRemovedRuntimeTransportHints(params)) return;
-  if (hasRuntimeTransportHints(params.runtime) && params.previous?.appId === params.appId) return;
+  if (!clearsRemovedRuntimeTransportBeforeOpen(params)) return;
   await params.clearRuntimeHints(removedRuntimeHintsClearInput(params));
 }
 

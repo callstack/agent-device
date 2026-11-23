@@ -45,6 +45,7 @@ import {
   bindStoredRuntimeHintsToApp,
   countConfiguredRuntimeHints,
   openApplicationRuntimeHints,
+  runtimeHintsClearInput,
   setSessionRuntimeHintsForOpen,
 } from '../../session-runtime.ts';
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
@@ -57,6 +58,7 @@ import {
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import {
   prepareOpenCommandDetails,
+  type ReplacedRuntimeHints,
   type ResolvedOpenRuntimeHintPlan,
 } from './session-open-prepare.ts';
 import { findSessionDeviceConflict } from '../../open-device-contention-wait.ts';
@@ -268,6 +270,7 @@ export async function completeOpenCommand(params: {
   surface: SessionSurface;
   appBundleId?: string;
   runtimeHints: SessionRuntimeHints | undefined;
+  replacedRuntimeHints?: ReplacedRuntimeHints;
   lifecycle: OpenApplicationRuntime;
   applyRuntimeHints?: RuntimeHintApplyOperation;
   existingRef?: SessionRef;
@@ -288,6 +291,7 @@ export async function completeOpenCommand(params: {
     surface,
     appBundleId,
     runtimeHints,
+    replacedRuntimeHints,
     lifecycle,
     applyRuntimeHints,
     existingRef,
@@ -351,6 +355,10 @@ export async function completeOpenCommand(params: {
       throw error;
     });
   sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
+  // The hints were applied to the prepared id, and a later open compares the binding with the id
+  // it prepares. Without a prepared id, as for a deep link with no current app, the app the launch
+  // reports is the one a later open names.
+  const runtimeHintsAppId = appBundleId ?? outcome.appBundleId;
   const timing: OpenTiming = { ...outcome.timing };
   const preparedSelection = markSelectionBootOccurred(selection);
   const startupSample = openTarget
@@ -366,6 +374,11 @@ export async function completeOpenCommand(params: {
   }
 
   requireOpenSessionAdmission(sessionStore, sessionName, openDispatchRef);
+  if (replacedRuntimeHints && replacedRuntimeHints.applied.appId !== runtimeHintsAppId) {
+    await replacedRuntimeHints.clear(
+      runtimeHintsClearInput(replacedRuntimeHints.applied, undefined),
+    );
+  }
   if (existingRef) {
     markDeferredInteractionOutcome({
       session: sessionStore.requireCurrent(existingRef),
@@ -440,12 +453,10 @@ export async function completeOpenCommand(params: {
   sessionStore.clearCloseEffectsUnconfirmed(nextRef);
   const nextSession = sessionStore.requireCurrent(nextRef);
   markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
-  // Bind to the prepared id the hints were applied to, not the outcome's: a later open compares
-  // the binding with its own prepared id.
   if (req.runtime !== undefined) {
-    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, appBundleId);
+    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, runtimeHintsAppId);
   } else if (runtimeHints) {
-    bindStoredRuntimeHintsToApp(sessionStore, sessionName, appBundleId);
+    bindStoredRuntimeHintsToApp(sessionStore, sessionName, runtimeHintsAppId);
   }
   applyOrdinaryScriptRecordingOpenOutcome({
     session: nextSession,
@@ -641,6 +652,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       appBundleId: details.details.appBundleId,
       appName: details.details.appName,
       runtimeHints: details.details.runtime,
+      replacedRuntimeHints: details.details.replacedRuntimeHints,
       lifecycle,
       applyRuntimeHints,
       surface,
