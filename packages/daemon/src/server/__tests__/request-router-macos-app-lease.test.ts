@@ -105,12 +105,15 @@ test('a leased screenshot answers with the artifact handle and the tenant-chosen
   expectNoHostFacts(response, hostFacts(sessionStore));
 });
 
-test('a refused leased request names no host log or path', async () => {
+test.each([
+  [{}, 'UNAUTHORIZED'],
+  [{ flags: { record: true, noRecord: true } }, 'INVALID_ARGS'],
+] as const)('a refused leased request names no host log or path with %j', async (options, code) => {
   const { handler, sessionStore } = leasedRouter();
 
-  const response = await handler(leasedRequest('devices', 'req-devices'));
+  const response = await handler(leasedRequest('devices', 'req-devices', options));
 
-  expect(response).toMatchObject({ ok: false, error: { code: 'UNAUTHORIZED' } });
+  expect(response).toMatchObject({ ok: false, error: { code } });
   expectNoHostFacts(response, hostFacts(sessionStore));
 });
 

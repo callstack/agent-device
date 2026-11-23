@@ -24,14 +24,18 @@ Implicit web sessions in different worktrees also use separate browsers, so they
 
 When a session starts, human output prints a `Session state: <path>` line and JSON output includes
 `sessionStateDir`. That directory holds the session's artifacts; inspect or delete it after the run.
-JSON output also includes `runnerLogPath` and `requestLogPath` when available.
+JSON output also includes `runnerLogPath`, `requestLogPath`, and `eventLogPath` when available.
 
 Each session artifact directory contains:
 
 - `request-records/<record-id>.ndjson` - daemon request diagnostics for this session, one file per request. The daemon names the file, a failed command prints its path, and each line carries the request id.
-- `events.ndjson` - session event timeline for requests and recorded actions; rotates to `events.ndjson.1` before an entry would exceed 5 MiB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`, whole bytes), with `events.ndjson.window.json` tracking the retained files so `events` cursors within the retained window stay valid across rotation. Older cursors expire.
 - `runner.log` - Apple runner and `xcodebuild` build/start output for this session.
 - `app.log` - app/device logs when `logs start` or `logs clear --restart` is active.
+
+Use `agent-device events` to read requests and recorded actions for an active session.
+The file at `eventLogPath` rotates at 5 MiB by default. Set `AGENT_DEVICE_EVENT_LOG_MAX_BYTES`
+on the daemon to change the cap in bytes. Cursors in the retained window survive rotation.
+Closing the session removes its event journal. Start with a fresh cursor when you reopen it.
 
 `events.ndjson` leaves out user-entered content. It keeps command names, status,
 durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and

@@ -176,16 +176,19 @@ test('recordAction writes a paged session event log', async () => {
     flags: { platform: 'ios' },
     result: { ref: '14', refLabel: 'Checkout', x: 120, y: 240, message: 'Tapped @14 (120, 240)' },
   });
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const eventLogPath = store.resolveEventLogPath(session.name);
+  const eventLogPath = store.resolveEventLogPath(storeSessionForTest(store, session));
   assert.equal(fs.existsSync(eventLogPath), true);
-  const firstPage = store.readEvents(session.name, { limit: 1 });
+  const firstPage = store.readEvents(storeSessionForTest(store, session), { limit: 1 });
   assert.equal(firstPage.events.length, 1);
   assert.equal(firstPage.events[0]?.kind, 'action.recorded');
   assert.equal(firstPage.nextCursor, '1');
 
-  const secondPage = store.readEvents(session.name, { cursor: firstPage.nextCursor, limit: 1 });
+  const secondPage = store.readEvents(storeSessionForTest(store, session), {
+    cursor: firstPage.nextCursor,
+    limit: 1,
+  });
   assert.equal(secondPage.events[0]?.summary, 'Tapped @14');
   assert.equal(secondPage.nextCursor, undefined);
 });
@@ -200,9 +203,10 @@ test.each(['app', 'frontmost-app', 'desktop', 'menubar', undefined] as const)(
       saveScript: true,
       ...(surface === undefined ? {} : { surface }),
     });
-    await fixture.store.flushEvents(fixture.session.name);
+    await fixture.store.flushEvents(storeSessionForTest(fixture.store, fixture.session));
 
-    const event = fixture.store.readEvents(fixture.session.name).events[0];
+    const event = fixture.store.readEvents(storeSessionForTest(fixture.store, fixture.session))
+      .events[0];
     assert.equal(event?.kind, 'action.recorded');
     assert.deepEqual(event?.details?.flags, {
       platform: 'macos',
@@ -228,9 +232,9 @@ test('recordAction event log redacts typed text and its length from display posi
     flags: {},
     result: { ref: '14', text: 'super-secret-token', message: 'Filled super-secret-token' },
   });
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const page = store.readEvents(session.name);
+  const page = store.readEvents(storeSessionForTest(store, session));
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('super-secret-token'), false);
   assert.equal(page.events[0]?.summary, 'Filled @14');
@@ -270,9 +274,9 @@ test('recordAction event log redacts payload-bearing and unknown positionals', a
     flags: {},
     result: { message: `Ran ${futurePayload}` },
   });
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const page = store.readEvents(session.name);
+  const page = store.readEvents(storeSessionForTest(store, session));
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes(clipboardText), false);
   assert.equal(serialized.includes(pushPayload), false);
@@ -301,9 +305,9 @@ test('recordAction event log omits transformed messages for redacted positionals
     flags: {},
     result: { message: 'Ran my-arg-123 after arg' },
   });
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const page = store.readEvents(session.name);
+  const page = store.readEvents(storeSessionForTest(store, session));
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('my-token-123'), false);
   assert.equal(serialized.includes('token'), false);
@@ -323,9 +327,9 @@ test('recordAction event log does not leak short typed text or its length', asyn
     flags: {},
     result: { text: 'e', message: 'Typed 1 chars' },
   });
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const page = store.readEvents(session.name);
+  const page = store.readEvents(storeSessionForTest(store, session));
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('"e"'), false);
   assert.equal(page.events[0]?.summary, 'Typed text');
@@ -346,9 +350,9 @@ test('recordAction event log omits value-bearing selector details', async () => 
       message: 'Tapped 123456',
     },
   });
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const page = store.readEvents(session.name);
+  const page = store.readEvents(storeSessionForTest(store, session));
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('123456'), false);
   assert.equal(page.events[0]?.summary, 'Tapped target');
@@ -380,9 +384,9 @@ test('recordAction event log rejects malformed provider scroll output', async ()
       message: privateValue,
     },
   });
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const event = store.readEvents(session.name).events[0];
+  const event = store.readEvents(storeSessionForTest(store, session)).events[0];
   assert.equal(event?.summary, 'Scrolled');
   assert.deepEqual(event?.details, {
     command: 'scroll',
@@ -395,7 +399,7 @@ test('request failure event log omits raw error message and hint', async () => {
   const { store, session } = makeFixture('agent-device-session-events-error-redaction-');
   const secretPayload = '{"ssn":"123-45-6789"';
   store.recordEvent(
-    session.name,
+    storeSessionForTest(store, session),
     buildRequestFinishedEvent({
       req: {
         token: 'test-token',
@@ -415,9 +419,9 @@ test('request failure event log omits raw error message and hint', async () => {
       durationMs: 12,
     }),
   );
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
 
-  const page = store.readEvents(session.name);
+  const page = store.readEvents(storeSessionForTest(store, session));
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes(secretPayload), false);
   assert.equal(page.events[0]?.summary, 'Failed trigger-app-event: INVALID_ARGS');
@@ -432,9 +436,9 @@ test('saveScript path writes session log to custom location', async () => {
   recordClose(store, session);
 
   store.writeSessionLog(storeSessionForTest(store, session));
-  await store.flushEvents(session.name);
+  await store.flushEvents(storeSessionForTest(store, session));
   assert.equal(fs.existsSync(customPath), true);
-  assert.equal(fs.existsSync(store.resolveEventLogPath(session.name)), true);
+  assert.equal(fs.existsSync(store.resolveEventLogPath(storeSessionForTest(store, session))), true);
 });
 
 test('writeSessionLog persists open --relaunch in script output', () => {

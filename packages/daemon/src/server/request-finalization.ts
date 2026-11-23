@@ -7,10 +7,13 @@ import {
   toAppErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
+import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
+import { resolveSessionRequestLog } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
+  updateDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionStore } from '../core/session-store.ts';
@@ -24,7 +27,13 @@ import type {
   DaemonResponseData,
 } from '@agent-device/kernel/contracts';
 import { isDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
-import { leaseVerifier, type TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import {
+  claimRequestDiagnosticsRecord,
+  leaseVerifier,
+  requestDiagnosticsRecordId,
+  type TrackDownloadableArtifact,
+} from '../resources/artifact-tracking.ts';
+import { tenantScopedSessionName } from '../core/session-tenant-scope.ts';
 import {
   captureOutputLeaseVerifier,
   captureOutputOwnership,
@@ -37,6 +46,43 @@ type PendingArtifact = DaemonArtifact & {
   displayRotation?: DeviceRotation;
   deleteAfterDownload?: boolean;
 };
+
+export function installDetachedRequestDiagnostics(
+  req: DaemonRequest,
+  store: Pick<SessionStore, 'resolveSessionDir'>,
+): void {
+  claimRequestDiagnosticsRecord(req);
+  const tenant = normalizeTenantId(
+    typeof req.meta?.tenantId === 'string' ? req.meta.tenantId : req.flags?.tenant,
+  );
+  const namespace = 'request-diagnostics';
+  const session = tenant ? tenantScopedSessionName(tenant, namespace) : namespace;
+  const record = resolveSessionRequestLog({
+    session,
+    sessionDir: store.resolveSessionDir(session),
+    requestId: requestDiagnosticsRecordId(req),
+    directory: 'request-records',
+  });
+  updateDiagnosticsScope({ logPath: record.path, logRecord: record.ref });
+}
+
+export function finalizeThrownRequestError(error: unknown): DaemonResponse {
+  emitDiagnostic({
+    level: 'error',
+    phase: 'request_failed',
+    data: { error: error instanceof Error ? error.message : String(error) },
+  });
+  const details = getDiagnosticsMeta();
+  const record = flushDiagnosticsToSessionFile({ force: true });
+  return {
+    ok: false,
+    error: normalizeError(error, {
+      diagnosticId: details.diagnosticId,
+      logPath: record?.path,
+      diagnosticsRecord: record?.ref,
+    }),
+  };
+}
 
 export function finalizeDaemonResponse(
   req: DaemonRequest,

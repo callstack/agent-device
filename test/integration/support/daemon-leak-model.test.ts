@@ -172,16 +172,23 @@ describe('surviving-daemon rule', () => {
 
   test('its metadata files stay stray rather than being excused by its own survival', () => {
     const snapshot = evaluateDaemonLeaks(
-      observe({ livePids: [DAEMON_PID], stateEntries: [file('daemon.json'), file('daemon.lock')] }),
+      observe({
+        livePids: [DAEMON_PID],
+        stateEntries: [file('daemon.json'), file('daemon.lock'), file('daemon.lock/owner.json')],
+      }),
     );
 
-    expect(snapshot.strayStateEntries).toEqual(['daemon.json', 'daemon.lock']);
+    expect(snapshot.strayStateEntries).toEqual([
+      'daemon.json',
+      'daemon.lock',
+      'daemon.lock/owner.json',
+    ]);
   });
 
   test('a live daemon is expected while a session merely closed', () => {
     const snapshot = evaluateDaemonLeaks(
       observeAfterClose(['closed-one'], {
-        stateEntries: [file('daemon.json'), file('daemon.lock')],
+        stateEntries: [file('daemon.json'), file('daemon.lock'), file('daemon.lock/owner.json')],
       }),
     );
 
@@ -198,8 +205,27 @@ describe('state-dir residue rules', () => {
     closedSessions: ['closed-one'],
   };
 
+  test.each(['events.ndjson', 'events.ndjson.1', 'events.ndjson.window.json'])(
+    'closing session A allows session B to keep %s until shutdown',
+    (name) => {
+      const entry = file(`session-journals/33cd82c9-f0a4-4908-bf80-d1aa073c145d/${name}`);
+      const state = { stateEntries: [entry] };
+
+      expect(evaluateDaemonLeaks(observeAfterClose(['A'], state)).strayStateEntries).toEqual([]);
+      expect(evaluateDaemonLeaks(observe(state, AFTER_SHUTDOWN)).strayStateEntries).toEqual([
+        entry.path,
+      ]);
+    },
+  );
+
   test.each<[string, StateEntry, DaemonLeakPhaseSelection, 'expected' | 'stray']>([
     ['session event log', file('sessions/default/events.ndjson'), AFTER_SHUTDOWN, 'expected'],
+    [
+      'unknown lifetime journal file',
+      file('session-journals/33cd82c9-f0a4-4908-bf80-d1aa073c145d/other.ndjson'),
+      AFTER_CLOSE,
+      'stray',
+    ],
     [
       'request diagnostics',
       file('sessions/d/request-records/abc.ndjson'),
