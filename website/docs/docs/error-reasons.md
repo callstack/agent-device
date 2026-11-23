@@ -358,6 +358,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `mobile-data-unreadable` | The device answered the mobile-data read-back with a value that is neither 0 nor 1. |
 | `setting_app_not_package` | The named app resolves to an intent such as `settings`, not to an installed package. |
 | `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |
+| `ios-notification-settings-unreachable` | The simulator's files are not on this host, so its notification settings cannot be written. |
+| `ios-notification-settings-missing` | The simulator has no notification settings file yet; SpringBoard creates it on its first start. |
+| `ios-notification-settings-unrecognized` | The notification settings file is not in the layout this command writes, so it is left alone. |
 
 ### `shake`
 

@@ -15,6 +15,7 @@ import {
 } from '@agent-device/test-kit';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { applePlugin } from '@agent-device/platform-apple';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import { assertFlatToolCall } from './assertions.ts';
@@ -161,6 +162,31 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
         permission: 'camera',
         ...selection,
       });
+
+      // A scoped tool provider keeps the simulator's files out of reach, so `all` skips the
+      // notification settings file and a targeted change refuses before any restart.
+      const all = await client.settings.update({
+        setting: 'permission',
+        state: 'grant',
+        permission: 'all',
+        ...selection,
+      });
+      assert.equal((all.permissions as string[]).includes('notifications'), false);
+      assert.match(String((all.warnings as string[]).at(-1)), /^Skipped notifications: /);
+      await assert.rejects(
+        () =>
+          client.settings.update({
+            setting: 'permission',
+            state: 'grant',
+            permission: 'notifications',
+            ...selection,
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.reason, 'ios-notification-settings-unreachable');
+          return true;
+        },
+      );
 
       const alertGet = await client.command.alert({ action: 'get', ...selection });
       assert.equal(alertGet.title, 'Camera Access');

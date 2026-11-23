@@ -1,3 +1,4 @@
+import path from 'node:path';
 import {
   parsePermissionAction,
   parseSettingState,
@@ -26,6 +27,8 @@ import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
+import { hostSimulatorDataPath } from './simulator-data-path.ts';
+import { SIMULATOR_NOTIFICATION_SETTINGS_FILE } from './simulator-notification-permission.ts';
 import { runSimctlForDevice } from './simctl-execution.ts';
 import {
   invalidateSimulatorStatusBarOverrideCache,
@@ -34,7 +37,7 @@ import {
   withSimulatorStatusBarHeld,
 } from './screenshot-status-bar.ts';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
-import { resolveAppleToolProvider, runXcrun } from './tool-provider.ts';
+import { hasScopedAppleToolProvider, resolveAppleToolProvider, runXcrun } from './tool-provider.ts';
 
 const MACOS_HOST_SETTINGS = ['appearance', 'permission'] as const satisfies readonly SettingName[];
 
@@ -197,6 +200,15 @@ export async function setIosSetting(
         state,
         appBundleId,
         resolveApp: (app) => resolveIosSettingsApp(device, app),
+        // A scoped tool provider runs the simulator on another host, out of reach of this one's files.
+        ...(hasScopedAppleToolProvider()
+          ? {}
+          : {
+              notificationSettingsPath: path.join(
+                hostSimulatorDataPath(device),
+                SIMULATOR_NOTIFICATION_SETTINGS_FILE,
+              ),
+            }),
         options,
       });
     default:

@@ -73,18 +73,42 @@ test('a Limrun iOS permission the runtime refuses reports the local unsupported 
       setting: 'permission',
       state: 'grant',
       appBundleId: 'com.example.ios',
-      options: { permissionTarget: 'notifications' },
+      options: { permissionTarget: 'siri' },
     });
 
     await expect(refusal).rejects.toMatchObject({
       code: 'UNSUPPORTED_OPERATION',
       message:
-        'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
+        'iOS simulator does not support setting siri permission via simctl privacy on this runtime.',
       details: { appBundleId: 'com.example.ios' },
     });
     expect(state.simctl.mock.calls).toEqual([
-      [['privacy', 'booted', 'grant', 'notifications', 'com.example.ios']],
+      [['privacy', 'booted', 'grant', 'siri', 'com.example.ios']],
     ]);
+  } finally {
+    await dispose();
+  }
+});
+
+test('a Limrun iOS notifications permission refuses before any simctl call', async () => {
+  const { binding, dispose } = await bindLimrunDeployment(
+    'ios',
+    new AbortController().signal,
+    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+  );
+  try {
+    await expect(
+      binding.operations.setSetting!({
+        setting: 'permission',
+        state: 'grant',
+        appBundleId: 'com.example.ios',
+        options: { permissionTarget: 'notifications' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'ios-notification-settings-unreachable', appBundleId: 'com.example.ios' },
+    });
+    expect(state.simctl).not.toHaveBeenCalled();
   } finally {
     await dispose();
   }

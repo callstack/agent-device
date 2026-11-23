@@ -8,6 +8,11 @@ import {
 import { type MobilePermissionTarget } from '@agent-device/contracts/settings-catalog';
 import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
+import {
+  isNotificationSettingsRefusal,
+  setSimulatorNotificationPermission,
+  SPRINGBOARD_RESTART_WARNING,
+} from './simulator-notification-permission.ts';
 
 /** Changes one simulator setting through `simctl`; the Apple package owns this plan for every runner. */
 export async function applySimctlSetting(
@@ -54,6 +59,10 @@ async function setPermission(
   const action = permissionAction === 'deny' ? 'revoke' : permissionAction;
   const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
   const appBundleId = await requireAppBundleId(request);
+  if (target === 'notifications') {
+    await setNotificationPermission(request, action, appBundleId);
+    return { permission: 'notifications', warnings: [SPRINGBOARD_RESTART_WARNING] };
+  }
   if (target === 'all' && action !== 'reset') {
     return await setEveryIosPrivacyService(request, action, appBundleId);
   }
@@ -65,14 +74,19 @@ async function setPermission(
   }
 }
 
-/** The `simctl privacy` service for every target except `photos`, whose service depends on its mode. */
-const IOS_PRIVACY_SERVICES: Record<Exclude<MobilePermissionTarget, 'photos'>, string> = {
+/**
+ * The `simctl privacy` service for every target except `photos`, whose service depends on its mode,
+ * and `notifications`, which `simctl privacy` refuses and SpringBoard's settings file holds instead.
+ */
+const IOS_PRIVACY_SERVICES: Record<
+  Exclude<MobilePermissionTarget, 'photos' | 'notifications'>,
+  string
+> = {
   all: 'all',
   camera: 'camera',
   microphone: 'microphone',
   contacts: 'contacts',
   'contacts-limited': 'contacts-limited',
-  notifications: 'notifications',
   calendar: 'calendar',
   location: 'location',
   'location-always': 'location-always',
@@ -105,12 +119,13 @@ const IOS_ALL_TARGETS = {
   siri: true,
 } as const satisfies Record<Exclude<MobilePermissionTarget, 'all'>, boolean>;
 
-/** The services a grant of `all` changes, one `simctl privacy` call each. */
+/** The services a grant of `all` changes through `simctl privacy`, one call each. */
 const IOS_ALL_GRANTED_SERVICES: readonly string[] = (
   Object.keys(IOS_ALL_TARGETS) as (keyof typeof IOS_ALL_TARGETS)[]
-)
-  .filter((target) => IOS_ALL_TARGETS[target])
-  .map((target) => (target === 'photos' ? 'photos' : IOS_PRIVACY_SERVICES[target]));
+).flatMap((target) => {
+  if (!IOS_ALL_TARGETS[target] || target === 'notifications') return [];
+  return [target === 'photos' ? 'photos' : IOS_PRIVACY_SERVICES[target]];
+});
 
 /**
  * The services a revoke of `all` changes: every granted one, and limited photo access
@@ -119,18 +134,20 @@ const IOS_ALL_GRANTED_SERVICES: readonly string[] = (
 const IOS_ALL_REVOKED_SERVICES: readonly string[] = [...IOS_ALL_GRANTED_SERVICES, 'photos-add'];
 
 /**
- * `all` for grant and revoke, as one `simctl privacy` call per service. The simulator records
- * `simctl privacy grant all` as a single `kTCCServiceAll` row that iOS 27 does not consult, so the
- * app still prompts, and a revoke of `all` leaves every per-service grant in place. A service the
- * runtime refuses is skipped with a warning, as Android skips a permission it cannot change. Any
- * other failure stops the sequence, and its error carries the services already changed in
- * `details.permissions`. A reset of `all` stays one call: it removes every row.
+ * `all` for grant and revoke, as one `simctl privacy` call per service, then notifications. The
+ * simulator records `simctl privacy grant all` as a single `kTCCServiceAll` row that iOS 27 does
+ * not consult, so the app still prompts, and a revoke of `all` leaves every per-service grant in
+ * place. A service the runtime refuses, or a notification settings file this cannot write, is
+ * skipped with a warning, as Android skips a permission it cannot change. Any other failure stops
+ * the sequence, and its error carries the services already changed in `details.permissions`. A
+ * reset of `all` stays one call: it removes every row.
  */
 async function setEveryIosPrivacyService(
-  { runSimctl, udid, deviceId }: SimctlSettingRequest,
+  request: SimctlSettingRequest,
   action: 'grant' | 'revoke',
   appBundleId: string,
 ): Promise<Record<string, unknown>> {
+  const { runSimctl, udid, deviceId } = request;
   const applied: string[] = [];
   const warnings: string[] = [];
   let lastRefusal: unknown;
@@ -145,10 +162,33 @@ async function setEveryIosPrivacyService(
       warnings.push(`Skipped ${service}: this iOS runtime does not let simctl privacy change it.`);
     }
   }
+  try {
+    await setNotificationPermission(request, action, appBundleId);
+    applied.push('notifications');
+    warnings.push(SPRINGBOARD_RESTART_WARNING);
+  } catch (error) {
+    if (!isNotificationSettingsRefusal(error)) throw withAppliedServices(error, applied);
+    warnings.push(`Skipped notifications: ${error.message}`);
+  }
   if (applied.length === 0) {
     throw iosPrivacyServiceRefusedError(action, 'all', appBundleId, deviceId, lastRefusal);
   }
   return { permission: 'all', permissions: applied, ...(warnings.length > 0 ? { warnings } : {}) };
+}
+
+async function setNotificationPermission(
+  { runSimctl, udid, deviceId, notificationSettingsPath }: SimctlSettingRequest,
+  action: 'grant' | 'revoke' | 'reset',
+  appBundleId: string,
+): Promise<void> {
+  await setSimulatorNotificationPermission({
+    runSimctl,
+    udid,
+    deviceId,
+    appBundleId,
+    action,
+    settingsPath: notificationSettingsPath,
+  });
 }
 
 /** The error that stopped `all` partway, naming the services it had already changed. */
@@ -199,7 +239,7 @@ function parseIosPrivacyService(
       `Permission mode is only supported for photos. Received: ${permissionMode}.`,
     );
   }
-  return IOS_PRIVACY_SERVICES[normalized];
+  return normalized === 'notifications' ? normalized : IOS_PRIVACY_SERVICES[normalized];
 }
 
 function parseIosAppearance(stdout: string, stderr: string): 'light' | 'dark' | null {

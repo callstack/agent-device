@@ -39,6 +39,11 @@ import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
 import { withFakeAppleTool, type FakeAppleToolResponse } from '../../__tests__/fake-apple-tool.ts';
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
+import { build as buildPlist, parse as parsePlist } from 'plist';
+import {
+  SIMULATOR_NOTIFICATION_REASONS,
+  SIMULATOR_NOTIFICATION_SETTINGS_FILE,
+} from '../simulator-notification-permission.ts';
 
 bindTestCommandHost();
 
@@ -612,7 +617,7 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
   await withFakeAppleTool(
     (args) => {
       if (isSimctlListApps(args)) return INSTALLED_APPS_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 revoke notifications com.example.app') {
+      if (args.join(' ') === 'simctl privacy sim-1 revoke siri com.example.app') {
         return { stderr: 'Failed to revoke access\nOperation not permitted', exitCode: 1 };
       }
       return unexpectedArgs(args);
@@ -626,13 +631,13 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
             'deny',
             'com.example.app',
             {
-              permissionTarget: 'notifications',
+              permissionTarget: 'siri',
             },
             process.env,
           ),
         {
           code: 'UNSUPPORTED_OPERATION',
-          message: /does not support setting notifications permission/i,
+          message: /does not support setting siri permission/i,
         },
       );
       assert.deepEqual(calls.at(-1), [
@@ -640,11 +645,86 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
         'privacy',
         'sim-1',
         'revoke',
-        'notifications',
+        'siri',
         'com.example.app',
       ]);
     },
   );
+});
+
+/** A simulator set holding sim-1 with a notification settings file in SpringBoard's layout. */
+async function simulatorSetWithNotificationSettings(): Promise<{ set: string; file: string }> {
+  const set = await mkdtempForTest('agent-device-ios-notification-set-');
+  const file = path.join(set, 'sim-1/data', SIMULATOR_NOTIFICATION_SETTINGS_FILE);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, buildPlist({ sectionInfo: {}, sectionInfoVersionNumber: 3 }));
+  return { set, file };
+}
+
+test('setIosSetting notifications writes the settings file of the simulator on this host', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+  const { set, file } = await simulatorSetWithNotificationSettings();
+  const simctl: string[][] = [];
+  mockRunCmd.mockImplementation(async (cmd, args) => {
+    assert.equal(cmd, 'xcrun');
+    const unscoped = args.slice(args.indexOf('--set') + 2);
+    simctl.push(unscoped);
+    const stdout = unscoped.join(' ') === 'listapps sim-1' ? INSTALLED_APPS_JSON : '';
+    return { stdout, stderr: '', exitCode: 0 };
+  });
+
+  const result = await setIosSetting(
+    { ...IOS_TEST_SIMULATOR, simulatorSetPath: set },
+    'permission',
+    'grant',
+    'Example',
+    { permissionTarget: 'notifications' },
+    process.env,
+  );
+
+  assert.equal(result?.permission, 'notifications');
+  const store = parsePlist(await fs.readFile(file, 'utf8')) as {
+    sectionInfo: Record<string, Uint8Array>;
+  };
+  assert.deepEqual(Object.keys(store.sectionInfo), ['com.example.app']);
+  assert.deepEqual(simctl.at(-1), [
+    'spawn',
+    'sim-1',
+    'launchctl',
+    'start',
+    'com.apple.usernotificationsd',
+  ]);
+});
+
+test('setIosSetting notifications refuses a simulator a scoped tool provider runs', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+  const { set, file } = await simulatorSetWithNotificationSettings();
+  const before = await fs.readFile(file);
+
+  const tool = (args: string[]) =>
+    installedAppsTool(args.filter((arg) => arg !== '--set' && arg !== set));
+  await withFakeAppleTool(tool, async ({ calls }) => {
+    await assertRejectsAppError(
+      () =>
+        setIosSetting(
+          { ...IOS_TEST_SIMULATOR, simulatorSetPath: set },
+          'permission',
+          'grant',
+          'com.example.app',
+          { permissionTarget: 'notifications' },
+          process.env,
+        ),
+      {
+        code: 'UNSUPPORTED_OPERATION',
+        reason: SIMULATOR_NOTIFICATION_REASONS.unreachable.reason,
+      },
+    );
+    assert.equal(
+      calls.some((args) => args.includes('launchctl')),
+      false,
+    );
+  });
+  assert.deepEqual(await fs.readFile(file), before);
 });
 
 function installedAppsTool(args: string[]): FakeAppleToolResponse {

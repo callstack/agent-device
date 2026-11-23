@@ -133,7 +133,8 @@ test.for([
   },
 );
 
-// Every target but the narrower ones that share a row (contacts-limited, location).
+// Every target but the narrower ones that share a row (contacts-limited, location) and
+// notifications, which SpringBoard's settings file holds.
 const EVERY_SERVICE = [
   'calendar',
   'camera',
@@ -142,7 +143,6 @@ const EVERY_SERVICE = [
   'media-library',
   'microphone',
   'motion',
-  'notifications',
   'photos',
   'reminders',
   'siri',
@@ -171,7 +171,7 @@ test.for([
     // The simulator records `all` as one kTCCServiceAll row that iOS does not consult.
     const runSimctl = recordingRunner(
       services.map((service) =>
-        service === 'notifications' ? refusal(wording) : { stdout: '', stderr: '' },
+        service === 'siri' ? refusal(wording) : { stdout: '', stderr: '' },
       ),
     );
 
@@ -189,8 +189,11 @@ test.for([
     );
     expect(result).toEqual({
       permission: 'all',
-      permissions: services.filter((service) => service !== 'notifications'),
-      warnings: ['Skipped notifications: this iOS runtime does not let simctl privacy change it.'],
+      permissions: services.filter((service) => service !== 'siri'),
+      warnings: [
+        'Skipped siri: this iOS runtime does not let simctl privacy change it.',
+        'Skipped notifications: iOS simulator notification permission needs the simulator files on this host.',
+      ],
     });
   },
 );
@@ -270,13 +273,13 @@ test('a privacy service the runtime refuses is unsupported; other failures pass 
     setting: 'permission',
     state: 'grant',
     appBundleId: 'com.example.app',
-    options: { permissionTarget: 'notifications' },
+    options: { permissionTarget: 'siri' },
   });
 
   await expect(applySimctlSetting(grant)).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     message:
-      'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
+      'iOS simulator does not support setting siri permission via simctl privacy on this runtime.',
     details: { deviceId: 'SIM-1', appBundleId: 'com.example.app' },
     cause: refused,
   });
@@ -297,25 +300,23 @@ test('a refused privacy service reports the device id the caller names, not the 
         setting: 'permission',
         state: 'grant',
         appBundleId: 'com.example.app',
-        options: { permissionTarget: 'notifications' },
+        options: { permissionTarget: 'siri' },
       }),
     ),
   ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: { deviceId: 'limrun:ios:lease-a', appBundleId: 'com.example.app' },
   });
-  expect(argvs(runSimctl)).toEqual([
-    ['privacy', 'booted', 'grant', 'notifications', 'com.example.app'],
-  ]);
+  expect(argvs(runSimctl)).toEqual([['privacy', 'booted', 'grant', 'siri', 'com.example.app']]);
 });
 
 test.for([
-  { state: 'deny', action: 'revoke', target: 'notifications', wording: 'Failed to revoke access' },
+  { state: 'deny', action: 'revoke', target: 'siri', wording: 'Failed to revoke access' },
   { state: 'grant', action: 'grant', target: 'calendar', wording: 'Failed to set access' },
   {
     state: 'grant',
     action: 'grant',
-    target: 'notifications',
+    target: 'motion',
     wording:
       'Underlying error (domain=NSPOSIXErrorDomain, code=1):\n\tFailed to create TCC authorization record',
   },
@@ -362,18 +363,18 @@ test('a refused targeted reset fails instead of a reset all that would clear ear
     });
 
   await applySimctlSetting(permission('grant', 'microphone'));
-  const error = await appErrorFrom(applySimctlSetting(permission('reset', 'notifications')));
+  const error = await appErrorFrom(applySimctlSetting(permission('reset', 'siri')));
 
   expect(error).toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     message:
-      'iOS simulator does not support resetting notifications permission via simctl privacy on this runtime.',
+      'iOS simulator does not support resetting siri permission via simctl privacy on this runtime.',
     details: { deviceId: 'SIM-1', appBundleId: 'com.example.app' },
     cause: refused,
   });
   expect(argvs(runSimctl)).toEqual([
     ['privacy', 'SIM-1', 'grant', 'microphone', 'com.example.app'],
-    ['privacy', 'SIM-1', 'reset', 'notifications', 'com.example.app'],
+    ['privacy', 'SIM-1', 'reset', 'siri', 'com.example.app'],
   ]);
 });
 
