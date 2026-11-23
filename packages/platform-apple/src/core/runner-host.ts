@@ -10,7 +10,11 @@ import {
 } from '@agent-device/host-kit/command';
 import { shellQuote } from '@agent-device/kernel/device-shell';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import {
+  captureDiagnosticTraceWriter,
+  emitDiagnostic,
+  withDiagnosticTimer,
+} from '@agent-device/host-kit/diagnostics';
 import {
   isProcessAlive,
   isProcessGroupAlive,
@@ -87,6 +91,7 @@ export const appleRunnerHost: AppleRunnerHost = {
     return host;
   },
   shellQuote,
+  captureDiagnosticTraceWriter,
   emitDiagnostic,
   withDiagnosticTimer,
   retryWithPolicy,

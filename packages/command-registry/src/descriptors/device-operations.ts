@@ -182,6 +182,10 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
         refFrameEffect: 'preserve',
         allowInvalidRecording: true,
         allowSessionlessDefaultDevice: isRecordingStartRequest,
+        sessionlessLeaseAdmissionExemption: (req) =>
+          req.positionals?.[0]?.toLowerCase() === 'stop'
+            ? { kind: 'ended-lease-output' }
+            : undefined,
       },
       platformExecution: { kind: 'device-runtime', uses: screenRecordingRuntimePlanUses },
       // A `record stop` export can outlast the request envelope. Resetting the daemon mid-export

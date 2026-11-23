@@ -86,6 +86,6 @@ test('a Maestro replay error comes back unchanged after its inputText registered
   expect(result.ok).toBe(false);
   if (result.ok) return;
   expect(JSON.stringify(result.error)).not.toContain('[REDACTED]');
-  expect(result.error.logPath).toContain('req-maestro-input-1');
+  expect(result.error.logPath).toMatch(/[a-f0-9]{32}-unleased\.ndjson$/);
   expect(fs.existsSync(result.error.logPath!)).toBe(true);
 });

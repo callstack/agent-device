@@ -43,7 +43,9 @@ export const perfCommandMetadata = defineFieldCommandMetadata(
     kind: enumField(PERF_KIND_VALUES),
     template: stringField('xctrace template name, for example Time Profiler.'),
     out: stringField('Output artifact path.'),
-    tracePath: stringField('Existing .trace path to report, defaults to the latest session trace.'),
+    tracePath: stringField(
+      'Existing local .trace path to report. For a remote report, omit it to use the session capture.',
+    ),
   },
 );
 

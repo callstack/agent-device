@@ -9,6 +9,7 @@ import {
   withDiagnosticsScope,
   withDiagnosticTimer,
   DIAGNOSTIC_STDERR_PREFIX,
+  getDiagnosticsMeta,
 } from './diagnostics.ts';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -153,6 +154,40 @@ test('appendDiagnosticLine ensures the log directory once across appended lines'
   } finally {
     mkdirSpy.mockRestore();
   }
+});
+
+test('a record names a lease by its fingerprint, and a nested scope keeps the record of its parent', async () => {
+  const logPath = path.join(mkdtempForTestSync('agent-device-diag-lease-'), 'r1.ndjson');
+  const leaseId = 'A1B2C3D4E5F60718293A4B5C6D7E8F90';
+  const recordIds = await withDiagnosticsScope(
+    { session: 'leased', requestId: 'r1', debug: true, logPath, recordId: 'record-1' },
+    async () => {
+      emitDiagnostic({
+        phase: 'leased_session_ended',
+        data: {
+          leaseId,
+          endedLeases: [{ leaseId }],
+          releasedLeaseIds: [leaseId],
+          releaseId: 'r-1',
+        },
+      });
+      const nested = await withDiagnosticsScope(
+        { requestId: 'r1' },
+        () => getDiagnosticsMeta().recordId,
+      );
+      return [getDiagnosticsMeta().recordId, nested];
+    },
+  );
+
+  assert.deepEqual(recordIds, ['record-1', 'record-1']);
+  const record = fs.readFileSync(logPath, 'utf8');
+  assert.equal(record.toLowerCase().includes(leaseId.toLowerCase()), false);
+  assert.deepEqual(JSON.parse(record.split('\n')[0]!).data, {
+    leaseId: 'ff25d238',
+    endedLeases: [{ leaseId: 'ff25d238' }],
+    releasedLeaseIds: ['ff25d238'],
+    releaseId: 'r-1',
+  });
 });
 
 test('a later diagnostics scope recreates a removed log directory', async () => {

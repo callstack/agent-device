@@ -200,7 +200,19 @@ describe('state-dir residue rules', () => {
 
   test.each<[string, StateEntry, DaemonLeakPhaseSelection, 'expected' | 'stray']>([
     ['session event log', file('sessions/default/events.ndjson'), AFTER_SHUTDOWN, 'expected'],
-    ['request diagnostics', file('sessions/d/requests/abc.ndjson'), AFTER_SHUTDOWN, 'expected'],
+    [
+      'request diagnostics',
+      file('sessions/d/request-records/abc.ndjson'),
+      AFTER_SHUTDOWN,
+      'expected',
+    ],
+    ['legacy diagnostics', file('sessions/d/requests/abc.ndjson'), AFTER_SHUTDOWN, 'expected'],
+    [
+      'verified legacy diagnostics',
+      file('sessions/d/requests-unleased/abc.ndjson'),
+      AFTER_SHUTDOWN,
+      'expected',
+    ],
     ['shutdown report', file('daemon-shutdown.json'), AFTER_SHUTDOWN, 'expected'],
     ['torn publish temporary', file('device-claims/a.json.55.tmp'), AFTER_SHUTDOWN, 'stray'],
     [

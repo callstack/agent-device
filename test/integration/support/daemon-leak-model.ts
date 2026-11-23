@@ -102,7 +102,7 @@ const EXPECTED_STATE_DIR_ENTRIES: readonly RegExp[] = [
   /^daemon\.log$/,
   /^daemon-shutdown\.json$/,
   /^sessions\/[^/]+\/events\.ndjson$/,
-  /^sessions\/[^/]+\/requests\/[^/]+\.ndjson$/,
+  /^sessions\/[^/]+\/(?:request-records|requests(?:-unleased)?)\/[^/]+\.ndjson$/,
   /^sessions\/[^/]+\/(?:app|runner)\.log$/,
   /^sessions\/[^/]+\/repair-tombstone\.json$/,
   /^sessions\/[^/]+\/artifacts\/.+$/,

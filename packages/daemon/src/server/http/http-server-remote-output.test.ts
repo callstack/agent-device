@@ -11,25 +11,15 @@ import type {
   PerfNativeCaptureLiveHandle,
   PerfNativeCaptureSnapshot,
 } from '@agent-device/contracts/perf-runtime';
-import type {
-  DaemonArtifact,
-  DaemonResponse,
-  DaemonResponseData,
-} from '@agent-device/kernel/contracts';
+import type { DaemonArtifact } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
-  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
-  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
+  DAEMON_HTTP_LEASE_HEADER,
+  DAEMON_HTTP_TENANT_HEADER,
 } from '@agent-device/contracts/daemon-http';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import {
-  closeLoopbackServer,
-  createTestHostEnvironment,
-  listenOnLoopback,
-  mkdtempForTestSync,
-} from '@agent-device/test-kit';
-import { createDaemonHttpServer } from './http-server.ts';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import {
   makeAndroidSession,
@@ -44,68 +34,10 @@ import {
   listDownloadableArtifacts,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
+import { localEnv, successfulData, withHttp } from './http-output.fixtures.ts';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
 import { runBatchCommands } from '../../sessions/handlers/session-batch.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
-
-type RpcBody = {
-  result?: Extract<DaemonResponse, { ok: true }>;
-  error?: { data?: { code?: string; details?: { reason?: string; field?: string } } };
-};
-
-function successfulData(body: RpcBody): DaemonResponseData {
-  expect(body.result?.ok, JSON.stringify(body)).toBe(true);
-  expect(body.result!.data).toBeDefined();
-  return body.result!.data!;
-}
-
-function localEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  delete env.AGENT_DEVICE_HTTP_AUTH_HOOK;
-  delete env.AGENT_DEVICE_HTTP_AUTH_EXPORT;
-  return env;
-}
-
-async function withHttp(
-  handleRequest: (request: DaemonRequest) => Promise<DaemonResponse>,
-  run: (
-    post: (params: Record<string, unknown>, remote?: boolean, tenant?: string) => Promise<RpcBody>,
-    base: string,
-  ) => Promise<void>,
-  env = localEnv(),
-): Promise<void> {
-  const server = await createDaemonHttpServer({
-    token: 'test-token',
-    handleRequest,
-    env,
-    cwd: process.cwd(),
-  });
-  try {
-    const base = `http://127.0.0.1:${await listenOnLoopback(server)}`;
-    await run(async (params, remote = true, tenant) => {
-      const response = await fetch(`${base}/rpc`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: 'Bearer test-token',
-          ...(tenant ? { 'x-tenant': tenant } : {}),
-          ...(remote
-            ? { [DAEMON_HTTP_NETWORK_ACCESS_HEADER]: DAEMON_HTTP_PUBLIC_NETWORK_ACCESS }
-            : {}),
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'output',
-          method: 'agent-device.command',
-          params,
-        }),
-      });
-      return (await response.json()) as RpcBody;
-    }, base);
-  } finally {
-    await closeLoopbackServer(server);
-  }
-}
 
 const outputCases = [
   { command: 'screenshot', positionals: ['/host/screenshot.png'] },
@@ -287,7 +219,10 @@ test.each(['marker', 'auth-hook', 'batch'] as const)(
         const artifact = data?.artifacts?.[0];
         expect(artifact?.artifactId).toBeTypeOf('string');
         const download = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {
-          headers: { authorization: 'Bearer test-token' },
+          headers: {
+            authorization: 'Bearer test-token',
+            ...(lease ? { [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId } : {}),
+          },
         });
         expect(download.status).toBe(200);
         const bytes = Buffer.from(await download.arrayBuffer());
@@ -400,7 +335,7 @@ test.each(['local', 'local-client-destination', 'remote'] as const)(
           cleanupDownloadableArtifact(artifactId!);
         } else {
           expect(artifactId).toBeUndefined();
-          const inventory = await listDownloadableArtifacts(undefined, {});
+          const inventory = await listDownloadableArtifacts({}, {});
           expect(
             inventory.some(
               ({ filename }) => filename === 'caller.mp4' || filename === 'copied.mp4',
@@ -491,8 +426,8 @@ test('nested remote dispatch normalizes host outputs again below HTTP', async ()
   if (response.ok) expect(response.data?.artifacts?.[0]?.artifactId).toBeTypeOf('string');
 });
 
-test.each(
-  (
+test.each([
+  ...(
     [
       { kind: 'simpleperf', area: 'cpu' },
       { kind: 'xctrace', area: 'cpu' },
@@ -500,12 +435,13 @@ test.each(
       { kind: 'xctrace', area: 'trace' },
     ] as const
   ).flatMap((capture) =>
-    (['remote', 'local', 'remote-local-stop', 'relocated'] as const).map((origin) => ({
+    (['remote', 'local', 'remote-local-stop', 'relocated', 'leased'] as const).map((origin) => ({
       ...capture,
       origin,
     })),
   ),
-)(
+  { kind: 'simpleperf', area: 'cpu', origin: 'report-requester' } as const,
+])(
   '$origin $kind $area capture keeps producer output ownership through stop',
   async ({ kind, area, origin }) => {
     const root = mkdtempForTestSync('remote-native-perf-');
@@ -528,13 +464,16 @@ test.each(
         },
       };
     };
+    const explicitTrace = path.join(root, 'explicit.trace');
+    const leaseRegistry = new LeaseRegistry();
+    const { ownership, reporter } = nativePerfOwners(leaseRegistry, origin);
     const handler = createRequestHandler({
       host: createTestHostEnvironment(),
       createCommandSurface: screenshotCommandSurface,
       logPath: path.join(root, 'daemon.log'),
       token: 'test-token',
       sessionStore,
-      leaseRegistry: new LeaseRegistry(),
+      leaseRegistry,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       deviceRuntimeGateway: {
         ...base,
@@ -606,13 +545,19 @@ test.each(
                   response: snapshot(false),
                 };
               },
-              perfProfileReport: async ({ tracePath, outPath }) => {
+              perfProfileReport: async ({ tracePath, outPath, profile, template }) => {
+                const explicit =
+                  fs.existsSync(explicitTrace) && tracePath === fs.realpathSync(explicitTrace);
+                if (explicit) {
+                  expect(profile).toBeUndefined();
+                  expect(template).toBeUndefined();
+                }
                 expect(
                   fs.readFileSync(
                     kind === 'xctrace' ? path.join(tracePath, 'capture.bin') : tracePath,
                     'utf8',
                   ),
-                ).toBe('generated-capture');
+                ).toBe(explicit ? 'independent-capture' : 'generated-capture');
                 fs.writeFileSync(outPath, 'generated-report');
                 return { outPath };
               },
@@ -631,18 +576,22 @@ test.each(
           command: 'perf',
           session: 'capture',
           positionals: positionals('start'),
+          meta: ownership.meta,
           ...(origin === 'local' ? { flags: { out: callerOutput } } : {}),
         },
         origin !== 'local',
       );
       expect(successfulData(started).artifacts).toBeUndefined();
+      await ownership.refuseUnowned(() =>
+        post({ command: 'perf', session: 'capture', positionals: positionals('stop') }),
+      );
       const stopped = await post(
         {
           command: 'perf',
           session: 'capture',
           positionals: positionals('stop'),
           ...(origin === 'relocated' ? { flags: { out: callerOutput } } : {}),
-          meta: { clientArtifactPaths: { outPath: '/client/capture' } },
+          meta: { ...ownership.meta, clientArtifactPaths: { outPath: '/client/capture' } },
         },
         origin !== 'remote-local-stop' && origin !== 'relocated',
       );
@@ -662,8 +611,9 @@ test.each(
       }
       expect(artifact?.artifactId).toBeTypeOf('string');
       const output = stoppedData.outPath as string;
+      const restoreProfile = replaceXctraceProfile(kind, area, output);
       const download = await fetch(`${baseUrl}/artifacts/${artifact?.artifactId}`, {
-        headers: { authorization: 'Bearer test-token' },
+        headers: ownership.headers,
       });
       expect(download.status).toBe(200);
       const payload = Buffer.from(await download.arrayBuffer());
@@ -672,22 +622,43 @@ test.each(
           ? gunzipSync(payload).includes(Buffer.from('generated-capture'))
           : payload.toString() === 'generated-capture',
       ).toBe(true);
+      restoreProfile();
       if (area === 'cpu') {
         expect(
           fs.readFileSync(kind === 'xctrace' ? path.join(output, 'capture.bin') : output, 'utf8'),
         ).toBe('generated-capture');
+        await ownership.refuseUnowned(() =>
+          post({ command: 'perf', session: 'capture', positionals: positionals('report') }),
+        );
+        if (kind === 'xctrace' && origin === 'leased') {
+          fs.mkdirSync(explicitTrace);
+          fs.writeFileSync(path.join(explicitTrace, 'capture.bin'), 'independent-capture');
+          const reportPath = path.join(root, 'explicit-report.json');
+          const explicitReport = (source: string) =>
+            post(
+              {
+                command: 'perf',
+                session: 'capture',
+                positionals: [...positionals('report'), '', reportPath, source],
+              },
+              false,
+            );
+          successfulData(await explicitReport(explicitTrace));
+          expect(fs.readFileSync(reportPath, 'utf8')).toBe('generated-report');
+          const alias = path.join(root, 'retained-alias.trace');
+          fs.symlinkSync(output, alias, 'dir');
+          await ownership.refuseUnowned(() => explicitReport(alias));
+        }
         const report = await post({
           command: 'perf',
           session: 'capture',
           positionals: positionals('report'),
+          meta: reporter.meta,
         });
         const reportData = successfulData(report);
-        const reportDownload = await fetch(
+        await reporter.expectReport(
           `${baseUrl}/artifacts/${reportData.artifacts?.[0]?.artifactId}`,
-          { headers: { authorization: 'Bearer test-token' } },
         );
-        expect(reportDownload.status).toBe(200);
-        expect(await reportDownload.text()).toBe('generated-report');
       } else await vi.waitFor(() => expect(fs.existsSync(output)).toBe(false));
     });
   },
@@ -925,7 +896,11 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
           path.join(sessionStore.resolveSessionDir('tenant-b:capture'), 'test-artifacts'),
         );
         const download = await fetch(`${baseUrl}/artifacts/${second.artifactId}`, {
-          headers: { authorization: 'Bearer test-token', 'x-tenant': 'tenant-b' },
+          headers: {
+            authorization: 'Bearer test-token',
+            'x-tenant': 'tenant-b',
+            [DAEMON_HTTP_LEASE_HEADER]: leases.get('tenant-b')!.leaseId,
+          },
         });
         expect(download.status).toBe(200);
         const archive = gunzipSync(Buffer.from(await download.arrayBuffer()));
@@ -942,7 +917,11 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
         expect(forbidden.status).toBe(401);
         for (const artifact of [first, third]) {
           const own = await fetch(`${baseUrl}/artifacts/${artifact.artifactId}`, {
-            headers: { authorization: 'Bearer test-token', 'x-tenant': 'tenant-a' },
+            headers: {
+              authorization: 'Bearer test-token',
+              'x-tenant': 'tenant-a',
+              [DAEMON_HTTP_LEASE_HEADER]: leases.get('tenant-a')!.leaseId,
+            },
           });
           expect(own.status).toBe(200);
           await own.arrayBuffer();
@@ -958,3 +937,51 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
     cwd.mockRestore();
   }
 });
+
+function replaceXctraceProfile(kind: string, area: string, output: string): () => void {
+  if (kind !== 'xctrace' || area !== 'cpu') return () => {};
+  const profile = path.join(output, 'capture.bin');
+  fs.writeFileSync(profile, 'later-profile');
+  return () => fs.writeFileSync(profile, 'generated-capture');
+}
+
+function nativePerfOwners(registry: LeaseRegistry, origin: string) {
+  if (origin === 'report-requester') {
+    return {
+      ownership: nativePerfOwnership(registry, false, 'capture-tenant'),
+      reporter: nativePerfOwnership(registry, true, 'report-tenant'),
+    };
+  }
+  const ownership = nativePerfOwnership(registry, origin === 'leased');
+  return { ownership, reporter: ownership };
+}
+
+function nativePerfOwnership(registry: LeaseRegistry, leased: boolean, tenantId?: string) {
+  const scope = {
+    tenantId: tenantId ?? 'tenant',
+    runId: 'perf',
+    leaseBackend: 'android-instance',
+  } as const;
+  const lease = leased ? registry.allocateLease(scope) : undefined;
+  const headers = {
+    authorization: 'Bearer test-token',
+    ...(lease || tenantId ? { [DAEMON_HTTP_TENANT_HEADER]: scope.tenantId } : {}),
+  };
+  const leasedHeaders = lease ? { ...headers, [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId } : headers;
+  return {
+    meta: lease ? { ...scope, leaseId: lease.leaseId } : { tenantId },
+    headers: leasedHeaders,
+    expectReport: async (url: string) => {
+      if (lease) expect((await fetch(url, { headers })).status).toBe(401);
+      const download = await fetch(url, { headers: leasedHeaders });
+      expect(download.status).toBe(200);
+      expect(await download.text()).toBe('generated-report');
+    },
+    refuseUnowned: async (run: () => Promise<{ error?: { data?: unknown } }>) => {
+      if (lease)
+        expect((await run()).error?.data).toMatchObject({
+          details: { reason: 'LEASE_OUTPUT_MISMATCH' },
+        });
+    },
+  };
+}

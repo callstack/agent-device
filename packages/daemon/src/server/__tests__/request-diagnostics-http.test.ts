@@ -17,10 +17,19 @@ import {
 
 const RECORD = '{"phase":"request_start"}\n{"phase":"request_failed"}\n';
 
-function writeRecord(sessionsDir: string, session: string, requestId: string): string {
+// A record id as the daemon chooses it for a request that sent no lease id.
+const RECORD_ID = `${'a'.repeat(32)}-unleased`;
+
+function writeRecord(
+  sessionsDir: string,
+  session: string,
+  requestId: string,
+  directory: Parameters<typeof resolveSessionRequestLogPath>[2] = 'request-records',
+): string {
   const recordPath = resolveSessionRequestLogPath(
     path.join(sessionsDir, safeSessionName(session)),
     requestId,
+    directory,
   );
   fs.mkdirSync(path.dirname(recordPath), { recursive: true });
   fs.writeFileSync(recordPath, RECORD);
@@ -37,10 +46,11 @@ async function withDiagnosticsServer(
     token: 'daemon-secret',
     leaseRegistry,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-    resolveRequestDiagnosticsPath: (ref) =>
+    resolveRequestDiagnosticsPath: (ref, directory) =>
       resolveSessionRequestLogPath(
         path.join(sessionsDir, safeSessionName(ref.session)),
         ref.requestId,
+        directory,
       ),
     env: process.env,
     cwd: process.cwd(),
@@ -83,8 +93,8 @@ test('request diagnostics route serves one record as ndjson to an authorized cal
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'cwd:9f1:default', 'abc123');
-    const response = await fetch(diagnosticsUrl(baseUrl, 'cwd:9f1:default', 'abc123'), {
+    writeRecord(sessionsDir, 'cwd:9f1:default', RECORD_ID);
+    const response = await fetch(diagnosticsUrl(baseUrl, 'cwd:9f1:default', RECORD_ID), {
       headers: { authorization: 'Bearer daemon-secret' },
     });
     assert.equal(response.status, 200);
@@ -98,7 +108,7 @@ test('request diagnostics returns complete JSON when its stream fails before hea
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'default', 'abc123');
+    writeRecord(sessionsDir, 'default', RECORD_ID);
     const createReadStream = fs.createReadStream;
     const streams = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) =>
       createReadStream(file, {
@@ -111,7 +121,7 @@ test('request diagnostics returns complete JSON when its stream fails before hea
     );
     let response: Response | undefined;
     try {
-      response = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+      response = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID), {
         headers: { authorization: 'Bearer daemon-secret' },
       });
       expect(response.status).toBe(500);
@@ -129,8 +139,8 @@ test('request diagnostics route refuses an unauthenticated caller', async (t) =>
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'default', 'abc123');
-    const response = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'));
+    writeRecord(sessionsDir, 'default', RECORD_ID);
+    const response = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID));
     assert.equal(response.status, 401);
     assert.equal((await response.text()).includes('request_start'), false);
   });
@@ -140,16 +150,34 @@ test('request diagnostics route answers 404 for a record that was never written'
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'default', 'abc123');
+    writeRecord(sessionsDir, 'default', RECORD_ID);
     const auth = { authorization: 'Bearer daemon-secret' };
     const unknownRequest = await fetch(diagnosticsUrl(baseUrl, 'default', 'nope'), {
       headers: auth,
     });
     assert.equal(unknownRequest.status, 404);
-    const unknownSession = await fetch(diagnosticsUrl(baseUrl, 'other', 'abc123'), {
+    const unknownSession = await fetch(diagnosticsUrl(baseUrl, 'other', RECORD_ID), {
       headers: auth,
     });
     assert.equal(unknownSession.status, 404);
+  });
+});
+
+test('request diagnostics route does not serve a record that an earlier release named', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    // Its name carries no owner, so nobody is known to own it.
+    writeRecord(sessionsDir, 'default', 'abc123');
+    for (const leaseHeader of [{}, { 'x-agent-device-lease-id': 'b'.repeat(32) }] as Record<
+      string,
+      string
+    >[]) {
+      const legacy = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+        headers: { authorization: 'Bearer daemon-secret', ...leaseHeader },
+      });
+      assert.equal(legacy.status, 404);
+    }
   });
 });
 
@@ -157,14 +185,14 @@ test('request diagnostics route rejects ids that do not name one record', async 
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'default', 'abc123');
+    writeRecord(sessionsDir, 'default', RECORD_ID);
     // Sent over a raw request rather than `fetch`: URL parsing resolves `..`
     // away client-side, so only a hand-built request target reaches the daemon
     // with the segment a traversal attempt would actually carry.
     for (const [session, requestId] of [
-      ['..', 'abc123'],
+      ['..', RECORD_ID],
       ['default', '..'],
-      ['', 'abc123'],
+      ['', RECORD_ID],
       ['default', ''],
     ] as const) {
       const status = await requestRawStatus(
@@ -188,13 +216,13 @@ test('request diagnostics route reads an unattested tenant as no session partiti
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'tenant-a:default', 'abc123');
+    writeRecord(sessionsDir, 'tenant-a:default', RECORD_ID);
     const auth = { authorization: 'Bearer daemon-secret' };
-    const owner = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', 'abc123'), {
+    const owner = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', RECORD_ID), {
       headers: { ...auth, 'x-agent-device-tenant': 'tenant-a' },
     });
     assert.equal(owner.status, 200);
-    const otherTenant = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', 'abc123'), {
+    const otherTenant = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', RECORD_ID), {
       headers: { ...auth, 'x-agent-device-tenant': 'tenant-b' },
     });
     assert.equal(otherTenant.status, 200);
@@ -205,8 +233,8 @@ test('request diagnostics route serves a plain session to the tenant that ran th
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'default', 'abc123');
-    const response = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+    writeRecord(sessionsDir, 'default', RECORD_ID);
+    const response = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID), {
       headers: {
         authorization: 'Bearer daemon-secret',
         'x-agent-device-tenant': 'tenant-a',
@@ -221,8 +249,8 @@ test('request diagnostics route serves the cwd-scoped session its owner ran in',
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'cwd:9f1:default', 'abc123');
-    const response = await fetch(diagnosticsUrl(baseUrl, 'cwd:9f1:default', 'abc123'), {
+    writeRecord(sessionsDir, 'cwd:9f1:default', RECORD_ID);
+    const response = await fetch(diagnosticsUrl(baseUrl, 'cwd:9f1:default', RECORD_ID), {
       headers: {
         authorization: 'Bearer daemon-secret',
         'x-agent-device-tenant': 'tenant-a',
@@ -256,16 +284,36 @@ test('request diagnostics route does not serve a tenant that held a macos-app le
     deviceKey: 'com.example.app',
   });
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
-    writeRecord(sessionsDir, 'default', 'abc123');
+    writeRecord(sessionsDir, 'default', RECORD_ID);
     const auth = { authorization: 'Bearer daemon-secret' };
-    const leased = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+    const leased = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID), {
       headers: { ...auth, 'x-agent-device-tenant': 'tenant-a' },
     });
     assert.equal(leased.status, 401, await leased.clone().text());
     assert.equal((await leased.text()).includes('request_start'), false);
-    const other = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+    const other = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID), {
       headers: { ...auth, 'x-agent-device-tenant': 'tenant-b' },
     });
     assert.equal(other.status, 200);
   }, leaseRegistry);
+});
+
+test('legacy diagnostics are served only from the host-verified namespace', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'default', RECORD_ID, 'requests');
+    const reservedId = `${'b'.repeat(32)}-${'c'.repeat(64)}`;
+    writeRecord(sessionsDir, 'default', reservedId, 'requests-unleased');
+    const headers = { authorization: 'Bearer daemon-secret' };
+    const unknown = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID), { headers });
+    expect(unknown.status).toBe(404);
+    const verified = await fetch(diagnosticsUrl(baseUrl, 'default', reservedId), {
+      headers,
+    });
+    expect(verified.status).toBe(200);
+    expect(await verified.text()).toBe(RECORD);
+    writeRecord(sessionsDir, 'default', reservedId);
+    const current = await fetch(diagnosticsUrl(baseUrl, 'default', reservedId), { headers });
+    expect(current.status).toBe(401);
+  });
 });

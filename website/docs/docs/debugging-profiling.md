@@ -136,7 +136,7 @@ When a command fails, stderr starts and ends with the same summary line, so the 
 
 ```text
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
-Log: /Users/me/.agent-device/sessions/<session>/requests/<request-id>.ndjson
+Log: /Users/me/.agent-device/sessions/<session>/request-records/<record-id>.ndjson
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
 ```
 
@@ -146,9 +146,9 @@ Use `--json` to inspect `error.details.stderr` when it is present. Diagnostic st
 
 When a command fails against a remote daemon, the `Log:` path is always on your machine:
 agent-device downloads the failing request's record over the same base URL and token into
-`<state-dir>/remote-diagnostics/<session>/requests/<request-id>.ndjson`, so a CI job can keep it as a build
+`<state-dir>/remote-diagnostics/<session>/requests/<record-id>.ndjson`, so a CI job can keep it as a build
 artifact. If the download fails, the line reads `Log: unavailable` with the remote daemon, the
-request id, and the reason — never a path on the daemon host.
+record id, and the reason.
 
 On iOS simulators, `logs` scope by bundle id and the resolved app executable. For launch-time stdout/stderr, capture the direct app launch console instead of starting raw `simctl` streams:
 
@@ -274,6 +274,7 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 - `perf memory snapshot` escalates to file artifacts. Android supports Java HPROF capture for active app processes when the build/device allows heap dumping. iOS simulator and macOS app sessions support memgraph capture. On physical iOS devices, memgraph capture reports unavailable with a hint.
 - Heap and memgraph artifacts are returned as paths plus compact metadata. Example default output: `Memory artifact (android-hprof): /tmp/app.hprof (42MB)`. They are not printed or embedded in JSON by default. Native allocation tracing (heapprofd) is not supported.
 - `perf cpu profile ... --kind xctrace` collects an Apple native `.trace`; `report` aggregates every run, returns at most ten weighted top functions in JSON, and prints five. `perf trace ... --kind xctrace` keeps trace data as an artifact.
+- For a remote CPU profile report, use the session’s stopped capture. Supply an existing host trace path only when you run the report locally.
 - On iOS simulators and macOS, process sampling and captures target the resolved app executable. Other running copies with the same executable name are excluded, including copies installed on another simulator.
 - Android native profiling uses `perf cpu profile ... --kind simpleperf`; its report likewise returns at most ten top functions and prints five. Android native trace capture uses `perf trace ... --kind perfetto`. These commands require an active Android app session and return artifact paths/summaries instead of dumping profile or trace contents.
 - Use the compact result as evidence. For example, a successful Perfetto stop may return `state: "stopped"`, `outPath: "/tmp/app.perfetto-trace"`, `sizeBytes: 5392410`, and `method: "adb-shell-perfetto"` while the 5.3 MB raw trace remains on disk as the artifact.

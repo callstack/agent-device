@@ -158,7 +158,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     flags: {
       ...nextFlags,
       session: nextState.session,
-      leaseId: nextState.leaseId,
+      leaseId: nextState.leaseId ?? (command === 'artifacts' ? nextState.endedLeaseId : undefined),
       leaseBackend: nextState.leaseBackend,
       platform: nextState.platform ?? nextFlags.platform,
       target: nextState.target ?? nextFlags.target,

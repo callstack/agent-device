@@ -7,6 +7,7 @@ export {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
+  captureDiagnosticTraceWriter,
   registerDiagnosticSensitiveValue,
   type ResourceDiagnostic,
   toDiagnosticJson,

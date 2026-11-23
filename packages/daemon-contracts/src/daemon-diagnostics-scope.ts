@@ -18,11 +18,14 @@ export async function withDaemonDiagnosticsScope<T>(
   body: () => Promise<T> | T,
 ): Promise<T> {
   const { logPath, command = 'daemon', debug = true } = options;
-  return await withDiagnosticsScope({ command, session: 'daemon', logPath, debug }, async () => {
-    try {
-      return await body();
-    } finally {
-      flushDiagnosticsToSessionFile({ force: true });
-    }
-  });
+  return await withDiagnosticsScope(
+    { command, session: 'daemon', logPath, debug, operatorLog: true },
+    async () => {
+      try {
+        return await body();
+      } finally {
+        flushDiagnosticsToSessionFile({ force: true });
+      }
+    },
+  );
 }

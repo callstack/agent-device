@@ -2348,7 +2348,7 @@ Exact behavior: `agent-device help record`.
 - `apple_simulator_recording_busy` means another recording holds the simulator. Run `record stop` in the session that owns it.
 - `record stop` is safe to repeat. If it returns `video_validator_compile_timeout`, or the request ends during export, run `record stop` again; the recording is kept. `video_validator_unavailable` names a host failure to repair before you retry.
 - `record start --scope device` without a session creates one, and `record stop` ends it, unless something else started using the session meanwhile.
-- On a remote daemon, a recording whose leased session ends stays downloadable by the tenant for a short time through `GET /artifacts`.
+- On a remote daemon, if a leased session ends while a recording runs (lease expiry, release, or `close`), the daemon finishes the recording. It keeps the video and telemetry downloadable with the ended lease's id: `GET /artifacts` lists them with `sessionName`, and `GET /artifacts/<id>` downloads them, when the request sends the `x-agent-device-lease-id` header. After `close`, `agent-device artifacts` on the same connection sends that id for you. Each file is deleted after its download, or after 15 minutes.
 - `record contact-sheet` turns an exported MP4 into one PNG grid of the frames where the screen changed, each labeled with its time. It needs no session and runs on macOS hosts only. A short-lived screen between samples can be missing.
 
 **Session app logs:** See [Debugging and profiling](/docs/debugging-profiling#logs) for the clean-repro and grep workflow.
