@@ -196,11 +196,8 @@ export async function composeDaemonRuntimeDeps(
       recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
       providerRentalPolicy: (provider: string) => {
         const runtime = providerDeviceRuntimes.find((runtime) => runtime.provider === provider);
-        const module = providerComposition.platformModules.find(
-          (entry) => entry.runtime === runtime,
-        )?.module;
         return {
-          runtimeIdentity: module?.owner.instance,
+          rentalRecoveryPrincipal: runtime?.rentalRecoveryPrincipal,
           legacyRecovery: !!runtime?.recoverExpiredLease && !runtime.leaseLifecycle.recoverRental,
         };
       },

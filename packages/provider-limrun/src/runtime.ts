@@ -40,7 +40,10 @@ import type {
   PlatformRuntimeOwner,
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  providerRuntimeInstance,
+  providerRuntimeOwner,
+} from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import {
@@ -104,7 +107,7 @@ export type LimrunRuntime = ProviderDeviceRuntime & {
 };
 
 export type LimrunRuntimeRegistration = Readonly<{
-  runtime: LimrunRuntime;
+  runtime: LimrunRuntime & { prepareRentalRecovery(): Promise<void> };
   platformModule: PlatformRuntimeProviderModule;
 }>;
 
@@ -156,6 +159,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly options: LimrunRuntimeOptions;
   private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
+  rentalRecoveryPrincipal?: string;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
@@ -219,6 +223,18 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
           ...LIMRUN_ORG_CLIENT_LOGGING,
         })
       : undefined;
+  }
+
+  async prepareRentalRecovery(): Promise<void> {
+    if (!this.limrun) return;
+    // The SDK can override the configured key and URL when building its request.
+    const { req } = await this.limrun.buildRequest({ method: 'get', path: '/' });
+    const authorization = req.headers.get('authorization');
+    if (!authorization) return;
+    this.rentalRecoveryPrincipal = providerRuntimeInstance(LIMRUN_PROVIDER, [
+      ['authorization', authorization],
+      ['baseUrl', this.limrun.baseURL],
+    ]);
   }
 
   /**

@@ -76,6 +76,8 @@ export type ExpiredProviderLeaseReleaser = {
     lease: DeviceLease,
     afterSessionCleanup?: Promise<void>,
   ) => Promise<ProviderLeaseReleaseOutcome>;
+  /** Records a request-owned stop and retries journal retirement while registration is held. */
+  confirmRelease: (lease: DeviceLease) => void;
   /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
   recordLiveLeases: (leases: readonly DeviceLease[]) => void;
   /**
@@ -117,6 +119,7 @@ export function createExpiredProviderLeaseReleaser(options: {
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
   const pendingRecoveryLeases = new Map<string, DeviceLease>();
+  const pendingRetirements = new Map<string, DeviceLease>();
   const inheritedRentalIds = new Set<string>();
   const persistedRecoveryLeaseIds = new Set<string>();
   let persistedLiveLeaseIds = new Set<string>();
@@ -266,7 +269,7 @@ export function createExpiredProviderLeaseReleaser(options: {
     const rental = inheritedRental(lease);
     if (!rental) return isRecoverableProviderAvailable(lease, options.recoverableProviderIds);
     if (
-      !rental.canUseCredentials(lease) ||
+      !rental.hasMatchingRecoveryPrincipal(lease) ||
       !isProviderRuntimeAvailable(lease, options.providerRuntimeIds)
     )
       return false;
@@ -304,7 +307,9 @@ export function createExpiredProviderLeaseReleaser(options: {
         provider: lease.leaseProvider,
         releaseStatus: 'unknown',
         reason,
-        ...(rental?.canUseCredentials(lease) === false ? { credentialsChanged: true } : {}),
+        ...(rental?.hasMatchingRecoveryPrincipal(lease) === false
+          ? { recoveryPrincipalUnverified: true }
+          : {}),
       },
     });
   };
@@ -352,7 +357,8 @@ export function createExpiredProviderLeaseReleaser(options: {
       // inherits whatever these lease records still hold.
       phase === 'closed' ||
       retryTimer ||
-      (![...pendingLiveLeases.values()].some(canAttemptLiveRelease) &&
+      (pendingRetirements.size === 0 &&
+        ![...pendingLiveLeases.values()].some(canAttemptLiveRelease) &&
         ![...pendingRecoveryLeases.values()].some(canRecover))
     ) {
       return;
@@ -367,6 +373,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       level: 'warn',
       phase: 'provider_lease_expiry_retry_scheduled',
       data: {
+        pendingRetirementCount: pendingRetirements.size,
         pendingLiveLeaseCount: pendingLiveLeases.size,
         pendingRecoveryLeaseCount: pendingRecoveryLeases.size,
         retryDelayMs: nextRetryDelayMs,
@@ -374,11 +381,31 @@ export function createExpiredProviderLeaseReleaser(options: {
     });
   };
 
+  const retireConfirmedRelease = (lease: DeviceLease): void => {
+    if (isClosed()) return;
+    if (!confirmProviderRelease(lease)) {
+      pendingRetirements.set(lease.leaseId, lease);
+      scheduleRetry();
+      return;
+    }
+    pendingRetirements.delete(lease.leaseId);
+    pendingLiveLeases.delete(lease.leaseId);
+    if (pendingRecoveryLeases.delete(lease.leaseId)) {
+      inheritedRentalIds.delete(lease.leaseId);
+      persistPendingLeases();
+    }
+  };
+
   const trackReleaseAttempt = (key: string, attempt: Promise<void>): Promise<void> => {
     activeReleaseAttempts.set(key, attempt);
     const finish = (): void => {
       if (activeReleaseAttempts.get(key) === attempt) activeReleaseAttempts.delete(key);
-      if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
+      if (
+        pendingRetirements.size === 0 &&
+        pendingLiveLeases.size === 0 &&
+        pendingRecoveryLeases.size === 0 &&
+        retryTimer
+      ) {
         clearTimeout(retryTimer);
         retryTimer = undefined;
       } else {
@@ -413,7 +440,8 @@ export function createExpiredProviderLeaseReleaser(options: {
     (!hasRentalRecord(lease) || options.providerRentals?.legacyLeaseId(lease) !== undefined);
 
   const ensureLiveReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
-    if (isClosed() || !canAttemptLiveRelease(lease)) return undefined;
+    if (isClosed() || pendingRetirements.has(lease.leaseId) || !canAttemptLiveRelease(lease))
+      return undefined;
     const key = `live:${lease.leaseId}`;
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
@@ -424,15 +452,13 @@ export function createExpiredProviderLeaseReleaser(options: {
         released = await releaseLiveProviderLease(options.leaseLifecycleProvider, lease);
       }
       if (isClosed()) return;
-      if (released) {
-        if (confirmProviderRelease(lease)) pendingLiveLeases.delete(lease.leaseId);
-      } else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
+      if (released) retireConfirmedRelease(lease);
+      else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
     });
   };
 
   const ensureRecoveryReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
-    if (phase === 'closed') return undefined;
-    if (!canRecover(lease)) return undefined;
+    if (isClosed() || pendingRetirements.has(lease.leaseId) || !canRecover(lease)) return undefined;
     if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) return undefined;
     const key = `recovery:${lease.leaseId}`;
     const activeAttempt = activeReleaseAttempts.get(key);
@@ -455,10 +481,7 @@ export function createExpiredProviderLeaseReleaser(options: {
         (await releaseExpiredProviderLease(recover, lease));
       if (isClosed()) return;
       if (released) {
-        if (!confirmProviderRelease(lease)) return;
-        pendingRecoveryLeases.delete(lease.leaseId);
-        inheritedRentalIds.delete(lease.leaseId);
-        persistPendingLeases();
+        retireConfirmedRelease(lease);
       } else {
         options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
         if (identity)
@@ -472,6 +495,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   };
 
   const retryPending = async (): Promise<void> => {
+    for (const lease of pendingRetirements.values()) retireConfirmedRelease(lease);
     const attempts = [
       ...[...pendingLiveLeases.values()].map(ensureLiveReleaseAttempt),
       ...[...pendingRecoveryLeases.values()].map(ensureRecoveryReleaseAttempt),
@@ -514,6 +538,7 @@ export function createExpiredProviderLeaseReleaser(options: {
         return { status: 'not-required' };
       }
       if (isClosed()) return refuseClosedRelease(lease);
+      if (pendingRetirements.has(lease.leaseId)) return { status: 'retrying' };
       if (afterSessionCleanup) {
         sessionCleanup.set(lease.leaseId, afterSessionCleanup);
         const forget = () => {
@@ -545,6 +570,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (outcome.status === 'retrying') scheduleRetry();
       return outcome;
     },
+    confirmRelease: retireConfirmedRelease,
     recordLiveLeases,
     recoverInherited,
     retryPending,
@@ -555,7 +581,13 @@ export function createExpiredProviderLeaseReleaser(options: {
       // drain reports it, it never throws past the bounded window.
       await settleWithin(() => retryPending(), Math.max(0, timeoutMs)).catch(() => undefined);
       const result = {
-        pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
+        pending: [
+          ...new Map([
+            ...pendingLiveLeases,
+            ...pendingRecoveryLeases,
+            ...pendingRetirements,
+          ]).values(),
+        ],
         unknown: [
           ...[...pendingLiveLeases.values()].filter((lease) =>
             activeReleaseAttempts.has(`live:${lease.leaseId}`),
@@ -563,7 +595,7 @@ export function createExpiredProviderLeaseReleaser(options: {
           ...[...pendingRecoveryLeases.values()].filter((lease) =>
             activeReleaseAttempts.has(`recovery:${lease.leaseId}`),
           ),
-        ],
+        ].filter((lease) => !pendingRetirements.has(lease.leaseId)),
         released: [...drainReleasedLeases.values()],
       };
       drainReleasedLeases = new Map();

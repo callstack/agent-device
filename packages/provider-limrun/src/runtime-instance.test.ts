@@ -1,4 +1,6 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+import { limrunPlugin } from './plugin.ts';
+import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 
 test('derives a stable opaque identity without exposing the API key', () => {
@@ -45,4 +47,55 @@ test('keeps the durable digest of an account and of an attached instance', () =>
       instances: { ios: { apiUrl: 'https://attached.example/api', token: 't' } },
     }),
   ).toBe('principal-5e4bdc0668a05c1c16f984e4655fc1d1a3bcd25b5965e3b9f3a40838121d5110');
+});
+
+test('rental recovery binds effective authorization and API URL independently of model settings', async () => {
+  const [provider] = limrunPlugin({
+    createDependencies: stubLimrunRuntimeDependencies,
+  }).contributes;
+  if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
+  const principal = async (env: Record<string, string>) => {
+    const setup = await provider.setup({
+      env,
+      options: {},
+      clientVersion: 'test-version',
+      diagnostics: { emit: () => {} },
+      createError: (_code, message) => {
+        throw new Error(message);
+      },
+      runHostCommand: async () => {
+        throw new Error('Expected no host command');
+      },
+    });
+    if (!('runtime' in setup)) throw new Error('Expected a configured Limrun runtime');
+    return setup.runtime.rentalRecoveryPrincipal;
+  };
+  vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
+  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', undefined);
+  try {
+    const first = await principal({ LIMRUN_API_KEY: 'fixture-key', LIMRUN_IOS_MODEL: 'iphone' });
+    expect(first).toMatch(/^principal-[a-f0-9]{64}$/);
+    expect(
+      await principal({
+        LIMRUN_API_KEY: 'fixture-key',
+        LIMRUN_IOS_MODEL: 'ipad',
+        LIMRUN_KEEP_ALIVE: '1',
+      }),
+    ).toBe(first);
+    expect(await principal({ LIMRUN_API_KEY: 'other-key' })).not.toBe(first);
+
+    vi.stubEnv('LIMRUN_BASE_URL', 'https://b.example.test');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
+    vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'Authorization: Bearer alternate-fixture-credential');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
+    expect(
+      await principal({
+        LIM_IOS_INSTANCE_URL: 'https://attached.example.test',
+        LIM_IOS_INSTANCE_TOKEN: 'fixture-token',
+      }),
+    ).toBeUndefined();
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

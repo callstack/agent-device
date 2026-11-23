@@ -120,6 +120,7 @@ export class LeaseRegistry {
     lease: DeviceLease,
     reason?: 'PROVIDER_INSTANCE_ENDED' | 'LEASE_RELEASED',
   ) => void;
+  private readonly onProviderReleaseConfirmed: LeaseRegistryOptions['onProviderReleaseConfirmed'];
   private readonly onProviderLeasesChanged?: (leases: readonly DeviceLease[]) => void;
   private readonly providerRentals: LeaseRegistryOptions['providerRentals'];
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
@@ -132,6 +133,7 @@ export class LeaseRegistry {
     this.now = options.now ?? (() => Date.now());
     this.onLeaseExpired = options.onLeaseExpired;
     this.onProviderLeasesChanged = options.onProviderLeasesChanged;
+    this.onProviderReleaseConfirmed = options.onProviderReleaseConfirmed;
     this.providerRentals = options.providerRentals;
     this.providerSessionOwnership = new ProviderSessionOwnershipRegistry({
       now: this.now,
@@ -899,8 +901,9 @@ export class LeaseRegistry {
   }
 
   confirmRequestProviderRelease(lease: DeviceLease): void {
-    this.confirmLeaseEnd(lease.leaseId, 'providerReleased');
-    if (this.isProviderRentalRetirementPending(lease.leaseId)) this.retryProviderLeaseEnd(lease);
+    if (leaseProviderRequiringRuntime(lease) && this.onProviderReleaseConfirmed)
+      this.onProviderReleaseConfirmed(lease);
+    else this.confirmLeaseEnd(lease.leaseId, 'providerReleased');
   }
 
   leaseEndRefusal(leaseId: string): AppError | undefined {

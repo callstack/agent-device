@@ -44,10 +44,15 @@ Before provider allocation, the daemon writes the contention scope to `provider-
 The journal keeps a lease fingerprint, any provider reconciliation key, and the exact instance ID when the provider supplies it.
 The daemon reads the rental journal and the legacy live and pending journals after it holds daemon registration.
 Allocation, session commands, and host lease PUT wait for startup recovery to restore the reservations.
-A provider can settle an inherited rental by confirming release or proving absence.
+For an inherited rental, the daemon requires a matching recovery principal for the effective provider account and API origin.
+With that proof, the provider can settle the rental by confirming release or proving absence.
+If the principal is missing or different, the daemon keeps the rental fenced as `releaseStatus: unknown`.
+The legacy live and pending files use their historical adoption path.
 Revyl uses a fresh session ID for each journaled create, even if a later lease reuses the public lease ID.
 Revyl keeps the lease fenced if a stop reports absence before the provider confirms the instance.
-If journal retirement fails after confirmed release, the daemon keeps the reservation and retries retirement.
+If journal retirement fails after confirmed release, the daemon retries the write, including during shutdown.
+The retry can proceed while session or claim cleanup is pending.
+The daemon keeps the contention reservation until journal retirement and local cleanup both succeed.
 An empty lookup can race a create and leave the reservation as `releaseStatus: unknown`.
 Use the journal and daemon diagnostics to identify a rental for provider-side reconciliation.
 The live session store starts empty. The controller must connect again.

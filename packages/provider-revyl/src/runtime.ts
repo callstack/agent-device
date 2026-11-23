@@ -93,13 +93,7 @@ export type RevylRuntime = ProviderDeviceRuntime & {
  */
 export function createRevylRuntime(options: RevylRuntimeOptions): RevylRuntimeRegistration {
   const runtime = new RevylRuntimeImplementation(options);
-  const owner = providerRuntimeOwner(
-    REVYL_PROVIDER,
-    resolveRevylRuntimeInstance({
-      apiKey: options.apiKey,
-      ...(options.backendUrl === undefined ? {} : { backendUrl: options.backendUrl }),
-    }),
-  );
+  const owner = providerRuntimeOwner(REVYL_PROVIDER, runtime.rentalRecoveryPrincipal);
   if (owner.kind !== 'provider-runtime') throw new TypeError('Invalid Revyl runtime owner');
   return Object.freeze({
     runtime,
@@ -117,6 +111,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   /** Every lease this runtime rents a device for, until Revyl confirms that device's `/stop`. */
   private readonly leases: ProviderLeaseTable<RevylSession, RevylRentedSession, RevylLeaseRequest>;
   readonly provider = REVYL_PROVIDER;
+  readonly rentalRecoveryPrincipal: string;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: (lease, context) => this.allocate(lease, context),
@@ -167,6 +162,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       ...(options.backendUrl === undefined ? {} : { backendUrl: options.backendUrl }),
       clientVersion: options.clientVersion,
     });
+    this.rentalRecoveryPrincipal = resolveRevylRuntimeInstance(options);
     this.leases = createProviderLeaseTable(createRevylLeaseDriver(this.client));
   }
 

@@ -6,7 +6,6 @@ import type {
   LeaseLifecycleContext,
   ProviderRentalIdentity,
 } from '@agent-device/contracts/device';
-import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import { normalizeLeaseId } from '@agent-device/contracts/lease-scope';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { publishDurableFileSync } from '@agent-device/host-kit/file';
@@ -15,24 +14,19 @@ import { deviceLeaseBusyError } from './lease-registry-scope.ts';
 
 type Rental = {
   lease: DeviceLease;
-  credentialFingerprint?: string;
-  runtimeIdentity?: string;
+  rentalRecoveryPrincipal?: string;
   legacyLeaseId?: string;
   releaseOnRestart: ProviderRentalIdentity;
 };
 
 export type ProviderRentalPolicy = (provider: string) => {
-  runtimeIdentity?: string;
+  rentalRecoveryPrincipal?: string;
   legacyRecovery: boolean;
 };
 
 export type ProviderRentalJournal = ReturnType<typeof createProviderRentalJournal>;
 
-export function createProviderRentalJournal(
-  stateDir: string,
-  credentials: DaemonProviderCredentials | undefined,
-  policy?: ProviderRentalPolicy,
-) {
+export function createProviderRentalJournal(stateDir: string, policy?: ProviderRentalPolicy) {
   const destination = path.join(stateDir, 'provider-rentals.json');
   let entries = new Map<string, Rental>();
   const unrecordedInstances = new Map<string, string>();
@@ -47,8 +41,6 @@ export function createProviderRentalJournal(
     entries = updated;
   };
 
-  const fingerprint = (lease: DeviceLease) =>
-    lease.leaseProvider && credentials?.fingerprint(lease.leaseProvider, lease.backend);
   const policyFor = (lease: DeviceLease) =>
     lease.leaseProvider ? policy?.(lease.leaseProvider) : undefined;
   const idFor = (lease: DeviceLease): string =>
@@ -121,12 +113,9 @@ export function createProviderRentalJournal(
     inheritedLeases: () => [...entries.values()].map(({ lease }) => lease),
     identity: (lease: DeviceLease) => entries.get(idFor(lease))?.releaseOnRestart,
     legacyLeaseId: (lease: DeviceLease) => entries.get(idFor(lease))?.legacyLeaseId,
-    canUseCredentials: (lease: DeviceLease) => {
-      const entry = entries.get(idFor(lease));
-      const runtimeIdentity = policyFor(lease)?.runtimeIdentity;
-      if (entry?.runtimeIdentity !== runtimeIdentity) return false;
-      const recorded = entry?.credentialFingerprint;
-      return recorded === undefined || recorded === fingerprint(lease);
+    hasMatchingRecoveryPrincipal: (lease: DeviceLease) => {
+      const recorded = entries.get(idFor(lease))?.rentalRecoveryPrincipal;
+      return recorded !== undefined && recorded === policyFor(lease)?.rentalRecoveryPrincipal;
     },
     assertLeaseIdAvailable: (leaseId: string) => {
       if (entries.has(rentalId(leaseId))) {
@@ -145,8 +134,7 @@ export function createProviderRentalJournal(
             leaseId: id,
             ...(recovery?.legacyRecovery ? { clientId, retainOnClose } : {}),
           },
-          credentialFingerprint: fingerprint(lease),
-          runtimeIdentity: recovery?.runtimeIdentity,
+          rentalRecoveryPrincipal: recovery?.rentalRecoveryPrincipal,
           legacyLeaseId: recovery?.legacyRecovery ? lease.leaseId : undefined,
           releaseOnRestart: {},
         }),
@@ -195,9 +183,9 @@ function isRental(value: unknown): value is Rental {
   return (
     !!entry &&
     isRentalScope(entry.lease) &&
-    (entry.credentialFingerprint === undefined ||
-      typeof entry.credentialFingerprint === 'string') &&
-    (entry.runtimeIdentity === undefined || typeof entry.runtimeIdentity === 'string') &&
+    (entry.rentalRecoveryPrincipal === undefined ||
+      (typeof entry.rentalRecoveryPrincipal === 'string' &&
+        entry.rentalRecoveryPrincipal.trim().length > 0)) &&
     (entry.legacyLeaseId === undefined ||
       (typeof entry.legacyLeaseId === 'string' &&
         normalizeLeaseId(entry.legacyLeaseId) === entry.legacyLeaseId &&

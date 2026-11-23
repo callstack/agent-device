@@ -29,10 +29,10 @@ export async function startRentalDaemon(
     'leaseLifecycleProvider' | 'recoverExpiredLease' | 'providerRentalPolicy'
   >,
 ) {
-  const otherCredentials = phase === 'recover-other-credentials';
+  const otherPrincipal = phase === 'recover-other-principal';
   const fakeProviderState = path.join(
     stateDir,
-    otherCredentials ? 'other-account-instance' : 'fake-provider-instance',
+    otherPrincipal ? 'other-account-instance' : 'fake-provider-instance',
   );
   const runtime = await startDaemonRuntime({
     host: captureHostEnvironment({ env: rentalDaemonEnv(stateDir), cwd: process.cwd }),
@@ -40,13 +40,10 @@ export async function startRentalDaemon(
       const deps = await createDaemonRuntimeDeps(input);
       return {
         ...deps,
-        requestRouter: {
-          ...deps.requestRouter,
-          providerCredentials: {
-            stateDir,
-            fingerprint: () => (otherCredentials ? 'other-account' : 'original-account'),
-          },
-        },
+        providerRentalPolicy: () => ({
+          rentalRecoveryPrincipal: otherPrincipal ? 'other-account' : 'original-account',
+          legacyRecovery: false,
+        }),
         providerRuntimeIds: ['limrun'],
         recoverableProviderIds: ['limrun'],
         recoverExpiredLease: async () => {

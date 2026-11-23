@@ -3,9 +3,11 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { startDaemonRuntime } from '@agent-device/daemon';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { mkdtempForTestSync, selectPlugin } from '@agent-device/test-kit';
+import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { expect, test, vi } from 'vitest';
 import {
   fakeInstanceId,
@@ -124,7 +126,7 @@ test.each([
 test.each([
   ['unknown', 'recover-unknown'],
   ['before-key', 'recover-unknown'],
-  ['after-identity', 'recover-other-credentials'],
+  ['after-identity', 'recover-other-principal'],
 ])(
   'unconfirmed release stays fenced across daemon registrations (%s)',
   async (phase, recoveryPhase) => {
@@ -288,76 +290,130 @@ test('a live provider lease ID with a different scope is already in use', async 
   }
 });
 
-test('a changed runtime identity cannot confirm absence for an inherited rental', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-rental-runtime-');
-  const journalPath = path.join(stateDir, 'provider-rentals.json');
-  const allocate = async (_lease: DeviceLease, context?: LeaseLifecycleContext) => {
-    context?.rental?.beforeCreate(fakeRentalKey);
-    context?.rental?.rented(fakeInstanceId);
-    return { providerSessionId: fakeInstanceId };
-  };
-  const original = await startRentalDaemon(stateDir, 'recover', () => {}, {
-    providerRentalPolicy: () => ({ runtimeIdentity: 'original-runtime', legacyRecovery: false }),
-    leaseLifecycleProvider: { allocate, release: async () => ({ release: 'unknown' }) },
-  });
-  try {
-    expect(await send(original, 'lease_allocate', scope)).toMatchObject({ ok: true });
-  } finally {
-    await original.runtime.close();
-  }
-  const record = fs.readFileSync(journalPath, 'utf8');
-  const recoverRental = vi.fn(async () => true);
-  const changed = await startRentalDaemon(stateDir, 'recover', () => {}, {
-    providerRentalPolicy: () => ({ runtimeIdentity: 'other-runtime', legacyRecovery: false }),
-    leaseLifecycleProvider: { allocate, recoverRental },
-  });
-  try {
-    expect(recoverRental).not.toHaveBeenCalled();
-    expect(await send(changed, 'lease_allocate', { ...scope, leaseId: undefined })).toMatchObject({
-      ok: false,
-      error: { code: 'DEVICE_IN_USE' },
-    });
-    expect(fs.readFileSync(journalPath, 'utf8')).toBe(record);
-  } finally {
-    await changed.runtime.close();
-  }
-});
-
-test('a provider with legacy-only recovery receives the original lease ID after restart', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-rental-legacy-provider-');
-  const providerRentalPolicy = () => ({ legacyRecovery: true });
-  const original = await startRentalDaemon(stateDir, 'recover', () => {}, {
-    providerRentalPolicy,
-    recoverExpiredLease: async () => {
-      throw new Error('Release temporarily unavailable.');
-    },
-    leaseLifecycleProvider: {
-      allocate: async () => ({}),
-      release: async () => ({ release: 'unknown' }),
-    },
-  });
-  try {
-    expect(await send(original, 'lease_allocate', scope)).toMatchObject({ ok: true });
-  } finally {
-    await original.runtime.close();
-  }
-  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => {});
-  const successor = await startRentalDaemon(stateDir, 'recover', () => {}, {
-    providerRentalPolicy,
-    recoverExpiredLease,
-    leaseLifecycleProvider: {},
-  });
-  try {
-    expect(recoverExpiredLease).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ leaseId: scope.leaseId, deviceKey: scope.deviceKey }),
+test.each(['recoverRental', 'recoverExpiredLease'] as const)(
+  'production composition requires the same configured account and origin for %s',
+  async (hook) => {
+    const stateDir = mkdtempForTestSync('agent-device-rental-plugin-principal-');
+    const name = '@example/rental-recovery';
+    const provider = 'rental-recovery';
+    const journal = path.join(stateDir, 'provider-rentals.json');
+    const calls = path.join(stateDir, 'recovery-calls');
+    const configPath = path.join(stateDir, 'config.json');
+    const options = { account: 'fixture-account', origin: 'https://a.example.test', calls };
+    const principal = 'fixture-account@https://a.example.test';
+    const legacy = hook === 'recoverExpiredLease';
+    selectPlugin(
+      stateDir,
+      name,
+      String.raw`import fs from 'node:fs';
+      export default ({ account, origin, calls, allowRecovery }) => ({
+        apiVersion: 3,
+        contributes: [{
+          kind: 'provider', provider: "${provider}", credentials: { variables: [] },
+          setup: () => {
+            const recover = (lease) => {
+              if (!allowRecovery) throw new Error('Recovery is unavailable before restart');
+              fs.appendFileSync(calls, JSON.stringify({ account, origin, leaseId: lease.leaseId }) + '\n');
+              return true;
+            };
+            return {
+              runtime: {
+                provider: "${provider}",
+                rentalRecoveryPrincipal: account ? account + '@' + origin : undefined,
+                leaseLifecycle: {
+                  allocate: async (_lease, { rental }) => {
+                    rental.beforeCreate('fixture-key');
+                    rental.rented('fixture-instance');
+                    return {};
+                  },
+                  release: async () => ({ release: 'unknown' }),
+                  ${legacy ? '' : 'recoverRental: async (lease) => recover(lease),'}
+                },
+                ${legacy ? 'recoverExpiredLease: async (lease) => { recover(lease); },' : ''}
+                ownsDevice: () => false,
+                getInteractor: () => undefined,
+                deviceInventoryProvider: async () => [],
+                shutdown: async () => {},
+              },
+              platformModule: {
+                owner: { kind: 'provider-runtime', provider: "${provider}", instance: 'android' },
+                loadRuntime: async () => { throw new Error('No device access expected'); },
+              },
+            };
+          },
+        }],
+      });`,
+      { selectionOptions: options },
     );
-    expect(
-      JSON.parse(fs.readFileSync(path.join(stateDir, 'provider-rentals.json'), 'utf8')).rentals,
-    ).toEqual([]);
-  } finally {
-    await successor.runtime.close();
-  }
-});
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const start = async () => {
+      const runtime = await startDaemonRuntime({
+        host: captureHostEnvironment({ env: rentalDaemonEnv(stateDir), cwd: process.cwd }),
+        composeDeps: createDaemonRuntimeDeps,
+        stderr: { write: () => {} },
+        stdout: { write: () => {} },
+      });
+      if (!runtime?.socketPort) throw new Error('Rental plugin daemon did not open a socket.');
+      return { runtime, port: runtime.socketPort, token: runtime.token };
+    };
+    const request = { ...scope, leaseProvider: provider };
+    const original = await start();
+    try {
+      expect(await send(original, 'lease_allocate', request)).toMatchObject({ ok: true });
+    } finally {
+      await original.runtime.close();
+    }
+
+    const recorded = fs.readFileSync(journal, 'utf8');
+    expect(fs.existsSync(calls)).toBe(false);
+    const withoutPrincipal = JSON.parse(recorded);
+    delete withoutPrincipal.rentals[0].rentalRecoveryPrincipal;
+    const unprovenRecord = JSON.stringify(withoutPrincipal);
+    for (const [changed, contents] of [
+      [{ ...options, origin: 'https://b.example.test' }, recorded],
+      [{ ...options, account: 'other-fixture-account' }, recorded],
+      [{ ...options, account: undefined }, recorded],
+      [options, unprovenRecord],
+      [{ ...options, account: undefined }, unprovenRecord],
+    ] as const) {
+      config.plugins[name].options = { ...changed, allowRecovery: true };
+      fs.writeFileSync(journal, contents);
+      fs.writeFileSync(configPath, JSON.stringify(config));
+      const successor = await start();
+      try {
+        expect(fs.existsSync(calls)).toBe(false);
+        expect(
+          await send(successor, 'lease_allocate', { ...request, leaseId: undefined }),
+        ).toMatchObject({
+          ok: false,
+          error: { code: 'DEVICE_IN_USE', details: { releaseStatus: 'unknown' } },
+        });
+        expect(fs.readFileSync(journal, 'utf8')).toBe(contents);
+      } finally {
+        await successor.runtime.close();
+      }
+    }
+
+    const entry = JSON.parse(recorded).rentals[0];
+    expect(entry.rentalRecoveryPrincipal).toBe(principal);
+    expect(entry.legacyLeaseId).toBe(legacy ? scope.leaseId : undefined);
+    config.plugins[name].options = { ...options, allowRecovery: true };
+    fs.writeFileSync(journal, recorded);
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    const successor = await start();
+    try {
+      const recovery = {
+        account: options.account,
+        origin: options.origin,
+        leaseId: legacy ? scope.leaseId : entry.lease.leaseId,
+      };
+      expect(fs.readFileSync(calls, 'utf8')).toBe(`${JSON.stringify(recovery)}\n`);
+      expect(JSON.parse(fs.readFileSync(journal, 'utf8')).rentals).toHaveLength(0);
+    } finally {
+      await successor.runtime.close();
+    }
+  },
+);
 
 test.each(['live', 'legacy'] as const)(
   'an exact ID write failure blocks allocation and retries through %s release',

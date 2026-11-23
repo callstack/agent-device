@@ -34,6 +34,8 @@ export type ProviderExpiredLeaseRecovery = (lease: DeviceLease) => Promise<void>
 /** Provider adapter contract; root owns active-runtime and request composition. */
 export type ProviderDeviceRuntime = {
   provider: string;
+  /** Non-secret identity of the effective account and API origin that can recover this runtime's rentals. */
+  readonly rentalRecoveryPrincipal?: string;
   leaseLifecycle: LeaseLifecycleProvider;
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   cloudArtifacts?: CloudArtifactProvider;

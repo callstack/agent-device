@@ -94,12 +94,13 @@ export type PluginConnection = Readonly<{
 }>;
 
 /**
- * The provider runtime a plugin builds. This type names only `provider` and `shutdown`; the host
- * also requires `leaseLifecycle`, `ownsDevice`, `getInteractor` and `deviceInventoryProvider` from
+ * The provider runtime a plugin builds. The host also requires `leaseLifecycle`, `ownsDevice`, `getInteractor` and `deviceInventoryProvider` from
  * the provider runtime contract before it registers the runtime.
  */
 export type PluginProviderRuntime = Readonly<{
   provider: string;
+  /** Non-secret identity of the effective account and API origin that can recover this runtime's rentals. */
+  rentalRecoveryPrincipal?: string;
   shutdown(): Promise<void>;
 }>;
 

@@ -301,11 +301,7 @@ async function startDaemonRuntimeOnHost(
   const { createLeaseSessionEnd } = await import('../lease-session-end.ts');
   const { createProviderRentalJournal } =
     await import('../../resources/provider-rental-journal.ts');
-  const providerRentals = createProviderRentalJournal(
-    baseDir,
-    deps.requestRouter.providerCredentials,
-    deps.providerRentalPolicy,
-  );
+  const providerRentals = createProviderRentalJournal(baseDir, deps.providerRentalPolicy);
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
@@ -371,6 +367,7 @@ async function startDaemonRuntimeOnHost(
         )
         .finally(finishProvider);
     },
+    onProviderReleaseConfirmed: expiredProviderLeaseReleaser.confirmRelease,
     onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
   });
   const leaseExpirySweep = setInterval(() => {

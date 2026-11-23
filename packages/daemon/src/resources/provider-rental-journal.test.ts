@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { createProviderRentalJournal } from './provider-rental-journal.ts';
 
 test('an allocation holding an old journal callback cannot submit a create after shutdown', () => {
-  const journal = createProviderRentalJournal(mkdtempForTestSync('provider-rental-'), undefined);
+  const journal = createProviderRentalJournal(mkdtempForTestSync('provider-rental-'));
   const lease = {
     leaseId: '1234567890abcdef1234567890abcdef',
     tenantId: 'tenant',
