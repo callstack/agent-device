@@ -1,6 +1,9 @@
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
-import { PLATFORM_RUNTIME_REASONS, type RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
+import {
+  PLATFORM_RUNTIME_REASONS,
+  type RuntimeOperationUnavailability,
+} from '@agent-device/contracts/platform-runtime';
 
 const nativeBackendUnavailable: RuntimeOperationUnavailability = Object.freeze({
   available: false,

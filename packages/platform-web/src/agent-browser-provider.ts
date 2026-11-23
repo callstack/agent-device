@@ -510,12 +510,11 @@ function parseBatchEntries(
   if (data.length !== commands.length)
     throw unusable(AGENT_BROWSER_REFUSAL_REASONS.entryCount.reason);
   if (!data.every(isBatchEntry)) throw unusable(AGENT_BROWSER_REFUSAL_REASONS.entryShape.reason);
-  const entries = data;
-  for (const [index, entry] of entries.entries()) {
+  for (const [index, entry] of data.entries()) {
     if (!sameBatchCommand(entry.command, commands[index]))
       throw unusable(AGENT_BROWSER_REFUSAL_REASONS.entryCommand.reason);
   }
-  return entries;
+  return data;
 }
 
 /** The echo as the backend printed it, which for these commands is exactly the array that was sent. */
@@ -945,10 +944,6 @@ function agentBrowserCliRefusalDispatch(parsed: JsonObject): {
     : {};
 }
 
-/**
- * The click reached the page but no editable field there took focus, so typing would go to nothing
- * or to whatever else holds focus. The fill is refused before it sends any text or key.
- */
 function textEntryFocusNotObservedError(x: number, y: number, cause: string): AppError {
   return new AppError(
     'COMMAND_FAILED',

@@ -1,4 +1,4 @@
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError, PLUGIN_INSTALLATION_REASONS } from '@agent-device/kernel/errors';
 import type { Platform } from '@agent-device/kernel/device';
 import type { OptionalPlatform } from './platform-module.ts';
 
@@ -135,13 +135,6 @@ export const MACOS_PLATFORM_PLUGIN_DECLARATION = Object.freeze({
 } as const satisfies PluginReleaseDeclaration & Readonly<{ label: string }>);
 
 /** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
-export const PLUGIN_INSTALLATION_REASONS = {
-  // A command requires a plugin that is absent.
-  notInstalled: { reason: 'plugin-not-installed', commands: ['connect', 'replay', 'test'] },
-  // The selected plugin cannot supply the requested provider.
-  unavailable: { reason: 'plugin-unavailable', commands: ['connect'] },
-} as const satisfies ReasonTable<'plugins'>;
-
 /**
  * The typed outcome for a platform family a composition does not have (ADR 0034). An optional family
  * reports `plugin-not-installed` with the package that provides it and its installation command,

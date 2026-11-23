@@ -38,6 +38,10 @@ interface HarmonyBundleDump {
   }>;
 }
 
+interface HarmonyArchiveModule {
+  app?: { bundleName?: string };
+}
+
 const HARMONY_APP_INVENTORY_TIMEOUT_MS = 60_000;
 const HARMONY_APP_METADATA_CONCURRENCY = 4;
 
@@ -412,7 +416,10 @@ export async function verifyHarmonyOpenForeground(
           HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
           Math.max(0, requestDeadlineAtMs - Date.now()),
         );
-  const verification = await pollHarmonyOpenForeground(hdc, device, bundleId, { signal, pollBudgetMs });
+  const verification = await pollHarmonyOpenForeground(hdc, device, bundleId, {
+    signal,
+    pollBudgetMs,
+  });
   if (verification === undefined) return outcome;
   if (input.execution.foreground !== true) {
     return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };

@@ -8,13 +8,19 @@ import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
-import { AppError, createRequestCanceledError, type ReasonTable } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
+import { ignoresSessionLease } from './daemon-command-registry.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import {
   LEASE_ADMISSION_REASONS,
   assertRequestHoldsSessionLease,
   assertRequestPresentsLease,
+  compareRequestLeaseClaims,
   sessionLeaseOf,
 } from './lease-context.ts';
 import {
@@ -253,6 +259,15 @@ export class SessionStore {
     return Array.from(this.sessions, ([address, entry]) => this.captureRef(address, entry));
   }
 
+  leasedSessionRefs(leaseId: string): SessionRef[] {
+    return this.listRefs().filter((ref) => ref.session.lease?.leaseId === leaseId);
+  }
+
+  currentRefForLease(ref: SessionRef, leaseId: string): SessionRef | undefined {
+    if (this.resolveCurrent(ref)?.lease?.leaseId !== leaseId) return undefined;
+    return this.refresh(ref);
+  }
+
   getRuntimeHints(name: string): SessionRuntimeHints | undefined {
     return this.runtimeHints.get(name)?.hints;
   }
@@ -280,6 +295,19 @@ export class SessionStore {
 
   recordEvent(sessionName: string, event: SessionEventLogInput): void {
     appendSessionEvent(this.resolveEventLogPath(sessionName), sessionName, event, this.host.env);
+  }
+
+  recordRequestEvent(
+    req: DaemonRequest,
+    address: string,
+    buildEvent: () => SessionEventLogInput,
+  ): boolean {
+    const lease = this.sessions.get(address)?.current.lease;
+    if (lease && (ignoresSessionLease(req.command) || compareRequestLeaseClaims(req, lease))) {
+      return false;
+    }
+    this.recordEvent(address, buildEvent());
+    return true;
   }
 
   readEvents(

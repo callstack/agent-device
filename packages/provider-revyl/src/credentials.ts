@@ -1,10 +1,4 @@
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-
-/** Every `details.reason` this module raises when it reads the Revyl credentials. */
-const REVYL_CREDENTIAL_REASONS = {
-  // No Revyl API key is set, so the provider cannot authenticate the request.
-  missingCredentials: { reason: 'missing_provider_credentials' },
-} as const satisfies ReasonTable<'revyl provider'>;
+import { AppError, PROVIDER_CREDENTIAL_REASONS } from '@agent-device/kernel/errors';
 
 export const REVYL_API_KEY_VARIABLE = 'REVYL_API_KEY';
 export const REVYL_API_URL_VARIABLE = 'REVYL_API_URL';
@@ -28,7 +22,7 @@ export function requireRevylCredentials(
     return { apiKey, apiUrl: env[REVYL_API_URL_VARIABLE]?.trim() || undefined };
   }
   throw new AppError('INVALID_ARGS', `${command} requires a Revyl API key.`, {
-    reason: REVYL_CREDENTIAL_REASONS.missingCredentials.reason,
+    reason: PROVIDER_CREDENTIAL_REASONS.missing.reason,
     hint: `Set ${REVYL_API_KEY_VARIABLE} to a Revyl API key. Revyl issues keys to its customers; a partner integration gets one through Revyl's partner program.`,
     variables: [REVYL_API_KEY_VARIABLE],
   });

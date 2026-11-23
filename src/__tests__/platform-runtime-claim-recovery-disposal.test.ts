@@ -33,6 +33,7 @@ import {
   createUnavailableRuntimeFactsForTest,
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
+import { runtimeModuleRegistryFixture } from '../platform-runtime-gateway.fixtures.ts';
 import { createComposedPlatformRuntimeGateway } from '../platform-runtime-gateway.ts';
 import { runStaleDeviceClaimRelease } from '../platform-runtime-claim-recovery.ts';
 
@@ -134,7 +135,7 @@ function composedRecovery(loadRuntime: () => Promise<PlatformRuntimeOwner>, sign
     beforeGateway: inspectDeviceClaimRecovery,
     composeGateway: () =>
       createComposedPlatformRuntimeGateway({
-        modules: new Map([['android', androidModule]]),
+        modules: runtimeModuleRegistryFixture([androidModule]),
         loadHost: async () => ({}) as PlatformRuntimeHost,
       }),
     trackDisposal: () => {},
@@ -290,26 +291,22 @@ test('runStaleDeviceClaimRelease writes outcomes at the bound and waits for late
     withDiagnosticsScope(
       { session: 'cli', requestId: 'req-cli-stale', command: 'device', debug: false, logPath },
       async () =>
-        await runStaleDeviceClaimRelease(
-          {},
-          createTestHostEnvironment({ env: f.env }),
-          {
-            composeRecovery: () => ({
-              reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
-              dispose: async () => {
-                try {
-                  await shutdown();
-                } finally {
-                  events.push('late-shutdown-finished');
-                }
-              },
-            }),
-            afterOutcomes: (outcomes) => {
-              events.push('output-written');
-              writtenOutcomes.push(outcomes);
+        await runStaleDeviceClaimRelease({}, createTestHostEnvironment({ env: f.env }), {
+          composeRecovery: () => ({
+            reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
+            dispose: async () => {
+              try {
+                await shutdown();
+              } finally {
+                events.push('late-shutdown-finished');
+              }
             },
+          }),
+          afterOutcomes: (outcomes) => {
+            events.push('output-written');
+            writtenOutcomes.push(outcomes);
           },
-        ),
+        }),
     ),
   );
 

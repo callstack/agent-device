@@ -48,7 +48,12 @@ import {
 } from '@agent-device/contracts/lease-scope';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { normalizeLeaseProvider, platformForLeaseBackend } from '@agent-device/kernel/contracts';
-import { AppError, createRequestCanceledError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  errorMessage,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../../resources/artifact-tracking.ts';

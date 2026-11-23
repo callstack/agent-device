@@ -1,4 +1,4 @@
-import { PLUGIN_REASONS } from './reasons.ts';
+import { PLUGIN_REASONS } from './contract.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';

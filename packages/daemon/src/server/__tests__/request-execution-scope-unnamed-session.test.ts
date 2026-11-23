@@ -27,6 +27,7 @@ function createTestRequestScope(
     ...params,
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    trackClaimRecoveryDisposal: () => {},
     deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
     platformRequestScope: platformRequestScopeFixture(),
   });

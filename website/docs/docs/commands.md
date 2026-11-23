@@ -2772,7 +2772,7 @@ Run `agent-device mcp` from an MCP client that supports direct tools. Configure 
 Manage installed provider plugins.
 
 ```bash
-agent-device plugins list [--state-dir <path>]|add <package[@version]>|update <package>|remove <package>
+agent-device plugins list [--state-dir <path>]|add <package[@version]|path.tgz>|update <package>|remove <package>
 ```
 
 **`plugins list`**
