@@ -193,11 +193,6 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'sessionIsolation',
       'reason',
       'ttlMs',
-      'platform',
-      'target',
-      'device',
-      'udid',
-      'serial',
     ],
   },
   'react-devtools': {

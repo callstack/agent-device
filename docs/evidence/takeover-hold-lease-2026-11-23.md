@@ -66,6 +66,29 @@ Opened: com.android.settings
 
 ## Ownership: another lease cannot touch the hold
 
+Session `s` created the hold first:
+
+```sh
+$ agent-device open com.android.settings --platform android --session s
+Opened: com.android.settings
+$ agent-device takeover hold --session s --reason "ownership demo" --ttl-ms 120000 --json
+{
+  "data": {
+    "hold": {
+      "id": "takeover-9617435c-edd6-4084-adce-189302ddc2ff",
+      "scope": {
+        "backend": "android-instance",
+        "leaseProvider": "proxy",
+        "deviceKey": "<device-key-from-the-lease>"
+      },
+      "state": "active",
+      "reason": "ownership demo",
+      "expiresAt": 1795410297152
+    }
+  }
+}
+```
+
 A second session `s2` connected to the same proxy and admitted its own lease
 on another device (an iOS simulator). Its release of session `s`'s live hold
 is refused as a typed ownership violation:
