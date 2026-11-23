@@ -77,10 +77,12 @@ export async function setAppleFoldPose(
   });
 
   const hingeAngleDegrees = await awaitHingePose(device, helper, pose, options.signal, targetAngle);
-  const verifiedPose = foldPoseForHingeAngle(hingeAngleDegrees)!;
-  const litPanel = await awaitPoseLitPanel(device, helper, verifiedPose, options.signal);
+  // Panels were measured only at the named poses, so a custom final angle keeps one panel read.
+  const litPanel = intent.pose
+    ? await awaitPoseLitPanel(device, helper, intent.pose, options.signal)
+    : litPanelOf(await readGuestPanelTable(device, helper, options.signal));
   return {
-    pose: verifiedPose,
+    pose: foldPoseForHingeAngle(hingeAngleDegrees)!,
     hingeAngleDegrees,
     ...(litPanel ? { screen: screenReport(litPanel) } : {}),
   };
@@ -107,7 +109,7 @@ async function dispatchedUnverifiedPoseError(
   targetAngle: number | undefined,
   cause: unknown,
 ): Promise<AppError> {
-  const litPanel = await readLitPanel(device, helper, signal);
+  const litPanel = litPanelOf(await readGuestPanelTable(device, helper, signal));
   return new AppError(
     'COMMAND_FAILED',
     `${device.name} received the ${pose} pose request, but the first hinge-angle read returned no sample to verify it`,
@@ -295,10 +297,10 @@ function unsettledPoseError(
 }
 
 /**
- * Reads the lit panel until it is the panel the verified pose lights: the `primary` panel when
- * closed and the other panel in every other pose (ADR 0025). The hinge reaches its stop before the
- * guest switches panel power, so the first read can still name the panel lit before the fold. A
- * pose that already lit its panel settles on that first read.
+ * Reads the lit panel until it is the panel the named pose lights: the `primary` panel when closed
+ * and the other panel when open or half-open (ADR 0025). A pose whose panel is already lit settles
+ * on the first read. A table that cannot show a panel switch, because it is unresolved or no panel
+ * reports measured power, ends the poll at once.
  */
 async function awaitPoseLitPanel(
   device: DeviceInfo,
@@ -306,29 +308,47 @@ async function awaitPoseLitPanel(
   pose: FoldPose,
   signal: AbortSignal | undefined,
 ): Promise<AppleDeviceDisplay | undefined> {
-  // CONSERVATIVE: Wait for the pose's panel so that `screen` never names the panel lit before the
-  // fold. When the deadline passes first, `screen` is omitted as unconfirmed. Revisit only if the
-  // panel table reports the switch together with the hinge stop.
-  const { settled, value } = await pollUntilSettled({
-    probe: () => readLitPanel(device, helper, signal),
-    settled: (panel) => panel !== undefined && panel.primary === (pose === 'closed'),
-    deadline: Deadline.fromTimeoutMs(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS),
+  const posePanel = (inventory: AppleDisplayInventory) => {
+    const panel = litPanelOf(inventory);
+    return panel?.primary === (pose === 'closed') ? panel : undefined;
+  };
+  // CONSERVATIVE: The guest switches panel power after the hinge stop, so the first read can name
+  // the panel lit before the fold; wait for the pose's panel and omit `screen` at the deadline.
+  // Revisit only if the panel table reports the switch together with the hinge stop.
+  const deadline = Deadline.fromTimeoutMs(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS);
+  const { value } = await pollUntilSettled({
+    // The time left on the deadline bounds each read, so the poll costs about one full read.
+    probe: () =>
+      readGuestPanelTable(device, helper, signal, {
+        timeoutMs: Math.max(deadline.remainingMs(), IOS_FOLD_PANEL_READ_INTERVAL_MS),
+      }),
+    settled: (inventory) => !hasMeasuredPanelPower(inventory) || posePanel(inventory) !== undefined,
+    deadline,
     intervalMs: IOS_FOLD_PANEL_READ_INTERVAL_MS,
     signal,
   });
-  return settled ? value : undefined;
+  return posePanel(value);
 }
 
-async function readLitPanel(
+function hasMeasuredPanelPower(inventory: AppleDisplayInventory): boolean {
+  return !inventory.unresolved && inventory.displays.some((display) => display.power !== 'unknown');
+}
+
+async function readGuestPanelTable(
   device: DeviceInfo,
   foldHelper: FoldHelper,
   signal: AbortSignal | undefined,
-): Promise<AppleDeviceDisplay | undefined> {
-  const inventory = await queryAppleDisplayInventory(device, {
+  options: { timeoutMs?: number } = {},
+): Promise<AppleDisplayInventory> {
+  return await queryAppleDisplayInventory(device, {
     signal,
     source: 'guest',
     foldHelper,
+    timeoutMs: options.timeoutMs,
   });
+}
+
+function litPanelOf(inventory: AppleDisplayInventory): AppleDeviceDisplay | undefined {
   if (inventory.unresolved || inventory.ambiguous) return undefined;
   return inventory.activeDisplay;
 }

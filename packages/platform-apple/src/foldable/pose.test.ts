@@ -28,6 +28,7 @@ import {
   buildInventory,
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
+  type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import {
   IOS_FOLD_PANEL_READ_INTERVAL_MS,
@@ -188,7 +189,7 @@ test("reports native panel points regardless of the display's own currentOrienta
 });
 
 test('omits the screen report when panel selection stays ambiguous, never inventing a viewport', async () => {
-  // Two lit panels make the inventory ambiguous, so `readLitPanel` refuses to name one; the pose is
+  // Two lit panels make the inventory ambiguous, so the panel read refuses to name one; the pose is
   // still verified but carries no `screen` rather than guessing the app viewport.
   const bothLit = buildInventory([panel({}), panel({ name: 'LCD-1', displayId: 3 })]);
   expect(bothLit.ambiguous).toBe(true);
@@ -235,6 +236,30 @@ test('omits the screen when the panel lit before the fold is still lit at the de
   const panelReads = mockInventory.mock.calls.length - 1;
   expect(panelReads).toBe(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS / IOS_FOLD_PANEL_READ_INTERVAL_MS + 1);
 });
+
+test.each<[string, AppleDisplayInventory]>([
+  ['unresolved', { displays: [], multiScreen: false, ambiguous: false, unresolved: true }],
+  [
+    'reporting no measured panel power',
+    buildInventory([
+      panel({ power: 'unknown' }),
+      panel({ name: 'LCD-1', displayId: 3, primary: false, power: 'unknown' }),
+    ]),
+  ],
+])(
+  'omits the screen after one read when the panel table is %s, without waiting',
+  async (_label, table) => {
+    // Neither table can ever show the panel switch, so a further read cannot help.
+    mockInventory.mockResolvedValueOnce(duoInventory('outer')).mockResolvedValue(table);
+    mockHinge.mockResolvedValue(180);
+
+    await expect(foldOnFakeClock({ pose: 'open' })).resolves.toEqual({
+      pose: 'open',
+      hingeAngleDegrees: 180,
+    });
+    expect(mockInventory).toHaveBeenCalledTimes(2);
+  },
+);
 
 test('sends half-open and reports it only once the hinge has stopped', async () => {
   mockInventory
@@ -443,7 +468,7 @@ test.each([
 ])(
   'custom target %s accepts stable readback %s across a category boundary',
   async (target, observed, pose) => {
-    mockInventory.mockResolvedValue(duoInventory(pose === 'closed' ? 'outer' : 'inner'));
+    mockInventory.mockResolvedValue(duoInventory('inner'));
     mockHinge.mockResolvedValue(Number(observed));
     await expect(
       setAppleFoldPose(duo, {
@@ -454,6 +479,9 @@ test.each([
       }),
     ).resolves.toMatchObject({ pose, hingeAngleDegrees: observed });
     expect(mockHinge).toHaveBeenCalledTimes(2);
+    // Panels were measured only at the named poses, so a custom final angle reads the panel once
+    // and reports the measured panel without requiring the one a named pose lights.
+    expect(mockInventory).toHaveBeenCalledTimes(2);
   },
 );
 
