@@ -70,7 +70,7 @@ export class LeaseRegistry {
     {
       lease: DeviceLease;
       sessionsSettled: boolean;
-      providerReleased: boolean;
+      providerRelease: 'pending' | 'confirmed' | 'unknown';
     }
   >();
   /**
@@ -146,7 +146,7 @@ export class LeaseRegistry {
       return this.refreshLease(existing, leaseTtlMs);
     }
     const ending = this.ending.get(id);
-    if (ending) throw deviceLeaseBusyError(ending.lease);
+    if (ending) throw deviceLeaseBusyError(ending.lease, ending.providerRelease === 'unknown');
     this.assertHumanControlAdmission(normalized);
     this.assertDeviceAvailable(normalized);
     if (normalized.backend === 'macos-app') this.macOsAppTenantIds.add(normalized.tenantId);
@@ -744,15 +744,21 @@ export class LeaseRegistry {
     this.ending.set(lease.leaseId, {
       lease,
       sessionsSettled,
-      providerReleased: !lease.leaseProvider,
+      providerRelease: lease.leaseProvider ? 'pending' : 'confirmed',
     });
+  }
+
+  markExpiredProviderReleaseUnknown(leaseId: string): void {
+    const end = this.ending.get(leaseId);
+    if (end?.providerRelease === 'pending') end.providerRelease = 'unknown';
   }
 
   confirmExpiredLeaseEnd(leaseId: string, part: 'sessionsSettled' | 'providerReleased'): boolean {
     const end = this.ending.get(leaseId);
     if (!end) return true;
-    end[part] = true;
-    if (!end.sessionsSettled || !end.providerReleased) return false;
+    if (part === 'providerReleased') end.providerRelease = 'confirmed';
+    else end.sessionsSettled = true;
+    if (!end.sessionsSettled || end.providerRelease !== 'confirmed') return false;
     this.ending.delete(leaseId);
     return true;
   }
@@ -768,8 +774,9 @@ export class LeaseRegistry {
       deviceKey: params.deviceKey,
     });
     if (!deviceBindingKey) return;
-    for (const { lease } of this.ending.values()) {
-      if (leaseDeviceBindingKey(lease) === deviceBindingKey) throw deviceLeaseBusyError(lease);
+    for (const { lease, providerRelease } of this.ending.values()) {
+      if (leaseDeviceBindingKey(lease) === deviceBindingKey)
+        throw deviceLeaseBusyError(lease, providerRelease === 'unknown');
     }
     const activeLeaseId = this.deviceBindings.get(deviceBindingKey);
     if (!activeLeaseId) return;

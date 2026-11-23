@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
@@ -99,73 +100,93 @@ test('an expired lease ends its session without any further request', async () =
   }
 });
 
-test('a lease that expires after shutdown is refused and reported, not sent to its provider', async () => {
-  vi.useFakeTimers();
-  const stateDir = mkdtempForTestSync('agent-device-daemon-lease-closed-');
-  const release = vi.fn(async (_lease: DeviceLease) => ({}));
-  try {
-    const runtime = await startDaemonRuntime({
-      composeDeps: daemonRuntimeDepsFixture({
-        leaseLifecycleProvider: { release },
-        providerRuntimeIds: ['browserstack'],
-      }),
-      host: createTestHostEnvironment({
-        env: {
-          ...process.env,
-          AGENT_DEVICE_STATE_DIR: stateDir,
-          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-          AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
+test.each(['closed', 'provider-runtime-unavailable'] as const)(
+  'a non-durable provider refusal (%s) reports unknown release and keeps the reservation',
+  async (reason) => {
+    vi.useFakeTimers();
+    const stateDir = mkdtempForTestSync('agent-device-daemon-lease-closed-');
+    const release = vi.fn(async (_lease: DeviceLease) => ({}));
+    let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | undefined;
+    try {
+      runtime = await startDaemonRuntime({
+        composeDeps: daemonRuntimeDepsFixture({
+          leaseLifecycleProvider: { release },
+          providerRuntimeIds: reason === 'closed' ? ['browserstack'] : [],
+        }),
+        host: createTestHostEnvironment({
+          env: {
+            ...process.env,
+            AGENT_DEVICE_STATE_DIR: stateDir,
+            AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+            AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+            AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
+          },
+        }),
+        stderr: { write: () => {} },
+        stdout: { write: () => {} },
+      });
+      assert.notEqual(runtime, null);
+      const [registry] = leaseProbe.registries;
+      assert.ok(registry);
+      if (reason === 'closed') {
+        const closing = runtime!.close();
+        await vi.runOnlyPendingTimersAsync();
+        await closing;
+      }
+
+      const request = {
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseProvider: 'browserstack',
+        deviceKey: 'fixture-device',
+        ttlMs: 10,
+      };
+      const lease = registry.allocateLease(request);
+      await vi.advanceTimersByTimeAsync(1_000);
+      registry.consumeExpiredLease(lease.leaseId);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The provider was never asked, and the daemon log names the lease it could not end.
+      assert.deepEqual(release.mock.calls, []);
+      const next = { ...request, runId: 'run-2' };
+      assert.throws(
+        () => registry.allocateLease(next),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'DEVICE_IN_USE');
+          assert.equal(error.details?.reason, 'DEVICE_LEASE_BUSY');
+          assert.equal(error.details?.releaseStatus, 'unknown');
+          return true;
         },
-      }),
-      stderr: { write: () => {} },
-      stdout: { write: () => {} },
-    });
-    assert.notEqual(runtime, null);
-    const [registry] = leaseProbe.registries;
-    assert.ok(registry);
-    const closing = runtime!.close();
-    await vi.runOnlyPendingTimersAsync();
-    await closing;
-
-    // An abandoned request let this lease go past its TTL once this daemon had stopped releasing.
-    const lease = registry.allocateLease({
-      tenantId: 'tenant-a',
-      runId: 'run-1',
-      leaseProvider: 'browserstack',
-      ttlMs: 10,
-    });
-    await vi.advanceTimersByTimeAsync(1_000);
-    registry.consumeExpiredLease(lease.leaseId);
-    await vi.advanceTimersByTimeAsync(0);
-
-    // The provider was never asked, and the daemon log names the lease it could not end.
-    assert.deepEqual(release.mock.calls, []);
-    const rows = fs
-      .readFileSync(`${stateDir}/daemon.log`, 'utf8')
-      .split('\n')
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as { phase: string; level: string; data?: unknown });
-    assert.ok(
-      rows.some(
-        (row) =>
-          row.phase === 'provider_lease_release_refused' &&
-          row.level === 'error' &&
-          JSON.stringify(row.data) ===
-            JSON.stringify({
-              leaseId: lease.leaseId,
-              reason: 'closed',
-              durable: false,
-              leaseProvider: 'browserstack',
-            }),
-      ),
-      `expected a refusal row in the daemon log, got ${JSON.stringify(rows.map((r) => r.phase))}`,
-    );
-  } finally {
-    vi.useRealTimers();
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
+      );
+      assert.ok(registry.allocateLease({ ...next, deviceKey: 'other-device' }).leaseId);
+      const rows = fs
+        .readFileSync(`${stateDir}/daemon.log`, 'utf8')
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as { phase: string; level: string; data?: unknown });
+      assert.ok(
+        rows.some(
+          (row) =>
+            row.phase === 'provider_lease_release_refused' &&
+            row.level === 'error' &&
+            JSON.stringify(row.data) ===
+              JSON.stringify({
+                leaseId: lease.leaseId,
+                reason,
+                durable: false,
+                leaseProvider: 'browserstack',
+              }),
+        ),
+        `expected a refusal row in the daemon log, got ${JSON.stringify(rows.map((r) => r.phase))}`,
+      );
+    } finally {
+      vi.useRealTimers();
+      await runtime?.close();
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  },
+);
 
 test('expiry reserves the provider device through a slow failed release and a successful retry', async () => {
   vi.useFakeTimers();

@@ -25,6 +25,8 @@ The daemon sweeps for expired leases every second.
 A request can also trigger expiry.
 Both paths share one teardown for each expired session.
 The daemon keeps the lease reservation until session cleanup and any provider release are confirmed.
+If the provider refuses release and no recovery record exists, an overlapping allocation returns
+`DEVICE_LEASE_BUSY` with `releaseStatus: "unknown"`.
 If expiry wins, the old owner's request returns `LEASE_NOT_FOUND`.
 An owner `close` can report the confirmed lease end in `endedLeases` on that error.
 Only `open` with a separate valid lease can replace an expired session.

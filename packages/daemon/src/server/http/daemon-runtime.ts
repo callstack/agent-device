@@ -305,6 +305,8 @@ async function startDaemonRuntimeOnHost(
         .release(lease, sessionsEnd)
         .then(
           (outcome) => {
+            if (outcome.status === 'refused' && !outcome.durable)
+              leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId);
             // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
             // request, so this report goes to the daemon log rather than a request scope.
             const event = leaseReleaseDiagnosticEvent(lease, outcome);
