@@ -2716,7 +2716,7 @@ agent-device session list
 agent-device session list --json
 ```
 
-- `session list` shows the active daemon sessions visible to your request scope: your workspace, or the named session scope when `--session` or `AGENT_DEVICE_SESSION` is set. A session that holds a device lease appears only when the request sends that session's lease id. Run the command from the saved connection that owns the session — the CLI sends the saved lease id with every command — or pass `--lease-id <id>`. Add `--json` for raw session metadata.
+- `session list` shows the active daemon sessions visible to your request scope: your workspace, or the named session scope when `--session` or `AGENT_DEVICE_SESSION` is set. A session that holds a device lease appears only when the request sends that session's lease id. Run the command from the saved connection that owns the session — the CLI sends the saved lease id with every command — or pass `--lease-id <id>`. Through a [shared proxy without tenant isolation](/docs/sessions#session-visibility), the list contains only sessions whose lease ID you send. Add `--json` for raw session metadata.
 - `session list --json` reports `kind`, `model`, and `osVersion` flat on each entry when the host reported them: read `sessions[0].osVersion`, not `sessions[0].device.osVersion`, which is the device name.
 
 ## Cloud provider artifacts

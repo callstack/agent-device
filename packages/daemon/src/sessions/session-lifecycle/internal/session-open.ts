@@ -1,6 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
+import { claimOwnerVisible } from '../../session-routing.ts';
 import { resolveRequestTargetDeviceSelection } from '../../../core/request-device-resolution.ts';
 import {
   openApplicationRuntimeUse,
@@ -300,6 +301,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       admittedSession.device,
       admittedSession.deviceClaim,
       params.host.env,
+      (owner) => claimOwnerVisible(req, sessionStore, owner),
     );
     if (lostClaim) return { type: 'response', response: lostClaim };
 
@@ -347,6 +349,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       device,
       sessionStore.requireCurrent(existingRef).deviceClaim,
       params.host.env,
+      (owner) => claimOwnerVisible(req, sessionStore, owner),
     );
     if (reclaimed) return { type: 'response', response: reclaimed };
 

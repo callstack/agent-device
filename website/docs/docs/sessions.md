@@ -196,9 +196,12 @@ If the session at the address has an expired lease, `open` with your own valid l
 cleanup within the request deadline. Use `--wait` to cap that wait. Your lease must still be valid
 when cleanup ends.
 
-Behind a shared proxy token, all clients share a tenant. A proxy client can see the holder's address
-in a refusal or in wait progress if it can list the holder and the holder has a lease or a tenant
-scope. To see the address of a leased holder, the caller must send that holder's lease id.
+### Session visibility
+
+When you connect through a shared proxy token, `session list`, `doctor`, wait progress, and
+contention errors use the same visibility rule. With tenant isolation, you see sessions in your
+tenant. Without tenant isolation, you see only leased sessions in your scope. For a leased session,
+send its lease ID to see its address.
 Open contention and claim conflicts can show the address of an unleased session in another
 workspace to a local caller. The owner can use that address to close the session from its workspace.
 
@@ -278,7 +281,9 @@ xcrun simctl install "$udid" ./App.app
   simulator can take minutes.
 - This is a session claim, not a claim owned by your process. If the shell dies without running its
   `trap` (for example `kill -9`), the session keeps the device until you run
-  `agent-device close --session <name>`. Find the name with `agent-device session list`.
+  `agent-device close --session <name>`. Find the name with `agent-device session list` when your
+  request can see the session. On a shared proxy without tenant isolation, reuse the name you passed
+  to `open` for an unleased session.
   The tool itself is not stopped from touching the device; only other agent-device sessions are
   fenced off.
 

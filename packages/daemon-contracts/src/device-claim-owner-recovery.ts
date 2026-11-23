@@ -147,7 +147,6 @@ export function createOwnerScopedDeviceClaimReconciler(
             ...event,
             data: {
               deviceKey: claim.deviceKey,
-              ownerSession: claim.session,
               ...retainedReason,
               ...event.data,
             },

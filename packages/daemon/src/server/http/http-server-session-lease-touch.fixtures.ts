@@ -1,7 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { createLeaseSessionEnd, type LeaseSessionEnd } from '../lease-session-end.ts';
 import path from 'node:path';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import {
   IOS_SIMULATOR,
   closeLoopbackServer,
@@ -48,6 +48,21 @@ export type RpcBody = {
     };
   };
 };
+
+export function expectLeaseIdRefusal(body: RpcBody): void {
+  expect(body.error?.data, JSON.stringify(body)).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_SESSION_MISMATCH', field: 'leaseId' },
+  });
+}
+
+export function expectDetachedDoctor(body: RpcBody): void {
+  expect(body.result?.ok, JSON.stringify(body)).toBe(true);
+  expect(body.result?.data?.targetApp).toBeUndefined();
+  expect(body.result?.data?.checks).toContainEqual(
+    expect.objectContaining({ id: 'session', status: 'info' }),
+  );
+}
 
 export function deferred() {
   let resolve!: () => void;

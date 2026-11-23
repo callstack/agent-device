@@ -18,11 +18,12 @@ import type { SessionRef } from '../../core/session-state.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import {
   deferred,
+  expectDetachedDoctor,
+  expectLeaseIdRefusal,
   startDaemon,
   TENANT,
   SESSION,
   LEASE_TTL_MS,
-  type RpcBody,
 } from './http-server-session-lease-touch.fixtures.ts';
 
 const UNLEASED = { sessionIsolation: 'none', tenantId: undefined };
@@ -39,13 +40,6 @@ afterEach(async () => {
   await world?.close();
   world = undefined;
 });
-
-function expectLeaseIdRefusal(body: RpcBody): void {
-  expect(body.error?.data, JSON.stringify(body)).toMatchObject({
-    code: 'UNAUTHORIZED',
-    details: { reason: 'LEASE_SESSION_MISMATCH', field: 'leaseId' },
-  });
-}
 
 test('a refused request writes no event into the leased session, and the owner request does', async () => {
   if (!world) return;
@@ -469,7 +463,10 @@ test.each([
     } else if (leased) {
       daemon.publishLeasedSession(sessionName);
     } else {
-      sessionStore.publish(sessionName, makeIosAppSession(sessionName));
+      sessionStore.publish(
+        sessionName,
+        makeIosAppSession(sessionName, { sessionScope: { kind: 'named-local' } }),
+      );
     }
     const enteredToolchain = deferred();
     const releaseToolchain = deferred();
@@ -547,6 +544,8 @@ test.each([
     const response = await world.send(command, [], scope);
     if (command === 'events') {
       expect(response.error?.data?.code).toBe('SESSION_NOT_FOUND');
+    } else if (command === 'doctor') {
+      expectDetachedDoctor(response);
     } else {
       expectLeaseIdRefusal(response);
     }
@@ -628,7 +627,9 @@ test.each(['doctor', 'capabilities', 'artifacts'] as const)(
       expect(current?.session.lease?.leaseId).toBe(owner.leaseId);
     };
 
-    expectLeaseIdRefusal(await daemon.send(command, [], {}));
+    const response = await daemon.send(command, [], {});
+    if (command === 'doctor') expectDetachedDoctor(response);
+    else expectLeaseIdRefusal(response);
 
     const events = await daemon.send('events', [], owner);
     expect(events.result?.ok, JSON.stringify(events)).toBe(true);

@@ -1,3 +1,4 @@
+import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -17,10 +18,7 @@ import {
   listSessionSelectorConflicts,
   type SessionSelectorConflict,
 } from '../core/session-selector.ts';
-import { LEASE_FIELD_NORMALIZERS, resolveLeaseScope } from '../core/lease-context.ts';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { isDeviceClaimConflictReason } from '@agent-device/contracts/device';
-import { GENERIC_IN_USE_MESSAGE } from '../core/session-recovery-hints.ts';
+import { compareRequestLeaseClaims } from '../core/lease-context.ts';
 
 const DEFAULT_SESSION_NAME = 'default';
 const IMPLICIT_SESSION_KEY_PREFIX = 'cwd';
@@ -88,22 +86,20 @@ export function resolveSessionScope(req: DaemonWireRequest): SessionScope {
   return scopeRoot ? { kind: 'cwd', id: hashScopeRoot(scopeRoot) } : { kind: 'global-default' };
 }
 
-/**
- * Whether a request may see a session at all, i.e. whether listing it or naming it to the caller
- * leaks another client's activity. Ownership scope decides the first half; a session that holds a
- * lease is revealed only to the request carrying that lease's id, because on a shared proxy token
- * the tenant label is a label and any holder of the token can send it (#4908). The request scope
- * and lease id are resolved once, so one listing judges every session against the same workspace.
- */
+/** The device-recovery view can also name an unleased local holder in another workspace. */
 export function createSessionVisibilityPredicate(
   req: DaemonRequest,
+  mode: 'listed' | 'device-recovery' = 'listed',
 ): (session: SessionState) => boolean {
-  const requestScope = resolveSessionScope(req);
-  const requestLeaseId = LEASE_FIELD_NORMALIZERS.leaseId(resolveLeaseScope(req).leaseId);
+  const scope = resolveSessionScope(req);
+  const local = isLocalCaller(req, scope);
   return (session) => {
-    if (!sessionMatchesInventoryScope(session, requestScope)) return false;
-    if (session.lease) return requestLeaseId === session.lease.leaseId;
-    return true;
+    if (!session.lease && local && mode === 'device-recovery') {
+      return session.sessionScope?.kind !== 'tenant';
+    }
+    if (!sessionMatchesInventoryScope(session, scope)) return false;
+    if (session.lease) return compareRequestLeaseClaims(req, session.lease) === undefined;
+    return local || scope.kind === 'tenant';
   };
 }
 
@@ -360,100 +356,27 @@ function findGitWorktreeRoot(startDir: string): string | undefined {
   }
 }
 
-/** The ownership fields of a host-global device claim that this visibility rule needs. */
-export type ClaimOwnerRef = Readonly<{
-  session: string;
-  workspace: string;
-  stateDir: string;
-}>;
+type ClaimOwnerRef = Pick<DeviceClaim, 'session' | 'stateDir' | 'ownerToken' | 'unleasedLocal'>;
 
-/**
- * Whether a reply may name `session` to this request. A remote caller (admitted as
- * `publicNetworkOnly`, as every proxy client is) or a tenant-scoped one learns only a session it may
- * list that is leased or tenant-scoped: on a proxy shared under one token, any other name is another
- * client's (#4923). For device recovery, a local caller can also learn the address of an unleased
- * local session in another workspace. Its owner uses that address to close it from that folder (#2580).
- */
-export function mayNameSession(
-  req: DaemonRequest,
-  session: SessionState,
-  mode: 'listed' | 'device-recovery' = 'listed',
-): boolean {
-  const listed = createSessionVisibilityPredicate(req)(session);
-  if (!isLocalCaller(req)) {
-    return listed && (session.lease !== undefined || session.sessionScope?.kind === 'tenant');
-  }
-  return (
-    listed ||
-    (mode === 'device-recovery' &&
-      session.lease === undefined &&
-      session.sessionScope?.kind !== 'tenant')
-  );
+function isLocalCaller(req: DaemonRequest, scope = resolveSessionScope(req)): boolean {
+  return !req.internal?.publicNetworkOnly && scope.kind !== 'tenant';
 }
 
-/** A caller on this host: neither admitted from the public network nor scoped to a tenant. */
-function isLocalCaller(req: DaemonRequest): boolean {
-  return !req.internal?.publicNetworkOnly && resolveSessionScope(req).kind !== 'tenant';
+export function isUnleasedLocalClaimRequest(req: DaemonRequest): boolean {
+  return req.internal?.admittedLease === undefined && isLocalCaller(req);
 }
 
-/**
- * Whether a reply may name the session a host-global device claim records as its owner.
- *
- * A claim of this daemon whose label resolves follows the device recovery naming rule.
- * A local caller can also see the owner of a claim from another daemon on this host or a claim
- * without a stored session. A remote or tenant-scoped caller can see only listable owners (#4923).
- */
+/** A live session proves ownership only when it holds this exact claim. */
 export function claimOwnerVisible(
   req: DaemonRequest,
   sessionStore: SessionStore,
   owner: ClaimOwnerRef,
 ): boolean {
-  const localRequest = isLocalCaller(req);
-  if (!isSameDaemonStateDir(owner.stateDir, sessionStore.resolveDaemonStateDir())) {
-    return localRequest;
+  if (path.resolve(owner.stateDir) === path.resolve(sessionStore.resolveDaemonStateDir())) {
+    const session = sessionStore.lookup(owner.session)?.session;
+    if (session?.deviceClaim?.ownerToken === owner.ownerToken) {
+      return createSessionVisibilityPredicate(req, 'device-recovery')(session);
+    }
   }
-  const ref = sessionStore.lookup(owner.session);
-  return ref ? mayNameSession(req, ref.session, 'device-recovery') : localRequest;
-}
-
-/**
- * Answers a claim-conflict refusal without its owner when the owner is an unverified or invisible
- * session of this daemon. The code, typed reason, classification, device fields, recovery command
- * and hint stay; the `owner` detail and the message naming it go.
- */
-export function dropInvisibleClaimOwner(
-  req: DaemonRequest,
-  sessionStore: SessionStore,
-  response: DaemonResponse,
-): DaemonResponse {
-  if (response.ok) return response;
-  const { error } = response;
-  const details = error.details;
-  const owner = readClaimOwner(details?.owner);
-  if (
-    !isDeviceClaimConflictReason(details?.reason) ||
-    owner === undefined ||
-    claimOwnerVisible(req, sessionStore, owner)
-  ) {
-    return response;
-  }
-  const { owner: _namedOwner, ...anonymousDetails } = details ?? {};
-  return {
-    ok: false,
-    error: { ...error, message: GENERIC_IN_USE_MESSAGE, details: anonymousDetails },
-  };
-}
-
-function isSameDaemonStateDir(claimStateDir: string, daemonStateDir: string): boolean {
-  return path.resolve(claimStateDir) === path.resolve(daemonStateDir);
-}
-
-function readClaimOwner(owner: unknown): ClaimOwnerRef | undefined {
-  if (typeof owner !== 'object' || owner === null) return undefined;
-  const { session, workspace, stateDir } = owner as Record<string, unknown>;
-  return typeof session === 'string' &&
-    typeof workspace === 'string' &&
-    typeof stateDir === 'string'
-    ? { session, workspace, stateDir }
-    : undefined;
+  return owner.unleasedLocal === true && isLocalCaller(req);
 }

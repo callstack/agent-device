@@ -8,7 +8,10 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { SessionRecoveryOptions } from '../core/session-recovery-hints.ts';
-import { isImplicitSessionScopeConflict, mayNameSession } from './session-routing.ts';
+import {
+  createSessionVisibilityPredicate,
+  isImplicitSessionScopeConflict,
+} from './session-routing.ts';
 import {
   buildDeviceInUseBySessionError,
   buildForeignWorkspaceSessionConflict,
@@ -153,7 +156,7 @@ export function findSessionDeviceConflict(params: {
     : sessionStore.findByDevice(device.id);
   if (!inUse) return undefined;
   const attempt = describeOpenWaitForRefusal(req);
-  const canNameHolder = mayNameSession(req, inUse.session, 'device-recovery');
+  const canNameHolder = createSessionVisibilityPredicate(req, 'device-recovery')(inUse.session);
   if (canNameHolder && isImplicitSessionScopeConflict(req, inUse.session)) {
     return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
   }
@@ -176,6 +179,7 @@ function createOpenDeviceWait(params: {
 }): OpenDeviceWait {
   const { req, sessionName, sessionStore, deviceId, budgetMs } = params;
   const deadline = Deadline.fromTimeoutMs(budgetMs);
+  const canNameHolder = createSessionVisibilityPredicate(req, 'device-recovery');
   const holder = () => findSessionHoldingDevice(sessionStore, deviceId, sessionName);
 
   const waitForDeviceOutsideLocks = async (): Promise<void> => {
@@ -188,7 +192,7 @@ function createOpenDeviceWait(params: {
         type: 'command',
         status: 'progress',
         message: `Waiting for ${holding.session.device.name}: ${
-          mayNameSession(req, holding.session, 'device-recovery')
+          canNameHolder(holding.session)
             ? `held by session "${holding.address}"`
             : 'held by another session'
         } (${Math.round(deadline.elapsedMs())}ms of the ${Math.round(budgetMs)}ms wait budget used)`,

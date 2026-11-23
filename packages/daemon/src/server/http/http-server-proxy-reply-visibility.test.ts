@@ -15,7 +15,11 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
+import {
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createDaemonHttpServer } from './http-server.ts';
 import {
   createRequestHandler,
@@ -26,6 +30,7 @@ import { makeIosAppSession } from '../../__tests__/support/session-factories.ts'
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
+import { hostDiagnosticsFixture } from '../../__tests__/support/host-diagnostics-fixture.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 
 const PROXY_TOKEN = 'shared-proxy-token';
@@ -53,16 +58,22 @@ const PEER_SCOPE = {
 type RpcBody = {
   result?: { ok?: boolean; data?: Record<string, unknown> & { lease?: { leaseId: string } } };
   error?: {
-    data?: { code?: string; message?: string; hint?: string; details?: Record<string, unknown> };
+    data?: {
+      code?: string;
+      message?: string;
+      hint?: string;
+      details?: Record<string, unknown>;
+      diagnosticsRecord?: { session: string; requestId: string };
+    };
   };
 };
 
-async function sendCommand(
+async function postCommand(
   url: string,
   token: string,
   params: Record<string, unknown>,
-): Promise<RpcBody> {
-  const response = await fetch(url, {
+): Promise<Response> {
+  return await fetch(url, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -72,7 +83,29 @@ async function sendCommand(
       params,
     }),
   });
-  return (await response.json()) as RpcBody;
+}
+
+async function sendCommand(
+  url: string,
+  token: string,
+  params: Record<string, unknown>,
+): Promise<RpcBody> {
+  return (await (await postCommand(url, token, params)).json()) as RpcBody;
+}
+
+async function sendStreamingCommand(url: string, token: string, params: Record<string, unknown>) {
+  const response = await postCommand(url, token, params);
+  expect(response.headers.get('content-type')).toContain('application/x-ndjson');
+  const envelopes = (await response.text())
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const terminal = envelopes.pop();
+  expect(terminal?.type).toBe('response');
+  return {
+    body: terminal.response as RpcBody,
+    progress: envelopes.map((envelope) => envelope.event?.message as string),
+  };
 }
 
 let world: Awaited<ReturnType<typeof startProxiedDaemon>> | undefined;
@@ -129,6 +162,7 @@ async function startProxiedDaemon() {
     token: 'daemon-token',
     sessionStore,
     leaseRegistry,
+    hostDiagnostics: hostDiagnosticsFixture(),
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => [DEVICE],
     }),
@@ -147,6 +181,9 @@ async function startProxiedDaemon() {
   const daemon = await createDaemonHttpServer({
     token: 'daemon-token',
     handleRequest,
+    leaseRegistry,
+    resolveRequestDiagnosticsPath: ({ session, requestId }, directory) =>
+      resolveSessionRequestLogPath(sessionStore.resolveSessionDir(session), requestId, directory),
     env: {},
     cwd: process.cwd(),
   });
@@ -157,13 +194,24 @@ async function startProxiedDaemon() {
     clientToken: PROXY_TOKEN,
   });
   const proxyPort = await listenOnLoopback(proxy);
+  const localUrl = `http://127.0.0.1:${daemonPort}/rpc`;
+  const proxyUrl = `http://127.0.0.1:${proxyPort}/agent-device/rpc`;
   return {
+    streamLocal: (params: Record<string, unknown>) =>
+      sendStreamingCommand(localUrl, 'daemon-token', params),
+    streamProxy: (params: Record<string, unknown>) =>
+      sendStreamingCommand(proxyUrl, PROXY_TOKEN, params),
+    async downloadDiagnostics(record: { session: string; requestId: string }) {
+      const target = `sessions/${encodeURIComponent(record.session)}/requests/${encodeURIComponent(record.requestId)}/diagnostics`;
+      return await fetch(new URL(target, proxyUrl.replace(/rpc$/, '')), {
+        headers: { authorization: `Bearer ${PROXY_TOKEN}` },
+      });
+    },
     holderLeaseId: holderLease.leaseId,
     peerLeaseId: peerLease.leaseId,
     holderSessionName,
     sessionStore,
-    sendLocal: (params: Record<string, unknown>) =>
-      sendCommand(`http://127.0.0.1:${daemonPort}/rpc`, 'daemon-token', params),
+    sendLocal: (params: Record<string, unknown>) => sendCommand(localUrl, 'daemon-token', params),
     /** Sends `command` as `session` with the given lease metadata and flags. */
     send: (
       session: string,
@@ -171,7 +219,7 @@ async function startProxiedDaemon() {
       params: { meta?: Record<string, unknown>; flags?: Record<string, unknown> } = {},
       positionals: string[] = [],
     ) =>
-      sendCommand(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, PROXY_TOKEN, {
+      sendCommand(proxyUrl, PROXY_TOKEN, {
         session,
         command,
         positionals,
@@ -183,17 +231,25 @@ async function startProxiedDaemon() {
           ...params.meta,
         },
       }),
-    /** Writes the live claim this daemon would have left for its holder session on this device. */
-    seedHolderClaim: async () => {
+    seedHolderClaim: async ({
+      session = holderSessionName,
+      stateDir = sessionStore.resolveDaemonStateDir(),
+      unleasedLocal,
+    }: { session?: string; stateDir?: string; unleasedLocal?: true } = {}) => {
       const acquired = await acquireDeviceClaim({
         device: DEVICE,
-        session: tenantScopedSessionName(TENANT, HOLDER),
+        session,
         workspace: '/work/holder',
-        stateDir: sessionStore.resolveDaemonStateDir(),
+        stateDir,
+        unleasedLocal,
         env: process.env,
         reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
       });
       if (acquired.status !== 'acquired') throw new Error('fixture claim was not acquired');
+      const ref = sessionStore.lookup(session);
+      if (ref && stateDir === sessionStore.resolveDaemonStateDir()) {
+        sessionStore.update(ref, { deviceClaim: acquired.ownership });
+      }
     },
     close: async () => {
       await closeLoopbackServer(proxy);
@@ -355,6 +411,8 @@ test('implicit shutdown names a cwd-scoped holder only in its own workspace', as
   const holder = world.sessionStore.findByDevice(DEVICE.id)!;
   expect(holder.session.sessionScope?.kind).toBe('cwd');
   expect(holder.session.lease).toBeUndefined();
+  const claim = inspectDeviceClaims({ udid: DEVICE.id }, process.env)[0]?.claim;
+  expect(claim).toMatchObject({ session: holder.address, unleasedLocal: true });
 
   const refused = await world.sendLocal({
     command: 'shutdown',
@@ -406,3 +464,217 @@ test('an implicit open in another workspace does not name a leased cwd-scoped ho
   expect(JSON.stringify(refused)).not.toContain(holder.address);
   expect(refused.error?.data?.details?.session).toBeUndefined();
 });
+
+test('listing, doctor, and open disclose names according to caller scope and recovery intent', async () => {
+  if (!world) return;
+  const tenantHolder = world.sessionStore.lookup(world.holderSessionName)!;
+  const localName = 'unleased-local-holder';
+  const leasedName = 'leased-shared-token-holder';
+  const otherLeaseName = 'other-lease-holder';
+  const app = 'com.example.privateholder';
+  const flags = { platform: 'ios', udid: DEVICE.id };
+  const sharedOwner = {
+    ...HOLDER_SCOPE,
+    leaseId: world.holderLeaseId,
+    sessionIsolation: undefined,
+  };
+  const tenantPeer = { ...PEER_SCOPE, leaseId: world.peerLeaseId };
+  const addresses = (body: RpcBody) => {
+    expect(body.result?.ok).toBe(true);
+    const sessions = body.result?.data?.sessions as { address: string }[];
+    return sessions.map(({ address }) => address);
+  };
+  const wait = {
+    command: 'open',
+    flags: { ...flags, waitMs: 400 },
+    positionals: ['com.example.app'],
+  };
+
+  const tenantList = await world.send(PEER, 'session_list', { meta: tenantPeer });
+  const tenantOwnerList = await world.send(HOLDER, 'session_list', {
+    meta: { ...HOLDER_SCOPE, leaseId: world.holderLeaseId },
+  });
+  const tenantWait = await world.streamProxy({
+    ...wait,
+    session: PEER,
+    meta: { ...tenantPeer, sessionIsolation: 'tenant', requestProgress: 'command' },
+  });
+  world.sessionStore.retire(tenantHolder);
+  const leasedHolder = world.sessionStore.publish(
+    leasedName,
+    makeIosAppSession(leasedName, {
+      sessionScope: { kind: 'named-local' },
+      device: DEVICE,
+      lease: tenantHolder.session.lease,
+    }),
+  );
+  const otherLease = world.sessionStore.publish(
+    otherLeaseName,
+    makeIosAppSession(otherLeaseName, {
+      sessionScope: { kind: 'named-local' },
+      device: { ...DEVICE, id: 'sim-other' },
+      lease: { ...tenantHolder.session.lease!, leaseId: world.peerLeaseId },
+    }),
+  );
+  const localHolder = world.sessionStore.publish(
+    localName,
+    makeIosAppSession(localName, {
+      sessionScope: { kind: 'named-local' },
+      appBundleId: app,
+      device: { ...DEVICE, id: 'sim-local' },
+    }),
+  );
+
+  const sharedList = await world.send(PEER, 'session_list', { meta: sharedOwner });
+  const matchingWait = await world.streamProxy({
+    ...wait,
+    session: PEER,
+    meta: { ...sharedOwner, requestProgress: 'command' },
+  });
+  const doctor = await world.streamProxy({
+    command: 'doctor',
+    session: localName,
+    flags: { remote: true },
+    meta: { ...sharedOwner, requestProgress: 'command' },
+  });
+  world.sessionStore.retire(leasedHolder);
+  world.sessionStore.retire(otherLease);
+  world.sessionStore.retire(localHolder);
+  world.sessionStore.publish(
+    localName,
+    makeIosAppSession(localName, {
+      sessionScope: { kind: 'named-local' },
+      device: DEVICE,
+    }),
+  );
+  const hiddenWait = await world.streamProxy({
+    ...wait,
+    session: PEER,
+    meta: { ...sharedOwner, requestProgress: 'command' },
+  });
+  world.sessionStore.retire(world.sessionStore.lookup(localName)!);
+
+  const holderCwd = mkdtempForTestSync('agent-device-visibility-holder-');
+  const callerCwd = mkdtempForTestSync('agent-device-visibility-caller-');
+  const opened = await world.sendLocal({ ...wait, flags, meta: { cwd: holderCwd } });
+  expect(opened.result?.ok).toBe(true);
+  const workspaceHolder = world.sessionStore.findByDevice(DEVICE.id)!;
+  const localList = await world.sendLocal({ command: 'session_list', meta: { cwd: callerCwd } });
+  const localWait = await world.streamLocal({
+    ...wait,
+    meta: { cwd: callerCwd, requestProgress: 'command' },
+  });
+
+  expect(addresses(tenantList)).toEqual([]);
+  expect(addresses(tenantOwnerList)).toEqual([tenantHolder.address]);
+  expect(addresses(sharedList)).toEqual([leasedName]);
+  expect(addresses(localList)).toEqual([]);
+  expect(doctor.body.result?.ok).toBe(true);
+  expect(doctor.body.result?.data?.targetApp).toBeUndefined();
+  expect(doctor.progress.join('\n')).toContain('No active session');
+  expect(doctor.progress.join('\n')).not.toContain(localName);
+
+  for (const [result, holder, visible] of [
+    [tenantWait, tenantHolder.address, false],
+    [matchingWait, leasedName, true],
+    [hiddenWait, localName, false],
+    [localWait, workspaceHolder.address, true],
+  ] as const) {
+    expect(result.body.error?.data?.code, JSON.stringify(result.body)).toBe('DEVICE_IN_USE');
+    const progress = result.progress.filter((message) => message?.startsWith('Waiting for'));
+    expect(progress.length).toBeGreaterThan(0);
+    if (visible) {
+      expect(progress.join('\n')).toContain(holder);
+      expect(result.body.error?.data?.details?.session).toBe(holder);
+    } else {
+      expect(progress.join('\n')).toContain('held by another session');
+      expect(progress.join('\n')).not.toContain(holder);
+      expect(JSON.stringify(result.body)).not.toContain(holder);
+    }
+  }
+});
+
+test.each([false, true])(
+  'local recovery hides an unverified claim owner from the same or another daemon (foreign=%s)',
+  async (foreign) => {
+    if (!world) return;
+    const stateDir = foreign ? mkdtempForTestSync('agent-device-other-state-') : undefined;
+    const session = 'owner-outside-the-session-table';
+    await world.seedHolderClaim({ session, stateDir });
+    world.sessionStore.retire(world.sessionStore.lookup(world.holderSessionName)!);
+    const devices = await world.sendLocal({ command: 'devices' });
+    const refusal = await world.sendLocal({
+      command: 'open',
+      positionals: ['com.example.app'],
+      flags: { platform: 'ios', udid: DEVICE.id },
+    });
+
+    expect(devices.result?.ok).toBe(true);
+    expect(refusal.error?.data).toMatchObject({
+      code: 'DEVICE_IN_USE',
+      details: { reason: 'DEVICE_CLAIM_LIVE_OWNER' },
+    });
+    expect(JSON.stringify(devices)).not.toContain(session);
+    expect(JSON.stringify(refusal)).not.toContain(session);
+  },
+);
+
+test('the downloadable claim refusal contains only the public device and reason', async () => {
+  if (!world) return;
+  const stateDir = mkdtempForTestSync('agent-device-hidden-state-');
+  const session = 'hidden-leased-claim-owner';
+  await world.seedHolderClaim({ session, stateDir });
+  world.sessionStore.retire(world.sessionStore.lookup(world.holderSessionName)!);
+
+  const refusal = await world.send(
+    PEER,
+    'open',
+    {
+      meta: {
+        tenantId: undefined,
+        sessionIsolation: undefined,
+        requestId: 'claim-diagnostics-request',
+      },
+      flags: { platform: 'ios', udid: DEVICE.id },
+    },
+    ['com.example.app'],
+  );
+  expect(refusal.error?.data?.code).toBe('DEVICE_IN_USE');
+  expect(refusal.error?.data?.diagnosticsRecord).toBeDefined();
+  const record = await world.downloadDiagnostics(refusal.error!.data!.diagnosticsRecord!);
+  expect(record.status).toBe(200);
+  const diagnostics = await record.text();
+  expect(diagnostics).toContain('"phase":"device_claim_conflict"');
+  expect(diagnostics).toContain('"classification":"live"');
+  expect(diagnostics).not.toContain(session);
+  expect(diagnostics).not.toContain(stateDir);
+});
+
+test.each([undefined, 'default'])(
+  'doctor detaches before lease preflight for a hidden default session (%s)',
+  async (name) => {
+    if (!world) return;
+    const holder = world.sessionStore.lookup(world.holderSessionName)!;
+    world.sessionStore.publish(
+      'default',
+      makeIosAppSession('default', {
+        device: DEVICE,
+        sessionScope: { kind: 'global-default' },
+        lease: holder.session.lease,
+        appBundleId: 'com.example.hidden',
+      }),
+    );
+
+    const { body, progress } = await world.streamProxy({
+      session: name,
+      command: 'doctor',
+      flags: { remote: true },
+      meta: { requestProgress: 'command' },
+    });
+
+    expect(body.result?.ok).toBe(true);
+    expect(body.result?.data?.targetApp).toBeUndefined();
+    expect(progress.join('\n')).toContain('No active session');
+    expect(JSON.stringify(body)).not.toContain('com.example.hidden');
+  },
+);

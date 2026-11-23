@@ -212,6 +212,7 @@ export async function acquireDeviceClaim(params: {
   session: string;
   workspace: string;
   stateDir: string;
+  unleasedLocal?: boolean;
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   /**
@@ -320,6 +321,7 @@ export async function acquireTransientDeviceClaim(params: {
   coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
   workspace: string;
   stateDir: string;
+  unleasedLocal?: boolean;
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): Promise<TransientDeviceClaimResult> {
@@ -344,6 +346,7 @@ export async function acquireTransientDeviceClaim(params: {
       identity,
       session,
       transientCommand: params.command,
+      unleasedLocal: params.unleasedLocal,
       workspace: params.workspace,
       stateDir: params.stateDir,
       env: params.env,
@@ -387,6 +390,7 @@ async function claimHeldDevice(params: {
   transientCommand?: string;
   workspace: string;
   stateDir: string;
+  unleasedLocal?: boolean;
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
@@ -428,6 +432,7 @@ async function claimHeldDevice(params: {
     createdAtMs: now,
     updatedAtMs: now,
     claimOwnerKind,
+    ...(params.unleasedLocal ? { unleasedLocal: true } : {}),
     ...(params.transientCommand === undefined ? {} : { transientCommand: params.transientCommand }),
   };
   writeDeviceClaim(claim, params.env);
@@ -620,7 +625,7 @@ async function releaseInspectedStaleClaim(
     emitDiagnostic({
       level: 'info',
       phase: 'device_claim_stale_released',
-      data: { deviceKey, ownerSession: claim.session, ownerStateDir: claim.stateDir },
+      data: { deviceKey },
     });
     return { ...base, status: 'released' as const };
   });

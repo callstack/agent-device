@@ -4,7 +4,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
-import { mayNameSession } from '../session-routing.ts';
+import { createSessionVisibilityPredicate } from '../session-routing.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';
 import type { DoctorCheck, DoctorKind } from '@agent-device/contracts/observability';
 
@@ -100,7 +100,7 @@ export function sessionChecks(
   // `default`, so a name compare would hide them from each other (#2031/#1394). A session of
   // another proxy client is not listed at all: the doctor reports it the way it reports nothing
   // (#4923).
-  const nameableToRequest = (candidate: SessionState) => mayNameSession(req, candidate);
+  const nameableToRequest = createSessionVisibilityPredicate(req);
   const sameDeviceSessions = session
     ? sessionStore
         .listRefs()
@@ -120,8 +120,8 @@ export function sessionChecks(
         id: 'session',
         status: 'info',
         summary: options.remote
-          ? `No active session named ${sessionName}. Remote doctor will use configured remote scope.`
-          : `No active session named ${sessionName}. Doctor will use device inventory only.`,
+          ? 'No active session. Remote doctor will use configured remote scope.'
+          : 'No active session. Doctor will use device inventory only.',
         hint: 'This is expected before a run. Use open when app foreground state matters.',
       },
     ];

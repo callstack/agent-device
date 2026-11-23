@@ -49,6 +49,8 @@ export type DeviceClaim = {
    * version so a record renewed or abandoned after migration keeps saying the same thing.
    */
   claimOwnerKind: DeviceClaimOwnerKind;
+  /** Affirmative owner evidence for local recovery across daemon state directories. */
+  unleasedLocal?: true;
   /** The command a `transient-command` claim is scoped to; present for exactly that kind. */
   transientCommand?: string;
   /** Set by `abandonDeviceClaim`; absent while the claim still holds the device for its owner. */
@@ -98,13 +100,18 @@ export function decodeStoredDeviceClaim(value: unknown): DeviceClaim | null {
 function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
   const { claimOwnerKind, transientCommand } = raw;
   if (!isKnownOwnerKind(claimOwnerKind)) return null;
+  const unleasedLocal =
+    claimOwnerKind !== 'unstated' && raw.unleasedLocal === true
+      ? { unleasedLocal: true as const }
+      : {};
   if (claimOwnerKind === 'transient-command') {
     if (!isNonEmptyString(transientCommand)) return null;
     const claim = decodeClaimBody(raw, claimOwnerKind);
-    return claim ? { ...claim, transientCommand } : null;
+    return claim ? { ...claim, ...unleasedLocal, transientCommand } : null;
   }
   if (transientCommand !== undefined) return null;
-  return decodeClaimBody(raw, claimOwnerKind);
+  const claim = decodeClaimBody(raw, claimOwnerKind);
+  return claim ? { ...claim, ...unleasedLocal } : null;
 }
 
 function isKnownOwnerKind(value: unknown): value is DeviceClaimOwnerKind {

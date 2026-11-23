@@ -98,7 +98,9 @@ function seedLiveForeignClaim(claimsDir: string, device: DeviceInfo, foreignStat
   fs.writeFileSync(
     path.join(claimsDir, `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`),
     JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
+      claimOwnerKind: 'open-session',
+      unleasedLocal: true,
       deviceKey,
       device: {
         family: 'apple',

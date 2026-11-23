@@ -273,7 +273,6 @@ function isCurrentClaimOwner(
   );
 }
 
-/** The one diagnostic that names who holds a device when an acquisition is refused. */
 function emitClaimConflict(
   deviceKey: string,
   existing: InspectedDeviceClaim,
@@ -285,15 +284,9 @@ function emitClaimConflict(
     data: {
       deviceKey,
       classification: existing.classification,
-      ...describeClaimOwner(existing),
       ...(reconciliationReason ? { reconciliationReason } : {}),
     },
   });
-}
-
-/** The owner projection for diagnostics that name who holds the device. */
-function describeClaimOwner(existing: InspectedDeviceClaim): Record<string, unknown> {
-  return { ownerSession: existing.claim?.session, ownerStateDir: existing.claim?.stateDir };
 }
 
 function emitClaimSupersede(deviceKey: string, abandoned: DeviceClaim): void {
@@ -302,7 +295,6 @@ function emitClaimSupersede(deviceKey: string, abandoned: DeviceClaim): void {
     phase: 'device_claim_abandoned_superseded',
     data: {
       deviceKey,
-      abandonedSession: abandoned.session,
       abandonedAtMs: abandoned.abandonedAtMs,
     },
   });

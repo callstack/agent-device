@@ -86,7 +86,6 @@ import {
   repairExpiredIfTombstoned,
 } from './request-finalization.ts';
 import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
-import { dropInvisibleClaimOwner } from '../sessions/session-routing.ts';
 import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
@@ -339,17 +338,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     } catch (error) {
       response = finalizeThrownRequestError(error);
     }
-    return redactForMacOsAppLease(
-      req,
-      scope,
-      dropInvisibleClaimOwner(
-        // The restricted, tenant-scoped request the scope runs under, the same one the app-lease
-        // redaction judges with: a caller-supplied `meta.cwd` never widens what it may learn.
-        scope?.req ?? req,
-        sessionStore,
-        await finalizeRequestBindingCleanup(scope, response),
-      ),
-    );
+    return redactForMacOsAppLease(req, scope, await finalizeRequestBindingCleanup(scope, response));
   }
 
   // Not covered, by choice: a request refused before its scope exists that names no lease in its
@@ -360,7 +349,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     response: DaemonResponse,
   ): DaemonResponse {
     let session: SessionState | undefined;
-    if (
+    if (scope?.command === 'doctor') {
+      session = scope.admittedRef?.session;
+    } else if (
       scope &&
       !scope.detachedObservation &&
       scope.req.internal?.snapshotObservation === undefined
@@ -482,6 +473,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger,
       hostDiagnostics,
+      doctorSession: lockedScope.doctorSession,
       withSessionExecutionLock,
       resolveSessionRef: lockedScope.resolveSessionRef,
       requestScope,
@@ -546,11 +538,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       // This entry point registers a sensitive fill too, so it redacts that fill's error as well.
       return redactSensitiveFillResponse(
         req,
-        dropInvisibleClaimOwner(
-          childScope?.req ?? req,
-          sessionStore,
-          await finalizeRequestBindingCleanup(childScope, response),
-        ),
+        await finalizeRequestBindingCleanup(childScope, response),
       );
     };
   }
