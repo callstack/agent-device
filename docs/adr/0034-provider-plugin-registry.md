@@ -49,6 +49,9 @@ The provider host supplies `diagnostics.emit(event)`.
 The emitter uses the host request active at the time of the call, including during lease allocation.
 The host owns the log and redaction.
 The optional `dispose` belongs to that registration.
+Device-provider host types are first-party. `src/sdk/plugin-device-host.ts` declares them and states
+the reason: publishing them would place the Apple and Android platform declarations in the shared
+chunk every `agent-device/plugins` consumer loads.
 A `platform` declares a platform family and setup with a platform host.
 Platform setup returns inventory and runtime modules, request-provider scoping, and named operations.
 Platform setup, doctor, and orphan recovery are explicit operations.
@@ -167,6 +170,12 @@ This duplicates shared code across those plugin packages and keeps it out of cor
 Decision history (2026-11-23): Version 3 provider setup also accepts a dormant result during the 0.22 prerelease ([#4852](https://github.com/callstack/agent-device/issues/4852)).
 Reporting absent credentials as a setup failure was rejected because an optional provider can be installed before it is configured.
 Exceptions from setup still record failed claims.
+
+Decision history (2026-11-23): Device-provider host types stay first-party for 0.22 ([#4981](https://github.com/callstack/agent-device/issues/4981)).
+`agent-device/plugins/device-host` is not a published entry. The Limrun plugin reads `DeviceProviderPluginHost`, `ProviderHostCapabilities`, `ProviderAppleHost`, and `ProviderHostKit` through that workspace path, so no third-party device provider can drive an Apple or Android lease through the host.
+A published entry of its own was rejected because it would make those platform declarations public API just before release.
+A narrowed interface carried by `agent-device/plugins` was rejected because no third-party device provider exists to shape it.
+Reopen the decision when one asks, and design the published interface against that consumer.
 
 ## Daemon ownership
 
