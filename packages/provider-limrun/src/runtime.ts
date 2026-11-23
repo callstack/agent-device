@@ -574,7 +574,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       }
       const limrun = this.orgClient('Creating an instance');
       const requestedAsset = await resolveRequestedLimrunAppAsset(limrun, platform, context);
-      const rentalKey = context?.rental && randomUUID();
+      const rental = context?.rental;
+      const rentalKey = rental && randomUUID();
       const params = {
         limrun,
         lease: owner.lease,
@@ -586,9 +587,15 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       };
       const rent = (instanceId: string): void => {
         owner.rentedInstanceId = instanceId;
-        context?.rental?.rented(instanceId);
+        rental?.rented(instanceId);
       };
-      if (rentalKey) context?.rental?.beforeCreate(rentalKey);
+      if (rental && rentalKey) {
+        rental.beforeCreate(rentalKey);
+        owner.rental = {
+          reconciliationKey: rentalKey,
+          recordInstance: (instanceId) => rental.rented(instanceId),
+        };
+      }
       owner.createSubmitted = true;
       const session =
         platform === 'ios'
@@ -696,6 +703,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly disposalHost: LimrunDisposalHost = {
     deleteInstance: async (platform, instanceId) =>
       await this.deleteCreatedInstance(platform, instanceId),
+    findRentalInstance: async (platform, reconciliationKey) => {
+      const { findLimrunRentalInstance } = await import('./lease-release.ts');
+      return await findLimrunRentalInstance(this.limrun, platform, reconciliationKey);
+    },
     endCapture: async (owner) => await this.capturesInstance?.end(owner),
   };
 
