@@ -291,9 +291,14 @@ export type DirectApplicationLifecycleParams = Readonly<{
    * Reads which bundle holds the foreground before the dispatch, or `undefined` when no read
    * answers. Owners whose native launch of an already-foreground app is a passthrough wire their
    * platform's read here, so the open can say that it re-activated instead of restarted. The read
-   * is advisory: its failure never fails the open it informs.
+   * is advisory: its failure never fails the open it informs. The read receives the request's
+   * deadline beside the signal, so the owner can bound its device read by the budget the open has
+   * left instead of its own fixed one (#4860 follow-up).
    */
-  readForegroundBundle?: (signal: AbortSignal) => Promise<string | undefined>;
+  readForegroundBundle?: (
+    signal: AbortSignal,
+    requestDeadlineAtMs: number | undefined,
+  ) => Promise<string | undefined>;
   /** Port reverse is the one non-direct operation a provider owner may still implement. */
   configureProviderPortReverse?: ApplicationLifecycleRuntimeOperations['configureProviderPortReverse'];
 }>;
@@ -403,7 +408,9 @@ async function resolveAlreadyForeground(
   const target = probeableOpenTarget(input);
   if (!target) return false;
   try {
-    return (await readForegroundBundle(binding.signal)) === target;
+    return (
+      (await readForegroundBundle(binding.signal, input.execution.requestDeadlineAtMs)) === target
+    );
   } catch {
     return false;
   }

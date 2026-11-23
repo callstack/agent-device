@@ -195,6 +195,46 @@ test('a foreground read naming another app claims nothing about the open', async
   expect(calls).toEqual(['open com.example.app terminate=undefined']);
 });
 
+test('the foreground read receives the request deadline beside the signal', async () => {
+  const readDeadlines: Array<number | undefined> = [];
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor([]) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async (_signal, requestDeadlineAtMs) => {
+      readDeadlines.push(requestDeadlineAtMs);
+      return 'com.other.app';
+    },
+  });
+
+  await lifecycle.openApplication(openInput({ execution: { requestDeadlineAtMs: 1_234_567 } }));
+
+  // The read bounds itself by the budget the open has left (#4860 follow-up),
+  // so the owner's probe cannot outlive the request with its own fixed timer.
+  expect(readDeadlines).toEqual([1_234_567]);
+});
+
+test('the foreground read tolerates an open no transport admitted a deadline for', async () => {
+  const readDeadlines: Array<number | undefined> = [];
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor([]) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async (_signal, requestDeadlineAtMs) => {
+      readDeadlines.push(requestDeadlineAtMs);
+      return 'com.other.app';
+    },
+  });
+
+  await lifecycle.openApplication(openInput());
+
+  expect(readDeadlines).toEqual([undefined]);
+});
+
 test('a failing foreground read does not fail the open', async () => {
   const calls: string[] = [];
   const lifecycle = bindLocalDirectApplicationLifecycle({

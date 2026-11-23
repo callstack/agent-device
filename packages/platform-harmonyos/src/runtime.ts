@@ -140,7 +140,10 @@ function harmonyOpenVerifiedLifecycle(params: {
   host: { resolve: LocalApplicationLifecycleInteractorResolver };
   device: DeviceInfo;
   signal: AbortSignal;
-  readForegroundBundle?: (signal: AbortSignal) => Promise<string | undefined>;
+  readForegroundBundle?: (
+    signal: AbortSignal,
+    requestDeadlineAtMs: number | undefined,
+  ) => Promise<string | undefined>;
 }): ApplicationLifecycleRuntimeOperations {
   const direct = bindLocalDirectApplicationLifecycle({
     owner: 'HarmonyOS',
@@ -412,8 +415,10 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               host: host.localInteractors,
               device: request.device,
               signal: request.scope.signal,
-              readForegroundBundle: (signal) =>
-                probeHarmonyForegroundBundle(request.device, signal),
+              readForegroundBundle: (signal, requestDeadlineAtMs) =>
+                probeHarmonyForegroundBundle(request.device, signal, {
+                  deadlineAtMs: requestDeadlineAtMs,
+                }),
             }),
             facts.operations,
           ),
