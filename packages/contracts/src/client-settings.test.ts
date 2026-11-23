@@ -42,6 +42,14 @@ describe('public client permission vocabulary', () => {
     expectTypeOf<Permission['state']>().toEqualTypeOf<'grant' | 'deny' | 'reset'>();
     expectTypeOf<Permission['mode']>().toEqualTypeOf<'full' | 'limited' | undefined>();
   });
+
+  test('takes a mode only with photos, the one target whose form has modes', () => {
+    type Grant<Target> = { setting: 'permission'; state: 'grant'; permission: Target };
+    expectTypeOf<Grant<'photos'> & { mode: 'limited' }>().toExtend<SettingsUpdateOptions>();
+    expectTypeOf<Grant<'camera'>>().toExtend<SettingsUpdateOptions>();
+    expectTypeOf<Grant<'camera'> & { mode: 'limited' }>().not.toExtend<SettingsUpdateOptions>();
+    expectTypeOf<Grant<'accessibility'> & { mode: 'full' }>().not.toExtend<SettingsUpdateOptions>();
+  });
 });
 
 describe('public client settings cover the catalog', () => {

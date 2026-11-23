@@ -54,6 +54,26 @@ type DeviceLevelToggleOptions = {
   };
 }[DeviceLevelToggleSetting];
 
+/** The permission targets whose catalog form declares `modes`; no other target takes a mode. */
+type ModedPermissionTarget = Extract<
+  (typeof SETTINGS)['permission']['forms'][number],
+  { modes: readonly string[] }
+>['targets'][number];
+
+type PermissionUpdateOptions = DeviceCommandBaseOptions & {
+  setting: 'permission';
+  state: PermissionAction;
+  /**
+   * The app the permission changes, by bundle id, package name, or app name, resolved as `open`
+   * resolves it: an iOS simulator, local or Limrun, matches display names and accepts only an
+   * installed bundle id, and Android accepts only an installed package and refuses a name that
+   * resolves to an intent with `setting_app_not_package`. Without it the session app is used;
+   * no app has to be running or open. macOS permissions are host-level TCC grants, so naming an
+   * app there is refused.
+   */
+  app?: string;
+};
+
 export type SettingsUpdateOptions =
   | StateOnlySettingOptions
   | DeviceLevelToggleOptions
@@ -75,18 +95,9 @@ export type SettingsUpdateOptions =
       longitude: number;
       app?: string;
     })
-  | (DeviceCommandBaseOptions & {
-      setting: 'permission';
-      state: PermissionAction;
-      permission: PermissionTarget;
-      mode?: PermissionMode;
-      /**
-       * The app the permission changes, by bundle id, package name, or app name, resolved as `open`
-       * resolves it: an iOS simulator, local or Limrun, matches display names and accepts only an
-       * installed bundle id, and Android accepts only an installed package and refuses a name that
-       * resolves to an intent with `setting_app_not_package`. Without it the session app is used;
-       * no app has to be running or open. macOS permissions are host-level TCC grants, so naming an
-       * app there is refused.
-       */
-      app?: string;
+  | (PermissionUpdateOptions & { permission: ModedPermissionTarget; mode?: PermissionMode })
+  /** Every other target refuses a mode at runtime, so the type refuses it too. */
+  | (PermissionUpdateOptions & {
+      permission: Exclude<PermissionTarget, ModedPermissionTarget>;
+      mode?: never;
     });

@@ -105,7 +105,7 @@ export const settingsCommandFacet = defineCommandFacet({
     cliDetail: [
       'A bare readable setting reads the value the target holds. A target that does not serve a setting refuses it with UNSUPPORTED_OPERATION before anything changes.',
       '',
-      'On an iOS simulator, settings wifi and settings airplane wait for screenshots and other status bar writes. The request timeout includes this wait (90 seconds for a standalone CLI request). Once the write starts, its status bar command has a separate 10-second timeout. A request or write that times out may already have changed the bar; check the bar before relying on it. Cancelling while still queued guarantees nothing was written.',
+      "On an iOS simulator, settings wifi and settings airplane change only the status bar; the simulator keeps using the host Mac's network, so they cannot test offline behavior. They wait for screenshots and other status bar writes. The request timeout includes this wait (90 seconds for a standalone CLI request). Once the write starts, its status bar command has a separate 10-second timeout. A request or write that times out may already have changed the bar; check the bar before relying on it. Cancelling while still queued guarantees nothing was written.",
       '',
       'Settings:',
       ...settingsHelpLines().map((line) => `  ${line}`),

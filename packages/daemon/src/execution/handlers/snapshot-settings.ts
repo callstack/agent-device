@@ -30,7 +30,7 @@ import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
-import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 
 import type {
@@ -74,7 +74,7 @@ export function parseSettingsArgs(
     return { ok: true, parsed: { leg: 'write', args: parseSettingsMutation(positionals) } };
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
-    return errorResponse(error.code, error.message);
+    return { ok: false, error: normalizeError(error) };
   }
 }
 
