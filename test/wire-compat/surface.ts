@@ -457,7 +457,10 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'fetchRemoteArtifact',
         'materializeRemoteArtifacts',
         'downloadResponseArtifacts',
+        'downloadOneArtifact',
+        'DroppedArtifact',
         'resolveMaterializedArtifactPath',
+        'resolveOrdinaryArtifactFallbackPath',
       ),
       // The client functions and types that write the remote open --save-script request field and
       // read the session-script artifact fields (ADR 0016).

@@ -14,20 +14,30 @@ import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
 
 async function withRecordingServer(
   t: TestContext,
-  run: (cwd: string, stop: ReturnType<typeof recordStop>) => Promise<void>,
+  run: (
+    cwd: string,
+    stop: ReturnType<typeof recordStop>,
+    artifactRequests: string[],
+  ) => Promise<void>,
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t, 'remote recording download')) return;
   const root = mkdtempForTestSync('agent-device-record-download-');
   const cwd = path.join(root, 'cwd');
   fs.mkdirSync(cwd);
+  const artifactRequests: string[] = [];
   // Each artifact's bytes are its own id, served as binary so the body is never read as HTML.
   const server = http.createServer((req, res) => {
+    artifactRequests.push(req.url ?? '');
     res.writeHead(200, { 'content-type': 'application/octet-stream' });
     res.end(path.basename(req.url ?? ''));
   });
   try {
     const port = await listenOnLoopback(server);
-    await run(cwd, recordStop(`http://127.0.0.1:${port}`, cwd, path.join(root, 'state')));
+    await run(
+      cwd,
+      recordStop(`http://127.0.0.1:${port}`, cwd, path.join(root, 'state')),
+      artifactRequests,
+    );
   } finally {
     await closeLoopbackServer(server);
   }
@@ -81,7 +91,10 @@ test('record stop ignores the daemon localPath and warns about the cwd download'
 test('record stop uses the destination named in the current request', async (t) => {
   await withRecordingServer(t, async (cwd, stop) => {
     const hostile = path.resolve(cwd, '../hostile.mp4');
-    const data = await stop([{ ...video, localPath: hostile }], '../requested.mp4');
+    const data = await stop(
+      [{ ...video, localPath: hostile, fileName: 'clip\0.mp4' }],
+      '../requested.mp4',
+    );
     const requested = path.resolve(cwd, '../requested.mp4');
     expect(fs.existsSync(hostile)).toBe(false);
     expect(fs.readFileSync(requested, 'utf8')).toBe('video');
@@ -126,6 +139,28 @@ test.for([
     expect(data?.recordingDestinationWarnings).toEqual([
       { reason: 'recording_destination_not_requested', field: 'outPath', path: destination },
     ]);
+  });
+});
+
+test.for([
+  { field: 'outPath', artifactType: 'screen-recording' },
+  { field: 'chunkPath', artifactType: 'screen-recording-chunk' },
+  { field: 'telemetryPath', artifactType: 'screen-recording-telemetry' },
+])('unnamed record stop drops a NUL in the $field artifact name', async (artifact, t) => {
+  await withRecordingServer(t, async (cwd, stop, artifactRequests) => {
+    const { field } = artifact;
+    const data = await stop([{ ...video, ...artifact, fileName: 'clip\0.mp4' }]);
+    expect(data).toMatchObject({
+      outPath: '/daemon/other.mp4',
+      artifacts: [],
+      droppedArtifacts: [{ field, reason: 'artifact_name_invalid' }],
+      warnings: [
+        `The remote artifact for "${field}" was not downloaded: its name cannot be a file name.`,
+      ],
+    });
+    expect(data?.recordingDestinationWarnings).toBeUndefined();
+    expect(artifactRequests).toEqual([]);
+    expect(fs.readdirSync(cwd)).toEqual([]);
   });
 });
 

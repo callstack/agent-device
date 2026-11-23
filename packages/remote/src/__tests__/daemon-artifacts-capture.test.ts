@@ -8,6 +8,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  withMockedPlatform,
 } from '@agent-device/test-kit';
 import { materializeRemoteArtifacts, prepareRemoteRequestArtifacts } from '../daemon-artifacts.ts';
 
@@ -78,17 +79,37 @@ type MaterializationCase = {
   positionals?: string[];
   registered?: string;
   localPath: string;
-  fileName: string;
-  expected: string;
+  field?: string;
+  fileName?: string;
+  expected?: string;
+  generatedName?: RegExp;
 };
+
+const posixNameCases: MaterializationCase[] = [
+  {
+    name: 'POSIX keeps a colon in the response basename',
+    command: 'snapshot',
+    localPath: 'outside/shot.png',
+    fileName: 'C:shot.png',
+    expected: 'cwd/C:shot.png',
+  },
+  {
+    name: 'POSIX keeps a colon in the generated basename',
+    command: 'snapshot',
+    localPath: 'outside/shot.png',
+    field: 'subdir/c:path',
+    fileName: '',
+    generatedName: /^c:path-\d+$/,
+  },
+];
 
 test.for<MaterializationCase>([
   {
-    name: 'a registered destination wins over a response localPath',
+    name: 'a registered destination wins over a response localPath and invalid name',
     command: 'screenshot',
     registered: 'client/shot.png',
     localPath: 'outside/shot.png',
-    fileName: 'shot.png',
+    fileName: 'shot\0.png',
     expected: 'client/shot.png',
   },
   {
@@ -97,6 +118,11 @@ test.for<MaterializationCase>([
     localPath: 'outside/x',
     fileName: '../../x',
     expected: 'cwd/x',
+  },
+  {
+    name: 'an omitted file name generates a destination in cwd',
+    command: 'snapshot',
+    localPath: 'outside/shot.png',
   },
   {
     name: 'a close does not authorize an unrelated response artifact destination',
@@ -121,10 +147,12 @@ test.for<MaterializationCase>([
     fileName: 'cpu.trace',
     expected: 'client/cpu.trace',
   },
+  ...(process.platform === 'win32' ? [] : posixNameCases),
 ])('remote artifact materialization: $name', async (c, t) => {
   if (await skipWhenLoopbackUnavailable(t, 'remote artifact download')) return;
   const root = mkdtempForTestSync('agent-device-remote-artifact-path-');
   const inRoot = (relative: string) => path.join(root, relative);
+  const field = c.field ?? 'path';
   const server = http.createServer((_req, res) => res.end('artifact-bytes'));
   try {
     const port = await listenOnLoopback(server);
@@ -137,7 +165,7 @@ test.for<MaterializationCase>([
         positionals: c.positionals ?? ['stop'],
         meta: {
           cwd: inRoot('cwd'),
-          ...(c.registered ? { clientArtifactPaths: { path: inRoot(c.registered) } } : {}),
+          ...(c.registered ? { clientArtifactPaths: { [field]: inRoot(c.registered) } } : {}),
         },
       },
       {
@@ -146,11 +174,11 @@ test.for<MaterializationCase>([
           artifacts: [
             {
               artifactId: 'a1',
-              field: 'path',
+              field,
               artifactType: 'screenshot',
               path: '/daemon/x',
               localPath: inRoot(c.localPath),
-              fileName: c.fileName,
+              ...(c.fileName === undefined ? {} : { fileName: c.fileName }),
             },
           ],
         },
@@ -158,9 +186,98 @@ test.for<MaterializationCase>([
       createTestHostEnvironment(),
       inRoot('state'),
     );
-    expect(response.ok && response.data?.path).toBe(inRoot(c.expected));
-    expect(fs.readFileSync(inRoot(c.expected), 'utf8')).toBe('artifact-bytes');
+    const saved = response.ok && response.data?.[field];
+    expect(saved).toEqual(c.expected ? inRoot(c.expected) : expect.any(String));
+    if (!c.expected) {
+      expect(path.dirname(String(saved))).toBe(inRoot('cwd'));
+      expect(path.basename(String(saved))).toMatch(c.generatedName ?? /^path-\d+$/);
+    }
+    expect(fs.readFileSync(String(saved), 'utf8')).toBe('artifact-bytes');
     expect(fs.existsSync(inRoot('outside'))).toBe(false);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+type InvalidNameCase = {
+  name: string;
+  field: string;
+  fileName: string | null;
+  platform?: NodeJS.Platform;
+};
+
+test.for<InvalidNameCase>([
+  { name: 'a NUL byte', field: 'path', fileName: 'shot\0.png' },
+  { name: 'a NUL byte in the directory part', field: 'path', fileName: 'bad\0/shot.png' },
+  { name: 'explicit null', field: 'path', fileName: null },
+  {
+    name: 'a Windows drive prefix on the response basename',
+    field: 'path',
+    fileName: 'subdir/C:shot.png',
+    platform: 'win32',
+  },
+  {
+    name: 'a Windows drive prefix on the generated basename',
+    field: 'subdir/c:path',
+    fileName: '',
+    platform: 'win32',
+  },
+])('a remote artifact with $name is dropped and the action result is kept', async (c, t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'remote artifact download')) return;
+  const root = mkdtempForTestSync('agent-device-remote-artifact-invalid-name-');
+  const cwd = path.join(root, 'cwd');
+  fs.mkdirSync(cwd);
+  const requested: string[] = [];
+  const server = http.createServer((req, res) => {
+    requested.push(req.url ?? '');
+    res.writeHead(404).end();
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    const response = await withMockedPlatform(c.platform ?? process.platform, () =>
+      materializeRemoteArtifacts(
+        { baseUrl: `http://127.0.0.1:${port}`, token: 'secret' },
+        {
+          token: 'secret',
+          command: 'snapshot',
+          session: 'capture',
+          positionals: [],
+          meta: { cwd },
+        },
+        {
+          ok: true,
+          data: {
+            nodes: 3,
+            path: '/daemon/x',
+            artifacts: [
+              {
+                artifactId: 'invalid',
+                field: c.field,
+                artifactType: 'screenshot',
+                path: '/daemon/x',
+                fileName: c.fileName as string,
+              },
+            ],
+          },
+        },
+        createTestHostEnvironment(),
+        path.join(root, 'state'),
+      ),
+    );
+    expect(response).toEqual({
+      ok: true,
+      data: {
+        nodes: 3,
+        path: '/daemon/x',
+        artifacts: [],
+        droppedArtifacts: [{ field: c.field, reason: 'artifact_name_invalid' }],
+        warnings: [
+          `The remote artifact for "${c.field}" was not downloaded: its name cannot be a file name.`,
+        ],
+      },
+    });
+    expect(requested).toEqual([]);
+    expect(fs.readdirSync(cwd)).toEqual([]);
   } finally {
     await closeLoopbackServer(server);
   }
