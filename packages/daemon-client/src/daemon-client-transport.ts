@@ -255,7 +255,7 @@ export async function readRemoteDaemonHealth(
       link.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION,
   );
   if (!incompatible) return health;
-  const proxy = incompatible === health.upstream ? health : undefined;
+  const proxy = incompatible === health.upstream ? { service: health.service } : undefined;
   throw incompatibleRemoteProtocolError(info.baseUrl, incompatible, proxy);
 }
 

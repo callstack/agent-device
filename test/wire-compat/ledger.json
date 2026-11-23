@@ -72,7 +72,7 @@
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthLabel": "sha256:ec3579252fb62eda72ed2232e94730bb35c5a012509a498fb4c66e0c9a6bcaa7",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:ebed1315a73b3d83e59a4fd01ff2d35ddc9cf9fe0c2820d85a11dc4fc013cdb7",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
-    "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:49849ab90412433dd2444a46725786fdc6916786dd50c593e93aa951a5808ada",
+    "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bf9ca0ecb9dc00f18d0bf4acab30d544d680246b8cdacbc50f684db182b6f23b",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:9f72097ae602ee8040c7a42104d682e4ea6b4c5999aa653a72b3cf47d4f5b81d",
@@ -301,8 +301,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth",
-      "digest": "sha256:49849ab90412433dd2444a46725786fdc6916786dd50c593e93aa951a5808ada",
-      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. #3178 threads the caller's optional AbortSignal through so a canceled call cuts a probe already in flight instead of waiting it out: the signal is client-local, never serialized, and the GET /health request and payload are unchanged. The mismatch refusal now names both versions and the side to upgrade in its message, with a new hint and a client-local upgradeSide detail; the comparison it makes, the /health request, and the refusal's code and existing detail fields are unchanged, and nothing new is serialized. It now passes the proxy's own link rather than its service name, so a proxy reporting an empty service is still named as a proxy; the comparison and the /health request are unchanged."
+      "digest": "sha256:bf9ca0ecb9dc00f18d0bf4acab30d544d680246b8cdacbc50f684db182b6f23b",
+      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. #3178 threads the caller's optional AbortSignal through so a canceled call cuts a probe already in flight instead of waiting it out: the signal is client-local, never serialized, and the GET /health request and payload are unchanged. The mismatch refusal now names both versions and the side to upgrade in its message, with a new hint and a client-local upgradeSide detail; the comparison it makes, the /health request, and the refusal's code and existing detail fields are unchanged, and nothing new is serialized. It now flags the proxy link explicitly, carrying only the proxy's service, rather than inferring it from that name, so a proxy reporting an empty service is still named as a proxy; the comparison and the /health request are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
