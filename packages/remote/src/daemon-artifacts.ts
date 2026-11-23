@@ -730,7 +730,7 @@ function isRecordStop(req: DaemonWireRequest): boolean {
 /**
  * A path from this request wins. A record stop without one can use only a plain name in cwd.
  * Trace and perf stop or report can still use an echoed destination from an earlier request.
- * A non-string response file name cannot provide a fallback destination.
+ * A NUL in a response file name cannot provide a fallback destination.
  */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
@@ -744,21 +744,31 @@ function resolveMaterializedArtifactPath(
     if (hasNonEmptyString(requested)) {
       return { path: resolveAbsoluteClientPath(requested, req.meta?.cwd, host), fallback: false };
     }
+    if (typeof artifact.fileName === 'string' && artifact.fileName.includes('\0')) return undefined;
     const fileName = localFileName(artifact.fileName) ?? `recording-${crypto.randomUUID()}`;
     return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: true };
   }
   if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return { path: artifact.localPath, fallback: false };
   }
+  const fallbackPath = resolveOrdinaryArtifactFallbackPath(artifact, req.meta?.cwd ?? host.cwd);
+  return fallbackPath ? { path: fallbackPath, fallback: false } : undefined;
+}
+
+function resolveOrdinaryArtifactFallbackPath(
+  artifact: DaemonArtifact,
+  cwd: string,
+): string | undefined {
   const { fileName: rawName = '' }: { fileName?: unknown } = artifact;
-  if (typeof rawName !== 'string') return undefined;
-  const responseName = path.basename(rawName.trim());
+  if (typeof rawName !== 'string' || rawName.includes('\0')) return undefined;
+  const pathRules = process.platform === 'win32' ? path.win32 : path.posix;
+  const responseName = pathRules.basename(rawName.trim());
   const fileName =
     responseName && responseName !== '.' && responseName !== '..'
       ? responseName
-      : `${path.basename(artifact.field)}-${Date.now()}`;
-  if (/^[a-z]:/i.test(fileName)) return undefined;
-  return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: false };
+      : `${pathRules.basename(artifact.field)}-${Date.now()}`;
+  if (pathRules === path.win32 && /^[a-z]:/i.test(fileName)) return undefined;
+  return pathRules.resolve(cwd, fileName);
 }
 
 function localFileName(value: unknown): string | undefined {
