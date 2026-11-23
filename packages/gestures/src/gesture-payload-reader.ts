@@ -300,10 +300,12 @@ function assertDragEndpointsAreTargets(
   );
 }
 
-/** "170", "170 1595", or "170,1595". */
+/** "170", "170 1595", or "170,1595". An empty segment, as in "," or "170,", is no number. */
 function readCoordinateEndpoint(token: string): number[] | undefined {
-  const numbers = token.split(/[\s,]+/).map(Number);
-  return numbers.length <= 2 && numbers.every(Number.isFinite) ? numbers : undefined;
+  const segments = token.split(/[\s,]+/);
+  if (segments.length > 2 || segments.includes('')) return undefined;
+  const numbers = segments.map(Number);
+  return numbers.every(Number.isFinite) ? numbers : undefined;
 }
 
 /** The pan that makes the drag's move, when both endpoints are points and its timing is valid. */

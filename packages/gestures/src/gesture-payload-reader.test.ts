@@ -97,6 +97,15 @@ test('drag refuses coordinate endpoints and carries the held pan that makes the 
     readGesturePayload({ kind: 'drag', source: 'label="170"', destination: '@e2' }).kind,
     'drag',
   );
+  // An empty or blank segment is no coordinate, so these are left to the selector checks.
+  for (const endpoint of [',', '170,', '170 , ']) {
+    assert.equal(
+      readGesturePayload({ kind: 'drag', source: endpoint, destination: '@e2' }).kind,
+      'drag',
+      endpoint,
+    );
+  }
+  assert.deepEqual(refusal('170,', '540 160'), { reason, endpoint: 'destination', pan: undefined });
 });
 
 test('drag requires two non-empty targets and validates each timing phase', () => {
