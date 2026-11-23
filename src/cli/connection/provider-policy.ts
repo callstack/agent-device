@@ -16,8 +16,8 @@ import {
   getProviderPluginDeclaration,
   providerPluginAdmission,
   providerPluginConnectionCapabilities,
-  providerPluginRepairCommand,
-} from '../../commands/provider-plugin-catalog.ts';
+} from '@agent-device/contracts/provider-plugin-catalog';
+import { providerPluginRepairCommand } from '../../commands/provider-plugin-catalog.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
 export type ConnectProvider = string;
@@ -128,8 +128,7 @@ export async function admitProviderForRoute(
 ): Promise<void> {
   if (provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(provider)) return;
   await primePluginConnections(env);
-  if (route === 'dispatches-to-remote-daemon') return;
-  if (route === 'reads-connection-record' && declaredConnectionCapabilities(provider, env)) return;
+  if (route !== 'drives-connection') return;
   if (pluginConnectionCapabilities(provider, env) !== undefined) return;
   const unavailable = unavailableConnectPluginError(provider, env);
   if (unavailable) throw unavailable;
@@ -175,7 +174,7 @@ export function unavailableConnectPluginError(
     'UNSUPPORTED_OPERATION',
     `${declaration.label} requires the ${declaration.package} plugin.`,
     {
-      reason: 'plugin-not-installed',
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled,
       provider,
       package: declaration.package,
       ...pluginInstallationHint(declaration, readVersion()),

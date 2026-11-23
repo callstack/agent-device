@@ -11,7 +11,7 @@ import {
   type DeviceTarget,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = [
   'android',
@@ -122,10 +122,15 @@ export function isDeviceClaimConflictReason(value: unknown): value is DeviceClai
   return DEVICE_CLAIM_CONFLICT_REASONS.has(value as DeviceClaimConflictReason);
 }
 
+export const PROVIDER_INVENTORY_REASONS = {
+  // The provider connection has no live instance. Allocate one with open, boot, or leases.allocate.
+  instanceUnallocated: { reason: 'provider_instance_unallocated' },
+} as const satisfies ReasonTable<'provider inventory'>;
+
 /** A provider connection that has no live instance: none was allocated, or the last one ended. */
 export function providerInstanceUnallocatedError(leaseProvider: string): AppError {
   return new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
-    reason: 'provider_instance_unallocated',
+    reason: PROVIDER_INVENTORY_REASONS.instanceUnallocated.reason,
     hint: 'Run boot or open to allocate an instance. SDK callers allocate one with leases.allocate and pass its leaseId.',
     leaseProvider,
   });

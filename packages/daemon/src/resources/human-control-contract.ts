@@ -1,14 +1,11 @@
+import { normalizeLeaseProvider } from '@agent-device/kernel/contracts';
 import type {
   HumanControlHold,
   HumanControlHoldOptions,
   HumanControlHoldScope,
 } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  normalizeDeviceKey,
-  normalizeLeaseBackend,
-  normalizeLeaseProvider,
-} from './lease-registry-scope.ts';
+import { normalizeDeviceKey, normalizeLeaseBackend } from './lease-registry-scope.ts';
 
 export const HUMAN_CONTROL_HTTP_PREFIX = '/admin/human-control/holds';
 

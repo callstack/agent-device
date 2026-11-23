@@ -120,7 +120,6 @@ test('connect --remote-config with a Limrun profile refuses the plugin before re
   const { result, registered } = await connectWithToken(['connect', '--session', 'ci'], {
     env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: TOKEN },
     remoteConfigProfile: {
-      daemonBaseUrl: CLOUD_DAEMON,
       tenant: 'team-a',
       runId: 'run-a',
       leaseProvider: 'limrun',
@@ -131,6 +130,32 @@ test('connect --remote-config with a Limrun profile refuses the plugin before re
   assertProviderPluginRefusal(result, 'limrun');
   assert.deepEqual(registered, [], 'a refused route must not register a credential value');
 });
+
+test.each([
+  { source: 'flag', args: ['--daemon-base-url', CLOUD_DAEMON], options: {} },
+  {
+    source: 'environment',
+    args: [],
+    options: { env: { AGENT_DEVICE_DAEMON_BASE_URL: CLOUD_DAEMON } },
+  },
+  { source: 'user config', args: [], options: { tokenInUserConfig: true } },
+])(
+  'connect --remote-config uses the daemon from the $source before admitting a local provider',
+  async ({ args, options }) => {
+    const { result } = await connectWithToken(['connect', '--session', 'ci', ...args], {
+      ...options,
+      env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: TOKEN, ...options.env },
+      remoteConfigProfile: {
+        tenant: 'team-a',
+        runId: 'run-a',
+        leaseProvider: ' limrun ',
+        platform: 'android',
+      },
+    });
+    assert.equal(result.code, null, result.stdout + result.stderr);
+    assert.deepEqual(result.calls, []);
+  },
+);
 
 test('connect browserstack resolves and registers this run token before its own admission', async () => {
   // The closest negative: a provider this release admits in its connect handler still resolves and

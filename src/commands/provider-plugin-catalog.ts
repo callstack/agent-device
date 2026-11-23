@@ -1,109 +1,14 @@
-import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
-  type PluginReleaseDeclaration,
   pluginInstallCommand,
   pluginPackageSelector,
   pluginRepairCommand,
 } from '@agent-device/contracts/plugin-installation';
 
-/** What a route must do about a provider whose plugin this host cannot supply. */
-export type ProviderAdmissionPolicy = 'provider' | 'route';
-
-type ProviderPluginDeclaration = PluginReleaseDeclaration &
-  Readonly<{
-    provider: string;
-    label: string;
-    /**
-     * The plugin's own `connection.capabilities` declaration, readable without loading the plugin. A
-     * connection's lease policy comes from its provider on every route, including one whose plugin
-     * this host does not load, so the same command behaves the same with or without it installed.
-     * `provider-policy.test.ts` keeps this copy equal to the plugin's own declaration.
-     */
-    connectionCapabilities?: ConnectionProviderCapabilities;
-    /**
-     * Whether a route that needs this provider admits it itself before it authenticates or writes
-     * anything. `'provider'` means only the plugin can supply the provider, because the core ships no
-     * runtime for it, so a route driving a connection here refuses a provider it has no plugin for.
-     * `'route'`, the default, keeps this release's starting behavior: the `connect` handler admits a
-     * named provider, and the adapter that reads a profile verifies the provider it names.
-     */
-    admission?: ProviderAdmissionPolicy;
-  }>;
-
-export const AWS_DEVICE_FARM: ProviderPluginDeclaration = {
-  provider: 'aws-device-farm',
-  package: '@agent-device/aws-device-farm',
-  label: 'AWS Device Farm',
-  nightlyTag: 'nightly-0.22',
-};
-
-export const BROWSERSTACK: ProviderPluginDeclaration = {
-  provider: 'browserstack',
-  package: '@agent-device/browserstack',
-  label: 'BrowserStack',
-  nightlyTag: 'nightly-0.22',
-};
-
-export const LIMRUN: ProviderPluginDeclaration = {
-  provider: 'limrun',
-  package: '@agent-device/limrun',
-  label: 'Limrun',
-  nightlyTag: 'nightly-0.22',
-  admission: 'provider',
-  connectionCapabilities: {
-    leaseKind: 'direct-device-provider',
-    requiresAppAttachment: false,
-    requiresRemoteDaemon: false,
-    supportsArtifacts: false,
-    supportsDeferredAppSelection: true,
-    supportsDirectPortReverse: true,
-    usesCloudWebDriverLease: false,
-    holdsCloudDevice: true,
-    forgetsEndedConnectionLease: true,
-  },
-};
-
-const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
-  AWS_DEVICE_FARM,
-  BROWSERSTACK,
-  LIMRUN,
-  { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
-  { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },
-  { provider: 'webos', package: '@agent-device/webos', label: 'LG webOS' },
-  { provider: 'tizen', package: '@agent-device/tizen', label: 'Samsung Tizen' },
-];
-
-/** Every catalog row, so the release check can compare each row's package with what it publishes. */
-export function providerPluginDeclarations(): readonly ProviderPluginDeclaration[] {
-  return PROVIDER_PLUGIN_CATALOG;
-}
-
-export function getProviderPluginDeclaration(
-  provider: string,
-): ProviderPluginDeclaration | undefined {
-  return PROVIDER_PLUGIN_CATALOG.find((plugin) => plugin.provider === provider);
-}
-
-/**
- * The capabilities a plugin provider declares, read from the catalog without loading the plugin or
- * its store. Undefined for a provider the catalog does not list.
- */
-export function providerPluginConnectionCapabilities(
-  provider: string | undefined,
-): ConnectionProviderCapabilities | undefined {
-  return provider === undefined
-    ? undefined
-    : getProviderPluginDeclaration(provider)?.connectionCapabilities;
-}
-
-/** How a route treats a provider it must admit itself; see `ProviderAdmissionPolicy`. */
-export function providerPluginAdmission(provider: string | undefined): ProviderAdmissionPolicy {
-  return (
-    (provider === undefined ? undefined : getProviderPluginDeclaration(provider)?.admission) ??
-    'route'
-  );
-}
+import {
+  providerPluginDeclarations,
+  type ProviderPluginDeclaration,
+} from '@agent-device/contracts/provider-plugin-catalog';
 
 export function providerPluginInstallCommand(
   declaration: ProviderPluginDeclaration,
@@ -120,9 +25,11 @@ export function providerPluginRepairCommand(
 }
 
 export function providerPluginHelp(coreVersion: string = readVersion()): string {
-  const plugins = PROVIDER_PLUGIN_CATALOG.map(
-    (plugin) =>
-      `${plugin.label} (connect ${plugin.provider}; ${pluginPackageSelector(plugin, coreVersion)})`,
-  ).join(', ');
+  const plugins = providerPluginDeclarations()
+    .map(
+      (plugin) =>
+        `${plugin.label} (connect ${plugin.provider}; ${pluginPackageSelector(plugin, coreVersion)})`,
+    )
+    .join(', ');
   return `  Plugins, installed separately: ${plugins}. Run agent-device plugins add <package>, then retry agent-device connect <provider> with your original arguments.`;
 }

@@ -123,7 +123,7 @@ test('provider-owned relaunch refuses launch-console without closing the running
   );
 });
 
-test('provider lease allocation is refused when no registered runtime claims the provider', async () => {
+test('provider lease allocation names the missing plugin before issuing a lease', async () => {
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
     deviceInventoryProvider: async () => null,
@@ -146,17 +146,17 @@ test('provider lease allocation is refused when no registered runtime claims the
         },
       },
     );
-    const error = assertRpcError(
-      response,
-      500,
-      'UNSUPPORTED_OPERATION',
-      /Provider "testmu" is not available in this daemon runtime/,
-    );
+    const error = assertRpcError(response, 500, 'UNSUPPORTED_OPERATION', /@agent-device\/testmu/);
     const details = error.details as Record<string, unknown>;
     assert.equal(details.reason, 'provider-not-registered');
     assert.equal(details.provider, 'testmu');
     assert.deepEqual(details.registeredProviders, [FAKE_PROVIDER]);
-    assert.match(String(error.hint), /Restart the daemon/);
+    assert.equal(details.package, '@agent-device/testmu');
+    assert.equal(
+      details.installCommand,
+      'agent-device plugins add @agent-device/testmu@nightly-0.22',
+    );
+    assert.match(String(error.hint), /daemon stop/);
     const retried = await daemon.callCommand(
       'lease_allocate',
       [],
