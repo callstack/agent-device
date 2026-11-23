@@ -144,7 +144,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `GESTURE_PATH_TOO_SHORT` | The gesture path has fewer usable samples than any recognizable motion needs. |
 | `GESTURE_PATH_INVALID_TIMELINE` | The path's sample timeline is not ordered and finite, so no clock can play it back. |
 | `GESTURE_TRAJECTORY_NON_FINITE` | A trajectory sample carries a non-finite coordinate. |
-| `GESTURE_TRAJECTORY_OUT_OF_BOUNDS` | A trajectory sample leaves the viewport, so the contact would press outside the screen. |
+| `GESTURE_TRAJECTORY_OUT_OF_BOUNDS` | A trajectory sample leaves the viewport, so the contact would press outside the screen, or a two-finger path cannot keep its contacts the minimum span apart inside it. |
 
 ### `install-from-source`
 
