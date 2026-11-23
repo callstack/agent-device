@@ -70,8 +70,8 @@ Tips:
 ## Selector syntax
 
 A selector expression is one or more terms separated by spaces, and an element must match every
-term. A term is `key=value`, or a boolean key alone, which means `key=true`: `checked` is
-`checked=true`. `agent-device help selectors` prints this syntax.
+term. A term is `key=value`, or a boolean key alone, which means `key=true`: `role=switch checked`
+is `role=switch checked=true`. `agent-device help selectors` prints this syntax.
 
 These commands take a selector:
 
@@ -101,9 +101,8 @@ Text keys:
 | `appname`     | The owning app's name                                                              |
 | `windowtitle` | The owning window's title                                                          |
 
-Linux snapshots and the macOS `desktop`, `frontmost-app`, and `menubar` surfaces report `appname`
-and `windowtitle`. A macOS app session reports them only with `AGENT_DEVICE_MACOS_APP_BACKEND=native`.
-Elsewhere a non-empty value matches nothing.
+Not every snapshot reports `appname` and `windowtitle`; `agent-device help selectors` lists the
+ones that do.
 
 Text values match the whole field, ignoring case and extra whitespace: `label="sign in"` matches
 `Sign In` but not `Sign In Now`. For partial matches, use `find`.
