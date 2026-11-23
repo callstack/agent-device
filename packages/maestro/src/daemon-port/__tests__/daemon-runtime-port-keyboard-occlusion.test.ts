@@ -15,24 +15,26 @@ import {
 
 const keyboardFrame = { x: 0, y: 590, width: 402, height: 284 };
 const pickup = { id: 'shipping-pickup' };
+const returnKey = { id: 'Return' };
 
-function checkoutSnapshot(targetY: number) {
+function checkoutSnapshot(targetY: number, keyboardOwned: boolean) {
   const snapshot = makeSnapshot([
     { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
     {
       index: 1,
       parentIndex: 0,
       type: 'Button',
-      identifier: pickup.id,
+      identifier: keyboardOwned ? returnKey.id : pickup.id,
       enabled: true,
       rect: { x: 110, y: targetY, width: 108, height: 44 },
+      ...(keyboardOwned ? { keyboardOwned } : {}),
     },
   ]);
   snapshot.keyboard = { kind: 'visible', frame: keyboardFrame };
   return snapshot;
 }
 
-function checkoutTap(selector: MaestroSelector, targetPositions: number[]) {
+function checkoutTap(selector: MaestroSelector, targetPositions: number[], keyboardOwned = false) {
   const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
     ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
@@ -41,7 +43,7 @@ function checkoutTap(selector: MaestroSelector, targetPositions: number[]) {
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'snapshot') {
-        return { ok: true, data: checkoutSnapshot(targetPositions.shift()!) };
+        return { ok: true, data: checkoutSnapshot(targetPositions.shift()!, keyboardOwned) };
       }
       if (targetPositions.length > 0) {
         return { ok: false, error: { code: 'ELEMENT_NOT_FOUND', message: 'native selector miss' } };
@@ -114,6 +116,28 @@ test('a required keyboard-covered tapOn fails the flow with the typed refusal', 
 
   expect(result).toMatchObject({ ok: false, error: keyboardRefusal });
   expect(requests.map(({ command }) => command)).toEqual(['snapshot']);
+});
+
+test('assertVisible then tapOn refuses a covered point from the reused observation', async () => {
+  const { requests, runFlow } = checkoutTap(pickup, [629]);
+  const result = await runFlow(
+    '---\n- assertVisible: {id: shipping-pickup}\n- tapOn: {id: shipping-pickup}\n',
+  );
+
+  expect(result).toMatchObject({
+    ok: false,
+    error: keyboardRefusal,
+    failure: { action: 'tapOn', source: { line: 3 } },
+  });
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot']);
+});
+
+test('tapOn can dispatch to a keyboard-owned control inside the keyboard frame', async () => {
+  const { requests, tap } = checkoutTap(returnKey, [629], true);
+  await tap();
+
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+  expect(requests[1]?.positionals).toEqual(['id="Return"']);
 });
 
 test('an explicit retry can resolve a fresh target after a keyboard refusal', async () => {
