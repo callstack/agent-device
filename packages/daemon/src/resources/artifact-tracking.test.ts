@@ -9,13 +9,59 @@ import { AppError, isRequestCanceledError, normalizeError } from '@agent-device/
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import * as command from '@agent-device/host-kit/command';
 import {
+  captureDiagnosticTraceWriter,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
+import { makeIosSession } from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import {
   cleanupDownloadableArtifact,
+  leaseVerifier,
   listDownloadableArtifacts,
   openDownloadableArtifact,
+  requestTraceDiagnostics,
   trackDownloadableArtifact,
   trackUploadedArtifact,
   type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
+
+test.each(['trace stopped', 'session gained a lease'])(
+  'an unleased caller-owned trace accepts runner output after the request until %s',
+  async (ended) => {
+    const store = makeSessionStore('agent-device-runner-trace-scope-');
+    const tracePath = path.join(store.ensureSessionDir('default'), 'active-runner.trace');
+    const ref = store.publish(
+      'default',
+      makeIosSession('default', {
+        trace: { outPath: tracePath, startedAt: Date.now() },
+      }),
+    );
+    const req = { token: 'test-token', session: 'default', command: 'snapshot', positionals: [] };
+    const write = await withDiagnosticsScope(requestTraceDiagnostics(req, ref, store), () => {
+      const writer = captureDiagnosticTraceWriter('runner');
+      writer?.('from the producing request\n');
+      return writer;
+    });
+    write?.('while the trace is still active\n');
+    if (ended === 'trace stopped') {
+      store.update(ref, { trace: undefined });
+    } else {
+      store.update(ref, {
+        lease: {
+          leaseId: 'a'.repeat(32),
+          tenantId: 'tenant-a',
+          runId: 'run-a',
+          backend: 'ios-simulator',
+        },
+      });
+    }
+    write?.('after the trace or owner changed\n');
+
+    expect(fs.readFileSync(tracePath, 'utf8')).toBe(
+      'from the producing request\nwhile the trace is still active\n',
+    );
+  },
+);
 
 test.each(['cleanup', 'expiry'] as const)(
   '%s aborts an inventory-only archive and removes its source after tar settles',
@@ -57,7 +103,7 @@ test.each(['cleanup', 'expiry'] as const)(
       } finally {
         timers.mockRestore();
       }
-      listing = runtime.run(() => listDownloadableArtifacts(undefined, process.env));
+      listing = runtime.run(() => listDownloadableArtifacts({}, process.env));
       await started;
       expect(fs.existsSync(archivePath)).toBe(true);
       if (trigger === 'expiry') {
@@ -99,7 +145,7 @@ test('a missing cached directory archive is rebuilt from the live source', async
     const id = runtime.run(() =>
       trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
     );
-    const first = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const first = await runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     downloads.push(first);
     expect(gunzipSync(await buffer(first.stream)).includes(expected)).toBe(true);
     await closed(first.stream);
@@ -107,7 +153,7 @@ test('a missing cached directory archive is rebuilt from the live source', async
     const oldArchive = String(first.stream.path);
     fs.unlinkSync(oldArchive);
     expect(fs.existsSync(artifactPath)).toBe(true);
-    const second = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const second = await runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     downloads.push(second);
     expect(gunzipSync(await buffer(second.stream)).includes(expected)).toBe(true);
     await closed(second.stream);
@@ -155,12 +201,12 @@ test('cancelling the archive builder preserves a second download waiting for its
       trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
     );
     const timerIndex = timers.mock.calls.length;
-    const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const first = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     openings.push(first);
     void first.catch(() => {});
     const cancelFirst = timers.mock.calls[timerIndex]![0];
     await started;
-    const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const second = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     openings.push(second);
     void second.catch(() => {});
     runtime.run(cancelFirst);
@@ -242,7 +288,7 @@ test.each(['deadline-aborted', 'late-aborted'] as const)(
         trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
       );
       const timers = vi.spyOn(globalThis, 'setTimeout');
-      const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      const first = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
       openings.push(first);
       void first.catch(() => {});
       const deadline = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
@@ -253,7 +299,7 @@ test.each(['deadline-aborted', 'late-aborted'] as const)(
       expect(deadline).toBeTypeOf('function');
       runtime.run(() => deadline!());
       await cancelled;
-      const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      const second = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
       openings.push(second);
       void second.catch(() => {});
       finishAborted();
@@ -313,9 +359,7 @@ test.each(['before opening', 'while archiving'] as const)(
         trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
       );
       if (phase === 'before opening') caller.abort(reason);
-      opening = runtime.run(() =>
-        openDownloadableArtifact(id, undefined, process.env, caller.signal),
-      );
+      opening = runtime.run(() => openDownloadableArtifact(id, {}, process.env, caller.signal));
       void opening.catch(() => {});
       if (phase === 'while archiving') caller.abort(reason);
       const error = await opening.catch((error: unknown) => error);
@@ -369,9 +413,9 @@ test('disposing every archive waiter aborts the shared build and removes its tem
     const id = runtime.run(() =>
       trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
     );
-    openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
+    openings.push(runtime.run(() => openDownloadableArtifact(id, {}, process.env)));
     await started;
-    openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
+    openings.push(runtime.run(() => openDownloadableArtifact(id, {}, process.env)));
     for (const opening of openings) void opening.catch(() => {});
     runtime.dispose();
     await aborted(archiveSignal);
@@ -477,15 +521,11 @@ test.each(['old-first', 'new-first'] as const)(
       runtime.run(() => trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }));
     try {
       const firstId = track();
-      downloads.push(
-        await runtime.run(() => openDownloadableArtifact(firstId, undefined, process.env)),
-      );
+      downloads.push(await runtime.run(() => openDownloadableArtifact(firstId, {}, process.env)));
       runtime.run(() => cleanupDownloadableArtifact(firstId));
       const secondId = track();
       expect(secondId).not.toBe(firstId);
-      downloads.push(
-        await runtime.run(() => openDownloadableArtifact(secondId, undefined, process.env)),
-      );
+      downloads.push(await runtime.run(() => openDownloadableArtifact(secondId, {}, process.env)));
       runtime.run(() => cleanupDownloadableArtifact(secondId));
       for (const download of downloads) download.stream.resume();
       await reads.untilPending(2);
@@ -544,7 +584,7 @@ test.each(['expiry-first', 'deadline-first'] as const)(
       const expire = timers.mock.calls.at(-1)![0];
       const expiryTimer = timers.mock.results.at(-1)!.value;
       const timerIndex = timers.mock.calls.length;
-      const opening = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      const opening = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
       const deadline = timers.mock.calls[timerIndex]![0];
       download = await opening;
       const archiveDir = path.dirname(String(download.stream.path));
@@ -634,6 +674,46 @@ test('a file tracked twice for one tenant keeps one id, and another tenant gets 
   expect(otherTenant).not.toBe(first);
 });
 
+test.each([
+  { first: undefined, second: 'a'.repeat(32) },
+  { first: 'a'.repeat(32), second: 'b'.repeat(32) },
+])(
+  'an id does not serve a later capture written to its path (first lease $first)',
+  async ({ first, second }) => {
+    const artifactPath = path.join(mkdtempForTestSync('agent-device-artifact-path-'), 'shot.png');
+    const runtime = createRuntimeStateHandle();
+    const capture = (bytes: string, leaseId: string | undefined) => {
+      fs.writeFileSync(artifactPath, bytes);
+      return runtime.run(() =>
+        trackDownloadableArtifact({
+          artifactPath,
+          tenantId: 'tenant-a',
+          artifactType: 'screenshot',
+          ...(leaseId ? { leaseVerifier: leaseVerifier(leaseId) } : {}),
+        }),
+      );
+    };
+    const reader = (leaseId: string | undefined) => ({ tenantId: 'tenant-a', leaseId });
+    const firstId = capture('first capture', first);
+    const secondId = capture('the second capture', second);
+
+    expect(secondId).not.toBe(firstId);
+    // The first id named the first capture, which is gone. It never opens the second capture.
+    await expect(
+      runtime.run(() => openDownloadableArtifact(firstId, reader(first), process.env)),
+    ).rejects.toMatchObject({ details: { reason: 'RESOURCE_EXPIRED' } });
+    expect(await runtime.run(() => listDownloadableArtifacts(reader(first), process.env))).toEqual(
+      [],
+    );
+    const download = await runtime.run(() =>
+      openDownloadableArtifact(secondId, reader(second), process.env),
+    );
+    expect((await buffer(download.stream)).toString()).toBe('the second capture');
+    download.release();
+    runtime.dispose();
+  },
+);
+
 test.each(
   (['old-first', 'new-first'] as const).flatMap((order) =>
     [true, false].map((deleteAfterDownload) => ({ order, deleteAfterDownload })),
@@ -659,7 +739,7 @@ test.each(
       );
     const open = async (id: string) => {
       const artifact: OpenedDownloadableArtifact = await runtime.run(() =>
-        openDownloadableArtifact(id, 'tenant-a', process.env),
+        openDownloadableArtifact(id, { tenantId: 'tenant-a' }, process.env),
       );
       downloads.push(artifact);
       return artifact;
@@ -706,3 +786,27 @@ test.each(
     }
   },
 );
+
+test('a file download streams from the descriptor whose identity was checked', async () => {
+  const root = mkdtempForTestSync('artifact-descriptor-');
+  const source = path.join(root, 'capture.mp4');
+  fs.writeFileSync(source, 'recorded-video');
+  const id = trackDownloadableArtifact({ artifactPath: source, artifactType: 'screen-recording' });
+  const checked = vi.spyOn(fs, 'fstatSync');
+  const streams = vi.spyOn(fs, 'createReadStream');
+  try {
+    const opened = await openDownloadableArtifact(id, {}, process.env);
+    try {
+      expect(checked.mock.calls[0]?.[0]).toBeTypeOf('number');
+      expect(streams).toHaveBeenCalledWith(source, { fd: checked.mock.calls[0]?.[0] });
+      expect((await buffer(opened.stream)).toString()).toBe('recorded-video');
+    } finally {
+      opened.stream.destroy();
+      opened.release();
+    }
+  } finally {
+    streams.mockRestore();
+    checked.mockRestore();
+    cleanupDownloadableArtifact(id);
+  }
+});

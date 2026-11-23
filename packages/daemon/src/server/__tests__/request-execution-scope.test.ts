@@ -123,7 +123,7 @@ test('createRequestExecutionScope resolves session-scoped request and runner log
 
   expect(scope.sessionName).toMatch(/^cwd:[a-f0-9]{16}:default$/);
   expect(scope.requestLogPath).toMatch(
-    /cwd_[a-f0-9]{16}_default\/requests\/request-logs-1\.ndjson$/,
+    /cwd_[a-f0-9]{16}_default\/request-records\/request-logs-1\.ndjson$/,
   );
   expect(scope.runnerLogPath).toMatch(/cwd_[a-f0-9]{16}_default\/runner\.log$/);
 });
@@ -640,6 +640,7 @@ test('tenant lease rejection flushes diagnostics into the effective session requ
   const expectedPath = resolveSessionRequestLogPath(
     sessionStore.resolveSessionDir('tenant-a:default'),
     requestId,
+    'request-records',
   );
   expect(flushedPath).toBe(expectedPath);
   expect(fs.readFileSync(expectedPath, 'utf8')).toContain('"phase":"request_start"');

@@ -66,15 +66,17 @@ test('the platform plugin host keeps a background command as a managed process',
     new AbortController().signal,
   );
 
-  expect(process.marker?.pid).toBeGreaterThan(0);
-  // The marker is the core's own record, so its recovery path reads it.
-  expect(JSON.parse(fs.readFileSync(markerPath, 'utf8'))).toMatchObject({
-    pid: process.marker?.pid,
-  });
-
-  await process.terminate();
+  try {
+    expect(process.marker?.pid).toBeGreaterThan(0);
+    // The marker is the core's own record, so its recovery path reads it.
+    expect(JSON.parse(fs.readFileSync(markerPath, 'utf8'))).toMatchObject({
+      pid: process.marker?.pid,
+    });
+    await expect.poll(() => written.join('')).toContain('hilog line');
+  } finally {
+    await process.terminate();
+  }
   expect((await process.wait).exitCode).not.toBe(0);
-  expect(written.join('')).toContain('hilog line');
   expect(fs.existsSync(markerPath)).toBe(false);
 });
 

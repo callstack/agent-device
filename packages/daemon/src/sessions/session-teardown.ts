@@ -251,11 +251,10 @@ async function finishSessionScreenRecording(params: {
   const binding = bindSessionScreenRecording(params.sessionStore, params.ref);
   const recording = binding.read();
   if (!recording) return;
-  const remoteCaptureOutput = recording.envelope.metadata?.remoteCaptureOutput === true;
   const completion = await finishLiveScreenRecording({ binding, intent: 'disposal' });
   if (!params.ref.session.lease) return;
   const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
-  retainLeasedSessionRecording(params.ref, completion, remoteCaptureOutput);
+  retainLeasedSessionRecording(params.ref, completion, recording.envelope.metadata);
 }
 
 async function finishSessionAudioProbe(params: {

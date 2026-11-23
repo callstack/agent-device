@@ -10,6 +10,7 @@ import { resolveRunnerMaxConcurrentDestinationsFlag } from './runner-cache-metad
 import { xcodebuildDestinationArgs } from './runner-device-set.ts';
 import {
   createRunnerLogFile,
+  bindRunnerTraceOutput,
   logChunk,
   readRunnerLogTail,
   tailRunnerLogFile,
@@ -97,12 +98,13 @@ export function launchRunnerProcess(input: LaunchRunnerProcessInput): LaunchedRu
         captureOutput: false,
       },
     );
+    const writeTrace = bindRunnerTraceOutput(input.traceLogPath);
     const logTail = tailRunnerLogFile({
       file: logFile,
       onOutput: (chunk) => {
         listenerReady.observe(chunk);
-        if (input.traceLogPath || input.verbose) {
-          logChunk(chunk, undefined, input.traceLogPath, input.verbose);
+        if (writeTrace || input.verbose) {
+          logChunk(chunk, undefined, writeTrace, input.verbose);
         }
       },
     });

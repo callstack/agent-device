@@ -3,11 +3,13 @@ import { once } from 'node:events';
 import { Transform } from 'node:stream';
 import { finished, pipeline } from 'node:stream/promises';
 import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import {
   cleanupDownloadableArtifact,
   listDownloadableArtifacts,
   openDownloadableArtifact,
+  type DownloadableArtifactReader,
 } from '../resources/artifact-tracking.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
 import { decodeUriSegment } from './http-request-target.ts';
@@ -104,7 +106,7 @@ async function handleArtifactDownload(
 
     const artifact = await openDownloadableArtifact(
       artifactId,
-      auth.tenantId,
+      artifactReader(req, auth),
       options.hostEnv,
       signal,
     );
@@ -179,12 +181,20 @@ async function handleArtifactInventory(
     res.setHeader('content-type', 'application/json');
     res.end(
       JSON.stringify({
-        artifacts: await listDownloadableArtifacts(auth.tenantId, options.hostEnv),
+        artifacts: await listDownloadableArtifacts(artifactReader(req, auth), options.hostEnv),
       }),
     );
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
   }
+}
+
+function artifactReader(
+  req: http.IncomingMessage,
+  auth: { tenantId?: string },
+): DownloadableArtifactReader {
+  const leaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
+  return { tenantId: auth.tenantId, ...(typeof leaseId === 'string' ? { leaseId } : {}) };
 }
 
 function readArtifactId(pathname: string): string {

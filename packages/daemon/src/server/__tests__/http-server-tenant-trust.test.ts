@@ -91,10 +91,11 @@ async function withDiagnosticsHookServer(
   const server = await createDaemonHttpServer({
     token: DAEMON_TOKEN,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-    resolveRequestDiagnosticsPath: (ref) =>
+    resolveRequestDiagnosticsPath: (ref, directory) =>
       resolveSessionRequestLogPath(
         path.join(sessionsDir, safeSessionName(ref.session)),
         ref.requestId,
+        directory,
       ),
     env: process.env,
     cwd: process.cwd(),
@@ -109,10 +110,13 @@ async function withDiagnosticsHookServer(
   }
 }
 
+const RECORD_ID = `${'a'.repeat(32)}-unleased`;
+
 function writeDiagnosticsRecord(sessionsDir: string, session: string, requestId: string): void {
   const recordPath = resolveSessionRequestLogPath(
     path.join(sessionsDir, safeSessionName(session)),
     requestId,
+    'request-records',
   );
   fs.mkdirSync(path.dirname(recordPath), { recursive: true });
   fs.writeFileSync(recordPath, DIAGNOSTICS_RECORD);
@@ -363,8 +367,8 @@ test('aux route: a hook configured but silent on tenant refuses a client-declare
   try {
     const hookPath = writeSilentAuthHook(root);
     await withDiagnosticsHookServer(hookPath, async ({ baseUrl, sessionsDir }) => {
-      writeDiagnosticsRecord(sessionsDir, 'victim-tenant:default', 'abc123');
-      const response = await fetch(diagnosticsUrl(baseUrl, 'victim-tenant:default', 'abc123'), {
+      writeDiagnosticsRecord(sessionsDir, 'victim-tenant:default', RECORD_ID);
+      const response = await fetch(diagnosticsUrl(baseUrl, 'victim-tenant:default', RECORD_ID), {
         headers: {
           authorization: `Bearer ${DAEMON_TOKEN}`,
           [DAEMON_HTTP_TENANT_HEADER]: 'victim-tenant',
@@ -384,8 +388,8 @@ test('aux route: a hook configured but silent on tenant refuses an omitted heade
   try {
     const hookPath = writeSilentAuthHook(root);
     await withDiagnosticsHookServer(hookPath, async ({ baseUrl, sessionsDir }) => {
-      writeDiagnosticsRecord(sessionsDir, 'victim-tenant:default', 'abc123');
-      const response = await fetch(diagnosticsUrl(baseUrl, 'victim-tenant:default', 'abc123'), {
+      writeDiagnosticsRecord(sessionsDir, 'victim-tenant:default', RECORD_ID);
+      const response = await fetch(diagnosticsUrl(baseUrl, 'victim-tenant:default', RECORD_ID), {
         headers: { authorization: `Bearer ${DAEMON_TOKEN}` },
       });
       assert.equal(response.status, 401);
@@ -406,9 +410,9 @@ test('aux route: a hook that attests a tenant wins over a mismatched client-decl
   try {
     const hookPath = writeAttestingAuthHook(root);
     await withDiagnosticsHookServer(hookPath, async ({ baseUrl, sessionsDir }) => {
-      writeDiagnosticsRecord(sessionsDir, `${ATTESTED_TENANT_ID}:default`, 'abc123');
+      writeDiagnosticsRecord(sessionsDir, `${ATTESTED_TENANT_ID}:default`, RECORD_ID);
       const owner = await fetch(
-        diagnosticsUrl(baseUrl, `${ATTESTED_TENANT_ID}:default`, 'abc123'),
+        diagnosticsUrl(baseUrl, `${ATTESTED_TENANT_ID}:default`, RECORD_ID),
         {
           headers: {
             authorization: `Bearer ${DAEMON_TOKEN}`,
@@ -427,8 +431,8 @@ test('aux route: a hook that attests a tenant wins over a mismatched client-decl
 test('aux route: no hook configured keeps the header-declared tenant unchanged (regression)', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   await withDiagnosticsHookServer(undefined, async ({ baseUrl, sessionsDir }) => {
-    writeDiagnosticsRecord(sessionsDir, 'tenant-a:default', 'abc123');
-    const owner = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', 'abc123'), {
+    writeDiagnosticsRecord(sessionsDir, 'tenant-a:default', RECORD_ID);
+    const owner = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', RECORD_ID), {
       headers: {
         authorization: `Bearer ${DAEMON_TOKEN}`,
         [DAEMON_HTTP_TENANT_HEADER]: 'tenant-a',
@@ -439,7 +443,7 @@ test('aux route: no hook configured keeps the header-declared tenant unchanged (
     // session namespace and the `<tenant>:` prefix carries no ownership to check
     // — the two RPC regressions above show the same caller may already run any
     // command in `tenant-a:default`. The token is the gate in this mode.
-    const otherTenant = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', 'abc123'), {
+    const otherTenant = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', RECORD_ID), {
       headers: {
         authorization: `Bearer ${DAEMON_TOKEN}`,
         [DAEMON_HTTP_TENANT_HEADER]: 'tenant-b',
@@ -458,18 +462,18 @@ test('aux route: an attested tenant is still refused a record outside its partit
       // The hook attests `tenant-real`, so every session that caller can reach is
       // named `tenant-real:...`. Another tenant's record, and the plain sessions
       // outside the partition, both stay outside what it may address.
-      writeDiagnosticsRecord(sessionsDir, 'tenant-other:default', 'abc123');
-      writeDiagnosticsRecord(sessionsDir, 'cwd:9f1:default', 'abc123');
+      writeDiagnosticsRecord(sessionsDir, 'tenant-other:default', RECORD_ID);
+      writeDiagnosticsRecord(sessionsDir, 'cwd:9f1:default', RECORD_ID);
       const auth = { authorization: `Bearer ${DAEMON_TOKEN}` };
       for (const session of ['tenant-other:default', 'cwd:9f1:default']) {
-        const refused = await fetch(diagnosticsUrl(baseUrl, session, 'abc123'), { headers: auth });
+        const refused = await fetch(diagnosticsUrl(baseUrl, session, RECORD_ID), { headers: auth });
         assert.equal(refused.status, 401, `expected 401 for session ${session}`);
         const body = (await refused.json()) as { error?: string; code?: string };
         assert.equal(body.code, 'UNAUTHORIZED');
         assert.equal(body.error, 'Session is outside this tenant');
       }
-      writeDiagnosticsRecord(sessionsDir, `${ATTESTED_TENANT_ID}:default`, 'abc123');
-      const own = await fetch(diagnosticsUrl(baseUrl, `${ATTESTED_TENANT_ID}:default`, 'abc123'), {
+      writeDiagnosticsRecord(sessionsDir, `${ATTESTED_TENANT_ID}:default`, RECORD_ID);
+      const own = await fetch(diagnosticsUrl(baseUrl, `${ATTESTED_TENANT_ID}:default`, RECORD_ID), {
         headers: auth,
       });
       assert.equal(own.status, 200);

@@ -7,12 +7,14 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { providerForgetsEndedConnectionLease } from './provider-policy.ts';
+import { declaredConnectionCapabilities } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 
 /**
  * Forgets the stored connection lease once a daemon reply says its request ended that lease, so the next
- * `open` allocates instead of heartbeating a lease that no longer exists.
+ * `open` allocates instead of heartbeating a lease that no longer exists. A proxy connection keeps
+ * the id as `endedLeaseId`: the daemon lists the output that it kept for an ended lease only to a
+ * request that sends that lease's id.
  */
 export function forgetEndedConnectionLease(
   flags: CliFlags,
@@ -31,9 +33,15 @@ export function forgetEndedConnectionLease(
   if (isHostAllocatedLease(state)) return;
   // `close` and `session` load no plugin store, so this reads what answers without one: the
   // provider's loaded declaration, then the plugin catalog.
-  if (!providerForgetsEndedConnectionLease(state.leaseProvider, host.env)) return;
+  const capabilities = declaredConnectionCapabilities(state.leaseProvider, host.env);
+  if (!capabilities?.forgetsEndedConnectionLease) return;
   writeRemoteConnectionState({
     stateDir,
-    state: { ...state, leaseId: undefined, updatedAt: new Date().toISOString() },
+    state: {
+      ...state,
+      leaseId: undefined,
+      ...(capabilities.leaseKind === 'proxy' ? { endedLeaseId: state.leaseId } : {}),
+      updatedAt: new Date().toISOString(),
+    },
   });
 }

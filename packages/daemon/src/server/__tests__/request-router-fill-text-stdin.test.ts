@@ -226,7 +226,6 @@ test.each([
 );
 
 test('a short --text-stdin value is redacted from the error text but not from its log path', async () => {
-  // `stdin` also appears in this request's id, which names its diagnostics file.
   const { response } = fillWithStdinText(
     makeSession('web', { device: WEB_DESKTOP_DEVICE }),
     {},
@@ -238,9 +237,8 @@ test('a short --text-stdin value is redacted from the error text but not from it
   expect(result.ok).toBe(false);
   if (result.ok) return;
   expect(result.error.message).toBe('could not type "[REDACTED]" into the field');
-  expect(result.error.logPath).toContain('req-fill-text-stdin');
   expect(fs.existsSync(result.error.logPath!)).toBe(true);
-  expect(result.error.diagnosticsRecord?.requestId).toBe('req-fill-text-stdin');
+  expect(result.error.diagnosticsRecord?.requestId).toMatch(/^[a-f0-9]{32}-unleased$/);
 });
 
 test('a batch step carrying --text-stdin is refused before typing and returns no part of the value', async () => {

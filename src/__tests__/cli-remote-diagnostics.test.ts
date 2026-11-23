@@ -114,7 +114,7 @@ function findRequestLog(stateDir: string): string {
     .readdirSync(sessionsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory());
   const requestLogs = sessionDirs.flatMap((session) => {
-    const requestsDir = path.join(sessionsDir, session.name, 'requests');
+    const requestsDir = path.join(sessionsDir, session.name, 'request-records');
     if (!fs.existsSync(requestsDir)) return [];
     return fs.readdirSync(requestsDir).map((name) => path.join(requestsDir, name));
   });
