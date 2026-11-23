@@ -361,6 +361,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `ios-notification-settings-unreachable` | The simulator's files are not on this host, so its notification settings cannot be written. |
 | `ios-notification-settings-missing` | The simulator has no notification settings file yet; SpringBoard creates it on its first start. |
 | `ios-notification-settings-unrecognized` | The notification settings file is not in the layout this command writes, so it is left alone. |
+| `ios-notification-restart-timeout` | SpringBoard or usernotificationsd did not stop, or SpringBoard did not start, within 10 seconds. |
+| `ios-notification-settings-not-applied` | The file read back after the restart does not hold the written status. |
 
 ### `shake`
 

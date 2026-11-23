@@ -79,7 +79,7 @@ export type SettingOptions = {
   longitude?: number;
 };
 
-/** The settings a simulator changes through `simctl`, whichever host runs that `simctl`. */
+/** The settings a simulator changes through `simctl` alone, whichever host runs that `simctl`. */
 type SimctlSetting = 'appearance' | 'permission' | 'location';
 
 /**
@@ -102,11 +102,6 @@ export type SimctlSettingRequest = {
   appBundleId?: string;
   /** Resolves the app a privacy change names to the bundle id `simctl privacy` writes. */
   resolveApp: (app: string) => Promise<string>;
-  /**
-   * The simulator's notification settings file on this host, which `notifications` writes since
-   * `simctl privacy` refuses it; absent where the runner cannot reach the simulator's files.
-   */
-  notificationSettingsPath?: string;
   options?: SettingOptions;
 };
 

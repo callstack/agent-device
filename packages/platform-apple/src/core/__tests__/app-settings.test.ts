@@ -665,11 +665,21 @@ test('setIosSetting notifications writes the settings file of the simulator on t
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   const { set, file } = await simulatorSetWithNotificationSettings();
   const simctl: string[][] = [];
+  // `launchctl list` shows SpringBoard's process between its stop and its start.
+  let springBoardPid = '1';
   mockRunCmd.mockImplementation(async (cmd, args) => {
     assert.equal(cmd, 'xcrun');
     const unscoped = args.slice(args.indexOf('--set') + 2);
     simctl.push(unscoped);
-    const stdout = unscoped.join(' ') === 'listapps sim-1' ? INSTALLED_APPS_JSON : '';
+    const command = unscoped.join(' ');
+    if (command === 'spawn sim-1 launchctl stop com.apple.SpringBoard') springBoardPid = '-';
+    if (command === 'spawn sim-1 launchctl start com.apple.SpringBoard') springBoardPid = '2';
+    const stdout =
+      command === 'listapps sim-1'
+        ? INSTALLED_APPS_JSON
+        : command === 'spawn sim-1 launchctl list'
+          ? `${springBoardPid}\t0\tcom.apple.SpringBoard`
+          : '';
     return { stdout, stderr: '', exitCode: 0 };
   });
 
@@ -687,13 +697,9 @@ test('setIosSetting notifications writes the settings file of the simulator on t
     sectionInfo: Record<string, Uint8Array>;
   };
   assert.deepEqual(Object.keys(store.sectionInfo), ['com.example.app']);
-  assert.deepEqual(simctl.at(-1), [
-    'spawn',
-    'sim-1',
-    'launchctl',
-    'start',
-    'com.apple.usernotificationsd',
-  ]);
+  assert.ok(
+    simctl.some((args) => args.join(' ') === 'spawn sim-1 launchctl start com.apple.SpringBoard'),
+  );
 });
 
 test('setIosSetting notifications refuses a simulator a scoped tool provider runs', async () => {

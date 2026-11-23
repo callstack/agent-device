@@ -1,10 +1,13 @@
 import {
   readHostBinaryFile,
+  removeHostPath,
   renameHostPath,
   writeHostBinaryFile,
 } from '@agent-device/host-kit/host-file';
+import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { PlistValue } from 'plist';
+import { readApplePlist } from './plist.ts';
 
 /** The file under a simulator's data directory where SpringBoard keeps each app's notification settings. */
 export const SIMULATOR_NOTIFICATION_SETTINGS_FILE =
@@ -17,6 +20,10 @@ export const SIMULATOR_NOTIFICATION_REASONS = {
   missing: { reason: 'ios-notification-settings-missing' },
   // The notification settings file is not in the layout this command writes, so it is left alone.
   unrecognized: { reason: 'ios-notification-settings-unrecognized' },
+  // SpringBoard or usernotificationsd did not stop, or SpringBoard did not start, within 10 seconds.
+  restartTimeout: { reason: 'ios-notification-restart-timeout' },
+  // The file read back after the restart does not hold the written status.
+  notApplied: { reason: 'ios-notification-settings-not-applied' },
 } as const satisfies ReasonTable<'settings'>;
 
 /** The `sectionInfoVersionNumber` of the layout the written record follows (iOS 27). */
@@ -27,6 +34,11 @@ const AUTHORIZATION_STATUS = { grant: 2, revoke: 1 } as const;
 
 /** The services that hold the settings in memory, and write them back to the file as they stop. */
 const NOTIFICATION_SERVICES = ['com.apple.SpringBoard', 'com.apple.usernotificationsd'];
+const SPRINGBOARD = 'com.apple.SpringBoard';
+
+/** How long a stop or a start may take before the change fails, and how often it is read. */
+const SERVICE_WAIT_MS = 10_000;
+const SERVICE_POLL_MS = 200;
 
 /** Seconds from the Unix epoch to the Cocoa reference date, 2001-01-01. */
 const COCOA_EPOCH_SECONDS = 978_307_200;
@@ -35,7 +47,7 @@ export const SPRINGBOARD_RESTART_WARNING =
   'Restarted SpringBoard to apply the notification permission, so the simulator is back on the Home Screen. Change notifications before open, then open the app.';
 
 type NotificationPermissionRequest = {
-  runSimctl: (args: string[]) => Promise<unknown>;
+  runSimctl: (args: string[]) => Promise<{ readonly stdout: string }>;
   udid: string;
   deviceId: string;
   appBundleId: string;
@@ -43,6 +55,14 @@ type NotificationPermissionRequest = {
   /** The settings file on this host; absent where the runner cannot reach the simulator's files. */
   settingsPath: string | undefined;
 };
+
+/**
+ * What a change did: nothing when the file already held it, else a restart, which reopens the app
+ * when it was running so a test that changes notifications mid-flow keeps its app in front.
+ */
+export type NotificationPermissionOutcome =
+  | { restarted: false }
+  | { restarted: true; reopened: boolean; reopenFailure?: string };
 
 type SettingsFile = {
   format: 'xml' | 'binary';
@@ -56,12 +76,11 @@ type SettingsFile = {
  * `BBSectionInfo` per bundle id, or none for a reset. SpringBoard and `usernotificationsd` write
  * their copy back as they stop, so the edit lands between their stop and start, and the restart
  * leaves the simulator on the Home Screen. A file in any other layout is refused, not rewritten.
- * Resolves `false`, with no restart, when the file already holds the asked-for status.
  */
 export async function setSimulatorNotificationPermission(
   request: NotificationPermissionRequest,
-): Promise<boolean> {
-  const { runSimctl, udid, settingsPath } = request;
+): Promise<NotificationPermissionOutcome> {
+  const { runSimctl, udid, settingsPath, appBundleId } = request;
   if (settingsPath === undefined) {
     throw notificationSettingsError(
       request,
@@ -73,14 +92,18 @@ export async function setSimulatorNotificationPermission(
   // Read before the stop as well, so a file this cannot write refuses without a restart. SpringBoard
   // writes a prompt answer to the file at once (iOS 27.2), so a file that already holds the status
   // is what the services hold too.
+  const wanted = wantedStatus(request.action);
   const current = await readSettingsFile(request, settingsPath);
-  if ((await recordedStatus(current, request.appBundleId)) === wantedStatus(request.action)) {
-    return false;
-  }
+  if ((await recordedStatus(current, appBundleId)) === wanted) return { restarted: false };
+  const wasRunning = runningJobs(await listJobs(request)).some((label) =>
+    label.startsWith(`UIKitApplication:${appBundleId}[`),
+  );
   try {
     for (const service of NOTIFICATION_SERVICES) {
       await runSimctl(['spawn', udid, 'launchctl', 'stop', service]);
     }
+    // `launchctl stop` only signals, and a service still exiting writes its copy over the edit.
+    await waitForJobs(request, NOTIFICATION_SERVICES, 'stopped');
     const file = await readSettingsFile(request, settingsPath);
     if (request.action === 'reset') {
       delete file.sections[request.appBundleId];
@@ -96,7 +119,83 @@ export async function setSimulatorNotificationPermission(
       await runSimctl(['spawn', udid, 'launchctl', 'start', service]);
     }
   }
-  return true;
+  await waitForJobs(request, [SPRINGBOARD], 'running');
+  const written = await readSettingsFile(request, settingsPath);
+  if ((await recordedStatus(written, appBundleId)) !== wanted) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `iOS simulator notification settings for ${appBundleId} did not hold after SpringBoard restarted.`,
+      {
+        reason: SIMULATOR_NOTIFICATION_REASONS.notApplied.reason,
+        deviceId: request.deviceId,
+        appBundleId,
+      },
+    );
+  }
+  if (!wasRunning) return { restarted: true, reopened: false };
+  try {
+    await runSimctl(['launch', udid, appBundleId]);
+    return { restarted: true, reopened: true };
+  } catch (error) {
+    return { restarted: true, reopened: false, reopenFailure: (error as Error).message };
+  }
+}
+
+/** The warning a change carries: none when nothing restarted. */
+export function notificationRestartWarnings(
+  appBundleId: string,
+  outcome: NotificationPermissionOutcome,
+): string[] {
+  if (!outcome.restarted) return [];
+  if (outcome.reopened) {
+    return [
+      `Restarted SpringBoard to apply the notification permission, and opened ${appBundleId} again because it was running.`,
+    ];
+  }
+  if (outcome.reopenFailure !== undefined) {
+    return [
+      `${SPRINGBOARD_RESTART_WARNING} Opening ${appBundleId} again failed: ${outcome.reopenFailure}`,
+    ];
+  }
+  return [SPRINGBOARD_RESTART_WARNING];
+}
+
+/** `launchctl list` inside the simulator: one `PID Status Label` row per job, `-` for no process. */
+async function listJobs({ runSimctl, udid }: NotificationPermissionRequest): Promise<string> {
+  return (await runSimctl(['spawn', udid, 'launchctl', 'list'])).stdout;
+}
+
+/** The labels of the jobs that have a process. */
+function runningJobs(list: string): string[] {
+  return list.split('\n').flatMap((line) => {
+    const [pid, , label] = line.trim().split(/\s+/);
+    return label && /^\d+$/.test(pid ?? '') && Number(pid) > 0 ? [label] : [];
+  });
+}
+
+/** Polls until every label is stopped or running, and fails with a typed reason past the bound. */
+async function waitForJobs(
+  request: NotificationPermissionRequest,
+  labels: readonly string[],
+  state: 'stopped' | 'running',
+): Promise<void> {
+  const deadline = Deadline.fromTimeoutMs(SERVICE_WAIT_MS);
+  for (;;) {
+    const running = runningJobs(await listJobs(request));
+    if (labels.every((label) => running.includes(label) === (state === 'running'))) return;
+    if (deadline.isExpired()) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `iOS simulator ${labels.join(' and ')} did not ${state === 'stopped' ? 'stop' : 'start'} within ${SERVICE_WAIT_MS / 1000} seconds.`,
+        {
+          reason: SIMULATOR_NOTIFICATION_REASONS.restartTimeout.reason,
+          deviceId: request.deviceId,
+          appBundleId: request.appBundleId,
+        },
+      );
+    }
+    await sleep(SERVICE_POLL_MS);
+  }
 }
 
 /** The status the action leaves, with `null` for a reset's absent record. */
@@ -147,15 +246,15 @@ async function readSettingsFile(
       'Boot the simulator to the Home Screen once so SpringBoard creates the file, then retry.',
     );
   }
-  const { parse, parseBinary } = await import('plist');
-  const format = new TextDecoder().decode(bytes.subarray(0, 8)) === 'bplist00' ? 'binary' : 'xml';
-  let store: PlistValue;
+  let plist: Awaited<ReturnType<typeof readApplePlist>> | undefined;
   try {
-    store = format === 'binary' ? parseBinary(bytes) : parse(new TextDecoder().decode(bytes));
+    plist = await readApplePlist(bytes);
   } catch {
-    store = null;
+    plist = undefined;
   }
-  if (isRecognizedStore(store)) return { format, store, sections: store.sectionInfo };
+  if (plist && isRecognizedStore(plist.value)) {
+    return { format: plist.format, store: plist.value, sections: plist.value.sectionInfo };
+  }
   throw notificationSettingsError(
     request,
     'unrecognized',
@@ -192,13 +291,18 @@ function isDictionary(value: PlistValue | undefined): value is Record<string, Pl
 async function writeSettingsFile(settingsPath: string, file: SettingsFile): Promise<void> {
   const { build, buildBinary } = await import('plist');
   const temporaryPath = `${settingsPath}.agent-device.tmp`;
-  await writeHostBinaryFile(
-    temporaryPath,
-    file.format === 'binary'
-      ? buildBinary(file.store)
-      : new TextEncoder().encode(build(file.store)),
-  );
-  await renameHostPath(temporaryPath, settingsPath);
+  try {
+    await writeHostBinaryFile(
+      temporaryPath,
+      file.format === 'binary'
+        ? buildBinary(file.store)
+        : new TextEncoder().encode(build(file.store)),
+    );
+    await renameHostPath(temporaryPath, settingsPath);
+  } catch (error) {
+    await removeHostPath(temporaryPath);
+    throw error;
+  }
 }
 
 /** A plist UID, the reference type of an NSKeyedArchiver object table. */
@@ -291,11 +395,16 @@ async function sectionInfoArchive(bundleId: string, status: 1 | 2): Promise<Uint
   });
 }
 
+/** The refusals of a settings file this cannot write, which `all` skips; a failed restart is not one. */
+const SETTINGS_REFUSALS: readonly string[] = [
+  SIMULATOR_NOTIFICATION_REASONS.unreachable.reason,
+  SIMULATOR_NOTIFICATION_REASONS.missing.reason,
+  SIMULATOR_NOTIFICATION_REASONS.unrecognized.reason,
+];
+
 /** Whether an error is the refusal of a settings file this cannot write, which `all` skips. */
 export function isNotificationSettingsRefusal(error: unknown): error is AppError {
-  if (!(error instanceof AppError)) return false;
-  const reason = error.details?.reason;
-  return Object.values(SIMULATOR_NOTIFICATION_REASONS).some((row) => row.reason === reason);
+  return error instanceof AppError && SETTINGS_REFUSALS.includes(String(error.details?.reason));
 }
 
 function notificationSettingsError(

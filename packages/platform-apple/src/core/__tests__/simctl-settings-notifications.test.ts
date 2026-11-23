@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { build, buildBinary, parse, parseBinary, type PlistValue } from 'plist';
-import type { SimctlSettingRequest } from '@agent-device/contracts/settings';
+import { renameHostPath } from '@agent-device/host-kit/host-file';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
-import { applySimctlSetting } from '../simctl-settings.ts';
+import { applySimctlSetting, type AppleSimctlSettingRequest } from '../simctl-settings.ts';
 import {
   SIMULATOR_NOTIFICATION_REASONS,
   SPRINGBOARD_RESTART_WARNING,
@@ -19,12 +19,26 @@ const SETTINGS: Record<string, PlistValue> = {
   sectionInfoVersionNumber: 3,
 };
 
+vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/host-file')>();
+  return { ...actual, renameHostPath: vi.fn(actual.renameHostPath) };
+});
+
+const LIST = ['spawn', 'SIM-1', 'launchctl', 'list'];
+
+// Whether the app runs, the stop, a read until both services exit, the start, and a read until
+// SpringBoard is back.
 const RESTART = [
+  LIST,
   ['spawn', 'SIM-1', 'launchctl', 'stop', 'com.apple.SpringBoard'],
   ['spawn', 'SIM-1', 'launchctl', 'stop', 'com.apple.usernotificationsd'],
+  LIST,
   ['spawn', 'SIM-1', 'launchctl', 'start', 'com.apple.SpringBoard'],
   ['spawn', 'SIM-1', 'launchctl', 'start', 'com.apple.usernotificationsd'],
+  LIST,
 ];
+
+const APP_JOB = 'UIKitApplication:com.example.app[1a2b][rb-legacy]';
 
 async function settingsFile(
   store: PlistValue = SETTINGS,
@@ -61,19 +75,42 @@ function recordOf(record: Uint8Array | undefined): { sectionID: PlistValue; stat
   };
 }
 
-function recordingRunner(onRun: (args: string[]) => void = () => {}) {
+/**
+ * A simulator's `launchctl`: `stop` ends a job and `start` gives it a process, unless a test holds
+ * the job in its old state; a SpringBoard stop ends the app, and `simctl launch` brings it back.
+ */
+function recordingRunner(
+  onRun: (args: string[]) => void = () => {},
+  { appRunning = false, held = [] as string[] } = {},
+) {
+  const pids = new Map<string, number | undefined>([
+    ['com.apple.SpringBoard', 100],
+    ['com.apple.usernotificationsd', 101],
+    [APP_JOB, appRunning ? 200 : undefined],
+  ]);
   return vi.fn(async (args: string[]) => {
     onRun(args);
-    return { stdout: '', stderr: '' };
+    const [, , tool, verb, label = ''] = args;
+    if (tool === 'launchctl' && !held.includes(label)) {
+      if (verb === 'stop') pids.set(label, undefined);
+      if (verb === 'stop' && label === 'com.apple.SpringBoard') pids.set(APP_JOB, undefined);
+      if (verb === 'start') pids.set(label, 300);
+    }
+    if (args[0] === 'launch') pids.set(APP_JOB, 400);
+    const rows = [...pids].map(([job, pid]) => `${pid ?? '-'}\t0\t${job}`);
+    return {
+      stdout: verb === 'list' ? ['PID\tStatus\tLabel', ...rows].join('\n') : '',
+      stderr: '',
+    };
   });
 }
 
 function permission(
-  runSimctl: SimctlSettingRequest['runSimctl'],
+  runSimctl: AppleSimctlSettingRequest['runSimctl'],
   state: string,
   permissionTarget: string,
   notificationSettingsPath: string | undefined,
-): SimctlSettingRequest {
+): AppleSimctlSettingRequest {
   return {
     runSimctl,
     udid: 'SIM-1',
@@ -160,7 +197,7 @@ test('a settings file that changes layout during the stop still restarts both se
     code: 'UNSUPPORTED_OPERATION',
     details: { reason: SIMULATOR_NOTIFICATION_REASONS.unrecognized.reason },
   });
-  expect(runSimctl.mock.calls.map(([args]) => args)).toEqual(RESTART);
+  expect(runSimctl.mock.calls.map(([args]) => args)).toEqual(RESTART.slice(0, -1));
 });
 
 test.for([
@@ -356,4 +393,204 @@ test('grant all on a file that already holds the grant counts notifications with
   expect(runSimctl.mock.calls.every(([args]) => args[0] === 'privacy')).toBe(true);
   expect(result.permissions.at(-1)).toBe('notifications');
   expect(result.warnings).toBeUndefined();
+});
+
+test('an app that was running is opened again once SpringBoard is back', async () => {
+  const file = await settingsFile();
+  const runSimctl = recordingRunner(() => {}, { appRunning: true });
+
+  const result = await applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file));
+
+  expect(runSimctl.mock.calls.map(([args]) => args)).toEqual([
+    ...RESTART,
+    ['launch', 'SIM-1', 'com.example.app'],
+  ]);
+  expect(result).toEqual({
+    permission: 'notifications',
+    warnings: [
+      'Restarted SpringBoard to apply the notification permission, and opened com.example.app again because it was running.',
+    ],
+  });
+});
+
+test('a failed reopen keeps the applied change and says the app stayed closed', async () => {
+  const file = await settingsFile();
+  const fake = recordingRunner(() => {}, { appRunning: true });
+  const runSimctl = vi.fn(async (args: string[]) => {
+    if (args[0] === 'launch') throw new AppError('COMMAND_FAILED', 'simctl exited with code 4');
+    return await fake(args);
+  });
+
+  const result = (await applySimctlSetting(
+    permission(runSimctl, 'grant', 'notifications', file),
+  )) as { warnings: string[] };
+
+  expect(result.warnings).toEqual([
+    `${SPRINGBOARD_RESTART_WARNING} Opening com.example.app again failed: simctl exited with code 4`,
+  ]);
+  expect(recordOf(sections(file)['com.example.app']).status).toBe(2);
+});
+
+test('the edit waits for SpringBoard to exit, so its last write cannot replace the edit', async () => {
+  const file = await settingsFile();
+  const flushed = new Uint8Array([7, 7, 7]);
+  let exiting = 0;
+  // SpringBoard ignores the stop and start verbs here; this test decides when it reports no process.
+  const fake = recordingRunner(() => {}, { held: ['com.apple.SpringBoard'] });
+  const runSimctl = vi.fn(async (args: string[]) => {
+    const answer = await fake(args);
+    const calls = fake.mock.calls.map(([call]) => call.join(' '));
+    const stopped = calls.some((call) => call.endsWith('stop com.apple.SpringBoard'));
+    const started = calls.some((call) => call.endsWith('start com.apple.SpringBoard'));
+    if (args.join(' ') !== LIST.join(' ') || !stopped || started) return answer;
+    exiting += 1;
+    if (exiting < 3) return answer;
+    // SpringBoard writes its copy as it exits, then reports no process.
+    const store = readSettings(file);
+    (store.sectionInfo as Record<string, PlistValue>)['com.apple.Maps'] = flushed;
+    fs.writeFileSync(file, build(store));
+    return {
+      ...answer,
+      stdout: answer.stdout.replace(/^\d+(\t0\tcom\.apple\.SpringBoard)$/m, '-$1'),
+    };
+  });
+
+  await applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file));
+
+  expect(exiting).toBe(3);
+  expect(sections(file)['com.apple.Maps']).toEqual(flushed);
+  expect(recordOf(sections(file)['com.example.app']).status).toBe(2);
+});
+
+/** Moves fake time on between the real file reads until the change settles. */
+async function advanceUntilSettled(pending: Promise<unknown>): Promise<void> {
+  let settled = false;
+  pending.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  for (let step = 0; step < 200 && !settled; step += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    await vi.advanceTimersByTimeAsync(200);
+  }
+}
+
+test.for([
+  { label: 'SpringBoard never exits', held: 'com.apple.SpringBoard', verb: 'stop', written: false },
+  {
+    label: 'usernotificationsd never exits',
+    held: 'com.apple.usernotificationsd',
+    verb: 'stop',
+    written: false,
+  },
+  {
+    label: 'SpringBoard never comes back',
+    held: 'com.apple.SpringBoard',
+    verb: 'start',
+    written: true,
+  },
+])(
+  'a restart where $label fails after 10 seconds and still starts both',
+  async ({ held, verb, written }) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const file = await settingsFile();
+      const before = fs.readFileSync(file);
+      const fake = recordingRunner();
+      // The held job keeps the state it had before the verb.
+      const runSimctl = vi.fn(async (args: string[]) => {
+        if (args[3] === verb && args[4] === held) return { stdout: '', stderr: '' };
+        return await fake(args);
+      });
+
+      const pending = applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file));
+      const settled = expect(pending).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: SIMULATOR_NOTIFICATION_REASONS.restartTimeout.reason },
+      });
+      await advanceUntilSettled(pending);
+      await settled;
+
+      const argvs = runSimctl.mock.calls.map(([args]) => args.join(' '));
+      expect(argvs).toContain('spawn SIM-1 launchctl start com.apple.SpringBoard');
+      expect(argvs).toContain('spawn SIM-1 launchctl start com.apple.usernotificationsd');
+      expect(fs.readFileSync(file).equals(before)).toBe(!written);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+test('a record that does not hold after the restart fails as not applied', async () => {
+  const file = await settingsFile();
+  const original = fs.readFileSync(file);
+  const runSimctl = recordingRunner((args) => {
+    // SpringBoard comes back with the settings it held before the edit.
+    if (args.join(' ') === 'spawn SIM-1 launchctl start com.apple.SpringBoard') {
+      fs.writeFileSync(file, original);
+    }
+  });
+
+  await expect(
+    applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file)),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: SIMULATOR_NOTIFICATION_REASONS.notApplied.reason },
+  });
+});
+
+test('a failed rename removes its temporary file and leaves the settings whole', async () => {
+  const file = await settingsFile();
+  const before = fs.readFileSync(file);
+  vi.mocked(renameHostPath).mockRejectedValueOnce(new Error('EXDEV: cross-device link'));
+  const runSimctl = recordingRunner();
+
+  await expect(
+    applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file)),
+  ).rejects.toThrow('EXDEV');
+
+  expect(fs.readdirSync(path.dirname(file))).toEqual([path.basename(file)]);
+  expect(fs.readFileSync(file)).toEqual(before);
+  expect(runSimctl.mock.calls.map(([args]) => args.join(' '))).toContain(
+    'spawn SIM-1 launchctl start com.apple.SpringBoard',
+  );
+});
+
+test('grant all fails on a restart that times out instead of skipping notifications', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const file = await settingsFile();
+    const fake = recordingRunner();
+    const runSimctl = vi.fn(async (args: string[]) =>
+      args.join(' ') === 'spawn SIM-1 launchctl stop com.apple.SpringBoard'
+        ? { stdout: '', stderr: '' }
+        : await fake(args),
+    );
+
+    const pending = applySimctlSetting(permission(runSimctl, 'grant', 'all', file));
+    const settled = expect(pending).rejects.toMatchObject({
+      details: {
+        reason: SIMULATOR_NOTIFICATION_REASONS.restartTimeout.reason,
+        permissions: expect.arrayContaining(['camera']),
+      },
+    });
+    await advanceUntilSettled(pending);
+    await settled;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('another running app is not the one reopened', async () => {
+  const file = await settingsFile();
+  const fake = recordingRunner();
+  const runSimctl = vi.fn(async (args: string[]) => {
+    const answer = await fake(args);
+    if (args.join(' ') !== LIST.join(' ')) return answer;
+    return { ...answer, stdout: `${answer.stdout}\n300\t0\tUIKitApplication:com.apple.Maps[9f9f]` };
+  });
+
+  await applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file));
+
+  expect(runSimctl.mock.calls.map(([args]) => args)).toEqual(RESTART);
 });

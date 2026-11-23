@@ -10,13 +10,21 @@ import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 import {
   isNotificationSettingsRefusal,
+  notificationRestartWarnings,
   setSimulatorNotificationPermission,
-  SPRINGBOARD_RESTART_WARNING,
 } from './simulator-notification-permission.ts';
+
+/**
+ * A setting request with what only a runner on the simulator's own host has: the simulator's
+ * notification settings file, which `notifications` writes since `simctl privacy` refuses it.
+ */
+export type AppleSimctlSettingRequest = SimctlSettingRequest & {
+  notificationSettingsPath?: string;
+};
 
 /** Changes one simulator setting through `simctl`; the Apple package owns this plan for every runner. */
 export async function applySimctlSetting(
-  request: SimctlSettingRequest,
+  request: AppleSimctlSettingRequest,
 ): Promise<Record<string, unknown> | void> {
   switch (request.setting) {
     case 'appearance':
@@ -52,7 +60,7 @@ async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): 
 }
 
 async function setPermission(
-  request: SimctlSettingRequest,
+  request: AppleSimctlSettingRequest,
 ): Promise<Record<string, unknown> | void> {
   const { runSimctl, udid, deviceId, state, options } = request;
   const permissionAction = parsePermissionAction(state);
@@ -60,11 +68,8 @@ async function setPermission(
   const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
   const appBundleId = await requireAppBundleId(request);
   if (target === 'notifications') {
-    const restarted = await setNotificationPermission(request, action, appBundleId);
-    return {
-      permission: 'notifications',
-      ...(restarted ? { warnings: [SPRINGBOARD_RESTART_WARNING] } : {}),
-    };
+    const warnings = await setNotificationPermission(request, action, appBundleId);
+    return { permission: 'notifications', ...(warnings.length > 0 ? { warnings } : {}) };
   }
   if (target === 'all' && action !== 'reset') {
     return await setEveryIosPrivacyService(request, action, appBundleId);
@@ -150,7 +155,7 @@ const IOS_ALL_REVOKED_SERVICES: readonly string[] = [...IOS_ALL_GRANTED_SERVICES
  * the sequence, and its error carries the services already changed in `details.permissions`.
  */
 async function setEveryIosPrivacyService(
-  request: SimctlSettingRequest,
+  request: AppleSimctlSettingRequest,
   action: 'grant' | 'revoke',
   appBundleId: string,
 ): Promise<Record<string, unknown>> {
@@ -182,27 +187,28 @@ async function setEveryIosPrivacyService(
  * what `all` already changed.
  */
 async function setNotificationsUnderAll(
-  request: SimctlSettingRequest,
+  request: AppleSimctlSettingRequest,
   action: 'grant' | 'revoke' | 'reset',
   appBundleId: string,
   applied: string[],
 ): Promise<string[]> {
   try {
-    const restarted = await setNotificationPermission(request, action, appBundleId);
+    const warnings = await setNotificationPermission(request, action, appBundleId);
     applied.push('notifications');
-    return restarted ? [SPRINGBOARD_RESTART_WARNING] : [];
+    return warnings;
   } catch (error) {
     if (!isNotificationSettingsRefusal(error)) throw withAppliedServices(error, applied);
     return [`Skipped notifications: ${error.message}`];
   }
 }
 
+/** Sets notifications and answers with the warnings its restart, if any, leaves. */
 async function setNotificationPermission(
-  { runSimctl, udid, deviceId, notificationSettingsPath }: SimctlSettingRequest,
+  { runSimctl, udid, deviceId, notificationSettingsPath }: AppleSimctlSettingRequest,
   action: 'grant' | 'revoke' | 'reset',
   appBundleId: string,
-): Promise<boolean> {
-  return await setSimulatorNotificationPermission({
+): Promise<string[]> {
+  const outcome = await setSimulatorNotificationPermission({
     runSimctl,
     udid,
     deviceId,
@@ -210,6 +216,7 @@ async function setNotificationPermission(
     action,
     settingsPath: notificationSettingsPath,
   });
+  return notificationRestartWarnings(appBundleId, outcome);
 }
 
 /** The error that stopped `all` partway, naming the services it had already changed. */
