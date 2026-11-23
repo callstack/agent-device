@@ -146,6 +146,7 @@ jobs:
               sha="$(sha256sum "$deb" | cut -d' ' -f1)"
               grep -qxF "$sha $key" "$signed/records" || { echo "Unverified: $deb"; return 1; }
             done
+            stamp "verified $(compgen -G "$CACHE/lists/*_Packages" | wc -l) lists and $(compgen -G "$CACHE/archives/*.deb" | wc -l) archives"
           }
           # Succeeds when apt can install PACKAGES from the archive directory without a download.
           offline_plan() {
