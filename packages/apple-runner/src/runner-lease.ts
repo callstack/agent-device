@@ -23,6 +23,7 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
+import type { BootFailureReason } from '@agent-device/provision-kit/boot-diagnostics';
 import { runnerSimulatorSetPath } from './runner-device-set.ts';
 import type { RunnerEndpoint } from './runner-contract.ts';
 
@@ -271,7 +272,9 @@ export async function prepareRunnerLeaseForStartup(
         ? `iOS runner for ${deviceId} is busy after device lease admission`
         : `iOS runner for ${deviceId} is already owned by another agent-device daemon`,
       {
-        reason: 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON',
+        // Type-checked against the provision-kit row: this package reaches provision-kit only
+        // through its host port, so it does not load the table.
+        reason: 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON' satisfies BootFailureReason,
         deviceId,
         logicalLeaseContext,
         ownerPid: state.lease.ownerPid,
