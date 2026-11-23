@@ -6,13 +6,13 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
-import { SessionStore } from '../../../core/session-store.ts';
+import { SessionStore, type StoredRuntimeHints } from '../../../core/session-store.ts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import {
   hasRuntimeTransportHints,
+  mayClearRemovedRuntimeTransportHints,
   maybeClearRemovedRuntimeTransportHints,
   RUNTIME_HINTS_REASONS,
-  shouldClearRemovedRuntimeTransportHints,
   storedRuntimeHintsForApp,
   tryResolveOpenRuntimeHints,
 } from '../../session-runtime.ts';
@@ -36,12 +36,11 @@ type ClearRuntimeHints = (input: RuntimeHintsApplicationInput) => Promise<void>;
 
 export type ResolvedOpenRuntimeHintPlan = Readonly<{
   runtime: SessionRuntimeHints | undefined;
-  previousRuntime: SessionRuntimeHints | undefined;
-  /** The app the stored hints are bound to; absent while they are unbound. */
-  previousRuntimeAppId: string | undefined;
+  /** The stored hints this open found, with the app they are bound to. */
+  previous: StoredRuntimeHints | undefined;
   replacedStoredRuntime: boolean;
-  // Admission may require the apply operation for stored hints that the open then drops because
-  // they are bound to another app: the target app is resolved only after admission.
+  // Admission may require an apply or clear operation that the open then skips because of the
+  // app the hints are bound to: the target app is resolved only after admission.
   applyRuntimeHints: boolean;
   clearRemovedRuntimeHints: boolean;
 }>;
@@ -123,20 +122,17 @@ export function resolveOpenRuntimeHintPlan(params: {
 }): OpenRuntimeHintPlanResult {
   const runtimeResult = tryResolveOpenRuntimeHints(params);
   if (!runtimeResult.ok) return { type: 'response', response: runtimeResult };
-  const { runtime, previousRuntime, replacedStoredRuntime } = runtimeResult.data;
-  const previousRuntimeAppId = params.sessionStore.getRuntimeHints(params.sessionName)?.appId;
+  const { runtime, previous, replacedStoredRuntime } = runtimeResult.data;
   return {
     type: 'plan',
     plan: {
       runtime,
-      previousRuntime,
-      previousRuntimeAppId,
+      previous,
       replacedStoredRuntime,
       applyRuntimeHints: hasRuntimeTransportHints(runtime),
-      clearRemovedRuntimeHints: shouldClearRemovedRuntimeTransportHints({
+      clearRemovedRuntimeHints: mayClearRemovedRuntimeTransportHints({
         replacedStoredRuntime,
-        previousRuntime,
-        previousRuntimeAppId,
+        previous,
         runtime,
         session: params.existingSession,
       }),
@@ -209,10 +205,10 @@ export async function prepareOpenCommandDetails(params: {
     }
     await maybeClearRemovedRuntimeTransportHints({
       replacedStoredRuntime: runtimeHintPlan.replacedStoredRuntime,
-      previousRuntime: runtimeHintPlan.previousRuntime,
-      previousRuntimeAppId: runtimeHintPlan.previousRuntimeAppId,
+      previous: runtimeHintPlan.previous,
       runtime: runtimeHintPlan.runtime,
       session: existingSession,
+      appId: appBundleId,
       clearRuntimeHints,
     });
   }
@@ -226,7 +222,7 @@ export async function prepareOpenCommandDetails(params: {
         ? runtimeHintPlan.runtime
         : storedRuntimeHintsForApp(
             runtimeHintPlan.runtime,
-            runtimeHintPlan.previousRuntimeAppId,
+            runtimeHintPlan.previous?.appId,
             appBundleId,
           ),
     },
