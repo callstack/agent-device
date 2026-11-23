@@ -188,35 +188,6 @@ test('takeover hold names a custom reason and TTL', async () => {
   assert.equal(input.ttlMs, 60000);
 });
 
-test('takeover hold refuses device-naming flags the lease already names', async () => {
-  const { client, transport } = clientForTest();
-  const cases: Array<Partial<typeof TAKEOVER_CLI_FLAGS>> = [
-    { deviceKey: 'android:mobile:serial-1' },
-    { platform: 'android', serial: 'serial-1' },
-    { leaseBackend: 'ios-instance' },
-    { udid: 'udid-1' },
-  ];
-  for (const deviceFlags of cases) {
-    await assert.rejects(
-      takeoverCommand({
-        host: createTestHostEnvironment(),
-        client,
-        flags: { ...TAKEOVER_CLI_FLAGS, ...deviceFlags },
-        positionals: ['hold'],
-      }),
-      (error: unknown) => {
-        assert.equal((error as { code?: string }).code, 'INVALID_ARGS');
-        assert.equal(
-          (error as { details?: { reason?: string } }).details?.reason,
-          'hold-device-from-lease',
-        );
-        return true;
-      },
-    );
-  }
-  assert.equal(transport.mock.calls.length, 0);
-});
-
 test('takeover hold rejects positional arguments', async () => {
   const { client, transport } = clientForTest();
   await assert.rejects(

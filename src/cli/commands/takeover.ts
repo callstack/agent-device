@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { HumanControlHold } from '@agent-device/contracts/client';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -12,11 +12,6 @@ const FOREGROUND_HEARTBEAT_MS = 5_000;
 const LEASE_HOLD_TTL_MS = 60_000;
 const LEASE_HOLD_REASON = 'A script outside agent-device is holding this device.';
 
-/** Why a takeover hold refuses input that would name a device the admitted lease already names. */
-const TAKEOVER_HOLD_REFUSAL_REASONS = {
-  // The hold pins the device of the caller's admitted lease, never a device flag.
-  deviceNamed: { reason: 'hold-device-from-lease' },
-} as const satisfies ReasonTable<'takeover'>;
 export const takeoverCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const action = positionals[0]?.toLowerCase();
   if (action === 'status') {
@@ -52,16 +47,6 @@ export const takeoverCommand: ClientCommandHandler = async ({ positionals, flags
 };
 
 async function holdTakeover(flags: CliFlags, agentDeviceClient: AgentDeviceClient): Promise<void> {
-  if (holdDeviceNamed(flags)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'takeover hold pins the device of the admitted lease; drop the device and backend flags.',
-      {
-        reason: TAKEOVER_HOLD_REFUSAL_REASONS.deviceNamed.reason,
-        hint: 'Run the open that admits the lease first, then hold with the session that names it.',
-      },
-    );
-  }
   const holdId = `takeover-${randomUUID()}`;
   const input = {
     reason: flags.reason?.trim() || LEASE_HOLD_REASON,
@@ -69,22 +54,6 @@ async function holdTakeover(flags: CliFlags, agentDeviceClient: AgentDeviceClien
   };
   const hold = await agentDeviceClient.leases.humanControl.put(holdId, input);
   await writeCommandOutput(flags, { hold, state: 'active' }, () => renderTakeoverHold(hold));
-}
-
-/**
- * The hold reaches exactly the device-scoped leases the request admits, so a
- * device flag would name a lease the command must not infer.
- */
-function holdDeviceNamed(flags: CliFlags): boolean {
-  return (
-    flags.deviceKey !== undefined ||
-    flags.platform !== undefined ||
-    flags.target !== undefined ||
-    flags.device !== undefined ||
-    flags.udid !== undefined ||
-    flags.serial !== undefined ||
-    flags.leaseBackend !== undefined
-  );
 }
 
 async function runForegroundTakeover(

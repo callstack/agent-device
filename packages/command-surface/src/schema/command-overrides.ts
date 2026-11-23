@@ -169,7 +169,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Pause agent interactions while a person controls a device',
       description:
-        'Temporarily hand control of a device to a person. The foreground command pauses state-changing agent commands on the active remote lease device, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. It uses the active connection and --session, with normal tenant and lease admission. status lists the holds the admitted lease can see. release removes a hold owned by the admitted lease. hold pins the device of the admitted lease for a script: device mutations served by that lease refuse with DEVICE_IN_USE until the TTL passes or release removes the hold, and reads keep working. The hold takes backend, provider and device identity only from the admitted lease, so it never names a device itself: run the open that admits the lease first, then hold with the session that names it. Holds do not survive daemon restart; re-establish them after reconnecting. Local takeover without a remote device lease is not supported.',
+        'Temporarily hand control of a device to a person. The foreground command pauses state-changing agent commands on the active remote lease device, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. It uses the active connection and --session, with normal tenant and lease admission. status lists the holds the admitted lease can see. release removes a hold owned by the admitted lease. hold pins the device of the admitted lease for a script: device mutations served by that lease refuse with DEVICE_IN_USE until the TTL passes or release removes the hold, and reads keep working. The hold takes backend, provider and device identity only from the admitted lease. While it is active, device mutations and allocation from any device-scoped lease this daemon serves for that device refuse with DEVICE_IN_USE (human_control_active), and reads keep working. Holds do not survive daemon restart; re-establish them after reconnecting. Local takeover without a remote device lease is not supported.',
     },
     usageOverride: 'takeover [status | hold | release <hold-id>] [--session <name>]',
     listUsageOverride: 'takeover [status|hold|release]',
@@ -191,7 +191,6 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'leaseId',
       'leaseBackend',
       'sessionIsolation',
-      'deviceKey',
       'reason',
       'ttlMs',
       'platform',

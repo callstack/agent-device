@@ -161,16 +161,6 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
-    key: 'deviceKey',
-    names: ['--device-key'],
-    type: 'string',
-    usageLabel: '--device-key <key>',
-    usageDescription:
-      'Exact lease device key (platform:target:id) a takeover hold pins; device selectors derive it when omitted',
-    projectConfig: false,
-    recorded: false,
-  },
-  {
     key: 'reason',
     names: ['--reason'],
     type: 'string',

@@ -272,11 +272,10 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['osVersion', 'imageTag', 'deviceMode', 'deviceBaseline', 'physical'],
     },
     {
-      // `takeover hold` rides the admitted lease RPC, so no provider scenario reaches it;
-      // the hold refuses deviceKey because the admitted lease already names the device.
+      // `takeover hold` rides the admitted lease RPC, so no provider scenario reaches it.
       name: 'takeover lease hold',
       owner: 'takeover command tests',
-      keys: ['deviceKey', 'reason', 'ttlMs'],
+      keys: ['reason', 'ttlMs'],
     },
     {
       name: 'cloud artifact provider lookup',

@@ -375,12 +375,6 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `observation-unavailable` | The runner answered an observe-only snapshot request without an observe-only snapshot. |
 | `empty-snapshot` | XCTest returned a snapshot with no nodes on an iOS simulator. |
 
-### `takeover`
-
-| Reason | Meaning |
-| --- | --- |
-| `hold-device-from-lease` | The hold pins the device of the caller's admitted lease, never a device flag. |
-
 ### `telephony`
 
 | Reason | Meaning |
