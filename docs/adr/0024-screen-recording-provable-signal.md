@@ -287,12 +287,15 @@ Artifact cleanup is a separate, explicit decision (rule 6).
 Session teardown and failed-start rollback dispose through the backend under the fence.
 They do this only after the manifest records that no recoverable export is lost.
 
-A leased session's teardown that commits an export at a remote temp path registers it, and its telemetry, as downloadable artifacts of that lease (rule 1, #2281).
-Only a request that sends the id of the ended lease lists or downloads them (ADR 0007).
+A remote recording reserves a daemon-chosen destination and records the producing lifetime, tenant, and lease verifier or unleased marker at start.
+The completed manifest records the file identities of the video, later chunks, and telemetry.
+Explicit stop and teardown commit the verified files under that producer's authority.
 The inventory names the session, and the usual delete-after-download and 15-minute expiry apply.
-A later `record stop` replay of that manifest serves the same artifact ids.
-If registration fails, teardown deletes the files.
-A failed teardown finish still runs forced cleanup (disposal intent) and registers nothing.
+A retry can serve the same artifact IDs while the entries remain available.
+Only the original lease credential can list or download leased exports (ADR 0007).
+A manifest from an earlier release must carry its explicit owner before it can serve a remote export.
+A failed teardown finish still runs forced cleanup (disposal intent) and publishes no recording.
+A suite includes recordings committed by cleanup in its result and archive.
 
 ### 2.6 Native markers
 

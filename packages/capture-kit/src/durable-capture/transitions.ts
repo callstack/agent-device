@@ -131,11 +131,8 @@ export async function finishDurableCaptureHandle<
         await respondToFailedFinish(definition, lease, params, finishError, params.intent);
         throw finishError;
       }
-      if (finishOutcome.status === 'completed') {
-        transitionFinishOutcome(definition, lease, finishOutcome);
-        return finishOutcome.result;
-      }
-      transitionFinishOutcome(definition, lease, finishOutcome);
+      await transitionFinishOutcome(definition, lease, finishOutcome);
+      if (finishOutcome.status === 'completed') return finishOutcome.result;
       const finishError = cleanupPendingError(definition, finishOutcome);
       settleIfMissing(lease);
       await respondToFailedFinish(definition, lease, params, finishError, params.intent);
@@ -346,16 +343,16 @@ function cleanupPendingError(
   );
 }
 
-export function transitionFinishOutcome<K extends string, C>(
+export async function transitionFinishOutcome<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureOpenResourceFenceLease<K>,
   outcome: FinishOutcome<C>,
-): void {
+): Promise<void> {
   if (outcome.status === 'completed') {
     lease.transition('completed', {
       metadata: {
         ...(lease.envelope.metadata ?? {}),
-        ...definition.completionMetadata(outcome.result),
+        ...(await definition.completionMetadata(outcome.result, lease.envelope.metadata)),
         phase: 'completed',
       },
     });

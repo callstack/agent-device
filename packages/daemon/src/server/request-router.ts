@@ -792,7 +792,15 @@ async function finalizeRequestBindingCleanup(
   let finalResponse = response;
   try {
     await scope[Symbol.asyncDispose]();
-    if (response.ok && scope.command === 'screenshot') scope.throwIfCanceled();
+    if (
+      response.ok &&
+      (scope.command === 'screenshot' ||
+        (scope.command === 'record' &&
+          response.data?.recording === 'stopped' &&
+          response.data.artifacts?.some((artifact) => artifact.artifactId)))
+    ) {
+      scope.throwIfCanceled();
+    }
   } catch (cleanupError) {
     if (response.ok) {
       finalResponse = finalizeThrownRequestError(cleanupError);

@@ -6,10 +6,7 @@ import type { DaemonArtifactType, DaemonResponse } from '@agent-device/kernel/co
 import type { DownloadableArtifactRegistration } from '../../resources/artifact-tracking.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { leaseVerifier } from '../../resources/artifact-tracking.ts';
-import {
-  asDaemonDeliveredArtifact,
-  withCaptureOutputOwnership,
-} from '../../core/capture-output-ownership.ts';
+import { asDaemonDeliveredArtifact } from '../../core/capture-output-ownership.ts';
 
 test('finalizeDaemonResponse preserves handler error hints from details', () => {
   const req: DaemonRequest = {
@@ -75,8 +72,8 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
   const req: DaemonRequest = {
     token: 'token',
     session: 'default',
-    command: 'record',
-    positionals: ['stop'],
+    command: 'snapshot',
+    positionals: [],
     meta: { tenantId: 'tenant-a' },
   };
   const response: DaemonResponse = {
@@ -84,11 +81,11 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
     data: {
       artifacts: [
         {
-          field: 'telemetryPath',
-          artifactType: 'screen-recording-telemetry',
-          path: '/tmp/telemetry.json',
-          localPath: '/client/telemetry.json',
-          fileName: 'telemetry.json',
+          field: 'fallbackScreenshotPath',
+          artifactType: 'screenshot',
+          path: '/tmp/fallback.png',
+          localPath: '/client/fallback.png',
+          fileName: 'fallback.png',
         },
         {
           field: 'rawPath',
@@ -117,11 +114,11 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
     data: {
       artifacts: [
         {
-          field: 'telemetryPath',
-          artifactType: 'screen-recording-telemetry',
+          field: 'fallbackScreenshotPath',
+          artifactType: 'screenshot',
           artifactId: 'artifact-id-1',
-          fileName: 'telemetry.json',
-          localPath: '/client/telemetry.json',
+          fileName: 'fallback.png',
+          localPath: '/client/fallback.png',
         },
         {
           field: 'rawPath',
@@ -141,10 +138,10 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
   expect(finalizedArtifacts?.[1]).not.toHaveProperty('artifactType');
   expect(tracked).toEqual([
     {
-      artifactPath: '/tmp/telemetry.json',
+      artifactPath: '/tmp/fallback.png',
       tenantId: 'tenant-a',
-      artifactType: 'screen-recording-telemetry',
-      fileName: 'telemetry.json',
+      artifactType: 'screenshot',
+      fileName: 'fallback.png',
     },
     {
       artifactPath: '/tmp/raw.bin',
@@ -365,10 +362,15 @@ test.each([
   },
 );
 
-test('a delivered script keeps the admitted lease alongside an unleased recording', () => {
+test('a delivered script keeps its admitted lease alongside a committed recording', () => {
   const lease = new LeaseRegistry().allocateLease({ tenantId: 'tenant', runId: 'record' });
   const tracked: DownloadableArtifactRegistration[] = [];
-  finalizeDaemonResponse(
+  const recording = {
+    field: 'outPath',
+    artifactType: 'screen-recording',
+    artifactId: 'recording-output',
+  };
+  const response = finalizeDaemonResponse(
     {
       token: 'token',
       session: 'default',
@@ -379,32 +381,34 @@ test('a delivered script keeps the admitted lease alongside an unleased recordin
     },
     {
       ok: true,
-      data: withCaptureOutputOwnership(
-        {
-          artifacts: [
-            { field: 'outPath', artifactType: 'screen-recording', path: '/daemon/video.mp4' },
-            asDaemonDeliveredArtifact(
-              {
-                field: 'savedScript',
-                artifactType: 'session-script',
-                path: '/daemon/session.ad',
-              },
-              'tenant',
-            ),
-          ],
-        },
-        'daemon',
-        undefined,
-        null,
-      ),
+      data: {
+        artifacts: [
+          recording,
+          asDaemonDeliveredArtifact(
+            {
+              field: 'savedScript',
+              artifactType: 'session-script',
+              path: '/daemon/session.ad',
+            },
+            'tenant',
+          ),
+        ],
+      },
     },
     (entry) => {
       tracked.push(entry);
-      return 'artifact';
+      return 'script-output';
     },
   );
-  expect(tracked.map((artifact) => [artifact.tenantId, artifact.leaseVerifier])).toEqual([
-    ['tenant', undefined],
-    ['tenant', leaseVerifier(lease.leaseId)],
+  expect(tracked).toEqual([
+    expect.objectContaining({
+      tenantId: 'tenant',
+      leaseVerifier: leaseVerifier(lease.leaseId),
+      artifactType: 'session-script',
+    }),
   ]);
+  expect(response).toMatchObject({
+    ok: true,
+    data: { artifacts: [recording, { field: 'savedScript', artifactId: 'script-output' }] },
+  });
 });

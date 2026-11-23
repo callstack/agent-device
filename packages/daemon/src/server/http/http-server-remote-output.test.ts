@@ -32,10 +32,10 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   cleanupDownloadableArtifact,
   listDownloadableArtifacts,
+  settleCommittedFileOutputs,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
 import { localEnv, successfulData, withHttp } from './http-output.fixtures.ts';
-import { finalizeDaemonResponse } from '../request-finalization.ts';
 import { runBatchCommands } from '../../sessions/handlers/session-batch.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
 
@@ -258,6 +258,20 @@ test('local HTTP still honors capture destinations and cwd', async () => {
   );
 });
 
+async function handleRecordingRequest(
+  harness: ReturnType<typeof makeRecordRuntimeHarness>,
+  request: DaemonRequest,
+) {
+  const response = await harness.run(
+    request.positionals,
+    request.meta,
+    request.flags,
+    request.internal,
+  );
+  if (response.ok) settleCommittedFileOutputs(response.data?.artifacts, true);
+  return response;
+}
+
 test('remote recording without client metadata stays in its session and downloads by ID', async () => {
   const harness = makeRecordRuntimeHarness('remote-record-output-');
   const root = mkdtempForTestSync('remote-record-victim-');
@@ -269,12 +283,7 @@ test('remote recording without client metadata stays in its session and download
     return await start(input);
   });
   await withHttp(
-    async (request) =>
-      finalizeDaemonResponse(
-        request,
-        await harness.run(request.positionals, request.meta, request.flags, request.internal),
-        trackDownloadableArtifact,
-      ),
+    (request) => handleRecordingRequest(harness, request),
     async (post, base) => {
       const started = await post({
         command: 'record',
@@ -313,12 +322,7 @@ test.each(['local', 'local-client-destination', 'remote'] as const)(
       return await start(input);
     });
     await withHttp(
-      async (request) =>
-        finalizeDaemonResponse(
-          request,
-          await harness.run(request.positionals, request.meta, request.flags, request.internal),
-          trackDownloadableArtifact,
-        ),
+      (request) => handleRecordingRequest(harness, request),
       async (post) => {
         const started = await post(
           {

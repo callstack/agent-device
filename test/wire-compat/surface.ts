@@ -313,6 +313,11 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'readScriptDeliveryFailure',
       ),
       ...from(
+        'packages/contracts/src/replay.ts',
+        'ReplaySuiteRecordingArtifacts',
+        'ReplaySuiteRecordingArtifact',
+      ),
+      ...from(
         KERNEL_ERRORS,
         'DaemonError',
         'ErrorWireDetails',

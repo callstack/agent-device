@@ -150,6 +150,13 @@ export const REPLAY_COMMAND_OUTPUT_SCHEMAS = {
       durationMs: numberSchema(),
       failures: { type: 'array', items: looseObjectSchema() },
       tests: { type: 'array', items: looseObjectSchema() },
+      recordingArtifacts: {
+        type: 'array',
+        items: objectSchema(
+          { session: stringSchema(), path: stringSchema(), artifactId: stringSchema() },
+          ['session', 'path'],
+        ),
+      },
       snapshotDiagnostics: looseObjectSchema(),
     },
     [

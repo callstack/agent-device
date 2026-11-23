@@ -193,7 +193,10 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
       }
       case 'completed':
         await transitionTerminal(params, resourcePath, envelope, {
-          ...params.definition.completionMetadata(authority.reattached.result),
+          ...(await params.definition.completionMetadata(
+            authority.reattached.result,
+            envelope.metadata,
+          )),
         });
         return true;
       case 'missing':

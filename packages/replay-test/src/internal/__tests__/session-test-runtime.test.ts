@@ -100,7 +100,7 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
     // the scheduler stops the suite instead of retrying into a contended session.
     expect(result.infrastructure).toBe(true);
   }
-  expect(cleanupSession).toHaveBeenCalledWith('default:test:timeout');
+  expect(cleanupSession).toHaveBeenCalledWith('default:test:timeout', expect.any(Set));
   expect(finalizeAttempt).toHaveBeenCalledWith(
     expect.objectContaining({
       sessionName: 'default:test:timeout',
@@ -154,7 +154,7 @@ test('runReplayTestAttempt keeps a passing replay passed when finalization fails
   expect(result.status).toBe('passed');
   if (result.status !== 'passed') throw new Error(result.error.message);
   expect(result.warnings).toEqual(['Replay test finalization failed: failed to stop recording']);
-  expect(cleanupSession).toHaveBeenCalledWith('default:test:pass');
+  expect(cleanupSession).toHaveBeenCalledWith('default:test:pass', expect.any(Set));
 });
 
 test('runReplayTestAttempt marks a failed cleanup as infrastructure so the scheduler cannot retry into its session', async () => {
@@ -182,7 +182,7 @@ test('runReplayTestAttempt marks a failed cleanup as infrastructure so the sched
     expect(result.error.message).toBe('open "System Settings" failed');
     expect(result.infrastructure).toBe(true);
   }
-  expect(cleanupSession).toHaveBeenCalledWith('default:test:cleanup-failure');
+  expect(cleanupSession).toHaveBeenCalledWith('default:test:cleanup-failure', expect.any(Set));
 });
 
 // #1478 P3 characterization: attempt finalization happens before cleanup, always, and the
@@ -232,8 +232,11 @@ test('runReplayTestAttempt cleans up once when a timed-out replay settles inside
     resolveReplay = resolve;
   });
   const lifecycleEvents: string[] = [];
-  const cleanupSession = vi.fn(async () => {
+  const recording = path.join(artifactsDir, 'recording.mp4');
+  const cleanupSession = vi.fn(async (_name: string, artifactPaths?: Set<string>) => {
     lifecycleEvents.push('cleanup');
+    fs.writeFileSync(recording, 'late-export');
+    artifactPaths?.add(recording);
   });
 
   const attemptPromise = runReplayTestAttempt({
@@ -263,6 +266,8 @@ test('runReplayTestAttempt cleans up once when a timed-out replay settles inside
     expect(result.error.details?.reason).toBe('timeout');
     expect(result.error.details?.timeoutCleanupPending).toBe(undefined);
     expect(result.error.details?.timeoutMode).toBe('cooperative');
+    expect(result.error.details?.artifactPaths).toContain(recording);
+    expect(result.artifactPaths).toContain(recording);
     expect(result.infrastructure).toBe(false);
   }
   expect(lifecycleEvents).toEqual(['finalize', 'cleanup']);
@@ -292,7 +297,7 @@ test('runReplayTestAttempt cleans up without a finalizer and adds no finalizatio
   expect(result.status).toBe('passed');
   if (result.status !== 'passed') throw new Error(result.error.message);
   expect(result.warnings).toEqual([]);
-  expect(cleanupSession).toHaveBeenCalledWith('default:test:no-finalizer');
+  expect(cleanupSession).toHaveBeenCalledWith('default:test:no-finalizer', expect.any(Set));
 });
 
 test.each(['passed', 'failed'] as const)(

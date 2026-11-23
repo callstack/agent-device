@@ -145,7 +145,17 @@ export type ReplaySuiteTestResult =
   | ReplaySuiteTestFailed
   | ReplaySuiteTestSkipped;
 
-export type ReplaySuiteResult = {
+export type ReplaySuiteRecordingArtifact = Readonly<{
+  session: string;
+  path: string;
+  artifactId?: string;
+}>;
+
+type ReplaySuiteRecordingArtifacts = {
+  recordingArtifacts?: readonly ReplaySuiteRecordingArtifact[];
+};
+
+export type ReplaySuiteResult = ReplaySuiteRecordingArtifacts & {
   total: number;
   executed: number;
   passed: number;

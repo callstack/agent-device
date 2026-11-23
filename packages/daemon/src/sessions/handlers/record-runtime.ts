@@ -52,7 +52,6 @@ import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { requestCwd } from '../../core/context.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { sessionHasOwnersBeyondRecording } from '../../core/session-state.ts';
-import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
 import { resolveLeaseScope } from '../../core/lease-context.ts';
 import {
   leasedOutputRefusal,
@@ -71,7 +70,7 @@ import {
   recordingExtensionForPlatform,
   resolveRecordingOutputPaths,
 } from '@agent-device/capture-kit/recording-output-path';
-import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
+import { isRemoteTempArtifactPath, normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { randomUUID } from 'node:crypto';
 import {
   buildRecordingStartResponse,
@@ -82,6 +81,7 @@ import {
   recordingOutputLeaseVerifier,
   UNLEASED_CAPTURE,
 } from './record-runtime-response.ts';
+import { commitRecordingOutputs } from '../recording-outputs.ts';
 import { resolveRequestTargetDevice } from '../../core/request-device-resolution.ts';
 
 /**
@@ -103,6 +103,7 @@ export type RecordRuntimeHandlerParams = Readonly<{
   bindExactDevice: BindExactDeviceRuntime;
   admissionLedger: ScreenRecordingAdmissionLedger;
   requestScope: PlatformRequestScope;
+  suiteCapture?: 'local' | 'remote';
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
 }>;
@@ -136,6 +137,7 @@ async function handleRecordCommandUnsafe(
   ) {
     return missingAppSessionResponse(req);
   }
+  if (plan.kind !== 'start') assertRequestMayStopRecording(params);
   const resolvedSession = await resolveRecordingSession(params, existingRef, plan);
   const { session } = resolvedSession;
   if (plan.kind === 'start') {
@@ -257,14 +259,12 @@ async function startRecording(
   if (session.screenRecording) {
     return { ok: false, error: { code: 'INVALID_ARGS', message: 'recording already in progress' } };
   }
-  const draft = ref
+  const slot = ref
     ? undefined
-    : bindRecordOnlyScreenRecording(
-        params.sessionStore,
-        params.sessionName,
-        session,
-        new SessionCoordinator(params.sessionStore).reserve(params.req, params.sessionName),
-      );
+    : new SessionCoordinator(params.sessionStore).reserve(params.req, params.sessionName);
+  const draft =
+    slot && bindRecordOnlyScreenRecording(params.sessionStore, params.sessionName, session, slot);
+  const lifetimeId = ref?.lifetime.journalId ?? slot!.lifetimeId;
   const binding = ref ? bindSessionScreenRecording(params.sessionStore, ref) : draft!.binding;
   binding.assertAdoptable();
   const admission = await params.bindDevice(session.device, screenRecordingAdmissionUse);
@@ -298,7 +298,7 @@ async function startRecording(
     owner: runtime.owner,
     fence,
     ...started,
-    envelope: withCaptureOwner(started.envelope, params.req, outputPaths.daemonOwned === true),
+    envelope: withCaptureOwner(started.envelope, params, outputPaths, lifetimeId),
     throwIfCanceled: params.throwIfCanceled,
   });
   const adoptedRef = ref ?? draft!.requireRef();
@@ -325,18 +325,26 @@ async function startRecording(
  */
 function withCaptureOwner(
   envelope: DurableResourceEnvelope<'screen-recording'>,
-  req: DaemonRequest,
-  daemonOwned: boolean,
+  { req, suiteCapture }: RecordRuntimeHandlerParams,
+  output: RecordingStartPaths,
+  lifetimeId: string,
 ): DurableResourceEnvelope<'screen-recording'> {
   const lease = req.internal?.admittedLease;
-  const tenantId = lease?.tenantId ?? req.meta?.tenantId;
+  const tenantId = normalizeTenantId(lease?.tenantId ?? req.meta?.tenantId);
   const leaseId = lease?.leaseId;
   return {
     ...envelope,
     metadata: {
       ...envelope.metadata,
-      ...(daemonOwned ? { remoteCaptureOutput: true } : {}),
+      ...(output.daemonOwned
+        ? {
+            remoteCaptureOutput: true,
+            remoteCapturePath: output.outputPath,
+            remoteCaptureLifetime: lifetimeId,
+          }
+        : {}),
       ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
+      ...(suiteCapture ? { suiteRecordingLifetime: lifetimeId } : {}),
       remoteCaptureLease: leaseId ? leaseVerifier(leaseId) : UNLEASED_CAPTURE,
     },
   };
@@ -353,12 +361,21 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
       resourcePath,
       device: session.device,
     }),
-    outputPaths: resolveRecordingStartPaths(
-      params.req,
-      session.device.platform,
-      params.sessionStore.host.cwd,
-      params.sessionStore.ensureSessionDir(params.sessionName),
-    ),
+    outputPaths: params.suiteCapture
+      ? {
+          ...resolveRecordingOutputPaths({
+            requestedPath: params.req.positionals?.[1],
+            platform: session.device.platform,
+            cwd: params.sessionStore.host.cwd,
+          }),
+          ...(params.suiteCapture === 'remote' ? { daemonOwned: true as const } : {}),
+        }
+      : resolveRecordingStartPaths(
+          params.req,
+          session.device.platform,
+          params.sessionStore.host.cwd,
+          params.sessionStore.ensureSessionDir(params.sessionName),
+        ),
   };
 }
 
@@ -445,7 +462,6 @@ async function stopRecording(
   kind: 'stop-live' | 'stop-recovery',
   needsReadiness: boolean,
 ): Promise<DaemonResponse> {
-  const leaseOwner = assertRequestMayStopRecording(params);
   let stopped: ScreenRecordingStop;
   try {
     stopped =
@@ -463,8 +479,9 @@ async function stopRecording(
     throw error;
   }
   const completion = stopped.completion;
-  const response = buildRecordingStopResponse(completion);
-  const { daemonOwned, tenantId } = readRecordingOutput(params, completion, leaseOwner, ref);
+  const record = screenRecordingDurableResource.store.read(
+    screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
+  );
   if (stopped.recordsSessionAction) {
     recordSessionAction(params.sessionStore, ref, params.req, params.req.command, {
       action: 'stop',
@@ -479,69 +496,35 @@ async function stopRecording(
   // session has to be re-read here, because the record this stop started with may have gained an
   // app, a capture, a claim, or a lease while the recording was being finished.
   if (ref) retireRecordOnlySession(params.sessionStore, ref);
-  return response.ok && response.data
-    ? {
-        ...response,
-        data: withCaptureOutputOwnership(
-          response.data,
-          daemonOwned ? 'daemon' : 'caller',
-          tenantId,
-          leaseOwner,
-        ),
-      }
-    : response;
-}
-
-function readRecordingOutput(
-  params: RecordRuntimeHandlerParams,
-  completion: ScreenRecordingCompletion,
-  leaseOwner: string | null | undefined,
-  ref: SessionRef | undefined,
-): { daemonOwned: boolean; tenantId?: string } {
-  const resourcePath = screenRecordingDurableResource.resourcePath(
-    params.sessionStore,
-    params.sessionName,
-  );
-  const record = screenRecordingDurableResource.store.read(resourcePath);
-  const daemonOwned =
-    record.status === 'decoded' && record.envelope.metadata?.remoteCaptureOutput === true;
-  if (isLegacyRemoteRecordingOutput(completion) || (daemonOwned && leaseOwner === undefined)) {
-    throw leasedOutputRefusal('Recording');
-  }
-  const storedTenant =
-    record.status === 'decoded' ? record.envelope.metadata?.remoteCaptureTenantId : undefined;
-  const tenantId =
-    typeof storedTenant === 'string'
-      ? storedTenant
-      : ((ref && params.sessionStore.resolveCurrent(ref)?.lease?.tenantId) ??
-        params.req.meta?.tenantId);
-  return { daemonOwned, tenantId };
+  if (isLegacyRemoteRecordingOutput(completion)) throw leasedOutputRefusal('Recording');
+  const envelope = record.status === 'decoded' ? record.envelope : undefined;
+  const artifacts =
+    envelope?.metadata?.remoteCaptureOutput === true
+      ? commitRecordingOutputs(envelope, completion)
+      : undefined;
+  return buildRecordingStopResponse(completion, artifacts);
 }
 
 /**
- * Refuses a stop that the owner of the recording did not send, and returns the verifier of the
- * lease that owns the export. A completed export needs only the lease id of its owner, also after
+ * A completed export needs only the lease id of its owner, also after
  * that lease ended. A recording that still runs needs the admitted lease.
  */
-function assertRequestMayStopRecording(
-  params: RecordRuntimeHandlerParams,
-): string | null | undefined {
+function assertRequestMayStopRecording(params: RecordRuntimeHandlerParams): void {
   const record = screenRecordingDurableResource.store.read(
     screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
   );
-  if (record.status !== 'decoded') return undefined;
+  if (record.status !== 'decoded') return;
   const { metadata, lifecycle } = record.envelope;
   const owner = recordingOutputLeaseVerifier(metadata);
   if (owner === undefined && metadata?.remoteCaptureOutput === true) {
     throw leasedOutputRefusal('Recording');
   }
-  if (typeof owner !== 'string') return owner;
+  if (typeof owner !== 'string') return;
   const presented =
     lifecycle === 'completed'
       ? resolveLeaseScope(params.req).leaseId
       : params.req.internal?.admittedLease?.leaseId;
   if (!requestHoldsOutputLease(owner, presented)) throw leasedOutputRefusal('Recording');
-  return owner;
 }
 
 function deleteTerminalRecordOnlySession(

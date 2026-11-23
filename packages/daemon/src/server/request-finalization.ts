@@ -184,7 +184,9 @@ function registerDownloadableArtifacts(
       scriptRevision: artifact.scriptRevision,
     };
   };
-  if (captureOutputOwnership(data) === 'caller') {
+  const isRecordingStop =
+    req.command === 'record' && req.positionals?.[0]?.toLowerCase() === 'stop';
+  if (captureOutputOwnership(data) === 'caller' || isRecordingStop) {
     // Caller-owned capture output stays at the caller path; a daemon-delivered artifact still registers.
     if (!data.artifacts?.some(daemonDeliveredArtifact)) return data;
     return {

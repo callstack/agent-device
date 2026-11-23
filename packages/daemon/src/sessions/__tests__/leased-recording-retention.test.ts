@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
+import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import {
   IOS_SIMULATOR,
   closeLoopbackServer,
@@ -28,29 +29,12 @@ import {
   cleanupDownloadableArtifact,
   leaseVerifier,
   listDownloadableArtifacts,
-  trackDownloadableArtifact,
+  settleCommittedFileOutputs,
 } from '../../resources/artifact-tracking.ts';
-import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../../server/downloadable-artifact-http.ts';
-import { finalizeDaemonResponse } from '../../server/request-finalization.ts';
-import { buildRecordingStopResponse } from '../handlers/record-runtime-response.ts';
+import { commitRecordingOutputs } from '../recording-outputs.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
 import { makeRecordRuntimeHarness } from '../handlers/__tests__/record-runtime.fixtures.ts';
-
-const tracking = vi.hoisted(() => ({ failOnCall: 0, calls: 0 }));
-vi.mock('../../resources/artifact-tracking.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../resources/artifact-tracking.ts')>();
-  return {
-    ...actual,
-    trackDownloadableArtifact: (
-      ...args: Parameters<typeof actual.trackDownloadableArtifact>
-    ): string => {
-      tracking.calls += 1;
-      if (tracking.calls === tracking.failOnCall) throw new Error('registration failed');
-      return actual.trackDownloadableArtifact(...args);
-    },
-  };
-});
 
 const TENANT = 'tenant-a';
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
@@ -63,8 +47,6 @@ afterEach(async () => {
     cleanupDownloadableArtifact(id);
   }
   for (const filePath of createdPaths.splice(0)) fs.rmSync(filePath, { force: true });
-  tracking.failOnCall = 0;
-  tracking.calls = 0;
   vi.useRealTimers();
 });
 
@@ -99,6 +81,7 @@ function publishRecordingSession(
     finishFails?: boolean;
     unleasedProducer?: boolean;
     producerTenant?: string;
+    omitTelemetry?: boolean;
   } = {},
 ) {
   const session: SessionState = makeIosSession(ADDRESS, {
@@ -130,7 +113,7 @@ function publishRecordingSession(
     }
     createdPaths.push(recordingExport.outPath, recordingExport.telemetryPath);
     fs.writeFileSync(recordingExport.outPath, 'video');
-    fs.writeFileSync(recordingExport.telemetryPath, '{"events":[]}');
+    if (!options.omitTelemetry) fs.writeFileSync(recordingExport.telemetryPath, '{"events":[]}');
     return { status: 'completed', result: completion } as const;
   });
   const forceCleanup = vi.fn(async () => ({ status: 'cleaned' }) as const);
@@ -201,6 +184,9 @@ test('a leased session teardown keeps the remote recording export downloadable b
   ]);
   expect(await listDownloadableArtifacts({ tenantId: 'tenant-b' }, process.env)).toEqual([]);
   expect(await listDownloadableArtifacts({ tenantId: TENANT }, process.env)).toEqual([]);
+  expect(
+    await listDownloadableArtifacts({ tenantId: TENANT, leaseId: 'f'.repeat(32) }, process.env),
+  ).toEqual([]);
 });
 
 test('a retained recording is deleted once its lease holder downloads it', async (t) => {
@@ -268,16 +254,15 @@ test('a failed teardown finish runs forced cleanup and keeps nothing for downloa
   expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
 });
 
-test('a leased teardown that cannot register the export deletes it instead of leaking it', async () => {
-  tracking.failOnCall = 2;
+test('teardown with a missing sidecar keeps its source and publishes no partial recording', async () => {
   const sessionStore = makeSessionStore('agent-device-leased-recording-unregistered-');
   const recordingExport = remoteRecordingExport();
-  publishRecordingSession(sessionStore, recordingExport);
+  publishRecordingSession(sessionStore, recordingExport, { omitTelemetry: true });
 
   await teardown(sessionStore);
 
   expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
-  expect(fs.existsSync(recordingExport.outPath)).toBe(false);
+  expect(fs.readFileSync(recordingExport.outPath, 'utf8')).toBe('video');
   expect(fs.existsSync(recordingExport.telemetryPath)).toBe(false);
 });
 
@@ -293,28 +278,13 @@ test('a record stop replay after a leased teardown serves the artifacts teardown
     device: IOS_SIMULATOR,
   });
   if (recovery.kind !== 'completed') throw new Error(`expected a replay, got ${recovery.kind}`);
-  const stopped = buildRecordingStopResponse(recovery.completion);
-  if (!stopped.ok || !stopped.data) throw new Error('expected a stop response');
-  // The stop handler names the lease of the manifest as the owner of a replayed export.
-  const replayed = finalizeDaemonResponse(
-    {
-      token: 't',
-      session: ADDRESS,
-      command: 'record',
-      positionals: ['stop'],
-      flags: {},
-      meta: { tenantId: TENANT },
-    },
-    {
-      ok: true,
-      data: withCaptureOutputOwnership(stopped.data, 'daemon', TENANT, leaseVerifier(LEASE_ID)),
-    },
-    trackDownloadableArtifact,
+  const record = screenRecordingResourceStore.read(
+    screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(ADDRESS)),
   );
+  if (record.status !== 'decoded') throw new Error('Expected completed recording manifest');
+  const artifacts = commitRecordingOutputs(record.envelope, recovery.completion);
 
-  expect(replayed.ok && replayed.data?.artifacts?.map((a) => a.artifactId)).toEqual(
-    retained.map((a) => a.id),
-  );
+  expect(artifacts.map((artifact) => artifact.artifactId)).toEqual(retained.map((a) => a.id));
   expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([
     expect.objectContaining({ id: retained[0]!.id, sessionName: 'checkout-flow' }),
     expect.objectContaining({ id: retained[1]!.id, sessionName: 'checkout-flow' }),
@@ -434,3 +404,38 @@ test.each([undefined, 'former-tenant'])(
     );
   },
 );
+
+test('fresh runtime slots can restore an intact recording from its producer manifest', async () => {
+  const harness = makeRecordRuntimeHarness('verified-recording-restart-');
+  const start = harness.runtime.start.getMockImplementation()!;
+  harness.runtime.start.mockImplementation(async (input) => {
+    fs.writeFileSync(input.outputPath, 'surviving-original-export');
+    return await start(input);
+  });
+  const producer = createRuntimeStateHandle();
+  const successor = createRuntimeStateHandle();
+  const remote = { publicNetworkOnly: true } as const;
+  try {
+    await producer.run(async () => {
+      expect(await harness.run(['start'], { tenantId: TENANT }, undefined, remote)).toMatchObject({
+        ok: true,
+      });
+      expect(await harness.run(['stop'], { tenantId: TENANT }, undefined, remote)).toMatchObject({
+        ok: true,
+      });
+    });
+    await successor.run(async () => {
+      expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+      const stopped = await harness.run(['stop'], { tenantId: 'other' }, undefined, remote);
+      if (!stopped.ok) throw new Error(stopped.error.message);
+      settleCommittedFileOutputs(stopped.data?.artifacts, true);
+      expect(await listDownloadableArtifacts({ tenantId: 'other' }, {})).toEqual([]);
+      expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([
+        expect.objectContaining({ artifactType: 'screen-recording' }),
+      ]);
+    });
+  } finally {
+    successor.dispose();
+    producer.dispose();
+  }
+});

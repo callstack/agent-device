@@ -18,8 +18,10 @@ import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-run
 import { screenshotCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
 import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
-import { finalizeDaemonResponse } from '../request-finalization.ts';
+import {
+  settleCommittedFileOutputs,
+  trackDownloadableArtifact,
+} from '../../resources/artifact-tracking.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
 import { successfulData, withHttp } from './http-output.fixtures.ts';
 
@@ -276,12 +278,16 @@ test('direct HTTP recording replay requires known remote output provenance', asy
   const { remoteCaptureLease: _owner, ...metadata } = record.envelope.metadata ?? {};
   screenRecordingResourceStore.write(resourcePath, { ...record.envelope, metadata });
   await withHttp(
-    async (request) =>
-      finalizeDaemonResponse(
-        request,
-        await harness.run(request.positionals, request.meta, request.flags, request.internal),
-        trackDownloadableArtifact,
-      ),
+    async (request) => {
+      const response = await harness.run(
+        request.positionals,
+        request.meta,
+        request.flags,
+        request.internal,
+      );
+      if (response.ok) settleCommittedFileOutputs(response.data?.artifacts, true);
+      return response;
+    },
     async (post, base) => {
       const replay = async () => await post({ command: 'record', positionals: ['stop'] }, false);
       expect((await replay()).error?.data?.details).toMatchObject({

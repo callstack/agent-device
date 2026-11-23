@@ -105,6 +105,11 @@ list the artifact and the download fails with `UNAUTHORIZED` and reason `LEASE_O
 The same header is required to read the diagnostics record of a request on a leased session.
 This holds after the session closes, for as long as the daemon keeps the file.
 
+After a remote recording finishes, its video, chunks, and telemetry stay available for up to
+15 minutes or until downloaded. If a lease produced the recording, send that lease ID to
+list or download it, including after the session closes. A recorded test suite includes exports
+that finish during cleanup in its artifact archive.
+
 By default, artifacts leave the inventory after download or after 15 minutes.
 `AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress
 can finish before their files are removed, including overlapping downloads of a directory archive.

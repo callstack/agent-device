@@ -254,9 +254,18 @@ async function finishSessionScreenRecording(params: {
     intent: 'disposal',
     confirmedMissing,
   });
-  if (!params.ref.session.lease) return;
+  const record = screenRecordingDurableResource.store.read(
+    screenRecordingDurableResource.store.resolvePath(binding.sessionDir),
+  );
+  if (
+    record.status !== 'decoded' ||
+    record.envelope.lifecycle !== 'completed' ||
+    record.envelope.fence.token !== recording.envelope.fence.token ||
+    record.envelope.fence.generation !== recording.envelope.fence.generation
+  )
+    return;
   const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
-  retainLeasedSessionRecording(params.ref, completion, recording.envelope.metadata);
+  retainLeasedSessionRecording(params.ref, completion, record.envelope);
 }
 
 async function finishSessionAudioProbe(params: {

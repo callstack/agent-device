@@ -16,8 +16,6 @@ import {
 } from '@agent-device/host-kit/request';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
-import { leaseVerifier } from '../../../resources/artifact-tracking.ts';
-import { captureOutputLeaseVerifier } from '../../../core/capture-output-ownership.ts';
 import {
   expectDecodedCompletedRecording,
   makeRecordRuntimeHarness,
@@ -148,8 +146,6 @@ test('a completed leased export replays to the lease id that started it, with no
   // The lease ended with its session. The replay names it, and no request is admitted under it.
   const replayed = await replay(leaseId.toUpperCase());
   expect(replayed).toMatchObject({ ok: true, data: { recording: 'stopped', outPath } });
-  // The export stays with the lease of the manifest when the response is registered.
-  expect(replayed.ok && captureOutputLeaseVerifier(replayed.data!)).toBe(leaseVerifier(leaseId));
 });
 
 test('a completed remote export whose manifest names no owner is not replayed', async () => {

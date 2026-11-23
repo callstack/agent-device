@@ -73,14 +73,17 @@ export function buildRecordingUnsupportedResponse(
   };
 }
 
-export function buildRecordingStopResponse(completion: ScreenRecordingCompletion): DaemonResponse {
+export function buildRecordingStopResponse(
+  completion: ScreenRecordingCompletion,
+  artifacts = recordingStopArtifacts(completion),
+): DaemonResponse {
   return {
     ok: true,
     data: {
       recording: 'stopped',
       outPath: completion.outPath,
       telemetryPath: completion.telemetryPath,
-      artifacts: recordingStopArtifacts(completion),
+      artifacts,
       recordingBackend: completion.backend,
       recordingScope: completion.scope,
       recordOnlySession: completion.recordOnlySession,

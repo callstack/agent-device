@@ -1,77 +1,39 @@
-import fs from 'node:fs';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { errorMessage } from '@agent-device/kernel/errors';
 import type { SessionRef } from '../core/session-state.ts';
-import { tenantPublicSessionName } from '../core/session-tenant-scope.ts';
-import {
-  cleanupDownloadableArtifact,
-  trackDownloadableArtifact,
-} from '../resources/artifact-tracking.ts';
+import { settleCommittedFileOutputs } from '../resources/artifact-tracking.ts';
 import {
   isLegacyRemoteRecordingOutput,
-  recordingStopArtifacts,
   recordingOutputLeaseVerifier,
 } from './handlers/record-runtime-response.ts';
+import { commitRecordingOutputs } from './recording-outputs.ts';
 
-/**
- * Keeps the export of a recording that a leased session's teardown finished, so a request that sends
- * the producing lease's id can still download it (ADR 0024 rule 1). The durable envelope marks
- * daemon-owned exports. A caller-owned export stays at the path the caller named.
- */
 export function retainLeasedSessionRecording(
   ref: SessionRef,
   completion: ScreenRecordingCompletion,
-  metadata: DurableResourceEnvelope['metadata'],
+  envelope: DurableResourceEnvelope<'screen-recording'>,
 ): void {
   const lease = ref.session.lease;
-  if (!lease || metadata?.remoteCaptureOutput !== true || isLegacyRemoteRecordingOutput(completion))
+  const { metadata } = envelope;
+  if (
+    metadata?.remoteCaptureOutput !== true ||
+    isLegacyRemoteRecordingOutput(completion) ||
+    recordingOutputLeaseVerifier(metadata) === undefined ||
+    (metadata.remoteCaptureLifetime === undefined
+      ? !lease
+      : metadata.remoteCaptureLifetime !== ref.lifetime.journalId)
+  )
     return;
-  const owner = recordingOutputLeaseVerifier(metadata);
-  if (owner === undefined) return;
-  const storedTenant = metadata?.remoteCaptureTenantId;
-  const tenantId =
-    owner !== null && typeof storedTenant === 'string' ? storedTenant : lease.tenantId;
-  const sessionName = tenantPublicSessionName(lease.tenantId, ref.address);
-  const artifacts = recordingStopArtifacts(completion).filter(
-    (artifact) => typeof artifact.path === 'string',
-  );
-  const artifactIds: string[] = [];
   try {
-    for (const artifact of artifacts) {
-      artifactIds.push(
-        trackDownloadableArtifact({
-          artifactPath: artifact.path!,
-          tenantId,
-          ...(owner === null ? {} : { leaseVerifier: owner }),
-          artifactType: artifact.artifactType,
-          fileName: artifact.fileName,
-          sessionName,
-        }),
-      );
-    }
+    const artifacts = commitRecordingOutputs(envelope, completion, lease?.tenantId);
+    settleCommittedFileOutputs(artifacts, true);
   } catch (error) {
-    for (const artifactId of artifactIds) cleanupDownloadableArtifact(artifactId);
-    for (const artifact of artifacts) removeBestEffort(artifact.path!);
     emitDiagnostic({
       level: 'warn',
       phase: 'leased_session_recording_retention_failed',
-      data: { session: ref.address, leaseId: lease.leaseId, error: errorMessage(error) },
+      data: { session: ref.address, error: errorMessage(error) },
     });
-    return;
-  }
-  emitDiagnostic({
-    level: 'info',
-    phase: 'leased_session_recording_retained',
-    data: { session: ref.address, sessionName, leaseId: lease.leaseId, artifactIds },
-  });
-}
-
-function removeBestEffort(filePath: string): void {
-  try {
-    fs.rmSync(filePath, { force: true });
-  } catch {
-    // A file that cannot be removed must not stop the removal of the others.
   }
 }

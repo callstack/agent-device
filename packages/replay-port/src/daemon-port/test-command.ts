@@ -8,6 +8,7 @@ import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/co
 import type {
   ReplayDispatchOptions,
   ReplaySuiteResult,
+  ReplaySuiteRecordingArtifact,
   ReplayScriptSourceBundle,
 } from '@agent-device/contracts/replay';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '@agent-device/replay-port/script-source';
@@ -298,7 +299,10 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
     cleanupSession,
   });
   return outcome.status === 'completed'
-    ? { ok: true, data: attachRemoteReplayTestArtifacts(outcome.data, req) }
+    ? {
+        ok: true,
+        data: attachRemoteReplayTestArtifacts(outcome.data, req, command.recordingOutputs?.()),
+      }
     : errorResponse(outcome.error.code, outcome.error.message);
 }
 
@@ -375,10 +379,13 @@ function withOriginalTestRefusalGuidance(
 export function attachRemoteReplayTestArtifacts(
   data: ReplaySuiteResult,
   req: DaemonWireRequest,
+  recordings: readonly ReplaySuiteRecordingArtifact[] = [],
 ): DaemonResponseData {
   const clientRoot = req.meta?.clientArtifactPaths?.artifactsDir;
   const daemonRoot = data.artifactsDir;
-  if (!clientRoot || !daemonRoot) return data;
+  if (!clientRoot || !daemonRoot) {
+    return recordings.length > 0 ? { ...data, recordingArtifacts: recordings } : data;
+  }
 
   // The directory the client will actually extract the download into, on ITS filesystem —
   // `clientRoot` plus the same invocation-id segment `daemonRoot` ends in (see doc comment).
@@ -394,6 +401,13 @@ export function attachRemoteReplayTestArtifacts(
   const rewritten: DaemonResponseData = {
     ...data,
     artifactsDir: clientSuiteRoot,
+    ...(recordings.length > 0
+      ? {
+          recordingArtifacts: recordings
+            .filter((recording) => recording.path.startsWith(daemonRoot + path.sep))
+            .map((recording) => ({ ...recording, path: remapArtifactsDir(recording.path) })),
+        }
+      : {}),
     tests: data.tests.map((test) =>
       'artifactsDir' in test && test.artifactsDir
         ? { ...test, artifactsDir: remapArtifactsDir(test.artifactsDir) }

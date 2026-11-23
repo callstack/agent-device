@@ -135,7 +135,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
   const owner = localRuntimeOwner(session.device.platform);
   let currentOutPath = '';
   let currentClientOutPath: string | undefined;
-  const handle: ScreenRecordingLiveHandle = {
+  const handle = {
     inspect: () => ({
       backend: 'adb screenrecord',
       outPath: currentOutPath,
@@ -168,7 +168,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
     }),
     forceCleanup: vi.fn(async () => options.cleanup ?? { status: 'cleaned' as const }),
     [Symbol.asyncDispose]: async () => {},
-  };
+  } satisfies ScreenRecordingLiveHandle;
   const start = vi.fn(
     async (input: Parameters<PlatformRuntimeOperations['screenRecordingStart']>[0]) => {
       currentOutPath = input.outputPath;

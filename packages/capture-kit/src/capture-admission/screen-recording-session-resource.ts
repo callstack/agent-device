@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -34,7 +35,12 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   resourceKind: 'screen-recording',
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
-  completionMetadata: encodeScreenRecordingCompletionMetadata,
+  completionMetadata: async (result, metadata) => ({
+    ...encodeScreenRecordingCompletionMetadata(result),
+    ...(typeof metadata?.remoteCapturePath === 'string'
+      ? { remoteCaptureExport: await verifyRecordingExport(metadata.remoteCapturePath, result) }
+      : {}),
+  }),
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
   // record is served the same export the first stop was answered with. That answer is a cold path: the
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
@@ -70,6 +76,45 @@ export function finishLiveScreenRecording(params: {
   confirmedMissing?: () => boolean;
 }): Promise<ScreenRecordingCompletion> {
   return screenRecordingDurableResource.finishLive(params);
+}
+
+async function verifyRecordingExport(reservedPath: string, completion: ScreenRecordingCompletion) {
+  const [{ chunkPathAt }, { deriveRecordingTelemetryPath }] = await Promise.all([
+    import('../recording/output-path.ts'),
+    import('../recording/telemetry.ts'),
+  ]);
+  const files = [
+    completion.outPath,
+    ...(completion.chunks?.slice(1).map((chunk) => chunk.path) ?? []),
+    ...(completion.telemetryPath ? [completion.telemetryPath] : []),
+  ];
+  const matchesReservation =
+    completion.outPath === reservedPath &&
+    (completion.chunks?.every(
+      (chunk, offset) =>
+        chunk.index === offset + 1 && chunk.path === chunkPathAt(reservedPath, chunk.index),
+    ) ??
+      true) &&
+    (completion.telemetryPath === undefined ||
+      completion.telemetryPath === deriveRecordingTelemetryPath(reservedPath));
+  return {
+    completedAt: Date.now(),
+    identities: matchesReservation ? files.map(readRecordingExportIdentity) : [],
+  };
+}
+
+function readRecordingExportIdentity(file: string): string | null {
+  try {
+    return recordingExportFileIdentity(fs.lstatSync(file, { throwIfNoEntry: false }));
+  } catch {
+    return null;
+  }
+}
+
+export function recordingExportFileIdentity(stat: fs.Stats | undefined): string | null {
+  return stat?.isFile()
+    ? `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
+    : null;
 }
 
 export function encodeScreenRecordingCompletionMetadata(

@@ -47,6 +47,7 @@ import type { BoundSnapshotCapture } from '../../core/snapshot-runtime-binding.t
 import { resolveObservationCapture } from '../../core/observation-capture.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
 import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
+import { collectSuiteRecordingOutputs } from '../recording-outputs.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';
 
@@ -136,7 +137,12 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     return ref && sessionStore.resolveCurrent(ref) ? sessionStore.refresh(ref) : undefined;
   };
   const completed = (name: string) => (attempts.get(name)?.running ? undefined : pinned(name));
+  const recordingOutputs = new Map<
+    string,
+    ReturnType<typeof collectSuiteRecordingOutputs>[number]
+  >();
   const video = createReplayTestVideoOwner({
+    suiteRequest: req,
     sessionStore,
     withSessionExecutionLock,
     sessionRef: (name, phase) => (phase === 'start' ? running(name) : completed(name)),
@@ -153,17 +159,18 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     bindDevice,
     platformServices,
   };
-  const suiteRequest = req.internal?.publicNetworkOnly
-    ? {
-        ...req,
-        flags: {
-          ...req.flags,
-          artifactsDir: resolveSessionTestArtifactsRoot(
-            sessionStore.resolveSessionDir(sessionName),
-          ),
-        },
-      }
-    : req;
+  const suiteRequest =
+    req.internal?.publicNetworkOnly || req.meta?.clientArtifactPaths?.artifactsDir
+      ? {
+          ...req,
+          flags: {
+            ...req.flags,
+            artifactsDir: resolveSessionTestArtifactsRoot(
+              sessionStore.resolveSessionDir(sessionName),
+            ),
+          },
+        }
+      : req;
   return await runReplayTestCommand({
     ...splitReplayCommandRequest(suiteRequest),
     host,
@@ -212,7 +219,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       return result;
     }, req),
     dependencies: replayDaemonDependencies,
-    cleanupSession: async (name) => {
+    cleanupSession: async (name, artifactPaths) => {
       // A timed-out attempt can still hold the lock. Its late cleanup runs after it settles.
       const lifetime = completed(name)?.lifetime;
       if (!lifetime) return [];
@@ -225,20 +232,29 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
             if (ref?.lifetime !== lifetime) return [];
             await holdDevice(ref.session.device.id);
             acquiring = false;
-            return await closeReplayTestSession({
-              host,
-              req,
-              ref,
-              logPath,
-              sessionStore,
-              leaseRegistry,
-              leaseLifecycleProvider,
-              inspectFacts,
-              bindDevice,
-              platformServices,
-              platformResourceCleanup,
-              deviceShutdownDenied,
-            });
+            try {
+              return await closeReplayTestSession({
+                host,
+                req,
+                ref,
+                logPath,
+                sessionStore,
+                leaseRegistry,
+                leaseLifecycleProvider,
+                inspectFacts,
+                bindDevice,
+                platformServices,
+                platformResourceCleanup,
+                deviceShutdownDenied,
+              });
+            } finally {
+              if (video && req.flags?.recordVideo) {
+                for (const output of collectSuiteRecordingOutputs(sessionStore, ref)) {
+                  artifactPaths?.add(output.path);
+                  if (artifactPaths) recordingOutputs.set(output.path, output);
+                }
+              }
+            }
           },
           signal,
         );
@@ -265,7 +281,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         );
       }
     },
-    ...(video ? { video } : {}),
+    ...(video ? { video, recordingOutputs: () => [...recordingOutputs.values()] } : {}),
   });
 };
 
