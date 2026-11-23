@@ -37,7 +37,13 @@ async function publishLeasedSession(
 ): Promise<string> {
   const { stateDir } = claimStores();
   const session = makeIosSession(name, {
-    lease: { backend: 'ios-simulator', leaseId, tenantId: 'tenant-a', runId: 'run-1' },
+    lease: {
+      backend: 'ios-simulator',
+      leaseId,
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      deviceKey: 'ios:simulator:fixture',
+    },
   });
   const acquired = await acquireDeviceClaim({
     env: process.env,
@@ -85,6 +91,7 @@ function leaseSessionEnd(
       executionLocks,
       teardownSession,
       cleanupSessionlessExecutionHost,
+      withinDiagnosticsScope: (run) => run(),
     }),
   };
 }
@@ -357,26 +364,39 @@ test('end publishes the recorded script of the session it ends', async () => {
   expect(fs.readFileSync(scriptPath, 'utf8')).toMatch(/recorded-step/);
 });
 
-test('end tears down the session opened under the lease and clears its device claim', async () => {
-  const sessionStore = makeSessionStore('agent-device-lease-end-');
-  const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
-  sessionStore.publish(
-    'other',
-    makeIosSession('other', {
-      lease: { backend: 'ios-simulator', leaseId: 'lease-2', tenantId: 'tenant-b', runId: 'run-2' },
-    }),
-  );
-  expect(fs.existsSync(claimPath)).toBe(true);
-  const teardownSession = vi.fn(async () => {});
+test.each(['LEASE_RELEASED', 'PROVIDER_INSTANCE_ENDED', 'LEASE_EXPIRED'] as const)(
+  '%s logs and tears down its session and clears its device claim',
+  async (reason) => {
+    vi.mocked(emitDiagnostic).mockClear();
+    const sessionStore = makeSessionStore('agent-device-lease-end-');
+    const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
+    sessionStore.publish(
+      'other',
+      makeIosSession('other', {
+        lease: {
+          backend: 'ios-simulator',
+          leaseId: 'lease-2',
+          tenantId: 'tenant-b',
+          runId: 'run-2',
+        },
+      }),
+    );
+    expect(fs.existsSync(claimPath)).toBe(true);
+    const teardownSession = vi.fn<SessionTeardown>(async () => {});
 
-  await leaseSessionEnd(sessionStore, teardownSession).ender.end('lease-1', 'LEASE_RELEASED');
+    await leaseSessionEnd(sessionStore, teardownSession).ender.end('lease-1', reason);
 
-  expect(teardownSession).toHaveBeenCalledTimes(1);
-  expect(teardownSession).toHaveBeenCalledWith(expect.objectContaining({ address: 'leased' }));
-  expect(sessionStore.get('leased')).toBeUndefined();
-  expect(fs.existsSync(claimPath)).toBe(false);
-  expect(sessionStore.get('other')).toBeDefined();
-});
+    expect(teardownSession).toHaveBeenCalledTimes(1);
+    expect(teardownSession.mock.lastCall?.[0].address).toBe('leased');
+    expect(sessionStore.get('leased')).toBeUndefined();
+    expect(fs.existsSync(claimPath)).toBe(false);
+    expect(sessionStore.get('other')).toBeDefined();
+    expect(emitDiagnostic).toHaveBeenCalledWith({
+      phase: 'leased_session_ended',
+      data: { reason, session: 'leased', deviceKey: 'ios:simulator:fixture', leaseId: 'lease-1' },
+    });
+  },
+);
 
 test('end keeps the claim of a session whose teardown failed', async () => {
   const sessionStore = makeSessionStore('agent-device-lease-end-unreachable-');
@@ -417,7 +437,16 @@ test.each([
       expect(transitions.map(({ data }) => data)).toEqual(
         events.map((event) => {
           const [oldState, newState] = EXPIRY_TRANSITIONS[event];
-          return { actor: 'daemon', event, oldState, newState, cause: 'LEASE_EXPIRED' };
+          return {
+            actor: 'daemon',
+            event,
+            oldState,
+            newState,
+            cause: 'LEASE_EXPIRED',
+            session: 'leased',
+            deviceKey: 'ios:simulator:fixture',
+            leaseId: 'lease-1',
+          };
         }),
       );
     } finally {
@@ -427,6 +456,7 @@ test.each([
 );
 
 test('provider release waits for a successful cleanup retry and the address stays reserved', async () => {
+  vi.mocked(emitDiagnostic).mockClear();
   const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
   try {
     const store = makeSessionStore();
@@ -464,6 +494,9 @@ test('provider release waits for a successful cleanup retry and the address stay
     finish();
     expect(await ender.settlementFor(ref.lifetime)?.done).toBe(true);
     expect(ender.closingAt(ref.address)).toBeUndefined();
+    expect(emitDiagnostic).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ leaseId: 'lease-1' }) }),
+    );
   } finally {
     clock.mockRestore();
   }

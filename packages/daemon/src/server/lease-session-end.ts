@@ -74,16 +74,6 @@ export const EXPIRY_TRANSITIONS = {
   incomplete: ['closing', 'cleanup-pending'],
 } as const;
 
-function transitionExpiry(event: keyof typeof EXPIRY_TRANSITIONS, cause: LeaseEndReason) {
-  const [oldState, newState] = EXPIRY_TRANSITIONS[event];
-  emitDiagnostic({
-    level: 'info',
-    phase: 'lease_expiry_transition',
-    data: { actor: 'daemon', event, oldState, newState, cause },
-  });
-  return newState;
-}
-
 export function createLeaseSessionEnd(params: {
   env: HostEnvironment['env'];
   sessionStore: SessionStore;
@@ -105,6 +95,10 @@ export function createLeaseSessionEnd(params: {
     }
   >();
   const closingRefs = new Map<string, SessionRef>();
+  const collectClosingRefs = (leaseId: string) => {
+    for (const ref of sessionStore.leasedSessionRefs(leaseId)) closingRefs.set(ref.address, ref);
+    return [...closingRefs.values()].filter((ref) => ref.session.lease?.leaseId === leaseId);
+  };
   const forgetClosing = (leaseId: string) => {
     for (const [address, ref] of closingRefs) {
       if (ref.session.lease?.leaseId === leaseId) closingRefs.delete(address);
@@ -112,6 +106,25 @@ export function createLeaseSessionEnd(params: {
   };
   const settlements = new WeakMap<SessionRef['lifetime'], ExpirySettlement>();
   const daemonContext = new AsyncResource('LeaseExpiry');
+  const diagnosticIdentity = ({ session }: SessionRef) => ({
+    session: session.name,
+    deviceKey: session.lease?.deviceKey,
+    leaseId: params.withinDiagnosticsScope ? session.lease?.leaseId : undefined,
+  });
+  const transitionExpiry = (
+    event: keyof typeof EXPIRY_TRANSITIONS,
+    refs: readonly SessionRef[],
+  ) => {
+    const [oldState, newState] = EXPIRY_TRANSITIONS[event];
+    const transition = { actor: 'daemon', event, oldState, newState, cause: 'LEASE_EXPIRED' };
+    for (const ref of refs) {
+      emitDiagnostic({
+        phase: 'lease_expiry_transition',
+        data: { ...transition, ...diagnosticIdentity(ref) },
+      });
+    }
+    return newState;
+  };
   const endLiveSessions = async (
     leaseId: string,
     reason: LeaseEndReason,
@@ -136,6 +149,10 @@ export function createLeaseSessionEnd(params: {
               )
                 return;
               attempted.add(ref.lifetime);
+              emitDiagnostic({
+                phase: 'leased_session_ended',
+                data: { reason, ...diagnosticIdentity(ref) },
+              });
               await endLeasedSession(
                 sessionStore.refresh(ref),
                 sessionStore,
@@ -220,6 +237,7 @@ export function createLeaseSessionEnd(params: {
 
   const registerExpiry = (
     leaseId: string,
+    refs: readonly SessionRef[],
     cleanup: Promise<boolean>,
     provider?: ExpiryProviderSettlement,
   ) => {
@@ -235,22 +253,15 @@ export function createLeaseSessionEnd(params: {
       if (confirmed) forgetClosing(leaseId);
       return confirmed;
     });
-    const settleExpiredLifetime = (lifetime: SessionRef['lifetime']) => {
-      settlements.set(lifetime, {
-        done,
-        takeReceipt: () => {
-          if (reported) return false;
-          reported = true;
-          return true;
-        },
-      });
+    const settlement: ExpirySettlement = {
+      done,
+      takeReceipt: () => {
+        if (reported) return false;
+        reported = true;
+        return true;
+      },
     };
-    for (const ref of sessionStore.leasedSessionRefs(leaseId)) {
-      closingRefs.set(ref.address, ref);
-    }
-    for (const ref of closingRefs.values()) {
-      if (ref.session.lease?.leaseId === leaseId) settleExpiredLifetime(ref.lifetime);
-    }
+    for (const { lifetime } of refs) settlements.set(lifetime, settlement);
   };
 
   const end = async (
@@ -264,18 +275,15 @@ export function createLeaseSessionEnd(params: {
     const previous = pending.get(leaseId);
     const provider = providerEnd ?? previous?.provider;
     pending.set(leaseId, { reason, provider, nextRetryAt: 0 });
-    const settle = async () => {
-      if (expiry) transitionExpiry(previous ? 'retry' : 'expired', reason);
-      await run(leaseId, reason, provider);
-      const retired = !closing && !pending.has(leaseId);
-      return expiry
-        ? transitionExpiry(retired ? 'settled' : 'incomplete', reason) === 'retired'
-        : retired;
-    };
+    const refs = expiry ? collectClosingRefs(leaseId) : [];
     const runScoped = async (): Promise<boolean> => {
       let retired = false;
       const cleanup = async () => {
-        retired = await settle();
+        if (expiry) transitionExpiry(previous ? 'retry' : 'expired', refs);
+        await run(leaseId, reason, provider);
+        retired = !closing && !pending.has(leaseId);
+        if (expiry)
+          retired = transitionExpiry(retired ? 'settled' : 'incomplete', refs) === 'retired';
       };
       await (params.withinDiagnosticsScope?.(cleanup) ?? cleanup()).catch((error) => {
         emitDiagnostic({
@@ -291,7 +299,7 @@ export function createLeaseSessionEnd(params: {
       ? daemonContext.runInAsyncScope(() => Promise.resolve().then(runScoped))
       : runScoped();
     const ending = cleanup.then(() => {});
-    if (expiry) registerExpiry(leaseId, cleanup, provider);
+    if (expiry) registerExpiry(leaseId, refs, cleanup, provider);
     const running = inFlight.get(leaseId) ?? new Set<Promise<void>>();
     running.add(ending);
     inFlight.set(leaseId, running);
