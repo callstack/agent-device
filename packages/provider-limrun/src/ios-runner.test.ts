@@ -20,9 +20,11 @@ test('the forwarded runner endpoint scrubs text and structured diagnostics', asy
     kit: {},
   } as unknown as LimrunIosHost;
   await createLimrunIosRunner(
-    { apiUrl: 'https://instance.invalid/api', token } as Parameters<
-      typeof createLimrunIosRunner
-    >[0],
+    {
+      apiUrl: 'https://instance.invalid/api',
+      token,
+      device: { appleOs: 'ios' },
+    } as Parameters<typeof createLimrunIosRunner>[0],
     host,
   );
   const diagnostics = createLaunchedProvider.mock.calls[0]?.[1].endpoint.http?.diagnostics;
