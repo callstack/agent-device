@@ -8,7 +8,8 @@ import type { SessionState } from '../../../core/session-state.ts';
 
 /**
  * Post-touch escape guard. Throws when a touch left the session app for an escape surface
- * (settings/systemui/launcher), unless such a surface already owned the focus before the dispatch.
+ * (settings/systemui/launcher), unless an escape surface other than the session app already owned
+ * the focus before the dispatch.
  * A raised permission prompt is not an escape: it returns a response warning for `alert` instead.
  */
 export async function assertAndroidPressStayedInApp(
