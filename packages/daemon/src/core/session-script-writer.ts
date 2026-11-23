@@ -255,11 +255,9 @@ function handleSessionScriptWriteFailure(params: {
 }
 
 function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
-  const detail = error instanceof Error ? error.message : String(error);
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+  return toScriptWriteFailure(
+    error,
+    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}`,
     {
       reason: SCRIPT_WRITE_REASONS.writeFailed.reason,
       ...(scriptPath ? { path: scriptPath } : {}),
@@ -267,6 +265,18 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
     },
     error,
   );
+}
+
+/** An AppError passes through; any other failure is wrapped with its message appended. */
+function toScriptWriteFailure(
+  error: unknown,
+  message: string,
+  details: Record<string, unknown>,
+  cause?: unknown,
+): AppError {
+  if (error instanceof AppError) return error;
+  const detail = error instanceof Error ? error.message : String(error);
+  return new AppError('COMMAND_FAILED', `${message}: ${detail}`, details, cause);
 }
 
 /**
@@ -277,11 +287,9 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
  * message and hint so the two are distinguishable to the agent.
  */
 function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
-  const detail = error instanceof Error ? error.message : String(error);
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+  return toScriptWriteFailure(
+    error,
+    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}`,
     {
       hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
     },
