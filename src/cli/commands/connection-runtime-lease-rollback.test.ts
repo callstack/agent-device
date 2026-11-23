@@ -12,7 +12,7 @@ import {
   seedConnectionState,
   type LeaseAllocateRequest,
 } from '../../__tests__/remote-connection.fixtures.ts';
-import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 

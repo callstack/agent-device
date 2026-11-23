@@ -3,7 +3,7 @@ import {
   connectionCommand as connectionCommandOnHost,
   disconnectCommand as disconnectCommandOnHost,
 } from '../../cli/commands/connection.ts';
-import { materializeRemoteConnectionForCommand as materializeRemoteConnectionForCommandOnHost } from '../../cli/commands/connection-runtime.ts';
+import { materializeRemoteConnectionForCommand as materializeRemoteConnectionForCommandOnHost } from './materialize-connection.ts';
 import { tryRunClientBackedCommand as tryRunClientBackedCommandOnHost } from '../../cli/commands/router.ts';
 import { withTestHost } from './with-test-host.ts';
 

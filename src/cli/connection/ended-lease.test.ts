@@ -10,7 +10,7 @@ import {
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { createAgentDeviceClient } from '@agent-device/client';
-import { materializeRemoteConnectionForCommand } from '../commands/connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 import { forgetEndedConnectionLease } from './ended-lease.ts';
 import { primeProviderConnection } from './provider-policy.ts';
 

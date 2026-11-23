@@ -49,7 +49,7 @@ function remoteDaemonConnection(
 
 /**
  * The provider a command on a remote connection uses: the stored connection's, then the remote
- * config profile's. Admission and materialization both read it here, so they agree.
+ * config profile's.
  */
 export function connectionLeaseProvider(
   stored: { leaseProvider?: string } | null | undefined,

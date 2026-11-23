@@ -15,7 +15,7 @@ vi.mock('@agent-device/react-native', async (importOriginal) => ({
   stopMetroTunnel: vi.fn(),
 }));
 
-import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from './test-utils/materialize-connection.ts';
 import { selectAwsDeviceFarmPlugin } from './test-utils/aws-device-farm-plugin-inventory.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 
