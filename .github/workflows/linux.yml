@@ -210,7 +210,7 @@ jobs:
           for list in "$CACHE"/lists/*_InRelease; do
             gpgv --quiet --keyring "$KEYRING" "$list" 2> /dev/null || rm -f "${list%InRelease}"*
           done
-          find "$CACHE/lists" -type f ! -name '*_InRelease' ! -name '*_Packages' -delete
+          find "$CACHE/lists" -mindepth 1 ! -name '*_InRelease' ! -name '*_Packages' -delete
           if compgen -G "$CACHE/archives/*.deb" > /dev/null; then
             echo "save=true" >> "$GITHUB_OUTPUT"
           fi
