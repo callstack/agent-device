@@ -17,7 +17,6 @@ Shapes:
   agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
   agent-device scroll down --until 'id=submit'
   agent-device gesture fling right 200 420 180
-  agent-device gesture pinch 0.5 200 400
   agent-device gesture pinch 2 @e17
   agent-device gesture rotate 35 200 420
   agent-device gesture transform 200 420 80 -40 2 35 700
