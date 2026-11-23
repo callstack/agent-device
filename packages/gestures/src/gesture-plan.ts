@@ -358,9 +358,8 @@ function buildTransformPlan(
   const initialSpan = motion.scale > 1 ? maximumSpan / motion.scale : maximumSpan;
   const finalSpan = initialSpan * motion.scale;
   if (Math.min(initialSpan, finalSpan) < GESTURE_MINIMUM_RELIABLE_SPAN_PX) {
-    throw trajectoryOutOfBounds({
+    throw trajectoryOutOfBounds(viewport, {
       intent: motion.intent,
-      viewport,
       initialSpan,
       finalSpan,
       minimumReliableSpan: GESTURE_MINIMUM_RELIABLE_SPAN_PX,
@@ -586,17 +585,36 @@ function assertSamplesInViewport(
       y < viewport.y + GESTURE_VIEWPORT_INSET_PX ||
       y > maxY
     ) {
-      throw trajectoryOutOfBounds({ ...details, viewport, sample });
+      throw trajectoryOutOfBounds(viewport, { ...details, sample }, sample.point);
     }
   }
 }
 
-function trajectoryOutOfBounds(details: Record<string, unknown>): AppError {
-  return new AppError('INVALID_ARGS', 'Gesture trajectory does not fit inside the viewport', {
-    ...details,
-    reason: GESTURE_PLAN_REFUSAL_REASONS.trajectoryOutOfBounds.reason,
-    hint: 'Move the gesture away from the edge or reduce its translation, scale, or rotation.',
-  });
+/** The message names the viewport and the first point outside it, so a unit mix-up shows at once. */
+function trajectoryOutOfBounds(
+  viewport: Rect,
+  details: Record<string, unknown>,
+  point?: Point,
+): AppError {
+  const origin = viewport.x === 0 && viewport.y === 0 ? '' : ` at (${viewport.x}, ${viewport.y})`;
+  const frame = `the ${viewport.width}x${viewport.height} viewport${origin}`;
+  return new AppError(
+    'INVALID_ARGS',
+    point
+      ? `Gesture point (${roundForMessage(point.x)}, ${roundForMessage(point.y)}) is outside the usable area of ${frame}`
+      : `Gesture trajectory does not fit inside ${frame}`,
+    {
+      ...details,
+      viewport,
+      reason: GESTURE_PLAN_REFUSAL_REASONS.trajectoryOutOfBounds.reason,
+      hint: `${point ? 'Use the coordinate units snapshot reports: points on Apple platforms, not screenshot pixels. ' : ''}Move the gesture away from the edge or reduce its translation, scale, or rotation.`,
+    },
+  );
+}
+
+/** Interpolated samples carry long fractions; `details.sample` keeps the exact point. */
+function roundForMessage(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function normalizeViewport(viewport: Rect): Rect {

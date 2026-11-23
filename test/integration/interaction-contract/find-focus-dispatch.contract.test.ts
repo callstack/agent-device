@@ -771,7 +771,11 @@ test(
     // no-match refusal. A candidate-disclosure or message change here fails this scenario, which
     // is the cell's own evidence rather than the `disambiguation` scenario's.
     await withIosContractDaemon(
-      [runnerSnapshotEntry(twinFormTree()), runnerSnapshotEntry(KEYBOARD_TREE)],
+      [
+        runnerSnapshotEntry(twinFormTree()),
+        runnerSnapshotEntry(KEYBOARD_TREE),
+        runnerSnapshotEntry(KEYBOARD_TREE),
+      ],
       async (daemon) => {
         const ambiguous = assertRpcError(
           await daemon.callCommand('find', ['label', 'Form', 'focus']),
@@ -784,12 +788,17 @@ test(
           '@e3 [button] "Form"',
         ]);
 
-        assertRpcError(
-          await daemon.callCommand('find', ['label', 'Nowhere', 'focus']),
-          500,
-          'COMMAND_FAILED',
-          /find did not match any element/,
-        );
+        // A bare find is a click. Click and focus share resolveFindMatch, so this row also pins the
+        // click no-match: neither sends anything.
+        for (const args of [['label', 'Nowhere', 'focus'], ['Nowhere']]) {
+          const noMatch = assertRpcError(
+            await daemon.callCommand('find', args),
+            500,
+            'COMMAND_FAILED',
+            /find did not match any element/,
+          );
+          assert.equal(readErrorDetails(noMatch).dispatched, 'no');
+        }
       },
     );
   },
