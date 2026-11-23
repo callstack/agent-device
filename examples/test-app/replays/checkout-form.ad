@@ -10,13 +10,17 @@ fill id="field-name" "Ada Lovelace"
 fill id="field-email" "ada@example.com"
 keyboard enter
 wait "Checkout form" 5000
-scroll down 0.6
+scroll down --until id="shipping-pickup"
+wait stable
 click id="shipping-pickup"
+scroll down --until id="payment-cash"
 click id="payment-cash"
 wait "Delivery choices" 5000
-scroll down 0.7
+scroll down --until id="checkbox-agree"
 click id="checkbox-agree"
+scroll down --until id="submit-order"
 click id="submit-order"
+scroll up --until id="form-success"
 wait "Order summary" 5000
 wait "Ada Lovelace chose pickup with cash payment." 5000
 close

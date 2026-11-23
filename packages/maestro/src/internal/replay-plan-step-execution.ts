@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { TAP_KEYBOARD_OCCLUDES_TARGET_REASON } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { stripUndefined } from './shared.ts';
 import { isMaestroTestFailure, maestroTestFailure } from './compatibility-errors.ts';
 import { isMaestroConditionTruthy } from './engine-truthiness.ts';
@@ -104,7 +105,9 @@ async function executeOptionalCommand(
 function formatOptionalWarning(command: MaestroRuntimeCommand, error: unknown): string {
   const source = `${command.source.path ? `${command.source.path}:` : ''}line ${command.source.line}`;
   const message = error instanceof AppError ? error.message : String(error);
-  return `Optional Maestro ${command.kind} skipped at ${source}: ${message}`;
+  const reason = error instanceof AppError ? error.details?.reason : undefined;
+  const suffix = reason === TAP_KEYBOARD_OCCLUDES_TARGET_REASON ? ` (${reason})` : '';
+  return `Optional Maestro ${command.kind} skipped at ${source}: ${message}${suffix}`;
 }
 
 function isOptionalCommand(command: MaestroRuntimeCommand): boolean {

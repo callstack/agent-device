@@ -661,7 +661,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       keyboardOcclusion: {
         kind: 'waived',
         reason:
-          'Intentional: the fused runner element tap never sees a daemon tree, so no band can be derived; the daemon-resolved sibling paths refuse the same target.',
+          'The fused runner tap has no snapshot evidence. The Maestro runtime port applies the shared keyboard guard to iOS tapOn selectors before invoking it.',
       },
       parentOwnedTouchPoint: {
         kind: 'waived',
@@ -723,7 +723,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       keyboardOcclusion: {
         kind: 'waived',
         reason:
-          'Intentional: shares the occlusion waiver above — Maestro taps resolved bounds regardless of what overlays them.',
+          'The runner coordinate fallback has no snapshot evidence. The Maestro runtime port applies the shared keyboard guard to iOS tapOn selectors before invoking it.',
       },
       parentOwnedTouchPoint: {
         kind: 'waived',

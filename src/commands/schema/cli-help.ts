@@ -111,7 +111,7 @@ Snapshots and refs:
   Truncated preview: snapshot -s @e12 (the current concrete ref), not get text. Missing target: scroll <dir> --until <selector>. TV/D-pad focus: help tv.
 
 Selectors:
-  id="field-email", label="Allow", role=button label="Search" -- not bare role keys (button="Search"); no CSS selectors/--selector/--text/raw x-y when refs/selectors exist. Full syntax: help selectors.
+  id="field-email", label="Allow", role=button label="Search" -- not bare role keys (button="Search"); no CSS selectors/--selector/--text/raw x-y when refs/selectors exist.
   Mutating selector ambiguity: press/click/fill/longpress collapse duplicate accessibility wrappers only when every match is one ancestor-descendant chain resolving to the same actionable node. Matches in distinct subtrees fail with AMBIGUOUS_MATCH and a bounded candidate list; geometry never chooses a winner. Retry one printed candidate ref (pinned to refsGeneration) or narrow the selector with role/id/longer text. Uniqueness-based reads (is except exists/absent, get attrs) share that failure shape.
   hittable: false on a resolved element does not block dispatch (iOS AX flags are unreliable on deep RN trees); press/fill/click and find focus/type return targetHittable: false plus a hint -- verify or re-target, not a failure.
 
@@ -119,7 +119,7 @@ Text entry:
   fill replaces; type appends to an already-focused field: fill 'id="field-email"' "qa@example.com"; type "Handle with care" --delay-ms 80
   fill <target> "" clears the field (replace with nothing); the empty argument must be present -- fill <target> alone is a missing argument.
   For dropped iOS text, retry with --delay-ms before clipboard paste (also Limrun iOS).
-  Keyboard covers the target (tap_keyboard_occludes_target): on iOS, press a visible Hide Keyboard key or app dismissal control. In apps with drag dismissal, use gesture pan. Android: keyboard dismiss. Use keyboard enter to send Return.
+  Keyboard blocks the target (tap_keyboard_occludes_target, including iOS Maestro tapOn): use a visible dismissal control or gesture pan if supported. Android: keyboard dismiss. keyboard enter sends Return.
   iOS paste-prompt limits and Android IME/handwriting capture quirks: help debugging.
 
 Session ordering:
@@ -151,7 +151,7 @@ Escalate:
   help debugging logs, network, alerts, traces, text-entry
   help scripting recording, save-script, batch, replay repair
   help gestures multi-touch gesture shapes/quirks
-  help selectors selector keys, quoting, alternatives
+  help selectors syntax and matching
   help tv Android TV, tvOS, Vega VVD remote
   help react-devtools RN components, props/state/hooks, render profiling
   help react-native RN hazards, Metro/Re.Pack, routing

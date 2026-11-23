@@ -1,4 +1,5 @@
 import { AppError, type AppErrorDetails, type ReasonTable } from '@agent-device/kernel/errors';
+import { TAP_KEYBOARD_OCCLUDES_TARGET_REASON } from '@agent-device/contracts/tap-keyboard-occlusion';
 
 /** Why a Maestro-compatibility step ends its run. */
 const MAESTRO_COMPATIBILITY_REASONS = {
@@ -19,6 +20,8 @@ export function isMaestroTestFailure(error: unknown): boolean {
   return (
     error instanceof AppError &&
     error.code === 'COMMAND_FAILED' &&
-    error.details?.reason === MAESTRO_TEST_FAILURE_REASON
+    (error.details?.reason === MAESTRO_TEST_FAILURE_REASON ||
+      (error.details?.reason === TAP_KEYBOARD_OCCLUDES_TARGET_REASON &&
+        error.details.dispatched === 'no'))
   );
 }
