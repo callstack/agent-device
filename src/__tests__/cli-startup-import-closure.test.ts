@@ -111,6 +111,15 @@ test.for([
   expect(refs.includes('node:http') || refs.includes('node:https')).toBe(eager);
 });
 
+test('the binary bootstrap leaves process management to CLI and MCP execution', () => {
+  const closure = eagerClosureOf(path.join(srcRoot, 'bin.ts'));
+  expect(closure).toContain(path.join(srcRoot, 'cli/entry.ts'));
+  expect(closure).not.toContain(
+    path.resolve(srcRoot, '../packages/host-kit/src/internal/host-process.ts'),
+  );
+  expect(closure).not.toContain(path.resolve(srcRoot, '../packages/host-kit/src/internal/exec.ts'));
+});
+
 test('the CLI startup import closure never evaluates node:http or node:https', () => {
   const offenders: string[] = [];
   for (const file of eagerClosureOf(path.join(srcRoot, 'cli.ts'))) {

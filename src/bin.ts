@@ -1,20 +1,26 @@
-import { withCommandHost } from '@agent-device/host-kit/command';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { runEntry } from './cli/entry.ts';
 
 declare const __AGENT_DEVICE_VERSION__: string;
 
-const host = captureHostEnvironment(process);
+async function captureCliHost() {
+  const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
+  return captureHostEnvironment(process);
+}
 
 runEntry(
   process.argv.slice(2),
   {
     help: () => import('./commands/schema/cli-help.ts'),
     cli: async () => {
+      const host = await captureCliHost();
       const { runCliProcess } = await import('./cli/process-entry.ts');
       return { runCliProcess: (argv) => runCliProcess(argv, host) };
     },
     mcp: async () => {
+      const [host, { withCommandHost }] = await Promise.all([
+        captureCliHost(),
+        import('@agent-device/host-kit/command'),
+      ]);
       const { runAgentDeviceMcpServer } = await import('./mcp/server.ts');
       return {
         runAgentDeviceMcpServer: async (options) =>
