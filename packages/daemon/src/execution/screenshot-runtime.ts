@@ -108,7 +108,6 @@ export async function resolveScreenshotGenericExecution(
         sessionName: execution.sessionName,
         logPath: execution.logPath,
         dispatchContext: execution.dispatchContext,
-        flags: execution.request.flags,
         req: execution.request,
         outPath: request.outPath,
         lifetimeId: params.lifetimeId,
@@ -200,7 +199,6 @@ async function executeScreenshot(
     sessionName: string;
     logPath: string;
     dispatchContext: DaemonCommandContext;
-    flags: CommandFlags | undefined;
     outPath: string | undefined;
     req: DaemonRequest;
     lifetimeId: string;
@@ -209,7 +207,8 @@ async function executeScreenshot(
     cropRun?: ScreenshotCropRun;
   }>,
 ): Promise<Record<string, unknown>> {
-  const { session, runtime, flags, req } = params;
+  const { session, runtime, req } = params;
+  const flags = req.flags;
   const crop = buildScreenshotCropBinding({
     cropOn: params.cropOn,
     captureSnapshot: runtime.captureSnapshot,
@@ -217,21 +216,21 @@ async function executeScreenshot(
     logPath: params.logPath,
   });
   const clientPath = req.meta?.clientArtifactPaths?.path;
-  const downloadable = req.internal?.publicNetworkOnly || Boolean(clientPath);
-  const publishedPath = params.outPath;
-  const reservation = downloadable
-    ? reserveFileOutput('screenshot', 'screenshot.png', {
-        lifetimeId: params.lifetimeId,
-        tenantId: normalizeTenantId(req.meta?.tenantId),
-        leaseVerifier: admittedOutputLeaseVerifier(req),
-      })
-    : undefined;
+  const remote = req.internal?.publicNetworkOnly;
+  const reservation =
+    remote || clientPath
+      ? reserveFileOutput('screenshot', 'screenshot.png', {
+          lifetimeId: params.lifetimeId,
+          tenantId: normalizeTenantId(req.meta?.tenantId),
+          leaseVerifier: admittedOutputLeaseVerifier(req),
+        })
+      : undefined;
   try {
     const captured = await captureScreenshotArtifact({
       createCommandSurface: params.createCommandSurface,
       session,
       sessionName: params.sessionName,
-      outPath: reservation?.path ?? publishedPath,
+      outPath: reservation?.path ?? params.outPath,
       dispatchContext: params.dispatchContext,
       captureScreenshot: runtime.captureScreenshot,
       ...(crop ? { crop } : {}),
@@ -255,38 +254,48 @@ async function executeScreenshot(
         scale: flags?.screenshotScale,
       })),
     };
-    if (!reservation) return result;
-    params.dispatchContext.signal?.throwIfAborted();
-    const mirrorPath =
-      !req.internal?.publicNetworkOnly &&
-      publishedPath &&
-      !isRemoteTempArtifactPath(publishedPath, 'screenshot', '.png')
-        ? publishedPath
-        : undefined;
-    if (mirrorPath) {
-      await publishScreenshotFile(reservation.path, mirrorPath, params.dispatchContext.signal);
-    }
-    return {
-      ...result,
-      ...(mirrorPath
-        ? {
-            path: mirrorPath,
-            ...(result.message === undefined ? {} : { message: `Saved screenshot: ${mirrorPath}` }),
-          }
-        : {}),
-      artifacts: [
-        reservation.commit({
-          field: 'path',
-          localPath: clientPath,
-          fileName: path.basename(clientPath ?? mirrorPath ?? captured.path),
-          displayRotation: result.displayRotation,
-        }),
-      ],
-    };
+    return reservation
+      ? await commitScreenshot(reservation, result, {
+          clientPath,
+          localOutputPath: remote ? undefined : params.outPath,
+          signal: params.dispatchContext.signal,
+        })
+      : result;
   } catch (error) {
     reservation?.discard();
     throw error;
   }
+}
+
+async function commitScreenshot(
+  reservation: ReturnType<typeof reserveFileOutput>,
+  result: CapturedScreenshot,
+  placement: { clientPath?: string; localOutputPath?: string; signal?: AbortSignal },
+) {
+  const { clientPath, localOutputPath, signal } = placement;
+  signal?.throwIfAborted();
+  const mirrorPath =
+    localOutputPath && !isRemoteTempArtifactPath(localOutputPath, 'screenshot', '.png')
+      ? localOutputPath
+      : undefined;
+  if (mirrorPath) await publishScreenshotFile(reservation.path, mirrorPath, signal);
+  return {
+    ...result,
+    ...(mirrorPath
+      ? {
+          path: mirrorPath,
+          ...(result.message === undefined ? {} : { message: `Saved screenshot: ${mirrorPath}` }),
+        }
+      : {}),
+    artifacts: [
+      reservation.commit({
+        field: 'path',
+        localPath: clientPath,
+        fileName: path.basename(clientPath ?? mirrorPath ?? result.path),
+        displayRotation: result.displayRotation,
+      }),
+    ],
+  };
 }
 
 /** Present exactly when the admitted plan carries a crop and the snapshot binding to serve it. */
