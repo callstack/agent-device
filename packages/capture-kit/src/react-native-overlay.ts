@@ -296,7 +296,11 @@ type RectNode = SnapshotNode & { rect: Rect };
  * its partners sit centered at an even spacing. The row may stop short of the surface edges only by
  * the side inset a landscape window keeps. A capture hands over the full tile, only its text, or a
  * row it folded the Dismiss tile into, labelled Dismiss and holding the other tiles; the target is
- * Dismiss's column in each case. A node centered in its own column is preferred over a folded row.
+ * Dismiss's column in each case.
+ *
+ * Candidates are tried from the end of the capture. The simulator accessibility capture lists the
+ * LogBox and RedBox windows after the app's, so an app bar shaped like a footer loses to the real one
+ * there, and a row is listed before the tiles it holds, so a tile wins over the row folded around it.
  */
 function findOverlayFooterDismiss(facts: ReactNativeOverlayFacts): OverlayFooterDismiss | null {
   const tolerance = footerTolerance(facts.surface);
@@ -304,11 +308,11 @@ function findOverlayFooterDismiss(facts: ReactNativeOverlayFacts): OverlayFooter
     (node): node is RectNode =>
       node.rect !== undefined && nodeHasMatchingLabel(node, isReactNativeOverlayDismissLabel),
   );
-  for (const folded of [false, true]) {
-    for (const node of dismissNodes) {
-      const column = footerDismissColumn(node.rect, folded, facts, tolerance);
-      if (column) return { node, column };
-    }
+  for (const node of [...dismissNodes].reverse()) {
+    const column =
+      footerDismissColumn(node.rect, false, facts, tolerance) ??
+      footerDismissColumn(node.rect, true, facts, tolerance);
+    if (column) return { node, column };
   }
   return null;
 }

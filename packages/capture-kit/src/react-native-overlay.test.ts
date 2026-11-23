@@ -471,6 +471,24 @@ describe('React Native overlay dismissal beside app Close and Dismiss buttons', 
     });
   });
 
+  test('synthetic: a full-width app bar listed before the inspector footer loses to it', () => {
+    // The simulator accessibility capture lists the LogBox window after the app's.
+    const bar = (index: number, label: string, x: number) =>
+      node({
+        index,
+        ref: `e${index}`,
+        type: 'Button',
+        label,
+        rect: { x, y: 100, width: 201, height: 44 },
+      });
+    const state = analyzeReactNativeOverlay(
+      [bar(20, 'Dismiss', 0), bar(21, 'Copy', 201), componentStackText, ...inspectorFooter],
+      viewport,
+    );
+
+    expect(state.primaryAction).toMatchObject({ action: 'dismiss', ref: 'e60' });
+  });
+
   test.each([
     { direction: 'left-to-right', minimizeX: 134, copyX: 268, tapX: 67 },
     { direction: 'right-to-left', minimizeX: 134, copyX: 0, tapX: 335 },
@@ -878,10 +896,10 @@ describe('React Native overlay dismissal beside app Close and Dismiss buttons', 
         rect: { x: centerX - width / 2, y: 2213, width, height: 53 },
       });
     const footerTexts = [
-      // Text sits a few pixels off its column's center, within 2 dp at this density.
+      // The Dismiss text sits a few pixels off its column's center, within 2 dp at this density.
       text(70, 'Dismiss', 183, 160),
-      text(71, 'Minimize', 543, 182),
-      text(72, 'Copy', 897, 102),
+      text(71, 'Minimize', 540, 182),
+      text(72, 'Copy', 900, 102),
     ];
     const footerTiles = ['Dismiss', 'Minimize', 'Copy'].map((label, column) =>
       node({
@@ -936,7 +954,11 @@ describe('React Native overlay dismissal beside app Close and Dismiss buttons', 
         surface,
       );
 
-      expect(state.primaryAction).toMatchObject({ action: 'dismiss', point: { x: 180 } });
+      expect(state.primaryAction).toMatchObject({
+        action: 'dismiss',
+        ref: 'e70',
+        point: { x: 183 },
+      });
     });
 
     test('in landscape, a footer inset by the cutout and the navigation bar is still read', () => {
