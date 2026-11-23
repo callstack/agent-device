@@ -63,6 +63,7 @@ import {
 } from '../sessions/open-device-contention-wait.ts';
 import {
   createRequestExecutionLocks,
+  createSessionExecutionLock,
   withRequestExecutionLockKeys,
 } from './request-execution-locks.ts';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
@@ -835,6 +836,10 @@ function contextFromRequestFlags(
 }
 
 /** The idle reaper shares these locks so expiry cannot tear down an active request. */
+export function leaseRegistrySessionExecutionLock(leaseRegistry: LeaseRegistry) {
+  return createSessionExecutionLock(getLeaseRegistryExecutionLocks(leaseRegistry));
+}
+
 export function getLeaseRegistryExecutionLocks(
   leaseRegistry: LeaseRegistry,
 ): Map<string, Promise<unknown>> {

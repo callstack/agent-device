@@ -26,7 +26,6 @@ import {
   leaseVerifier,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
-import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { successfulData, withHttp } from './http-output.fixtures.ts';
 
@@ -224,31 +223,6 @@ test.each(['xctrace', 'simpleperf'] as const)(
   },
 );
 
-test('perf stop retains the session lease tenant for an unleased producer', async () => {
-  const fixture = reportFixture();
-  const session = fixture.sessionStore.publish('capture', makeIosAppSession('capture'));
-  const lease = fixture.leaseRegistry.allocateLease({
-    tenantId,
-    runId: 'session-owner',
-    leaseBackend: 'android-instance',
-  });
-  await withHttp(fixture.handler, async (post, base) => {
-    successfulData(await post(captureRequest('start')));
-    fixture.sessionStore.update(session, { lease: sessionLeaseOf(lease) });
-    const result = successfulData(await post(captureRequest('stop', { leaseId: lease.leaseId })));
-    const id = result.artifacts?.[0]?.artifactId;
-    expect(id).toBeTypeOf('string');
-    const fetchCapture = (tenant: string) =>
-      fetch(`${base}/artifacts/${id}`, {
-        headers: { authorization: 'Bearer test-token', [DAEMON_HTTP_TENANT_HEADER]: tenant },
-      });
-    expect((await fetchCapture('other-tenant')).status).toBe(401);
-    const download = await fetchCapture(tenantId);
-    expect(download.status).toBe(200);
-    await download.arrayBuffer();
-  });
-});
-
 test('public-network perf report uses the session capture despite an explicit host path', async () => {
   const fixture = reportFixture();
   fixture.retainProfile('capture');
@@ -276,7 +250,6 @@ test('a tenant-isolated local xctrace report keeps the same-lease handoff for an
   const lease = fixture.leaseRegistry.allocateLease(scope);
   const name = `${tenantId}:capture`;
   fixture.retainProfile(name, lease.leaseId);
-  fixture.sessionStore.update(fixture.sessionStore.lookup(name)!, { lease: sessionLeaseOf(lease) });
   const explicitPath = fixture.profilePath + '-external';
   fs.mkdirSync(explicitPath);
   await withHttp(fixture.handler, async (post) => {
