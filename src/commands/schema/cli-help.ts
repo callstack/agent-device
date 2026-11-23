@@ -477,7 +477,6 @@ Rules:
 
 Remote connection providers use the same lifecycle:
   connect -> install/open -> commands -> close -> disconnect
-  Close a live session before reopening it under a different lease.
 
 Providers:
   Cloud: agent-device connect or agent-device connect cloud discovers the agent-device cloud profile.
@@ -521,7 +520,7 @@ Direct proxy flow for a remote Mac/simulator:
     agent-device close
     agent-device disconnect
 
-Leased sessions: a connection from connect proxy, connect (cloud), another connect provider, or a remote config that sets leaseProvider leases its device for one agent. Every command on it that takes a session, from connect to disconnect, names its session with --session <name>, AGENT_DEVICE_SESSION, or a config session. A command that takes no session, such as auth, daemon, device, plugins, proxy, or web, runs on no connection. It never reads the active connection or leases a device through a remote config. Without a session, a command that takes one fails with INVALID_ARGS, reason REMOTE_SESSION_REQUIRED, before anything is leased, and never falls back to the connection another agent on the machine saved last. Set AGENT_DEVICE_SESSION once per agent or CI job before connect.
+Leased sessions: a connection from connect proxy, connect (cloud), another connect provider, or a remote config that sets leaseProvider leases its device for one agent. Every command on it that takes a session, from connect to disconnect, names its session with --session <name>, AGENT_DEVICE_SESSION, or a config session. A command that takes no session, such as auth, daemon, device, plugins, proxy, or web, runs on no connection. It never reads the active connection or leases a device through a remote config. Without a session, a command that takes one fails with INVALID_ARGS, reason REMOTE_SESSION_REQUIRED, before anything is leased, and never falls back to the connection another agent on the machine saved last. Set AGENT_DEVICE_SESSION once per agent or CI job before connect. Close a live session before you reopen it under a different lease.
 
 Proxy lease by device spec:
   Without --udid or --serial, open, install, reinstall, and uninstall through connect proxy send --platform, --target, and --device on the lease allocate, and the backend in front of the daemon picks the device. --os <version|range>, --image-tag <tag>, --device-mode <slim|full>, --device-baseline <name>, and --physical add a device spec to that request. A non-blank osVersion, imageTag, deviceMode or deviceBaseline and physical: true name a spec key, sent as given; the backend validates its value (for example, Android --os is an API level, --device-mode full asks for an unslimmed iOS simulator, and --device-baseline names a saved device state the backend restores; it is unrelated to diff screenshot --baseline <path>). A blank string and physical: false name nothing, from the CLI, the SDK, or MCP. A value of another type fails with INVALID_ARGS, reason device-spec-invalid. connect proxy stores the spec keys it names as defaults like --platform and --device.
