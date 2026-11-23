@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  parseAndroidComponent,
   parseAndroidLaunchablePackages,
   parseAndroidResumedActivity,
   readAndroidBlockingDialogFocus,
@@ -36,6 +37,38 @@ test('readAndroidBlockingDialogFocus preserves responding window text without re
       focusedPackage: 'com.example.app',
     },
   );
+});
+
+// Every reader (resumed activity, focused window, foreground) passes its segment here.
+test.each([
+  [' ActivityRecord{99 u0 com.example.app/.MainActivity t7}', 'com.example.app', '.MainActivity'],
+  [
+    'Window{84ec7b8 u0 com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity',
+    'com.android.settings',
+    'com.android.settings.Settings$AppNotificationSettingsActivity',
+  ],
+  [
+    ' u0 com.example_app2.beta/com.example_app2.Main}',
+    'com.example_app2.beta',
+    'com.example_app2.Main',
+  ],
+  [
+    ' ActivityRecord{1 u0 com.first.app/.One t1} ActivityRecord{2 u0 com.second.app/.Two t2}',
+    'com.first.app',
+    '.One',
+  ],
+])('parseAndroidComponent reads the first package/Activity in %j', (segment, pkg, activity) => {
+  assert.deepEqual(parseAndroidComponent(segment), { package: pkg, activity });
+});
+
+test.each([
+  '',
+  'Window{5a1b2c3 u0 NotificationShade}',
+  'Window{5a1b2c3 u0 Application Not Responding: com.example.app}',
+  ' u0 android/com.android.internal.app.ResolverActivity}',
+  ' u0 com.example.app}',
+])('parseAndroidComponent names no component in %j', (segment) => {
+  assert.equal(parseAndroidComponent(segment), null);
 });
 
 test('parseAndroidResumedActivity reads every resumed-marker shape', () => {

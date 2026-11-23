@@ -30,9 +30,19 @@ export const ANDROID_FOCUS_MARKERS = [
 ] as const;
 const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
 const ANDROID_PACKAGE_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
-/** A `package/Activity` component: group 1 is the package, group 2 the activity. */
 const ANDROID_COMPONENT_PATTERN =
   /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/;
+
+/**
+ * The first `package/Activity` component in a dump segment. Callers choose the segment (a marker's
+ * line remainder, or the window text up to `}`) and the marker order.
+ */
+export function parseAndroidComponent(
+  segment: string,
+): { package: string; activity: string } | null {
+  const match = ANDROID_COMPONENT_PATTERN.exec(segment);
+  return match?.[1] && match[2] ? { package: match[1], activity: match[2] } : null;
+}
 
 export function parseAndroidLaunchablePackages(stdout: string): string[] {
   const packages = new Set<string>();
@@ -87,7 +97,7 @@ export function readAndroidBlockingDialogFocus(text: string): AndroidBlockingDia
   const focus = parseAndroidFocusSegment(text, (segment, raw, marker) => {
     if (marker === ANDROID_FOCUSED_WINDOW_MARKER && !focusObserved) {
       focusObserved = true;
-      focusedPackage = ANDROID_COMPONENT_PATTERN.exec(segment.split('}')[0] ?? '')?.[1];
+      focusedPackage = parseAndroidComponent(segment.split('}')[0] ?? '')?.package;
     }
     return parseAndroidBlockingDialogFromSegment(segment, raw);
   });
@@ -133,10 +143,8 @@ export function parseAndroidResumedActivity(
       // marker only counts at the start of a field, i.e. at line start or after whitespace.
       if (markerIndex === -1 || (markerIndex > 0 && /\S/.test(line[markerIndex - 1] ?? '')))
         continue;
-      const component = ANDROID_COMPONENT_PATTERN.exec(line.slice(markerIndex + marker.length));
-      if (component?.[1] && component[2]) {
-        return { package: component[1], activity: component[2] };
-      }
+      const component = parseAndroidComponent(line.slice(markerIndex + marker.length));
+      if (component) return component;
     }
   }
   return null;
