@@ -194,6 +194,16 @@ export async function composeDaemonRuntimeDeps(
       providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
       recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
       recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
+      providerRentalPolicy: (provider: string) => {
+        const runtime = providerDeviceRuntimes.find((runtime) => runtime.provider === provider);
+        const module = providerComposition.platformModules.find(
+          (entry) => entry.runtime === runtime,
+        )?.module;
+        return {
+          runtimeIdentity: module?.owner.instance,
+          legacyRecovery: !!runtime?.recoverExpiredLease && !runtime.leaseLifecycle.recoverRental,
+        };
+      },
       deviceRuntimeGateway,
       platformResourceCleanup: createPlatformResourceCleanup(host, web),
       claimRecoveryGateway: createClaimRecoveryGatewayFor(host, platforms),

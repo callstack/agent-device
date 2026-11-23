@@ -44,10 +44,83 @@ test('Revyl renews a live rental with callbacks from a new allocation request', 
     const first = await allocate();
     assert.ok(first);
     assert.deepEqual(await allocate(), first);
-    assert.deepEqual(submitted, [revylSessionIdForLease(lease.leaseId)]);
+    assert.equal(submitted.length, 1);
     assert.deepEqual(rented, submitted);
   } finally {
     await runtime.shutdown();
+    await fixture.close();
+  }
+});
+
+test('a stop for an earlier journaled create cannot end a replacement with the same lease ID', async () => {
+  const fixture = await startRevylFixtureBackend({
+    sessionExistsOnceStarted: true,
+    startResponse: { success: true },
+  });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const submitted: string[] = [];
+  const allocate = () =>
+    runtime.leaseLifecycle.allocate!(lease, {
+      rental: {
+        beforeCreate: (key) => submitted.push(key),
+        rented: () => {},
+      },
+    });
+  try {
+    const first = await allocate();
+    assert.equal(first?.providerSessionId, submitted[0]);
+    assert.equal((await runtime.leaseLifecycle.release!(lease))?.release, 'confirmed');
+    const second = await allocate();
+    assert.equal(second?.providerSessionId, submitted[1]);
+    assert.notEqual(submitted[0], submitted[1]);
+    assert.equal(fixture.hasOpenSession(submitted[1]!), true);
+    assert.equal(
+      await runtime.leaseLifecycle.recoverRental!(lease, { instanceId: submitted[0] }, () => {}),
+      true,
+    );
+    assert.equal(fixture.hasOpenSession(submitted[1]!), true);
+    assert.equal((await runtime.leaseLifecycle.release!(lease))?.release, 'confirmed');
+    assert.equal(fixture.hasOpenSession(submitted[1]!), false);
+    assert.deepEqual(
+      fixture.paths().filter((route) => route.endsWith('/stop')),
+      [submitted[0], submitted[0], submitted[1]].map(
+        (key) => `POST /api/v1/execution/device/sessions/${key}/stop`,
+      ),
+    );
+  } finally {
+    await runtime.shutdown();
+    await fixture.close();
+  }
+});
+
+test('live release stays unknown while an unacknowledged create is absent', async () => {
+  const fixture = await startRevylFixtureBackend({
+    sessionExistsOnceStarted: true,
+    respond: { 'POST /api/v1/execution/start_device': { status: 503 } },
+  });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const submitted: string[] = [];
+  const rented: string[] = [];
+  try {
+    await assert.rejects(
+      runtime.leaseLifecycle.allocate!(lease, {
+        rental: {
+          beforeCreate: (key) => submitted.push(key),
+          rented: (id) => rented.push(id),
+        },
+      }),
+    );
+    assert.equal(submitted.length, 1);
+    assert.deepEqual(rented, []);
+    assert.equal((await runtime.leaseLifecycle.release!(lease))?.release, 'unknown');
+    const stopPath = `POST /api/v1/execution/device/sessions/${submitted[0]}/stop`;
+    assert.deepEqual(
+      fixture.paths().filter((route) => route.endsWith('/stop')),
+      [stopPath, stopPath],
+    );
+  } finally {
     await fixture.close();
   }
 });

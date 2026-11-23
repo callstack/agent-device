@@ -24,6 +24,10 @@ export async function startRentalDaemon(
   stateDir: string,
   phase: string,
   reportRecovery: (result: unknown) => void,
+  overrides?: Pick<
+    Partial<Awaited<ReturnType<typeof createDaemonRuntimeDeps>>>,
+    'leaseLifecycleProvider' | 'recoverExpiredLease' | 'providerRentalPolicy'
+  >,
 ) {
   const otherCredentials = phase === 'recover-other-credentials';
   const fakeProviderState = path.join(
@@ -90,6 +94,7 @@ export async function startRentalDaemon(
             return true;
           },
         },
+        ...overrides,
       };
     },
     stderr: { write: () => {} },

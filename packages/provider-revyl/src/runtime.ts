@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   DeviceInventoryProvider,
   DeviceLease,
@@ -270,12 +271,14 @@ function createRevylLeaseDriver(
 ): ProviderLeaseDriver<RevylSession, RevylRentedSession, RevylLeaseRequest> {
   /** The idle-clock refresh of each ready session, by session id, ended before its `/stop`. */
   const keepAlives = new Map<string, () => void>();
+  const submittedKeys = new WeakMap<DeviceLease, string>();
   return {
     startTimeoutMs: REVYL_ALLOCATION_TIMEOUT_MS,
     // Wait for `start_device` to name its session before attempting live release. An earlier stop can
     // report "already gone" while the start is still in progress.
     start: async (lease, { selection, rental }, control) => {
       const started = await startRevylSession(client, lease, {
+        sessionId: rental ? randomUUID() : revylSessionIdForLease(lease.leaseId),
         platform: selection.platform,
         appUrl: selection.appUrl,
         deviceModel: selection.deviceModel,
@@ -283,7 +286,12 @@ function createRevylLeaseDriver(
         // The table aborts this once no caller waits or the lease is ending; Revyl bounds `start_device`
         // and readiness with its own budgets, which `REVYL_ALLOCATION_TIMEOUT_MS` covers.
         signal: control.signal,
-        beforeCreate: rental?.beforeCreate,
+        beforeCreate:
+          rental &&
+          ((sessionId) => {
+            rental.beforeCreate(sessionId);
+            submittedKeys.set(lease, sessionId);
+          }),
         onRented: (rented) => {
           control.rented(rented);
           rental?.rented(rented.sessionId);
@@ -292,7 +300,11 @@ function createRevylLeaseDriver(
       if (started.status === 'failed') return started;
       const { runId, sessionId } = started.session;
       keepAlives.set(sessionId, keepRevylSessionAlive(client, runId));
-      return { status: 'ready', session: started.session, handle: { runId, sessionId } };
+      return {
+        status: 'ready',
+        session: started.session,
+        handle: { runId, sessionId, state: 'confirmed' },
+      };
     },
     stop: async (handle) => {
       keepAlives.get(handle.sessionId)?.();
@@ -300,12 +312,14 @@ function createRevylLeaseDriver(
       try {
         await stopRevylSession(client, handle.sessionId);
       } catch (error) {
-        // Revyl answers a session it no longer has as gone: that device is not rented.
-        if (!isRevylSessionGone(error)) throw error;
+        if (handle.state === 'submitted' || !isRevylSessionGone(error)) throw error;
       }
     },
     handleKey: (handle) => handle.sessionId,
-    findByLease: async (lease) => ({ sessionId: revylSessionIdForLease(lease.leaseId) }),
+    findByLease: async (lease) => ({
+      sessionId: revylSessionIdForLease(lease.leaseId),
+      state: 'legacy',
+    }),
     shuttingDown: (lease) => shuttingDownDuring(lease.leaseId, 'allocate'),
     releasing: (lease) =>
       new AppError('COMMAND_FAILED', `Revyl lease ${lease.leaseId} is being released.`, {
@@ -318,7 +332,7 @@ function createRevylLeaseDriver(
         revylLeasePlatform(lease),
         caller,
         budgetMs,
-        rented?.sessionId ?? revylSessionIdForLease(lease.leaseId),
+        rented?.sessionId ?? submittedKeys.get(lease) ?? revylSessionIdForLease(lease.leaseId),
       ),
     cleanupPending: (unconfirmed, scope, cause) =>
       revylCleanupPending(

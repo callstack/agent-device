@@ -304,6 +304,7 @@ async function startDaemonRuntimeOnHost(
   const providerRentals = createProviderRentalJournal(
     baseDir,
     deps.requestRouter.providerCredentials,
+    deps.providerRentalPolicy,
   );
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
@@ -320,6 +321,7 @@ async function startDaemonRuntimeOnHost(
     onReleased: (lease) => {
       if (leaseRegistry.confirmLeaseEnd(lease.leaseId, 'providerReleased'))
         leaseSessionEnd.forgetClosing(lease.leaseId);
+      return !leaseRegistry.isProviderRentalRetirementPending(lease.leaseId);
     },
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
   });
@@ -797,8 +799,7 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
     clearInterval(leaseExpirySweep);
     stopMetadataLossWatch();
-    // Cancellation and the listener close run together: a connection held by a request that ignores
-    // cancellation is force-closed at the same budget the drain gives it.
+    // Close uncooperative connections within the request drain budget.
     const serversClosed = closeDaemonServers(servers, requestDrainTimeoutMs);
     if (closeOptions.cause) await emitFatalDiagnostic(closeOptions.cause);
     const requests = await drainInFlightRequests();
@@ -929,6 +930,7 @@ async function startDaemonRuntimeOnHost(
       report = await closeSteps(closeOptions);
       return report;
     } finally {
+      expiredProviderLeaseReleaser.shutdown();
       await Promise.allSettled([
         settleWithin(async () => await releasePngWorker(), DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
         Promise.resolve().then(() => pluginClose.close()),
@@ -953,8 +955,6 @@ async function startDaemonRuntimeOnHost(
     }
   };
 
-  // Idle reap, external callers and the executable's signal handlers all close through here, and
-  // none of them runs inside the startup scope, so the close re-enters it.
   let closing: Promise<ShutdownReport> | undefined;
   let settleClosed: { resolve(report: ShutdownReport): void; reject(error: unknown): void };
   const closed = new Promise<ShutdownReport>((resolve, reject) => {

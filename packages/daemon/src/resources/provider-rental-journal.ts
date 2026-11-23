@@ -7,6 +7,7 @@ import type {
   ProviderRentalIdentity,
 } from '@agent-device/contracts/device';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
+import { normalizeLeaseId } from '@agent-device/contracts/lease-scope';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { publishDurableFileSync } from '@agent-device/host-kit/file';
 import { readLeaseBackend } from '@agent-device/kernel/contracts';
@@ -15,7 +16,14 @@ import { deviceLeaseBusyError } from './lease-registry-scope.ts';
 type Rental = {
   lease: DeviceLease;
   credentialFingerprint?: string;
+  runtimeIdentity?: string;
+  legacyLeaseId?: string;
   releaseOnRestart: ProviderRentalIdentity;
+};
+
+export type ProviderRentalPolicy = (provider: string) => {
+  runtimeIdentity?: string;
+  legacyRecovery: boolean;
 };
 
 export type ProviderRentalJournal = ReturnType<typeof createProviderRentalJournal>;
@@ -23,9 +31,11 @@ export type ProviderRentalJournal = ReturnType<typeof createProviderRentalJourna
 export function createProviderRentalJournal(
   stateDir: string,
   credentials: DaemonProviderCredentials | undefined,
+  policy?: ProviderRentalPolicy,
 ) {
   const destination = path.join(stateDir, 'provider-rentals.json');
   let entries = new Map<string, Rental>();
+  const unrecordedInstances = new Map<string, string>();
   let closed = false;
 
   const write = (updated: Map<string, Rental>): void => {
@@ -39,6 +49,8 @@ export function createProviderRentalJournal(
 
   const fingerprint = (lease: DeviceLease) =>
     lease.leaseProvider && credentials?.fingerprint(lease.leaseProvider, lease.backend);
+  const policyFor = (lease: DeviceLease) =>
+    lease.leaseProvider ? policy?.(lease.leaseProvider) : undefined;
   const idFor = (lease: DeviceLease): string =>
     entries.has(lease.leaseId) ? lease.leaseId : rentalId(lease.leaseId);
 
@@ -70,6 +82,22 @@ export function createProviderRentalJournal(
     });
   };
 
+  const persistPendingInstance = (lease: DeviceLease): void => {
+    const id = idFor(lease);
+    const instanceId = unrecordedInstances.get(id);
+    if (instanceId === undefined) return;
+    recordInstance(lease, instanceId);
+    unrecordedInstances.delete(id);
+  };
+  const retryPendingInstance = (lease: DeviceLease): void => {
+    if (closed) return;
+    try {
+      persistPendingInstance(lease);
+    } catch (error) {
+      reportFailure(lease, error);
+    }
+  };
+
   return {
     restore: () => {
       let contents: string;
@@ -92,8 +120,12 @@ export function createProviderRentalJournal(
     path: destination,
     inheritedLeases: () => [...entries.values()].map(({ lease }) => lease),
     identity: (lease: DeviceLease) => entries.get(idFor(lease))?.releaseOnRestart,
+    legacyLeaseId: (lease: DeviceLease) => entries.get(idFor(lease))?.legacyLeaseId,
     canUseCredentials: (lease: DeviceLease) => {
-      const recorded = entries.get(idFor(lease))?.credentialFingerprint;
+      const entry = entries.get(idFor(lease));
+      const runtimeIdentity = policyFor(lease)?.runtimeIdentity;
+      if (entry?.runtimeIdentity !== runtimeIdentity) return false;
+      const recorded = entry?.credentialFingerprint;
       return recorded === undefined || recorded === fingerprint(lease);
     },
     assertLeaseIdAvailable: (leaseId: string) => {
@@ -104,55 +136,48 @@ export function createProviderRentalJournal(
     reserve: (lease: DeviceLease) => {
       if (closed) throw new Error('Provider rental journal is closed.');
       const id = rentalId(lease.leaseId);
-      const {
-        backend,
-        deviceKey,
-        leaseProvider,
-        tenantId,
-        runId,
-        createdAt,
-        heartbeatAt,
-        expiresAt,
-      } = lease;
+      const recovery = policyFor(lease);
+      const { clientId, retainOnClose, ...scope } = lease;
       update(lease, (updated) =>
         updated.set(id, {
           lease: {
+            ...scope,
             leaseId: id,
-            backend,
-            deviceKey,
-            leaseProvider,
-            tenantId,
-            runId,
-            createdAt,
-            heartbeatAt,
-            expiresAt,
+            ...(recovery?.legacyRecovery ? { clientId, retainOnClose } : {}),
           },
           credentialFingerprint: fingerprint(lease),
+          runtimeIdentity: recovery?.runtimeIdentity,
+          legacyLeaseId: recovery?.legacyRecovery ? lease.leaseId : undefined,
           releaseOnRestart: {},
         }),
       );
     },
     recordInstance,
+    persistPendingInstance,
+    retryPendingInstance,
     context: (lease: DeviceLease): LeaseLifecycleContext['rental'] => {
       if (!entries.has(idFor(lease))) return undefined;
       return {
         beforeCreate: (reconciliationKey) => record(lease, { reconciliationKey }),
         rented: (instanceId) => {
-          if (closed) return;
-          try {
-            recordInstance(lease, instanceId);
-          } catch (error) {
-            reportFailure(lease, error);
-          }
+          const id = idFor(lease);
+          if (closed || !entries.has(id)) return;
+          unrecordedInstances.set(id, instanceId);
+          retryPendingInstance(lease);
         },
       };
     },
-    confirmReleased: (lease: DeviceLease) => {
-      if (!entries.has(idFor(lease))) return;
+    confirmReleased: (lease: DeviceLease): boolean => {
+      if (!entries.has(idFor(lease))) return true;
+      if (closed) return false;
+      const id = idFor(lease);
       try {
         update(lease, (updated, id) => updated.delete(id));
+        unrecordedInstances.delete(id);
+        return true;
       } catch (error) {
         reportFailure(lease, error);
+        return false;
       }
     },
     close: () => {
@@ -172,6 +197,11 @@ function isRental(value: unknown): value is Rental {
     isRentalScope(entry.lease) &&
     (entry.credentialFingerprint === undefined ||
       typeof entry.credentialFingerprint === 'string') &&
+    (entry.runtimeIdentity === undefined || typeof entry.runtimeIdentity === 'string') &&
+    (entry.legacyLeaseId === undefined ||
+      (typeof entry.legacyLeaseId === 'string' &&
+        normalizeLeaseId(entry.legacyLeaseId) === entry.legacyLeaseId &&
+        rentalId(entry.legacyLeaseId) === entry.lease?.leaseId)) &&
     isRentalIdentity(entry.releaseOnRestart)
   );
 }

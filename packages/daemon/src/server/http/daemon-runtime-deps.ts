@@ -15,6 +15,7 @@ import type { InteractorResolution } from '../../core/interactor-resolution.ts';
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
 import type { ProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
 import type { RequestRouterDeps } from '../request-router.ts';
+import type { ProviderRentalPolicy } from '../../resources/provider-rental-journal.ts';
 
 /**
  * Every capability the daemon runtime cannot construct for itself: the platform and provider
@@ -54,6 +55,7 @@ export type DaemonRuntimeDeps = Readonly<{
   providerRuntimeIds: readonly string[];
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   recoverableProviderIds: readonly string[];
+  providerRentalPolicy?: ProviderRentalPolicy;
   /** The runtime gateway every lifecycle and recovery step in this server runs through. */
   deviceRuntimeGateway: RequestRouterDeps['deviceRuntimeGateway'];
   /** The resource-cleanup surface the session teardowns run through. */

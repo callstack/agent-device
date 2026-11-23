@@ -26,6 +26,7 @@ export const DEVICE_LEASE_REASONS = {
   busy: { reason: 'DEVICE_LEASE_BUSY' },
   // The lease is ending and its local session cleanup is still pending.
   sessionCleanupPending: { reason: 'session-cleanup-pending' },
+  rentalRetirementPending: { reason: 'provider-rental-retirement-pending' },
 } as const satisfies ReasonTable<'leases'>;
 
 export type LeaseRegistryOptions = {
@@ -33,7 +34,8 @@ export type LeaseRegistryOptions = {
     assertLeaseIdAvailable: (leaseId: string) => void;
     reserve: (lease: DeviceLease) => void;
     context: (lease: DeviceLease) => LeaseLifecycleContext['rental'];
-    confirmReleased: (lease: DeviceLease) => void;
+    persistPendingInstance: (lease: DeviceLease) => void;
+    confirmReleased: (lease: DeviceLease) => boolean;
   };
   maxActiveSimulatorLeases?: number;
   defaultLeaseTtlMs?: number;

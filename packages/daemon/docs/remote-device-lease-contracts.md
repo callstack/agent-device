@@ -45,6 +45,9 @@ The journal keeps a lease fingerprint, any provider reconciliation key, and the 
 The daemon reads the rental journal and the legacy live and pending journals after it holds daemon registration.
 Allocation, session commands, and host lease PUT wait for startup recovery to restore the reservations.
 A provider can settle an inherited rental by confirming release or proving absence.
+Revyl uses a fresh session ID for each journaled create, even if a later lease reuses the public lease ID.
+Revyl keeps the lease fenced if a stop reports absence before the provider confirms the instance.
+If journal retirement fails after confirmed release, the daemon keeps the reservation and retries retirement.
 An empty lookup can race a create and leave the reservation as `releaseStatus: unknown`.
 Use the journal and daemon diagnostics to identify a rental for provider-side reconciliation.
 The live session store starts empty. The controller must connect again.

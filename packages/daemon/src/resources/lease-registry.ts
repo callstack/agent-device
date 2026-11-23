@@ -59,7 +59,7 @@ const LEASE_REGISTRY_REASONS = {
 type LeaseEnd = {
   lease: DeviceLease;
   sessionsSettled: boolean;
-  providerRelease: 'pending' | 'confirmed';
+  providerRelease: 'pending' | 'retiring' | 'confirmed';
   claimReleaseUnknown?: true;
   providerReleaseUnknown?: ReleaseUnknownReason;
   providerEnded?: true;
@@ -78,7 +78,13 @@ function leaseEndBusyError(end: LeaseEnd, lease?: DeviceLease): AppError {
   const reason = releaseReason(end);
   return reason
     ? deviceLeaseBusyError(lease, reason)
-    : deviceLeaseBusyError(lease, undefined, DEVICE_LEASE_REASONS.sessionCleanupPending.reason);
+    : deviceLeaseBusyError(
+        lease,
+        undefined,
+        end.providerRelease === 'retiring'
+          ? DEVICE_LEASE_REASONS.rentalRetirementPending.reason
+          : DEVICE_LEASE_REASONS.sessionCleanupPending.reason,
+      );
 }
 
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
@@ -138,12 +144,12 @@ export class LeaseRegistry {
     const requestedLease = this.refreshRequestedLease(chosenLeaseId, normalized, leaseTtlMs);
     if (requestedLease) return requestedLease;
     this.assertNoEndingLease(chosenLeaseId);
-    if (chosenLeaseId) this.providerRentals?.assertLeaseIdAvailable(chosenLeaseId);
     if (chosenLeaseId && this.issuedLeaseIds.has(chosenLeaseId)) {
       throw new AppError('INVALID_ARGS', 'Lease id already names a lease this daemon issued.', {
         reason: LEASE_REGISTRY_REASONS.idInUse.reason,
       });
     }
+    if (chosenLeaseId) this.providerRentals?.assertLeaseIdAvailable(chosenLeaseId);
     this.assertHumanControlAdmission(normalized);
     this.assertDeviceAvailable(normalized);
     this.assertNoRunBindingLease(normalized);
@@ -349,13 +355,17 @@ export class LeaseRegistry {
     return this.providerRentals?.context(lease);
   }
 
+  persistProviderRentalInstance(lease: DeviceLease): void {
+    this.providerRentals?.persistPendingInstance(lease);
+  }
+
   finishProviderAllocation(leaseId: string): void {
     this.allocating.delete(leaseId);
   }
 
   joinProviderRelease(leaseId: string, release: () => Promise<ProviderLeaseRelease>) {
     const end = this.ending.get(leaseId);
-    if (!end || end.providerRelease === 'confirmed')
+    if (!end || end.providerRelease !== 'pending')
       return Promise.resolve<ProviderLeaseRelease>({ release: 'confirmed' });
     return (end.releaseAttempt ??= Promise.resolve()
       .then(release)
@@ -374,7 +384,7 @@ export class LeaseRegistry {
 
   pendingRequestedLeaseEnds(): DeviceLease[] {
     return [...this.ending.values()]
-      .filter((end) => end.requestRelease && end.providerRelease === 'pending')
+      .filter((end) => end.requestRelease && end.providerRelease !== 'confirmed')
       .map(({ lease }) => lease);
   }
 
@@ -884,6 +894,15 @@ export class LeaseRegistry {
     return this.ending.get(leaseId)?.providerRelease === 'pending';
   }
 
+  isProviderRentalRetirementPending(leaseId: string): boolean {
+    return this.ending.get(leaseId)?.providerRelease === 'retiring';
+  }
+
+  confirmRequestProviderRelease(lease: DeviceLease): void {
+    this.confirmLeaseEnd(lease.leaseId, 'providerReleased');
+    if (this.isProviderRentalRetirementPending(lease.leaseId)) this.retryProviderLeaseEnd(lease);
+  }
+
   leaseEndRefusal(leaseId: string): AppError | undefined {
     const end = this.ending.get(leaseId);
     return end && leaseEndBusyError(end);
@@ -893,7 +912,10 @@ export class LeaseRegistry {
     const end = this.ending.get(leaseId);
     if (!end) return true;
     if (part === 'providerReleased') {
-      this.providerRentals?.confirmReleased(end.lease);
+      if (this.providerRentals?.confirmReleased(end.lease) === false) {
+        end.providerRelease = 'retiring';
+        return false;
+      }
       end.providerRelease = 'confirmed';
       this.reportProviderLeases(end.lease);
     } else {

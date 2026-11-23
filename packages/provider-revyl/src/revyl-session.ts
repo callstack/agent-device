@@ -2,7 +2,7 @@ import { AppError, REQUEST_CANCELED_REASONS, type ReasonTable } from '@agent-dev
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { buildRevylDevice, revylSessionIdForLease, type RevylPlatform } from './device.ts';
+import { buildRevylDevice, type RevylPlatform } from './device.ts';
 import {
   REVYL_START_DEVICE_TIMEOUT_MS,
   isRevylSessionGone,
@@ -83,6 +83,7 @@ export type RevylSession = Readonly<{
 }>;
 
 export type RevylStartRequestInput = Readonly<{
+  sessionId: string;
   platform: RevylPlatform;
   appUrl: string | undefined;
   deviceModel: string | undefined;
@@ -106,7 +107,11 @@ export type RevylCallerBudget = Readonly<{ signal?: AbortSignal; deadline?: numb
  * it. `sessionId` is always the id the backend was told, or the one it answered with, so the end always
  * addresses what Revyl actually holds.
  */
-export type RevylRentedSession = Readonly<{ runId?: string; sessionId: string }>;
+export type RevylRentedSession = Readonly<{
+  runId?: string;
+  sessionId: string;
+  state: 'submitted' | 'confirmed' | 'legacy';
+}>;
 
 /**
  * What one start amounted to. A start either hands over a ready device, or fails and says whether it left
@@ -131,13 +136,15 @@ export async function startRevylSession(
   lease: DeviceLease,
   input: RevylStartRequestInput,
 ): Promise<RevylStart> {
-  // The runtime issues the session id rather than reading it back, so a session this lease started
-  // can be ended from the lease alone — including from a process that never started it.
-  const sessionId = revylSessionIdForLease(lease.leaseId);
+  const { sessionId } = input;
   // Nothing has been sent yet, so nothing is rented: this caller is answered with its own cancellation and
   // the entry closes without asking Revyl for a session it never made.
   if (input.signal?.aborted) return { status: 'failed', error: startCanceled(input) };
-  input.beforeCreate?.(sessionId);
+  try {
+    input.beforeCreate?.(sessionId);
+  } catch (error) {
+    return { status: 'failed', error };
+  }
   let started: RevylStartDeviceResponse;
   try {
     started = await submitRevylStart(client, input, sessionId);
@@ -147,7 +154,7 @@ export async function startRevylSession(
     return {
       status: 'failed',
       error,
-      ...(startMayHaveRented(error) ? { rented: { sessionId } } : {}),
+      ...(startMayHaveRented(error) ? { rented: { sessionId, state: 'submitted' } } : {}),
     };
   }
   const accepted = readRevylStartResponse(started, sessionId, input);
@@ -158,13 +165,13 @@ export async function startRevylSession(
   if (input.signal?.aborted) {
     return {
       status: 'failed',
-      rented: { runId, sessionId },
+      rented: { runId, sessionId, state: 'confirmed' },
       error: startCanceled(input),
     };
   }
   const deadline = readinessDeadline(input);
   try {
-    const health = await awaitRevylDeviceReady(client, runId, deadline, { ...input, sessionId });
+    const health = await awaitRevylDeviceReady(client, runId, deadline, input);
     return {
       status: 'ready',
       session: {
@@ -181,7 +188,7 @@ export async function startRevylSession(
       },
     };
   } catch (error) {
-    return { status: 'failed', error, rented: { runId, sessionId } };
+    return { status: 'failed', error, rented: { runId, sessionId, state: 'confirmed' } };
   }
 }
 
@@ -193,15 +200,13 @@ function readRevylStartResponse(
   const runId = typeof started.workflow_run_id === 'string' ? started.workflow_run_id : undefined;
   const echoed =
     typeof started.session_id === 'string' && started.session_id ? started.session_id : undefined;
-  if (runId || echoed) input.onRented?.({ runId, sessionId: echoed ?? sessionId });
+  if (runId || echoed)
+    input.onRented?.({ runId, sessionId: echoed ?? sessionId, state: 'confirmed' });
   if (runId && echoed && echoed !== sessionId) {
-    // Every later stop addresses the session by the id the runtime issued, and an expired-lease
-    // recovery in another process derives that same id from the lease. A backend that kept its own
-    // identity therefore has to be refused, and the id it named is the only handle that still names
-    // the device: that is what `rented` reports, and what the failure names.
+    // If Revyl kept a different identity, its answer is the release target.
     return {
       status: 'failed',
-      rented: { runId, sessionId: echoed },
+      rented: { runId, sessionId: echoed, state: 'confirmed' },
       error: new AppError(
         'COMMAND_FAILED',
         `Revyl started the device as session ${echoed} instead of ${sessionId}.`,
@@ -219,7 +224,7 @@ function readRevylStartResponse(
     // when it kept its own, so the end addresses the session the backend actually holds.
     return {
       status: 'failed',
-      rented: { sessionId: echoed ?? sessionId },
+      rented: { sessionId: echoed ?? sessionId, state: echoed ? 'confirmed' : 'submitted' },
       error: new AppError(
         'COMMAND_FAILED',
         `Revyl did not start a ${input.platform} device: ${started.error ?? started.message ?? 'no workflow run was returned'}`,
@@ -320,7 +325,8 @@ function startMayHaveRented(error: unknown): boolean {
 }
 
 /** A rented session whose `/stop` Revyl did not confirm, and why. */
-export type RevylUnconfirmedStop = RevylRentedSession & Readonly<{ failure: string }>;
+export type RevylUnconfirmedStop = Pick<RevylRentedSession, 'runId' | 'sessionId'> &
+  Readonly<{ failure: string }>;
 
 /**
  * The one report for Revyl sessions that are still rented because their stop was not confirmed. The ids
@@ -356,7 +362,6 @@ export function revylCleanupPending(
 }
 
 /** The start request once its session id is issued, which every readiness failure names. */
-type RevylReadyInput = RevylStartRequestInput & Readonly<{ sessionId: string }>;
 
 /** The readiness budget: the instant it runs out, and how much of it the caller was given. */
 type RevylDeadline = Readonly<{ at: number; budgetMs: number }>;
@@ -374,7 +379,7 @@ async function awaitRevylDeviceReady(
   client: RevylClient,
   runId: string,
   deadline: RevylDeadline,
-  input: RevylReadyInput,
+  input: RevylStartRequestInput,
 ): Promise<RevylWorkerHealth> {
   await untilRevylWorkerReady(client, runId, deadline, input);
   for (;;) {
@@ -395,7 +400,7 @@ async function readWorkerHealth(
   client: RevylClient,
   runId: string,
   deadline: RevylDeadline,
-  input: RevylReadyInput,
+  input: RevylStartRequestInput,
 ): Promise<RevylWorkerHealth> {
   try {
     return await runWithinDeadline(
@@ -417,7 +422,7 @@ async function readWorkerHealth(
 async function runWithinDeadline<T>(
   poll: () => Promise<T>,
   deadline: RevylDeadline,
-  input: RevylReadyInput,
+  input: RevylStartRequestInput,
 ): Promise<T> {
   try {
     return await poll();
@@ -441,7 +446,7 @@ async function untilRevylWorkerReady(
   client: RevylClient,
   runId: string,
   deadline: RevylDeadline,
-  input: RevylReadyInput,
+  input: RevylStartRequestInput,
 ): Promise<void> {
   for (;;) {
     requireTime(deadline, input);
@@ -483,7 +488,7 @@ async function readWorkerConnection(
   client: RevylClient,
   runId: string,
   deadline: RevylDeadline,
-  input: RevylReadyInput,
+  input: RevylStartRequestInput,
 ): Promise<RevylWorkerConnection | undefined> {
   try {
     return await runWithinDeadline(
@@ -499,7 +504,7 @@ async function readWorkerConnection(
 }
 
 /** Fails the moment the readiness budget is spent, whatever a poll that was already sent answers. */
-function requireTime(deadline: RevylDeadline, input: RevylReadyInput): void {
+function requireTime(deadline: RevylDeadline, input: RevylStartRequestInput): void {
   if (Date.now() < deadline.at) return;
   // The budget is the caller's deadline when it is shorter, so the number named has to be the one that
   // actually ran out.
@@ -507,7 +512,7 @@ function requireTime(deadline: RevylDeadline, input: RevylReadyInput): void {
 }
 
 /** The remaining readiness budget, so a poll that outlives it is canceled rather than awaited. */
-function pollSignal(deadline: RevylDeadline, input: RevylReadyInput): AbortSignal {
+function pollSignal(deadline: RevylDeadline, input: RevylStartRequestInput): AbortSignal {
   const remaining = AbortSignal.timeout(Math.max(0, deadline.at - Date.now()));
   return input.signal === undefined ? remaining : AbortSignal.any([input.signal, remaining]);
 }
