@@ -200,7 +200,7 @@ function settingsFacts(device: DeviceInfo) {
       return settingsRuntimeOperationFacts({
         target: available,
         unsupported,
-        write: { 'clear-app-state': available, 'keep-awake': available },
+        write: { 'clear-app-state': available },
       });
     case 'apple':
       break;

@@ -145,7 +145,7 @@ test.each([
     expect(binding.operations[operation]).toBeUndefined();
   }
   expect(runtimeSubjectFact(facts.operations.setSetting, 'clear-app-state').available).toBe(true);
-  expect(runtimeSubjectFact(facts.operations.setSetting, 'keep-awake').available).toBe(true);
+  expect(runtimeSubjectFact(facts.operations.setSetting, 'keep-awake').available).toBe(false);
   expect(runtimeSubjectFact(facts.operations.setSetting, 'wifi').available).toBe(false);
   expect(binding.operations.setSetting).toBeTypeOf('function');
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
