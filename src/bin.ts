@@ -9,6 +9,8 @@ const host = captureHostEnvironment(process);
 runEntry(
   process.argv.slice(2),
   {
+    rootHelp: async () =>
+      (await import('./commands/schema/cli-help-overview.ts')).renderCliHelpOverview(),
     help: () => import('./commands/schema/cli-help.ts'),
     cli: async () => {
       const { runCliProcess } = await import('./cli/process-entry.ts');
