@@ -23,9 +23,11 @@ import {
   type TouchReferenceFrame,
 } from '@agent-device/capture-kit/touch-reference-frame';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
+import { pointInsideRect } from '@agent-device/kernel/rect-center';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { assertTapTargetClearOfVisibleKeyboard } from '@agent-device/selectors/keyboard-occlusion';
 
 export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_RUNTIME_ADAPTER_POLICY.observationPollMs;
 export type DaemonMaestroRuntimeDependencies = {
@@ -88,6 +90,7 @@ export function resolveTypedMaestroTarget(params: {
   readonly context: MaestroRuntimeReadContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
+  readonly reusedObservation?: boolean;
 }): MaestroTargetMatch {
   return resolveTargetFromSnapshot({
     ...params,
@@ -98,11 +101,13 @@ export function resolveTypedMaestroTarget(params: {
 function resolveTargetFromSnapshot(params: {
   readonly query: MaestroSnapshotTargetQuery & {
     readonly includeSurfaceSignature?: boolean;
+    readonly purpose?: MaestroTargetQuery['purpose'];
   };
   readonly context: MaestroRuntimeReadContext;
   readonly snapshot: SnapshotState;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   readonly mode: MaestroTargetResolutionMode;
+  readonly reusedObservation?: boolean;
 }): MaestroTargetMatch {
   const frame = getSnapshotReferenceFrame(params.snapshot);
   const presentation =
@@ -126,7 +131,7 @@ function resolveTargetFromSnapshot(params: {
         : undefined,
     },
   );
-  return targetMatchFromResolution(
+  const match = targetMatchFromResolution(
     resolution,
     params.snapshot,
     params.context.generation,
@@ -135,6 +140,23 @@ function resolveTargetFromSnapshot(params: {
     params.platform,
     params.mode,
   );
+  // A reused observation authorizes only the atomic route. Point dispatch must use a fresh capture.
+  if (
+    resolution.ok &&
+    params.platform === 'ios' &&
+    params.query.purpose === 'tap' &&
+    (!params.reusedObservation || match.dispatchSelector)
+  ) {
+    assertTapTargetClearOfVisibleKeyboard({
+      nodes: params.snapshot.nodes,
+      node: { ...resolution.node, rect: resolution.rect },
+      action: 'click',
+      label: 'Maestro tapOn target',
+      tapPoint: pointInsideRect(resolution.rect),
+      ...(params.snapshot.keyboard ? { keyboard: params.snapshot.keyboard } : {}),
+    });
+  }
+  return match;
 }
 
 export async function observeTypedMaestroCondition(params: {
