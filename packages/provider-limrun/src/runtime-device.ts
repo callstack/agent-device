@@ -7,7 +7,7 @@ export function isSupportedLimrunRuntimeDevice(device: DeviceInfo): boolean {
   if (!parsed || device.target !== 'mobile') return false;
   return parsed.platform === 'ios'
     ? device.platform === 'apple' &&
-        device.appleOs === 'ios' &&
+        (device.appleOs === 'ios' || device.appleOs === 'ipados' || device.appleOs === 'watchos') &&
         device.kind === 'simulator' &&
         device.iosPhysicalDeviceBackend === undefined
     : device.platform === 'android' &&

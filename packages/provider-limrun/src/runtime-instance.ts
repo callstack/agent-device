@@ -1,4 +1,5 @@
 import { providerRuntimeInstance } from '@agent-device/contracts/platform-runtime';
+import type { LimrunIosModel } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 
 /**
@@ -8,6 +9,7 @@ import type { LimrunInstanceAccess } from './instance-access.ts';
 export function resolveLimrunRuntimeInstance(options: {
   apiKey?: string;
   region?: string;
+  iosModel?: LimrunIosModel;
   runtimeInstance?: string;
   instances?: LimrunInstanceAccess;
 }): string {
@@ -19,6 +21,7 @@ export function resolveLimrunRuntimeInstance(options: {
   return providerRuntimeInstance('limrun', [
     ['region', options.region?.trim().toLowerCase() || 'default'],
     ['apiKey', options.apiKey],
+    ['iosModel', options.instances?.ios ? undefined : options.iosModel],
     ['attachedIos', options.instances?.ios?.apiUrl],
     ['attachedAndroid', options.instances?.android?.apiUrl],
   ]);

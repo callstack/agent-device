@@ -125,7 +125,7 @@ extension RunnerTests {
       )
     }
     let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
-#if os(iOS)
+#if os(iOS) || os(watchOS)
     // A managed XCTest host can override TMPDIR outside the app container.
     // The returned tmp/ path must resolve inside the runner's data container.
     let temporaryDirectory = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)

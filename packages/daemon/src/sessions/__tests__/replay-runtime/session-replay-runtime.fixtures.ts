@@ -50,8 +50,11 @@ export function baseReplayRequest(overrides: Partial<DaemonRequest> = {}): Daemo
 
 export function seedReplayFixtureSession(
   sessionStore: SessionStore,
-  platform: 'android' | 'ios' | undefined,
+  platform: 'android' | 'ios' | 'ipados' | undefined,
 ): void {
   if (platform === 'android') sessionStore.publish('s', makeAndroidSession('s'));
-  if (platform === 'ios') sessionStore.publish('s', makeIosSession('s'));
+  if (platform === 'ios' || platform === 'ipados') {
+    const session = makeIosSession('s');
+    sessionStore.publish('s', { ...session, device: { ...session.device, appleOs: platform } });
+  }
 }

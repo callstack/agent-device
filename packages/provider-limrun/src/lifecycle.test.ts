@@ -56,9 +56,6 @@ const OTHER_PROVIDER_FAMILIES = [
   { platform: 'web', target: 'desktop' },
 ] as const;
 
-// The direct Limrun provider only has two lifecycle dispatch cells: iOS-simulator/mobile and
-// Android-emulator/mobile. Every other canonical leaf/kind/provider shape is fact-only and fails
-// closed before a concrete provider binding is constructed.
 const LIMRUN_LIFECYCLE_DENOMINATOR = [
   ...DEVICE_KINDS.map((kind) => ({
     name: `Android ${kind} mobile`,
@@ -88,9 +85,11 @@ const LIMRUN_LIFECYCLE_DENOMINATOR = [
         booted: true,
       },
       expected:
-        appleOs === 'ios' && kind === 'simulator' && target === 'mobile'
+        (appleOs === 'ios' || appleOs === 'ipados') && kind === 'simulator' && target === 'mobile'
           ? LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL
-          : LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
+          : appleOs === 'watchos' && kind === 'simulator'
+            ? { ...LIMRUN_SUPPORTED_IOS_LIFECYCLE_CELL, runtimeHints: false }
+            : LIMRUN_UNSUPPORTED_LIFECYCLE_CELL,
     })),
   ),
   ...OTHER_PROVIDER_FAMILIES.flatMap(({ platform, target }) =>

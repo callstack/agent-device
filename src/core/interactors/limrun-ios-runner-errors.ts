@@ -30,9 +30,9 @@ const DEFAULT_HINTS: Readonly<Record<LimrunRunnerFailure, string>> = {
   xctestSlotOccupied:
     'Another XCTest run owns this simulator. Stop its agent-device or Appium session, wait for its run stream to close, then retry. If the previous client died and the slot stays occupied, recreate the Limrun instance.',
   launchFailed:
-    'Inspect runner.log and the Limrun XCTest stream. Use a simulator runner built for this instance’s Xcode and iOS runtime.',
+    'Inspect runner.log and the Limrun XCTest stream. Use a simulator runner built for this instance’s Xcode and simulator runtime.',
   productsInvalid:
-    'Set AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP to the simulator runner .app built for this instance’s Xcode and iOS runtime, or use a matching release runner.',
+    'Set AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP or AGENT_DEVICE_LIMRUN_WATCHOS_RUNNER_APP to the matching simulator runner .app built for this instance’s Xcode and simulator runtime, or use a matching release runner.',
   uploadFailed: 'Check the Limrun instance connection and retry preparing the runner.',
   bindAddressMissing:
     'The simulator must expose USE_IP for HTTP forwarding. Check the instance connection and simulator configuration.',

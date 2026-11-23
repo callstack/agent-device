@@ -6,7 +6,7 @@ import {
   unavailableFact,
   PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   awaitLimrunDeploymentOperation,
@@ -48,12 +48,11 @@ export function limrunAppDeploymentFacts(
     materializeAppSource: deployment,
     deployMaterializedApp: deployment,
     uninstallApp: deployment,
-    sendPushNotification:
-      device.platform === 'apple'
-        ? deployment
-        : sessionActive
-          ? pushUnavailable
-          : deploymentUnavailable,
+    sendPushNotification: isHandheldAppleSimulator(device)
+      ? deployment
+      : sessionActive
+        ? pushUnavailable
+        : deploymentUnavailable,
   });
 }
 
@@ -63,7 +62,8 @@ export function createLimrunAppDeploymentOperations(
   signal: AbortSignal,
   operationDrain?: LimrunRequestOperationDrain,
 ): Partial<PlatformRuntimeOperations> {
-  if (!limrunAppDeploymentFacts(options, device).deployApp.available) return {};
+  const facts = limrunAppDeploymentFacts(options, device);
+  if (!facts.deployApp.available) return {};
   const bind = options.bindDeployment!;
   const load = async () => {
     signal.throwIfAborted();
@@ -89,7 +89,7 @@ export function createLimrunAppDeploymentOperations(
     };
   };
   return {
-    ...(device.platform === 'apple'
+    ...(facts.sendPushNotification.available
       ? {
           sendPushNotification: async (
             input: import('@agent-device/contracts/app-deployment-runtime').PushNotificationInput,

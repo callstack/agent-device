@@ -26,7 +26,12 @@ import {
 } from './open-policy.ts';
 import type { LaunchObservationPort } from './snapshot-observability.ts';
 import type { LaunchConfirmationAttempt, LaunchConfirmationTarget } from './launch-confirmation.ts';
-import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isApplePlatform,
+  isHandheldAppleSimulator,
+  isIosFamily,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
 const POST_CLOSE_SETTLE_MS = 300;
@@ -617,7 +622,7 @@ function confirmableLaunchUrl(
   appBundleId: string | undefined,
   url: string,
 ): LaunchConfirmationTarget | undefined {
-  if (device.appleOs !== 'ios' || device.kind !== 'simulator') return undefined;
+  if (!isHandheldAppleSimulator(device)) return undefined;
   if (appBundleId === undefined || isWebUrl(url)) return undefined;
   return { url, appBundleId };
 }

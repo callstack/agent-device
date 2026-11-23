@@ -54,6 +54,7 @@ async function requestBody(request: IncomingMessage): Promise<Buffer | undefined
 
 export async function fixture(
   options: {
+    appleOs?: 'ios' | 'watchos';
     launchStatus?: number;
     holdLaunchErrorBody?: boolean;
     syncStatus?: number;
@@ -255,7 +256,7 @@ export async function fixture(
     device: {
       id: 'limrun:ios:test',
       platform: 'apple',
-      appleOs: 'ios',
+      appleOs: options.appleOs ?? 'ios',
       kind: 'simulator',
       name: 'Limrun iOS',
       booted: true,
@@ -300,7 +301,9 @@ export async function fixture(
   const host = {
     cwd: directory,
     env: {
-      AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP: app,
+      ...(options.appleOs === 'watchos'
+        ? { AGENT_DEVICE_LIMRUN_WATCHOS_RUNNER_APP: app }
+        : { AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP: app }),
       ...(options.idleMs === undefined
         ? {}
         : { AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS: String(options.idleMs) }),

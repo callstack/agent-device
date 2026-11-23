@@ -138,6 +138,7 @@ export function launchUrlSimulator(
     acceptAlert?: () => Promise<unknown>;
     resolveInteractor?: () => Promise<void>;
     owner?: () => Promise<string | undefined>;
+    device?: DeviceInfo;
   }> = {},
 ) {
   if (legs.owner) urlOwner.resolve = legs.owner;
@@ -174,7 +175,7 @@ export function launchUrlSimulator(
         },
       },
     },
-    device: simulator,
+    device: legs.device ?? simulator,
     signal: new AbortController().signal,
     observation: {
       awaitObservable: async () => {

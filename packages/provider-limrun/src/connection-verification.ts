@@ -1,8 +1,15 @@
 import Limrun from '@limrun/api';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
+import type { LimrunIosModel } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 import { limrunUserAgent } from './client-options.ts';
+
+const IOS_MODEL_NAMES: Record<LimrunIosModel, string> = {
+  iphone: 'Provider-selected iOS simulator',
+  ipad: 'iPad simulator',
+  watch: 'Apple Watch simulator',
+};
 
 export type LimrunConnectionVerification = ProviderConnectionVerification & {
   provider: 'limrun';
@@ -24,6 +31,7 @@ export type LimrunConnectionVerificationOptions = {
   instances?: LimrunInstanceAccess;
   platform: 'android' | 'ios';
   region?: string;
+  iosModel?: LimrunIosModel;
 };
 
 /** Verifies the instance access for the platform when given, otherwise the organization API key. */
@@ -67,14 +75,17 @@ export async function verifyLimrunConnection(
     );
   }
   const platformName = options.platform === 'android' ? 'Android' : 'iOS';
-  const deviceKind = options.platform === 'android' ? 'emulator' : 'simulator';
+  const deviceName =
+    options.platform === 'android'
+      ? 'Provider-selected Android emulator'
+      : IOS_MODEL_NAMES[options.iosModel ?? 'iphone'];
   return {
     provider: 'limrun',
     service: 'Limrun',
     verificationMessage: `Credentials and ${platformName} instance access verified.`,
     device: {
       status: 'deferred',
-      name: `Provider-selected ${platformName} ${deviceKind}`,
+      name: deviceName,
       platform: options.platform,
     },
     app: {
@@ -92,7 +103,7 @@ function readStatus(error: unknown): number | undefined {
 
 function connectAttachedInstance(
   options: LimrunConnectionVerificationOptions,
-): Promise<{ disconnect(): void }> | undefined {
+): Promise<{ disconnect(): void; deviceInfo?: { model?: string } }> | undefined {
   const clientOptions = { logLevel: 'none', maxReconnectAttempts: 0 } as const;
   const { ios, android } = options.instances ?? {};
   if (options.platform === 'android') {
@@ -118,8 +129,11 @@ async function verifyAttachedInstance(
   if (!connecting) return undefined;
   const android = options.platform === 'android';
   const platformName = android ? 'Android' : 'iOS';
+  let model: string | undefined;
   try {
-    (await connecting).disconnect();
+    const client = await connecting;
+    model = client.deviceInfo?.model;
+    client.disconnect();
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -138,7 +152,7 @@ async function verifyAttachedInstance(
     verificationMessage: `Existing ${platformName} instance access verified. A daemon started with these variables drives it without creating or deleting it.`,
     device: {
       status: 'verified',
-      name: `Existing ${platformName} ${android ? 'emulator' : 'simulator'}`,
+      name: model || `Existing ${platformName} ${android ? 'emulator' : 'simulator'}`,
       platform: options.platform,
     },
     app: {

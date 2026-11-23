@@ -1,9 +1,9 @@
 ---
 title: Limrun
-description: Drive Limrun iOS simulators and Android emulators with agent-device.
+description: Drive Limrun iOS and watchOS simulators and Android emulators with agent-device.
 ---
 
-Use Limrun to run agent-device on remote iOS simulators and Android emulators. You need a Limrun API key, or the URL and token of an instance someone else created. Limrun does not use local or physical-device selectors such as `--udid`, `--serial`, or `--device`.
+Use Limrun to run agent-device on remote iOS and watchOS simulators and Android emulators. You need a Limrun API key, or the URL and token of an instance someone else created. Limrun does not use local or physical-device selectors such as `--udid`, `--serial`, or `--device`.
 
 ## Set credentials and connect
 
@@ -41,7 +41,7 @@ An agent in a sandbox can drive an instance that someone else created, such as t
 
 | Platform | Environment variables |
 | --- | --- |
-| iOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
+| iOS or watchOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
 | Android | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
 
 The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon registers without Limrun, lists it as `failed` in `agent-device daemon status`, and records `provider_plugin_failed` in `daemon.log`.
@@ -128,6 +128,31 @@ Open your app before taking a snapshot. Snapshots target the app you opened in t
 `install` leaves your app stopped. Use `open` to launch it. To change launch arguments on an app that is already running, use `open --relaunch --launch-args`. Screenshots download as lossless PNG files, and recording downloads the finished MP4 when you stop it. Push notifications use the same command and payload format as local simulators.
 
 If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build's maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 27, because Limrun runs XCTest with Xcode 27. agent-device refuses a runner built with an older Xcode. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
+
+## Use an iPad simulator
+
+Set `LIMRUN_IOS_MODEL=ipad` before starting the daemon, then run `agent-device connect limrun --platform ios` and `agent-device boot`. In the Node.js SDK, pass `iosModel: 'ipad'`. For an existing iPad, set `LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN` before connecting. In both cases, `agent-device devices --json` reports `appleOs: "ipados"`. iPad uses the same simulator runner as iPhone.
+
+## Use an Apple Watch simulator
+
+Limrun provides Apple Watch simulators through its iOS instance API. With `LIMRUN_API_KEY` set, select the Watch model before starting the daemon. To try the built-in Settings app, run these commands.
+
+```bash
+export LIMRUN_IOS_MODEL=watch
+export AGENT_DEVICE_SESSION=watch
+agent-device connect limrun --platform ios
+agent-device boot
+agent-device open com.apple.NanoSettings
+agent-device snapshot -i
+agent-device scroll down
+agent-device screenshot ./watch.png
+agent-device close --shutdown
+agent-device disconnect
+```
+
+To drive an existing Watch, set `LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN` before connecting. The provider detects watchOS from the instance. An attached Watch stays running after you disconnect.
+
+For an unpublished build, set `AGENT_DEVICE_LIMRUN_WATCHOS_RUNNER_APP` to the watchsimulator XCTest runner `.app` built from the same checkout with Xcode 27. Stable releases with Watch support download the matching Watch runner automatically. In the Node.js SDK, pass `iosModel: 'watch'` when creating your Limrun runtime.
 
 ## Connect an iOS app to Metro
 

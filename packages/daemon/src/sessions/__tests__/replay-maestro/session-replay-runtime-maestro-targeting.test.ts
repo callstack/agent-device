@@ -103,51 +103,55 @@ test('runReplayCommand retries Maestro scrollUntilVisible with scroll probes', a
   );
 });
 
-test('runReplayCommand uses semantic iOS dispatch for an exact text tapOn', async () => {
-  const calls: CapturedInvocation[] = [];
-  const { response } = await runReplayFixture({
-    label: 'maestro-tap-visible-text-atomic-ios',
-    script: ['appId: demo.app', '---', '- tapOn: Article', ''].join('\n'),
-    flags: { replayBackend: 'maestro', platform: 'ios' },
-    invoke: async (req) => {
-      calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
-      if (req.command === 'snapshot') {
-        return {
-          ok: true,
-          data: {
-            nodes: [
-              {
-                index: 1,
-                type: 'XCUIElementTypeButton',
-                label: 'Article',
-                rect: { x: 40, y: 100, width: 120, height: 48 },
-                hittable: true,
-              },
-              {
-                index: 2,
-                parentIndex: 1,
-                type: 'XCUIElementTypeStaticText',
-                label: 'Article',
-                rect: { x: 76, y: 114, width: 48, height: 20 },
-                hittable: false,
-              },
-            ],
-          },
-        };
-      }
-      return { ok: true, data: {} };
-    },
-  });
+test.each(['ios', 'ipados'] as const)(
+  'runReplayCommand infers iOS dispatch for an exact text tapOn in an active %s session',
+  async (sessionPlatform) => {
+    const calls: CapturedInvocation[] = [];
+    const { response } = await runReplayFixture({
+      label: 'maestro-tap-visible-text-atomic-ios',
+      script: ['appId: demo.app', '---', '- tapOn: Article', ''].join('\n'),
+      flags: { replayBackend: 'maestro' },
+      sessionPlatform,
+      invoke: async (req) => {
+        calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
+        if (req.command === 'snapshot') {
+          return {
+            ok: true,
+            data: {
+              nodes: [
+                {
+                  index: 1,
+                  type: 'XCUIElementTypeButton',
+                  label: 'Article',
+                  rect: { x: 40, y: 100, width: 120, height: 48 },
+                  hittable: true,
+                },
+                {
+                  index: 2,
+                  parentIndex: 1,
+                  type: 'XCUIElementTypeStaticText',
+                  label: 'Article',
+                  rect: { x: 76, y: 114, width: 48, height: 20 },
+                  hittable: false,
+                },
+              ],
+            },
+          };
+        }
+        return { ok: true, data: {} };
+      },
+    });
 
-  assert.equal(response.ok, true);
-  assert.deepEqual(
-    calls.map((call) => [call.command, call.positionals]),
-    [
-      ['snapshot', []],
-      ['click', ['text="Article"']],
-    ],
-  );
-});
+    assert.equal(response.ok, true);
+    assert.deepEqual(
+      calls.map((call) => [call.command, call.positionals]),
+      [
+        ['snapshot', []],
+        ['click', ['text="Article"']],
+      ],
+    );
+  },
+);
 
 test('runReplayCommand uses matched Android id geometry for tapOn', async () => {
   const calls: CapturedInvocation[] = [];
