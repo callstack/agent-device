@@ -52,7 +52,10 @@ import {
   mockEnsureReadyRuntime,
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { SessionStore } from '../../../../core/session-store.ts';
-import { withFailedOpenLaunchCleanup } from '../session-open-launch-cleanup.ts';
+import {
+  openSeesDeviceHeldByOtherUnderClaimLock,
+  withFailedOpenLaunchCleanup,
+} from '../session-open-launch-cleanup.ts';
 import { makeSession } from '../../../../__tests__/support/session-factories.ts';
 import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
 import { deviceIdentity } from '@agent-device/kernel/device';
@@ -212,6 +215,63 @@ beforeEach(() => {
   mockEnsureReadyRuntime.mockResolvedValue(undefined);
   emitDiagnostic.mockClear();
   resetLaunchedProcessOwnerAnswers();
+});
+
+test('a cold open hands readiness the answer for who holds the device it is booting', async () => {
+  const runs = createRoutedSession();
+  // The boot runs before any session or claim of this open exists, so the only owner readiness can
+  // hear about is somebody else's (#4867).
+  runs.sessionStore.publish(
+    'other-holder',
+    makeSession('other-holder', { device: BOOTED_EMULATOR }),
+  );
+
+  await runs.runColdOpen({});
+
+  const input = mockEnsureReadyRuntime.mock.calls[0]?.[0];
+  await expect(input?.isAndroidEmulatorHeldByOther?.(BOOTED_EMULATOR)).resolves.toBe(true);
+  // A serial nobody holds is the other answer, so the stop is not blocked at large. A boot that never
+  // resolved a serial is never asked about: sessions and claims are keyed under the serial, so an AVD
+  // name could only ever answer "not held". Readiness keeps that launch itself, and the readiness suite
+  // pins that answer (#4867).
+  await expect(
+    input?.isAndroidEmulatorHeldByOther?.({ ...BOOTED_EMULATOR, id: 'emulator-5556' }),
+  ).resolves.toBe(false);
+});
+
+test('a claim being written for a booting device answers as ownership', async () => {
+  const runs = createRoutedSession();
+  // Somebody is recording a claim for this device right now, which is the same answer a claim that
+  // refuses this open gives; a boot may not stop the emulator that claim is for. The whole open would
+  // wait behind this lock for its own claim, so the readiness question is asked directly.
+  const release = await acquireProcessLock({
+    lockDirPath: deviceClaimLockPath(runs.claimsDir, BOOTED_EMULATOR),
+    owner: { pid: process.ppid, startTime: null, acquiredAtMs: Date.now() },
+    timeoutMs: 5_000,
+    description: 'test-held device claim lock',
+  });
+
+  try {
+    await expect(
+      openSeesDeviceHeldByOtherUnderClaimLock({
+        sessionStore: runs.sessionStore,
+        sessionName: SESSION,
+        workspace: process.cwd(),
+        device: BOOTED_EMULATOR,
+      }),
+    ).resolves.toBe(true);
+  } finally {
+    await release();
+  }
+
+  await expect(
+    openSeesDeviceHeldByOtherUnderClaimLock({
+      sessionStore: runs.sessionStore,
+      sessionName: SESSION,
+      workspace: process.cwd(),
+      device: BOOTED_EMULATOR,
+    }),
+  ).resolves.toBe(false);
 });
 
 test('a cold open whose later step fails stops the emulator it launched and keeps its own error', async () => {
