@@ -47,6 +47,7 @@ import {
   deleteLimrunInstance,
   LIMRUN_ORG_CLIENT_LOGGING,
   limrunUserAgent,
+  readLimrunTerminationReason,
   requireLimrunOrgClient,
 } from './client-options.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
@@ -76,7 +77,6 @@ const LIMRUN_RUNTIME_REASONS = {
   runtimeShutDown: { reason: 'limrun_runtime_shut_down' },
 } as const satisfies ReasonTable<'limrun provider'>;
 
-const HEARTBEAT_PROBE_BUDGET_MS = 2_000;
 const KEEP_ALIVE_INTERVAL_MS = 30_000;
 
 export type LimrunRuntimeOptions = {
@@ -965,42 +965,6 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
       hint: 'Start the daemon again to allocate a Limrun lease.',
     },
   );
-}
-
-/**
- * The termination reason of a created instance whose connection dropped, or `undefined` when the
- * instance is not terminated or the probe cannot tell. The budget only stops waiting, so the probe
- * aborts its own GET when the budget expires.
- */
-async function readLimrunTerminationReason(
-  limrun: Limrun,
-  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId' | 'token'>,
-  requestSignal: AbortSignal | undefined,
-): Promise<string | undefined> {
-  const expiry = new AbortController();
-  const signal = requestSignal ? AbortSignal.any([requestSignal, expiry.signal]) : expiry.signal;
-  try {
-    const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
-    const request =
-      session.platform === 'ios'
-        ? limrun.iosInstances.get(session.instanceId, { signal })
-        : limrun.androidInstances.get(session.instanceId, { signal });
-    const answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
-    if (!answer.ok) {
-      if ('expired' in answer) expiry.abort();
-      return undefined;
-    }
-    if (answer.value.status.state !== 'terminated') return undefined;
-    // The termination reason is the account API's own text, and this request carries the account key in
-    // its header, so it goes through the same reader as an instance's error body before it is published.
-    const { safeTerminationReason } = await import('./error-text.ts');
-    return safeTerminationReason(answer.value.status.terminationReason, [
-      limrun.apiKey ?? undefined,
-      session.token,
-    ]);
-  } catch {
-    return undefined;
-  }
 }
 
 export type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
