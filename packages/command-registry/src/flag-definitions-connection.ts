@@ -161,6 +161,27 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'reason',
+    names: ['--reason'],
+    type: 'string',
+    usageLabel: '--reason <text>',
+    usageDescription: 'Human-control hold reason a blocked agent sees (takeover hold)',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'ttlMs',
+    names: ['--ttl-ms'],
+    type: 'int',
+    min: 1000,
+    max: 86_400_000,
+    usageLabel: '--ttl-ms <ms>',
+    usageDescription:
+      'Human-control hold TTL in milliseconds, 1000 to 86400000 (takeover hold; default 60000)',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'provider',
     names: ['--provider'],
     type: 'string',

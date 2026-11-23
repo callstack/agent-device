@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '@agent-device/client';
 import {
+  renderTakeoverHold,
   renderTakeoverStarted,
   renderTakeoverStatus,
   takeoverCommand,
@@ -12,7 +13,9 @@ import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
 
 const mocks = vi.hoisted(() => ({ writeCommandOutput: vi.fn() }));
 vi.mock('../cli/commands/shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
-beforeEach(() => mocks.writeCommandOutput.mockReset());
+beforeEach(() => {
+  mocks.writeCommandOutput.mockReset();
+});
 afterEach(() => vi.useRealTimers());
 
 function createControlLatch() {
@@ -55,13 +58,13 @@ test('takeover status and release use the configured lease client', async () => 
   await takeoverCommand({
     host: createTestHostEnvironment(),
     client,
-    flags: TAKEOVER_CLI_FLAGS,
+    flags: { ...TAKEOVER_CLI_FLAGS, session: 'remote-session' },
     positionals: ['status'],
   });
   await takeoverCommand({
     host: createTestHostEnvironment(),
     client,
-    flags: TAKEOVER_CLI_FLAGS,
+    flags: { ...TAKEOVER_CLI_FLAGS, session: 'remote-session' },
     positionals: ['release', 'operator-1'],
   });
   assert.deepEqual(
@@ -141,4 +144,94 @@ test('a failed heartbeat stops foreground takeover and attempts release', async 
   await vi.advanceTimersByTimeAsync(5_000);
   await rejected;
   assert.equal(transport.mock.calls.at(-1)?.[0].positionals?.[0], 'remove');
+});
+
+test('takeover hold rides the admitted lease with the default TTL and reason', async () => {
+  const { client, transport } = clientForTest();
+  await takeoverCommand({
+    host: createTestHostEnvironment(),
+    client,
+    flags: { ...TAKEOVER_CLI_FLAGS, session: 'remote-session' },
+    positionals: ['hold'],
+  });
+  const [req] = transport.mock.calls[0]?.[0].positionals ?? [];
+  assert.equal(req, 'put');
+  const holdId = transport.mock.calls[0]?.[0].positionals?.[1] ?? '';
+  assert.match(String(holdId), /^takeover-/);
+  const input = JSON.parse(transport.mock.calls[0]?.[0].positionals?.[2] ?? '{}') as Record<
+    string,
+    unknown
+  >;
+  assert.equal(input.ttlMs, 60_000);
+  assert.equal(input.reason, 'A script outside agent-device is holding this device.');
+  assert.equal(input.scope, undefined);
+});
+
+test('takeover hold names a custom reason and TTL', async () => {
+  const { client, transport } = clientForTest();
+  await takeoverCommand({
+    host: createTestHostEnvironment(),
+    client,
+    flags: {
+      ...TAKEOVER_CLI_FLAGS,
+      session: 'remote-session',
+      reason: 'flashing the device',
+      ttlMs: 60000,
+    },
+    positionals: ['hold'],
+  });
+  const input = JSON.parse(transport.mock.calls[0]?.[0].positionals?.[2] ?? '{}') as Record<
+    string,
+    unknown
+  >;
+  assert.equal(input.reason, 'flashing the device');
+  assert.equal(input.ttlMs, 60000);
+});
+
+test('takeover hold rejects positional arguments', async () => {
+  const { client, transport } = clientForTest();
+  await assert.rejects(
+    takeoverCommand({
+      host: createTestHostEnvironment(),
+      client,
+      flags: { ...TAKEOVER_CLI_FLAGS },
+      positionals: ['hold', 'extra'],
+    }),
+    { code: 'INVALID_ARGS' },
+  );
+  assert.equal(transport.mock.calls.length, 0);
+});
+
+test('takeover release removes the hold through the lease client', async () => {
+  const { client, transport } = clientForTest();
+  await takeoverCommand({
+    host: createTestHostEnvironment(),
+    client,
+    flags: { ...TAKEOVER_CLI_FLAGS, session: 'remote-session' },
+    positionals: ['release', 'operator-1'],
+  });
+  assert.deepEqual(
+    transport.mock.calls.map(([req]) => req.positionals),
+    [['remove', 'operator-1']],
+  );
+});
+
+test('takeover hold output names the release command', () => {
+  assert.match(renderTakeoverHold(HUMAN_CONTROL_HOLD), /Human control active for ios:mobile:sim-1/);
+  assert.match(renderTakeoverHold(HUMAN_CONTROL_HOLD), /takeover release operator-1/);
+  assert.match(renderTakeoverHold(HUMAN_CONTROL_HOLD), /Hold: operator-1/);
+  assert.match(
+    renderTakeoverHold(HUMAN_CONTROL_HOLD, 'remote-session'),
+    /takeover release operator-1 --session remote-session/,
+  );
+  assert.ok(
+    renderTakeoverHold(HUMAN_CONTROL_HOLD, 'qa team').includes(
+      "Release with: agent-device takeover release operator-1 --session 'qa team'\n",
+    ),
+  );
+  assert.ok(
+    renderTakeoverHold(HUMAN_CONTROL_HOLD, '--json').includes(
+      'Release with: agent-device takeover release operator-1 --session=--json\n',
+    ),
+  );
 });

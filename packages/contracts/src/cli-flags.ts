@@ -49,6 +49,8 @@ export type CliFlags = CloudProviderProfileFields &
     runId?: string;
     leaseId?: string;
     leaseBackend?: LeaseBackend;
+    reason?: string;
+    ttlMs?: number;
     provider?: string;
     providerSessionId?: string;
     force?: boolean;

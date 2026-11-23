@@ -520,6 +520,9 @@ Human takeover of a leased remote device:
     agent-device takeover --session remote-session
     agent-device takeover status
     agent-device takeover release <hold-id>
+  A script holds the device of its admitted lease with takeover hold. The hold pauses device mutations served by that lease until the TTL passes or release removes it; reads and heartbeats keep working. The hold takes backend, provider and device identity only from the admitted lease. While it is active, device mutations and allocation from any device-scoped lease this daemon serves for that device refuse with DEVICE_IN_USE (human_control_active), and reads keep working.
+    agent-device takeover hold --session remote-session --reason "handing to QA" --ttl-ms 60000
+    agent-device takeover release <hold-id>
   An HTTP-mode daemon also accepts authenticated GET/PUT/DELETE requests at /admin/human-control/holds on its loopback listener. Host administrators supply the exact lease backend/provider/device key and use the local daemon token, not a tenant credential. This host-admin route is intentionally not forwarded by agent-device proxy. Holds do not survive daemon restart; re-establish them after reconnecting. The same listener and token serve GET/PUT/DELETE /admin/leases, where a host allocates a macos-app lease confining a client to one app (<bundleId> or <bundleId>@<pid>); tenants cannot allocate one.
 
 Cloud profile flow:
