@@ -20,6 +20,10 @@ export const DEVICE_LEASE_REASONS = {
   // Another lease, or this tenant run, already holds the device; retry after that lease is released
   // or expires.
   busy: { reason: 'DEVICE_LEASE_BUSY' },
+  // Another request is creating a provider rental for this scope.
+  allocationInProgress: { reason: 'provider-allocation-in-progress' },
+  // The lease is ending and its local session cleanup is still pending.
+  sessionCleanupPending: { reason: 'session-cleanup-pending' },
 } as const satisfies ReasonTable<'leases'>;
 
 export type LeaseRegistryOptions = {
@@ -404,6 +408,8 @@ export type ReleaseUnknownReason =
 export function deviceLeaseBusyError(
   activeLease?: DeviceLease,
   releaseUnknown?: ReleaseUnknownReason,
+  reason: (typeof DEVICE_LEASE_REASONS)[keyof typeof DEVICE_LEASE_REASONS]['reason'] = DEVICE_LEASE_REASONS
+    .busy.reason,
 ): AppError {
   return new AppError(
     'DEVICE_IN_USE',
@@ -411,9 +417,9 @@ export function deviceLeaseBusyError(
       ? 'Lease release is unknown'
       : activeLease
         ? 'Device is already leased'
-        : 'Expired lease cleanup is pending',
+        : 'Lease cleanup is pending',
     {
-      reason: DEVICE_LEASE_REASONS.busy.reason,
+      reason,
       ...(activeLease
         ? {
             deviceKey: activeLease.deviceKey,

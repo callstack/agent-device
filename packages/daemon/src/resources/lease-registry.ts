@@ -71,7 +71,14 @@ function releaseReason(end: LeaseEnd): ReleaseUnknownReason | undefined {
   if (end.claimReleaseUnknown) return 'device-claim-release-unconfirmed';
   if (end.providerRelease === 'pending')
     return end.providerReleaseUnknown ?? 'provider-release-unconfirmed';
-  return end.sessionsSettled ? undefined : 'device-claim-release-unconfirmed';
+  return undefined;
+}
+
+function leaseEndBusyError(end: LeaseEnd, lease?: DeviceLease): AppError {
+  const reason = releaseReason(end);
+  return reason
+    ? deviceLeaseBusyError(lease, reason)
+    : deviceLeaseBusyError(lease, undefined, DEVICE_LEASE_REASONS.sessionCleanupPending.reason);
 }
 
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
@@ -135,8 +142,8 @@ export class LeaseRegistry {
       });
     }
     this.assertHumanControlAdmission(normalized);
-    this.assertNoRunBindingLease(normalized);
     this.assertDeviceAvailable(normalized);
+    this.assertNoRunBindingLease(normalized);
     this.enforceCapacity(normalized.backend);
     const lease = createDeviceLease(normalized, leaseTtlMs, this.now(), chosenLeaseId);
     if (providerAllocating) this.allocating.add(lease.leaseId);
@@ -848,8 +855,7 @@ export class LeaseRegistry {
 
   leaseEndRefusal(leaseId: string): AppError | undefined {
     const end = this.ending.get(leaseId);
-    const reason = end && releaseReason(end);
-    return reason && deviceLeaseBusyError(undefined, reason);
+    return end && leaseEndBusyError(end);
   }
 
   confirmLeaseEnd(leaseId: string, part: 'sessionsSettled' | 'providerReleased'): boolean {
@@ -858,7 +864,10 @@ export class LeaseRegistry {
     if (part === 'providerReleased') {
       end.providerRelease = 'confirmed';
       this.reportProviderLeases(end.lease);
-    } else end.sessionsSettled = true;
+    } else {
+      end.sessionsSettled = true;
+      delete end.claimReleaseUnknown;
+    }
     if (!end.sessionsSettled || end.providerRelease !== 'confirmed') return false;
     this.ending.delete(leaseId);
     return true;
@@ -866,14 +875,13 @@ export class LeaseRegistry {
 
   private assertNoEndingLease(leaseId: string | undefined): void {
     const end = leaseId && this.ending.get(leaseId);
-    if (end) throw deviceLeaseBusyError(end.lease, releaseReason(end));
+    if (end) throw leaseEndBusyError(end, end.lease);
   }
 
   assertNoEndingOverlap(request: AllocateLeaseRequest | NormalizedAllocateLeaseRequest): void {
     const scope = 'backend' in request ? request : normalizeAllocateLeaseRequest(request);
     for (const end of this.ending.values())
-      if (this.overlaps(scope, end.lease))
-        throw deviceLeaseBusyError(end.lease, releaseReason(end));
+      if (this.overlaps(scope, end.lease)) throw leaseEndBusyError(end, end.lease);
   }
 
   private overlaps(scope: NormalizedAllocateLeaseRequest, lease: DeviceLease): boolean {
@@ -892,7 +900,11 @@ export class LeaseRegistry {
     for (const leaseId of this.allocating) {
       const lease = this.leases.get(leaseId);
       if (lease && this.overlaps(scope, lease))
-        throw deviceLeaseBusyError(lease, 'provider-release-unconfirmed');
+        throw deviceLeaseBusyError(
+          lease,
+          undefined,
+          DEVICE_LEASE_REASONS.allocationInProgress.reason,
+        );
     }
     if (!deviceBindingKey) return;
     const activeLeaseId = this.deviceBindings.get(deviceBindingKey);

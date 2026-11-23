@@ -73,16 +73,16 @@ test.each(['sessionsSettled', 'providerReleased'] as const)(
     now = lease.expiresAt;
     expect(registry.consumeExpiredLeases()).toEqual([lease]);
     const next = { ...request, runId: 'successor' };
-    const expectBusy = () =>
+    const expectBusy = (reason = 'DEVICE_LEASE_BUSY') =>
       expect(() => registry.allocateLease(next)).toThrow(
         expect.objectContaining({
-          details: expect.objectContaining({ reason: 'DEVICE_LEASE_BUSY' }),
+          details: expect.objectContaining({ reason }),
         }),
       );
 
     expectBusy();
     expect(registry.confirmLeaseEnd(lease.leaseId, first)).toBe(false);
-    expectBusy();
+    expectBusy(first === 'providerReleased' ? 'session-cleanup-pending' : 'DEVICE_LEASE_BUSY');
     const second = first === 'sessionsSettled' ? 'providerReleased' : 'sessionsSettled';
     expect(registry.confirmLeaseEnd(lease.leaseId, second)).toBe(true);
     expect(registry.allocateLease(next).leaseId).not.toBe(lease.leaseId);
@@ -136,4 +136,29 @@ test('a delayed expiry reservation cannot fence a renewed host lease with the sa
   );
   expect(registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST).leaseId).not.toBe(leaseId);
   expect(reserved).toBe(false);
+});
+
+test('a confirmed provider release reports pending session cleanup without a claim refusal', () => {
+  const registry = new LeaseRegistry();
+  const scope = {
+    tenantId: 'tenant-a',
+    runId: 'run-a',
+    leaseProvider: 'limrun',
+    deviceKey: 'ios:fixture',
+  };
+  const lease = registry.allocateLease(scope);
+  registry.beginLeaseEnd(lease, { sessionsSettled: false, providerRelease: 'confirmed' });
+
+  expect(() => registry.allocateLease(scope)).toThrow(
+    expect.objectContaining({
+      code: 'DEVICE_IN_USE',
+      details: expect.objectContaining({ reason: 'session-cleanup-pending' }),
+    }),
+  );
+  const details = registry.leaseEndRefusal(lease.leaseId)?.details;
+  expect(details?.reason).toBe('session-cleanup-pending');
+  expect(details).not.toHaveProperty('releaseReason');
+  expect(details).not.toHaveProperty('releaseStatus');
+  expect(registry.confirmLeaseEnd(lease.leaseId, 'sessionsSettled')).toBe(true);
+  expect(() => registry.allocateLease(scope)).not.toThrow();
 });

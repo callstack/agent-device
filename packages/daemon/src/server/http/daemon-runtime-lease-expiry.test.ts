@@ -251,9 +251,9 @@ test('host DELETE ends logical leases and keeps refused provider releases fenced
   }
 });
 
-test.each([true, false])(
-  'allocation fences keyed and keyless overlap while creating (keyed first: %s)',
-  async (keyed) => {
+test.each(['keyed first', 'keyless first', 'both keyed'] as const)(
+  'allocation fences keyed and keyless overlap while creating (%s)',
+  async (order) => {
     const entered = barrier();
     const created = barrier();
     const allocate = vi.fn(async () => {
@@ -267,17 +267,18 @@ test.each([true, false])(
       leaseLifecycleProvider: { allocate, release: async () => ({ release: 'confirmed' }) },
     });
     const first = leaseRpc(runtime, 'allocate', {
-      deviceKey: keyed ? providerLease.deviceKey : undefined,
+      deviceKey: order === 'keyless first' ? undefined : providerLease.deviceKey,
     });
     try {
       await entered.reached;
       const overlap = await leaseRpc(runtime, 'allocate', {
-        deviceKey: keyed ? undefined : providerLease.deviceKey,
+        deviceKey: order === 'keyed first' ? undefined : providerLease.deviceKey,
       });
       expect(overlap.error?.data?.details).toMatchObject({
-        reason: 'DEVICE_LEASE_BUSY',
-        releaseStatus: 'unknown',
+        reason: 'provider-allocation-in-progress',
       });
+      expect(overlap.error?.data?.details).not.toHaveProperty('releaseStatus');
+      expect(overlap.error?.data?.details).not.toHaveProperty('releaseReason');
       expect(allocate).toHaveBeenCalledTimes(1);
     } finally {
       created.open();

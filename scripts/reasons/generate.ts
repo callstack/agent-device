@@ -58,7 +58,7 @@ export function renderPage(
     '',
     'Treat a reason that this page does not list as unknown, not as an error in the response: a newer daemon or a provider plugin can add reasons. [Commands](/docs/commands) documents more reasons with the behavior of each command.',
     '',
-    'For an ending lease, `error.details.releaseStatus` is `unknown`. The `error.details.releaseReason` field gives the outstanding proof. A `lease_release` response with `data.released: false` can also include these fields under `data`.',
+    'When lease release cannot be confirmed, `error.details.releaseStatus` is `unknown`. The `error.details.releaseReason` field gives the outstanding proof. A `lease_release` response with `data.released: false` can also include these fields under `data`.',
     '',
     '| Release reason | Meaning |',
     '| --- | --- |',

@@ -9,7 +9,7 @@ A failed command can name why it failed in `error.details.reason`. Branch on the
 
 Treat a reason that this page does not list as unknown, not as an error in the response: a newer daemon or a provider plugin can add reasons. [Commands](/docs/commands) documents more reasons with the behavior of each command.
 
-For an ending lease, `error.details.releaseStatus` is `unknown`. The `error.details.releaseReason` field gives the outstanding proof. A `lease_release` response with `data.released: false` can also include these fields under `data`.
+When lease release cannot be confirmed, `error.details.releaseStatus` is `unknown`. The `error.details.releaseReason` field gives the outstanding proof. A `lease_release` response with `data.released: false` can also include these fields under `data`.
 
 | Release reason | Meaning |
 | --- | --- |
@@ -616,6 +616,7 @@ These reasons can come from more than one command.
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
 | `daemon_shutting_down` | The daemon has begun to leave, so it refuses every new request; retry against a new daemon. |
+| `daemon-startup-failed` | Startup failed while this request waited for recovery. |
 | `daemon-owner-unrecognized` | The daemon record states an owner this build cannot prove, so `daemon stop` signaled nothing and a client did not replace that daemon. Stop the process by its own means and remove its daemon.json, or update agent-device if a newer build wrote the record. |
 | `daemon_retirement_unconfirmed` | A daemon was asked to retire, by `daemon stop`, by a client replacing it, or by cleanup after a replay, and the retirement could not be confirmed: its ownership, lock, record or cleanup stayed unresolved. `details.retirement` says which; state and diagnostics stay in the state directory. |
 | `daemon_exit_unconfirmed` | The stop could not confirm the daemon exited: the process stayed alive after the signal, the signal failed, or its start time or identity could not be verified. |
@@ -800,6 +801,8 @@ These reasons can come from more than one command.
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_OUTPUT_MISMATCH` | The request does not send the id of the lease that produced the artifact or diagnostics record. |
 | `DEVICE_LEASE_BUSY` | Another lease, or this tenant run, already holds the device; retry after that lease is released or expires. |
+| `provider-allocation-in-progress` | Another request is creating a provider rental for this scope. |
+| `session-cleanup-pending` | The lease is ending and its local session cleanup is still pending. |
 | `LEASE_ID_TOO_SHORT` | A lease id that the caller chose on allocate has fewer than 32 hex digits (128 bits). |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |

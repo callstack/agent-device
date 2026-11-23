@@ -17,6 +17,7 @@ import {
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
+  DAEMON_LIFECYCLE_REASONS,
   admitDaemonStateRoot,
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -188,9 +189,29 @@ export async function startDaemonRuntime(
       await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
         const rollback = createStartupRollback();
         rollback.onRollback(() => runtimeState.dispose());
+        let recovered!: () => void;
+        let failRecovery!: (error: AppError) => void;
+        const startupRecovered = new Promise<void>((resolve, reject) => {
+          recovered = resolve;
+          failRecovery = reject;
+        });
+        void startupRecovered.catch(() => {});
+
         try {
-          return await startDaemonRuntimeOnHost(runtimeOptions, rollback, runtimeState);
+          const runtime = await startDaemonRuntimeOnHost(
+            runtimeOptions,
+            rollback,
+            runtimeState,
+            startupRecovered,
+          );
+          recovered();
+          return runtime;
         } catch (error) {
+          failRecovery(
+            new AppError('COMMAND_FAILED', 'Daemon startup failed.', {
+              reason: DAEMON_LIFECYCLE_REASONS.startupFailed.reason,
+            }),
+          );
           await rollback.run();
           throw error;
         }
@@ -204,6 +225,7 @@ async function startDaemonRuntimeOnHost(
   },
   rollback: StartupRollback,
   runtimeState: RuntimeStateHandle,
+  startupRecovered: Promise<void>,
 ): Promise<DaemonRuntimeController> {
   const { host } = options;
   const { env } = host;
@@ -550,10 +572,6 @@ async function startDaemonRuntimeOnHost(
 
   // Quiesce runs before dispatch. It may drain once startup installs the close path.
   let startingUp = true;
-  let finishRecovery!: () => void;
-  const startupRecovered = new Promise<void>((resolve) => {
-    finishRecovery = resolve;
-  });
   const lifecycleAdmission = createDaemonLifecycleAdmission({
     token,
     identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
@@ -700,15 +718,8 @@ async function startDaemonRuntimeOnHost(
       retainArtifacts,
       env,
       cwd: host.cwd,
-      // A `/rpc` flow can reject after its own catches failed to answer, leaving this server's
-      // refusal as the only record the failure gets. It has no request scope — that opens later,
-      // inside the handler — so it reports through the pair every other out-of-request daemon
-      // event uses: a diagnostic scoped to the daemon log, and the runtime's error stream.
       onUnownedRequestFailure: (failure) => {
-        // The record goes first: an injected stream that throws on write must not cost `daemon.log`
-        // the event. The throw itself reaches the server's guard, which is the answer's owner.
-        // `.catch` because a detached diagnostic has nowhere to report its own failure — the same
-        // shape as the metadata-loss watch above.
+        // Log before writing to the injected stream, which can throw.
         void emitDaemonDiagnostic(logPath, 'daemon_rpc_request_flow_failed', {
           code: failure.code,
           message: failure.message,
@@ -746,13 +757,9 @@ async function startDaemonRuntimeOnHost(
     env,
   );
   await settleWithin(() => providerRecovery, 5_000);
-  finishRecovery();
   idleReap.noteActivity();
 
-  // Spawn the PNG worker ahead of the first screenshot request so its
-  // cold-start cost is not paid on a user-visible call. Best effort: when it
-  // cannot start or later stops, PNG processing falls back to the in-process sync path and the
-  // daemon log records why, once, outside any request.
+  // Warm the PNG worker before the first screenshot request.
   const releasePngWorker = retainPngWorker((reason) => {
     void emitDaemonDiagnostic(logPath, 'png_worker_unavailable', {
       reason: reason.kind,
@@ -968,9 +975,7 @@ async function startDaemonRuntimeOnHost(
     return closing;
   };
 
-  // Armed once `close` exists: the watch calls it.
-  // A detached daemon without its registration is one no new client can find, and a successor settles
-  // the device claims it held, so it leaves. An embedded runtime still serves its host.
+  // A detached daemon leaves when it loses its registration.
   stopMetadataLossWatch = armDaemonMetadataLossWatch(
     baseDir,
     infoPath,

@@ -18,6 +18,7 @@ import * as shutdown from './server-shutdown.ts';
 const probe = vi.hoisted(() => ({
   /** Holds daemon startup after its servers listen, until released. */
   startupGate: undefined as Promise<void> | undefined,
+  startupDiagnostics: undefined as Promise<void> | undefined,
   store: undefined as import('../../core/session-store.ts').SessionStore | undefined,
   registry: undefined as import('../../resources/lease-registry.ts').LeaseRegistry | undefined,
   held: undefined as Promise<void> | undefined,
@@ -65,6 +66,19 @@ vi.mock('../human-control-http.ts', async (importOriginal) => {
       const value = await actual.readHostAdminJsonBody(...args);
       if (probe.hostBodyRead) queueMicrotask(probe.hostBodyRead);
       return value;
+    },
+  };
+});
+
+vi.mock('./daemon-startup-diagnostics.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./daemon-startup-diagnostics.ts')>();
+  return {
+    ...actual,
+    flushDaemonStartupDiagnostics: async (
+      ...args: Parameters<typeof actual.flushDaemonStartupDiagnostics>
+    ) => {
+      await probe.startupDiagnostics;
+      await actual.flushDaemonStartupDiagnostics(...args);
     },
   };
 });
@@ -131,6 +145,7 @@ import { startDaemonRuntime } from './daemon-runtime.ts';
 
 afterEach(() => {
   probe.startupGate = undefined;
+  probe.startupDiagnostics = undefined;
   probe.held = undefined;
   probe.entered = undefined;
   probe.store = undefined;
@@ -759,5 +774,65 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
     openGate();
     reportProviderRecovered();
     await starting.then((runtime) => runtime?.close());
+  }
+});
+
+test('startup failure answers an allocation waiting on recovery and rolls back registration', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-startup-rollback-');
+  const paths = resolveDaemonPaths(stateDir);
+  const failure = new Error('startup diagnostic flush failed');
+  let failStartup!: (error: Error) => void;
+  probe.startupDiagnostics = new Promise<void>((_resolve, reject) => {
+    failStartup = reject;
+  });
+  let reportRegistered!: () => void;
+  const registered = new Promise<void>((resolve) => {
+    reportRegistered = resolve;
+  });
+  const allocationArrived = new Promise<void>((resolve) => {
+    probe.allocateArrived = resolve;
+  });
+  const starting = startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture(),
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'socket',
+      },
+    }),
+    startupProgress: {
+      report: (phase) => {
+        if (phase === 'registered') reportRegistered();
+      },
+      close: () => {},
+    },
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  }).catch((error: unknown) => error);
+  try {
+    await registered;
+    const { port, token } = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as {
+      port: number;
+      token: string;
+    };
+    const allocation = sendSocketRequest(port, {
+      token,
+      session: 'lease',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: { tenantId: 'tenant-a', runId: 'run-a', leaseBackend: 'ios-simulator' },
+    });
+    await allocationArrived;
+    failStartup(failure);
+    expect(await allocation).toMatchObject({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', details: { reason: 'daemon-startup-failed' } },
+    });
+    expect(await starting).toBe(failure);
+    expect(fs.existsSync(paths.infoPath)).toBe(false);
+    expect(fs.existsSync(paths.lockPath)).toBe(false);
+  } finally {
+    failStartup(failure);
   }
 });
