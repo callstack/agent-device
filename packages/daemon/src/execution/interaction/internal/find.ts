@@ -213,6 +213,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     nodes,
     locator,
     query,
+    action,
     selectorExpression,
     flags: req.flags,
     platform: device.platform,
