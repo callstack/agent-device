@@ -24,6 +24,11 @@ const RUNNER_BUILD_SETTINGS_REASONS = {
   buildSettingsMismatch: { reason: 'runner_build_settings_mismatch' },
 } as const satisfies ReasonTable<'apple runner'>;
 
+const RUNNER_SIGNING_AUTH_REASONS = {
+  // The App Store Connect API key variables are set only in part; xcodebuild takes all three or none.
+  signingAuthKeyIncomplete: { reason: 'signing_auth_key_incomplete' },
+} as const satisfies ReasonTable<'apple runner'>;
+
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 export const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
@@ -296,6 +301,58 @@ export function resolveRunnerSigningBuildSettings(
   }
   if (profile) args.push(`PROVISIONING_PROFILE_SPECIFIER=${profile}`);
   return args;
+}
+
+/**
+ * The App Store Connect API key that lets `-allowProvisioningUpdates` resolve automatic signing on
+ * a host with no interactive Xcode sign-in, read beside the signing settings it complements. The
+ * whole trio rides the command, a partial trio refuses the build here — before `xcodebuild` runs,
+ * so the failure carries this typed reason instead of the classifier's unclassified one — and no
+ * trio leaves the invocation byte-identical.
+ */
+export function resolveRunnerProvisioningAuthArgs(
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
+  forDevice = false,
+  device: Pick<DeviceInfo, 'platform' | 'appleOs'> = { platform: 'apple' },
+): string[] {
+  if (isMacOs(device) || !forDevice) {
+    return [];
+  }
+  const values = [
+    {
+      name: 'AGENT_DEVICE_IOS_AUTH_KEY_PATH',
+      value: env.AGENT_DEVICE_IOS_AUTH_KEY_PATH?.trim() || '',
+    },
+    { name: 'AGENT_DEVICE_IOS_AUTH_KEY_ID', value: env.AGENT_DEVICE_IOS_AUTH_KEY_ID?.trim() || '' },
+    {
+      name: 'AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID',
+      value: env.AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID?.trim() || '',
+    },
+  ];
+  const missing = values.filter((entry) => entry.value.length === 0).map((entry) => entry.name);
+  if (missing.length === values.length) {
+    return [];
+  }
+  if (missing.length > 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'The App Store Connect API key environment variables are only partially set',
+      {
+        reason: RUNNER_SIGNING_AUTH_REASONS.signingAuthKeyIncomplete.reason,
+        missingEnv: missing,
+        hint: 'Set all three of AGENT_DEVICE_IOS_AUTH_KEY_PATH, AGENT_DEVICE_IOS_AUTH_KEY_ID and AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID, or unset the rest.',
+      },
+    );
+  }
+  const [keyPath, keyId, issuerId] = values.map((entry) => entry.value);
+  return [
+    '-authenticationKeyPath',
+    keyPath!,
+    '-authenticationKeyID',
+    keyId!,
+    '-authenticationKeyIssuerID',
+    issuerId!,
+  ];
 }
 
 export function resolveRunnerBundleBuildSettings(

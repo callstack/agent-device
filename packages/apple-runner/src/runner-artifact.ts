@@ -45,6 +45,7 @@ import {
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerPerformanceBuildSettings,
+  resolveRunnerProvisioningAuthArgs,
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
   requireCertifiedRunnerCacheArtifacts,
@@ -918,7 +919,9 @@ async function buildRunnerXctestrun(
     device.kind === 'device',
     device,
   );
-  const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
+  const forDeviceBuild = device.kind === 'device';
+  const provisioningArgs = forDeviceBuild ? ['-allowProvisioningUpdates'] : [];
+  const provisioningAuthArgs = resolveRunnerProvisioningAuthArgs(env, forDeviceBuild, device);
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
   const archBuildSettings = resolveRunnerArchBuildSettings(env);
   const sandboxBuildArgs = resolveRunnerSandboxBuildArgs(env);
@@ -944,6 +947,7 @@ async function buildRunnerXctestrun(
         ...sandboxBuildArgs,
         ...runnerBundleBuildSettings,
         ...provisioningArgs,
+        ...provisioningAuthArgs,
         ...signingBuildSettings,
       ],
       {

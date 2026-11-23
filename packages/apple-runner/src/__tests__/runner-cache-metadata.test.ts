@@ -10,6 +10,7 @@ import {
   diffComparableRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
   resolveRunnerMaxConcurrentDestinationsFlag,
+  resolveRunnerProvisioningAuthArgs,
   resolveRunnerSigningBuildSettings,
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
@@ -106,6 +107,93 @@ test('resolveRunnerSigningBuildSettings switches to manual signing when a profil
     'CODE_SIGN_STYLE=Manual',
     'PROVISIONING_PROFILE_SPECIFIER=My Profile',
   ]);
+});
+
+test('resolveRunnerProvisioningAuthArgs passes no args without auth key env', () => {
+  assert.deepEqual(resolveRunnerProvisioningAuthArgs({}, true), []);
+});
+
+test('resolveRunnerProvisioningAuthArgs passes the xcodebuild authentication key args when the whole trio is set', () => {
+  assert.deepEqual(
+    resolveRunnerProvisioningAuthArgs(
+      {
+        AGENT_DEVICE_IOS_AUTH_KEY_PATH: '/keys/AuthKey_ABCDEF1234.p8',
+        AGENT_DEVICE_IOS_AUTH_KEY_ID: 'KID12345',
+        AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID: 'ISSUER67890',
+      },
+      true,
+    ),
+    [
+      '-authenticationKeyPath',
+      '/keys/AuthKey_ABCDEF1234.p8',
+      '-authenticationKeyID',
+      'KID12345',
+      '-authenticationKeyIssuerID',
+      'ISSUER67890',
+    ],
+  );
+});
+
+test('resolveRunnerProvisioningAuthArgs refuses every partial trio with the typed reason', () => {
+  const keyPath = { AGENT_DEVICE_IOS_AUTH_KEY_PATH: '/keys/AuthKey_ABCDEF1234.p8' };
+  const keyId = { AGENT_DEVICE_IOS_AUTH_KEY_ID: 'KID12345' };
+  const issuerId = { AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID: 'ISSUER67890' };
+  const partialTrios = [
+    [keyPath, ['AGENT_DEVICE_IOS_AUTH_KEY_ID', 'AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID']],
+    [keyId, ['AGENT_DEVICE_IOS_AUTH_KEY_PATH', 'AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID']],
+    [issuerId, ['AGENT_DEVICE_IOS_AUTH_KEY_PATH', 'AGENT_DEVICE_IOS_AUTH_KEY_ID']],
+    [{ ...keyPath, ...keyId }, ['AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID']],
+    [{ ...keyPath, ...issuerId }, ['AGENT_DEVICE_IOS_AUTH_KEY_ID']],
+    [{ ...keyId, ...issuerId }, ['AGENT_DEVICE_IOS_AUTH_KEY_PATH']],
+  ] as const;
+  for (const [env, missing] of partialTrios) {
+    assert.throws(
+      () => resolveRunnerProvisioningAuthArgs({ ...env }, true),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'signing_auth_key_incomplete');
+        assert.deepEqual(error.details?.missingEnv, missing);
+        assert.match(String(error.details?.hint), /AGENT_DEVICE_IOS_AUTH_KEY_PATH/);
+        return true;
+      },
+      `a trio missing ${missing.join(', ')} must refuse`,
+    );
+  }
+});
+
+test('resolveRunnerProvisioningAuthArgs ignores the auth key trio outside device builds', () => {
+  const trio = {
+    AGENT_DEVICE_IOS_AUTH_KEY_PATH: '/keys/AuthKey_ABCDEF1234.p8',
+    AGENT_DEVICE_IOS_AUTH_KEY_ID: 'KID12345',
+    AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID: 'ISSUER67890',
+  };
+  assert.deepEqual(resolveRunnerProvisioningAuthArgs(trio, false), []);
+  assert.deepEqual(
+    resolveRunnerProvisioningAuthArgs(trio, true, {
+      platform: 'apple',
+      appleOs: 'macos',
+    }),
+    [],
+  );
+});
+
+test('resolveRunnerProvisioningAuthArgs treats a whitespace-only value as unset', () => {
+  assert.throws(
+    () =>
+      resolveRunnerProvisioningAuthArgs(
+        {
+          AGENT_DEVICE_IOS_AUTH_KEY_PATH: '/keys/AuthKey_ABCDEF1234.p8',
+          AGENT_DEVICE_IOS_AUTH_KEY_ID: '  ',
+          AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID: 'ISSUER67890',
+        },
+        true,
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'signing_auth_key_incomplete' &&
+      JSON.stringify(error.details?.missingEnv) ===
+        JSON.stringify(['AGENT_DEVICE_IOS_AUTH_KEY_ID']),
+  );
 });
 
 test('resolveRunnerPerformanceBuildSettings disables indexing and code coverage', () => {
