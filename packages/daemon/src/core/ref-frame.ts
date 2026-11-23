@@ -5,6 +5,7 @@ import {
   issuedRefFrame,
   PRISTINE_REF_FRAME,
   type RefFrame,
+  type RefFrameOrigin,
   type RefFrameScope,
   type RefFrameState,
 } from './ref-frame-slot.ts';
@@ -153,7 +154,7 @@ export function readSessionRuntimeRevision(session: SessionState): number {
  * {@link activateRefFrame}.
  */
 export function activateCompleteRefFrame(session: SessionState): void {
-  activateRefFrame(session, 'all');
+  activateRefFrame(session, 'all', 'complete');
 }
 
 /**
@@ -165,8 +166,12 @@ export function activateCompleteRefFrame(session: SessionState): void {
  * empty result must not (see `markSessionPartialRefsIssued`) — but the transition itself
  * belongs here, with the complete form, because the two differ only in scope.
  */
-export function activatePartialRefFrame(session: SessionState, scope: ReadonlySet<string>): void {
-  activateRefFrame(session, scope);
+export function activatePartialRefFrame(
+  session: SessionState,
+  scope: ReadonlySet<string>,
+  origin: RefFrameOrigin = 'partial',
+): void {
+  activateRefFrame(session, scope, origin);
 }
 
 /**
@@ -179,16 +184,29 @@ export function activatePartialRefFrame(session: SessionState, scope: ReadonlySe
  * `session.snapshot` without disturbing this tree, so a ref keeps resolving against the
  * namespace that authorized it.
  */
-function activateRefFrame(session: SessionState, scope: RefFrameScope): void {
+function activateRefFrame(
+  session: SessionState,
+  scope: RefFrameScope,
+  origin: RefFrameOrigin,
+): void {
   session.refFrame = issuedRefFrame({
     scope,
     tree: session.snapshot,
     generation: session.snapshotGeneration,
+    origin,
   });
 }
 
 export function refFrameState(session: SessionState): RefFrameState {
   return refFrame(session).state;
+}
+
+/**
+ * Which publication minted the frame (`ref-frame-slot.ts`). Diagnostic only: refusal text
+ * and details read it (#4571); admission never does. Undefined before any issuance.
+ */
+export function refFrameOrigin(session: SessionState): RefFrameOrigin | undefined {
+  return refFrame(session).origin;
 }
 
 export function refFrameScope(session: SessionState): RefFrameScope {
@@ -199,6 +217,7 @@ export type RefMutationFrame = {
   admission: RefFrameAdmission;
   scope: RefFrameScope;
   currentGeneration: number | undefined;
+  origin: RefFrameOrigin | undefined;
 };
 
 export function readRefMutationFrame(params: {
@@ -215,6 +234,7 @@ export function readRefMutationFrame(params: {
     }),
     scope: refFrameScope(params.session),
     currentGeneration: refFrameEpoch(params.session),
+    origin: refFrameOrigin(params.session),
   };
 }
 

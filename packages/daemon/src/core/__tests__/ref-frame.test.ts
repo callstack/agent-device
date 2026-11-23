@@ -8,6 +8,7 @@ import {
   expireRefFrame,
   refFrame,
   refFrameEpoch,
+  refFrameOrigin,
   refFrameScope,
   refFrameState,
   type RefFrameAdmission,
@@ -134,6 +135,25 @@ test('activateCompleteRefFrame re-authorizes a complete frame after expiry', () 
   assert.deepEqual(admitRefMutation({ session: s, refBody: 'e9', mintedGeneration: undefined }), {
     admitted: true,
   });
+});
+
+test('frame origin records which publication minted it and survives expiry', () => {
+  // No issuance yet: no origin.
+  assert.equal(refFrameOrigin(session()), undefined);
+
+  // A complete publication, the partial default, and the settle-diff partial.
+  const complete = session({ snapshotGeneration: 42 });
+  activateCompleteRefFrame(complete);
+  assert.equal(refFrameOrigin(complete), 'complete');
+  assert.equal(refFrameOrigin(partialSession(42, new Set(['e1']))), 'partial');
+  const settled = session({ snapshotGeneration: 42 });
+  activatePartialRefFrame(settled, new Set(['e1']), 'settle-diff');
+  assert.equal(refFrameOrigin(settled), 'settle-diff');
+
+  // Expiry replaces the frame whole; the origin rides along.
+  expireRefFrame(settled);
+  assert.equal(refFrameState(settled), 'expired');
+  assert.equal(refFrameOrigin(settled), 'settle-diff');
 });
 
 test('expireRefFrame clears scoped-snapshot lineage at the seam (ADR 0014)', () => {

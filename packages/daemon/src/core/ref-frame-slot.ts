@@ -21,11 +21,20 @@ export type RefFrameScope = 'all' | ReadonlySet<string>;
 /** Lifecycle state of the current frame. */
 export type RefFrameState = 'active' | 'expired';
 
+/**
+ * Which publication minted the frame. Diagnostic only — it feeds refusal text and
+ * details (#4571) and never an admission decision. `partial` covers every non-settle
+ * partial publication (`find`, `audit`, replay divergence, ambiguity candidates), which
+ * all refuse a plain ref with the same recapture guidance.
+ */
+export type RefFrameOrigin = 'complete' | 'settle-diff' | 'partial';
+
 type RefFrameFields = Readonly<{
   state: RefFrameState;
   scope: RefFrameScope;
   tree: SnapshotState | undefined;
   generation: number | undefined;
+  origin: RefFrameOrigin | undefined;
 }>;
 
 /**
@@ -57,6 +66,10 @@ class SessionRefFrame {
     return this.#fields.generation;
   }
 
+  get origin(): RefFrameOrigin | undefined {
+    return this.#fields.origin;
+  }
+
   /** Idempotent by identity: an expired frame is returned as is, so repeated expiry compares `===`. */
   static expire(frame: SessionRefFrame): SessionRefFrame {
     if (frame.#fields.state === 'expired') return frame;
@@ -77,6 +90,7 @@ export const PRISTINE_REF_FRAME: RefFrame = new SessionRefFrame({
   scope: 'all',
   tree: undefined,
   generation: undefined,
+  origin: undefined,
 });
 
 /** The frame an issuance mints. Retention and epoch semantics are the caller's; see `ref-frame.ts`. */
@@ -84,6 +98,7 @@ export function issuedRefFrame(fields: {
   scope: RefFrameScope;
   tree: SnapshotState | undefined;
   generation: number | undefined;
+  origin: RefFrameOrigin;
 }): RefFrame {
   return new SessionRefFrame({ state: 'active', ...fields });
 }

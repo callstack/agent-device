@@ -19,6 +19,7 @@ import {
   expireRefFrame,
   refFrame,
   refFrameEpoch,
+  refFrameOrigin,
   refFrameScope,
   refFrameState,
 } from '../../core/ref-frame.ts';
@@ -257,6 +258,9 @@ for (const retire of [false, true]) {
     } else {
       expect(generation).toBe(session.snapshotGeneration);
       expect(refFrameScope(session)).toEqual(new Set(['e1']));
+      // #4571: the settle-diff origin is what lets a later plain-ref refusal name
+      // this diff as the replacement instead of a generic recapture.
+      expect(refFrameOrigin(session)).toBe('settle-diff');
     }
   });
 }

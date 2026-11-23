@@ -10,6 +10,7 @@ import {
   refFrameState,
   REF_FRAME_REASONS,
 } from '../core/ref-frame.ts';
+import type { RefFrameOrigin } from '../core/ref-frame-slot.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 
@@ -98,8 +99,16 @@ function normalizeRefBody(ref: string): string {
  * epoch — a plain ref then requires a complete frame, and a pinned ref outside
  * the set is rejected. An empty partial result does not supersede existing
  * authority (it leaves the frame untouched), so a useful prior frame survives.
+ *
+ * `origin` records which publication issued the frame (ADR 0014 amendment): the
+ * settle path passes `settle-diff` so a later plain-ref refusal can name the
+ * diff as the replacement; every other partial publication keeps `partial`.
  */
-export function markSessionPartialRefsIssued(session: SessionState, refs: Iterable<string>): void {
+export function markSessionPartialRefsIssued(
+  session: SessionState,
+  refs: Iterable<string>,
+  origin: RefFrameOrigin = 'partial',
+): void {
   const scope = new Set<string>();
   for (const ref of refs) {
     const body = normalizeRefBody(ref);
@@ -115,7 +124,7 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
   // depend on ancestors, siblings and viewport outside the emitted subset, so the whole
   // tree is kept while the issuance set bounds authority) and the frozen epoch that keeps
   // a later read-only capture from invalidating a correct pin from this frame.
-  activatePartialRefFrame(session, scope);
+  activatePartialRefFrame(session, scope, origin);
 }
 
 /**
@@ -140,7 +149,9 @@ export function issueSettleRefs(
   if (!ref || !settle?.diff) return undefined;
   const session = sessionStore.resolveCurrent(ref);
   if (!session) return undefined;
-  markSessionPartialRefsIssued(session, collectSettleIssuedRefBodies(settle));
+  // The settle-diff origin is what lets a later plain-ref refusal (#4571) name this
+  // diff as the replacement instead of pointing at a generic recapture.
+  markSessionPartialRefsIssued(session, collectSettleIssuedRefBodies(settle), 'settle-diff');
   return session.snapshotGeneration;
 }
 
