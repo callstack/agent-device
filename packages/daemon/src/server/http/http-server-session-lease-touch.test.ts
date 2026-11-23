@@ -102,13 +102,11 @@ test('a new owner opens the session right after the lease deadline, before the s
     'request.started',
     'request.finished',
   ]);
-  // The open ended the expired session under its own locks, so the lease-end owner found none.
-  expect(world.requestTeardown.stopSnapshotHelper).toHaveBeenCalledTimes(1);
   await world.expiryOwnerSettled();
-  expect(world.expiryTeardown).not.toHaveBeenCalled();
+  expect(world.expiryTeardown).toHaveBeenCalledTimes(1);
 });
 
-test('a successor open keeps its lease while the expired session teardown is pending', async () => {
+test('a successor lease can expire while it waits for teardown', async () => {
   const daemon = world;
   if (!daemon) return;
   daemon.publishLeasedSession(daemon.sessionName);
@@ -117,13 +115,12 @@ test('a successor open keeps its lease while the expired session teardown is pen
   const originalExpiry = daemon.leaseRegistry.inspectActiveLease(successor.leaseId)?.expiresAt;
   const teardownEntered = deferred();
   const releaseTeardown = deferred();
-  daemon.requestTeardown.stopSnapshotHelper.mockImplementationOnce(async () => {
+  daemon.expiryTeardown.mockImplementationOnce(async () => {
     teardownEntered.resolve();
     await releaseTeardown.promise;
   });
 
   const open = daemon.send('open', ['com.example.app'], successor);
-  let protectedExpiry: number | undefined;
   try {
     await Promise.race([
       teardownEntered.promise,
@@ -131,20 +128,22 @@ test('a successor open keeps its lease while the expired session teardown is pen
         throw new Error(`Open finished before teardown: ${JSON.stringify(response)}`);
       }),
     ]);
+    expect(daemon.leaseRegistry.inspectActiveLease(successor.leaseId)?.expiresAt).toBe(
+      originalExpiry,
+    );
     daemon.passLeaseDeadline();
-    daemon.passLeaseDeadline();
-    protectedExpiry = daemon.leaseRegistry.inspectActiveLease(successor.leaseId)?.expiresAt;
   } finally {
     releaseTeardown.resolve();
     await open;
   }
 
   const opened = await open;
-  expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
-  expect(protectedExpiry).toBeGreaterThan(originalExpiry ?? Infinity);
-  expect(daemon.sessionStore.get(daemon.sessionName)?.lease?.leaseId).toBe(successor.leaseId);
-  await daemon.expiryOwnerSettled();
-  expect(daemon.expiryTeardown).not.toHaveBeenCalled();
+  expect(opened.error?.data).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_NOT_FOUND' },
+  });
+  expect(daemon.sessionStore.get(daemon.sessionName)).toBeUndefined();
+  expect(daemon.expiryTeardown).toHaveBeenCalledTimes(1);
 });
 
 test('a successor open cannot use a lease id reissued during the expired session teardown', async () => {
@@ -155,7 +154,7 @@ test('a successor open cannot use a lease id reissued during the expired session
   const replacement = { ...successor, runId: 'run-c', clientId: 'client-c' };
   daemon.passLeaseDeadline();
   let released = false;
-  daemon.requestTeardown.stopSnapshotHelper.mockImplementationOnce(async () => {
+  daemon.expiryTeardown.mockImplementationOnce(async () => {
     await Promise.resolve();
     released = daemon.leaseRegistry.releaseLease(successor).released;
     daemon.leaseRegistry.putHostLease(successor.leaseId, replacement);
@@ -209,7 +208,10 @@ test.each([
     command: 'snapshot',
     positionals: [],
     meta: { clientId: undefined },
-    error: { code: 'UNAUTHORIZED', details: { reason: 'LEASE_SCOPE_REQUIRED' } },
+    error: {
+      code: 'UNAUTHORIZED',
+      details: { reason: 'LEASE_SESSION_MISMATCH', field: 'leaseId' },
+    },
   },
   {
     command: 'open',
@@ -242,7 +244,7 @@ test.each([
   {
     failure: 'lease expires during PID lookup',
     processAlive: true,
-    details: { reason: 'LEASE_SESSION_MISMATCH', field: 'leaseId' },
+    details: { reason: 'LEASE_NOT_FOUND' },
   },
 ])(
   'a macOS app successor leaves the expired session intact when the $failure',
@@ -294,7 +296,8 @@ test('doctor with the lease id after the deadline leaves the session to the leas
   const ref = world.publishLeasedSession(world.sessionName);
   world.passLeaseDeadline();
 
-  await world.send('doctor', [], world.owner);
+  const response = await world.send('doctor', [], world.owner);
+  expect(response.error?.data?.details?.reason).toBe('LEASE_NOT_FOUND');
 
   expect(world.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
   await world.expiryOwnerSettled();
@@ -310,7 +313,7 @@ test('the owner request after the deadline ends its own expired session', async 
   const snapshot = await world.send('snapshot', [], world.owner);
 
   expect(snapshot.error?.data?.code, JSON.stringify(snapshot)).toBe('UNAUTHORIZED');
-  expect(snapshot.error?.data?.details?.reason).not.toBe('LEASE_SESSION_MISMATCH');
+  expect(snapshot.error?.data?.details?.reason).toBe('LEASE_NOT_FOUND');
   expect(world.sessionStore.get(world.sessionName)).toBeUndefined();
 });
 

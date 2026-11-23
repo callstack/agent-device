@@ -1,3 +1,4 @@
+import type { ExpiryProviderSettlement } from '../lease-session-end.ts';
 import type { ComposeDaemonRuntimeDeps } from './daemon-runtime-deps.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
@@ -36,10 +37,7 @@ import {
   leaseReleaseDiagnosticEvent,
 } from '../provider-lease-expiry.ts';
 import { createRequestHandler } from '../request-router.ts';
-import {
-  createLeaseSessionEnd,
-  getLeaseRegistryExecutionLocks,
-} from '../request-execution-scope.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
 import { settleExpiredSession } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
@@ -48,6 +46,7 @@ import { runtimeHintsClearInput } from '../../sessions/session-runtime.ts';
 import {
   closeDaemonServers,
   teardownDaemonSessionForShutdown,
+  teardownDaemonSessions,
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
@@ -277,12 +276,18 @@ async function startDaemonRuntimeOnHost(
   }
   installProviderDeviceAdmission(deps.providerDeviceAdmission);
   installInteractorResolution(deps.interactorResolution);
+  const { createLeaseSessionEnd } = await import('../lease-session-end.ts');
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
     recoverExpiredLease: deps.recoverExpiredLease,
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
+    onRecovered: (lease) => leaseRegistry.reserveExpiredLease(lease, true),
+    onReleased: (lease) => {
+      if (leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased'))
+        leaseSessionEnd.forgetClosing(lease.leaseId);
+    },
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
   });
   rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
@@ -292,25 +297,42 @@ async function startDaemonRuntimeOnHost(
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease, reason) => {
-      void expiredProviderLeaseReleaser.release(lease).then(
-        (outcome) => {
-          // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
-          // request, so this report goes to the daemon log rather than a request scope.
-          const event = leaseReleaseDiagnosticEvent(lease, outcome);
-          if (event) {
-            void emitDaemonDiagnostic(logPath, event.phase, event.data, event.level).catch(
-              () => undefined,
-            );
-          }
-        },
-        (error: unknown) => {
-          void emitDaemonDiagnostic(logPath, 'provider_lease_release_outcome_failed', {
-            leaseId: lease.leaseId,
-            error: error instanceof Error ? error.message : String(error),
-          }).catch(() => undefined);
-        },
-      );
-      if (!reason) void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
+      if (!leaseRegistry.reserveExpiredLease(lease)) return;
+      let finishProvider!: () => void;
+      const providerEnd = new Promise<void>((resolve) => {
+        finishProvider = resolve;
+      });
+      let allowRelease!: () => void;
+      const sessionsEnd = new Promise<void>((resolve) => {
+        allowRelease = resolve;
+      });
+      void endSessionsForLease(lease.leaseId, reason ?? 'LEASE_EXPIRED', {
+        done: providerEnd,
+        allowRelease,
+      });
+      void expiredProviderLeaseReleaser
+        .release(lease, sessionsEnd)
+        .then(
+          (outcome) => {
+            if (outcome.status === 'refused' && !outcome.durable)
+              leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId);
+            // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
+            // request, so this report goes to the daemon log rather than a request scope.
+            const event = leaseReleaseDiagnosticEvent(lease, outcome);
+            if (event) {
+              void emitDaemonDiagnostic(logPath, event.phase, event.data, event.level).catch(
+                () => undefined,
+              );
+            }
+          },
+          (error: unknown) => {
+            void emitDaemonDiagnostic(logPath, 'provider_lease_release_outcome_failed', {
+              leaseId: lease.leaseId,
+              error: error instanceof Error ? error.message : String(error),
+            }).catch(() => undefined);
+          },
+        )
+        .finally(finishProvider);
     },
     onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
   });
@@ -342,9 +364,10 @@ async function startDaemonRuntimeOnHost(
     leaseRegistry,
     endSessionsForLease: async (leaseId, reason) =>
       await endSessionsForLease(leaseId, reason ?? 'LEASE_RELEASED'),
-    // A request that ends an expired session retires it, so the application is always finalized.
-    settleExpiredSession: async (ref: SessionRef) =>
-      await settleIdleExpiredSession(ref, 'finalize'),
+    leaseSessionEnd: {
+      closingAt: (address) => leaseSessionEnd.closingAt(address),
+      settlementFor: (lifetime) => leaseSessionEnd.settlementFor(lifetime),
+    },
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
@@ -379,14 +402,17 @@ async function startDaemonRuntimeOnHost(
 
   const shutdownClaimLedger = createDaemonShutdownClaimLedger(env);
 
-  const teardownDaemonSession = async (ref: SessionRef): Promise<boolean> => {
+  const teardownDaemonSession = async (ref: SessionRef) => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+    const failedSteps: string[] = [];
     try {
-      return await teardownDaemonSessionForShutdown({
+      const closed = await teardownDaemonSessionForShutdown({
         ref,
         sessionStore,
         stderr,
         platformCleanup: deps.platformResourceCleanup,
+        providerInstanceEnded: () =>
+          leaseRegistry.providerInstanceEnded(session.lease?.leaseId ?? ''),
         finalizeApplicationLifecycle: async (sessionToFinalize, runtimeHints) =>
           await finalizeDaemonSessionApplicationLifecycle({
             gateway: deviceRuntimeGateway,
@@ -395,22 +421,17 @@ async function startDaemonRuntimeOnHost(
             stateDir: baseDir,
             runtimeHints,
           }),
-        afterSuccessfulTeardown: shutdownClaimLedger.releaseClaim,
+        onFailedSteps: (steps) => {
+          failedSteps.push(...steps);
+        },
+        afterSuccessfulTeardown: async (current) => {
+          if (!(await shutdownClaimLedger.releaseClaim(current))) failedSteps.push('device_claim');
+        },
       });
+      return { closed, failedSteps };
     } finally {
       shutdownClaimLedger.finalize(session);
     }
-  };
-
-  const teardownDaemonSessions = async (): Promise<ShutdownReport['sessions']> => {
-    sessionStore.closeAdmission();
-    const sessionsToStop = sessionStore.listRefs();
-    const outcomes = await Promise.all(
-      sessionsToStop.map(async (ref) => await teardownDaemonSession(ref).catch(() => false)),
-    );
-    await sessionStore.flushJournalRemovals();
-    const closedCount = outcomes.filter(Boolean).length;
-    return { closed: closedCount, failed: outcomes.length - closedCount };
   };
 
   // #2833: settles the resources of a session this daemon expires for idleness. Deliberately NOT
@@ -421,10 +442,7 @@ async function startDaemonRuntimeOnHost(
   // survive so the next pass can retry rather than leave a claim owned by a process that no longer
   // knows what it holds. So: resources, then the platform finalization that stops the execution host
   // and releases its lease, then the claim, cleared last, by the reaper.
-  const settleIdleExpiredSession = async (
-    ref: SessionRef,
-    afterResourceFailure: 'stop' | 'finalize' = 'stop',
-  ): Promise<void> => {
+  const settleIdleExpiredSession = async (ref: SessionRef): Promise<void> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     const sessionName = ref.address;
     const runtimeHints = runtimeHintsClearInput(
@@ -436,7 +454,8 @@ async function startDaemonRuntimeOnHost(
       ref,
       sessionStore,
       platformCleanup: deps.platformResourceCleanup,
-      afterResourceFailure,
+      providerInstanceEnded: () =>
+        leaseRegistry.providerInstanceEnded(session.lease?.leaseId ?? ''),
       finalizeApplication: async () =>
         await finalizeDaemonSessionApplicationLifecycle({
           gateway: deviceRuntimeGateway,
@@ -444,6 +463,9 @@ async function startDaemonRuntimeOnHost(
           session,
           stateDir: baseDir,
           runtimeHints,
+          onRuntimeHintsCleared: () => {
+            if (sessionStore.resolveCurrent(ref)) sessionStore.clearRuntimeHints(ref);
+          },
           // The one caller that must say so: this daemon is staying alive, so there is no shutdown
           // phase a healthy runner could be deferred to. Taking the ordinary-close path stops the
           // runner and releases its lease instead of parking it until process exit.
@@ -464,10 +486,16 @@ async function startDaemonRuntimeOnHost(
     teardownSession: settleIdleExpiredSession,
     cleanupSessionlessExecutionHost: deps.platformResourceCleanup.cleanupSessionlessExecutionHost,
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
+    confirmExpiredSessions: (leaseId) =>
+      leaseRegistry.confirmExpiredLeaseEnd(leaseId, 'sessionsSettled'),
   });
 
-  const endSessionsForLease = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
-    await leaseSessionEnd.end(leaseId, reason);
+  const endSessionsForLease = async (
+    leaseId: string,
+    reason: LeaseEndReason,
+    providerEnd?: ExpiryProviderSettlement,
+  ): Promise<void> => {
+    await leaseSessionEnd.end(leaseId, reason, providerEnd);
     idleReap.noteActivity();
   };
 
@@ -778,15 +806,18 @@ async function startDaemonRuntimeOnHost(
     expiredProviderLeaseReleaser.beginShutdown();
     // Session teardown, lease finalization and the release drain run outside any request, so they
     // share one daemon scope; without it every claim, lease and drain diagnostic here is dropped.
-    const { sessions, providerReleaseDrain } = await withDaemonDiagnosticsScope(
-      { logPath },
-      async () => {
-        const tornDown = await teardownDaemonSessions();
+    const { sessions, providerReleaseDrain, leaseCleanupFailures } =
+      await withDaemonDiagnosticsScope({ logPath }, async () => {
+        const tornDown = await teardownDaemonSessions(sessionStore, teardownDaemonSession);
         const leaseFinalization = await finalizeDaemonLeases({
           leaseRegistry,
           expiredProviderLeaseReleaser,
           timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
         });
+        await leaseSessionEnd.finishShutdown(
+          tornDown.failedLeases,
+          DAEMON_LEASE_RELEASE_TIMEOUT_MS,
+        );
         try {
           await deps.ownerLifecycle.resetAndroidSnapshotHelper();
         } catch (error) {
@@ -813,9 +844,16 @@ async function startDaemonRuntimeOnHost(
             orphanedDeviceKeys: shutdownClaimLedger.claims.orphaned.map((claim) => claim.deviceKey),
           },
         });
-        return { sessions: tornDown, providerReleaseDrain: drain };
-      },
-    );
+        const failures = Array.from(tornDown.failedLeases, ([leaseId, failedSteps]) => ({
+          leaseId,
+          failedSteps,
+        }));
+        return {
+          sessions: tornDown.sessions,
+          providerReleaseDrain: drain,
+          leaseCleanupFailures: failures,
+        };
+      });
     expiredProviderLeaseReleaser.shutdown();
     let gatewayShutdownFailed = false;
     const ownerClose = await settleWithin(
@@ -846,7 +884,9 @@ async function startDaemonRuntimeOnHost(
     }
     const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
+    const cleanupFailures = leaseCleanupFailures.length ? { leaseCleanupFailures } : {};
     const report: ShutdownReport = {
+      ...cleanupFailures,
       providerReleases: {
         completed: providerReleaseDrain.released.map((lease) => lease.leaseId),
         pending: providerReleaseDrain.pending
@@ -861,6 +901,7 @@ async function startDaemonRuntimeOnHost(
       plugins,
     };
     shutdownOutcome = {
+      ...cleanupFailures,
       providerReleases: providerReleaseDrain,
       claims: shutdownClaimLedger.claims,
     };

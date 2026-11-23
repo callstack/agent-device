@@ -384,7 +384,9 @@ async function heartbeatLease(
   const { leaseRegistry, leaseLifecycleProvider, req, endSessionsForLease } = args;
   const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
   let providerData: Record<string, unknown> | undefined;
+  const confirmProviderEnd = leaseRegistry.pinProviderLeaseEnd(lease.leaseId);
   let ended: AppError | undefined;
+  let endWon = false;
   try {
     providerData = await leaseLifecycleProvider?.heartbeat?.(lease, {
       ...leaseLifecycleContext(req, args.host),
@@ -392,13 +394,13 @@ async function heartbeatLease(
     });
   } catch (error) {
     if (!(error instanceof AppError) || !isProviderInstanceEndedError(error)) throw error;
-    leaseRegistry.endProviderLease(leaseReleaseRequestFor(lease));
+    endWon = confirmProviderEnd();
     ended = error;
   }
   if (ended) {
     // The client stops beating only on the typed reason, so a failed teardown must not replace it.
     try {
-      await endSessionsForLease?.(lease.leaseId, 'PROVIDER_INSTANCE_ENDED');
+      if (endWon) await endSessionsForLease?.(lease.leaseId, 'PROVIDER_INSTANCE_ENDED');
     } catch (error) {
       emitDiagnostic({
         level: 'warn',

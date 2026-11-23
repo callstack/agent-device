@@ -11,8 +11,10 @@ import {
   type DurableCaptureRecoveryParams,
   type DurableCaptureRecordDefinition,
   type DurableCaptureSessionBinding,
+  type DurableCaptureSessionResource,
   type FinishRecoveredDurableCaptureParams,
 } from '../durable-capture/index.ts';
+import { cleanupDurableCaptureDescriptor } from '../durable-capture/transitions.ts';
 import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -82,6 +84,7 @@ export function createDurableCaptureResource<
     finishLive(params: {
       binding: DurableCaptureSessionBinding<K, H>;
       intent: DurableCaptureFinishIntent;
+      confirmedMissing?: () => boolean;
     }): Promise<C> {
       return finishLiveDurableCapture(
         definition,
@@ -97,6 +100,18 @@ export function createDurableCaptureResource<
         ...params,
         resourcePath: definition.store.resolvePath(params.binding.sessionDir),
       });
+    },
+    /** Records external proof that this exact native resource no longer exists. */
+    async confirmLiveMissing(params: {
+      binding: DurableCaptureSessionBinding<K, H>;
+      resource: DurableCaptureSessionResource<K, H>;
+    }): Promise<void> {
+      await cleanupDurableCaptureDescriptor(definition, {
+        envelope: params.resource.envelope,
+        resourcePath: definition.store.resolvePath(params.binding.sessionDir),
+        cleanup: async () => ({ status: 'already-missing' }),
+      });
+      params.binding.clear(params.resource);
     },
     recoverAll(params: SessionCaptureRecoveryParams<K, H, C>) {
       return recoverDurableCaptureResourcesAfterDaemonLock(recoveryParams(params));

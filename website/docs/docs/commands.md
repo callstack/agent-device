@@ -199,7 +199,7 @@ Aliases: `launch`, `relaunch`.
 | `--relaunch` | open: terminate app process before launching it |
 | `--foreground` | open: keep normal app/device selection and return an initial snapshot of the first screen (a local iOS simulator waits up to 10s for it); without an app, resolve the sole running app on the sole booted iOS simulator; on HarmonyOS with an app target, fail when the launched app does not hold the foreground within 5s |
 | `--no-record` | Do not record this action |
-| `--wait <ms>` | Open: wait up to n ms for a device another session is holding before failing with DEVICE_IN_USE |
+| `--wait <ms>` | Open: limit the wait for a busy device or expired session cleanup to n ms |
 
 Also accepts: [common options](#common-options): `--timeout <ms>`.
 

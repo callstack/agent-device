@@ -26,6 +26,7 @@ type SessionFinalization = Readonly<{
   session: SessionState;
   stateDir: string;
   runtimeHints: RuntimeHintsApplicationInput;
+  onRuntimeHintsCleared?: () => void;
   daemonShutdown?: boolean;
 }>;
 
@@ -46,6 +47,7 @@ async function finalizeSessionApplicationLifecycle(params: SessionFinalization):
   const runtime = await bind(session.device, use);
   await runtime.operations.finalizeApplicationClose(input);
   await runtime.operations.clearRuntimeHints(runtimeHints);
+  params.onRuntimeHintsCleared?.();
 }
 
 /**
@@ -66,6 +68,7 @@ export async function finalizeDaemonSessionApplicationLifecycle(params: {
   stateDir: string;
   /** The stored hints to clear and the app they are bound to, else the session's app. */
   runtimeHints: RuntimeHintsApplicationInput;
+  onRuntimeHintsCleared?: () => void;
   daemonLeaving?: boolean;
 }): Promise<void> {
   const { gateway, scope, session, stateDir, runtimeHints } = params;
@@ -81,6 +84,7 @@ export async function finalizeDaemonSessionApplicationLifecycle(params: {
       session,
       stateDir,
       runtimeHints,
+      onRuntimeHintsCleared: params.onRuntimeHintsCleared,
       ...(params.daemonLeaving === false ? {} : { daemonShutdown: true }),
     });
   } catch (operationError) {

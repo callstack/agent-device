@@ -9,6 +9,8 @@ export type ProviderReleaseRecord = {
   provider?: string;
 };
 
+export type LeaseCleanupFailure = { leaseId: string; failedSteps: string[] };
+
 /**
  * #1320: what happened to one session's device claim during graceful teardown.
  * `released` means the claim was confirmed gone after the session reached a safe
@@ -27,6 +29,7 @@ export type DeviceClaimRecord = {
 };
 
 export type DaemonShutdownReport = {
+  leaseCleanupFailures?: LeaseCleanupFailure[];
   providerReleases: {
     released: ProviderReleaseRecord[];
     pending: ProviderReleaseRecord[];
@@ -40,6 +43,7 @@ export type DaemonShutdownReport = {
 };
 
 export type DaemonShutdownOutcome = {
+  leaseCleanupFailures?: LeaseCleanupFailure[];
   providerReleases: { released: readonly DeviceLease[]; pending: readonly DeviceLease[] };
   claims: {
     released: readonly DeviceClaimRecord[];
@@ -51,6 +55,7 @@ export type DaemonShutdownOutcome = {
 
 export function buildDaemonShutdownReport(outcome: DaemonShutdownOutcome): DaemonShutdownReport {
   return {
+    ...leaseCleanupFailureSection(outcome.leaseCleanupFailures),
     providerReleases: {
       released: outcome.providerReleases.released.map(toProviderReleaseRecord),
       pending: outcome.providerReleases.pending.map(toProviderReleaseRecord),
@@ -70,7 +75,11 @@ export function readDaemonShutdownReport(stateDir: string): DaemonShutdownReport
       fs.readFileSync(resolveDaemonShutdownReportPath(stateDir), 'utf8'),
     );
     return isProviderReleaseReport(parsed)
-      ? { providerReleases: parsed.providerReleases, claims: readClaimSection(parsed) }
+      ? {
+          providerReleases: parsed.providerReleases,
+          claims: readClaimSection(parsed),
+          ...leaseCleanupFailureSection(parsed.leaseCleanupFailures),
+        }
       : null;
   } catch {
     return null;
@@ -88,9 +97,13 @@ function toProviderReleaseRecord(lease: DeviceLease): ProviderReleaseRecord {
   };
 }
 
-function isProviderReleaseReport(
-  value: unknown,
-): value is Omit<DaemonShutdownReport, 'claims'> & { claims?: unknown } {
+function isProviderReleaseReport(value: unknown): value is Pick<
+  DaemonShutdownReport,
+  'providerReleases'
+> & {
+  claims?: unknown;
+  leaseCleanupFailures?: unknown;
+} {
   if (!value || typeof value !== 'object') return false;
   const releases = (value as { providerReleases?: unknown }).providerReleases;
   if (!releases || typeof releases !== 'object') return false;
@@ -101,6 +114,20 @@ function isProviderReleaseReport(
     records.released.every(isProviderReleaseRecord) &&
     records.pending.every(isProviderReleaseRecord)
   );
+}
+
+function leaseCleanupFailureSection(
+  value: unknown,
+): Pick<DaemonShutdownReport, 'leaseCleanupFailures'> {
+  if (!Array.isArray(value)) return {};
+  const leaseCleanupFailures = value.filter(
+    (item): item is LeaseCleanupFailure =>
+      isProviderReleaseRecord(item) &&
+      'failedSteps' in item &&
+      Array.isArray(item.failedSteps) &&
+      item.failedSteps.every((step) => typeof step === 'string'),
+  );
+  return leaseCleanupFailures.length ? { leaseCleanupFailures } : {};
 }
 
 function readClaimSection(value: { claims?: unknown }): DaemonShutdownReport['claims'] {

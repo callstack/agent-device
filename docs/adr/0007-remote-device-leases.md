@@ -28,16 +28,29 @@ A daemon that enforces this rule reports the `session-lease-id` capability.
 
 A session binds its admitted lease when it is created. Recording and snapshot can also create a session.
 A session that starts without a lease stays unleased for its lifetime.
-If an `open` would change the session's lease, the daemon refuses it with `LEASE_SESSION_MISMATCH` before launch.
-Close the session under its current ownership before you open it under another lease.
+If an `open` would change a live session's lease, the daemon refuses it with `LEASE_SESSION_MISMATCH` before launch.
+Only an `open` with its own active lease can replace an expired session.
+After settlement, the daemon resolves the address and device again and checks the successor lease under the new locks.
 
 Lease admission and request execution share the daemon request lock.
 Scope resolution may precede the lock. Ownership mutation must not.
-A session cannot outlive its lease: lease end tears down its sessions and clears their device claims, even when the device no longer answers.
+Lease expiry revokes admission before teardown.
+The sweep and requests use the same daemon job for each expired session lifetime.
+A request confirms expiry under the session lock and waits outside execution locks.
+A lease end record covers all sessions, any retained execution host, and provider release.
+The session job checks the lifetime and claim token under the session and device locks.
+It clears the claim after cleanup confirms that the runtime is safe to reuse.
+The registry reserves the lease's device scope until session cleanup and provider release are confirmed.
+Canceling a request stops its wait while the daemon continues settlement.
+An expired owner request returns `LEASE_NOT_FOUND`.
+An owner `close` can report a confirmed end once in the outermost response.
 When a provider reports an instance ended, the daemon ends the lease and its sessions regardless of provider cleanup outcome.
 A cloud provider runtime refuses to allocate a lease that it is ending. It forgets a rented device only after the provider confirmed its stop.
-Recoverable provider leases are journaled so a later daemon can end rentals left by a dead daemon. Sessions and claims are not restored.
+Recoverable provider leases are journaled so a later daemon can end rentals left by a dead daemon.
+Startup restores the reservation for an unresolved recoverable lease before it accepts overlapping allocations.
+Live sessions start empty, and persistent device claims are checked under their host-global lock.
 
+The registry checks the lease issuance, effective deadline, wanted work, and pending or active holds in the same expiry decision.
 Wanted admitted work and human-control holds defer expiry.
 Wanted work renews the existing inactivity window when it finishes. Canceled work neither defers expiry past cancellation nor renews it.
 Before admission, a client phase such as an artifact upload sends lease heartbeats for as long as it runs.
@@ -67,7 +80,8 @@ The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-dev
 - Device-aware ownership makes contention recoverable before platform execution and keeps provider and device identity in scope.
 - A single request lock keeps ownership and execution consistent.
 - Preserving wanted work prevents an active command or provider allocation from losing its device to inactivity expiry.
-- Recovery ends paid rentals without reviving claims and sessions that died with the daemon.
+- Recovery ends paid rentals while live session admission starts empty.
+- One expiry job prevents an owner request and the sweep from performing the same teardown.
 - Host-owned app leases keep tenants from choosing their own authority over the desktop.
 - A shared proxy token cannot tell one client from another. A session name and tenant can be listed or guessed, so only a random lease id can prove ownership.
 
@@ -76,6 +90,7 @@ The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-dev
 - Use runner locks as client leases: they protect tooling, not remote ownership.
 - Restore live leases after daemon death: their sessions and device claims no longer exist.
 - Keep a separate provider lease table per provider: repeated lifecycle bookkeeping drifts.
+- Tear down expiry inline with a request: the sweep and successor can race the same effects.
 - Put the table in contracts: it owns lifecycle mechanics, not wire vocabulary.
 - Put the table in capture-kit: renting a device prepares it for execution, which provision-kit owns.
 - Silently accept unsupported device specifications: the client could receive a different device than requested.

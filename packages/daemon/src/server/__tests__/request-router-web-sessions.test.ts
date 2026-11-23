@@ -88,7 +88,7 @@ test.each(['batch', 'replay'] as const)(
           // directly, so it states the fact the scope would have added.
           req: seedWebSessionIdentity(freshWebRequest(command, name, replayPath)),
           sessionName: name,
-          sessionStore,
+          env: sessionStore.host.env,
         });
         expect(keys).toEqual([
           `session:${name}`,
@@ -496,7 +496,7 @@ test('a sessionless web command locks the implicit default session device it bin
   const plan = await resolveRequestExecutionLockPlan({
     req,
     sessionName: req.session,
-    sessionStore,
+    env: sessionStore.host.env,
   });
   const bound = await resolveCommandDevice({
     session: undefined,

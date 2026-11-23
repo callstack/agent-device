@@ -25,7 +25,7 @@ export type DaemonShutdownClaims = {
 export type DaemonShutdownClaimLedger = Readonly<{
   claims: DaemonShutdownClaims;
   /** Runs only once a session's teardown reached a safe terminal state. */
-  releaseClaim(session: SessionState): Promise<void>;
+  releaseClaim(session: SessionState): Promise<boolean>;
   /** Classifies the session's claim once its teardown has finished either way. */
   finalize(session: SessionState): void;
 }>;
@@ -76,9 +76,11 @@ export function createDaemonShutdownClaimLedger(
     claims,
     releaseClaim: async (session) => {
       const claim = session.deviceClaim;
-      if (!claim) return;
+      if (!claim) return true;
       try {
-        outcomes.set(claim.ownerToken, await clearDeviceClaim(claim, env));
+        const outcome = await clearDeviceClaim(claim, env);
+        outcomes.set(claim.ownerToken, outcome);
+        return outcome !== 'unattributable';
       } catch (error) {
         outcomes.set(claim.ownerToken, CLEAR_UNRECORDED);
         emitDiagnostic({
@@ -90,6 +92,7 @@ export function createDaemonShutdownClaimLedger(
             error: error instanceof Error ? error.message : String(error),
           },
         });
+        return false;
       }
     },
     finalize: (session) => {

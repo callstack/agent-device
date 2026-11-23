@@ -189,8 +189,12 @@ agent-device open Demo --platform android --wait 60000
 
 If the wait runs out while the device is still busy, `open` fails with `DEVICE_IN_USE`.
 If the reply names the holder, its owner can run `close --session <address>` to release the device.
-Each waiting `open` gets its full wait. If another waiter gets the device first, the rest keep
-waiting for the time left in their own budgets.
+Each waiting `open` has its own budget. If another waiter gets the device first, the rest keep
+waiting for the time left in their budgets.
+
+If the session at the address has an expired lease, `open` with your own valid lease waits for
+cleanup within the request deadline. Use `--wait` to cap that wait. Your lease must still be valid
+when cleanup ends.
 
 Behind a shared proxy token, all clients share a tenant. A proxy client can see the holder's address
 in a refusal or in wait progress if it can list the holder and the holder has a lease or a tenant
@@ -198,8 +202,7 @@ scope. To see the address of a leased holder, the caller must send that holder's
 Open contention and claim conflicts can show the address of an unleased session in another
 workspace to a local caller. The owner can use that address to close the session from its workspace.
 
-`--wait` waits only for another session. If another workspace's daemon holds the claim,
-`open` fails at once.
+If another workspace's daemon holds the claim, `open` fails at once.
 Device-mutating commands like `install` and `reinstall` don't wait either: while a
 session other than yours holds the device, they fail at once with `DEVICE_IN_USE`.
 Copying the owner's `--session` address doesn't change that — the claim must also

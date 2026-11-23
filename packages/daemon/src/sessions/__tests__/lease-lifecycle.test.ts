@@ -6,10 +6,8 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   admitRequestLeaseForLockedScope,
-  cleanupExpiredLeasedSession,
   releaseExpiredProviderLease,
   releaseSessionLease,
-  resolveLockedRequestSessionRef,
 } from '../lease-lifecycle.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 
@@ -50,8 +48,7 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
   const req = admitRequestLeaseForLockedScope({
     env: process.env,
     req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
-    sessionName: 'default',
-    sessionStore,
+    session: sessionStore.get('default'),
     leaseRegistry,
   });
 
@@ -80,99 +77,13 @@ test('admitRequestLeaseForLockedScope renews no session for a command that ignor
       command: 'devices',
       meta: { leaseId: own.leaseId, tenantId: 'tenant-a', runId: 'run-b' },
     }),
-    sessionName: 'default',
-    sessionStore,
+    session: sessionStore.get('default'),
     leaseRegistry,
   });
 
   // The addressed app lease still makes `devices` need a lease; it is admitted under its own.
   expect(req.internal?.admittedLease?.leaseId).toBe(own.leaseId);
   expect(sessionStore.get('default')?.lease).toEqual(sessionLease);
-});
-
-test('resolveLockedRequestSessionRef ends nothing when the successor lease expires while it waits for the device lock', async () => {
-  let now = 1_000;
-  const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
-  const leaseRegistry = new LeaseRegistry({ minLeaseTtlMs: 1, now: () => now });
-  const expired = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a', ttlMs: 10 });
-  const successor = leaseRegistry.allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-b',
-    ttlMs: 50,
-  });
-  const ref = sessionStore.publish(
-    'default',
-    makeIosSession('default', {
-      lease: {
-        leaseId: expired.leaseId,
-        tenantId: expired.tenantId,
-        runId: expired.runId,
-        backend: expired.backend,
-      },
-    }),
-  );
-  now = 1_020;
-  const teardownSession = vi.fn(async () => {});
-  const onSuccessorAdmitted = vi.fn();
-
-  await expect(
-    resolveLockedRequestSessionRef({
-      env: process.env,
-      req: makeRequest({ command: 'open', meta: { leaseId: successor.leaseId } }),
-      sessionName: 'default',
-      sessionStore,
-      leaseRegistry,
-      teardown: 'inline',
-      holdDeviceLock: async () => {
-        now = 1_060;
-      },
-      teardownSession,
-      admission: {},
-      onSuccessorAdmitted,
-    }),
-  ).rejects.toMatchObject({ details: { reason: 'LEASE_SESSION_MISMATCH' } });
-
-  expect(teardownSession).not.toHaveBeenCalled();
-  expect(onSuccessorAdmitted).not.toHaveBeenCalled();
-  expect(sessionStore.lookup('default')?.lifetime).toBe(ref.lifetime);
-});
-
-test('cleanupExpiredLeasedSession consumes expired lease and deletes the session after teardown', async () => {
-  let now = 1_000;
-  const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
-  const leaseRegistry = new LeaseRegistry({
-    defaultLeaseTtlMs: 10,
-    minLeaseTtlMs: 1,
-    now: () => now,
-  });
-  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  const session = makeIosSession('default', {
-    lease: {
-      leaseId: lease.leaseId,
-      tenantId: lease.tenantId,
-      runId: lease.runId,
-      backend: lease.backend,
-    },
-  });
-  sessionStore.publish('default', session);
-  now = 1_011;
-  const teardownSession = vi.fn(async () => {});
-
-  const cleaned = await cleanupExpiredLeasedSession({
-    env: process.env,
-    ref: sessionStore.lookup('default'),
-    sessionStore,
-    leaseRegistry,
-    teardownSession,
-    teardown: 'inline',
-  });
-
-  expect(cleaned).toBe(true);
-  expect(teardownSession).toHaveBeenCalledWith(
-    expect.objectContaining({ address: 'default', session }),
-  );
-  expect(sessionStore.get('default')).toBeUndefined();
-  expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
 test('releaseSessionLease releases with the stored session owner scope', async () => {

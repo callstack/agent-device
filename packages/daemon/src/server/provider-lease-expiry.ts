@@ -1,3 +1,4 @@
+import { AsyncResource } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
@@ -73,7 +74,10 @@ export type ExpiredProviderLeaseReleaser = {
    * providers may already be disposed. A recoverable lease is still made durable for the next daemon,
    * which is what the outcome's `durable` answers.
    */
-  release: (lease: DeviceLease) => Promise<ProviderLeaseReleaseOutcome>;
+  release: (
+    lease: DeviceLease,
+    afterSessionCleanup?: Promise<void>,
+  ) => Promise<ProviderLeaseReleaseOutcome>;
   /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
   recordLiveLeases: (leases: readonly DeviceLease[]) => void;
   /**
@@ -104,6 +108,8 @@ export function createExpiredProviderLeaseReleaser(options: {
   stateDir?: string;
   recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
+  onRecovered?: (lease: DeviceLease) => void;
+  onReleased?: (lease: DeviceLease) => void;
   /** Gives a timer-driven retry, which runs outside any request, a diagnostics scope. */
   withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
 }): ExpiredProviderLeaseReleaser {
@@ -114,6 +120,8 @@ export function createExpiredProviderLeaseReleaser(options: {
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   const activeReleaseAttempts = new Map<string, Promise<void>>();
+  const releaseContext = new AsyncResource('ProviderLeaseExpiry');
+  const sessionCleanup = new Map<string, Promise<void>>();
   let phase: ReleaserPhase = 'running';
   /** The releases this drain window observed; replaced at each window so one window's set is never another's. */
   let drainReleasedLeases = new Map<string, DeviceLease>();
@@ -144,6 +152,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   const recordReleasedLease = (lease: DeviceLease): void => {
     // The drain window is the only period that reports releases, so the phase is the tracker and the
     // set cannot grow outside it.
+    options.onReleased?.(lease);
     if (phase === 'draining') drainReleasedLeases.set(lease.leaseId, lease);
   };
 
@@ -245,6 +254,7 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
     for (const leaseId of pendingRecoveryLeases.keys()) persistedRecoveryLeaseIds.add(leaseId);
     adoptOrphanedLeases(onDiagnostic);
+    for (const lease of pendingRecoveryLeases.values()) options.onRecovered?.(lease);
     await retryPending();
   };
   const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
@@ -296,19 +306,29 @@ export function createExpiredProviderLeaseReleaser(options: {
     return attempt;
   };
 
+  const startReleaseAttempt = (leaseId: string, key: string, run: () => Promise<void>) => {
+    const after = sessionCleanup.get(leaseId);
+    const attempt = after
+      ? releaseContext.runInAsyncScope(async () => {
+          await after;
+          if (phase !== 'closed') await (options.withinDiagnosticsScope?.(run) ?? run());
+        })
+      : run();
+    return trackReleaseAttempt(key, attempt);
+  };
+
   const ensureLiveReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
     if (phase === 'closed') return undefined;
     if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) return undefined;
     const key = `live:${lease.leaseId}`;
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
-    const attempt = (async (): Promise<void> => {
+    return startReleaseAttempt(lease.leaseId, key, async () => {
       if (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease)) {
         pendingLiveLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
       }
-    })();
-    return trackReleaseAttempt(key, attempt);
+    });
   };
 
   const ensureRecoveryReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
@@ -318,14 +338,13 @@ export function createExpiredProviderLeaseReleaser(options: {
     const key = `recovery:${lease.leaseId}`;
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
-    const attempt = (async (): Promise<void> => {
+    return startReleaseAttempt(lease.leaseId, key, async () => {
       if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
         pendingRecoveryLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
         persistPendingLeases();
       }
-    })();
-    return trackReleaseAttempt(key, attempt);
+    });
   };
 
   const retryPending = async (): Promise<void> => {
@@ -376,9 +395,16 @@ export function createExpiredProviderLeaseReleaser(options: {
       advancePhase('draining');
       drainReleasedLeases = new Map();
     },
-    release: async (lease) => {
+    release: async (lease, afterSessionCleanup) => {
       if (!lease.leaseProvider) return { status: 'not-required' };
       if (phase === 'closed') return refuseClosedRelease(lease);
+      if (afterSessionCleanup) {
+        sessionCleanup.set(lease.leaseId, afterSessionCleanup);
+        const forget = () => {
+          sessionCleanup.delete(lease.leaseId);
+        };
+        void afterSessionCleanup.then(forget, forget);
+      }
       if (isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
         // Set before the first await: the registry journals right after `onLeaseExpired` returns, and the
         // journal keeps this lease only while it is pending here and not yet durable.

@@ -31,6 +31,7 @@ export async function finishLiveDurableCapture<
   params: {
     binding: DurableCaptureSessionBinding<K, H>;
     intent: DurableCaptureFinishIntent;
+    confirmedMissing?: () => boolean;
   },
   resourcePath: string,
 ): Promise<C> {
@@ -43,6 +44,7 @@ export async function finishLiveDurableCapture<
       fence: active.envelope.fence,
       resourcePath,
       intent: params.intent,
+      confirmedMissing: params.confirmedMissing,
       onCleanupPending: () => {
         cleanupPending = true;
       },
@@ -73,9 +75,15 @@ export async function finishDurableCaptureHandle<
     fence: ResourceOwnershipFence;
     resourcePath: string;
     intent: DurableCaptureFinishIntent;
+    confirmedMissing?: () => boolean;
     onCleanupPending?(outcome: Extract<CleanupOutcome, { status: 'cleanup-pending' }>): void;
   },
 ): Promise<C> {
+  const settleIfMissing = (lease: DurableCaptureOpenResourceFenceLease<K>): void => {
+    if (!params.confirmedMissing?.()) return;
+    transitionCleanupOutcome(lease, { status: 'already-missing' });
+    throw completedDurableCaptureError(definition.store);
+  };
   return await withDurableCaptureResourceFence({
     store: definition.store,
     resourcePath: params.resourcePath,
@@ -87,7 +95,9 @@ export async function finishDurableCaptureHandle<
     onCompleted: async ({ envelope }) => {
       let cleanup: CleanupOutcome;
       try {
-        cleanup = await params.handle.forceCleanup();
+        cleanup = params.confirmedMissing?.()
+          ? { status: 'already-missing' }
+          : await params.handle.forceCleanup();
       } catch (error) {
         cleanup = {
           status: 'cleanup-pending',
@@ -110,12 +120,14 @@ export async function finishDurableCaptureHandle<
       throw completedDurableCaptureError(definition.store);
     },
     run: async (lease) => {
+      settleIfMissing(lease);
       markCompletingDurableCapture(lease);
       const progress = createStopProgress(lease);
       let finishOutcome: FinishOutcome<C>;
       try {
         finishOutcome = await params.handle.finish(progress);
       } catch (finishError) {
+        settleIfMissing(lease);
         await respondToFailedFinish(definition, lease, params, finishError, params.intent);
         throw finishError;
       }
@@ -125,6 +137,7 @@ export async function finishDurableCaptureHandle<
       }
       transitionFinishOutcome(definition, lease, finishOutcome);
       const finishError = cleanupPendingError(definition, finishOutcome);
+      settleIfMissing(lease);
       await respondToFailedFinish(definition, lease, params, finishError, params.intent);
       throw finishError;
     },
