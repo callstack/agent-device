@@ -608,6 +608,21 @@ These reasons can come from more than one command.
 | `daemon_response_read_failure` | The response body could not be read before the connection ended. |
 | `daemon_request_too_large` | The serialized request passes `DAEMON_REQUEST_MAX_BYTES`, so it was refused before being sent. |
 
+### Device boot
+
+| Reason | Meaning |
+| --- | --- |
+| `IOS_BOOT_TIMEOUT` | The iOS simulator did not finish booting within its budget. |
+| `IOS_RUNNER_CONNECT_TIMEOUT` | The XCTest runner did not accept a connection: xcodebuild exited before it was ready, or the connection timed out, was refused or dropped. |
+| `IOS_RUNNER_OWNED_BY_OTHER_DAEMON` | The XCTest runner for this device is owned by another agent-device daemon, or is still busy after this session's device lease was admitted. |
+| `IOS_TOOL_MISSING` | Xcode command-line tools are missing or not on PATH. |
+| `ANDROID_BOOT_TIMEOUT` | The Android emulator did not finish booting, or an adb command timed out while it booted. |
+| `ADB_TRANSPORT_UNAVAILABLE` | adb is missing, its host refused the request, or the device is unauthorized. |
+| `CI_RESOURCE_STARVATION_SUSPECTED` | The boot output shows the host ran out of memory or processes, or a boot process was killed, as on an overloaded CI machine. |
+| `IOS_RUNNER_DEVICE_NOT_PROVISIONED` | The XCTest runner cannot be installed because its provisioning profile does not cover the device. Register the device with the signing team; retrying alone keeps failing. |
+| `BOOT_COMMAND_FAILED` | A boot command failed for another reason, including an iOS signing or profile failure; its stdout and stderr say which. |
+| `UNKNOWN` | The boot failed with no output or error to classify. |
+
 ### Device claims
 
 | Reason | Meaning |
