@@ -60,8 +60,11 @@ async function setPermission(
   const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
   const appBundleId = await requireAppBundleId(request);
   if (target === 'notifications') {
-    await setNotificationPermission(request, action, appBundleId);
-    return { permission: 'notifications', warnings: [SPRINGBOARD_RESTART_WARNING] };
+    const restarted = await setNotificationPermission(request, action, appBundleId);
+    return {
+      permission: 'notifications',
+      ...(restarted ? { warnings: [SPRINGBOARD_RESTART_WARNING] } : {}),
+    };
   }
   if (target === 'all' && action !== 'reset') {
     return await setEveryIosPrivacyService(request, action, appBundleId);
@@ -72,6 +75,11 @@ async function setPermission(
     if (!isIosPrivacyServiceRefusal(error)) throw error;
     throw iosPrivacyServiceRefusedError(action, target, appBundleId, deviceId, error);
   }
+  if (target !== 'all') return;
+  // A reset of `all` is one call that removes every privacy row, then notifications.
+  const applied = ['all'];
+  const warnings = await setNotificationsUnderAll(request, action, appBundleId, applied);
+  return { permission: 'all', permissions: applied, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
 /**
@@ -139,8 +147,7 @@ const IOS_ALL_REVOKED_SERVICES: readonly string[] = [...IOS_ALL_GRANTED_SERVICES
  * not consult, so the app still prompts, and a revoke of `all` leaves every per-service grant in
  * place. A service the runtime refuses, or a notification settings file this cannot write, is
  * skipped with a warning, as Android skips a permission it cannot change. Any other failure stops
- * the sequence, and its error carries the services already changed in `details.permissions`. A
- * reset of `all` stays one call: it removes every row.
+ * the sequence, and its error carries the services already changed in `details.permissions`.
  */
 async function setEveryIosPrivacyService(
   request: SimctlSettingRequest,
@@ -162,26 +169,40 @@ async function setEveryIosPrivacyService(
       warnings.push(`Skipped ${service}: this iOS runtime does not let simctl privacy change it.`);
     }
   }
-  try {
-    await setNotificationPermission(request, action, appBundleId);
-    applied.push('notifications');
-    warnings.push(SPRINGBOARD_RESTART_WARNING);
-  } catch (error) {
-    if (!isNotificationSettingsRefusal(error)) throw withAppliedServices(error, applied);
-    warnings.push(`Skipped notifications: ${error.message}`);
-  }
+  warnings.push(...(await setNotificationsUnderAll(request, action, appBundleId, applied)));
   if (applied.length === 0) {
     throw iosPrivacyServiceRefusedError(action, 'all', appBundleId, deviceId, lastRefusal);
   }
   return { permission: 'all', permissions: applied, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
+/**
+ * Notifications as the last step of `all`: the restart warning when they change, none when the file
+ * already holds them, or a skip warning when the file cannot be written. Any other failure carries
+ * what `all` already changed.
+ */
+async function setNotificationsUnderAll(
+  request: SimctlSettingRequest,
+  action: 'grant' | 'revoke' | 'reset',
+  appBundleId: string,
+  applied: string[],
+): Promise<string[]> {
+  try {
+    const restarted = await setNotificationPermission(request, action, appBundleId);
+    applied.push('notifications');
+    return restarted ? [SPRINGBOARD_RESTART_WARNING] : [];
+  } catch (error) {
+    if (!isNotificationSettingsRefusal(error)) throw withAppliedServices(error, applied);
+    return [`Skipped notifications: ${error.message}`];
+  }
+}
+
 async function setNotificationPermission(
   { runSimctl, udid, deviceId, notificationSettingsPath }: SimctlSettingRequest,
   action: 'grant' | 'revoke' | 'reset',
   appBundleId: string,
-): Promise<void> {
-  await setSimulatorNotificationPermission({
+): Promise<boolean> {
+  return await setSimulatorNotificationPermission({
     runSimctl,
     udid,
     deviceId,

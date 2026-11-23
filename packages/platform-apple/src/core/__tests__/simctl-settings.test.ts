@@ -198,7 +198,7 @@ test.for([
   },
 );
 
-test('reset all stays one simctl call, which clears every service', async () => {
+test('reset all is one simctl privacy call, which clears every service', async () => {
   const runSimctl = recordingRunner();
 
   const result = await applySimctlSetting(
@@ -211,7 +211,13 @@ test('reset all stays one simctl call, which clears every service', async () => 
   );
 
   expect(argvs(runSimctl)).toEqual([['privacy', 'SIM-1', 'reset', 'all', 'com.example.app']]);
-  expect(result).toBeUndefined();
+  expect(result).toEqual({
+    permission: 'all',
+    permissions: ['all'],
+    warnings: [
+      'Skipped notifications: iOS simulator notification permission needs the simulator files on this host.',
+    ],
+  });
 });
 
 test('grant all fails as unsupported only when the runtime refuses every service', async () => {

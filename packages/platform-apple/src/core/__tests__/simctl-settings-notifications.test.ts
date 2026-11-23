@@ -263,13 +263,97 @@ test('grant all stops at a restart failure and names the services it changed', a
   expect(failed.details?.permissions).not.toContain('notifications');
 });
 
-test('reset all with a settings file stays one simctl privacy call', async () => {
+test('reset all clears every privacy row, then removes the app notification record', async () => {
   const file = await settingsFile();
+  await applySimctlSetting(permission(recordingRunner(), 'grant', 'notifications', file));
   const runSimctl = recordingRunner();
 
-  await applySimctlSetting(permission(runSimctl, 'reset', 'all', file));
+  const result = await applySimctlSetting(permission(runSimctl, 'reset', 'all', file));
 
   expect(runSimctl.mock.calls.map(([args]) => args)).toEqual([
     ['privacy', 'SIM-1', 'reset', 'all', 'com.example.app'],
+    ...RESTART,
   ]);
+  expect(result).toEqual({
+    permission: 'all',
+    permissions: ['all', 'notifications'],
+    warnings: [SPRINGBOARD_RESTART_WARNING],
+  });
+  expect(Object.keys(sections(file))).toEqual(['com.apple.Home']);
+});
+
+test('reset all that simctl refuses leaves the notification record alone', async () => {
+  const file = await settingsFile();
+  await applySimctlSetting(permission(recordingRunner(), 'grant', 'notifications', file));
+  const refused = new AppError('COMMAND_FAILED', 'simctl exited with code 1', {
+    stderr: 'Failed to reset access\nOperation not permitted',
+  });
+  const runSimctl = vi.fn(async (_args: string[]) => {
+    throw refused;
+  });
+
+  await expect(
+    applySimctlSetting(permission(runSimctl, 'reset', 'all', file)),
+  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION', cause: refused });
+  expect(runSimctl).toHaveBeenCalledTimes(1);
+  expect(recordOf(sections(file)['com.example.app']).status).toBe(2);
+});
+
+test.for([
+  { held: 'grant', state: 'grant' },
+  { held: 'deny', state: 'deny' },
+  { held: undefined, state: 'reset' },
+])(
+  '$state notifications on a file that already holds it changes nothing and restarts nothing',
+  async ({ held, state }) => {
+    const file = await settingsFile();
+    if (held) await applySimctlSetting(permission(recordingRunner(), held, 'notifications', file));
+    const before = fs.readFileSync(file);
+    const runSimctl = recordingRunner();
+
+    const result = await applySimctlSetting(permission(runSimctl, state, 'notifications', file));
+
+    expect(result).toEqual({ permission: 'notifications' });
+    expect(runSimctl).not.toHaveBeenCalled();
+    expect(fs.readFileSync(file)).toEqual(before);
+  },
+);
+
+test.for([
+  { label: 'another status', record: undefined },
+  { label: 'an archive that does not parse', record: new Uint8Array([1, 2, 3]) },
+])('a record with $label is rewritten with a restart', async ({ record }) => {
+  const file = await settingsFile();
+  if (record) {
+    fs.writeFileSync(
+      file,
+      build({
+        ...SETTINGS,
+        sectionInfo: { 'com.apple.Home': HOME_RECORD, 'com.example.app': record },
+      }),
+    );
+  } else {
+    await applySimctlSetting(permission(recordingRunner(), 'deny', 'notifications', file));
+  }
+  const runSimctl = recordingRunner();
+
+  await applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file));
+
+  expect(runSimctl.mock.calls.map(([args]) => args)).toEqual(RESTART);
+  expect(recordOf(sections(file)['com.example.app']).status).toBe(2);
+});
+
+test('grant all on a file that already holds the grant counts notifications without a restart', async () => {
+  const file = await settingsFile();
+  await applySimctlSetting(permission(recordingRunner(), 'grant', 'notifications', file));
+  const runSimctl = recordingRunner();
+
+  const result = (await applySimctlSetting(permission(runSimctl, 'grant', 'all', file))) as {
+    permissions: string[];
+    warnings?: string[];
+  };
+
+  expect(runSimctl.mock.calls.every(([args]) => args[0] === 'privacy')).toBe(true);
+  expect(result.permissions.at(-1)).toBe('notifications');
+  expect(result.warnings).toBeUndefined();
 });

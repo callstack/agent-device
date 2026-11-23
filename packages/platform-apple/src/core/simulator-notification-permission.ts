@@ -56,10 +56,11 @@ type SettingsFile = {
  * `BBSectionInfo` per bundle id, or none for a reset. SpringBoard and `usernotificationsd` write
  * their copy back as they stop, so the edit lands between their stop and start, and the restart
  * leaves the simulator on the Home Screen. A file in any other layout is refused, not rewritten.
+ * Resolves `false`, with no restart, when the file already holds the asked-for status.
  */
 export async function setSimulatorNotificationPermission(
   request: NotificationPermissionRequest,
-): Promise<void> {
+): Promise<boolean> {
   const { runSimctl, udid, settingsPath } = request;
   if (settingsPath === undefined) {
     throw notificationSettingsError(
@@ -69,8 +70,13 @@ export async function setSimulatorNotificationPermission(
       'Answer the app notification prompt instead, or use a simulator on the host that runs agent-device.',
     );
   }
-  // Read before the stop as well, so a file this cannot write refuses without a restart.
-  await readSettingsFile(request, settingsPath);
+  // Read before the stop as well, so a file this cannot write refuses without a restart. SpringBoard
+  // writes a prompt answer to the file at once (iOS 27.2), so a file that already holds the status
+  // is what the services hold too.
+  const current = await readSettingsFile(request, settingsPath);
+  if ((await recordedStatus(current, request.appBundleId)) === wantedStatus(request.action)) {
+    return false;
+  }
   try {
     for (const service of NOTIFICATION_SERVICES) {
       await runSimctl(['spawn', udid, 'launchctl', 'stop', service]);
@@ -89,6 +95,39 @@ export async function setSimulatorNotificationPermission(
     for (const service of NOTIFICATION_SERVICES) {
       await runSimctl(['spawn', udid, 'launchctl', 'start', service]);
     }
+  }
+  return true;
+}
+
+/** The status the action leaves, with `null` for a reset's absent record. */
+function wantedStatus(action: NotificationPermissionRequest['action']): number | null {
+  return action === 'reset' ? null : AUTHORIZATION_STATUS[action];
+}
+
+/**
+ * The `authorizationStatus` an app's record holds, `null` when it has none, and `undefined` when
+ * its archive cannot be read, which never matches a wanted status.
+ */
+async function recordedStatus(
+  file: SettingsFile,
+  bundleId: string,
+): Promise<number | null | undefined> {
+  const record = file.sections[bundleId];
+  if (record === undefined) return null;
+  const { parseBinary } = await import('plist');
+  try {
+    const archive = parseBinary(record as Uint8Array) as {
+      $top: { root: { UID: number } };
+      $objects: Array<Record<string, { UID: number } | number>>;
+    };
+    const info = archive.$objects[archive.$top.root.UID];
+    const settingsRef = info?.sectionInfoSettings;
+    const settings =
+      typeof settingsRef === 'object' ? archive.$objects[settingsRef.UID] : undefined;
+    const status = settings?.authorizationStatus;
+    return typeof status === 'number' ? status : undefined;
+  } catch {
+    return undefined;
   }
 }
 
