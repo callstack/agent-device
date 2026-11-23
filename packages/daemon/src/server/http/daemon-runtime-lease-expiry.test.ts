@@ -149,25 +149,7 @@ async function heartbeatEnded(
   runtime: Awaited<ReturnType<typeof startProviderDaemon>>['runtime'],
   leaseId: string,
 ) {
-  const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'heartbeat',
-      method: 'agent_device.lease.heartbeat',
-      params: {
-        session: 'leased',
-        leaseId,
-        leaseProvider: providerLease.leaseProvider,
-        deviceKey: providerLease.deviceKey,
-        backend: providerLease.leaseBackend,
-        tenantId: providerLease.tenantId,
-        runId: providerLease.runId,
-      },
-    }),
-  });
-  const result = (await response.json()) as RpcBody;
+  const result = await leaseRpc(runtime, 'heartbeat', { leaseId });
   expect(result.error?.data?.details?.reason).toBe(LEASE_REASONS.instanceEnded.reason);
 }
 
@@ -187,7 +169,7 @@ async function closeProviderDaemon(
 
 async function leaseRpc(
   runtime: Awaited<ReturnType<typeof startProviderDaemon>>['runtime'],
-  method: 'allocate' | 'release' | 'close',
+  method: 'allocate' | 'heartbeat' | 'release' | 'close',
   params: Record<string, unknown> = {},
 ): Promise<RpcBody> {
   const scope = { ...providerLease, backend: providerLease.leaseBackend, ...params };
@@ -275,9 +257,10 @@ test.each(['keyed first', 'keyless first', 'both keyed'] as const)(
         deviceKey: order === 'keyed first' ? undefined : providerLease.deviceKey,
       });
       expect(overlap.error?.data?.details).toMatchObject({
-        reason: 'provider-allocation-in-progress',
+        reason: 'DEVICE_LEASE_BUSY',
+        releaseStatus: 'unknown',
+        allocationPhase: 'creating',
       });
-      expect(overlap.error?.data?.details).not.toHaveProperty('releaseStatus');
       expect(overlap.error?.data?.details).not.toHaveProperty('releaseReason');
       expect(allocate).toHaveBeenCalledTimes(1);
     } finally {
@@ -316,23 +299,61 @@ test('same-ID allocation cannot renew while an explicit release is awaiting its 
   }
 });
 
-test('a close retry admits the ending lease owner without renewing it', async () => {
+test('a close retry admits the ending lease owner through the device mutation pass', async () => {
+  const dispatched = barrier();
+  const answer = barrier();
+  let pauseRetry = false;
   const release = vi
     .fn()
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'provider has not confirmed release'))
-    .mockResolvedValue({ release: 'confirmed' });
+    .mockImplementation(async () => {
+      if (pauseRetry) {
+        dispatched.open();
+        await answer.reached;
+      }
+      return { release: 'confirmed' };
+    });
   const { runtime, registry, store } = await startProviderDaemon({
     leaseLifecycleProvider: { release },
   });
   const lease = registry.allocateLease(providerLease);
   store.publish('leased', makeIosSession('leased', { lease }));
-  const close = () => leaseRpc(runtime, 'close', { leaseId: lease.leaseId });
+  const close = (runId = lease.runId) =>
+    leaseRpc(runtime, 'close', { leaseId: lease.leaseId, runId });
+  const host = { kind: 'host' } as const;
+  const holdScope = {
+    backend: lease.backend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: providerLease.deviceKey,
+  };
   try {
     expect(await close()).toMatchObject({ error: { data: { code: 'COMMAND_FAILED' } } });
     expect(registry.inspectActiveLease(lease.leaseId)).toBeUndefined();
-    expect((await close()).result?.ok).toBe(true);
+    expect(await close('different-run')).toMatchObject({
+      error: { data: { code: 'UNAUTHORIZED' } },
+    });
+
+    await registry.putHumanControlHold(host, 'console', { scope: holdScope });
+    const renew = registry.inspectLeaseForClose(lease)?.heartbeatAt;
+    const blocked = await close();
+    expect(blocked.error?.data?.details?.reason).toBe('human_control_active');
+    expect(release).toHaveBeenCalledTimes(1);
+    registry.removeHumanControlHold(host, 'console');
+
+    pauseRetry = true;
+    await vi.advanceTimersByTimeAsync(10);
+    const retry = close();
+    await dispatched.reached;
+    expect(registry.inspectLeaseForClose(lease)?.heartbeatAt).toBe(renew);
+    const activation = registry.putHumanControlHold(host, 'console', { scope: holdScope });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(registry.listHumanControlHolds(host)).toMatchObject([{ state: 'activating' }]);
+    answer.open();
+    expect((await retry).result?.ok).toBe(true);
+    await expect(activation).resolves.toMatchObject({ state: 'active' });
     expect(release).toHaveBeenCalledTimes(2);
   } finally {
+    answer.open();
     await closeProviderDaemon(runtime);
   }
 });
@@ -395,6 +416,28 @@ test.each(['confirmed', 'unknown'] as const)(
       });
     } finally {
       vi.unstubAllEnvs();
+      await closeProviderDaemon(runtime);
+    }
+  },
+);
+
+test.each([undefined, 'proxy', 'cloud'])(
+  'a provider-ended heartbeat frees a lease with no provider runtime (%s)',
+  async (leaseProvider) => {
+    const { runtime, registry } = await startProviderDaemon({
+      leaseLifecycleProvider: {
+        heartbeat: async () => {
+          throw endedInstance();
+        },
+      },
+    });
+    const lease = registry.allocateLease({ ...providerLease, leaseProvider });
+    try {
+      const ended = await leaseRpc(runtime, 'heartbeat', { leaseId: lease.leaseId, leaseProvider });
+      expect(ended.error?.data?.details?.reason).toBe(LEASE_REASONS.instanceEnded.reason);
+      const overlap = await leaseRpc(runtime, 'allocate', { leaseProvider, runId: 'run-2' });
+      expect(overlap).toMatchObject({ result: { ok: true } });
+    } finally {
       await closeProviderDaemon(runtime);
     }
   },

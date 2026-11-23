@@ -255,8 +255,7 @@ test('a leased session keeps its lease until a retried close confirms the cleanu
   await expect(close(sessionStore, sessionName, loader, { leaseRegistry })).rejects.toMatchObject(
     cleanupIncomplete,
   );
-  const leaseId = sessionStore.get(sessionName)?.lease?.leaseId;
-  expect(leaseId && leaseRegistry.isLeaseEndPending(leaseId)).toBe(true);
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
 
   const retried = await close(sessionStore, sessionName, loader, { leaseRegistry });
 

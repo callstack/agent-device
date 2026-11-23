@@ -52,15 +52,6 @@ export async function finalizeDaemonLeases(params: {
             timeoutMs,
           );
           if (outcome === undefined) return { lease, timedOut: true };
-          if (outcome.status === 'released' || outcome.status === 'not-required')
-            leaseRegistry.confirmLeaseEnd(lease.leaseId, 'providerReleased');
-          else if (outcome.status === 'refused')
-            leaseRegistry.markLeaseReleaseUnknown(
-              lease.leaseId,
-              outcome.reason === 'provider-runtime-unavailable'
-                ? outcome.reason
-                : 'provider-release-unconfirmed',
-            );
           return { lease, outcome };
         } catch (error) {
           return { lease, error };

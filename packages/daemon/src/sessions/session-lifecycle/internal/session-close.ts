@@ -170,14 +170,17 @@ async function releaseProviderLeaseForClose(params: {
       | { endedLeaseId: string; providerData?: Record<string, unknown> }
       | undefined;
     let shutdownResult: TargetShutdownResult | undefined;
-    const shutdownTarget = params.lifecycle.operations.shutdownTarget;
-    if (shutdownTarget && providerShutdownRequested(params.req, params.lifecycle)) {
-      if (!params.shutdownPrepared) {
-        throw (
-          closeCleanupError(params.sessionName, params.cleanupFailures, { sessionKept: true }) ??
-          new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.')
-        );
-      }
+    const shutdownTarget = providerShutdownRequested(params.req, params.lifecycle)
+      ? params.lifecycle.operations.shutdownTarget
+      : undefined;
+    if (shutdownTarget && !params.shutdownPrepared) {
+      throw (
+        closeCleanupError(params.sessionName, params.cleanupFailures, { sessionKept: true }) ??
+        new AppError('COMMAND_FAILED', 'Target shutdown preparation failed. Retry close.')
+      );
+    }
+    beginSessionLeaseEnd(params.session.lease, params.leaseRegistry, shutdownTarget !== undefined);
+    if (shutdownTarget) {
       shutdownResult = await shutdownTarget({
         releaseLease: async (leaseId) => {
           const result = await releaseTargetLease({
@@ -472,7 +475,6 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
   } = params;
   const { address: sessionName } = ref;
-  beginSessionLeaseEnd(ref.session.lease, leaseRegistry, providerShutdownRequested(req, lifecycle));
   const cleanupFailures: SessionCleanupFailure[] = [];
   const {
     platformCloseError,

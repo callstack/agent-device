@@ -246,7 +246,7 @@ test('failed shutdown preparation keeps the session and retained lease for retry
   });
   expect(world.release).not.toHaveBeenCalled();
   expect(world.sessionStore.get('test')).toBeDefined();
-  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(0);
+  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
   expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
 });
 

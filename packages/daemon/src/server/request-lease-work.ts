@@ -35,6 +35,8 @@ export async function runAdmittedLeaseWork<T>(
   const lease = req.internal?.admittedLease;
   if (!lease) return await task();
   params.assertCurrent?.();
+  if (req.command === 'close' && leaseRegistry.canRetryClose(lease.leaseId))
+    return await leaseRegistry.runDeviceMutation(lease, task, 'close-retry');
   const work = leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(req.meta?.requestId));
   try {
     return await (isHumanControlMutation(req)

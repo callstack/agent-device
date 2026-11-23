@@ -112,6 +112,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   retryDelayMs?: number;
   onRecovered?: (lease: DeviceLease) => void;
   needsProviderRelease?: (lease: DeviceLease) => boolean;
+  /** The provider half is confirmed, including leases that had no provider to release. */
   onReleased?: (lease: DeviceLease) => void;
   onReleaseUnknown?: (lease: DeviceLease, reason: ReleaseUnknownReason) => void;
   /** Gives a timer-driven retry, which runs outside any request, a diagnostics scope. */
@@ -154,11 +155,15 @@ export function createExpiredProviderLeaseReleaser(options: {
     if (PHASE_RANK[next] > PHASE_RANK[phase]) phase = next;
   };
 
-  const recordReleasedLease = (lease: DeviceLease): void => {
+  const confirmProviderRelease = (
+    lease: DeviceLease,
+    status: 'released' | 'not-required' = 'released',
+  ): void => {
+    options.onReleased?.(lease);
+    if (status === 'not-required') return;
     // The drain window is the only period that reports releases, so the phase is the tracker and the
     // set cannot grow outside it.
     nextRetryDelayMs = retryDelayMs;
-    options.onReleased?.(lease);
     if (phase === 'draining') drainReleasedLeases.set(lease.leaseId, lease);
   };
 
@@ -358,7 +363,7 @@ export function createExpiredProviderLeaseReleaser(options: {
         (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease))
       ) {
         pendingLiveLeases.delete(lease.leaseId);
-        recordReleasedLease(lease);
+        confirmProviderRelease(lease);
       } else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
     });
   };
@@ -376,7 +381,7 @@ export function createExpiredProviderLeaseReleaser(options: {
         (await releaseExpiredProviderLease(options.recoverExpiredLease, lease))
       ) {
         pendingRecoveryLeases.delete(lease.leaseId);
-        recordReleasedLease(lease);
+        confirmProviderRelease(lease);
         persistPendingLeases();
       } else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
     });
@@ -431,7 +436,10 @@ export function createExpiredProviderLeaseReleaser(options: {
       drainReleasedLeases = new Map();
     },
     release: async (lease, afterSessionCleanup) => {
-      if (!leaseProviderRequiringRuntime(lease)) return { status: 'not-required' };
+      if (!leaseProviderRequiringRuntime(lease)) {
+        confirmProviderRelease(lease, 'not-required');
+        return { status: 'not-required' };
+      }
       if (phase === 'closed') {
         options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
         return refuseClosedRelease(lease);

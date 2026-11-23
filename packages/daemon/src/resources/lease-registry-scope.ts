@@ -20,8 +20,6 @@ export const DEVICE_LEASE_REASONS = {
   // Another lease, or this tenant run, already holds the device; retry after that lease is released
   // or expires.
   busy: { reason: 'DEVICE_LEASE_BUSY' },
-  // Another request is creating a provider rental for this scope.
-  allocationInProgress: { reason: 'provider-allocation-in-progress' },
   // The lease is ending and its local session cleanup is still pending.
   sessionCleanupPending: { reason: 'session-cleanup-pending' },
 } as const satisfies ReasonTable<'leases'>;

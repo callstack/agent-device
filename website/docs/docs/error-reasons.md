@@ -9,7 +9,7 @@ A failed command can name why it failed in `error.details.reason`. Branch on the
 
 Treat a reason that this page does not list as unknown, not as an error in the response: a newer daemon or a provider plugin can add reasons. [Commands](/docs/commands) documents more reasons with the behavior of each command.
 
-When lease release cannot be confirmed, `error.details.releaseStatus` is `unknown`. The `error.details.releaseReason` field gives the outstanding proof. A `lease_release` response with `data.released: false` can also include these fields under `data`.
+When lease release cannot be confirmed, `error.details.releaseStatus` is `unknown`. The `error.details.releaseReason` field gives the outstanding proof. If another request is still creating the rental, `DEVICE_LEASE_BUSY` includes `error.details.allocationPhase: creating` and `releaseStatus: unknown`. A `lease_release` response with `data.released: false` can also include these fields under `data`.
 
 | Release reason | Meaning |
 | --- | --- |
@@ -801,7 +801,6 @@ These reasons can come from more than one command.
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_OUTPUT_MISMATCH` | The request does not send the id of the lease that produced the artifact or diagnostics record. |
 | `DEVICE_LEASE_BUSY` | Another lease, or this tenant run, already holds the device; retry after that lease is released or expires. |
-| `provider-allocation-in-progress` | Another request is creating a provider rental for this scope. |
 | `session-cleanup-pending` | The lease is ending and its local session cleanup is still pending. |
 | `LEASE_ID_TOO_SHORT` | A lease id that the caller chose on allocate has fewer than 32 hex digits (128 bits). |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |

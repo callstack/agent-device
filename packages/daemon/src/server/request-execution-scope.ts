@@ -361,7 +361,6 @@ export async function createRequestExecutionScope(params: {
     };
     const admitLease = (ref: SessionRef | undefined, assertCurrent?: () => void) => {
       assertCurrent?.();
-      if (isRetryableClose(ref)) return scopedReq;
       return admitRequestLeaseForLockedScope({
         env: params.host.env,
         req: scopedReq,

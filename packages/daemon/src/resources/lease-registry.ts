@@ -432,6 +432,12 @@ export class LeaseRegistry {
     assertLeaseScopeMatch(this.getActiveLease(scope.leaseId), scope);
   }
 
+  inspectCloseRetryAdmission(request: HeartbeatLeaseRequest): DeviceLease | undefined {
+    const scope = normalizeLeaseAdmissionRequest(request);
+    if (!this.canRetryClose(scope.leaseId)) return undefined;
+    return this.inspectLeaseForClose(request);
+  }
+
   /** Checks request admission and renewal without sweeping or refreshing any lease. */
   inspectLeaseAdmission(request: HeartbeatLeaseRequest): DeviceLease {
     return this.checkLeaseAdmission(request).lease;
@@ -629,12 +635,27 @@ export class LeaseRegistry {
     if (entry) throw humanControlActiveError(entry.hold);
   }
 
-  async runDeviceMutation<T>(lease: DeviceLease | undefined, task: () => Promise<T>): Promise<T> {
+  async runDeviceMutation<T>(
+    lease: DeviceLease | undefined,
+    task: () => Promise<T>,
+    mode: 'active' | 'close-retry' = 'active',
+  ): Promise<T> {
     if (!lease) return await task();
+    if (mode === 'close-retry') {
+      const end = this.ending.get(lease.leaseId);
+      const closingLease =
+        end?.requestRelease === 'close' && end.lease.createdAt === lease.createdAt
+          ? end.lease
+          : undefined;
+      return await this.runLeaseMutation(requireActiveLease(closingLease), task);
+    }
     this.cleanupExpiredLeases();
-    const activeLease = this.getActiveLease(lease.leaseId);
-    this.assertHumanControlAdmission(activeLease);
-    return await this.mutations.run(leaseDeviceBindingKey(activeLease) ?? lease.leaseId, task);
+    return await this.runLeaseMutation(this.getActiveLease(lease.leaseId), task);
+  }
+
+  private async runLeaseMutation<T>(lease: DeviceLease, task: () => Promise<T>): Promise<T> {
+    this.assertHumanControlAdmission(lease);
+    return await this.mutations.run(leaseDeviceBindingKey(lease) ?? lease.leaseId, task);
   }
 
   async awaitDeviceMutations(lease: DeviceLease): Promise<void> {
@@ -899,12 +920,11 @@ export class LeaseRegistry {
     this.assertNoEndingOverlap(scope);
     for (const leaseId of this.allocating) {
       const lease = this.leases.get(leaseId);
-      if (lease && this.overlaps(scope, lease))
-        throw deviceLeaseBusyError(
-          lease,
-          undefined,
-          DEVICE_LEASE_REASONS.allocationInProgress.reason,
-        );
+      if (lease && this.overlaps(scope, lease)) {
+        const error = deviceLeaseBusyError(lease);
+        error.details = { ...error.details, releaseStatus: 'unknown', allocationPhase: 'creating' };
+        throw error;
+      }
     }
     if (!deviceBindingKey) return;
     const activeLeaseId = this.deviceBindings.get(deviceBindingKey);
