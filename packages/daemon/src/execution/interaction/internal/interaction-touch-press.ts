@@ -122,11 +122,15 @@ function buildTargetedRuntimeOptions(
         expectedResolvedTarget: req.internal?.replayTargetGuard,
         preresolvedTarget: req.internal?.findResolvedTarget,
       }),
-    afterRun: async (result) => {
+    afterRun: async (result, readiness) => {
       if (session.lease?.leaseProvider) return undefined;
       return await assertAndroidPressStayedInApp(
         session,
-        formatTouchTargetLabel(target, result),
+        {
+          command,
+          targetLabel: formatTouchTargetLabel(target, result),
+          focusedPackageBefore: readiness.status === 'clear' ? readiness.focusedPackage : undefined,
+        },
         params.androidObservation,
       );
     },

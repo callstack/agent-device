@@ -32,11 +32,12 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
   session: SessionState,
   command: string,
   options: { refContext: RefAdmissionContext | undefined },
-  run: () => Promise<TResult>,
+  run: (readiness: AndroidBlockingDialogReadinessResult) => Promise<TResult>,
   observation?: AndroidObservationAdapter,
 ): Promise<ReadinessOutcome<TResult>> {
   if (session.lease?.leaseProvider) {
-    return { aborted: false, readiness: { status: 'clear' }, runtimeResult: await run() };
+    const readiness = { status: 'clear' } as const;
+    return { aborted: false, readiness, runtimeResult: await run(readiness) };
   }
   const readiness = await ensureAndroidBlockingSystemDialogReady({
     session,
@@ -64,7 +65,7 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     });
     if (abort) return { aborted: true, response: abort };
   }
-  const runtimeResult = await run();
+  const runtimeResult = await run(readiness);
   await ensureAndroidBlockingSystemDialogReady({
     session,
     command,

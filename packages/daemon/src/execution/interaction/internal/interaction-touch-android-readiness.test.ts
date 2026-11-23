@@ -9,6 +9,7 @@ import {
 import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
+  mockLongPressPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
@@ -163,6 +164,83 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: expect.stringContaining('foregrounded com.android.settings'),
+  });
+});
+
+const LAUNCHER_PACKAGE = 'com.google.android.apps.nexuslauncher';
+
+async function longPressAtPointWithFocusBefore(
+  focusedPackageBefore: string,
+  foregroundPackageAfter: string = LAUNCHER_PACKAGE,
+) {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-longpress-focus-before';
+  const session = makeAndroidSession(sessionName);
+  session.appBundleId = 'com.example.app';
+  sessionStore.publish(sessionName, session);
+  // The before-command readiness read names the focused package; the after-command read is clear.
+  mockGetAndroidBlockingDialogObservation.mockResolvedValueOnce({
+    status: 'clear',
+    focusedPackage: focusedPackageBefore,
+  });
+  mockGetAndroidAppState.mockResolvedValue({ package: foregroundPackageAfter, activity: 'Main' });
+  return await handleInteractionCommands({
+    createCommandSurface: touchCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'longpress',
+      positionals: ['540', '1300', '1000'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+}
+
+test('longpress at a point fails, naming longpress, when the app owned the focus before and the launcher after', async () => {
+  await expect(longPressAtPointWithFocusBefore('com.example.app')).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringMatching(
+      /^longpress .+ left com\.example\.app and foregrounded com\.google\.android\.apps\.nexuslauncher\./,
+    ),
+  });
+  expect(mockLongPressPoint).toHaveBeenCalledTimes(1);
+});
+
+test('longpress at a point succeeds when the launcher owned the focus before and after the dispatch', async () => {
+  const response = await longPressAtPointWithFocusBefore(LAUNCHER_PACKAGE);
+  expect(response).toMatchObject({ ok: true });
+  expect(mockLongPressPoint).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  ['a permission prompt', 'com.google.android.permissioncontroller', 'com.android.settings'],
+  ['a Trusted Web Activity', 'com.android.chrome', LAUNCHER_PACKAGE],
+])(
+  'longpress at a point still fails when %s in the app flow owned the focus before an escape',
+  async (_flow, focusedPackageBefore, foregroundPackageAfter) => {
+    await expect(
+      longPressAtPointWithFocusBefore(focusedPackageBefore, foregroundPackageAfter),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining(
+        `left com.example.app and foregrounded ${foregroundPackageAfter}.`,
+      ),
+    });
+  },
+);
+
+test('longpress at a point warns about a second permission prompt that follows a first one', async () => {
+  const response = await longPressAtPointWithFocusBefore(
+    'com.google.android.permissioncontroller',
+    'com.google.android.permissioncontroller',
+  );
+  expect(response).toMatchObject({
+    ok: true,
+    data: { warning: expect.stringMatching(/^longpress .+ opened an Android permission dialog/) },
   });
 });
 

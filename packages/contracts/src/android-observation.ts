@@ -12,7 +12,11 @@ export type AndroidBlockingDialogFocus = Readonly<{
 /** One observation of Android's focused system-window state. */
 export type AndroidBlockingDialogObservation =
   | Readonly<{ status: 'dialog'; focus: AndroidBlockingDialogFocus }>
-  | Readonly<{ status: 'clear' }>
+  | Readonly<{
+      status: 'clear';
+      /** The app package that owns the focused window, when the read named one. */
+      focusedPackage?: string;
+    }>
   | Readonly<{ status: 'unknown' }>;
 
 /** The minimal result needed by daemon-owned recovery to classify an adb tap. */

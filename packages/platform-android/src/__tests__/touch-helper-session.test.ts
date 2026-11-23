@@ -820,7 +820,10 @@ test('fresh helper focus answers app guards while system windows retain ANR diag
         packageName: manifest.packageName,
         instrumentationRunner: manifest.instrumentationRunner,
       });
-      assert.deepEqual(await observer.readBlockingDialog(device), { status: 'clear' });
+      assert.deepEqual(await observer.readBlockingDialog(device), {
+        status: 'clear',
+        focusedPackage: 'com.example.app',
+      });
       assert.equal(
         await observer.readAppFocus(device, 'com.example.app', { requireNoBlockingDialog: true }),
         true,
