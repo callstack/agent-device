@@ -3,7 +3,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOwnerRef,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type {
   ScreenRecordingLiveSnapshot,
@@ -32,7 +35,7 @@ export function harmonyScreenRecordingFacts(device: DeviceInfo) {
     ? Object.freeze({ available: true } as const)
     : Object.freeze({
         available: false,
-        reason: 'unsupported-device-kind',
+        reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
         hint: 'HarmonyOS recording is supported on physical devices only.',
       } as const);
 }
