@@ -344,6 +344,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `setting_app_not_consumed` | The asked-for setting applies to the target itself, so the named app consumes nothing. |
+| `setting_permission_app_positional` | A permission's trailing positional reads as a bundle id or package, which belongs in --app. |
 | `android_bluetooth_adapter_missing` | The device declares no Bluetooth adapter, so there is nothing to turn on or off. |
 | `android_bluetooth_command_unavailable` | The build predates `svc bluetooth`, so the adapter cannot be switched from the shell. |
 | `bluetooth-not-applied` | The device kept Bluetooth in its prior state after `svc bluetooth` accepted the request. |
