@@ -191,6 +191,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `fold-helper-build-failed` | The iOS simulator fold helper could not be built with the selected Xcode. |
 | `orientation-hid-dispatch-failed` | The fold helper could not send the orientation to the iOS simulator. |
+| `orientation-hid-dispatch-timed-out` | The fold helper did not finish sending the orientation in time, so the rotation may have applied. |
 | `unsupported-foldable-orientation` | A foldable iOS simulator cannot rotate to portrait-upside-down. |
 | `orientation-unverified` | The orientation was sent, but the panel table does not report it afterwards. |
 | `orientation-panel-table-unavailable` | The foldable's guest panel table could not be read. |
