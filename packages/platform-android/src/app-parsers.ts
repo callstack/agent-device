@@ -1,3 +1,5 @@
+import type { AndroidBlockingDialogObservation } from '@agent-device/contracts/android-observation';
+
 export type AndroidBlockingDialogFocus = {
   package?: string;
   focusedWindow: string;
@@ -28,7 +30,9 @@ export const ANDROID_FOCUS_MARKERS = [
 ] as const;
 const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
 const ANDROID_PACKAGE_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
-const ANDROID_COMPONENT_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/[A-Za-z0-9_.$]+/;
+/** A `package/Activity` component: group 1 is the package, group 2 the activity. */
+const ANDROID_COMPONENT_PATTERN =
+  /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/;
 
 export function parseAndroidLaunchablePackages(stdout: string): string[] {
   const packages = new Set<string>();
@@ -91,10 +95,9 @@ export function readAndroidBlockingDialogFocus(text: string): AndroidBlockingDia
 }
 
 /** A clear blocking-dialog observation that names the focused package when the read did. */
-export function clearAndroidBlockingDialogObservation(focusedPackage: string | undefined): {
-  status: 'clear';
-  focusedPackage?: string;
-} {
+export function clearAndroidBlockingDialogObservation(
+  focusedPackage: string | undefined,
+): Extract<AndroidBlockingDialogObservation, { status: 'clear' }> {
   return focusedPackage ? { status: 'clear', focusedPackage } : { status: 'clear' };
 }
 
@@ -130,9 +133,7 @@ export function parseAndroidResumedActivity(
       // marker only counts at the start of a field, i.e. at line start or after whitespace.
       if (markerIndex === -1 || (markerIndex > 0 && /\S/.test(line[markerIndex - 1] ?? '')))
         continue;
-      const component = line
-        .slice(markerIndex + marker.length)
-        .match(/\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/);
+      const component = ANDROID_COMPONENT_PATTERN.exec(line.slice(markerIndex + marker.length));
       if (component?.[1] && component[2]) {
         return { package: component[1], activity: component[2] };
       }
