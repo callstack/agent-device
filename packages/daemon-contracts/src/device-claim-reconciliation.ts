@@ -58,13 +58,14 @@ export function createDeviceClaimReconciler(params: {
         return { status: 'retained', reason: `${pending.resourceKind}-cleanup-pending` };
       }
       return { status: 'reconciled' };
-    } catch {
+    } catch (error) {
       emitDiagnostic({
         level: 'warn',
         phase: 'device_claim_orphan_reconciliation_failed',
         data: {
           deviceKey: claim.deviceKey,
           reason: 'durable-resource-reconciliation-failed',
+          errorKind: reconciliationErrorKind(error),
         },
       });
       return { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
@@ -117,13 +118,14 @@ export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryIns
       }
     }
     return { status: 'inspectable', recoveryKinds, ownedResources };
-  } catch {
+  } catch (error) {
     emitDiagnostic({
       level: 'warn',
       phase: 'device_claim_orphan_reconciliation_failed',
       data: {
         deviceKey: claim.deviceKey,
         reason: 'durable-resource-reconciliation-failed',
+        errorKind: reconciliationErrorKind(error),
       },
     });
     return { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
@@ -215,4 +217,11 @@ function inspectResourceOwnership(
     return { status: 'retained', reason: `${resource.resourceKind}-owner-mismatch` };
   }
   return { status: 'owned', resourcePath, requiresRecovery: record.envelope.lifecycle === 'open' };
+}
+
+/** A failure's code or class, without its message: the message can name a session path. */
+function reconciliationErrorKind(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === 'string') return code;
+  return error instanceof Error ? error.name : typeof error;
 }
