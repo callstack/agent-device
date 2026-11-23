@@ -11,7 +11,10 @@ import {
 } from '@agent-device/apple-runner';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { unavailableFact } from '@agent-device/contracts/platform-runtime';
+import {
+  unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import { readRunnerSessionLiveness, runAppleRunnerCommand } from './core/runner-client.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -43,7 +46,7 @@ import { createSystemSurfaceForegroundProbe } from './system-surface-foreground.
  * forwards runner commands only, so every provider-backed Apple device refuses it.
  */
 const providerShakeUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'On Apple targets shake posts through simctl on the daemon host; a provider-owned simulator has no shake control here.',
 );
 

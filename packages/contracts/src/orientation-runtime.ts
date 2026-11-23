@@ -1,7 +1,7 @@
 import type { DeviceRotation } from './device-rotation.ts';
 import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
@@ -33,7 +33,9 @@ export type OrientationRuntimeOperationFacts = Readonly<{
 
 const unlockUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  // Checked against the PLATFORM_RUNTIME_REASONS row type: a value import of platform-runtime.ts
+  // would grow this module's eager closure.
+  reason: 'unsupported-platform-leaf' satisfies RuntimeOperationUnavailability['reason'],
   hint: 'orientation auto is only supported on ADB-backed Android.',
 } as const);
 

@@ -1,5 +1,8 @@
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import { isHostSystemAudioProbeDevice } from '@agent-device/contracts/audio-probe-support';
 
 /**
@@ -13,7 +16,7 @@ export function appleAudioProbeCaptureFact(device: DeviceInfo): RuntimeOperation
   if (device.hostApp) {
     return Object.freeze({
       available: false,
-      reason: 'unsupported-device-scope' as const,
+      reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceScope.reason,
       hint: 'This session holds one app of the Mac. Use a --surface desktop session for audio probe.',
     });
   }
@@ -21,13 +24,13 @@ export function appleAudioProbeCaptureFact(device: DeviceInfo): RuntimeOperation
   if (isMacOs(device) || (isIosFamily(device) && device.kind === 'simulator')) {
     return Object.freeze({
       available: false,
-      reason: 'unsupported-device-backend' as const,
+      reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
       hint: 'audio probe capture requires a macOS host.',
     });
   }
   return Object.freeze({
     available: false,
-    reason: 'unsupported-device-kind' as const,
+    reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
     hint: 'audio is supported for macOS sessions and iOS simulators on macOS hosts; physical iOS devices expose no host audio tap.',
   });
 }

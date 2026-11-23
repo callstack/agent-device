@@ -1,12 +1,15 @@
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
-import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationUnavailability,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import type { MacOsAppBackend } from '@agent-device/contracts/session';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 const nativeBackendUnavailable: RuntimeOperationUnavailability = Object.freeze({
   available: false,
-  reason: 'unsupported-device-backend',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
   hint: 'The native macOS app backend never starts the XCTest runner, which this command needs. Unset AGENT_DEVICE_MACOS_APP_BACKEND to use XCTest.',
 });
 

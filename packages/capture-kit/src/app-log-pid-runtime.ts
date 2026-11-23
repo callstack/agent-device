@@ -16,6 +16,7 @@ import {
   type RuntimeOwnerRef,
   localRuntimeOwner,
   sameRuntimeOwner,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   DurableDescriptorCodec,
@@ -196,7 +197,7 @@ function createFacts<Family extends Platform, Descriptor extends PidScopedDescri
     ? available
     : ({
         available: false,
-        reason: 'owner-capability-missing',
+        reason: PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
         hint: options.startUnavailableHint,
       } as const);
   return Object.freeze({

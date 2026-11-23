@@ -1,7 +1,10 @@
 import type { SetFoldPoseInput } from '@agent-device/contracts/device';
 import { foldRuntimeOperationFacts } from '@agent-device/contracts/fold-runtime';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import { whenAdmitted } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 import { setAppleFoldPose } from './pose.ts';
@@ -10,12 +13,12 @@ const available = Object.freeze({ available: true } as const);
 
 const foldKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'fold is supported on foldable iPhone simulators controlled through simulator HID; a physical device is folded by hand.',
 } as const);
 const foldOsUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'fold poses the hinge of a foldable iPhone; tvOS, macOS, watchOS and visionOS simulators have no hinge.',
 } as const);
 

@@ -7,6 +7,7 @@ import {
   providerRuntimeOwner,
   runtimeOwnerKey,
   sameRuntimeOwner,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -365,7 +366,7 @@ async function selectExactOwner(
 /** Missing provider modules must fail closed per operation, never via a shared lifecycle bucket. */
 const UNSUPPORTED_PROVIDER_MODE = Object.freeze({
   available: false,
-  reason: 'unsupported-provider-mode',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
 } as const);
 
 function unavailableProviderBinding(
