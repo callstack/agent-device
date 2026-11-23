@@ -526,7 +526,7 @@ describe('auditSnapshotState with retained tap facts', () => {
     return { nodes, createdAt: 0 };
   }
 
-  test('restores exact android-helper evidence and reports the touchable as small-target', () => {
+  test('restores exact android-helper evidence and reports the touchable as small-target', async () => {
     const state = stateWithoutTapFacts([
       node(1, { type: 'android.view.View', label: 'Custom action', rect: dp30 }),
     ]);
@@ -536,7 +536,7 @@ describe('auditSnapshotState with retained tap facts', () => {
       clickableByNodeIndex: new Map([[1, true]]),
       longClickableByNodeIndex: new Map([[1, false]]),
     });
-    const { findings } = auditSnapshotState(state, ANDROID);
+    const { findings } = await auditSnapshotState(state, ANDROID);
     expect(findings).toEqual([
       expect.objectContaining({
         kind: 'small-target',
@@ -547,14 +547,14 @@ describe('auditSnapshotState with retained tap facts', () => {
     ]);
   });
 
-  test('reports nothing when the capture retained no clickability evidence', () => {
+  test('reports nothing when the capture retained no clickability evidence', async () => {
     const state = stateWithoutTapFacts([
       node(1, { type: 'android.view.View', label: 'Custom action', rect: dp30 }),
     ]);
-    expect(auditSnapshotState(state, ANDROID).findings).toEqual([]);
+    expect((await auditSnapshotState(state, ANDROID)).findings).toEqual([]);
   });
 
-  test('reports nothing on divergence evidence, which names no clickable node', () => {
+  test('reports nothing on divergence evidence, which names no clickable node', async () => {
     const state = stateWithoutTapFacts([
       node(1, { type: 'android.view.View', label: 'Custom action', rect: dp30 }),
     ]);
@@ -563,7 +563,7 @@ describe('auditSnapshotState with retained tap facts', () => {
       provider: 'apple-xctest',
       reason: 'maestro-clickable-not-exposed-by-provider',
     });
-    expect(auditSnapshotState(state, ANDROID).findings).toEqual([]);
+    expect((await auditSnapshotState(state, ANDROID)).findings).toEqual([]);
   });
 });
 

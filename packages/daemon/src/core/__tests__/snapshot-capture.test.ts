@@ -3,8 +3,8 @@ import { captureSnapshot, captureSnapshotData } from '../snapshot-capture.ts';
 import {
   attachSnapshotScreenReaderOrderEvidence,
   readSnapshotScreenReaderOrderEvidence,
-  summarizeSnapshotDiagnostics,
-} from '@agent-device/contracts/capture';
+} from '@agent-device/contracts/snapshot-private-evidence';
+import { summarizeSnapshotDiagnostics } from '@agent-device/contracts/capture';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_EMULATOR, buildNodes, IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit';
 import {
@@ -263,5 +263,5 @@ test('captureSnapshot keeps the screen-reader order estimate on the built snapsh
     flags: {},
     logPath: '/tmp/snapshot-capture-test.log',
   });
-  expect(readSnapshotScreenReaderOrderEvidence(snapshot)).toBe(evidence);
+  expect(await readSnapshotScreenReaderOrderEvidence(snapshot)).toBe(evidence);
 });

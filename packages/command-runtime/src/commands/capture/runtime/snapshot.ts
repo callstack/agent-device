@@ -198,7 +198,7 @@ export const auditSnapshotCommand: RuntimeCommand<
   const { auditSnapshotState, matchNativeAuditFindings } =
     await import('@agent-device/capture-kit/snapshot-audit');
   const capture = await captureRuntimeSnapshot(runtime, options);
-  const audit = auditSnapshotState(capture.snapshot, {
+  const audit = await auditSnapshotState(capture.snapshot, {
     platform: runtime.backend.platform,
     producer: capture.snapshot.producer,
     target: options.target,

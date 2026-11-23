@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { auditResultRefs } from '@agent-device/contracts/capture';
+import { auditResultRefs } from '@agent-device/contracts/audit-result-refs';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import type { SnapshotRuntimeRouteParams } from '../core/snapshot-runtime-binding.ts';
 import { markSessionPartialRefsIssued } from '../execution/session-snapshot.ts';

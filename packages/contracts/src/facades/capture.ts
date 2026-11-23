@@ -16,7 +16,6 @@ export type {
   AuditSizeUnit,
   AuditSnapshotCommandResult,
 } from '../audit.ts';
-export { auditResultRefs } from '../audit.ts';
 export type { DiffSnapshotCommandResult, SnapshotDiffLine, SnapshotDiffSummary } from '../diff.ts';
 export {
   RETIRED_SCREENSHOT_MAX_SIZE,
@@ -103,6 +102,7 @@ export type {
   SnapshotClickabilityEvidence,
   SnapshotOcclusionContextEvidence,
   SnapshotScreenReaderOrderEvidence,
+  SnapshotScreenReaderOrderSource,
 } from '../snapshot-private-evidence.ts';
 export { readViewportDimensions } from '../viewport.ts';
 export type { ViewportCommandResult } from '../viewport.ts';

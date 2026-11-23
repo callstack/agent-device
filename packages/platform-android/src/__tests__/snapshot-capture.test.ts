@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { afterEach, beforeEach, test } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import { readSnapshotScreenReaderOrderEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import './test-utils/android-host-test-setup.ts';
 import {
   androidSnapshotPublicationInput,
@@ -221,4 +223,33 @@ test('an input method window the helper could not read makes the published keybo
     kind: 'unmeasurable',
     reason: 'window-root-unavailable',
   });
+});
+
+test('a stop the snapshot hides is listed by its first presented descendant', async () => {
+  const xml = readFileSync(
+    new URL('../fixtures/talkback/compose-clock.xml', import.meta.url),
+    'utf8',
+  );
+  const capture = await snapshotAndroid(device, {
+    helperAdb: helperAdbServing({}, xml),
+    helperArtifact,
+  });
+  const publication = androidSnapshotPublicationInput(capture);
+  const evidence = (await readSnapshotScreenReaderOrderEvidence(publication))!;
+  const labelByIndex = new Map(publication.nodes.map((node) => [node.index, node.label]));
+  // The capture lists the tip popup's window first.
+  const [popup, app] = evidence.windows.map(({ nodeIndexes, omittedStops }) => ({
+    labels: nodeIndexes.map((index) => labelByIndex.get(index)),
+    omittedStops,
+  }));
+  expect(popup!.labels).toContain('Dismiss');
+  // TalkBack reads the clock face and the date row as label-less containers.
+  expect(app!.labels.slice(0, 5)).toEqual([
+    'World Clock',
+    'More options',
+    '5:35\u200aPM',
+    'Sat, Nov 21',
+    'No locations',
+  ]);
+  expect(app!.omittedStops).toBe(0);
 });

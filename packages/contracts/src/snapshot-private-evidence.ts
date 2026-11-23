@@ -50,6 +50,11 @@ export type SnapshotScreenReaderOrderEvidence = {
   }>;
 };
 
+export type SnapshotScreenReaderOrderSource = () =>
+  | SnapshotScreenReaderOrderEvidence
+  | undefined
+  | Promise<SnapshotScreenReaderOrderEvidence | undefined>;
+
 /** Complete text-input geometry measured before iOS semantic projection; absent means unknown. */
 export type SnapshotTextInputGeometry = Readonly<{ rects: readonly Rect[] }>;
 
@@ -59,7 +64,7 @@ type SnapshotPrivateEvidence = {
   clickability?: SnapshotClickabilityEvidence;
   occlusionContext?: SnapshotOcclusionContextEvidence;
   /** Computed on first read: only `audit` reads it, so a regular snapshot never pays for it. */
-  screenReaderOrder?: () => SnapshotScreenReaderOrderEvidence | undefined;
+  screenReaderOrder?: SnapshotScreenReaderOrderSource;
 };
 
 const privateEvidenceBySnapshotObject = new WeakMap<object, SnapshotPrivateEvidence>();
@@ -149,11 +154,11 @@ export function readSnapshotOcclusionContextEvidence(
 /** Attaches the estimate as a computation that runs once, on the first read. */
 export function attachSnapshotScreenReaderOrderEvidence<T extends object>(
   owner: T,
-  compute: () => SnapshotScreenReaderOrderEvidence | undefined,
+  compute: SnapshotScreenReaderOrderSource,
 ): T {
   // Dropped after the run, so the capture tree it closes over is not kept with the snapshot.
   let pending: typeof compute | undefined = compute;
-  let evidence: SnapshotScreenReaderOrderEvidence | undefined;
+  let evidence: ReturnType<SnapshotScreenReaderOrderSource>;
   const screenReaderOrder = () => {
     if (pending) {
       evidence = pending();
@@ -164,9 +169,9 @@ export function attachSnapshotScreenReaderOrderEvidence<T extends object>(
   return attachSnapshotPrivateEvidence(owner, { screenReaderOrder });
 }
 
-export function readSnapshotScreenReaderOrderEvidence(
+export async function readSnapshotScreenReaderOrderEvidence(
   owner: object | null | undefined,
-): SnapshotScreenReaderOrderEvidence | undefined {
+): Promise<SnapshotScreenReaderOrderEvidence | undefined> {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.screenReaderOrder?.() : undefined;
 }
 

@@ -42,19 +42,23 @@ test('copies evidence across internal snapshot construction without serializing 
   assert.deepEqual(JSON.parse(JSON.stringify(target)), { nodes: [] });
 });
 
-test('computes the screen-reader order once on the first read, not on copy', () => {
+test('computes the screen-reader order once on the first read and shares it across concurrent reads', async () => {
   const source = {};
   const target = {};
   const evidence = { windows: [{ nodeIndexes: [0], omittedStops: 0 }] };
   let runs = 0;
   attachSnapshotScreenReaderOrderEvidence(source, () => {
     runs += 1;
-    return evidence;
+    return Promise.resolve(evidence);
   });
   copySnapshotScreenReaderOrderEvidence(source, target);
   assert.equal(runs, 0);
 
-  assert.equal(readSnapshotScreenReaderOrderEvidence(target), evidence);
-  assert.equal(readSnapshotScreenReaderOrderEvidence(source), evidence);
+  const [targetOrder, sourceOrder] = await Promise.all([
+    readSnapshotScreenReaderOrderEvidence(target),
+    readSnapshotScreenReaderOrderEvidence(source),
+  ]);
+  assert.equal(targetOrder, evidence);
+  assert.equal(sourceOrder, evidence);
   assert.equal(runs, 1);
 });

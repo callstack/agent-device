@@ -6,7 +6,7 @@ import {
   type AndroidSnapshotBackendMetadata,
   type SnapshotClickabilityEvidence,
   type SnapshotOcclusionContextEvidence,
-  type SnapshotScreenReaderOrderEvidence,
+  type SnapshotScreenReaderOrderSource,
 } from '@agent-device/contracts/capture';
 import type {
   RawSnapshotNode,
@@ -25,7 +25,7 @@ const androidCaptureEvidence = Symbol('androidSnapshotCaptureEvidence');
 type AndroidCaptureEvidence = Readonly<{
   clickability: Extract<SnapshotClickabilityEvidence, { provider: 'android-helper' }>;
   occlusionContext?: SnapshotOcclusionContextEvidence;
-  screenReaderOrder?: () => SnapshotScreenReaderOrderEvidence | undefined;
+  screenReaderOrder?: SnapshotScreenReaderOrderSource;
 }>;
 
 type AndroidSnapshotCaptureData = Readonly<{

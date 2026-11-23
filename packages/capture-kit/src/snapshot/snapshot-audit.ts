@@ -7,11 +7,9 @@ import type {
   AuditResult,
   AuditScreenReaderOrder,
   AuditSizeUnit,
+  SnapshotScreenReaderOrderEvidence,
 } from '@agent-device/contracts/capture';
-import {
-  readSnapshotClickabilityEvidence,
-  readSnapshotScreenReaderOrderEvidence,
-} from '@agent-device/contracts/snapshot-private-evidence';
+import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import { isNativeIosSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
@@ -152,9 +150,15 @@ function countSharedNames(
  * tap facts off their nodes, so the helper's retained clickability evidence is folded back onto
  * the nodes first; platforms that publish no tap fact audit the nodes as captured.
  */
-export function auditSnapshotState(snapshot: SnapshotState, context: AuditContext): AuditResult {
+export async function auditSnapshotState(
+  snapshot: SnapshotState,
+  context: AuditContext,
+): Promise<AuditResult> {
+  const { readSnapshotScreenReaderOrderEvidence } = await import('@agent-device/contracts/capture');
   const audit = auditSnapshot(withRetainedTapFacts(snapshot), context);
-  const screenReaderOrder = estimatedScreenReaderOrder(snapshot);
+  const evidence = await readSnapshotScreenReaderOrderEvidence(snapshot);
+  if (!evidence) return audit;
+  const screenReaderOrder = estimatedScreenReaderOrder(snapshot, evidence);
   if (!screenReaderOrder) return audit;
   return {
     ...audit,
@@ -167,9 +171,10 @@ const SCREEN_READER_ORDER_LIMITATION =
   "The screen-reader order is estimated from TalkBack 16.2's rules, not observed. It leaves out auto-scroll, scrolling past the screen, the order across windows, and web content.";
 
 /** The producer's TalkBack order estimate as refs, without windows that hold no stop. */
-function estimatedScreenReaderOrder(snapshot: SnapshotState): AuditScreenReaderOrder | undefined {
-  const evidence = readSnapshotScreenReaderOrderEvidence(snapshot);
-  if (!evidence) return undefined;
+function estimatedScreenReaderOrder(
+  snapshot: SnapshotState,
+  evidence: SnapshotScreenReaderOrderEvidence,
+): AuditScreenReaderOrder | undefined {
   const refByIndex = new Map(
     snapshot.nodes.flatMap((node) => (node.ref ? [[node.index, `@${node.ref}`] as const] : [])),
   );

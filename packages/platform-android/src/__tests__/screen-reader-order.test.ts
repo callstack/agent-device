@@ -1,10 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { readSnapshotScreenReaderOrderEvidence } from '@agent-device/contracts/capture';
 import type { AndroidNode } from '../ui-hierarchy-node.ts';
 import { parseUiHierarchyTree } from '../ui-hierarchy.ts';
-import { parseUiHierarchy } from '../ui-hierarchy.fixtures.ts';
-import { androidSnapshotPublicationInput } from '../snapshot-capture.ts';
 import { estimateTalkBackOrder } from '../screen-reader-order.ts';
 
 type TalkBackWalk = {
@@ -81,26 +78,4 @@ test('a capture from a helper without the screen-reader facts has no estimate', 
   const { xml } = talkBackFixture('permission-dialog');
   const older = xml.replaceAll(/ ax-id="\d+"/g, '');
   expect(estimateTalkBackOrder(parseUiHierarchyTree(older))).toBeUndefined();
-});
-
-test('a stop the snapshot hides is listed by its first presented descendant', () => {
-  const capture = parseUiHierarchy(talkBackFixture('compose-clock').xml, undefined, {});
-  const publication = androidSnapshotPublicationInput(capture);
-  const evidence = readSnapshotScreenReaderOrderEvidence(publication)!;
-  const labelByIndex = new Map(publication.nodes.map((node) => [node.index, node.label]));
-  // The capture lists the tip popup's window first.
-  const [popup, app] = evidence.windows.map(({ nodeIndexes, omittedStops }) => ({
-    labels: nodeIndexes.map((index) => labelByIndex.get(index)),
-    omittedStops,
-  }));
-  expect(popup!.labels).toContain('Dismiss');
-  // TalkBack reads the clock face and the date row as label-less containers.
-  expect(app!.labels.slice(0, 5)).toEqual([
-    'World Clock',
-    'More options',
-    '5:35\u200aPM',
-    'Sat, Nov 21',
-    'No locations',
-  ]);
-  expect(app!.omittedStops).toBe(0);
 });

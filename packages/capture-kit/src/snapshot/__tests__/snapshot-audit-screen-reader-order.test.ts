@@ -21,7 +21,7 @@ function state(nodes: SnapshotNode[]): SnapshotState {
   return { nodes, createdAt: 0 };
 }
 
-test('reports the producer estimate as refs per window, with its limitation', () => {
+test('reports the producer estimate as refs per window, with its limitation', async () => {
   const snapshot = state([text(0, 'e1'), text(1, 'e2'), text(2, 'e3')]);
   attachSnapshotScreenReaderOrderEvidence(snapshot, () => ({
     windows: [
@@ -29,7 +29,7 @@ test('reports the producer estimate as refs per window, with its limitation', ()
       { nodeIndexes: [1, 0], omittedStops: 0 },
     ],
   }));
-  const result = auditSnapshotState(snapshot, ANDROID);
+  const result = await auditSnapshotState(snapshot, ANDROID);
   expect(result.screenReaderOrder).toEqual({
     estimatedFrom: 'talkback-16.2',
     windows: [{ refs: ['@e3'] }, { refs: ['@e2', '@e1'] }],
@@ -37,7 +37,7 @@ test('reports the producer estimate as refs per window, with its limitation', ()
   expect(result.limitations).toContainEqual(expect.stringContaining('estimated from TalkBack'));
 });
 
-test('counts a stop without a ref as omitted and drops a window with no stop', () => {
+test('counts a stop without a ref as omitted and drops a window with no stop', async () => {
   const snapshot = state([text(0, 'e1'), text(1, undefined)]);
   attachSnapshotScreenReaderOrderEvidence(snapshot, () => ({
     windows: [
@@ -45,13 +45,13 @@ test('counts a stop without a ref as omitted and drops a window with no stop', (
       { nodeIndexes: [0, 1], omittedStops: 2 },
     ],
   }));
-  expect(auditSnapshotState(snapshot, ANDROID).screenReaderOrder?.windows).toEqual([
+  expect((await auditSnapshotState(snapshot, ANDROID)).screenReaderOrder?.windows).toEqual([
     { refs: ['@e1'], omittedStops: 3 },
   ]);
 });
 
-test('a snapshot without the estimate reports no order and no order limitation', () => {
-  const result = auditSnapshotState(state([text(0, 'e1')]), ANDROID);
+test('a snapshot without the estimate reports no order and no order limitation', async () => {
+  const result = await auditSnapshotState(state([text(0, 'e1')]), ANDROID);
   expect(result.screenReaderOrder).toBeUndefined();
   expect(result.limitations).toEqual([]);
 });

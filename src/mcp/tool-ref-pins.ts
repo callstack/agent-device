@@ -1,4 +1,4 @@
-import { auditResultRefs } from '@agent-device/contracts/capture';
+import { auditResultRefs } from '@agent-device/contracts/audit-result-refs';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
 import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
