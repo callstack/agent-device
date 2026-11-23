@@ -33,6 +33,7 @@ test('readAndroidBlockingDialogFocus preserves responding window text without re
         focusedWindow: '123 u0 com.example.app/com.example.MainActivity Demo is not responding',
         raw: 'mCurrentFocus=Window{123 u0 com.example.app/com.example.MainActivity Demo is not responding}',
       },
+      focusedPackage: 'com.example.app',
     },
   );
 });

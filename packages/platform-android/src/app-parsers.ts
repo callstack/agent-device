@@ -28,6 +28,7 @@ export const ANDROID_FOCUS_MARKERS = [
 ] as const;
 const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
 const ANDROID_PACKAGE_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
+const ANDROID_COMPONENT_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/[A-Za-z0-9_.$]+/;
 
 export function parseAndroidLaunchablePackages(stdout: string): string[] {
   const packages = new Set<string>();
@@ -65,19 +66,36 @@ export function parseAndroidUserInstalledPackages(stdout: string): string[] {
  * title. The other markers are still parsed — the marker order is unchanged (#592) — but a dump
  * that names just the focused app token has NOT answered this question and must not suppress the
  * variant that can.
+ *
+ * `focusedPackage` is the package of the `package/Activity` component the first focused-window
+ * line names. A window without a component (a popup, the keyboard, the notification shade) names
+ * no package.
  */
 export type AndroidBlockingDialogRead = {
   focusObserved: boolean;
   focus: AndroidBlockingDialogFocus | null;
+  focusedPackage?: string;
 };
 
 export function readAndroidBlockingDialogFocus(text: string): AndroidBlockingDialogRead {
   let focusObserved = false;
+  let focusedPackage: string | undefined;
   const focus = parseAndroidFocusSegment(text, (segment, raw, marker) => {
-    if (marker === ANDROID_FOCUSED_WINDOW_MARKER) focusObserved = true;
+    if (marker === ANDROID_FOCUSED_WINDOW_MARKER && !focusObserved) {
+      focusObserved = true;
+      focusedPackage = ANDROID_COMPONENT_PATTERN.exec(segment.split('}')[0] ?? '')?.[1];
+    }
     return parseAndroidBlockingDialogFromSegment(segment, raw);
   });
-  return { focusObserved, focus };
+  return { focusObserved, focus, ...(focusedPackage ? { focusedPackage } : {}) };
+}
+
+/** A clear blocking-dialog observation that names the focused package when the read did. */
+export function clearAndroidBlockingDialogObservation(focusedPackage: string | undefined): {
+  status: 'clear';
+  focusedPackage?: string;
+} {
+  return focusedPackage ? { status: 'clear', focusedPackage } : { status: 'clear' };
 }
 
 export function parseAndroidFocusSegment<T>(

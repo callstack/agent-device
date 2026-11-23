@@ -29,7 +29,11 @@ async function pressThatLeftTheApp(): Promise<unknown> {
     { token: 't', session: session.name, command: 'press', positionals: ['@e1'] },
     createRequestDispatchLedger(),
     async () => {
-      await assertAndroidPressStayedInApp(session, '@e1', observation);
+      await assertAndroidPressStayedInApp(
+        session,
+        { command: 'press', targetLabel: '@e1' },
+        observation,
+      );
       return null;
     },
   );

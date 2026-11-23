@@ -28,7 +28,11 @@ export type AndroidBlockingDialogRecoveryResult =
   | { status: 'failed'; reason: 'tap-failed' | 'dismiss-failed' | 'relaunch-failed' | 'error' }
   | { status: 'unknown'; reason: 'inspection-failed'; warning: string };
 export type AndroidBlockingDialogReadinessResult =
-  | { status: 'clear' }
+  | {
+      status: 'clear';
+      /** The app package that owned the focused window, when the readiness read named one. */
+      focusedPackage?: string;
+    }
   | { status: 'recovered'; warning: string };
 type AndroidDialogButtonTapResult =
   | { ok: true; x: number; y: number }
@@ -193,8 +197,9 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
           commandPhase: params.phase,
         },
       });
+      return { status: 'clear' };
     }
-    return { status: 'clear' };
+    return dialogObservation;
   }
   const focus = dialogObservation.focus;
 

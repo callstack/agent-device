@@ -5,6 +5,7 @@ import {
   ANDROID_FOCUSED_WINDOW_MARKER,
   ANDROID_FOCUS_MARKERS,
   ANDROID_RESUMED_ACTIVITY_MARKERS,
+  clearAndroidBlockingDialogObservation,
   parseAndroidResumedActivity,
   readAndroidBlockingDialogFocus,
   type AndroidBlockingDialogFocus,
@@ -116,7 +117,7 @@ export type AndroidWindowDumpReader = (args: readonly string[]) => Promise<strin
  */
 export type AndroidBlockingDialogObservation =
   | { status: 'dialog'; focus: AndroidBlockingDialogFocus }
-  | { status: 'clear' }
+  | { status: 'clear'; focusedPackage?: string }
   | { status: 'unknown' };
 
 export function createAndroidWindowDumpReader(device: DeviceInfo): AndroidWindowDumpReader {
@@ -183,9 +184,11 @@ export async function getAndroidBlockingDialogObservation(
   read: AndroidWindowDumpReader = createAndroidWindowDumpReader(device),
 ): Promise<AndroidBlockingDialogObservation> {
   for (const args of orderAndroidWindowDumps(device, 'blockingDialog')) {
-    const { focusObserved, focus } = readAndroidBlockingDialogFocus(await read(args));
+    const { focusObserved, focus, focusedPackage } = readAndroidBlockingDialogFocus(
+      await read(args),
+    );
     if (focus) return { status: 'dialog', focus };
-    if (focusObserved) return { status: 'clear' };
+    if (focusObserved) return clearAndroidBlockingDialogObservation(focusedPackage);
   }
   return { status: 'unknown' };
 }

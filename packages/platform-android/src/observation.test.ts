@@ -65,6 +65,22 @@ test('classifies an app-owned ANR without exposing dump mechanics to the daemon'
   });
 });
 
+test('a clear blocking-dialog read names the package of the focused component only', async () => {
+  const read = async (focusLine: string) =>
+    await createAndroidObservationAdapter(
+      hostFor(new Map([['shell dumpsys window windows', focusLine]])),
+    ).readBlockingDialog(device);
+
+  await expect(
+    read(
+      'mCurrentFocus=Window{1 u0 com.google.android.apps.nexuslauncher/com.android.launcher3.uioverrides.QuickstepLauncher}',
+    ),
+  ).resolves.toEqual({ status: 'clear', focusedPackage: 'com.google.android.apps.nexuslauncher' });
+  await expect(read('mCurrentFocus=Window{3 u0 Splash Screen com.example.app}')).resolves.toEqual({
+    status: 'clear',
+  });
+});
+
 test('owns touch rounding and screen-size parsing behind raw host commands', async () => {
   const host = hostFor(new Map([['shell wm size', 'Physical size: 1080x2400']]));
   const observer = createAndroidObservationAdapter(host);

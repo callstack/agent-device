@@ -12,6 +12,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   ANDROID_FOCUS_MARKERS,
   ANDROID_FOCUSED_WINDOW_MARKER,
+  clearAndroidBlockingDialogObservation,
   readAndroidBlockingDialogFocus,
 } from './app-parsers.ts';
 
@@ -139,12 +140,12 @@ async function readBlockingDialog(
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   const focus = await runAndroidAutomationHelper(device, { action: 'focus' });
   if (focus?.windowType === '1' && focus.focusedPackage && focus.focusedPackage !== 'android') {
-    return { status: 'clear' };
+    return { status: 'clear', focusedPackage: focus.focusedPackage };
   }
   for (const args of orderedDumps(device, 'blockingDialog')) {
     const parsed = readAndroidBlockingDialogFocus(await read(args));
     if (parsed.focus) return { status: 'dialog', focus: parsed.focus };
-    if (parsed.focusObserved) return { status: 'clear' };
+    if (parsed.focusObserved) return clearAndroidBlockingDialogObservation(parsed.focusedPackage);
   }
   return { status: 'unknown' };
 }
