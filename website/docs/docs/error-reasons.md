@@ -544,6 +544,12 @@ These reasons can come from more than one command.
 | `ARCHIVE_UNSAFE_ENTRY` | The archive holds a link, a special file, or an encrypted entry. |
 | `ARCHIVE_UNSAFE_PATH` | An archive entry's name is absolute, escaping, or otherwise not one relative path. |
 
+### Command flags
+
+| Reason | Meaning |
+| --- | --- |
+| `flag_value_invalid` | The value is not a number, falls outside the flag's range, or is not one of its enum values. |
+
 ### Daemon lifecycle
 
 | Reason | Meaning |
