@@ -573,6 +573,8 @@ test.for([
         );
         assert.ok(Array.isArray(result?.warnings));
         assert.equal(result.warnings.length, 1);
+        assert.match(result.warnings[0], new RegExp(`^settings ${setting} `));
+        assert.match(result.warnings[0], /status bar/);
       },
     );
   },
