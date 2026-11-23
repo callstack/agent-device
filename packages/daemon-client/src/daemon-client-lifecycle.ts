@@ -398,7 +398,7 @@ export async function cleanupDaemonAfterRequest(
  * attach a hint to (unlike `attachRepairSessionAddressHint`, which only ever
  * runs on an already-`ok:false` divergence): this REPLACES the response with
  * the same `REPAIR_COMMIT_FAILED` error the daemon's own
- * `repairExpiredIfTombstoned` (request-router.ts) would surface to a
+ * `repairExpiredIfTombstoned` (request-finalization.ts) would surface to a
  * follow-up request on this session — a one-shot command has no follow-up
  * request to receive it, so the client raises it here instead. An existing
  * `ok:false` response (e.g. the platform close itself failed for a different,
