@@ -1,3 +1,4 @@
+import type { AndroidBlockingDialogObservation } from '@agent-device/contracts/android-observation';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runAndroidShell } from './adb.ts';
@@ -6,10 +7,12 @@ import {
   ANDROID_FOCUS_MARKERS,
   ANDROID_RESUMED_ACTIVITY_MARKERS,
   clearAndroidBlockingDialogObservation,
+  parseAndroidComponent,
   parseAndroidResumedActivity,
   readAndroidBlockingDialogFocus,
-  type AndroidBlockingDialogFocus,
 } from './app-parsers.ts';
+
+export type { AndroidBlockingDialogObservation };
 
 /**
  * What is on the Android screen right now: which app owns the foreground, which activity AMS
@@ -109,16 +112,6 @@ const androidWindowDumpEverAnswered = new Map<string, Map<string, boolean>>();
  * those loops would never observe the state change they are waiting for.
  */
 export type AndroidWindowDumpReader = (args: readonly string[]) => Promise<string>;
-
-/**
- * What one look at the device says about a blocking system dialog. `unknown` is the case the
- * daemon must not confuse with `clear`: no variant printed the focused window, so this look is
- * evidence about nothing.
- */
-export type AndroidBlockingDialogObservation =
-  | { status: 'dialog'; focus: AndroidBlockingDialogFocus }
-  | { status: 'clear'; focusedPackage?: string }
-  | { status: 'unknown' };
 
 export function createAndroidWindowDumpReader(device: DeviceInfo): AndroidWindowDumpReader {
   const dumps = new Map<string, Promise<string>>();
@@ -252,13 +245,8 @@ function escapeRegExp(value: string): string {
 
 function parseLegacyAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
   for (const match of text.matchAll(ANDROID_FOCUS_LINE)) {
-    const segment = match[1];
-    const component = segment?.match(
-      /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/,
-    );
-    if (component?.[1] && component[2]) {
-      return { package: component[1], activity: component[2] };
-    }
+    const component = parseAndroidComponent(match[1] ?? '');
+    if (component) return component;
   }
   return null;
 }

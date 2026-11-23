@@ -9,7 +9,10 @@ export type AndroidBlockingDialogFocus = Readonly<{
   raw: string;
 }>;
 
-/** One observation of Android's focused system-window state. */
+/**
+ * One observation of Android's focused system-window state. `unknown` is the case the daemon must
+ * not confuse with `clear`: no read named the focused window, so it is evidence about nothing.
+ */
 export type AndroidBlockingDialogObservation =
   | Readonly<{ status: 'dialog'; focus: AndroidBlockingDialogFocus }>
   | Readonly<{

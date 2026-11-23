@@ -7,20 +7,18 @@ import {
 import type { SessionState } from '../../../core/session-state.ts';
 
 /**
- * Post-press escape guard. Throws when a touch dispatched while the session app owned the focus
- * left the app for a genuine escape surface (settings/systemui/launcher). A touch dispatched while an
- * escape surface already owned the focus (the launcher after `home`) acted on that surface, so it
- * cannot escape the app. Other packages that own the focus inside an app flow (a permission prompt,
- * a custom tab, a sign-in activity) do not skip the guard. A foregrounded permission prompt is NOT an escape — the press succeeded and
- * raised a system dialog the agent consumes via `alert` — so it returns a response warning instead.
+ * Post-touch escape guard. Throws when a touch left the session app for an escape surface
+ * (settings/systemui/launcher), unless an escape surface other than the session app already owned
+ * the focus before the dispatch.
+ * A raised permission prompt is not an escape: it returns a response warning for `alert` instead.
  */
 export async function assertAndroidPressStayedInApp(
   session: SessionState,
   touch: { command: string; targetLabel: string; focusedPackageBefore?: string },
   observation?: AndroidObservationAdapter,
 ): Promise<string | undefined> {
-  // CONSERVATIVE: an unread pre-dispatch focus still runs the guard, because it is no evidence that
-  // the app was in the background. Revisit if every readiness read names the focused package.
+  // CONSERVATIVE: an unread pre-dispatch focus runs the guard; it is no evidence that an escape
+  // surface owned the focus. Revisit if every readiness read names the focused package.
   const { focusedPackageBefore } = touch;
   if (
     focusedPackageBefore !== undefined &&

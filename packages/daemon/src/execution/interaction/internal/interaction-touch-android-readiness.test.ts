@@ -216,11 +216,12 @@ test('longpress at a point succeeds when the launcher owned the focus before and
   expect(mockLongPressPoint).toHaveBeenCalledTimes(1);
 });
 
+// Only an escape surface owning the focus skips the guard, not any package other than the app.
 test.each([
   ['a permission prompt', 'com.google.android.permissioncontroller', 'com.android.settings'],
   ['a Trusted Web Activity', 'com.android.chrome', LAUNCHER_PACKAGE],
 ])(
-  'longpress at a point still fails when %s in the app flow owned the focus before an escape',
+  'longpress at a point keeps failing an escape when %s in the app flow owned the focus before',
   async (_flow, focusedPackageBefore, foregroundPackageAfter) => {
     await expect(
       longPressAtPointWithFocusBefore(focusedPackageBefore, foregroundPackageAfter),

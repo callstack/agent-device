@@ -13,6 +13,7 @@ import {
   ANDROID_FOCUS_MARKERS,
   ANDROID_FOCUSED_WINDOW_MARKER,
   clearAndroidBlockingDialogObservation,
+  parseAndroidComponent,
   readAndroidBlockingDialogFocus,
 } from './app-parsers.ts';
 
@@ -140,7 +141,7 @@ async function readBlockingDialog(
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   const focus = await runAndroidAutomationHelper(device, { action: 'focus' });
   if (focus?.windowType === '1' && focus.focusedPackage && focus.focusedPackage !== 'android') {
-    return { status: 'clear', focusedPackage: focus.focusedPackage };
+    return clearAndroidBlockingDialogObservation(focus.focusedPackage);
   }
   for (const args of orderedDumps(device, 'blockingDialog')) {
     const parsed = readAndroidBlockingDialogFocus(await read(args));
@@ -182,10 +183,8 @@ function preservePositiveMemo(memo: Map<string, boolean>, key: string, answered:
 
 function parseForeground(text: string): AppStateRuntimeResult | null {
   for (const match of text.matchAll(FOCUS_LINE)) {
-    const component = match[1]?.match(
-      /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/,
-    );
-    if (component?.[1] && component[2]) return { package: component[1], activity: component[2] };
+    const component = parseAndroidComponent(match[1] ?? '');
+    if (component) return component;
   }
   return null;
 }
