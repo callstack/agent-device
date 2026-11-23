@@ -29,12 +29,12 @@ import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
+  incompatibleRemoteProtocolError,
   refuseOversizedDaemonRequest,
 } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { readVersion } from '@agent-device/host-kit/version';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {
@@ -250,22 +250,13 @@ export async function readRemoteDaemonHealth(
   // Every link a command RPC crosses has to speak the client's protocol: a proxy that reports a
   // skewed daemon behind it fails here, before the RPC, exactly like a skewed proxy does.
   const incompatible = [health, health.upstream].find(
-    (link) =>
+    (link): link is RemoteDaemonHealthLink & { rpcProtocolVersion: number } =>
       typeof link?.rpcProtocolVersion === 'number' &&
       link.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION,
   );
-  if (incompatible) {
-    throw new AppError('COMMAND_FAILED', 'Remote daemon RPC protocol is incompatible', {
-      daemonBaseUrl: info.baseUrl,
-      clientVersion: readVersion(),
-      remoteVersion: incompatible.version,
-      remoteService: incompatible.service,
-      supportedRpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
-      remoteRpcProtocolVersion: incompatible.rpcProtocolVersion,
-      hint: 'Upgrade agent-device on the client or remote host so both support the same daemon RPC protocol.',
-    });
-  }
-  return health;
+  if (!incompatible) return health;
+  const proxy = incompatible === health.upstream ? (health.service ?? 'the proxy') : undefined;
+  throw incompatibleRemoteProtocolError(info.baseUrl, incompatible, proxy);
 }
 
 function daemonHealthEndpoint(info: DaemonInfo): string | null {
