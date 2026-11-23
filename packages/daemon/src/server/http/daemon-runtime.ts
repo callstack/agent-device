@@ -463,6 +463,9 @@ async function startDaemonRuntimeOnHost(
           session,
           stateDir: baseDir,
           runtimeHints,
+          onRuntimeHintsCleared: () => {
+            if (sessionStore.resolveCurrent(ref)) sessionStore.clearRuntimeHints(ref);
+          },
           // The one caller that must say so: this daemon is staying alive, so there is no shutdown
           // phase a healthy runner could be deferred to. Taking the ordinary-close path stops the
           // runner and releases its lease instead of parking it until process exit.

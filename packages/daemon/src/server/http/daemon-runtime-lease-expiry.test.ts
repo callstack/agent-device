@@ -66,7 +66,12 @@ vi.mock('../lease-session-end.ts', async (importOriginal) => {
 });
 
 import { SessionStore } from '../../core/session-store.ts';
-import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import {
+  applicationLifecycleResourceFixture,
+  daemonRuntimeDepsFixture,
+} from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { applicationLifecycleRuntimeFixture } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
+import { createLifecycleDeviceRuntimeGatewaySpies } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { makeRecordingSession } from '../../__tests__/support/session-teardown.fixtures.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
@@ -311,6 +316,52 @@ test('shutdown releases expired leases after in-flight teardown and retained-hos
     expect(hostStopped).toBeLessThan(providerReleased);
   } finally {
     finish.open();
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test('expiry clears the hints for the app they were set for once across cleanup retries', async () => {
+  const release = vi.fn(async (_lease: DeviceLease) => undefined);
+  const clearRuntimeHints = vi.fn(async () => {});
+  const { gateway, bind } = createLifecycleDeviceRuntimeGatewaySpies(async (device, signal) => ({
+    ...(await applicationLifecycleRuntimeFixture(device, signal)),
+    clearRuntimeHints,
+  }));
+  const bindRuntime = bind.getMockImplementation()!;
+  bind.mockImplementationOnce(async (input) => ({
+    ...(await bindRuntime(input)),
+    [Symbol.asyncDispose]: async () => {
+      throw new Error('binding disposal failed');
+    },
+  }));
+  const { runtime, registry, store } = await startProviderDaemon({
+    deviceRuntimeGateway: {
+      ...gateway,
+      applicationLifecycle: applicationLifecycleResourceFixture(),
+    },
+    leaseLifecycleProvider: { release },
+  });
+  const lease = registry.allocateLease(providerLease);
+  store.publish('leased', {
+    ...makeIosSession('leased'),
+    appBundleId: 'com.example.active',
+    lease,
+  });
+  store.setRuntimeHints(
+    'leased',
+    { metroHost: 'scoped.example', metroPort: 8082 },
+    'com.example.bound',
+  );
+  try {
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(release).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([lease.leaseId]);
+    expect(clearRuntimeHints).toHaveBeenCalledExactlyOnceWith({
+      appId: 'com.example.bound',
+      values: { metroHost: 'scoped.example', metroPort: '8082' },
+    });
+  } finally {
     await closeProviderDaemon(runtime);
   }
 });
