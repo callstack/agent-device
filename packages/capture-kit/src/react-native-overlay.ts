@@ -4,7 +4,7 @@ import {
   type Rect,
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
-import { rectArea } from '@agent-device/kernel/rect';
+import { rectArea, rectContains } from '@agent-device/kernel/rect';
 import {
   isReactNativeCollapsedWarningBanner,
   isReactNativeCollapsedWarningCountBadgeBanner,
@@ -12,6 +12,7 @@ import {
   isReactNativeCollapsedWarningLabel,
   isReactNativeOverlayDismissLabel,
   isReactNativeOverlayMinimizeLabel,
+  isFullScreenOverlayRect,
 } from '@agent-device/contracts/react-native-overlay';
 import type {
   ReactNativeOverlayNode,
@@ -40,6 +41,11 @@ type ReactNativeOverlayFacts = {
   minimizeNodes: SnapshotNode[];
   collapsedNodes: SnapshotNode[];
   collapsedCountBadgeNodes: SnapshotNode[];
+  /** LogBox/RedBox regions a close control can belong to. */
+  overlaySurfaceNodes: ReadonlySet<SnapshotNode>;
+  /** LogBox/RedBox controls that share the footer row with their Dismiss. */
+  footerControlNodes: SnapshotNode[];
+  nodeByIndex: ReadonlyMap<number, SnapshotNode>;
   detected: boolean;
 };
 
@@ -50,6 +56,7 @@ const REACT_NATIVE_STACK_FRAME_PATTERNS = [
   /\b[\w.$<>/-]+\.(?:tsx?|jsx?)\s+\(\d+:\d+\)/,
 ] as const;
 const CLOSE_ICON_LABELS = new Set(['x', '×', '✕', '✖', '⨯']);
+const REDBOX_FOOTER_CONTROL_PATTERN = /^(?:reload(?: js)?|copy)(?:\s*\([^)]*\))?$/;
 
 export function formatReactNativeOverlayWarning(
   nodes: SnapshotNode[],
@@ -98,20 +105,36 @@ function collectReactNativeOverlayFacts(
   const collapsedCountBadgeNodes = collapsedNodes.filter((node) =>
     isReactNativeCollapsedWarningCountBadgeBanner(node, surface),
   );
+  const collapsedEvidenceNodes = collapsedNodes.filter((node) =>
+    nodeHasMatchingLabel(node, isReactNativeCollapsedWarningEvidenceLabel),
+  );
   return {
     dismissNodes,
     minimizeNodes,
     collapsedNodes,
     collapsedCountBadgeNodes,
+    overlaySurfaceNodes: new Set([
+      ...[...collapsedEvidenceNodes, ...collapsedCountBadgeNodes].filter(
+        isReactNativeCollapsedWarningBanner,
+      ),
+      ...nodes.filter(
+        (node) =>
+          !isFullScreenOverlayRect(node.rect) &&
+          hasKnownReactNativeOverlayText(formatNodeSearchText(node).toLowerCase()),
+      ),
+    ]),
+    footerControlNodes: [
+      ...minimizeNodes,
+      ...collectOverlayNodes(nodes, (label) => REDBOX_FOOTER_CONTROL_PATTERN.test(label)),
+    ],
+    nodeByIndex: new Map(nodes.map((node) => [node.index, node])),
     detected: isReactNativeOverlayDetected({
       text,
       hasReactNativeStackFrame,
       hasOverlayControl,
       hasControllessRedBoxText,
       collapsedNodes,
-      collapsedEvidenceNodes: collapsedNodes.filter((node) =>
-        nodeHasMatchingLabel(node, isReactNativeCollapsedWarningEvidenceLabel),
-      ),
+      collapsedEvidenceNodes,
       collapsedCountBadgeNodes,
       openDebuggerWarningNodes,
     }),
@@ -134,11 +157,25 @@ function isCollapsedWarningNode(
   );
 }
 
+/** Apps label their own buttons Dismiss and Close too, so overlay evidence outranks role. */
 function resolveSafeDismissAction(
   facts: ReactNativeOverlayFacts,
 ): ReactNativeOverlayDismissTarget | null {
-  const dismiss = firstControlNodeWithRect(facts.dismissNodes);
-  if (dismiss) return targetFromNode(dismiss, actionFromDismissNode(dismiss));
+  const dismiss = selectHighestScoredNode(
+    facts.dismissNodes.filter((node) =>
+      nodeHasMatchingLabel(node, isReactNativeOverlayDismissLabel),
+    ),
+    (node) => [
+      booleanScore(isOnOverlaySurface(node, facts) || sharesFooterRow(node, facts)),
+      ...controlNodeScores(node),
+    ],
+  );
+  if (dismiss) return targetFromNode(dismiss, 'dismiss');
+
+  const close = firstControlNodeWithRect(
+    facts.dismissNodes.filter((node) => isOnOverlaySurface(node, facts)),
+  );
+  if (close) return targetFromNode(close, 'close');
 
   const collapsed = chooseCollapsedWarningNode(
     facts.collapsedNodes.filter((node) => isSafeCollapsedWarningCoordinateFallback(node, facts)),
@@ -287,10 +324,37 @@ function targetFromNode(
   };
 }
 
-function actionFromDismissNode(node: SnapshotNode): ReactNativeOverlayDismissTarget['action'] {
-  const label = readNodeLabel(node)?.trim().toLowerCase();
-  if (label && isReactNativeOverlayDismissLabel(label)) return 'dismiss';
-  return 'close';
+function isOnOverlaySurface(node: SnapshotNode, facts: ReactNativeOverlayFacts): boolean {
+  if (hasOverlaySurfaceAncestor(node, facts)) return true;
+  const rect = node.rect;
+  if (!rect) return false;
+  return [...facts.overlaySurfaceNodes].some(
+    (surface) => surface.rect !== undefined && rectContains(surface.rect, rect),
+  );
+}
+
+function hasOverlaySurfaceAncestor(node: SnapshotNode, facts: ReactNativeOverlayFacts): boolean {
+  const visited = new Set<number>();
+  let parentIndex = node.parentIndex;
+  while (typeof parentIndex === 'number' && !visited.has(parentIndex)) {
+    visited.add(parentIndex);
+    const parent = facts.nodeByIndex.get(parentIndex);
+    if (!parent) return false;
+    if (facts.overlaySurfaceNodes.has(parent)) return true;
+    parentIndex = parent.parentIndex;
+  }
+  return false;
+}
+
+function sharesFooterRow(node: SnapshotNode, facts: ReactNativeOverlayFacts): boolean {
+  const rect = node.rect;
+  if (!rect) return false;
+  return facts.footerControlNodes.some(
+    (control) =>
+      control.rect !== undefined &&
+      control.rect.y < rect.y + rect.height &&
+      rect.y < control.rect.y + control.rect.height,
+  );
 }
 
 function chooseCollapsedWarningNode(nodes: SnapshotNode[]): SnapshotNode | null {

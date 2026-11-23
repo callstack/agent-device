@@ -347,3 +347,234 @@ describe('React Native collapsed banner with the entry-count badge', () => {
     expect(analyzeReactNativeOverlay(nodes).detected).toBe(false);
   });
 });
+
+/**
+ * Node shapes from an iOS capture where the app keeps its own `Close` buttons on screen while
+ * LogBox shows. A bare close label is app vocabulary, so it must not stand in for LogBox's control.
+ */
+describe('React Native overlay dismissal beside app close buttons', () => {
+  const viewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 402, height: 874 });
+  const appCloseButtons = [
+    node({
+      index: 20,
+      ref: 'e20',
+      type: 'Button',
+      label: 'Close',
+      rect: { x: 16, y: 62, width: 44, height: 44 },
+      hittable: true,
+    }),
+    node({
+      index: 60,
+      ref: 'e60',
+      type: 'Button',
+      label: 'Close',
+      rect: { x: 342, y: 420, width: 44, height: 44 },
+      hittable: true,
+    }),
+  ];
+  const collapsedBanner = node({
+    index: 70,
+    ref: 'e70',
+    type: 'Group',
+    label: '!, Uncaught (in promise) TypeError: Network request failed',
+    rect: { x: 10, y: 772, width: 382, height: 48 },
+    hittable: true,
+  });
+
+  test('a collapsed banner is closed at its own affordance, not at an app Close button', () => {
+    const state = analyzeReactNativeOverlay([...appCloseButtons, collapsedBanner], viewport);
+
+    expect(state.primaryAction).toMatchObject({
+      action: 'close-collapsed-banner',
+      ref: 'e70',
+      point: { x: 370, y: 796 },
+    });
+  });
+
+  test('a close control inside the collapsed banner wins over app Close buttons', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        ...appCloseButtons,
+        collapsedBanner,
+        node({
+          index: 72,
+          ref: 'e72',
+          type: 'Other',
+          label: 'Close',
+          rect: { x: 356, y: 782, width: 28, height: 28 },
+        }),
+      ],
+      viewport,
+    );
+
+    expect(state.primaryAction).toMatchObject({ action: 'close', ref: 'e72' });
+  });
+
+  test('the expanded inspector Dismiss control wins over app Close buttons whatever its role', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        ...appCloseButtons,
+        node({
+          index: 80,
+          ref: 'e80',
+          type: 'StaticText',
+          label: 'Log 1 of 1',
+          rect: { x: 151, y: 62, width: 100, height: 20 },
+        }),
+        node({
+          index: 84,
+          ref: 'e84',
+          type: 'StaticText',
+          label: 'Call Stack',
+          rect: { x: 12, y: 300, width: 90, height: 24 },
+        }),
+        node({
+          index: 90,
+          ref: 'e90',
+          type: 'Other',
+          label: 'Dismiss',
+          rect: { x: 0, y: 792, width: 201, height: 48 },
+        }),
+        node({
+          index: 91,
+          ref: 'e91',
+          type: 'Other',
+          label: 'Minimize',
+          rect: { x: 201, y: 792, width: 201, height: 48 },
+        }),
+      ],
+      viewport,
+    );
+
+    expect(state.detected).toBe(true);
+    expect(state.primaryAction).toMatchObject({
+      action: 'dismiss',
+      ref: 'e90',
+      point: { x: 101, y: 816 },
+    });
+  });
+
+  test('the inspector footer Dismiss wins over an app toast Dismiss button', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 30,
+          ref: 'e30',
+          type: 'Button',
+          label: 'Dismiss',
+          rect: { x: 300, y: 120, width: 86, height: 44 },
+          hittable: true,
+        }),
+        node({
+          index: 84,
+          ref: 'e84',
+          type: 'StaticText',
+          label: 'Call Stack',
+          rect: { x: 12, y: 300, width: 90, height: 24 },
+        }),
+        node({
+          index: 90,
+          ref: 'e90',
+          type: 'Other',
+          label: 'Dismiss',
+          rect: { x: 0, y: 792, width: 201, height: 48 },
+        }),
+        node({
+          index: 91,
+          ref: 'e91',
+          type: 'Other',
+          label: 'Minimize',
+          rect: { x: 201, y: 792, width: 201, height: 48 },
+        }),
+      ],
+      viewport,
+    );
+
+    expect(state.primaryAction).toMatchObject({ action: 'dismiss', ref: 'e90' });
+  });
+
+  test('a Close inside a key-prop warning banner is the dismiss target', () => {
+    // The banner is not safe to tap blind, but a close control inside it belongs to LogBox.
+    const state = analyzeReactNativeOverlay(
+      [
+        ...appCloseButtons,
+        node({
+          index: 70,
+          ref: 'e70',
+          label: 'Warning: Each child in a list should have a unique "key" prop.',
+          rect: { x: 0, y: 794, width: 402, height: 52 },
+          hittable: true,
+        }),
+        node({
+          index: 71,
+          ref: 'e71',
+          type: 'Button',
+          label: 'Close',
+          rect: { x: 356, y: 803, width: 34, height: 34 },
+          hittable: true,
+        }),
+      ],
+      viewport,
+    );
+
+    expect(state.primaryAction).toMatchObject({ action: 'close', ref: 'e71' });
+  });
+
+  test('a Close whose tree parent is the banner counts even when its frame overflows it', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        ...appCloseButtons,
+        collapsedBanner,
+        node({
+          index: 73,
+          ref: 'e73',
+          type: 'Button',
+          label: 'Close',
+          parentIndex: 70,
+          rect: { x: 380, y: 778, width: 36, height: 36 },
+        }),
+      ],
+      viewport,
+    );
+
+    expect(state.primaryAction).toMatchObject({ action: 'close', ref: 'e73' });
+  });
+
+  test('a full-screen container carrying overlay text does not vouch for an app Close', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 1,
+          ref: 'e1',
+          type: 'Other',
+          label: 'Runtime Error',
+          rect: { x: 0, y: 0, width: 402, height: 874 },
+        }),
+        ...appCloseButtons,
+      ],
+      viewport,
+    );
+
+    expect(state.detected).toBe(true);
+    expect(state.primaryAction).toBe(null);
+  });
+
+  test('an inspector without a Dismiss control never falls back to an app Close button', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        ...appCloseButtons,
+        node({
+          index: 84,
+          ref: 'e84',
+          type: 'StaticText',
+          label: 'Call Stack',
+          rect: { x: 12, y: 300, width: 90, height: 24 },
+        }),
+      ],
+      viewport,
+    );
+
+    expect(state.detected).toBe(true);
+    expect(state.primaryAction).toBe(null);
+  });
+});
