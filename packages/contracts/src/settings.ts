@@ -6,7 +6,6 @@ import {
 } from '@agent-device/kernel/errors';
 import {
   APPEARANCE_ACTIONS,
-  MACOS_PERMISSION_TARGETS,
   MOBILE_PERMISSION_TARGETS,
   PERMISSION_ACTIONS,
   SETTINGS,
@@ -137,6 +136,8 @@ const SETTINGS_REFUSAL_REASONS = {
    */
   // The asked-for setting applies to the target itself, so the named app consumes nothing.
   appNotConsumed: { reason: 'setting_app_not_consumed' },
+  // A permission's trailing positional reads as a bundle id or package, which belongs in --app.
+  permissionAppPositional: { reason: 'setting_permission_app_positional' },
 } as const satisfies ReasonTable<'settings'>;
 
 /**
@@ -322,7 +323,7 @@ function parsePermissionPositionals(
   if (permission === undefined || form === undefined) {
     throw new AppError(
       'INVALID_ARGS',
-      `settings permission requires a target: ${[...MOBILE_PERMISSION_TARGETS, ...MACOS_PERMISSION_TARGETS].join('|')}`,
+      `settings permission requires a target: ${forms.flatMap((candidate) => candidate.targets).join('|')}`,
     );
   }
   if (findVocabularyName(form.actions, action) === undefined) {
@@ -339,10 +340,14 @@ function parsePermissionPositionals(
   const app = (MOBILE_PERMISSION_TARGETS as readonly string[]).includes(permission)
     ? positionals.slice(3).find((value) => value.includes('.'))
     : undefined;
-  throw new AppError(
-    'INVALID_ARGS',
-    app === undefined ? refusal : `${refusal} Pass the app as --app ${app}.`,
-  );
+  if (app === undefined) throw new AppError('INVALID_ARGS', refusal);
+  throw new AppError('INVALID_ARGS', refusal, {
+    reason: SETTINGS_REFUSAL_REASONS.permissionAppPositional.reason,
+    dispatched: 'no',
+    permission,
+    app,
+    hint: `Pass the app with --app ${app}.`,
+  });
 }
 
 function permissionModeRefusal(
