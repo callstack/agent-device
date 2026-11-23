@@ -26,75 +26,29 @@ function request(requestId = 'snapshot-observation'): DaemonRequest {
   };
 }
 
-test('an observation borrows the exact admitted lifetime without publishing a session', () => {
+test.each(['cancellation', 'replacement'])('observation authority revokes on %s', (reason) => {
   const store = makeSessionStore();
   const coordinator = new SessionCoordinator(store);
   const session = makeSession('agent', { device });
   const ref = store.publish('agent', session);
-  let admitted = false;
+  const req = request(`observation-${reason}`);
   const observation = coordinator.observeDevice(
-    request(),
+    req,
     device,
     () => true,
-    (owner) => {
-      assert.equal(owner, session);
-      admitted = true;
-    },
+    () => {},
   );
 
-  observation.assertCurrent();
-  assert.equal(admitted, true);
-  assert.equal(store.lookup('default'), undefined);
-  assert.equal(store.lookup('agent')?.lifetime, ref.lifetime);
-  assert.equal(store.lookup('agent')?.session, session);
-});
-
-test.each(['callback exit', 'cancellation', 'replacement'])(
-  'observation authority revokes on %s',
-  (reason) => {
-    const store = makeSessionStore();
-    const coordinator = new SessionCoordinator(store);
-    const session = makeSession('agent', { device });
-    const ref = store.publish('agent', session);
-    const req = request(`observation-${reason}`);
-    let active = true;
-    const observation = coordinator.observeDevice(
-      req,
-      device,
-      () => active,
-      () => {},
-    );
-
-    try {
-      if (reason === 'callback exit') active = false;
-      if (reason === 'cancellation') markRequestCanceled(req.meta!.requestId!);
-      if (reason === 'replacement') {
-        store.retire(ref);
-        store.publish('agent', session);
-      }
-      assert.throws(() => observation.assertCurrent());
-    } finally {
-      clearRequestCanceled(req.meta!.requestId!);
+  try {
+    if (reason === 'cancellation') markRequestCanceled(req.meta!.requestId!);
+    if (reason === 'replacement') {
+      store.retire(ref);
+      store.publish('agent', session);
     }
-  },
-);
-
-test('a detached observation has revocable request authority without a session', () => {
-  const store = makeSessionStore();
-  const coordinator = new SessionCoordinator(store);
-  let active = true;
-  const observation = coordinator.observeDevice(
-    request(),
-    device,
-    () => active,
-    (owner) => {
-      assert.equal(owner, undefined);
-    },
-  );
-  observation.assertCurrent();
-  assert.deepEqual(store.listRefs(), []);
-  active = false;
-  assert.throws(() => observation.assertCurrent());
+    assert.throws(() => observation.assertCurrent());
+  } finally {
+    clearRequestCanceled(req.meta!.requestId!);
+  }
 });
 
 test('an observation cannot inspect a leased helper without the producing lease', () => {

@@ -10,6 +10,7 @@ import {
   abandonDeviceClaim,
   acquireTransientDeviceClaim,
   clearDeviceClaim,
+  claimMatchesOwnership,
   type DeviceClaimReconciler,
   type DeviceClaimSessionOwnership,
 } from '@agent-device/daemon-contracts/device-claims';
@@ -85,7 +86,10 @@ export function createDeviceClaimAdmission(params: {
       command: params.command,
       coveredBySession: coverage?.session ?? params.session,
       coveredClaimIsOwnedByRequest: (claim) => {
-        if (observation) return coverage?.ownsClaim(claim) === true;
+        if (observation) {
+          observation.assertCurrent();
+          return coverage !== undefined && claimMatchesOwnership(claim, coverage.ownership);
+        }
         return (
           requestScopeRoot === undefined ||
           params.resolveScopeRoot(claim.workspace) === requestScopeRoot

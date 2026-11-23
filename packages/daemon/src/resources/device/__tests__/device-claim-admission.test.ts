@@ -65,50 +65,58 @@ function makeAdmission(
   });
 }
 
-test('a scoped observation preserves the admitted helper owner claim through disposal', async () => {
-  const { stateDir } = setup();
-  const held = await acquireDeviceClaim({
-    env: process.env,
-    device: ANDROID_EMULATOR,
-    session: 'agent',
-    workspace: '/worktrees/current',
-    stateDir,
-    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
-  });
-  expect(held.status).toBe('acquired');
-  if (held.status !== 'acquired') throw new Error('Fixture claim was refused');
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
-  store.publish('agent', makeAndroidSession('agent', { deviceClaim: held.ownership }));
-  const coordinator = new SessionCoordinator(store);
-  let active = true;
-  const observation = coordinator.observeDevice(
-    { token: 't', session: 'default', command: 'snapshot', positionals: [] },
-    ANDROID_EMULATOR,
-    () => active,
-    () => {},
-  );
-  const admission = makeAdmission(
-    'require-owner',
-    stateDir,
-    'snapshot',
-    'default',
-    null,
-    () => observation,
-  );
-  await admission.admit(ANDROID_EMULATOR, localAndroid);
-  await admission[Symbol.asyncDispose]();
+test.each([true, false])(
+  'a scoped observation preserves the durable owner claim through disposal (exact proof: %s)',
+  async (exact) => {
+    const { stateDir } = setup();
+    const held = await acquireDeviceClaim({
+      env: process.env,
+      device: ANDROID_EMULATOR,
+      session: 'agent',
+      workspace: '/worktrees/current',
+      stateDir,
+      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+    });
+    expect(held.status).toBe('acquired');
+    if (held.status !== 'acquired') throw new Error('Fixture claim was refused');
+    const store = new SessionStore(
+      path.join(stateDir, 'sessions'),
+      createLiveTestHostEnvironment(),
+    );
+    const deviceClaim = exact ? held.ownership : { ...held.ownership, ownerToken: 'replaced' };
+    store.publish('agent', makeAndroidSession('agent', { deviceClaim }));
+    const coordinator = new SessionCoordinator(store);
+    let active = true;
+    const observation = coordinator.observeDevice(
+      { token: 't', session: 'default', command: 'snapshot', positionals: [] },
+      ANDROID_EMULATOR,
+      () => active,
+      () => {},
+    );
+    const admission = makeAdmission(
+      'require-owner',
+      stateDir,
+      'snapshot',
+      'default',
+      null,
+      () => observation,
+    );
+    const admitted = admission.admit(ANDROID_EMULATOR, localAndroid);
+    if (exact) {
+      await admitted;
+      active = false;
+      await expect(admission.admit(ANDROID_EMULATOR, localAndroid)).rejects.toThrow();
+    } else {
+      await expect(admitted).rejects.toMatchObject({ code: 'DEVICE_IN_USE' });
+    }
+    await admission[Symbol.asyncDispose]();
 
-  const claims = inspectDeviceClaims({}, process.env);
-  expect(claims).toHaveLength(1);
-  expect(claims[0]?.claim?.session).toBe('agent');
-  expect(claims[0]?.claim?.ownerToken).toBe(held.ownership.ownerToken);
-  const claim = claims[0]?.claim;
-  if (!claim) throw new Error('Owner claim disappeared');
-  expect(observation.claimCoverage?.ownsClaim(claim)).toBe(true);
-  expect(observation.claimCoverage?.ownsClaim({ ...claim, ownerToken: 'replaced' })).toBe(false);
-  active = false;
-  expect(() => observation.claimCoverage?.ownsClaim(claim)).toThrow();
-});
+    const claims = inspectDeviceClaims({}, process.env);
+    expect(claims).toHaveLength(1);
+    expect(claims[0]?.claim?.session).toBe('agent');
+    expect(claims[0]?.claim?.ownerToken).toBe(held.ownership.ownerToken);
+  },
+);
 
 test('a detached scoped observation takes and releases its own transient claim', async () => {
   const { stateDir } = setup();

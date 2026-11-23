@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
@@ -16,6 +17,7 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { handleSnapshotCommands } from '../../__tests__/support/handlers/snapshot-handler.fixtures.ts';
+import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   createRequestExecutionScope,
@@ -48,11 +50,14 @@ beforeEach(() => {
 });
 
 async function observe(req: DaemonRequest, sessionStore: ReturnType<typeof makeSessionStore>) {
+  const closingAt = vi.fn();
+  const settlementFor = vi.fn();
   const scope = await createRequestExecutionScope({
     host: createTestHostEnvironment(),
     req,
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    leaseSessionEnd: { closingAt, settlementFor },
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     trackClaimRecoveryDisposal: () => {},
@@ -85,11 +90,15 @@ async function observe(req: DaemonRequest, sessionStore: ReturnType<typeof makeS
     return result;
   });
   expect(() => observation!.assertCurrent()).toThrow();
+  if (req.flags?.serial) {
+    expect(closingAt).not.toHaveBeenCalled();
+    expect(settlementFor).not.toHaveBeenCalled();
+  }
   return response;
 }
 
-test.each(['serial', 'platform and serial', 'named session'])(
-  'Android observation by %s preserves the helper owner and an unrelated default session',
+test.each(['platform and serial', 'named session', 'standalone serial'])(
+  'Android observation by %s returns geometry without writing session state',
   async (selection) => {
     const sessionStore = makeSessionStore();
     const snapshot = buildSnapshotState(
@@ -98,8 +107,11 @@ test.each(['serial', 'platform and serial', 'named session'])(
     );
     const agent = makeAndroidSession('agent', { sessionScope: { kind: 'named-local' }, snapshot });
     const other = makeIosSession('default', { sessionScope: { kind: 'named-local' } });
-    const agentRef = sessionStore.publish('agent', agent);
-    const otherRef = sessionStore.publish('default', other);
+    const standalone = selection === 'standalone serial';
+    const agentRef = standalone ? undefined : sessionStore.publish('agent', agent);
+    const otherRef = standalone ? undefined : sessionStore.publish('default', other);
+    const { snapshotGeneration, actions } = agent;
+    const previousActions = [...actions];
     const noteActivity = vi.spyOn(sessionStore, 'noteSessionActivity');
     const recordEvent = vi.spyOn(sessionStore, 'recordEvent');
     vi.mocked(resolveTargetDevice).mockResolvedValue(agent.device);
@@ -122,17 +134,25 @@ test.each(['serial', 'platform and serial', 'named session'])(
     expect(response.ok).toBe(true);
     if (!response.ok) throw new Error(response.error.message);
     expect(response.data).toMatchObject({
-      nodes: [expect.objectContaining({ label: 'Live screen' })],
+      nodes: [
+        expect.objectContaining({
+          label: 'Live screen',
+          rect: { x: 1, y: 2, width: 3, height: 4 },
+        }),
+      ],
     });
     expect(response.data).not.toHaveProperty('refsGeneration');
     expect(response.data?.nodes).toEqual([expect.not.objectContaining({ ref: expect.anything() })]);
     const retainedAgent = sessionStore.lookup('agent');
     const retainedOther = sessionStore.lookup('default');
-    expect(retainedAgent?.lifetime).toBe(agentRef.lifetime);
-    expect(retainedAgent?.session).toBe(agent);
-    expect(retainedAgent?.session.snapshot).toBe(snapshot);
-    expect(retainedOther?.lifetime).toBe(otherRef.lifetime);
-    expect(retainedOther?.session).toBe(other);
+    expect(retainedAgent?.lifetime).toBe(agentRef?.lifetime);
+    expect(retainedAgent?.session).toBe(standalone ? undefined : agent);
+    expect(retainedAgent?.session.snapshot).toBe(standalone ? undefined : snapshot);
+    expect(retainedOther?.lifetime).toBe(otherRef?.lifetime);
+    expect(retainedOther?.session).toBe(standalone ? undefined : other);
+    expect(agent.snapshotGeneration).toBe(snapshotGeneration);
+    expect(agent.actions).toEqual(previousActions);
+    expect(sessionStore.listRefs()).toHaveLength(standalone ? 0 : 2);
     expect(noteActivity).not.toHaveBeenCalled();
     expect(recordEvent).not.toHaveBeenCalled();
     expect(legacyDispatchCapture).toHaveBeenCalledOnce();
@@ -174,3 +194,36 @@ test.each(['lease', 'workspace'])(
     expect(legacyDispatchCapture).not.toHaveBeenCalled();
   },
 );
+
+test('a refused detached observation never reads the public session address', async () => {
+  const sessionStore = makeSessionStore();
+  const defaultSession = makeIosSession('default');
+  sessionStore.publish('default', defaultSession);
+  const lookup = vi.spyOn(sessionStore, 'lookup');
+  const device = makeAndroidSession('agent').device;
+  vi.mocked(resolveTargetDevice).mockResolvedValue(device);
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    logPath: sessionStore.resolveSessionDir('default') + '/daemon.log',
+    token: 't',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 't',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+    flags: { serial: device.id, snapshotObserveOnly: true, snapshotDiff: true },
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', details: { reason: 'android_observe_only_snapshot_options' } },
+  });
+  expect(lookup).not.toHaveBeenCalled();
+});

@@ -57,7 +57,6 @@ import {
   resolveDetachedObservationDevice,
   admitSnapshotObservation,
   sessionExecutionLockKey,
-  existingSessionExecutionLockKeys,
   type RequestExecutionLockPlan,
 } from './request-binding.ts';
 import {
@@ -150,6 +149,7 @@ export type RequestExecutionScope = AsyncDisposable & {
   req: DaemonRequest;
   command: string;
   sessionName: string;
+  detachedObservation: boolean;
   admittedRef?: SessionRef;
   requestLogPath: string;
   runnerLogPath: string;
@@ -506,30 +506,24 @@ export async function createRequestExecutionScope(params: {
         const admission = await resolveExpiryAdmission(pinned, pending);
         return admission.kind === 'admitted' ? { kind: 'replan' } : admission;
       }
-      const plan = detachedObservationDevice
-        ? {
-            keys: existingSessionExecutionLockKeys(sessionName, detachedObservationDevice.id),
-            deviceId: detachedObservationDevice.id,
-          }
-        : expired || !attachesToSession
+      const plan =
+        expired || !attachesToSession
           ? { keys: expired ? [sessionKey] : [], deviceId: undefined }
           : resolveRequestExecutionLockPlan({
               req: scopedReq,
               sessionName,
-              existingDeviceId: observed?.session.device.id,
+              existingDeviceId: detachedObservationDevice?.id ?? observed?.session.device.id,
               env: sessionStore.host.env,
             });
       const lockPlan = plan instanceof Promise ? await plan : plan;
-      const openWait = detachedObservationDevice
-        ? undefined
-        : beginOpenDeviceWait({
-            req: scopedReq,
-            budgetMs:
-              openWaitBudgetMs === undefined ? undefined : Math.max(0, waitDeadline - Date.now()),
-            sessionName,
-            sessionStore,
-            deviceId: lockPlan.deviceId,
-          });
+      const openWait = beginOpenDeviceWait({
+        req: scopedReq,
+        budgetMs:
+          openWaitBudgetMs === undefined ? undefined : Math.max(0, waitDeadline - Date.now()),
+        sessionName,
+        sessionStore,
+        deviceId: lockPlan.deviceId,
+      });
       if (openWait) await openWait.waitForDeviceOutsideLocks();
       if (settlementFor(pinned)) return { kind: 'replan' };
       requestExecutionLocks = createRequestExecutionLocks({
@@ -546,11 +540,18 @@ export async function createRequestExecutionScope(params: {
         : await requestExecutionLocks.run(run);
     };
 
+    const noteAdmittedSessionActivity = () => {
+      if (attachesToSession && !isRequestCanceled(scopedReq.meta?.requestId)) {
+        sessionStore.noteSessionActivity(sessionName);
+      }
+    };
+
     const scope: RequestExecutionScope = {
       host: params.host,
       req: scopedReq,
       command,
       sessionName,
+      detachedObservation: detachedObservationDevice !== undefined,
       requestLogPath,
       runnerLogPath,
       retainDeviceExecutionLock: async (deviceId) =>
@@ -686,14 +687,7 @@ export async function createRequestExecutionScope(params: {
           });
         } finally {
           // Stamp completion under the session lock so the idle reaper cannot overtake live work.
-          if (
-            admissionCompleted &&
-            attachesToSession &&
-            scopedReq.internal?.snapshotObservation === undefined &&
-            !isRequestCanceled(scopedReq.meta?.requestId)
-          ) {
-            sessionStore.noteSessionActivity(sessionName);
-          }
+          if (admissionCompleted) noteAdmittedSessionActivity();
         }
       },
       runLocked: async <T>(task: () => Promise<T>): Promise<T> => {

@@ -205,11 +205,9 @@ async function resolveAndroidSnapshotHelperSession(params: {
     });
     return undefined;
   }
-  const live = sessions().get(params.deviceKey);
-  if (
-    params.options.ownsHelperSession === false &&
-    (live === undefined || isReusableAndroidSnapshotHelperSession(live, params.identity) === false)
-  ) {
+  if (params.options.ownsHelperSession === false) {
+    const live = sessions().get(params.deviceKey);
+    if (live && isReusableAndroidSnapshotHelperSession(live, params.identity)) return live;
     throw new AppError(
       'COMMAND_FAILED',
       'The active Android helper belongs to another capture identity.',

@@ -344,10 +344,10 @@ async function captureAndroidUiHierarchyWithHelper(
   artifact: AndroidSnapshotHelperArtifact,
 ): Promise<AndroidUiHierarchyCapture> {
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
-  const live = await getLiveAndroidSnapshotHelperSession(helperDeviceKey);
   const daemonOwnsHelper =
     options.helperSessionScope === 'daemon-session' && options.transient === undefined;
-  const ownsHelperSession = daemonOwnsHelper || live === undefined;
+  const ownsHelperSession =
+    daemonOwnsHelper || (await getLiveAndroidSnapshotHelperSession(helperDeviceKey)) === undefined;
   try {
     return await captureAndroidHelperContentWithinWindow({
       options,
@@ -619,19 +619,13 @@ async function captureAndroidHelperContentAttempt(params: {
   } catch (error) {
     options.signal?.throwIfAborted();
     if (isAndroidSnapshotHelperNotCurrentError(error)) throw error;
-    if (params.ownsHelperSession === false) {
-      const failureReason = formatAndroidSnapshotHelperFailureReason(error);
-      throw androidSnapshotHelperCaptureError(error, failureReason);
-    }
-    return {
-      outcome: 'captured',
-      capture: await rejectAndroidHelperCaptureFailure({
-        error,
-        helperDeviceKey,
-        artifact,
-        adb,
-      }),
-    };
+    return await rejectAndroidHelperCaptureFailure({
+      error,
+      helperDeviceKey,
+      artifact,
+      adb,
+      ownsHelperSession: params.ownsHelperSession,
+    });
   }
 
   const content = classifyAndroidHelperContent(helperCapture.xml, helperCapture.metadata, {
@@ -723,8 +717,11 @@ async function rejectAndroidHelperCaptureFailure(params: {
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
   adb: AndroidAdbExecutor;
+  ownsHelperSession: boolean;
 }): Promise<never> {
   const failureReason = formatAndroidSnapshotHelperFailureReason(params.error);
+  if (!params.ownsHelperSession)
+    throw androidSnapshotHelperCaptureError(params.error, failureReason);
   emitDiagnostic({
     level: 'error',
     phase: 'android_snapshot_helper_failed',

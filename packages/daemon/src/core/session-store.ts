@@ -15,7 +15,6 @@ import {
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
-import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { DaemonRequest } from './daemon-request.ts';
 import {
   LEASE_ADMISSION_REASONS,
@@ -722,9 +721,8 @@ export class SessionCoordinator {
     admit: (session: SessionState | undefined) => void,
   ): NonNullable<NonNullable<DaemonRequest['internal']>['snapshotObservation']> {
     const ref = this.#store.findByDevice(device.id);
-    if (ref) assertRequestHoldsSessionLease(req, ref.session);
-    admit(ref?.session);
     const authority = ref ? this.authorize(req, ref, active) : undefined;
+    admit(ref?.session);
     const assertCurrent = () => {
       throwIfRequestCanceled(req.meta?.requestId);
       if (active() && (authority === undefined || authority.current() !== undefined)) return;
@@ -732,18 +730,7 @@ export class SessionCoordinator {
     };
     assertCurrent();
     const ownership = ref?.session.deviceClaim;
-    const claimCoverage =
-      ref && ownership
-        ? {
-            session: ref.address,
-            ownsClaim: (claim: DeviceClaim) => {
-              assertCurrent();
-              return (
-                claim.ownerToken === ownership.ownerToken && claim.deviceKey === ownership.deviceKey
-              );
-            },
-          }
-        : undefined;
+    const claimCoverage = ref && ownership ? { session: ref.address, ownership } : undefined;
     return { device, assertCurrent, claimCoverage };
   }
 

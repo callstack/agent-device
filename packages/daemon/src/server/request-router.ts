@@ -360,7 +360,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     response: DaemonResponse,
   ): DaemonResponse {
     let session: SessionState | undefined;
-    if (scope && scope.req.internal?.snapshotObservation === undefined) {
+    if (
+      scope &&
+      !scope.detachedObservation &&
+      scope.req.internal?.snapshotObservation === undefined
+    ) {
       session = sessionStore.lookup(scope.sessionName)?.session;
     }
     return isConfinedToAppLease(scope?.req ?? req, leaseRegistry, session, daemonPolicy)
