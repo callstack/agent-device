@@ -18,6 +18,7 @@ import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
 import { withDisplacedLeaseClaims } from '../../core/lease-context.ts';
+import { screenshotWireData } from '../../core/capture-output-ownership.ts';
 import {
   isReadOnlyRequest,
   resolveDaemonRequestResultDeadlineMs,
@@ -826,7 +827,10 @@ function sendRpcRequestFailure(
 
 function rpcAnswerFor(rpcRequest: JsonRpcRequest, daemonResponse: DaemonResponse): JsonRpcResponse {
   if (daemonResponse.ok) {
-    return { jsonrpc: '2.0', id: rpcRequest.id ?? null, result: daemonResponse };
+    const result = daemonResponse.data
+      ? { ...daemonResponse, data: screenshotWireData(daemonResponse.data) }
+      : daemonResponse;
+    return { jsonrpc: '2.0', id: rpcRequest.id ?? null, result };
   }
   return createRpcError(
     rpcRequest.id ?? null,

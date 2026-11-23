@@ -65,3 +65,27 @@ export function daemonDeliveredArtifact(
   const delivered: DeliveredArtifact | undefined = artifact;
   return delivered?.[DAEMON_DELIVERED_ARTIFACT];
 }
+
+const SCREENSHOT_DELIVERY_PATH = Symbol('screenshotDeliveryPath');
+type ScreenshotDeliveryData = DaemonResponseData & {
+  [SCREENSHOT_DELIVERY_PATH]?: string;
+};
+
+/** Keeps the actual file available to nested commands until the HTTP reply is written. */
+export function withScreenshotDeliveryPath<T extends DaemonResponseData>(
+  data: T,
+  deliveryPath: string,
+): T {
+  return { ...data, [SCREENSHOT_DELIVERY_PATH]: deliveryPath };
+}
+
+export function screenshotWireData(data: DaemonResponseData): DaemonResponseData {
+  const screenshot: ScreenshotDeliveryData = data;
+  const deliveryPath = screenshot[SCREENSHOT_DELIVERY_PATH];
+  if (deliveryPath === undefined) return data;
+  return {
+    ...data,
+    path: deliveryPath,
+    ...(data.message === undefined ? {} : { message: `Saved screenshot: ${deliveryPath}` }),
+  };
+}
