@@ -515,6 +515,7 @@ test('close and reopen at one address give a second lease a fresh journal', asyn
 
   const closed = await send('close', [], owner);
   expect(closed.result?.ok, JSON.stringify(closed)).toBe(true);
+  expect(fs.existsSync(path.dirname(firstPath))).toBe(false);
   const secondOwner = world.allocateOtherClient();
   const reopened = await send('open', ['com.example.app'], secondOwner);
   expect(reopened.result?.ok, JSON.stringify(reopened)).toBe(true);
@@ -529,13 +530,19 @@ test('close and reopen at one address give a second lease a fresh journal', asyn
   });
   expect(secondPage.result?.data?.path).not.toBe(firstPath);
   expectLeaseIdRefusal(await send('events', [], owner));
-  await world.sessionStore.flushEvents();
-  const retiredEvents = fs.readFileSync(firstPath, 'utf8').trim().split('\n');
-  expect(JSON.parse(retiredEvents.at(-1)!)).toMatchObject({
-    command: 'close',
-    kind: 'request.finished',
-    status: 'ok',
-  });
+  expect((await send('close', [], secondOwner)).result?.ok).toBe(true);
+
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    const lease = world.allocateOtherClient();
+    const fresh = await send('open', ['com.example.app'], lease);
+    expect(fresh.result?.ok, JSON.stringify(fresh)).toBe(true);
+    const journalPath = String(fresh.result?.data?.eventLogPath);
+    expect((await send('events', [], lease)).result?.data?.events).toHaveLength(3);
+    expect(fs.existsSync(journalPath)).toBe(true);
+    expect((await send('close', [], lease)).result?.ok).toBe(true);
+    expect(fs.existsSync(path.dirname(journalPath))).toBe(false);
+  }
+  expect(fs.existsSync(path.dirname(path.dirname(firstPath)))).toBe(false);
 });
 
 test.each(['doctor', 'capabilities', 'artifacts'] as const)(

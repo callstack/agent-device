@@ -100,6 +100,14 @@ export async function flushSessionEventLogWrites(eventLogPath?: string): Promise
   await pending;
 }
 
+/** Removes a lifetime's journal after its owner has revoked all access. */
+export async function removeSessionEventLog(eventLogPath: string): Promise<void> {
+  await flushSessionEventLogWrites(eventLogPath);
+  const directory = path.dirname(eventLogPath);
+  ensuredEventLogDirs.delete(directory);
+  fs.rmSync(directory, { recursive: true, force: true });
+}
+
 type EventLogFailureReason =
   | 'entry-too-large'
   | 'queue-full'

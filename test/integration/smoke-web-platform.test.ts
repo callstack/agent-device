@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
@@ -231,6 +231,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
     // #1781 B1: the daemon leak oracle this fix unblocks wiring to a web lane — no stray
     // state-dir residue either, on top of the process-level proof above.
     await assertNoDaemonLeaks({ stateDir, daemonPids: [daemonPid], phase: 'after-shutdown' });
+    assert.equal(existsSync(path.join(stateDir, 'session-journals')), false);
   } finally {
     await cleanupWebShutdownSmoke(context, daemonIdentity, inspect);
   }

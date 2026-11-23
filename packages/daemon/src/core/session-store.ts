@@ -71,6 +71,7 @@ import {
   buildRequestStartedEvent,
   flushSessionEventLogWrites,
   readSessionEventLog,
+  removeSessionEventLog,
   resolveSessionEventLogPath,
   type BoundJournal,
   type SessionEventLogInput,
@@ -97,6 +98,7 @@ export type RetainedExecutionHost = Readonly<{
 
 export class SessionStore {
   private readonly sessions = new Map<string, SessionEntry>();
+  private readonly journalRemovals = new Map<SessionRef['lifetime'], Promise<void>>();
   private readonly retainedExecutionHosts = new Map<string, RetainedExecutionHost>();
   private acceptingSessions = true;
   private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
@@ -207,7 +209,9 @@ export class SessionStore {
       removeEmptySessionDirectory(this.resolveSessionDir(ref.address));
       removeEmptySessionDirectory(this.sessionsDir);
     }
-    return this.sessions.delete(ref.address);
+    this.sessions.delete(ref.address);
+    this.removeRetiredJournal(ref);
+    return true;
   }
 
   listRetainedExecutionHosts(leaseId: string): RetainedExecutionHost[] {
@@ -294,6 +298,7 @@ export class SessionStore {
   }
 
   recordEvent(ref: SessionRef, event: SessionEventLogInput): void {
+    if (!this.resolveCurrent(ref)) return;
     appendSessionEvent(this.resolveEventLogPath(ref), ref.address, event, this.host.env);
   }
 
@@ -302,7 +307,32 @@ export class SessionStore {
   }
 
   async flushEvents(ref?: SessionRef): Promise<void> {
-    await flushSessionEventLogWrites(ref ? this.resolveEventLogPath(ref) : undefined);
+    const removals = ref ? [this.journalRemovals.get(ref.lifetime)] : this.journalRemovals.values();
+    await Promise.all([
+      flushSessionEventLogWrites(ref ? this.resolveEventLogPath(ref) : undefined),
+      ...removals,
+    ]);
+  }
+
+  async flushJournalRemovals(): Promise<void> {
+    await Promise.all(this.journalRemovals.values());
+  }
+
+  private removeRetiredJournal(ref: SessionRef): void {
+    const eventLogPath = this.resolveEventLogPath(ref);
+    const removal = removeSessionEventLog(eventLogPath)
+      .then(() => {
+        if (this.sessions.size === 0) removeEmptySessionDirectory(this.journalRoot());
+      })
+      .catch((error: NodeJS.ErrnoException) => {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'session_event_log_cleanup_failed',
+          data: { path: eventLogPath, code: error.code },
+        });
+      })
+      .finally(() => this.journalRemovals.delete(ref.lifetime));
+    this.journalRemovals.set(ref.lifetime, removal);
   }
 
   writeSessionLog(ref: SessionRef, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
@@ -618,9 +648,11 @@ export class SessionStore {
   }
 
   resolveEventLogPath(ref: SessionRef): string {
-    return resolveSessionEventLogPath(
-      path.join(this.resolveDaemonStateDir(), 'session-journals', ref.lifetime.journalId),
-    );
+    return resolveSessionEventLogPath(path.join(this.journalRoot(), ref.lifetime.journalId));
+  }
+
+  private journalRoot(): string {
+    return path.join(this.resolveDaemonStateDir(), 'session-journals');
   }
 }
 
@@ -732,7 +764,6 @@ export class SessionCoordinator {
             ...buildRequestStartedEvent({ req }),
             ts: new Date(startedAtMs).toISOString(),
           });
-          // Close can retire this lifetime before the request completes.
           return (finishedReq, response) =>
             this.#store.recordEvent(
               ref,

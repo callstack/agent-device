@@ -671,10 +671,7 @@ test('#1391: a close-time script save failure still clears the device claim and 
     ['close'],
   );
   await store.flushEvents(ref);
-  const durableCloseEvents = store
-    .readEvents(ref)
-    .events.filter((event) => event.kind === 'action.recorded' && event.command === 'close');
-  assert.equal(durableCloseEvents.length, session.actions.length);
+  assert.equal(fs.existsSync(store.resolveEventLogPath(ref)), false);
 });
 
 test('an open under a macos-app lease claims its app device, beside other apps of the Mac', async () => {

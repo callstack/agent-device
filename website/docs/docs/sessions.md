@@ -35,7 +35,7 @@ Each session artifact directory contains:
 Use `agent-device events` to read requests and recorded actions for an active session.
 The file at `eventLogPath` rotates at 5 MiB by default. Set `AGENT_DEVICE_EVENT_LOG_MAX_BYTES`
 on the daemon to change the cap in bytes. Cursors in the retained window survive rotation.
-Start with a fresh cursor after you close and reopen the session.
+Closing the session removes its event journal. Start with a fresh cursor when you reopen it.
 
 `events.ndjson` leaves out user-entered content. It keeps command names, status,
 durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and
