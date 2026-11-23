@@ -64,6 +64,10 @@
       "types": "./src/interaction-outcome.ts",
       "default": "./src/interaction-outcome.ts"
     },
+    "./path-resolution": {
+      "types": "./src/path-resolution.ts",
+      "default": "./src/path-resolution.ts"
+    },
     "./process": {
       "types": "./src/process.ts",
       "default": "./src/process.ts"
