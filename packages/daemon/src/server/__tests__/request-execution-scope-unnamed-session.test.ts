@@ -70,7 +70,7 @@ function publishProviderLeasedDefaultSession(
   );
 }
 
-test.each(['snapshot', 'artifacts', 'events', 'logs', 'doctor', 'capabilities'])(
+test.each(['snapshot', 'artifacts', 'events', 'logs', 'capabilities'])(
   'an unnamed %s cannot reach the provider lease another caller left on the default session',
   async (command) => {
     const sessionStore = makeSessionStore('agent-device-request-scope-');
@@ -114,7 +114,7 @@ test('an unnamed command is refused when the session gains a provider lease afte
   expect(dispatch).not.toHaveBeenCalled();
 });
 
-test.each(['session_list', 'devices', 'release_materialized_paths'])(
+test.each(['session_list', 'devices', 'release_materialized_paths', 'doctor'])(
   'an unnamed %s still answers while the default session holds a provider lease',
   async (command) => {
     const sessionStore = makeSessionStore('agent-device-request-scope-');
@@ -128,5 +128,6 @@ test.each(['session_list', 'devices', 'release_materialized_paths'])(
     });
 
     await expect(scope.runLocked(async () => 'ran')).resolves.toBe('ran');
+    if (command === 'doctor') expect(scope.admittedRef).toBeUndefined();
   },
 );

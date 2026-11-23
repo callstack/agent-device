@@ -30,6 +30,7 @@ import {
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
   claimOwnerVisible,
+  isUnleasedLocalClaimRequest,
   resolveCallerScopeRoot,
   resolvePublicSessionName,
   resolveSessionScope,
@@ -42,6 +43,7 @@ import {
   assertRequestTenantAdmission,
   resolveRequestSessionName,
   resolveRequestSessionRef,
+  visibleDoctorSessionRef,
   type ResolveRequestSessionRef,
   scopeRequestSession,
   withTenantAdmissionOnRoutingError,
@@ -307,7 +309,10 @@ export async function createRequestExecutionScope(params: {
     const readAddressed = () =>
       detachedObservationDevice
         ? undefined
-        : (sessionStore.lookup(sessionName) ?? params.leaseSessionEnd?.closingAt(sessionName));
+        : visibleDoctorSessionRef(
+            scopedReq,
+            sessionStore.lookup(sessionName) ?? params.leaseSessionEnd?.closingAt(sessionName),
+          );
     const preflightRef = readAddressed();
     const preflightSession = preflightRef?.session;
     assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
@@ -436,6 +441,7 @@ export async function createRequestExecutionScope(params: {
       sessionStore,
       snapshotObservation: () => scopedReq.internal?.snapshotObservation,
       claimConflictError,
+      unleasedLocal: () => isUnleasedLocalClaimRequest(scopedReq),
     });
 
     let bindingCleanup: Promise<void> | undefined;
@@ -761,6 +767,7 @@ function createRequestDeviceAccess(params: {
   sessionStore: SessionStore;
   snapshotObservation: () => NonNullable<DaemonRequest['internal']>['snapshotObservation'];
   claimConflictError: Parameters<typeof createDeviceClaimAdmission>[0]['claimConflictError'];
+  unleasedLocal: () => boolean;
 }): {
   claimAdmission: DeviceClaimAdmission;
   runtimeBindings: RequestRuntimeBindings;
@@ -775,6 +782,7 @@ function createRequestDeviceAccess(params: {
     callerCwd: params.callerCwd,
     resolveScopeRoot: resolveCallerScopeRoot,
     claimConflictError: params.claimConflictError,
+    unleasedLocal: params.unleasedLocal,
     stateDir: params.stateDir,
     env: params.env,
     observation: params.snapshotObservation,

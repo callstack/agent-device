@@ -82,8 +82,11 @@ If a public-network request has no tenant isolation, show only sessions that mat
 If a request has tenant isolation, show only sessions in its tenant.
 If a session has a lease, require that lease's id and check the supplied scope labels before showing the name.
 If a local request needs device recovery, it can see an unleased local holder in a different workspace.
+If a claim has no live session that holds its exact token, require a stored unleased local designation to name the holder during local device recovery.
 If the rule hides a holder, give the caller the public contention reason.
-If `doctor` has no visible session at the admitted lifetime, use detached checks.
+If a claim diagnostic has no session visibility decision, include only public device and contention details.
+Before session-derived admission for `doctor`, apply the visibility rule to the session reference.
+If `doctor` has no visible session, use detached checks.
 
 ## Rationale
 

@@ -58,14 +58,13 @@ export function createDeviceClaimReconciler(params: {
         return { status: 'retained', reason: `${pending.resourceKind}-cleanup-pending` };
       }
       return { status: 'reconciled' };
-    } catch (error) {
+    } catch {
       emitDiagnostic({
         level: 'warn',
         phase: 'device_claim_orphan_reconciliation_failed',
         data: {
           deviceKey: claim.deviceKey,
-          ownerSession: claim.session,
-          error: error instanceof Error ? error.message : String(error),
+          reason: 'durable-resource-reconciliation-failed',
         },
       });
       return { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
@@ -118,14 +117,13 @@ export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryIns
       }
     }
     return { status: 'inspectable', recoveryKinds, ownedResources };
-  } catch (error) {
+  } catch {
     emitDiagnostic({
       level: 'warn',
       phase: 'device_claim_orphan_reconciliation_failed',
       data: {
         deviceKey: claim.deviceKey,
-        ownerSession: claim.session,
-        error: error instanceof Error ? error.message : String(error),
+        reason: 'durable-resource-reconciliation-failed',
       },
     });
     return { status: 'retained', reason: 'durable-resource-reconciliation-failed' };

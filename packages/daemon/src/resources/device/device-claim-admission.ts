@@ -64,6 +64,7 @@ export function createDeviceClaimAdmission(params: {
    */
   resolveScopeRoot: (workspace: string | undefined) => string | undefined;
   stateDir: string;
+  unleasedLocal?: () => boolean;
   claimConflictError: (device: DeviceInfo, conflict: InspectedDeviceClaim) => AppError;
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
@@ -99,6 +100,7 @@ export function createDeviceClaimAdmission(params: {
       },
       workspace: params.workspace,
       stateDir: params.stateDir,
+      unleasedLocal: params.unleasedLocal?.(),
       env: params.env,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
     });

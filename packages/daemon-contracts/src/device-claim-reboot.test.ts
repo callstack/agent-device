@@ -47,6 +47,7 @@ test('a device that came up after the claim destroyed what the claim was asserti
     session: 'cwd:/w:default',
     workspace: '/w',
     stateDir: '/state/owner',
+    ownerToken: CLAIM.ownerToken,
     bootedAtMs: 1_001,
   });
 });

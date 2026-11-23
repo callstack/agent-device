@@ -449,9 +449,11 @@ test('devices projects the blocking claim owner and hides provably dead owners',
     fs.writeFileSync(
       path.join(claimsDir, `${id}.json`),
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 3,
+        claimOwnerKind: 'open-session',
+        unleasedLocal: true,
         deviceKey: `local:android:none:${id}`,
-        device: { platform: 'android', id, name: id, kind: 'emulator' },
+        device: { family: 'android', id, name: id, kind: 'emulator' },
         session: `${id}-session`,
         workspace: `/worktrees/${id}`,
         stateDir: process.cwd(),
@@ -508,9 +510,11 @@ test('a claim never projects onto a same-id device from another platform family'
   fs.writeFileSync(
     path.join(claimsDir, 'shared-id.json'),
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 3,
+      claimOwnerKind: 'open-session',
+      unleasedLocal: true,
       deviceKey: 'local:android:none:shared-id',
-      device: { platform: 'android', id: 'shared-id', name: 'Claimed Pixel', kind: 'emulator' },
+      device: { family: 'android', id: 'shared-id', name: 'Claimed Pixel', kind: 'emulator' },
       session: 'android-session',
       workspace: '/worktrees/android',
       stateDir: process.cwd(),
@@ -572,6 +576,7 @@ test('devices shows the Mac as claimed while one of its app devices is', async (
     const claimed = await acquireDeviceClaim({
       device: hostAppDevice(mac, 'com.apple.TextEdit'),
       session: 'text-edit',
+      unleasedLocal: true,
       workspace: '/worktrees/agent',
       stateDir: process.cwd(),
       env: process.env,
@@ -610,6 +615,7 @@ test('devices shows the web host as claimed while one of its web session devices
     const claimed = await acquireDeviceClaim({
       device: webSessionDevice(browser, { name: 'checkout' }),
       session: 'checkout',
+      unleasedLocal: true,
       workspace: '/worktrees/agent',
       stateDir: process.cwd(),
       env: process.env,

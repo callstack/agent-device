@@ -59,6 +59,7 @@ async function claimForeignDaemon(root: string): Promise<string> {
     session: 'owner-session',
     workspace: '/worktrees/daemon-a',
     stateDir: ownerStateDir,
+    unleasedLocal: true,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
   expect(acquired.status).toBe('acquired');

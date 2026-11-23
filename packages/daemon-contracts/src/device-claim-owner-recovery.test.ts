@@ -141,7 +141,6 @@ test.each([1, 2] as const)(
         phase: 'device_claim_recovery_dispose_failed',
         data: expect.objectContaining({
           deviceKey: f.claim.deviceKey,
-          ownerSession: f.claim.session,
           error: expect.objectContaining({
             details: {
               reason: 'platform-owner-shutdown-failed',
@@ -317,7 +316,6 @@ test.each([
           phase: 'device_claim_recovery_dispose_failed',
           data: {
             deviceKey: f.claim.deviceKey,
-            ownerSession: f.claim.session,
             ...(outcome === 'retained' ? { retainedReason: retained.reason } : {}),
             reason: 'diagnostic-data-unserializable',
           },
@@ -375,7 +373,6 @@ test.each(['reconciled', 'retained', 'primary-error'] as const)(
       phase: 'device_claim_recovery_dispose_pending',
       data: {
         deviceKey: f.claim.deviceKey,
-        ownerSession: f.claim.session,
         budgetMs: DISPOSE_BUDGET_MS,
         ...(outcome === 'retained' ? { retainedReason: retained.reason } : {}),
       },

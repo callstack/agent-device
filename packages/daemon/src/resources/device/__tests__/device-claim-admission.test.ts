@@ -825,6 +825,7 @@ test('the request scope admits a transient command only in the session whose cla
     session: 'owning-session',
     workspace: '/worktrees/current',
     stateDir,
+    unleasedLocal: true,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
 
@@ -881,6 +882,7 @@ test('the request scope covers the implicit workspace session that routed to the
     session: routedAddress,
     workspace,
     stateDir,
+    unleasedLocal: true,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
 

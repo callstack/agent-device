@@ -206,7 +206,6 @@ test.each(['deadline', 'cancellation'] as const)(
       phase: 'device_claim_recovery_dispose_pending',
       data: {
         deviceKey: DEVICE_KEY,
-        ownerSession: 'dead-session',
         budgetMs: DISPOSAL_BUDGET_MS,
         retainedReason: 'app-log-cleanup-pending',
       },

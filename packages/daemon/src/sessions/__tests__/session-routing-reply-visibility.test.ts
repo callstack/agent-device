@@ -39,6 +39,12 @@ function storeWithLeasedSession(): SessionStore {
     'e2b:agentA',
     makeIosAppSession('e2b:agentA', {
       sessionScope: { kind: 'tenant', id: TENANT },
+      deviceClaim: {
+        deviceKey: 'local:apple:ios:sim-1',
+        ownerToken: 'token',
+        ownerPid: 4242,
+        ownerStartTime: 'start',
+      },
       lease: {
         leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         tenantId: TENANT,
@@ -55,6 +61,7 @@ function claimConflictResponse(
   store: SessionStore,
   session: string,
   stateDir = store.resolveDaemonStateDir(),
+  unleasedLocal?: true,
 ): DaemonResponse {
   const deviceKey = 'local:apple:ios:sim-1';
   return buildDeviceClaimConflictError(
@@ -65,7 +72,10 @@ function claimConflictResponse(
       deviceKey,
       claim: {
         schemaVersion: 3,
-        claimOwnerKind: 'open-session',
+        ...(session === 'transient:install'
+          ? { claimOwnerKind: 'transient-command', transientCommand: 'install' }
+          : { claimOwnerKind: 'open-session' }),
+        unleasedLocal,
         deviceKey,
         device: {
           family: 'apple',
@@ -138,7 +148,13 @@ test('a claim of this daemon whose session no longer resolves is not named', () 
 test('a local request keeps the owner of a transient claim of this daemon', () => {
   const store = storeWithLeasedSession();
 
-  const response = claimConflictResponse(LOCAL_REQUEST, store, 'transient:install');
+  const response = claimConflictResponse(
+    LOCAL_REQUEST,
+    store,
+    'transient:install',
+    undefined,
+    true,
+  );
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -150,13 +166,13 @@ test('a claim another daemon on this host wrote keeps its owner for a local requ
   const peerStateDir = mkdtempForTestSync('agent-device-reply-visibility-peer-');
   const stateDir = path.join(peerStateDir, 'daemon');
 
-  const local = claimConflictResponse(LOCAL_REQUEST, store, 'default', stateDir);
+  const local = claimConflictResponse(LOCAL_REQUEST, store, 'default', stateDir, true);
   expect(local.ok).toBe(false);
   if (local.ok) return;
   expect(local.error.message).toContain('default');
   expect(local.error.details?.owner).toMatchObject({ workspace: '/work/a' });
 
-  const proxied = claimConflictResponse(request(), store, 'default', stateDir);
+  const proxied = claimConflictResponse(request(), store, 'default', stateDir, true);
   expect(proxied.ok).toBe(false);
   if (proxied.ok) return;
   expect(proxied.error.details?.owner).toBeUndefined();
@@ -164,7 +180,11 @@ test('a claim another daemon on this host wrote keeps its owner for a local requ
 
 test('only local device recovery names an unlistable local session', () => {
   const store = storeWithLeasedSession();
-  const own = { session: 'e2b:agentA', workspace: '/w', stateDir: store.resolveDaemonStateDir() };
+  const own = {
+    session: 'e2b:agentA',
+    ownerToken: 'token',
+    stateDir: store.resolveDaemonStateDir(),
+  };
 
   expect(claimOwnerVisible(request(), store, own)).toBe(false);
   expect(
@@ -176,9 +196,15 @@ test('only local device recovery names an unlistable local session', () => {
       session: 'gone',
     }),
   ).toBe(false);
+  expect(
+    claimOwnerVisible(request({ leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }), store, {
+      ...own,
+      ownerToken: 'previous-claim',
+    }),
+  ).toBe(false);
   const peerClaim = { ...own, stateDir: path.join(own.stateDir, 'peer') };
   expect(claimOwnerVisible(request(), store, peerClaim)).toBe(false);
-  expect(claimOwnerVisible(LOCAL_REQUEST, store, peerClaim)).toBe(true);
+  expect(claimOwnerVisible(LOCAL_REQUEST, store, peerClaim)).toBe(false);
 
   const foreignWorkspaceSession = {
     name: 'default',

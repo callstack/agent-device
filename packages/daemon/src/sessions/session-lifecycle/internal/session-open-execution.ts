@@ -64,7 +64,11 @@ import {
   type ResolvedOpenRuntimeHintPlan,
 } from './session-open-prepare.ts';
 import { findSessionDeviceConflict } from '../../open-device-contention-wait.ts';
-import { claimOwnerVisible, resolvePublicSessionName } from '../../session-routing.ts';
+import {
+  claimOwnerVisible,
+  isUnleasedLocalClaimRequest,
+  resolvePublicSessionName,
+} from '../../session-routing.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import {
   abandonDeviceClaim,
@@ -571,6 +575,7 @@ async function acquireDeviceClaimForOwner(params: {
         session: sessionName,
         workspace: requestCwd(req, params.host),
         stateDir: sessionStore.resolveDaemonStateDir(),
+        unleasedLocal: isUnleasedLocalClaimRequest(req),
         env: params.host.env,
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,

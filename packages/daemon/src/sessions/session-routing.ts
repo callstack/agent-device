@@ -1,3 +1,4 @@
+import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -355,37 +356,27 @@ function findGitWorktreeRoot(startDir: string): string | undefined {
   }
 }
 
-/** The ownership fields of a host-global device claim that this visibility rule needs. */
-export type ClaimOwnerRef = Readonly<{
-  session: string;
-  workspace: string;
-  stateDir: string;
-}>;
+type ClaimOwnerRef = Pick<DeviceClaim, 'session' | 'stateDir' | 'ownerToken' | 'unleasedLocal'>;
 
 function isLocalCaller(req: DaemonRequest, scope = resolveSessionScope(req)): boolean {
   return !req.internal?.publicNetworkOnly && scope.kind !== 'tenant';
 }
 
-/**
- * Whether a reply may name the session a host-global device claim records as its owner.
- *
- * A claim of this daemon whose label resolves follows the device recovery naming rule.
- * A local caller can also see the owner of a claim from another daemon on this host or a claim
- * without a stored session. A remote or tenant-scoped caller can see only listable owners (#4923).
- */
+export function isUnleasedLocalClaimRequest(req: DaemonRequest): boolean {
+  return req.internal?.admittedLease === undefined && isLocalCaller(req);
+}
+
+/** A live session proves ownership only when it holds this exact claim. */
 export function claimOwnerVisible(
   req: DaemonRequest,
   sessionStore: SessionStore,
   owner: ClaimOwnerRef,
 ): boolean {
-  const localRequest = isLocalCaller(req);
-  if (!isSameDaemonStateDir(owner.stateDir, sessionStore.resolveDaemonStateDir())) {
-    return localRequest;
+  if (path.resolve(owner.stateDir) === path.resolve(sessionStore.resolveDaemonStateDir())) {
+    const session = sessionStore.lookup(owner.session)?.session;
+    if (session?.deviceClaim?.ownerToken === owner.ownerToken) {
+      return createSessionVisibilityPredicate(req, 'device-recovery')(session);
+    }
   }
-  const ref = sessionStore.lookup(owner.session);
-  return ref ? createSessionVisibilityPredicate(req, 'device-recovery')(ref.session) : localRequest;
-}
-
-function isSameDaemonStateDir(claimStateDir: string, daemonStateDir: string): boolean {
-  return path.resolve(claimStateDir) === path.resolve(daemonStateDir);
+  return owner.unleasedLocal === true && isLocalCaller(req);
 }

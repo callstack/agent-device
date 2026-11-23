@@ -133,8 +133,19 @@ export function resolveRequestSessionName(params: {
       attachesToSession: getSessionCommandKind(scopedReq.command) !== 'inventory',
     }),
   );
-  assertRequestTenantAdmission(unscopedReq, sessionStore.get(sessionName));
+  const ref = visibleDoctorSessionRef(scopedReq, sessionStore.lookup(sessionName));
+  assertRequestTenantAdmission(unscopedReq, ref?.session);
   return sessionName;
+}
+
+export function visibleDoctorSessionRef(
+  req: DaemonRequest,
+  ref: SessionRef | undefined,
+): SessionRef | undefined {
+  if (req.command === 'doctor' && ref && !createSessionVisibilityPredicate(req)(ref.session)) {
+    return undefined;
+  }
+  return ref;
 }
 
 /**
@@ -148,9 +159,6 @@ export function resolveRequestSessionRef(
 ): SessionRef | undefined {
   if (ref?.session.lease && ignoresSessionLease(req.command)) return undefined;
   assertRequestHoldsSessionLease(req, ref?.session);
-  if (req.command === 'doctor' && ref && !createSessionVisibilityPredicate(req)(ref.session)) {
-    return undefined;
-  }
   return ref;
 }
 

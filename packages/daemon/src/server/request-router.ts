@@ -349,7 +349,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     response: DaemonResponse,
   ): DaemonResponse {
     let session: SessionState | undefined;
-    if (
+    if (scope?.command === 'doctor') {
+      session = scope.admittedRef?.session;
+    } else if (
       scope &&
       !scope.detachedObservation &&
       scope.req.internal?.snapshotObservation === undefined

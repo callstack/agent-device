@@ -521,6 +521,7 @@ test('a foreign live claim rejects open before platform preparation or mutation'
     session: 'foreign-session',
     workspace: '/worktrees/foreign',
     stateDir: ownerStateDir,
+    unleasedLocal: true,
   });
   assert.equal(acquired.status, 'acquired');
   if (acquired.status !== 'acquired') return;
