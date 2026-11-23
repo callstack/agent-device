@@ -69,32 +69,39 @@ export function parseSourceValue(
     if (typeof value !== 'string' || !definition.enumValues?.includes(value)) {
       throw new AppError(
         'INVALID_ARGS',
-        `Invalid value for "${rawKey}" in ${sourceLabel}. Expected one of: ${definition.enumValues?.join(', ')}.`,
+        `Invalid value for "${rawKey}" in ${sourceLabel}. Expected ${describeAcceptedValues(definition)}.`,
       );
     }
     return value;
   }
   const parsed =
     typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-  if (!Number.isFinite(parsed) || (definition.type === 'int' && !Number.isInteger(parsed))) {
+  if (
+    !Number.isFinite(parsed) ||
+    (definition.type === 'int' && !Number.isInteger(parsed)) ||
+    (typeof definition.min === 'number' && parsed < definition.min) ||
+    (typeof definition.max === 'number' && parsed > definition.max)
+  ) {
     throw new AppError(
       'INVALID_ARGS',
-      `Invalid value for "${rawKey}" in ${sourceLabel}. Expected ${definition.type === 'int' ? 'integer' : 'number'}.`,
-    );
-  }
-  if (typeof definition.min === 'number' && parsed < definition.min) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid value for "${rawKey}" in ${sourceLabel}. Must be >= ${definition.min}.`,
-    );
-  }
-  if (typeof definition.max === 'number' && parsed > definition.max) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid value for "${rawKey}" in ${sourceLabel}. Must be <= ${definition.max}.`,
+      `Invalid value for "${rawKey}" in ${sourceLabel}. Expected ${describeAcceptedValues(definition)}.`,
     );
   }
   return parsed;
+}
+
+/**
+ * The values an enum or numeric definition accepts, worded the same for a CLI flag, an env var,
+ * and a config key: `integer from 100 to 120000`, `number >= 0.01`, `one of: auto, socket`.
+ */
+export function describeAcceptedValues(definition: SourceValueDefinition): string {
+  if (definition.type === 'enum') return `one of: ${definition.enumValues?.join(', ')}`;
+  const kind = definition.type === 'int' ? 'integer' : 'number';
+  const { min, max } = definition;
+  if (min !== undefined && max !== undefined) return `${kind} from ${min} to ${max}`;
+  if (min !== undefined) return `${kind} >= ${min}`;
+  if (max !== undefined) return `${kind} <= ${max}`;
+  return kind;
 }
 
 function parseBooleanValue(value: unknown, sourceLabel: string, rawKey: string): boolean {

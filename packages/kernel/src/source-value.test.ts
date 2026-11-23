@@ -150,12 +150,12 @@ describe('parseSourceValue integers', () => {
 
   test('enforces the min bound', () => {
     expect(parse({ type: 'int', min: 0 }, 0)).toBe(0);
-    expectInvalidArgs(() => parse({ type: 'int', min: 1 }, 0), 'Must be >= 1');
+    expectInvalidArgs(() => parse({ type: 'int', min: 1 }, 0), 'Expected integer >= 1');
   });
 
   test('enforces the max bound', () => {
     expect(parse({ type: 'int', max: 10 }, 10)).toBe(10);
-    expectInvalidArgs(() => parse({ type: 'int', max: 5 }, 6), 'Must be <= 5');
+    expectInvalidArgs(() => parse({ type: 'int', max: 5 }, 6), 'Expected integer <= 5');
   });
 });
 
@@ -167,8 +167,8 @@ describe('parseSourceValue numbers', () => {
 
   test('rejects non-numeric input and enforces bounds', () => {
     expectInvalidArgs(() => parse({ type: 'number' }, 'abc'), 'Expected number');
-    expectInvalidArgs(() => parse({ type: 'number', min: 0.01 }, 0), 'Must be >= 0.01');
-    expectInvalidArgs(() => parse({ type: 'number', max: 1 }, 1.1), 'Must be <= 1');
+    expectInvalidArgs(() => parse({ type: 'number', min: 0.01 }, 0), 'Expected number >= 0.01');
+    expectInvalidArgs(() => parse({ type: 'number', max: 1 }, 1.1), 'Expected number <= 1');
   });
 });
 

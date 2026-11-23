@@ -1,5 +1,6 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { describeAcceptedValues } from '@agent-device/kernel/source-value';
 import {
   assertCommandPositionalArity,
   getCommandSchema,
@@ -306,7 +307,7 @@ function parseFlagValue(
   }
   if (definition.type === 'enum') {
     if (!definition.enumValues?.includes(value)) {
-      throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
+      throw invalidFlagValue(definition, token, value);
     }
     return { value, consumeNext: inlineValue === undefined };
   }
@@ -314,14 +315,12 @@ function parseFlagValue(
     throw new AppError('INVALID_ARGS', `Flag ${token} requires a value.`);
   }
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
-  }
-  if (typeof definition.min === 'number' && parsed < definition.min) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
-  }
-  if (typeof definition.max === 'number' && parsed > definition.max) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
+  if (
+    !Number.isFinite(parsed) ||
+    (typeof definition.min === 'number' && parsed < definition.min) ||
+    (typeof definition.max === 'number' && parsed > definition.max)
+  ) {
+    throw invalidFlagValue(definition, token, value);
   }
   return {
     value: definition.type === 'int' ? Math.floor(parsed) : parsed,
@@ -331,6 +330,26 @@ function parseFlagValue(
 
 function labelForFlag(token: string): string {
   return token.replace(/^-+/, '');
+}
+
+/** Why the parser refused a flag value before any command ran. */
+const FLAG_VALUE_REFUSAL_REASONS = {
+  // The value is not a number, falls outside the flag's range, or is not one of its enum values.
+  invalid: { reason: 'flag_value_invalid' },
+} as const satisfies ReasonTable<'command flags'>;
+
+function invalidFlagValue(definition: FlagDefinition, token: string, value: string): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    `Invalid ${labelForFlag(token)}: ${value}. Expected ${describeAcceptedValues(definition)}.`,
+    {
+      reason: FLAG_VALUE_REFUSAL_REASONS.invalid.reason,
+      flag: token,
+      ...(definition.type === 'enum'
+        ? { allowed: definition.enumValues }
+        : { min: definition.min, max: definition.max }),
+    },
+  );
 }
 
 function looksLikeFlagToken(value: string): boolean {

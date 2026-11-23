@@ -106,6 +106,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `fill_record_as_requires_armed_recording` | `fill --record-as` needs an armed script recording; open a session with `--save-script` first. |
 | `fill_text_stdin_unparameterized_recording` | `fill --text-stdin` needs `--record-as` or `--no-record` while a recording is armed, so the stdin text stays out of the script. |
 | `android_test_ime_rebind_unconfirmed` | The test IME rebind could not be confirmed, so the focused field may have no input session. |
+| `fill_target_missing` | Only the text arrived: one value that is no target, or a blank target before the text. |
 | `fill_text_stdin_tty` | stdin is a terminal, so the command would wait for input no one is piping. |
 | `fill_text_stdin_too_large` | The piped input passed the byte limit of 64 KiB. |
 | `fill_text_stdin_empty` | The piped input decoded to an empty string. |
@@ -139,6 +140,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `drag_endpoint_is_coordinates` | A gesture drag endpoint is a number or an "x y" point; drag takes a ref or a selector. |
 | `GESTURE_TAP_DUPLICATE_POINT` | Two tap contacts share coordinates, so one contact would press where another already rests. |
 | `GESTURE_PATH_TOO_SHORT` | The gesture path has fewer usable samples than any recognizable motion needs. |
 | `GESTURE_PATH_INVALID_TIMELINE` | The path's sample timeline is not ordered and finite, so no clock can play it back. |
@@ -544,6 +546,12 @@ These reasons can come from more than one command.
 | `ARCHIVE_NESTING_LIMIT` | The archive nests deeper than the allowed archive-within-archive depth. |
 | `ARCHIVE_UNSAFE_ENTRY` | The archive holds a link, a special file, or an encrypted entry. |
 | `ARCHIVE_UNSAFE_PATH` | An archive entry's name is absolute, escaping, or otherwise not one relative path. |
+
+### Command flags
+
+| Reason | Meaning |
+| --- | --- |
+| `flag_value_invalid` | The value is not a number, falls outside the flag's range, or is not one of its enum values. |
 
 ### Daemon lifecycle
 
