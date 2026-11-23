@@ -19,6 +19,7 @@ export type {
   PluginConnectionContext,
   PluginConnectionResolution,
   PluginCredentials,
+  PluginDormantSetup,
   PluginPlatformModule,
   PluginProviderRuntime,
   PluginRuntimeSetup,

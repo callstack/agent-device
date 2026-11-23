@@ -1,5 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
+import { readLeaseProvider } from '@agent-device/kernel/contracts';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { isTenantOwnedSessionName, normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { resolveSessionIsolationMode } from '../core/config.ts';
 import { tenantScopedSessionName } from '../core/session-tenant-scope.ts';
@@ -148,17 +150,34 @@ export function resolveRequestSessionRef(
 
 export type ResolveRequestSessionRef = typeof resolveRequestSessionRef;
 
+type ProviderCatalogAdmission = Readonly<{
+  providerAppCatalog?: ProviderAppCatalog;
+  pluginInventory?: readonly PluginInventoryEntry[];
+}>;
+
+export function dormantProviderAdmissionError(
+  provider: string,
+  pluginInventory: readonly PluginInventoryEntry[] | undefined,
+): AppError | undefined {
+  for (const plugin of pluginInventory ?? []) {
+    if (plugin.state === 'dormant' && plugin.provider === provider) {
+      const { reason, message, hint } = plugin.dormant;
+      return new AppError('INVALID_ARGS', message, { provider, reason, hint });
+    }
+  }
+}
+
 export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session: SessionState | undefined,
-  options: Readonly<{
-    env: HostEnvironment['env'];
-    providerAppCatalog?: ProviderAppCatalog;
-    daemonPolicy?: DaemonPolicy;
-    /** Runs the same rules and changes no lease: no registry sweep and no renewal. */
-    inspectOnly?: boolean;
-  }>,
+  options: ProviderCatalogAdmission &
+    Readonly<{
+      env: HostEnvironment['env'];
+      daemonPolicy?: DaemonPolicy;
+      /** Runs the same rules and changes no lease: no registry sweep and no renewal. */
+      inspectOnly?: boolean;
+    }>,
 ): DeviceLease | undefined {
   // An admission-exempt command still acts on its session, so it must hold the session lease too.
   assertRequestHoldsSessionLease(req, session);
@@ -176,12 +195,7 @@ export function assertRequestLeaseAdmission(
   }
   if (
     session === undefined &&
-    hasSessionlessLeaseAdmissionExemption(
-      req,
-      requestLeaseScope.leaseId,
-      leaseRegistry,
-      options.providerAppCatalog,
-    )
+    hasSessionlessLeaseAdmissionExemption(req, requestLeaseScope, leaseRegistry, options)
   ) {
     return undefined;
   }
@@ -266,9 +280,9 @@ export function isConfinedToAppLease(
 
 function hasSessionlessLeaseAdmissionExemption(
   req: DaemonRequest,
-  leaseId: string | undefined,
+  { leaseId, leaseProvider }: ReturnType<typeof resolveLeaseScope>,
   leaseRegistry: LeaseRegistry,
-  providerAppCatalog: ProviderAppCatalog | undefined,
+  options: ProviderCatalogAdmission,
 ): boolean {
   const exemption = resolveSessionlessLeaseAdmissionExemption(req);
   if (exemption?.kind === 'ended-lease-output') {
@@ -276,10 +290,11 @@ function hasSessionlessLeaseAdmissionExemption(
   }
   if (leaseId) return false;
   if (exemption?.kind === 'unconditional') return true;
-  return (
-    exemption?.kind === 'provider-app-catalog' &&
-    providerAppCatalog?.supports(exemption.provider) === true
-  );
+  if (exemption?.kind !== 'provider-app-catalog' || leaseProvider === undefined) return false;
+  const provider = readLeaseProvider(leaseProvider);
+  const dormant = provider && dormantProviderAdmissionError(provider, options.pluginInventory);
+  if (dormant) throw dormant;
+  return options.providerAppCatalog?.supports(leaseProvider) === true;
 }
 
 /**

@@ -14,8 +14,10 @@ import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts'
 import { type SessionStore, SessionCoordinator } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
-import type { SessionRef } from '../core/session-state.ts';
+import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { remoteScriptVersionDelivery } from '../core/session-script-publication-capability.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
@@ -75,6 +77,55 @@ export async function resolveRequestExecutionLockPlan(params: {
   const ids = !device ? [] : req.command === 'open' ? hostAndDeviceIds(device) : [device.id];
   for (const id of ids) keys.add(deviceExecutionLockKey(id));
   return { keys: orderRequestExecutionLockKeys(keys), deviceId: device?.id };
+}
+
+async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): Promise<DeviceInfo> {
+  const { resolveForegroundOpenRequest } =
+    await import('../sessions/session-lifecycle/internal/session-open.ts');
+  const foreground = await resolveForegroundOpenRequest({ req, hasExistingSession: false });
+  if (foreground.type === 'response') {
+    if (!foreground.response.ok) {
+      const { code, message, details } = foreground.response.error;
+      throw new AppError(code, message, details);
+    }
+    throw new AppError('INVALID_ARGS', 'Invalid open target');
+  }
+  const openReq = foreground.type === 'resolved' ? foreground.req : req;
+  const { resolveRequestTargetDeviceSelection } =
+    await import('../core/request-device-resolution.ts');
+  const { resolveOpenTargetDeviceOptions } =
+    await import('../core/open-target-device-resolution.ts');
+  return (
+    await resolveRequestTargetDeviceSelection(openReq, resolveOpenTargetDeviceOptions(openReq, env))
+  ).device;
+}
+
+export async function resolveBoundedClaimDevice(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+  env: EnvMap,
+  platformServices: DaemonPlatformServices,
+): Promise<DeviceInfo> {
+  const { resolveBootCommandSelection, resolveCommandDevice, requireSessionOrExplicitSelector } =
+    await import('../resources/session-device-resolution.ts');
+  if (req.command !== 'open') {
+    const guard = requireSessionOrExplicitSelector(req.command, session, req.flags);
+    if (guard && !guard.ok) {
+      const { code, message, details } = guard.error;
+      throw new AppError(code, message, details);
+    }
+  }
+  if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
+  if (req.command === 'install_source' && session) return session.device;
+  const params = {
+    session,
+    req,
+    env,
+    platformServices,
+    androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
+  };
+  if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
+  return await resolveCommandDevice(params);
 }
 
 export function prepareLockedRequestBinding(params: {

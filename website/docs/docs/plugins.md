@@ -51,7 +51,7 @@ A missing installation returns `plugin-not-installed` with the package and insta
 
 ## See which providers are registered
 
-`agent-device daemon status` lists every provider the running daemon registered from the installed plugins, such as BrowserStack, AWS Device Farm, and Limrun. With `--json`, each entry has:
+`agent-device daemon status` shows the state of each plugin claim in the running daemon. This is an active TestMu entry from `daemon status --json`:
 
 ```json
 {
@@ -64,7 +64,11 @@ A missing installation returns `plugin-not-installed` with the package and insta
 }
 ```
 
-`source` is `builtin` or `store`; `embedder` is the third slot, reserved for plugins an embedding host passes itself (#3757). A plugin that cannot register has `state: "failed"` and an `error` with `code`, `message`, and a `reason` such as `invalid_plugin`, `incompatible_plugin`, or `duplicate_provider`. The daemon starts without it and keeps every other provider. Fix or remove the package, then stop the daemon so the next command starts a new one.
+`source` is `builtin`, `store`, or `embedder` for a plugin supplied by an embedding host.
+
+- **Active** means the claim is available.
+- **Dormant** means the provider is installed and needs a prerequisite such as credentials. The JSON entry includes `dormant.reason`, `dormant.message`, and a hint when supplied. A lease or app catalog request that selects the provider returns that reason and hint. Follow the hint on the daemon host, then restart the daemon.
+- **Failed** means the claim encountered an error. The JSON entry includes an `error` with `code`, `message`, and a `reason` such as `invalid_plugin`, `incompatible-plugin-api`, or `duplicate_provider`. Fix or remove the package, then stop the daemon so the next command starts a new one.
 
 When a daemon's `daemon.json` cannot be used, `daemon status` says so instead of reporting a stopped daemon: `unreadable` means the file exists but could not be read, and `invalid` means it was read but is not a daemon record. A missing or stale record means `stopped`; an unreadable or invalid file never does.
 
@@ -72,9 +76,9 @@ When the daemon stops, it closes every plugin once: each runtime shuts down, the
 
 `plugins list --json` works without a daemon. It lists your installed plugins with their provider and whether their factory loads and validates; whether `setup` succeeds shows only in a running daemon's inventory. When a daemon is running for the same `--state-dir`, it also reports that daemon's inventory under `daemon`.
 
-When two plugins claim the same provider, the first one wins: bundled providers, then installed plugins in package-name order, then, once #3757 lets an embedding host pass plugins, those. The others are `failed` with `duplicate_provider`. The first claim holds even when that plugin then fails to set up, so a later plugin for the same provider doesn't take over. `cloud` and `proxy` are reserved and can't be claimed.
+When two plugins claim the same provider, the first one wins: bundled providers, then installed plugins in package-name order, then plugins supplied by an embedding host. The others are `failed` with `duplicate_provider`. The first claim holds through both dormant and failed setup outcomes. `cloud` and `proxy` are reserved and can't be claimed.
 
-A lease that names a provider this daemon has no runtime for refuses with `UNSUPPORTED_OPERATION` and reason `provider-not-registered`, before any lease is recorded. The error lists the registered providers. The `failedPlugins` field lists failed registrations that name the provider or its package, and failures the daemon could not attribute to a package or claim. If a managed provider is absent, the error gives its package and the install command for your daemon's version. Run that command on the daemon host and restart the daemon. If you embed the runtime, call the plugin factory and pass its result in `plugins` when you recreate the runtime. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
+A lease that names an absent provider or one that failed to register returns `UNSUPPORTED_OPERATION` with reason `provider-not-registered` before it records a lease. The error lists the registered providers. The `failedPlugins` field lists failed registrations that name the provider or its package, and failures the daemon could not attribute to a package or claim. If a managed provider is absent, the error gives its package and the install command for your daemon's version. Run that command on the daemon host and restart the daemon. If you embed the runtime, call the plugin factory and pass its result in `plugins` when you recreate the runtime. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
 
 ## Install Maestro support
 
@@ -130,6 +134,8 @@ The host resolves the `./agent-device` export with import conditions. It falls b
 `setup(host)` receives a `ProviderPluginHost` with `env`, `options`, `clientVersion`, `runHostCommand`, `diagnostics`, and `createError` for host-recognized errors. Build and return `{ runtime, platformModule, dispose? }` using the [provider runtime](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/provider-device-runtime.ts) and [platform module](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/platform-runtime-operations.ts) contracts. The runtime's `provider` and the module owner's `provider` must equal the plugin's `provider`. The module owner must declare `kind: 'provider-runtime'` and a nonempty `instance`.
 
 If your plugin uses Appium or WebDriver, bundle the engine with your plugin and build the runtime in `setup`. Use `host.diagnostics.emit(event)` to record a diagnostic in the active request log.
+
+If required credentials are absent, return `{ dormant: { reason, message, hint? } }` from `setup`. Use a stable reason code and a message describing the prerequisite. Use the hint to explain how to supply it. Omit the runtime, platform module, and disposer for this outcome. Throw when setup fails.
 
 The host checks required runtime methods and owner metadata when it sets the plugin up; operation contracts are checked when used. `dispose` runs once after the runtime shuts down. A failing `setup` cleans up its own resources; the host shuts down a runtime it already received if validation then refuses it.
 

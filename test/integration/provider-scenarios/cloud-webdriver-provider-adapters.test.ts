@@ -226,10 +226,12 @@ test('AWS Device Farm facade rejects device features it does not read at session
 
 async function setupTestMuRuntime(env: Record<string, string>) {
   const [contribution] = testmu().contributes;
-  const { runtime, platformModule } = await contribution.setup({
+  const setup = await contribution.setup({
     ...(await createPluginHost({ env, cwd: '/' }, undefined)),
     clientVersion: CLIENT_VERSION,
   });
+  if (!('runtime' in setup)) throw new Error('TestMu setup needs an active runtime');
+  const { runtime, platformModule } = setup;
   return {
     runtime: runtime as ProviderDeviceRuntime,
     platformModule: platformModule as PlatformRuntimeProviderModule,

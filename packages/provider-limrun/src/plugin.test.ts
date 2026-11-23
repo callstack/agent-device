@@ -219,21 +219,18 @@ test('setup with only an attached instance builds a runtime without an API key o
   assert.equal('networkHarDir' in (options ?? {}), false);
 });
 
-test('setup refuses a host with no Limrun credentials before asking for host adapters', async () => {
+test('setup reports a dormant claim when the host has no Limrun credentials', async () => {
   const createDependencies = vi.fn(() => stubDependencies());
-  await assert.rejects(
-    async () => {
-      await providerOf(limrunPlugin({ createDependencies })).setup(
-        pluginHost({ LIMRUN_REGION: 'eu' }),
-      );
-    },
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'INVALID_ARGS');
-      assert.equal(error.details?.reason, 'missing_provider_credentials');
-      return true;
-    },
+  const setup = await providerOf(limrunPlugin({ createDependencies })).setup(
+    pluginHost({ LIMRUN_REGION: 'eu' }),
   );
+  assert.deepEqual(setup, {
+    dormant: {
+      reason: 'missing_provider_credentials',
+      message: 'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
+      hint: 'Set LIMRUN_API_KEY for the account, or the full LIM_IOS_INSTANCE_* or LIM_ANDROID_INSTANCE_* set for an existing instance.',
+    },
+  });
   assert.equal(createDependencies.mock.calls.length, 0);
 });
 

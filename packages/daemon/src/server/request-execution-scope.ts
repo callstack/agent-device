@@ -11,6 +11,7 @@ import {
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import * as output from '../resources/artifact-tracking.ts';
 import {
@@ -51,6 +52,7 @@ import {
 import {
   existingSessionExecutionLockKeys,
   prepareLockedRequestBinding,
+  resolveBoundedClaimDevice,
   resolveRequestExecutionLockPlan,
   sessionExecutionLockKey,
   type RequestExecutionLockPlan,
@@ -72,7 +74,6 @@ import { refreshRecordingHealth } from '../sessions/request-recording-health.ts'
 import { retainSuccessorLeaseWork, runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
-  resolveCommandAndroidAvdSelection,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
@@ -115,55 +116,6 @@ import {
   requestDispatchLedger,
   type RequestDispatchLedger,
 } from '../core/request-dispatch-ledger.ts';
-
-async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): Promise<DeviceInfo> {
-  const { resolveForegroundOpenRequest } =
-    await import('../sessions/session-lifecycle/internal/session-open.ts');
-  const foreground = await resolveForegroundOpenRequest({ req, hasExistingSession: false });
-  if (foreground.type === 'response') {
-    if (!foreground.response.ok) {
-      const { code, message, details } = foreground.response.error;
-      throw new AppError(code, message, details);
-    }
-    throw new AppError('INVALID_ARGS', 'Invalid open target');
-  }
-  const openReq = foreground.type === 'resolved' ? foreground.req : req;
-  const { resolveRequestTargetDeviceSelection } =
-    await import('../core/request-device-resolution.ts');
-  const { resolveOpenTargetDeviceOptions } =
-    await import('../core/open-target-device-resolution.ts');
-  return (
-    await resolveRequestTargetDeviceSelection(openReq, resolveOpenTargetDeviceOptions(openReq, env))
-  ).device;
-}
-
-async function resolveBoundedClaimDevice(
-  req: DaemonRequest,
-  session: SessionState | undefined,
-  env: EnvMap,
-  platformServices: DaemonPlatformServices,
-): Promise<DeviceInfo> {
-  const { resolveBootCommandSelection, resolveCommandDevice, requireSessionOrExplicitSelector } =
-    await import('../resources/session-device-resolution.ts');
-  if (req.command !== 'open') {
-    const guard = requireSessionOrExplicitSelector(req.command, session, req.flags);
-    if (guard && !guard.ok) {
-      const { code, message, details } = guard.error;
-      throw new AppError(code, message, details);
-    }
-  }
-  if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
-  if (req.command === 'install_source' && session) return session.device;
-  const params = {
-    session,
-    req,
-    env,
-    platformServices,
-    androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
-  };
-  if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
-  return await resolveCommandDevice(params);
-}
 
 const expiredSessionSettleNotComposed: SessionTeardown = async () => {
   throw new AppError(
@@ -265,6 +217,7 @@ export async function createRequestExecutionScope(params: {
   /** The daemon-owned teardown of a session whose lease expired (root runtime composition). */
   settleExpiredSession?: SessionTeardown;
   providerAppCatalog?: ProviderAppCatalog;
+  pluginInventory?: readonly PluginInventoryEntry[];
   daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
@@ -554,6 +507,7 @@ export async function createRequestExecutionScope(params: {
               sessionStore,
               leaseRegistry,
               providerAppCatalog: params.providerAppCatalog,
+              pluginInventory: params.pluginInventory,
               daemonPolicy: params.daemonPolicy,
               resolveSessionRef: scope.resolveSessionRef,
             });
