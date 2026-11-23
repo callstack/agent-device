@@ -46,6 +46,7 @@ test('composes one recovery per claim from that claim state dir and disposes it'
   const events: string[] = [];
   const reconcile = createOwnerScopedDeviceClaimReconciler({
     scope,
+    trackDisposal: () => {},
     composeGateway: () => {
       throw new Error('test composes through composeRecovery');
     },
@@ -77,6 +78,7 @@ test('a retained owner decision stops recovery before gateway composition', asyn
   const claim = makeClaim('/state/blocked', 'shared');
   const reconcile = createOwnerScopedDeviceClaimReconciler({
     scope,
+    trackDisposal: () => {},
     beforeGateway: async (current) => {
       assert.equal(current, claim);
       events.push('inspect');
@@ -104,6 +106,7 @@ test('unreadable durable evidence prevents owner-scoped gateway construction', a
   fs.writeFileSync(resourcePath, '{');
   const reconcile = createOwnerScopedDeviceClaimReconciler({
     scope,
+    trackDisposal: () => {},
     beforeGateway: inspectDeviceClaimRecovery,
     composeGateway: () => {
       throw new Error('gateway must not be composed');
@@ -160,6 +163,7 @@ test('owner-scoped recovery uses its pre-gateway ownership decision for terminal
   try {
     const reconcile = createOwnerScopedDeviceClaimReconciler({
       scope,
+      trackDisposal: () => {},
       beforeGateway: inspectDeviceClaimRecovery,
       composeGateway: () => ({ bind, shutdown }) as never,
     });
@@ -188,6 +192,7 @@ test('disposes the composed recovery when reconciliation retains or throws', asy
   const disposed: string[] = [];
   const retainReconcile = createOwnerScopedDeviceClaimReconciler({
     scope,
+    trackDisposal: () => {},
     composeGateway: () => {
       throw new Error('test composes through composeRecovery');
     },
@@ -203,6 +208,7 @@ test('disposes the composed recovery when reconciliation retains or throws', asy
 
   const throwingReconcile = createOwnerScopedDeviceClaimReconciler({
     scope,
+    trackDisposal: () => {},
     composeGateway: () => {
       throw new Error('test composes through composeRecovery');
     },
@@ -236,6 +242,7 @@ test('the default composition hands the gateway factory the claim owner state di
   const shutdowns: string[] = [];
   const reconcile = createOwnerScopedDeviceClaimReconciler({
     scope,
+    trackDisposal: () => {},
     composeGateway: (input) => {
       composed.push(input);
       return {

@@ -34,6 +34,7 @@ export function createHumanControlHarness() {
     logPath: '/tmp/agent-device-human-control.log',
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    trackClaimRecoveryDisposal: () => {},
     token: 'test-token',
     sessionStore,
     leaseRegistry: registry,

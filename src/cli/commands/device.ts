@@ -161,7 +161,7 @@ async function runDeviceRelease(flags: CliFlags, host: HostEnvironment): Promise
     );
   }
   const { runStaleDeviceClaimRelease } = await import('../../platform-runtime-claim-recovery.ts');
-  const outcomes = await runStaleDeviceClaimRelease(
+  await runStaleDeviceClaimRelease(
     {
       platform: flags.platform,
       device: flags.device,
@@ -169,14 +169,23 @@ async function runDeviceRelease(flags: CliFlags, host: HostEnvironment): Promise
       serial: flags.serial,
     },
     host,
+    undefined,
+    {
+      afterOutcomes: async (outcomes) => {
+        const data = {
+          released: outcomes
+            .filter((outcome) => outcome.status === 'released')
+            .map(serializeOutcome),
+          retained: outcomes
+            .filter((outcome) => outcome.status === 'retained')
+            .map(serializeOutcome),
+          refused: outcomes.filter((outcome) => outcome.status === 'refused').map(serializeOutcome),
+          changed: outcomes.filter((outcome) => outcome.status === 'changed').map(serializeOutcome),
+        };
+        await writeCommandOutput(flags, data, () => renderDeviceRelease(outcomes));
+      },
+    },
   );
-  const data = {
-    released: outcomes.filter((outcome) => outcome.status === 'released').map(serializeOutcome),
-    retained: outcomes.filter((outcome) => outcome.status === 'retained').map(serializeOutcome),
-    refused: outcomes.filter((outcome) => outcome.status === 'refused').map(serializeOutcome),
-    changed: outcomes.filter((outcome) => outcome.status === 'changed').map(serializeOutcome),
-  };
-  await writeCommandOutput(flags, data, () => renderDeviceRelease(outcomes));
   return true;
 }
 

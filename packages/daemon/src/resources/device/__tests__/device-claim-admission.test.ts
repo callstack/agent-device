@@ -628,6 +628,7 @@ async function bindInRequestSession(params: {
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    trackClaimRecoveryDisposal: () => {},
     req: {
       token: 't',
       session: params.session ?? '',

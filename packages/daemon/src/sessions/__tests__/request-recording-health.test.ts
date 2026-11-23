@@ -212,6 +212,7 @@ test.each(['rebuild', 'retire'] as const)(
       // the fixture whose observation member is the test's spy.
       platformServices,
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      trackClaimRecoveryDisposal: () => {},
       deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
       platformRequestScope: platformRequestScopeFixture(),
     });

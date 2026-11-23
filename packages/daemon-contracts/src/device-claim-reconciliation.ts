@@ -87,14 +87,17 @@ export type ClaimRecoveryInspection =
 /**
  * Why a claim's durable resources keep it un-settled. The reconciliation transaction and
  * `device status`'s acquirability report both answer with it, so a caller reads one vocabulary:
- * a reason named here is the reason `open` would refuse the device.
+ * a reason named here is the reason `open` would refuse the device. `recovery-dispose-pending`
+ * comes only from the reconciliation transaction when disposal outlives its budget, never from
+ * `device status`, which inspects durable manifests without composing a gateway.
  */
 export type ClaimRecoveryRetentionReason =
   | `${DurableSessionResourceKind}-cleanup-pending`
   | `${DurableSessionResourceKind}-owner-mismatch`
   | `${DurableSessionResourceKind}-descriptor-invalid`
   | `${DurableSessionResourceKind}-descriptor-version-unsupported`
-  | 'durable-resource-reconciliation-failed';
+  | 'durable-resource-reconciliation-failed'
+  | 'recovery-dispose-pending';
 
 /** Inspect exact-owner durable manifests without composing a gateway or settling a resource. */
 export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {

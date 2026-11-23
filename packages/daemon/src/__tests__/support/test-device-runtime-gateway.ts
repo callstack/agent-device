@@ -203,6 +203,7 @@ export function createRequestHandler(
     | 'providerCredentials'
     | 'platformServices'
     | 'claimRecoveryGateway'
+    | 'trackClaimRecoveryDisposal'
     | 'androidObservation'
     | 'platformResourceCleanup'
   > &
@@ -213,6 +214,7 @@ export function createRequestHandler(
         | 'providerCredentials'
         | 'platformServices'
         | 'claimRecoveryGateway'
+        | 'trackClaimRecoveryDisposal'
         | 'androidObservation'
         | 'platformResourceCleanup'
       >
@@ -223,6 +225,7 @@ export function createRequestHandler(
     providerCredentials = providerCredentialsFixture({}, path.dirname(deps.logPath)),
     platformServices = daemonPlatformServicesFixture(),
     claimRecoveryGateway = daemonClaimRecoveryGatewayFixture(),
+    trackClaimRecoveryDisposal = () => {},
     androidObservation = clearAndroidObservationFixture,
     platformResourceCleanup = platformResourceCleanupFixture(),
     ...rest
@@ -233,6 +236,7 @@ export function createRequestHandler(
     platformResourceCleanup,
     platformServices,
     claimRecoveryGateway,
+    trackClaimRecoveryDisposal,
     deviceRuntimeGateway,
     providerCredentials,
   });
