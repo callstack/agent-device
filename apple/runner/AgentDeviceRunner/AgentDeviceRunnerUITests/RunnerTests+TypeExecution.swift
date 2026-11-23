@@ -162,7 +162,7 @@ extension RunnerTests {
           code: RunnerPassThroughErrorCode.textEntryMismatch,
           message: "text entry read-back did not match the requested text",
           hint: textEntryMode == .replacement
-            ? "The app may have formatted, filtered, or consumed the entry. Inspect the field or resulting screen before retrying. If it needs correction, retry fill with the full text and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds)."
+            ? Self.replacementMismatchHint(observedText: textResult.observedText)
             : nil
         )
       )
@@ -201,6 +201,16 @@ extension RunnerTests {
       )
     }
     return Response(ok: true, data: data)
+  }
+
+  /// A field that reads back empty after the text was typed never received it. The usual cause is
+  /// an overlay, such as a sheet or a development menu, that took the focus tap and the typing.
+  static func replacementMismatchHint(observedText: String?) -> String {
+    let retry = "If it needs correction, retry fill with the full text and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds)."
+    if observedText?.isEmpty == true {
+      return "The field read back empty, so the tap may have landed on an overlay above it, such as a sheet or a development menu. Run snapshot -i and close the overlay before retrying. \(retry)"
+    }
+    return "The app may have formatted, filtered, or consumed the entry. Inspect the field or resulting screen before retrying. \(retry)"
   }
 
   /// The refusal of a coordinate `fill` whose point identified no text input, answered before the
