@@ -42,6 +42,8 @@ The current registry is in `packages/plugins/src/registry.ts`.
 Each contribution has one kind and a narrow host type for that kind.
 A `provider` declares its provider id, credentials, optional connection, and setup with a provider host.
 Provider setup builds its runtime and returns `{ runtime, platformModule, dispose? }`.
+If a required credential is absent, provider setup can return `{ dormant: { reason, message, hint? } }`.
+A dormant result holds the provider claim without registering a runtime or disposer.
 Providers bundle the engines they use.
 The provider host supplies `diagnostics.emit(event)`.
 The emitter uses the host request active at the time of the call, including during lease allocation.
@@ -68,7 +70,7 @@ Options-dependent credentials cannot be represented reliably in static metadata.
 
 The host validates the whole declaration before publishing any claim.
 It reserves claims in deterministic candidate order.
-The first registration keeps its claim even when that registration fails.
+The first candidate keeps its claim when setup reports dormancy or fails.
 Later registrations of that claim are recorded as failed.
 `cloud` and `proxy` remain reserved.
 A manifest and factory mismatch invalidates the package.
@@ -100,8 +102,10 @@ A missing replay execution returns `plugin-not-installed` before device binding.
 A package added after daemon startup returns `daemon-plugin-set-stale`.
 The caller finishes sessions and restarts the host.
 A changed plugin set takes effect in the next daemon.
-The inventory lists every claim as `active` or `failed`, with a typed `error.reason`.
-It is published in `daemon.json` and by `agent-device daemon status`.
+The inventory lists each plugin claim as `active`, `dormant`, or `failed`.
+The daemon publishes the inventory in `daemon.json` and shows it in `agent-device daemon status`.
+A dormant claim publishes `dormant.reason`; a failed claim publishes `error.reason`.
+If lease allocation or the app catalog selects a dormant provider, the daemon returns `INVALID_ARGS` with that claim's reason, message, and hint.
 Failure is data.
 Behavior keys on `error.reason`, never on the message.
 A selected package retains its load, validation, compatibility, or setup reason.
@@ -155,10 +159,14 @@ Hosts can use the shared manager without adding a runtime helper dependency to p
 
 Decision history (2026-11-19): version 3 replaces the version 2 manifest-free contract to support independently scoped platform and replay contributions.
 
-Decision history (2026-11-22): Version 3 provider setup returns a runtime for every provider ([#4974](https://github.com/callstack/agent-device/issues/4974)).
+Decision history (2026-11-22): Version 3 provider setup requires active providers to return their own runtime ([#4974](https://github.com/callstack/agent-device/issues/4974)).
 The host-side WebDriver descriptor kept an optional engine in every core install.
 Provider plugins now bundle the WebDriver modules they use and emit through the host diagnostics facet.
 This duplicates shared code across those plugin packages and keeps it out of core.
+
+Decision history (2026-11-23): Version 3 provider setup also accepts a dormant result during the 0.22 prerelease ([#4852](https://github.com/callstack/agent-device/issues/4852)).
+Reporting absent credentials as a setup failure was rejected because an optional provider can be installed before it is configured.
+Exceptions from setup still record failed claims.
 
 ## Daemon ownership
 

@@ -42,7 +42,7 @@ type RequestHandlerChainParams = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
-  failedPlugins?: readonly PluginInventoryEntry[];
+  pluginInventory?: readonly PluginInventoryEntry[];
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -165,7 +165,7 @@ async function runLeaseHandler(
       sessionStore: params.sessionStore,
       leaseRegistry: params.leaseRegistry,
       providerRuntimeIds: params.providerRuntimeIds,
-      failedPlugins: params.failedPlugins,
+      pluginInventory: params.pluginInventory,
       providerCredentials: params.providerCredentials,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,

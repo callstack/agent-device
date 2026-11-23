@@ -53,7 +53,9 @@ async function allocate(
   provider: Extract<AgentDevicePlugin['contributes'][number], { kind: 'provider' }>,
   env: Record<string, string>,
 ) {
-  const { runtime } = await provider.setup(host(env));
+  const setup = await provider.setup(host(env));
+  assert.ok('runtime' in setup);
+  const { runtime } = setup;
   try {
     const allocation = await (runtime as ProviderDeviceRuntime).leaseLifecycle.allocate!(
       {

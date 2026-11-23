@@ -128,11 +128,14 @@ async function setupCloudWebDriver(plugin: string, runHostCommand: RunHostComman
   const factory = CLOUD_WEBDRIVER_PLUGINS[plugin];
   if (!factory) throw new Error(`Unknown cloud WebDriver plugin "${plugin}".`);
   const [contribution] = factory().contributes;
-  const { runtime, platformModule } = await contribution.setup({
+  const setup = await contribution.setup({
     ...(await createPluginHost({ env: PROVIDER_ENV, cwd: '/' }, undefined)),
     clientVersion: '0.0.0',
     runHostCommand,
   });
+  if (!('runtime' in setup))
+    throw new Error('Cloud WebDriver provider setup needs an active runtime');
+  const { runtime, platformModule } = setup;
   return {
     runtime: runtime as ProviderDeviceRuntime,
     platformModule: platformModule as PlatformRuntimeProviderModule,

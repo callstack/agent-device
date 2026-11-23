@@ -69,7 +69,7 @@ An agent in a sandbox can drive an instance that someone else created, such as t
 | iOS or watchOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
 | Android | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
 
-The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon registers without Limrun, lists it as `failed` in `agent-device daemon status`, and records `provider_plugin_failed` in `daemon.log`. A daemon started with none of the Limrun variables lists the plugin as `failed` with `reason: missing_provider_credentials` and still serves every other provider.
+The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon lists Limrun as `failed` in `agent-device daemon status` and records `provider_plugin_failed` in `daemon.log`. When neither `LIMRUN_API_KEY` nor an instance credential set is present, the daemon lists Limrun as `dormant` with reason `missing_provider_credentials`. If a command selects the dormant provider, it returns that reason and a credential hint. Set the credentials on the daemon host and restart the daemon.
 
 ```bash
 export LIM_IOS_INSTANCE_URL=...

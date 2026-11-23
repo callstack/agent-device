@@ -359,7 +359,7 @@ async function startDaemonRuntimeOnHost(
     platformResourceCleanup: deps.platformResourceCleanup,
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
-    failedPlugins: deps.pluginInventory.filter(({ state }) => state === 'failed'),
+    pluginInventory: deps.pluginInventory,
     ...deps.requestRouter,
   });
 

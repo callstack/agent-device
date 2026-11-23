@@ -32,6 +32,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
   const plugins = artifact ? [] : await listPlugins(host.env, []);
   const daemon = readDaemonStatus(resolveDaemonPaths(flags.stateDir, host));
   const daemonPlugins = readPluginInventory(daemon.plugins);
+  const dormantInDaemon = daemonPlugins.filter((plugin) => plugin.state === 'dormant');
   const failedInDaemon = daemonPlugins.filter(({ state }) => state === 'failed');
   const data = {
     ...(artifact ? { artifact: { ...artifact, compatibility: 'unchecked' } } : { plugins }),
@@ -63,6 +64,10 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
             `The daemon record for ${daemon.stateDir} is ${daemon.state}, so its providers are unknown.`,
           ]
         : []),
+      ...dormantInDaemon.map(
+        (plugin) =>
+          `The running daemon lists ${plugin.package ?? plugin.provider} as dormant (${plugin.dormant.reason}): ${plugin.dormant.message}`,
+      ),
       ...failedInDaemon.map(
         (plugin) =>
           `The running daemon did not register ${plugin.package ?? plugin.provider ?? plugin.source}: ${plugin.error?.message}`,

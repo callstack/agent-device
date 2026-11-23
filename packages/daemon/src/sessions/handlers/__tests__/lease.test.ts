@@ -885,7 +885,7 @@ test('lease_allocate names the plugin that failed to register when it could have
       sessionStore: makeSessionStore('agent-device-failed-plugin-provider-'),
       leaseRegistry: registry,
       providerRuntimeIds: ['browserstack'],
-      failedPlugins: [
+      pluginInventory: [
         failed('testmu', '@agent-device/testmu'),
         failed(undefined, '@agent-device/testmu'),
         failed(undefined, 'unrelated-package'),
