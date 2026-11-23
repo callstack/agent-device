@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { test } from 'vitest';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
+import { readVersion } from '@agent-device/host-kit/version';
 import { readRemoteDaemonHealth } from '../daemon-client-transport.ts';
 import {
   closeLoopbackServer,
@@ -81,6 +82,38 @@ test('a proxy whose daemon speaks another protocol is refused, naming the daemon
         assert.equal(details?.remoteVersion, '98.0.0');
         assert.equal(details?.remoteRpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION + 1);
         assert.equal(details?.supportedRpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
+        return true;
+      },
+    );
+  });
+});
+
+test.each([
+  [
+    'an older daemon',
+    { ...DAEMON_LINK, rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION - 1 },
+    'remote',
+  ],
+  [
+    'a newer daemon',
+    { ...DAEMON_LINK, rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION + 1 },
+    'client',
+  ],
+  ['an older daemon behind a proxy', proxyHealth(DAEMON_RPC_PROTOCOL_VERSION - 1), 'remote'],
+  [
+    'a newer daemon behind a proxy',
+    proxyHealth(DAEMON_RPC_PROTOCOL_VERSION + 1),
+    'client-and-proxy',
+  ],
+] as const)('a refusal of %s names the side to upgrade', async (_label, payload, upgradeSide) => {
+  await withHealthServer(payload, async (baseUrl) => {
+    await assert.rejects(
+      readRemoteDaemonHealth({ baseUrl, token: 't', pid: 0 }),
+      (error: unknown) => {
+        const details = (error as { details?: Record<string, unknown> }).details;
+        assert.equal(details?.upgradeSide, upgradeSide);
+        assert.equal(details?.clientVersion, readVersion());
+        assert.equal(details?.remoteVersion, '98.0.0');
         return true;
       },
     );
