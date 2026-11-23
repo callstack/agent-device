@@ -38,7 +38,6 @@ import {
 import { createRequestHandler } from '../request-router.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
-import { createLeaseSessionEnd } from '../lease-session-end.ts';
 import { settleExpiredSession } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
@@ -275,6 +274,7 @@ async function startDaemonRuntimeOnHost(
   }
   installProviderDeviceAdmission(deps.providerDeviceAdmission);
   installInteractorResolution(deps.interactorResolution);
+  const { createLeaseSessionEnd } = await import('../lease-session-end.ts');
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,

@@ -84,7 +84,7 @@ import {
   shouldRecordEventForRequest,
   type BoundJournal,
 } from '@agent-device/session-journal/session-event-log';
-import { awaitExpiry, type ExpirySettlement, type LeaseSessionEnd } from './lease-session-end.ts';
+import type { ExpirySettlement, LeaseSessionEnd } from './lease-session-end.ts';
 import { deviceLeaseBusyError } from '../resources/lease-registry-scope.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { recordEndedLease } from '../core/request-ended-leases.ts';
@@ -429,6 +429,7 @@ export async function createRequestExecutionScope(params: {
       });
     };
     const waitForSettlement = async (attempt: NeedSettlement) => {
+      const { awaitExpiry } = await import('./lease-session-end.ts');
       const deadline = getRequestDeadlineMs(scopedReq.meta?.requestId) ?? Infinity;
       const settled = await awaitExpiry(
         attempt.settlement.done,

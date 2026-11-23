@@ -132,8 +132,14 @@ async function resolveExecutionLockPlan(
   sessionStore: SessionStore,
 ): Promise<LockKey[]> {
   if (!shouldLockSessionExecution(req.command)) return [];
-  const plan = await withPool(() =>
-    resolveRequestExecutionLockPlan({ req, sessionName, sessionStore }),
+  const plan = await withPool(
+    async () =>
+      await resolveRequestExecutionLockPlan({
+        req,
+        sessionName,
+        existingDeviceId: sessionStore.get(sessionName)?.device.id,
+        env: sessionStore.host.env,
+      }),
   );
   return plan.keys as LockKey[];
 }
