@@ -7,7 +7,7 @@ export const selectorsHelpTopic = {
 Selector syntax for commands that take a target. press, click, fill, longpress, hover, get, is, and wait take a selector as the target, gesture drag as its source and destination, and gesture pinch as the element to pinch. find takes one as its query, and scroll --until and screenshot --crop-on as the flag value.
 
 Shape:
-  One or more terms separated by spaces. An element must match every term. A term is key=value, or a boolean key alone, which means key=true: checked is checked=true. Wrap the whole expression in single quotes so the shell passes it as one argument:
+  One or more terms separated by spaces. An element must match every term. A term is key=value, or a boolean key alone, which means key=true: role=switch checked is role=switch checked=true. Wrap the whole expression in single quotes so the shell passes it as one argument:
     agent-device press 'role=button label="Continue"'
     agent-device fill 'label="Email" editable=true' "qa@example.com"
     agent-device wait 'id="checkout-total"' 5000
