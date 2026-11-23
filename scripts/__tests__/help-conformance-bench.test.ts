@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { scoreExpectations } from '../help-conformance-case-checks.mjs';
+import { CASES } from '../help-conformance-cases.mjs';
 import { validateAgentDeviceCommand } from '../help-conformance-command-validator.ts';
 import { opensAndCloses, usesValidationPrep } from '../help-conformance-expectations.mjs';
 import {
@@ -529,6 +530,35 @@ test('case matchers score parsed tokens so shell quoting does not change results
     usesLiteralHandleSelector: true,
     opensSettings: true,
   });
+});
+
+test('the selectors case passes a role+label plan and fails a bare role key', async () => {
+  const testCase = CASES.find(({ id }) => id === 'selectors-role-and-label-in-one-expression');
+  assert.ok(testCase);
+  const score = async (commands: string[]) =>
+    scoreExpectations(
+      testCase,
+      commands,
+      commands.join('\n'),
+      await validatePlanCommands(commands),
+    );
+
+  for (const plan of [
+    [`agent-device press 'role=button label="Save"' --settle`, 'agent-device wait text "Saved"'],
+    ['agent-device click label=Save role=button', 'agent-device find text "Saved" exists'],
+  ]) {
+    const checks = await score(plan);
+    assert.ok(
+      Object.values(checks).every(Boolean),
+      `${plan.join(' && ')}: ${JSON.stringify(checks)}`,
+    );
+  }
+
+  const bare = await score(['agent-device press button="Save"', 'agent-device wait text "Saved"']);
+  assert.equal(bare.noBareRoleKey, false);
+  assert.equal(bare.pressesRoleAndLabelSelector, false);
+  const unverified = await score([`agent-device press 'role=button label="Save"'`]);
+  assert.equal(unverified.verifiesSavedMessage, false);
 });
 
 test('foreground attach grammar accepts both auto-discovery and an explicit known app', async () => {
