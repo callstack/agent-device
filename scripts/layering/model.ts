@@ -211,10 +211,11 @@ function namedSymbols(
       ? [{ name, typeOnly: specifier[kindField] === 'type' }]
       : [];
   });
-  const unique = [...new Map(names.map((entry) => [entry.name, entry])).values()];
+  const symbols = [...new Set(names.map(({ name }) => name))];
+  const valueSymbols = new Set(names.filter(({ typeOnly }) => !typeOnly).map(({ name }) => name));
   return {
-    symbols: unique.map(({ name }) => name),
-    typeSymbols: unique.filter(({ typeOnly }) => typeOnly).map(({ name }) => name),
+    symbols,
+    typeSymbols: symbols.filter((name) => !valueSymbols.has(name)),
   };
 }
 
