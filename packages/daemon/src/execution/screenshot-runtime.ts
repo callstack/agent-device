@@ -289,19 +289,17 @@ async function commitScreenshot(
       ? localOutputPath
       : undefined;
   if (mirrorPath) await publishScreenshotFile(reservation.path, mirrorPath, signal);
+  const fileName = path.basename(clientPath ?? mirrorPath ?? result.path);
+  const deliveryPath = mirrorPath ?? clientPath ?? fileName;
   return {
     ...result,
-    ...(mirrorPath
-      ? {
-          path: mirrorPath,
-          ...(result.message === undefined ? {} : { message: `Saved screenshot: ${mirrorPath}` }),
-        }
-      : {}),
+    path: deliveryPath,
+    ...(result.message === undefined ? {} : { message: `Saved screenshot: ${deliveryPath}` }),
     artifacts: [
       reservation.commit({
         field: 'path',
         localPath: clientPath,
-        fileName: path.basename(clientPath ?? mirrorPath ?? result.path),
+        fileName,
         displayRotation: result.displayRotation,
       }),
     ],

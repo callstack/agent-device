@@ -71,14 +71,16 @@ test.each(['caller destination', 'remote placeholder', 'public remote'])(
           remote,
         ),
       );
+      expect(first.path).toBe(placeholder || remote ? '/client/first.png' : destination);
+      expect(first.message ?? '').not.toContain('agent-device-output-');
       let secondId: string | undefined;
       if (remote) {
         const second = successfulData(await post(capture));
         secondId = second.artifacts?.[0]?.artifactId;
         expect(secondId).toBeTypeOf('string');
         expect(secondId).not.toBe(first.artifacts?.[0]?.artifactId);
-        expect(second.path).not.toBe(first.path);
-        expect(fs.readFileSync(second.path as string)).toEqual(replacement);
+        expect(second.path).toBe('screenshot.png');
+        expect(second.message ?? '').not.toContain('agent-device-output-');
       } else if (!placeholder) {
         const second = successfulData(await post(capture, false));
         expect(second.path).toBe(destination);
