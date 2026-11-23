@@ -21,13 +21,6 @@ export {
   openVerifiedFileForRead,
   openVerifiedFileForTruncate,
 } from './internal/verified-file.ts';
-// Path-only callers use ./path-resolution to avoid loading file locks and process management.
-export {
-  expandUserHomePath,
-  resolveUserConfigPath,
-  resolveDeviceClaimRoot,
-  resolveUserPath,
-} from './path-resolution.ts';
 export {
   acquireProcessLock,
   acquireProcessLockAcquisition,

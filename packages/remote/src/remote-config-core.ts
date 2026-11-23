@@ -11,7 +11,7 @@ import {
 } from './remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from '@agent-device/host-kit/path-resolution';
 import { parseSourceValue, type EnvMap } from '@agent-device/kernel/source-value';
 
 // Deliberately narrower than `resolveRemoteConfigProfile`: this reads only

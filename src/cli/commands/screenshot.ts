@@ -7,7 +7,7 @@ import {
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from '@agent-device/host-kit/path-resolution';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { CaptureScreenshotResult } from '@agent-device/contracts/client';

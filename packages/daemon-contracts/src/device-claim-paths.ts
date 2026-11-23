@@ -1,4 +1,4 @@
-import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/path-resolution';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { EnvMap } from '@agent-device/kernel/source-value';

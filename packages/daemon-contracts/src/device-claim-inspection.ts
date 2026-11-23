@@ -15,7 +15,7 @@ import {
 } from '@agent-device/host-kit/process';
 
 import { isSupersededDaemonOwner } from './daemon-registration.ts';
-import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/path-resolution';
 import { decodeStoredDeviceClaim, type DeviceClaim } from './device-claim-record.ts';
 
 export type DeviceClaimClassification = OwnerLiveness | 'inconsistent' | 'owner-daemon-superseded';

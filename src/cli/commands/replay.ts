@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from '@agent-device/host-kit/path-resolution';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 import { writeStderr } from '../process-exit.ts';

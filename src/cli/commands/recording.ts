@@ -5,7 +5,7 @@ import type {
   RecordingContactSheetCommandOptions,
   RecordingContactSheetCommandResult,
 } from '@agent-device/command-runtime';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from '@agent-device/host-kit/path-resolution';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

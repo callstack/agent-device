@@ -14,13 +14,13 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
   acquireProcessLock,
-  expandUserHomePath,
   prepareScriptDestination,
   PROCESS_LOCK_REASONS,
   scriptAncestryReason,
   withProcessLock,
   type ProcessLockRelease,
 } from '@agent-device/host-kit/file';
+import { expandUserHomePath } from '@agent-device/host-kit/path-resolution';
 
 const LOCK_RETRY_DELAY_MS = 25;
 // swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but

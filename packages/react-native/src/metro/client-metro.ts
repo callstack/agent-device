@@ -41,7 +41,7 @@ import type {
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from '@agent-device/host-kit/path-resolution';
 
 import {
   detectProjectRuntimeKindFromPackageJson,

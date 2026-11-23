@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from '@agent-device/host-kit/path-resolution';
 import { loadReplayScriptSourceBundle } from './script-source-bundle.ts';
 
 export function replayScriptSourceBundleFor(filePath: string): ReplayScriptSourceBundle {

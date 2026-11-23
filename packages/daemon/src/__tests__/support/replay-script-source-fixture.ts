@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from '@agent-device/host-kit/path-resolution';
 import { loadReplayScriptSourceBundle } from '@agent-device/replay-port/script-source-bundle';
 import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-discovery';
 
