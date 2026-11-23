@@ -198,6 +198,10 @@ export function mergeDaemonShutdownReport(
             ...supersededClaimWarnings(report.claims.superseded),
             ...orphanedClaimWarnings(report.claims.orphaned),
             ...unattributableClaimWarnings(report.claims.unattributable),
+            ...(report.leaseCleanupFailures ?? []).map(
+              ({ leaseId, failedSteps }) =>
+                `Lease ${leaseId} had unfinished local cleanup at shutdown (${failedSteps.join(', ')}).`,
+            ),
           ],
         }
       : stopped;

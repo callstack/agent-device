@@ -12,6 +12,46 @@ import {
   testCaptureStore,
 } from './durable-capture.fixtures.ts';
 import { finishLiveDurableCapture } from './transitions.ts';
+import { withDurableCaptureResourceFence } from './fence.ts';
+
+test('proof received while waiting for the resource fence prevents native cleanup', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context);
+  await adoptStartedDurableCapture(
+    testCaptureDefinition,
+    { ...context, ...start, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const holder = withDurableCaptureResourceFence({
+    store: testCaptureStore,
+    resourcePath: context.resourcePath,
+    expected: start.envelope.fence,
+    onCompleted: () => {},
+    run: () => held,
+  });
+  let confirmed = false;
+  const attempt = finishLiveDurableCapture(
+    testCaptureDefinition,
+    { binding: context.binding, intent: 'disposal', confirmedMissing: () => confirmed },
+    context.resourcePath,
+  );
+  confirmed = true;
+  release();
+  await holder;
+  await expect(attempt).rejects.toMatchObject({
+    details: { reason: 'resource-already-completed' },
+  });
+  expect(start.finish).not.toHaveBeenCalled();
+  expect(start.forceCleanup).not.toHaveBeenCalled();
+  expect(context.binding.read()).toBeUndefined();
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    envelope: { lifecycle: 'completed', metadata: { cleanupStatus: 'already-missing' } },
+  });
+});
 
 test('finish failure remains primary when cleanup and cleanup-pending persistence both fail', async () => {
   const context = makeDurableCaptureContext();

@@ -11,7 +11,10 @@ import {
 import type { SessionStore } from '../core/session-store.ts';
 import { finishLiveAudioProbe } from '@agent-device/capture-kit/audio-probe-session-resource';
 import { finishLivePerfCapture } from '@agent-device/capture-kit/perf-capture-session-resource';
-import { finishLiveScreenRecording } from '@agent-device/capture-kit/screen-recording-session-resource';
+import {
+  finishLiveScreenRecording,
+  screenRecordingDurableResource,
+} from '@agent-device/capture-kit/screen-recording-session-resource';
 import { openWebSessionNames } from './web-session-names.ts';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 
@@ -127,6 +130,7 @@ export function sessionResourceStopSteps(params: {
   sessionStore: SessionStore;
   platformCleanup: PlatformResourceCleanup;
   appLog: 'run' | 'already-settled';
+  providerInstanceEnded?: () => boolean;
 }): SessionCleanupStep[] {
   const { ref, sessionStore, platformCleanup } = params;
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
@@ -137,7 +141,7 @@ export function sessionResourceStopSteps(params: {
     // gesture-telemetry for overlay finalization, and signalling the recorder first prevents a
     // leaked `simctl recordVideo` child (and its 0-byte, slot-holding mp4) when a session is torn
     // down — including on daemon shutdown — without an explicit `record stop`.
-    { step: 'recording', run: () => finishSessionScreenRecording({ ref, sessionStore }) },
+    { step: 'recording', run: () => finishSessionScreenRecording(params) },
     ...(params.appLog === 'run'
       ? [{ step: 'app_log', run: () => stopSessionAppLog({ ref, sessionStore }) }]
       : []),
@@ -177,6 +181,7 @@ type SessionResourceTeardownRequest = {
   sessionStore: SessionStore;
   appLog: 'run' | 'already-settled';
   platformCleanup?: PlatformResourceCleanup;
+  providerInstanceEnded?: () => boolean;
 };
 
 export async function teardownSessionResources(
@@ -216,42 +221,39 @@ export async function teardownSessionResources(
   if (aggregate) throw aggregate;
 }
 
-/**
- * Releases the resources of an expired session, then finalizes its application. An idle expiry
- * stops at a resource failure and retries later. A lease expiry retires the session whatever
- * happens, so it still finalizes the application, and the resource failure stays the error.
- */
+/** Settles session resources before finalizing the application. A failure preserves the session for retry. */
 export async function settleExpiredSession(
   request: SessionResourceTeardownRequest & {
     finalizeApplication: () => Promise<void>;
-    afterResourceFailure: 'stop' | 'finalize';
   },
 ): Promise<void> {
-  try {
-    await teardownSessionResources(request);
-  } catch (error) {
-    if (request.afterResourceFailure === 'finalize') {
-      await request.finalizeApplication().catch((finalizeError) => {
-        emitDiagnostic({
-          level: 'error',
-          phase: 'expired_session_lifecycle_cleanup_failed',
-          data: { session: request.ref.address, error: String(finalizeError) },
-        });
-      });
-    }
-    throw error;
-  }
+  await teardownSessionResources(request);
   await request.finalizeApplication();
 }
 
 async function finishSessionScreenRecording(params: {
   ref: SessionRef;
   sessionStore: SessionStore;
+  providerInstanceEnded?: () => boolean;
 }): Promise<void> {
   const binding = bindSessionScreenRecording(params.sessionStore, params.ref);
   const recording = binding.read();
   if (!recording) return;
-  const completion = await finishLiveScreenRecording({ binding, intent: 'disposal' });
+  const { owner } = recording.envelope;
+  const confirmedMissing = () =>
+    owner.kind === 'provider-runtime' &&
+    owner.provider === params.ref.session.lease?.leaseProvider &&
+    binding.read() === recording &&
+    params.providerInstanceEnded?.() === true;
+  if (confirmedMissing()) {
+    await screenRecordingDurableResource.confirmLiveMissing({ binding, resource: recording });
+    return;
+  }
+  const completion = await finishLiveScreenRecording({
+    binding,
+    intent: 'disposal',
+    confirmedMissing,
+  });
   if (!params.ref.session.lease) return;
   const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
   retainLeasedSessionRecording(params.ref, completion, recording.envelope.metadata);

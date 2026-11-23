@@ -2,9 +2,11 @@ import type {
   PluginCleanupOutcome,
   PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
-import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import type { LeaseCleanupFailure } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { settleWithin, type SettleWithinOutcome } from '@agent-device/host-kit/settle-within';
 import type { DaemonServer } from './transport.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { RuntimeHintsApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { SessionStore } from '../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
@@ -53,6 +55,7 @@ export async function closeDaemonServers(
 
 /** What a closed daemon runtime leaves behind, by kind of resource. */
 export type ShutdownReport = {
+  leaseCleanupFailures?: LeaseCleanupFailure[];
   /** Provider lease releases, by lease id. `unknown` was still in flight when the budget ran out. */
   providerReleases: { completed: string[]; pending: string[]; unknown: string[] };
   /** Device runners, by device id: `handedOff` was left running for the next daemon. */
@@ -266,18 +269,22 @@ async function settleDaemonTeardownStep(params: {
   stderr: WritableOutput;
   resource: 'app-log' | 'session' | 'lifecycle';
   teardown: () => Promise<unknown>;
-}): Promise<boolean> {
+}): Promise<string[]> {
   const { session, stderr, resource, teardown } = params;
   try {
     await teardown();
-    return true;
+    return [];
   } catch (error) {
     stderr.write(
       `Daemon ${resource} teardown error (${session.name}): ${
         error instanceof Error ? error.message : String(error)
       }\n`,
     );
-    return false;
+    const steps = error instanceof AppError ? error.details?.failedSteps : undefined;
+    const failedSteps = Array.isArray(steps)
+      ? steps.filter((step) => typeof step === 'string')
+      : [];
+    return failedSteps.length ? failedSteps : [resource];
   }
 }
 
@@ -299,6 +306,8 @@ export async function teardownDaemonSessionForShutdown(params: {
     runtimeHints: RuntimeHintsApplicationInput,
   ) => Promise<void>;
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
+  onFailedSteps?: (steps: string[]) => void;
+  providerInstanceEnded?: () => boolean;
 }): Promise<boolean> {
   const {
     ref,
@@ -319,7 +328,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   // still owns the daemon lock. It is intentionally outside the generic
   // teardown race so lock release and runtime shutdown cannot overtake it.
 
-  const appLogTeardownSucceeded = await settleDaemonTeardownStep({
+  const appLogFailures = await settleDaemonTeardownStep({
     session,
     stderr,
     resource: 'app-log',
@@ -327,7 +336,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   });
   const sessionAfterAppLog = sessionStore.resolveCurrent(ref) ?? session;
   const teardown = (async () => {
-    const genericTeardownSucceeded = await settleDaemonTeardownStep({
+    const resourceFailures = await settleDaemonTeardownStep({
       session,
       stderr,
       resource: 'session',
@@ -337,9 +346,10 @@ export async function teardownDaemonSessionForShutdown(params: {
           ref,
           sessionStore,
           platformCleanup,
+          providerInstanceEnded: params.providerInstanceEnded,
         }),
     });
-    const lifecycleTeardownSucceeded = finalizeApplicationLifecycle
+    const lifecycleFailures = finalizeApplicationLifecycle
       ? await settleDaemonTeardownStep({
           session,
           stderr,
@@ -347,22 +357,25 @@ export async function teardownDaemonSessionForShutdown(params: {
           teardown: async () =>
             await finalizeApplicationLifecycle(sessionAfterAppLog, runtimeHints),
         })
-      : true;
-    return genericTeardownSucceeded && lifecycleTeardownSucceeded;
+      : [];
+    return [...resourceFailures, ...lifecycleFailures];
   })();
   let timedOut = false;
-  let genericTeardownSucceeded = false;
+  let genericFailures = ['session_teardown'];
   try {
     const teardownOutcome = await settleWithin(async () => await teardown, timeoutMs);
     if (teardownOutcome.kind === 'deadline') timedOut = true;
-    else genericTeardownSucceeded = teardownOutcome.value;
+    else genericFailures = teardownOutcome.value;
   } catch {
     // A teardown that rejects is a failed teardown; its own step already wrote why to stderr.
   }
   if (timedOut) {
     stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
+    genericFailures = ['session_teardown_timeout'];
   }
-  const teardownSucceeded = appLogTeardownSucceeded && genericTeardownSucceeded;
+  const failedSteps = [...appLogFailures, ...genericFailures];
+  const teardownSucceeded = failedSteps.length === 0;
+  params.onFailedSteps?.(failedSteps);
   // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
   // `.ad` iff the repair transaction completed, else leave a bounded
   // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
@@ -370,4 +383,38 @@ export async function teardownDaemonSessionForShutdown(params: {
   if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
   sessionStore.retire(ref);
   return teardownSucceeded;
+}
+
+export async function teardownDaemonSessions(
+  sessionStore: SessionStore,
+  teardown: (ref: SessionRef) => Promise<{ closed: boolean; failedSteps: string[] }>,
+) {
+  sessionStore.closeAdmission();
+  const sessionsToStop = sessionStore.listRefs();
+  const failedLeases = new Map<string, string[]>();
+  const outcomes = await Promise.all(
+    sessionsToStop.map(async (ref) => {
+      const result = await teardown(ref).catch(() => undefined);
+      const failedSteps = result?.failedSteps ?? ['session_teardown'];
+      const { name, lease } = ref.session;
+      if (lease && failedSteps.length > 0) {
+        const { leaseId, deviceKey } = lease;
+        failedLeases.set(leaseId, [
+          ...new Set([...(failedLeases.get(leaseId) ?? []), ...failedSteps]),
+        ]);
+        emitDiagnostic({
+          phase: 'leased_session_ended',
+          level: 'warn',
+          data: { reason: 'DAEMON_SHUTDOWN', leaseId, session: name, deviceKey, failedSteps },
+        });
+      }
+      return result?.closed ?? false;
+    }),
+  );
+  await sessionStore.flushJournalRemovals();
+  const closedCount = outcomes.filter(Boolean).length;
+  return {
+    sessions: { closed: closedCount, failed: outcomes.length - closedCount },
+    failedLeases,
+  };
 }

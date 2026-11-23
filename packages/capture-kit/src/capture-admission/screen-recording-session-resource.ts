@@ -67,6 +67,7 @@ export function adoptStartedScreenRecording(params: {
 export function finishLiveScreenRecording(params: {
   binding: DurableCaptureSessionBinding<'screen-recording', ScreenRecordingLiveHandle>;
   intent: DurableCaptureFinishIntent;
+  confirmedMissing?: () => boolean;
 }): Promise<ScreenRecordingCompletion> {
   return screenRecordingDurableResource.finishLive(params);
 }

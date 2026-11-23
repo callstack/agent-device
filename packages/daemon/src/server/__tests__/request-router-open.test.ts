@@ -229,7 +229,7 @@ test('fresh macOS replay locks only the app device it opens first, so other apps
       meta: { cwd: root },
     },
     sessionName: 'fresh-macos-replay',
-    sessionStore: makeSessionStore('agent-device-router-replay-macos-lock-'),
+    env: makeSessionStore('agent-device-router-replay-macos-lock-').host.env,
   });
 
   // A replay holds these for its whole run; holding the host too would hold every other app's
@@ -266,7 +266,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
       meta: { cwd: root },
     }),
     sessionName: 'fresh-replay',
-    sessionStore,
+    env: sessionStore.host.env,
   });
 
   expect(keys).toEqual(['session:fresh-replay', 'device:SIM-WITH-APP']);
@@ -297,7 +297,7 @@ test('a fresh open of an app device locks its host too, so opens on one Mac run 
         flags: { platform: 'macos', ...(surface ? { surface } : {}) },
       },
       sessionName: 'fresh-app',
-      sessionStore,
+      env: sessionStore.host.env,
     });
 
   expect((await plan(['com.example.one'])).keys).toEqual([
@@ -330,7 +330,7 @@ test('fresh replay leaves a first deep-link open unbound when a later app target
       meta: { cwd: root },
     },
     sessionName: 'fresh-replay-deep-link',
-    sessionStore,
+    env: sessionStore.host.env,
   });
 
   expect(keys).toEqual(['session:fresh-replay-deep-link']);
@@ -358,7 +358,7 @@ test('fresh replay preserves an authored Android platform before advisory lockin
       meta: { cwd: root },
     },
     sessionName: 'fresh-replay-android',
-    sessionStore,
+    env: sessionStore.host.env,
   });
 
   expect(keys).toEqual(['session:fresh-replay-android', 'device:ANDROID-EMULATOR']);
@@ -899,7 +899,7 @@ test('web sessions open side by side on one host, each holding a device of its o
         openRequest('web-a', { platform: 'web' }, 'req-plan-web-a', {}, ['about:blank']),
       ),
       sessionName: 'web-a',
-      sessionStore,
+      env: sessionStore.host.env,
     });
     expect(keys).toEqual(['session:web-a', `device:${WEB_DESKTOP_DEVICE.id}:session:p_web-a`]);
 

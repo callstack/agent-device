@@ -217,7 +217,8 @@ test('the request plan for an existing session keeps the canonical session-first
   const requestPlan = await resolveRequestExecutionLockPlan({
     req: makeRequest({ command: 'snapshot' }),
     sessionName: 'default',
-    sessionStore,
+    existingDeviceId: session.device.id,
+    env: sessionStore.host.env,
   });
 
   // What this pins is the PLANNER: an existing session's request takes `existingSessionExecutionLockKeys`

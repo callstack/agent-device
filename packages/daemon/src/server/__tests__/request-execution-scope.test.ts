@@ -1,3 +1,4 @@
+import { createLeaseSessionEnd } from '../lease-session-end.ts';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
   daemonPlatformServicesFixture,
@@ -17,6 +18,7 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
   createRequestExecutionScope,
+  getLeaseRegistryExecutionLocks,
   prepareLockedRequestScope,
 } from '../request-execution-scope.ts';
 import { resolveSessionScope } from '../../sessions/session-routing.ts';
@@ -555,6 +557,18 @@ test('expired leased session cleanup waits for the request execution lock', asyn
     defaultLeaseTtlMs: 10,
     minLeaseTtlMs: 1,
     now: () => now,
+    onLeaseExpired: (lease) => {
+      void leaseSessionEnd.end(lease.leaseId, 'LEASE_EXPIRED');
+    },
+  });
+  let firstFinished = false;
+  const teardown = vi.fn(async () => expect(firstFinished).toBe(true));
+  const leaseSessionEnd = createLeaseSessionEnd({
+    env: sessionStore.host.env,
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    sessionStore,
+    teardownSession: teardown,
+    cleanupSessionlessExecutionHost: async () => {},
   });
   const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
   sessionStore.publish(
@@ -577,6 +591,7 @@ test('expired leased session cleanup waits for the request execution lock', asyn
     req: makeRequest({ command: 'click', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
+    leaseSessionEnd,
   });
 
   let releaseFirst: () => void = () => {};
@@ -598,16 +613,24 @@ test('expired leased session cleanup waits for the request execution lock', asyn
   markRequestCanceled(requestId);
 
   now = 1_011;
-  const secondRun = second.runLocked(async () => 'second');
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(sessionStore.get('default')).toBeDefined();
+  expect(leaseRegistry.consumeExpiredLeases()).toMatchObject([{ leaseId: lease.leaseId }]);
+  const dispatch = vi.fn(async () => 'second');
+  const refused = expect(second.runLocked(dispatch)).rejects.toMatchObject({
+    details: { reason: 'LEASE_NOT_FOUND' },
+  });
 
   try {
+    await Promise.resolve();
+    expect(teardown).not.toHaveBeenCalled();
+    firstFinished = true;
     releaseFirst();
     await firstRun;
-    await expect(secondRun).resolves.toBe('second');
+    await refused;
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(teardown).toHaveBeenCalledOnce();
     expect(sessionStore.get('default')).toBeUndefined();
   } finally {
+    releaseFirst();
     clearRequestCanceled(requestId);
   }
 });

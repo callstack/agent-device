@@ -1,24 +1,15 @@
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
-import { LEASE_REASONS, leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
-import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
   ProviderAppCatalog,
 } from '@agent-device/contracts/device';
-import { resolveLeaseScope } from '../core/lease-context.ts';
-import {
-  assertRequestLeaseAdmission,
-  resolveRequestSessionRef,
-  type ResolveRequestSessionRef,
-} from './request-admission.ts';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { assertRequestLeaseAdmission } from './request-admission.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
@@ -61,195 +52,41 @@ export async function releaseExpiredProviderLease(
   }
 }
 
-/**
- * How a request treats a session whose lease expired. A request that holds the session lock ends
- * it (`inline`). A composite refuses the expired lease rather than tear its session down mid-run.
- * A request without the session lock leaves the session to the lease-end owner and its locks.
- */
-export type ExpiredSessionTeardown = 'inline' | 'refuse' | 'lease-end-owner';
-
-export async function cleanupExpiredLeasedSession(params: {
-  env: HostEnvironment['env'];
-  /** The session the request holds the lease of; a request that holds none ends no session. */
-  ref: SessionRef | undefined;
-  sessionStore: SessionStore;
-  leaseRegistry: LeaseRegistry;
-  teardownSession: SessionTeardown;
-  teardown: ExpiredSessionTeardown;
-}): Promise<boolean> {
-  const { ref } = params;
-  const lease = ref?.session.lease;
-  if (!ref || !lease) return false;
-  if (
-    !params.leaseRegistry.consumeExpiredLease(lease.leaseId, () => {
-      if (params.teardown !== 'refuse') return;
-      throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-        reason: LEASE_REASONS.notFound.reason,
-        dispatched: 'no',
-      });
-    }) ||
-    params.teardown !== 'inline'
-  )
-    return false;
-  await endLeasedSession(
-    ref,
-    params.sessionStore,
-    params.teardownSession,
-    'LEASE_EXPIRED',
-    params.env,
-  );
-  return true;
-}
-
-/**
- * Ends one session whose lease is gone (released or expired). The device claim is cleared even when
- * teardown fails: the lease that paid for the device has ended, so nobody may keep it.
- */
 export async function endLeasedSession(
   ref: SessionRef,
   sessionStore: SessionStore,
   teardownSession: SessionTeardown,
-  reason: LeaseEndReason,
   env: HostEnvironment['env'],
-  /** Only the daemon log names the lease id. A request record can reach another client. */
-  daemonScope = false,
 ): Promise<void> {
-  const session = ref.session;
-  const leaseId = daemonScope ? session.lease?.leaseId : undefined;
-  emitDiagnostic({
-    level: 'info',
-    phase: 'leased_session_ended',
-    data: { reason, leaseId, session: session.name, deviceKey: session.lease?.deviceKey },
-  });
-  await teardownSession(ref).catch((error) => {
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'leased_session_end_cleanup_failed',
-      data: { reason, leaseId, session: session.name, error: errorMessage(error) },
-    });
-  });
-  await clearDeviceClaim(session.deviceClaim, env).catch((error) => {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'leased_session_end_device_claim_clear_failed',
-      data: {
-        session: session.name,
-        deviceKey: session.deviceClaim?.deviceKey,
-        error: errorMessage(error),
-      },
-    });
-  });
+  const claim = ref.session.deviceClaim;
+  await teardownSession(ref);
+  const current = sessionStore.resolveCurrent(ref);
+  if (!current || current.deviceClaim !== claim) return;
+  if ((await clearDeviceClaim(claim, env)) === 'unattributable') return;
   sessionStore.finalizeRepairTeardown(ref);
   sessionStore.retire(ref);
-}
-
-type LockedSessionParams = {
-  env: HostEnvironment['env'];
-  req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
-  leaseRegistry: LeaseRegistry;
-  teardown: ExpiredSessionTeardown;
-  holdDeviceLock: (deviceId: string) => Promise<void>;
-  teardownSession: SessionTeardown;
-  admission: Readonly<{ providerAppCatalog?: ProviderAppCatalog; daemonPolicy?: DaemonPolicy }>;
-  onSuccessorAdmitted(lease: DeviceLease): void;
-  resolveSessionRef?: ResolveRequestSessionRef;
-};
-
-/**
- * The session that a request acts through, resolved under the session lock. A request that
- * presents another active lease first ends a session whose lease is over, and then finds none.
- */
-export async function resolveLockedRequestSessionRef(
-  params: LockedSessionParams,
-): Promise<SessionRef | undefined> {
-  const { req, sessionName, sessionStore, resolveSessionRef = resolveRequestSessionRef } = params;
-  const ref = sessionStore.lookup(sessionName);
-  const ended =
-    ref !== undefined &&
-    params.teardown === 'inline' &&
-    (await endExpiredSessionForSuccessor(params, ref));
-  return resolveSessionRef(req, ended ? sessionStore.lookup(sessionName) : ref);
-}
-
-/**
- * Ends the session of a lease that is over, for a request that presents another active lease. A
- * new owner can then open the address before the lease sweep runs. Any other request ends nothing.
- */
-async function endExpiredSessionForSuccessor(
-  params: LockedSessionParams,
-  ref: SessionRef,
-): Promise<boolean> {
-  const { leaseRegistry } = params;
-  const expiredLeaseId = ref.session.lease?.leaseId;
-  const successorScope = resolveLeaseScope(params.req);
-  const successorLeaseId = successorScope.leaseId;
-  if (!expiredLeaseId || !successorLeaseId || successorLeaseId === expiredLeaseId) return false;
-  const canEndSession = () =>
-    params.sessionStore.currentRefForLease(ref, expiredLeaseId) !== undefined &&
-    !leaseRegistry.inspectActiveLease(expiredLeaseId) &&
-    leaseRegistry.inspectActiveLease(successorLeaseId) !== undefined;
-  if (!canEndSession()) return false;
-  await params.holdDeviceLock(ref.session.device.id);
-  throwIfRequestCanceled(params.req.meta?.requestId);
-  const admitSuccessor = () =>
-    assertRequestLeaseAdmission(params.req, leaseRegistry, undefined, {
-      ...params.admission,
-      env: params.env,
-      inspectOnly: true,
-    });
-  if (!canEndSession()) return false;
-  const successor = admitSuccessor();
-  if (!successor) return false;
-  if (successor.backend === 'macos-app') {
-    await assertMacOsAppLeaseProcess(successor);
-    throwIfRequestCanceled(params.req.meta?.requestId);
-    if (!canEndSession() || !admitSuccessor()) return false;
-  }
-  const admittedSuccessor = leaseRegistry.renewInspectedLeaseAdmission(
-    leaseScopeToHeartbeatRequest(successorScope),
-  );
-  params.onSuccessorAdmitted(admittedSuccessor);
-  await endLeasedSession(
-    ref,
-    params.sessionStore,
-    params.teardownSession,
-    'LEASE_EXPIRED',
-    params.env,
-  );
-  // An inactive lease never becomes active again. The registry notes the expiry only now, so the
-  // lease-end owner that it starts finds no session to end a second time.
-  leaseRegistry.consumeExpiredLease(expiredLeaseId);
-  return true;
 }
 
 export function admitRequestLeaseForLockedScope(params: {
   env: HostEnvironment['env'];
   req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
+  session: SessionState | undefined;
   leaseRegistry: LeaseRegistry;
   providerAppCatalog?: ProviderAppCatalog;
   pluginInventory?: readonly PluginInventoryEntry[];
   daemonPolicy?: DaemonPolicy;
-  resolveSessionRef?: ResolveRequestSessionRef;
 }): DaemonRequest {
-  const {
-    sessionName,
-    sessionStore,
-    leaseRegistry,
-    resolveSessionRef = resolveRequestSessionRef,
-  } = params;
-  // The addressed session still decides the app-lease veto.
-  const addressed = sessionStore.lookup(sessionName);
-  resolveSessionRef(params.req, addressed);
-  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, addressed?.session, {
-    env: params.env,
-    providerAppCatalog: params.providerAppCatalog,
-    pluginInventory: params.pluginInventory,
-    daemonPolicy: params.daemonPolicy,
-  });
+  const activeLease = assertRequestLeaseAdmission(
+    params.req,
+    params.leaseRegistry,
+    params.session,
+    {
+      env: params.env,
+      providerAppCatalog: params.providerAppCatalog,
+      pluginInventory: params.pluginInventory,
+      daemonPolicy: params.daemonPolicy,
+    },
+  );
   if (!activeLease) return params.req;
   return { ...params.req, internal: { ...params.req.internal, admittedLease: activeLease } };
 }

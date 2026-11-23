@@ -14,8 +14,6 @@ export type LeaseWorkWanted = () => boolean;
 /** A claim on one leased device for the duration of one admitted request's work. */
 export type LeaseWorkPass = Readonly<{
   leaseId: string;
-  /** Whether this pass is still registered for its original lease. */
-  isRetained(): boolean;
   /**
    * Ends the pass. Reports whether the work was still wanted when it ended, which
    * is what entitles it to renew the lease it just worked on.
@@ -43,7 +41,6 @@ export class LeaseInFlightWorkRegistry {
     this.entriesByLeaseId.set(leaseId, entries);
     return {
       leaseId,
-      isRetained: () => !entry.released && entries.has(entry),
       release: () => this.releasePass(leaseId, entries, entry),
     };
   }

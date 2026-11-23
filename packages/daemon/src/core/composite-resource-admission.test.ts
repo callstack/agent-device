@@ -821,7 +821,6 @@ test.each(['batch', 'replay'] as const)(
       const refusedLease = attachLease(refused);
       const allowedHeartbeat = vi.spyOn(allowed.leaseRegistry, 'heartbeatLease');
       const refusedHeartbeat = vi.spyOn(refused.leaseRegistry, 'heartbeatLease');
-      const refusedConsume = vi.spyOn(refused.leaseRegistry, 'consumeExpiredLease');
       assertRpcOk(
         await allowed.call('batch', [], {
           batchSteps: [{ command: 'home' }],
@@ -857,7 +856,6 @@ test.each(['batch', 'replay'] as const)(
       expect(refusedHeartbeat).toHaveBeenCalledWith(
         expect.objectContaining({ leaseId: refusedLease.leaseId }),
       );
-      expect(refusedConsume).toHaveBeenCalledOnce();
       expect(refused.leaseRegistry.getLease(refusedLease)).toMatchObject({
         leaseId: refusedLease.leaseId,
       });
