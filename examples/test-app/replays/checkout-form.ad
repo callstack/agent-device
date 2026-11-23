@@ -11,6 +11,7 @@ fill id="field-email" "ada@example.com"
 keyboard enter
 wait "Checkout form" 5000
 scroll down --until id="shipping-pickup"
+wait stable
 click id="shipping-pickup"
 scroll down --until id="payment-cash"
 click id="payment-cash"
