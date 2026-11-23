@@ -9,6 +9,13 @@ export type PluginInventoryError = Readonly<{
   hint?: string;
 }>;
 
+/** The prerequisite a provider needs before it can register. */
+export type PluginDormancy = Readonly<{
+  reason: string;
+  message: string;
+  hint?: string;
+}>;
+
 export type PluginInventoryCredentials = Readonly<{
   variables: readonly string[];
   byBackend: Readonly<Record<string, readonly string[]>>;
@@ -29,6 +36,8 @@ type PluginInventoryIdentity = Readonly<{
 /** One plugin as the daemon sees it: published in `daemon.json` and shown by `daemon status`. */
 export type PluginInventoryEntry =
   | (PluginInventoryIdentity & Readonly<{ state: 'active'; error?: undefined }>)
+  | (PluginInventoryIdentity &
+      Readonly<{ provider: string; state: 'dormant'; dormant: PluginDormancy; error?: undefined }>)
   | (PluginInventoryIdentity & Readonly<{ state: 'failed'; error: PluginInventoryError }>);
 
 /** One step of a plugin's cleanup: it completed, or it threw this typed error. */
@@ -86,7 +95,7 @@ function readEntry(value: unknown): PluginInventoryEntry | undefined {
   if (!isRecord(value) || !isSource(value.source)) return undefined;
   const credentials = readCredentials(value.credentials);
   if (!credentials) return undefined;
-  const identity = {
+  return readEntryState(value, {
     ...(typeof value.provider === 'string' ? { provider: value.provider } : {}),
     ...(typeof value.backend === 'string' ? { backend: value.backend } : {}),
     ...(typeof value.platform === 'string' ? { platform: value.platform } : {}),
@@ -98,10 +107,33 @@ function readEntry(value: unknown): PluginInventoryEntry | undefined {
     ...(typeof value.package === 'string' ? { package: value.package } : {}),
     ...(typeof value.version === 'string' ? { version: value.version } : {}),
     credentials,
-  };
+  });
+}
+
+function readEntryState(
+  value: Record<string, unknown>,
+  identity: PluginInventoryIdentity,
+): PluginInventoryEntry | undefined {
   if (value.state === 'active') return { ...identity, state: 'active' };
+  if (value.state === 'dormant' && identity.provider !== undefined) {
+    const dormant = readPluginDormancy(value.dormant);
+    return dormant
+      ? { ...identity, provider: identity.provider, state: 'dormant', dormant }
+      : undefined;
+  }
   const error = readError(value.error);
   return value.state === 'failed' && error ? { ...identity, state: 'failed', error } : undefined;
+}
+
+export function readPluginDormancy(value: unknown): PluginDormancy | undefined {
+  if (!isRecord(value) || typeof value.reason !== 'string' || typeof value.message !== 'string') {
+    return undefined;
+  }
+  const { reason, message, hint } = value;
+  if (!reason.trim() || !message.trim() || (hint !== undefined && typeof hint !== 'string')) {
+    return undefined;
+  }
+  return { reason, message, ...(hint === undefined ? {} : { hint }) };
 }
 
 function readCredentials(value: unknown): PluginInventoryCredentials | undefined {

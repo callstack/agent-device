@@ -59,10 +59,9 @@ export async function verifyPacked({ core, contracts, plugin }) {
     }
     assert.fail('Expected a Limrun failure');
   };
-  const missingCredentials = await capture(() => limrun.setup(host({})));
-  assert.equal(missingCredentials.code, 'INVALID_ARGS');
-  assert.equal(missingCredentials.details.reason, 'missing_provider_credentials');
-  assert.ok(missingCredentials.hint);
+  const { dormant } = await limrun.setup(host({}));
+  assert.equal(dormant.reason, 'missing_provider_credentials');
+  assert.match(dormant.hint, /LIMRUN_API_KEY/);
 
   // A host that supplies no device capabilities is refused before any instance is reached.
   const missingCapabilities = await capture(() =>
@@ -107,6 +106,8 @@ await runtime.close();
       'NodeNext',
       '--target',
       'ES2022',
+      '--lib',
+      'es2022,dom,esnext.disposable',
       '--typeRoots',
       path.join(root, 'node_modules/@types'),
       'consumer.mts',

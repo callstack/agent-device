@@ -140,7 +140,9 @@ function renderDaemonStatus(
             const outcome =
               plugin.state === 'active'
                 ? 'active'
-                : `failed: ${plugin.error?.message ?? 'unknown'}`;
+                : plugin.state === 'dormant'
+                  ? `dormant (${plugin.dormant.reason}): ${plugin.dormant.message}`
+                  : `failed: ${plugin.error.message}`;
             return `  ${plugin.provider ?? plugin.platform ?? (plugin.backend ? `replay backend ${plugin.backend}` : '(unknown plugin)')} [${plugin.source}] ${origin} - ${outcome}`;
           }),
         ]),

@@ -16,7 +16,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Manage installed provider plugins',
       description:
-        'Install, list, update, or remove provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. list works offline and, when a daemon is running for --state-dir, also reports the providers it registered. For a local tarball, use a path starting with ./ or ../, or an absolute path. Use --json for structured results.',
+        'Install, list, update, or remove provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. list works offline. If a daemon is running for --state-dir, list also reports its dormant and failed claims. Use --json for the full inventory. For a local tarball, use a path starting with ./ or ../, or an absolute path.',
     },
     usageOverride:
       'plugins list [--state-dir <path>]|add <package[@version]|path.tgz>|update <package>|remove <package>',

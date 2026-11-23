@@ -27,8 +27,10 @@ import type { RegisteredConnection } from './connection.ts';
 import { createPluginHost, createReplaySetupHost } from './host.ts';
 import {
   NO_PLUGIN_CREDENTIALS,
+  readPluginDormancy,
   type PluginCleanupOutcome,
   type PluginCleanupStep,
+  type PluginDormancy,
   type PluginInventoryEntry,
   type PluginSource,
 } from '@agent-device/contracts/plugin-inventory';
@@ -114,6 +116,7 @@ type Claim = PluggedClaim & {
   slot: Slot;
   contribution: Contribution;
   failure?: AppError;
+  dormant?: PluginDormancy;
   registration?: ProviderRegistration;
   platformSetup?: RegisteredPlatformSetup;
   platformLeaf?: MacOsPlatformLeafRegistration;
@@ -633,6 +636,10 @@ async function setUpProviderClaim(
   try {
     if (!isRecord(result))
       throw invalidPlugin(`Plugin setup must return a runtime: ${contribution.provider}`);
+    if (result.dormant !== undefined) {
+      claim.dormant = validateDormantSetup(result, contribution.provider);
+      return;
+    }
     const runtime = result.runtime as ProviderDeviceRuntime;
     const platformModule = result.platformModule as PlatformRuntimeProviderModule;
     assertProviderRuntime(contribution.provider, runtime, platformModule);
@@ -648,6 +655,21 @@ async function setUpProviderClaim(
     await cleanUpRejectedSetup(result);
     throw error;
   }
+}
+
+function validateDormantSetup(result: Record<string, unknown>, provider: string): PluginDormancy {
+  const dormant = readPluginDormancy(result.dormant);
+  if (
+    !dormant ||
+    result.runtime !== undefined ||
+    result.platformModule !== undefined ||
+    result.dispose !== undefined
+  ) {
+    throw invalidPlugin(
+      `Plugin dormant setup must supply a reason and message without a runtime: ${provider}`,
+    );
+  }
+  return dormant;
 }
 
 async function cleanUpRejectedSetup(result: unknown): Promise<void> {
@@ -713,13 +735,12 @@ function describeClaim(claim: ClaimEntry): PluginInventoryEntry[] {
       },
     ];
   }
-  return [
-    {
-      ...base,
-      state: 'active',
-      credentials: claimCredentials('contribution' in claim ? claim.contribution : undefined),
-    },
-  ];
+  const contribution = 'contribution' in claim ? claim.contribution : undefined;
+  const credentials = claimCredentials(contribution);
+  if ('dormant' in claim && claim.dormant !== undefined) {
+    return [{ ...base, provider: claim.id, state: 'dormant', dormant: claim.dormant, credentials }];
+  }
+  return [{ ...base, state: 'active', credentials }];
 }
 
 function identityOfCandidate(candidate: PluginCandidate): {

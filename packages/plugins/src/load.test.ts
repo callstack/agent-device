@@ -76,7 +76,7 @@ test('store plugins register in package-name order', async () => {
   await registry.close();
 });
 
-test('a broken plugin is listed as failed while its working neighbor registers', async () => {
+test('the registry distinguishes dormant claims, failed setup, and active runtimes', async () => {
   const { home, env } = pluginHome();
   selectPlugin(home, 'a-working', pluginSource('working'));
   selectPlugin(home, 'b-throws-on-import', 'throw new Error("import failed");');
@@ -107,6 +107,27 @@ test('a broken plugin is listed as failed while its working neighbor registers',
       }]
     });`,
   );
+  selectPlugin(
+    home,
+    'g-dormant',
+    `export default () => ({
+      apiVersion: 3, contributes: [{
+        kind: 'provider', provider: "unconfigured", credentials: { variables: ['EXAMPLE_API_KEY'] },
+        setup: () => ({ dormant: { reason: 'example_credentials_missing', message: 'Credentials are missing.', hint: 'Set EXAMPLE_API_KEY.' } })
+      }]
+    });`,
+  );
+  selectPlugin(home, 'h-duplicate', pluginSource('unconfigured'));
+  selectPlugin(
+    home,
+    'i-malformed-dormant',
+    `export default () => ({
+      apiVersion: 3, contributes: [{
+        kind: 'provider', provider: "malformed", credentials: { variables: [] },
+        setup: () => ({ dormant: { message: 'No reason code.' } })
+      }]
+    });`,
+  );
   const registry = await startStore(env);
 
   assert.deepEqual(
@@ -122,11 +143,33 @@ test('a broken plugin is listed as failed while its working neighbor registers',
       ['d-invalid', 'failed', 'invalid_plugin'],
       ['e-setup-fails', 'failed', 'plugin_setup_failed'],
       ['f-bad-owner', 'failed', 'invalid_plugin'],
+      ['g-dormant', 'dormant', undefined],
+      ['h-duplicate', 'failed', 'duplicate_provider'],
+      ['i-malformed-dormant', 'failed', 'invalid_plugin'],
     ],
   );
   assert.match(registry.inventory[1]!.error!.message, /import failed/);
   assert.match(registry.inventory[4]!.error!.message, /setup failed/);
-  await registry.close();
+  assert.deepEqual(
+    registry.inventory.find(({ state }) => state === 'dormant'),
+    {
+      provider: 'unconfigured',
+      source: 'store',
+      package: 'g-dormant',
+      version: '2.0.0',
+      state: 'dormant',
+      dormant: {
+        reason: 'example_credentials_missing',
+        message: 'Credentials are missing.',
+        hint: 'Set EXAMPLE_API_KEY.',
+      },
+      credentials: { variables: ['EXAMPLE_API_KEY'], byBackend: {} },
+    },
+  );
+  assert.deepEqual(
+    (await registry.close()).map(({ provider }) => provider),
+    ['working'],
+  );
 });
 
 test('the first plugin to name a provider claims it even when it fails, and later ones are failed', async () => {
