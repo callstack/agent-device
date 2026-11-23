@@ -1,20 +1,17 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
+import {
+  resourceAdmissionWorld,
+  assertRpcOk,
+  publishLeasedFixture,
+} from './composite-resource-admission.fixtures.ts';
 import { seedExistingCapture } from './composite-resource-existing.fixtures.ts';
 
 test('provider-releasing close refuses while reopen keeps the provider lease', async () => {
   const world = await resourceAdmissionWorld('capture', { withLifecycleProvider: true });
   try {
     const lease = world.leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
-    world.sessionStore.update(world.ref, {
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        backend: lease.backend,
-      },
-    });
+    publishLeasedFixture(world, lease);
     const close = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
     expect(close.json.error, JSON.stringify(close.json)).toBeDefined();
     expect(close.json.error?.data?.details).toMatchObject({
@@ -41,14 +38,7 @@ test.each(['batch', 'replay'] as const)(
     try {
       const owned = seedExistingCapture(world, 'audio-probe');
       const lease = world.leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
-      world.sessionStore.update(world.ref, {
-        lease: {
-          leaseId: lease.leaseId,
-          tenantId: lease.tenantId,
-          runId: lease.runId,
-          backend: lease.backend,
-        },
-      });
+      publishLeasedFixture(world, lease);
       world.expireLease();
       const script = path.join(world.daemon.stateDir, 'expired.ad');
       const response = await world.call(

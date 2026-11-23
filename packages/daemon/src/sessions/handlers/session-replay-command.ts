@@ -1,12 +1,22 @@
+import {
+  getRequestDeadlineMs,
+  getRequestSignal,
+  isRequestCanceled,
+  throwIfRequestCanceled,
+} from '@agent-device/host-kit/request';
+import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { resolveSessionTestArtifactsRoot } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { assertRequestHoldsSessionLease } from '../../core/lease-context.ts';
+import {
+  SessionCoordinator,
+  type WithSessionExecutionLock,
+  type SessionStore,
+} from '../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
-import type { SessionStore } from '../../core/session-store.ts';
 import { bindInternalObservationAuthority } from '../../execution/internal-observation.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
@@ -52,7 +62,10 @@ export const replayDaemonDependencies: ReplayDaemonDependencies = { resolveSessi
  * leaves every capture on the owner's own snapshot path. Root composition always supplies one, so
  * a replay run driven through the daemon never takes that branch.
  */
-export type ReplayCaptureAdmission = Readonly<{ meta?: DaemonRequest['meta'] }> &
+export type ReplayCaptureAdmission = Readonly<{
+  meta?: DaemonRequest['meta'];
+  isActive?: () => boolean;
+}> &
   RuntimeAdmissionBindings;
 
 /** What a replay run with no composed admission resolves every capture cell to. */
@@ -78,6 +91,7 @@ export const handleReplayCommand: SessionCommandHandler = async ({
       inspectFacts,
       bindDevice,
       platformServices,
+      isActive: req.internal?.sessionAuthorityActive,
     }),
     invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
@@ -99,34 +113,38 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   bindExactDevice,
   screenRecordingAdmissionLedger,
   requestScope,
-  retainDeviceExecutionLock,
   throwIfCanceled,
+  withSessionExecutionLock,
   platformResourceCleanup,
   deviceShutdownDenied,
 }) => {
-  if (!platformResourceCleanup) {
+  if (!platformResourceCleanup || !withSessionExecutionLock) {
     throw new AppError(
       'INTERNAL_ERROR',
-      'Platform resource cleanup was not supplied by root runtime composition',
+      'Replay test session cleanup and locks were not supplied by the router',
     );
   }
-  // The suite reaches an attempt session through the handlers below, not through admission. An
-  // attempt address can already hold a leased session, so every read here checks the lease id that
-  // the suite sent.
-  const lookupAttemptSession = (attemptSessionName: string): SessionRef | undefined => {
-    const ref = sessionStore.lookup(attemptSessionName);
-    assertRequestHoldsSessionLease(req, ref?.session);
-    return ref;
+  const coordinator = new SessionCoordinator(sessionStore);
+  const attempts = new Map<string, { running: boolean; requestId?: string; ref?: SessionRef }>();
+  const isRunning = (name: string) => {
+    const attempt = attempts.get(name);
+    return attempt?.running === true && !isRequestCanceled(attempt.requestId);
   };
+  const running = (name: string) => (isRunning(name) ? coordinator.pin(req, name) : undefined);
+  const pinned = (name: string) => {
+    const ref = attempts.get(name)?.ref;
+    return ref && sessionStore.resolveCurrent(ref) ? sessionStore.refresh(ref) : undefined;
+  };
+  const completed = (name: string) => (attempts.get(name)?.running ? undefined : pinned(name));
   const video = createReplayTestVideoOwner({
     sessionStore,
-    assertSuiteMayActOn: lookupAttemptSession,
+    withSessionExecutionLock,
+    sessionRef: (name, phase) => (phase === 'start' ? running(name) : completed(name)),
     bindDevice,
     platformServices,
     bindExactDevice,
     screenRecordingAdmissionLedger,
     requestScope,
-    retainDeviceExecutionLock,
     throwIfCanceled,
   });
   const capture: ReplayCaptureAdmission = {
@@ -150,28 +168,103 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     ...splitReplayCommandRequest(suiteRequest),
     host,
     session: createReplaySession(sessionName, logPath, sessionStore, capture),
-    createSession: (testSessionName, testLogPath) =>
-      createReplaySession(testSessionName, testLogPath, sessionStore, capture, () =>
-        lookupAttemptSession(testSessionName),
+    runAttempt: async (name, requestId, task) =>
+      await withSessionExecutionLock(
+        name,
+        async () => {
+          throwIfRequestCanceled(requestId);
+          const attempt = { running: true, requestId, ref: coordinator.pin(req, name) };
+          attempts.set(name, attempt);
+          try {
+            return await task();
+          } finally {
+            attempt.running = false;
+          }
+        },
+        getRequestSignal(requestId),
       ),
-    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
-    dependencies: replayDaemonDependencies,
-    cleanupSession: async (testSessionName) =>
-      await closeReplayTestSession({
-        host,
-        req,
-        sessionName: testSessionName,
-        lookupSession: lookupAttemptSession,
-        logPath,
+    createSession: (name, testLogPath, phase) =>
+      createReplaySession(
+        name,
+        testLogPath,
         sessionStore,
-        leaseRegistry,
-        leaseLifecycleProvider,
-        inspectFacts,
-        bindDevice,
-        platformServices,
-        platformResourceCleanup,
-        deviceShutdownDenied,
-      }),
+        capture,
+        phase === 'replay' ? () => running(name) : () => pinned(name),
+        withSessionExecutionLock,
+        () => isRunning(name),
+      ),
+    invoke: replayInvokeOverDispatch(async (nested) => {
+      const name = nested.session;
+      const attempt = attempts.get(name);
+      const result = await (invokeReplayAction ?? invoke)({
+        ...nested,
+        internal: {
+          ...nested.internal,
+          onLifetimePublished: (address, lifetime) => {
+            if (attempt && name === address && isRunning(name)) {
+              const ref = coordinator.pin(req, name);
+              if (ref?.lifetime === lifetime) attempt.ref = ref;
+            }
+          },
+        },
+      });
+      if (attempt && isRunning(name)) attempt.ref = coordinator.pin(req, name);
+      return result;
+    }, req),
+    dependencies: replayDaemonDependencies,
+    cleanupSession: async (name) => {
+      // A timed-out attempt can still hold the lock. Its late cleanup runs after it settles.
+      const lifetime = completed(name)?.lifetime;
+      if (!lifetime) return [];
+      let acquiring = true;
+      const closePinned = (signal?: AbortSignal) =>
+        withSessionExecutionLock(
+          name,
+          async (holdDevice) => {
+            const ref = completed(name);
+            if (ref?.lifetime !== lifetime) return [];
+            await holdDevice(ref.session.device.id);
+            acquiring = false;
+            return await closeReplayTestSession({
+              host,
+              req,
+              ref,
+              logPath,
+              sessionStore,
+              leaseRegistry,
+              leaseLifecycleProvider,
+              inspectFacts,
+              bindDevice,
+              platformServices,
+              platformResourceCleanup,
+              deviceShutdownDenied,
+            });
+          },
+          signal,
+        );
+      const lockBusy = (error: unknown) =>
+        acquiring &&
+        error instanceof AppError &&
+        error.code === 'DEVICE_IN_USE' &&
+        error.details?.reason === 'DEVICE_EXECUTION_LOCK_BUSY';
+      try {
+        return await closePinned();
+      } catch (error) {
+        if (!lockBusy(error)) throw error;
+        const signal = getRequestSignal(req.meta?.requestId);
+        const expiresAt = getRequestDeadlineMs(req.meta?.requestId);
+        const remaining = expiresAt === undefined ? undefined : expiresAt - Date.now();
+        if (signal?.aborted || (remaining !== undefined && remaining <= 0)) throw error;
+        return await retryWithPolicy(
+          () => closePinned(signal),
+          { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 200, jitter: 0, shouldRetry: lockBusy },
+          {
+            signal,
+            deadline: remaining === undefined ? undefined : Deadline.fromTimeoutMs(remaining),
+          },
+        );
+      }
+    },
     ...(video ? { video } : {}),
   });
 };
@@ -187,6 +280,8 @@ export function createReplaySession(
   store: SessionStore,
   capture?: ReplayCaptureAdmission,
   lookup: () => SessionRef | undefined = () => store.lookup(name),
+  withSessionExecutionLock?: WithSessionExecutionLock,
+  isActive = capture?.isActive,
 ): ReplaySession {
   const updateSession = (mutate: (session: SessionState) => void): boolean => {
     const session = lookup()?.session;
@@ -283,37 +378,57 @@ export function createReplaySession(
         platform,
       }),
     bindAuthority: (signal) => {
+      signal ??= getRequestSignal(capture?.meta?.requestId);
       const ref = lookup();
       return {
-        ...bindInternalObservationAuthority({ sessionStore: store, ref, signal }),
+        ...bindInternalObservationAuthority({ sessionStore: store, ref, signal, isActive }),
         capture: async ({ flags, logPath: captureLogPath }) => {
           if (!ref) {
             throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
           }
-          const session = store.requireCurrent(ref);
-          const bound = await bindCaptureFor(ref.lifetime, session);
-          return await captureSnapshot({
-            device: session.device,
-            session,
-            flags,
-            logPath: captureLogPath,
+          const captureCurrent = async () => {
+            const assertCurrent = () => {
+              signal?.throwIfAborted();
+              if (isActive?.() === false)
+                throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
+              return store.requireCurrent(ref);
+            };
+            const session = assertCurrent();
+            const bound = await bindCaptureFor(ref.lifetime, session);
+            assertCurrent();
+            return await captureSnapshot({
+              device: session.device,
+              session,
+              flags,
+              logPath: captureLogPath,
+              signal,
+              assertCurrent,
+              ...(bound
+                ? {
+                    captureData: async () =>
+                      await bound(
+                        buildRuntimeCaptureInput({
+                          flags,
+                          logPath: captureLogPath,
+                          meta: capture?.meta,
+                          session,
+                          snapshotScope: undefined,
+                          signal,
+                        }),
+                      ),
+                  }
+                : {}),
+            });
+          };
+          if (!withSessionExecutionLock) return await captureCurrent();
+          return await withSessionExecutionLock(
+            ref.address,
+            async (holdDevice) => {
+              await holdDevice(store.requireCurrent(ref).device.id);
+              return await captureCurrent();
+            },
             signal,
-            ...(bound
-              ? {
-                  captureData: async () =>
-                    await bound(
-                      buildRuntimeCaptureInput({
-                        flags,
-                        logPath: captureLogPath,
-                        meta: capture?.meta,
-                        session,
-                        snapshotScope: undefined,
-                        signal,
-                      }),
-                    ),
-                }
-              : {}),
-          });
+          );
         },
       };
     },
@@ -323,8 +438,7 @@ export function createReplaySession(
 type ReplayTestSessionCleanupParams = Readonly<{
   host: HostEnvironment;
   req: DaemonRequest;
-  sessionName: string;
-  lookupSession: (sessionName: string) => SessionRef | undefined;
+  ref: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -339,8 +453,8 @@ type ReplayTestSessionCleanupParams = Readonly<{
 async function closeReplayTestSession(
   params: ReplayTestSessionCleanupParams,
 ): Promise<readonly string[]> {
-  const { req, sessionName, logPath, sessionStore } = params;
-  if (!params.lookupSession(sessionName)) return [];
+  const { req, ref, logPath, sessionStore } = params;
+  const sessionName = ref.address;
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
     req: onDelegatingLedger(
@@ -358,6 +472,7 @@ async function closeReplayTestSession(
       req,
     ),
     sessionName,
+    sessionRef: ref,
     logPath,
     sessionStore,
     leaseRegistry: params.leaseRegistry,

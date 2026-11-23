@@ -13,7 +13,11 @@ import { webSessionBackendKey, type DeviceInfo } from '@agent-device/kernel/devi
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
-import { SessionStore } from '../../../core/session-store.ts';
+import {
+  SessionStore,
+  SessionCoordinator,
+  type SessionOpenRequest,
+} from '../../../core/session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { requestWebSession } from '../../../core/session-tenant-scope.ts';
@@ -266,9 +270,15 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   });
   if (foregroundResolution.type === 'response')
     return { type: 'response', response: foregroundResolution.response };
-  const req = foregroundResolution.type === 'resolved' ? foregroundResolution.req : params.req;
+  let req: SessionOpenRequest =
+    foregroundResolution.type === 'resolved' ? foregroundResolution.req : params.req;
 
-  requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
+  if (!existingRef) {
+    const openSlot = new SessionCoordinator(sessionStore).reserve(req, sessionName);
+    req = { ...req, internal: { ...req.internal, openSlot } };
+  }
+
+  requireOpenSessionAdmission(req, sessionStore, existingRef);
   // One `--timeout` budget covers the whole startup: a cold AVD boot and the open preparation.
   const startupDeadline = startupDeadlineAtMs(req.flags?.timeoutMs);
   if (existingRef) {
@@ -315,7 +325,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     const { admission, runtimeHintPlan } = runtimePlanAdmission;
     // The preparation can boot a device, clear native hints, or warm a runner. An existing
     // frame becomes stale before those effects, rather than after the later visible launch.
-    requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
+    requireOpenSessionAdmission(req, sessionStore, existingRef);
     const preparedSession = sessionStore.requireCurrent(existingRef);
     expireRefFrame(preparedSession);
     const details = await prepareOpenCommandDetails({
@@ -332,7 +342,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     });
     if (details.type === 'response') return { type: 'response', response: details.response };
 
-    requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
+    requireOpenSessionAdmission(req, sessionStore, existingRef);
     const reclaimed = await renewOpenSessionClaim(
       device,
       sessionStore.requireCurrent(existingRef).deviceClaim,

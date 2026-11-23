@@ -1,29 +1,32 @@
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { CloseBootOwnership, SessionRef, SessionState } from '../../../core/session-state.ts';
-import type { SessionStore } from '../../../core/session-store.ts';
+import {
+  type SessionStore,
+  type SessionOpenRequest,
+  assertSameOpenOwner,
+  requireSessionOpenSlot,
+} from '../../../core/session-store.ts';
 import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
 import { clearSessionSnapshot } from '../../../execution/session-snapshot.ts';
-import { sessionLeaseOf } from '../../../core/lease-context.ts';
 import { resolvePublicSessionName, resolveSessionScope } from '../../session-routing.ts';
 
 export function requireOpenSessionAdmission(
+  req: SessionOpenRequest,
   store: SessionStore,
-  address: string,
   ref: SessionRef | undefined,
 ): void {
   if (ref) {
     store.assertAdmissionOpen(ref.address);
-    store.requireCurrent(ref);
+    assertSameOpenOwner(req, store.requireCurrent(ref));
   } else {
-    store.assertPublishable(address);
+    requireSessionOpenSlot(req).assertPublishable();
   }
 }
 
 export function publishOpenSession(params: {
-  req: DaemonRequest;
+  req: SessionOpenRequest;
   sessionStore: SessionStore;
   sessionName: string;
   existingRef?: SessionRef;
@@ -39,7 +42,6 @@ export function publishOpenSession(params: {
   const {
     req,
     sessionStore: store,
-    sessionName,
     existingRef,
     device,
     surface,
@@ -48,8 +50,7 @@ export function publishOpenSession(params: {
     deviceClaim,
     bootOwnership,
   } = params;
-  const admittedLease = req.internal?.admittedLease;
-  requireOpenSessionAdmission(store, sessionName, existingRef);
+  requireOpenSessionAdmission(req, store, existingRef);
   if (existingRef) {
     store.updateOpenDevice(existingRef, device, bootOwnership, params.androidLaunchIdentity);
     const session = store.update(existingRef, {
@@ -57,7 +58,6 @@ export function publishOpenSession(params: {
       appBundleId,
       appName,
     });
-    session.lease ??= admittedLease && sessionLeaseOf(admittedLease);
     if (deviceClaim) session.deviceClaim = deviceClaim;
     clearSessionSnapshot(session);
     return store.refresh(existingRef);
@@ -71,10 +71,9 @@ export function publishOpenSession(params: {
     appName,
     createdAt: Date.now(),
     actions: [],
-    lease: admittedLease && sessionLeaseOf(admittedLease),
     deviceClaim,
   };
-  const ref = store.publish(sessionName, draft);
+  const ref = requireSessionOpenSlot(req).publish(draft).current()!;
   // The store decides what each ownership answer records; a fresh draft carries the device already,
   // and 'none' writes nothing but its absence. No second copy of that rule belongs here.
   store.updateOpenDevice(ref, device, bootOwnership, params.androidLaunchIdentity);

@@ -56,6 +56,7 @@ import {
 import {
   createRequestExecutionScope,
   finalizeRequestExecutionScope,
+  leaseRegistrySessionExecutionLock,
   type LockedRequestScope,
   prepareLockedRequestScope,
   type RequestExecutionScope,
@@ -125,10 +126,7 @@ import {
   isDaemonPolicyCapabilityDenied,
 } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
-
-// ---------------------------------------------------------------------------
-// Request handler API
-// ---------------------------------------------------------------------------
+import { withSessionScriptPublication } from './request-binding.ts';
 
 export type RequestRouterDeps = {
   /** The environment and working directory every request of this daemon runs with. */
@@ -207,6 +205,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     daemonPolicy,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
+  const withSessionExecutionLock = leaseRegistrySessionExecutionLock(leaseRegistry);
   const deviceShutdownDenied =
     daemonPolicy !== undefined && isDaemonPolicyCapabilityDenied(daemonPolicy, 'device-shutdown');
   const deviceInventoryGateways = daemonPolicy
@@ -410,16 +409,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     return inheritedProviderScope ? await scope.runAdmitted(run) : await scope.runLocked(run);
   }
 
-  async function executeLockedRequest(params: {
-    lockedScope: LockedRequestScope;
-    providerScope: RequestPlatformProviderScope;
-    allowReplayActions: boolean;
-  }): Promise<DaemonResponse> {
-    const { lockedScope, providerScope, allowReplayActions } = params;
-    return await discloseRequestDispatch(
-      lockedScope.req,
-      lockedScope.dispatchLedger,
-      async () => await routeLockedRequest({ lockedScope, providerScope, allowReplayActions }),
+  async function executeLockedRequest(params: Parameters<typeof routeLockedRequest>[0]) {
+    return await withSessionScriptPublication(sessionStore, params.lockedScope, (req) =>
+      discloseRequestDispatch(req, params.lockedScope.dispatchLedger, () =>
+        routeLockedRequest({ ...params, lockedScope: { ...params.lockedScope, req } }),
+      ),
     );
   }
 
@@ -481,6 +475,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger,
       hostDiagnostics,
+      withSessionExecutionLock,
       resolveSessionRef: lockedScope.resolveSessionRef,
       requestScope,
       retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,

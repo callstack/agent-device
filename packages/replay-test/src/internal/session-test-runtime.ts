@@ -66,6 +66,7 @@ export async function runReplayTestAttempt(
   const artifactPaths = new Set<string>();
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
+  let replaySettled = false;
   let outcome: ReplayTestAttemptOutcome | undefined;
   const attemptStartedAt = Date.now();
   const tracePath = prepareReplayTestTimingTrace({
@@ -93,6 +94,7 @@ export async function runReplayTestAttempt(
   })
     .catch((error) => replayTestAttemptFailure({ error: normalizeError(error) }))
     .finally(() => {
+      replaySettled = true;
       cancellation.release();
     });
 
@@ -121,28 +123,7 @@ export async function runReplayTestAttempt(
     });
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
-    if (timedOut) {
-      const settled = await waitForReplayAfterTimeout(replayPromise);
-      if (!settled) {
-        outcome = markReplayTimeoutCleanupPending(outcome);
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'test_timeout_cleanup_race',
-          data: {
-            session: sessionName,
-            requestId,
-            graceMs: REPLAY_TIMEOUT_CLEANUP_GRACE_MS,
-          },
-        });
-        void cleanupSessionAfterLateReplay({
-          replayPromise,
-          cleanupSession,
-          sessionName,
-          requestId,
-          emitDiagnostic,
-        });
-      }
-    }
+    if (timedOut) await waitForReplayAfterTimeout(replayPromise);
     const finalizeFailure = await finalizeReplayTestAttempt({
       finalizeAttempt,
       sessionName,
@@ -156,6 +137,25 @@ export async function runReplayTestAttempt(
         outcome,
         `Replay test finalization failed: ${finalizeFailure.error.message}`,
       );
+    }
+    if (!replaySettled) {
+      outcome = markReplayTimeoutCleanupPending(outcome);
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'test_timeout_cleanup_race',
+        data: {
+          session: sessionName,
+          requestId,
+          graceMs: REPLAY_TIMEOUT_CLEANUP_GRACE_MS,
+        },
+      });
+      void cleanupSessionAfterLateReplay({
+        replayPromise,
+        cleanupSession,
+        sessionName,
+        requestId,
+        emitDiagnostic,
+      });
     }
     const cleanupStartedAt = Date.now();
     try {
@@ -195,6 +195,25 @@ export async function runReplayTestAttempt(
       outcome = markReplayTestCleanupFailure(outcome, appErr, artifactPaths);
     }
   }
+  return finishReplayTestAttempt(outcome, timedOut, artifactPaths);
+}
+
+function finishReplayTestAttempt(
+  outcome: ReplayTestAttemptOutcome | undefined,
+  timedOut: boolean,
+  artifactPaths: Set<string>,
+): ReplayTestAttemptOutcome {
+  if (timedOut && outcome?.status === 'failed') {
+    const paths = [...artifactPaths];
+    return {
+      ...outcome,
+      artifactPaths: paths,
+      error: {
+        ...outcome.error,
+        details: { ...outcome.error.details, artifactPaths: paths },
+      },
+    };
+  }
   return (
     outcome ??
     replayTestAttemptFailure({
@@ -226,11 +245,8 @@ function markReplayTestCleanupFailure(
 
 async function waitForReplayAfterTimeout(
   replayPromise: Promise<ReplayTestAttemptOutcome>,
-): Promise<boolean> {
-  return await Promise.race([
-    replayPromise.then(() => true),
-    sleep(REPLAY_TIMEOUT_CLEANUP_GRACE_MS).then(() => false),
-  ]);
+): Promise<void> {
+  await Promise.race([replayPromise, sleep(REPLAY_TIMEOUT_CLEANUP_GRACE_MS)]);
 }
 
 async function cleanupSessionAfterLateReplay(params: {

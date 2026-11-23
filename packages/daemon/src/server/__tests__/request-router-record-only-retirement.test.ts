@@ -148,6 +148,28 @@ test('record stop leaves a session an open took over intact, and close releases 
   });
 });
 
+test('leased recording creates a lifetime that the same owner can open with its capture intact', async () => {
+  const recording = createRecordingGateway();
+  const sessionStore = makeSessionStore('agent-device-record-only-leased-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({ tenantId: 'record-owner', runId: 'record-run' });
+  const handler = createHandler(sessionStore, recording.gateway, {}, leaseRegistry);
+  const owner = { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId };
+  const start = recordRequest(['start', RECORDING_OUT_PATH], 'leased-start');
+  await unwrap(handler({ ...start, meta: { ...start.meta, ...owner } }));
+
+  const ref = sessionStore.lookup(SESSION);
+  if (!ref) throw new Error('expected the recording to publish a lifetime');
+  expect(ref.session.lease).toMatchObject(owner);
+  const capture = ref.session.screenRecording;
+  expect(capture).toBeDefined();
+
+  const open = request('open', ['com.example.app'], 'leased-open');
+  await unwrap(handler({ ...open, meta: { ...open.meta, ...owner } }));
+  expect(sessionStore.requireCurrent(ref).screenRecording).toBe(capture);
+  expect(recording.finish).not.toHaveBeenCalled();
+});
+
 test('record stop leaves a session an audio probe attached intact, and the probe stop releases it', async () => {
   const recording = createRecordingGateway();
   const sessionStore = makeSessionStore('agent-device-record-only-audio-');
@@ -267,6 +289,7 @@ function createHandler(
   sessionStore: ReturnType<typeof makeSessionStore>,
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>,
   platformServiceOverrides: Partial<ReturnType<typeof daemonPlatformServicesFixture>> = {},
+  leaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
     host: createTestHostEnvironment({
@@ -281,7 +304,7 @@ function createHandler(
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
-    leaseRegistry: new LeaseRegistry(),
+    leaseRegistry,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     deviceRuntimeGateway,
     platformServices: daemonPlatformServicesFixture(platformServiceOverrides),

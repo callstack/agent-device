@@ -33,6 +33,7 @@ export type BindDeviceRuntime = <
   device: DeviceInfo,
   use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>,
   cache?: 'bypass',
+  scope?: PlatformRequestScope,
 ) => Promise<
   BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
 >;
@@ -126,17 +127,17 @@ export function createRequestRuntimeBindings(params: {
     return binding;
   };
 
-  const bindOrdinary = (device: DeviceInfo) =>
+  const bindOrdinary = (device: DeviceInfo, scope = params.scope) =>
     params.gateway
-      .bind({ device, intent: { kind: 'ordinary' }, scope: params.scope })
-      .then(async (binding) => await adoptBinding(cleanups, binding, params.scope))
+      .bind({ device, intent: { kind: 'ordinary' }, scope })
+      .then(async (binding) => await adoptBinding(cleanups, binding, scope))
       .then(admitBinding);
 
-  const bindDevice: BindDeviceRuntime = async (device, use, cache) => {
+  const bindDevice: BindDeviceRuntime = async (device, use, cache, scope) => {
     params.admitDevice?.(device);
-    if (cache === 'bypass') {
+    if (scope || cache === 'bypass') {
       return recordBoundMutations(
-        narrowDeviceBinding(await bindOrdinary(device), use),
+        narrowDeviceBinding(await bindOrdinary(device, scope), use),
         params.dispatchLedger,
       );
     }

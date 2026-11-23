@@ -106,6 +106,32 @@ test('buildSnapshotVisibility handles nodes with no scroll hints as non-partial'
   expect(vis.reasons).toEqual([]);
 });
 
+test('a late canceled capture leaves timing and deferred stabilization unchanged', async () => {
+  const session = makeIosSession('canceled-capture');
+  session.deferredSurface = {
+    kind: 'stabilize',
+    action: 'swipe',
+    positionals: [],
+    markedAt: Date.now(),
+  };
+  const controller = new AbortController();
+  const reason = new Error('Canceled during capture');
+  const pending = captureSnapshot({
+    device: session.device,
+    session,
+    flags: {},
+    logPath: '/tmp/snapshot-capture-test.log',
+    signal: controller.signal,
+    captureData: async () => {
+      controller.abort(reason);
+      return { nodes: [], backend: 'xctest', producer: 'apple-runner' };
+    },
+  });
+  await expect(pending).rejects.toBe(reason);
+  expect(session.snapshotDiagnostics).toBeUndefined();
+  expect(session.deferredSurface).toMatchObject({ kind: 'stabilize' });
+});
+
 test('captureSnapshot composes post-gesture stabilization with Android freshness capture', async () => {
   resetLegacySnapshotCapture(captureSnapshotWithInteractor);
   const sessionName = 'android-post-gesture-freshness';

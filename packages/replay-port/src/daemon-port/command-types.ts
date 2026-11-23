@@ -52,7 +52,11 @@ export type ReplayCoordinator = {
   readonly resumeStamper: ReplayResumeStamper;
 };
 
-export type ReplayTestSessionFactory = (sessionName: string, logPath: string) => ReplaySession;
+export type ReplayTestSessionFactory = (
+  sessionName: string,
+  logPath: string,
+  phase: 'replay' | 'finalize',
+) => ReplaySession;
 
 export type ReplaySession = ReplayBackendSession &
   Readonly<{
@@ -98,6 +102,11 @@ type ReplayTestSessionCleanup = (sessionName: string) => Promise<readonly string
 export type ReplayTestCommand = ReplayCommand &
   Readonly<{
     createSession: ReplayTestSessionFactory;
+    runAttempt: <T>(
+      sessionName: string,
+      requestId: string | undefined,
+      task: () => Promise<T>,
+    ) => Promise<T>;
     cleanupSession: ReplayTestSessionCleanup;
     video?: ReplayTestVideoOwner;
   }>;

@@ -8,6 +8,10 @@ git grep -o -E 'sessionStore\.(get|lookup|requireCurrent|resolveCurrent|listRefs
   | wc -l
 ```
 
+The step 1 layering gate applies this rule and excludes `session-store.ts`, which owns both the store and the coordinator.
+With those exclusions it still reports 193 at `bdf5096f`.
+The gate compares the PR with its merge base and reports both counts.
+
 | Current path | Evidence at the baseline |
 | --- | --- |
 | Store access and replay | The store offers [address reads](https://github.com/callstack/agent-device/blob/bdf5096f/packages/daemon/src/core/session-store.ts#L93) and [journal access by name](https://github.com/callstack/agent-device/blob/bdf5096f/packages/daemon/src/core/session-store.ts#L250). Replay [binds address-based operations](https://github.com/callstack/agent-device/blob/bdf5096f/packages/daemon/src/sessions/handlers/session-replay-command.ts#L171). |

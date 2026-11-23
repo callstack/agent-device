@@ -29,13 +29,11 @@ test.each([false, true])(
     const root = mkdtempForTestSync('capture-producing-tenant-');
     const tenantId = 'tenant-a';
     const sessionName = tenantScopedSessionName(tenantId, 'capture');
+    const leaseRegistry = new LeaseRegistry();
+    const lease = leaseRegistry.allocateLease({ tenantId, runId: 'capture-run' });
     const harness = makeRecordRuntimeHarness('capture-producing-session-', {
       sessionName,
       appBundleId: 'com.example.app',
-    });
-    const leaseRegistry = new LeaseRegistry();
-    const lease = leaseRegistry.allocateLease({ tenantId, runId: 'capture-run' });
-    harness.sessionStore.update(harness.sessionStore.lookup(sessionName)!, {
       sessionScope: { kind: 'tenant', id: tenantId },
       lease: { backend: lease.backend, tenantId, runId: lease.runId, leaseId: lease.leaseId },
     });

@@ -342,6 +342,7 @@ type DeferredOutcomeCaptureParams = {
   interactiveOnly: boolean;
   androidFreshnessMode?: SnapshotFreshnessMode;
   capture: () => Promise<DeferredOutcomeSnapshotAttempt>;
+  assertCurrent?: () => void;
 };
 
 export type DeferredOutcomeCaptureResult = {
@@ -381,6 +382,7 @@ async function capturePostGestureAwareSnapshot(
 ): Promise<DeferredOutcomeCaptureResult> {
   const stabilized = await capturePostGestureStabilizedResult({
     session: params.session,
+    assertCurrent: params.assertCurrent,
     capture: async () => await capturePostActionSnapshotAttempt(params),
     readSnapshot: (attempt) => attempt.snapshot,
   });
@@ -390,6 +392,7 @@ async function capturePostGestureAwareSnapshot(
 async function capturePostActionSnapshotAttempt(
   params: DeferredOutcomeCaptureParams & { session: SessionState },
 ): Promise<DeferredOutcomeSnapshotAttempt> {
+  params.assertCurrent?.();
   const freshness = getActiveAndroidSnapshotFreshness(params.session);
   if (freshness && params.device.platform === 'android') {
     return await captureAndroidFreshnessRecoveredAttempt(params, freshness);
@@ -409,6 +412,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   capture: () => Promise<T>;
   readSnapshot: (result: T) => SnapshotState;
   initial?: T;
+  assertCurrent?: () => void;
 }): Promise<PostGestureStabilityOutcome<T>> {
   const { session, capture, readSnapshot } = params;
   const pending = pendingSurfaceStabilization(session);
@@ -446,6 +450,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       },
     });
   } finally {
+    params.assertCurrent?.();
     clearSurfaceStabilization(session);
   }
 }

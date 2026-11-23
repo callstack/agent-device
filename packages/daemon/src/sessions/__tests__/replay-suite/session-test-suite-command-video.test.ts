@@ -1,3 +1,6 @@
+import { AppError } from '@agent-device/kernel/errors';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
+import { withTestSessionLock } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { getReplayExecution } from '@agent-device/replay-port/replay-backend-registry';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
@@ -184,11 +187,26 @@ function expectRecordVideoCalls(params: {
   const { artifactsDir } = params;
   const [startCall, stopCall] = requireRecordVideoCalls();
   expectRecordRuntimeCall(startCall, params);
+  assert.notEqual(startCall.requestScope.signal, params.requestScope.signal);
+  const attemptId = startCall.req.meta?.requestId;
+  assert.ok(attemptId);
+  markRequestCanceled(attemptId);
+  try {
+    assert.throws(
+      startCall.throwIfCanceled,
+      (error) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    );
+  } finally {
+    clearRequestCanceled(attemptId);
+  }
   assert.deepEqual(startCall.req.positionals, [
     'start',
     path.join(artifactsDir ?? '', 'attempt-1', 'recording.mp4'),
   ]);
   expectRecordRuntimeCall(stopCall, params);
+  assert.strictEqual(stopCall.bindDevice, unavailableBindDevice);
+  assert.strictEqual(stopCall.requestScope, params.requestScope);
+  assert.strictEqual(stopCall.throwIfCanceled, params.throwIfCanceled);
   assert.deepEqual(stopCall.req.positionals, ['stop']);
 }
 
@@ -205,16 +223,13 @@ function expectRecordRuntimeCall(
   call: RecordRuntimeHandlerParams,
   expected: Pick<
     Parameters<typeof expectRecordVideoCalls>[0],
-    'generatedSession' | 'admissionLedger' | 'requestScope' | 'throwIfCanceled'
+    'generatedSession' | 'admissionLedger'
   >,
 ): void {
   assert.equal(call.sessionName, expected.generatedSession);
   assert.equal(call.req.session, expected.generatedSession);
-  assert.strictEqual(call.bindDevice, unavailableBindDevice);
   assert.strictEqual(call.bindExactDevice, unavailableBindExactDevice);
   assert.strictEqual(call.admissionLedger, expected.admissionLedger);
-  assert.strictEqual(call.requestScope, expected.requestScope);
-  assert.strictEqual(call.throwIfCanceled, expected.throwIfCanceled);
 }
 
 test('test finalizes replay video exactly once when cancellation arrives after start', async () => {
@@ -272,12 +287,12 @@ test('test finalizes replay video exactly once when cancellation arrives after s
   const video = createReplayTestVideoOwner({
     platformServices: daemonPlatformServicesFixture(),
     sessionStore,
-    assertSuiteMayActOn: () => {},
+    sessionRef: (name) => sessionStore.lookup(name),
+    withSessionExecutionLock: withTestSessionLock,
     bindDevice: unavailableBindDevice,
     bindExactDevice: unavailableBindExactDevice,
     screenRecordingAdmissionLedger,
     requestScope,
-    retainDeviceExecutionLock: async () => {},
     throwIfCanceled,
   });
   if (!video) throw new Error('Expected replay video owner');
@@ -289,6 +304,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),
     video,
+    runAttempt: async (_name, _requestId, task) => await task(),
     cleanupSession: async () => {},
     dependencies: replayDaemonDependencies,
     invoke: replayInvokeOverDispatch(async (nestedReq) => {

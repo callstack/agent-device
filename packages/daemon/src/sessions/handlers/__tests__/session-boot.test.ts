@@ -479,7 +479,7 @@ test('boot --headless preserves an unallocated provider refusal for an active se
         sessionName: 'default',
         sessionStore,
         inspectFacts: mockInspectDeviceRuntimeFacts,
-        bindDevice: mockBindDeviceRuntime,
+        bindDevice: (device, use, cache) => mockBindDeviceRuntime(device, use, cache),
       }),
     ),
   ).rejects.toMatchObject({
