@@ -134,6 +134,16 @@ export const MACOS_PLATFORM_PLUGIN_DECLARATION = Object.freeze({
   nightlyTag: 'nightly-0.22',
 } as const satisfies PluginReleaseDeclaration & Readonly<{ label: string }>);
 
+/** React DevTools is installed alongside core and loaded by the CLI command. */
+export const REACT_DEVTOOLS_PACKAGE = Object.freeze({
+  package: '@agent-device/react-devtools',
+  nightlyTag: 'nightly-0.22',
+} as const satisfies PluginReleaseDeclaration);
+
+export function reactDevtoolsInstallCommand(coreVersion: string): string {
+  return `npm install ${pluginPackageSelector(REACT_DEVTOOLS_PACKAGE, coreVersion)}`;
+}
+
 /** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
 export const PLUGIN_INSTALLATION_REASONS = {
   notInstalled: 'plugin-not-installed',

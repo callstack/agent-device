@@ -95,13 +95,23 @@ test('publishing cannot skip the package gate', () => {
   assert.match(script('check'), /scripts\/check-affected\/run\.ts --run --full$/);
   assert.deepEqual(getCheckSpec('package').kind, { type: 'script', script: 'check:package' });
   assert.equal(getCheckSpec('package').localRunnable, true);
-  // The minimum-Node job runs the script directly — the repo's pinned pnpm needs a newer Node than
-  // the floor that job covers — so it must still name the same entry point the script does.
+  const packageTests = [
+    'packages/maestro/test/package-artifact.test.mjs',
+    'packages/maestro/test/package-smoke.mjs',
+    'packages/replay/test/package-smoke.mjs',
+    'packages/platform-web/test/package-smoke.mjs',
+    'packages/platform-vega/test/package-smoke.mjs',
+    'packages/platform-harmonyos/test/package-smoke.mjs',
+    'packages/platform-linux/test/package-smoke.mjs',
+    'packages/platform-macos/test/package-smoke.mjs',
+    'packages/react-devtools/test/package-smoke.mjs',
+  ];
   assert.deepEqual(script('check:package').split(' && '), [
-    'node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test packages/maestro/test/package-artifact.test.mjs packages/maestro/test/package-smoke.mjs packages/replay/test/package-smoke.mjs packages/platform-web/test/package-smoke.mjs packages/platform-vega/test/package-smoke.mjs packages/platform-harmonyos/test/package-smoke.mjs packages/platform-linux/test/package-smoke.mjs packages/platform-macos/test/package-smoke.mjs',
+    `node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test ${packageTests.join(' ')}`,
     'node --experimental-strip-types scripts/check-package.ts',
   ]);
   assert.match(packagedCliWorkflow, /with: \{ gate: package \}/);
+  // The pinned pnpm needs a newer Node than the floor covered by the minimum-Node job.
   assert.match(
     packagedCliWorkflow,
     /run: node --experimental-strip-types scripts\/check-package\.ts/,

@@ -1,5 +1,4 @@
 import { parseArgs } from 'node:util';
-import { resolveSessionMetroServerUrl } from '../metro/metro-session-hints.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   debuggerUrlOn,
@@ -17,6 +16,9 @@ import {
 export type ReactDevtoolsCommandOptions = {
   stateDir: string;
   session: string;
+  resolveMetroServerUrl(
+    input: Pick<RuntimeArgs, 'bundleUrl' | 'metroHost' | 'metroPort'>,
+  ): URL | Promise<URL>;
 };
 
 const DEVTOOLS_OPTIONS = {
@@ -117,7 +119,7 @@ export async function withAppRuntime<T>(
   options: ReactDevtoolsCommandOptions,
   action: (session: InspectorSession, target: MetroInspectorTarget) => Promise<T>,
 ): Promise<T> {
-  const serverUrl = resolveSessionMetroServerUrl(options, args);
+  const serverUrl = await options.resolveMetroServerUrl(args);
   const target = selectReactNativeTarget(await listMetroInspectorTargets(serverUrl), {
     appId: args.app,
     device: args.metroDevice,

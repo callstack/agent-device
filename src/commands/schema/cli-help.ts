@@ -4,6 +4,7 @@ import {
   LIMRUN,
 } from '@agent-device/contracts/provider-plugin-catalog';
 import { getReplayPluginInstallation } from '@agent-device/ad-script';
+import { reactDevtoolsInstallCommand } from '@agent-device/contracts/plugin-installation';
 import { gestureHelpTopic } from './cli-help-gestures.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
@@ -272,9 +273,10 @@ Focus and visual truth:
   ...debuggingHelpTopics,
   'react-devtools': {
     summary: 'React Native components, props/state/hooks, and render profiling',
-    body: `agent-device help react-devtools
+    body: (coreVersion: string) => `agent-device help react-devtools
 
 Use this for React Native internals the accessibility tree cannot show: the component tree, a component's props, state, hooks, and owners, errors and warnings components logged while rendering, and render performance (slow renders, rerenders and their causes, commits over a 16 ms frame).
+Install the optional package alongside agent-device with ${reactDevtoolsInstallCommand(coreVersion)}. Add --global if you installed agent-device globally.
 
 Components:
   agent-device react-devtools tree [@ref|Name] [--depth 8] [--limit 60]

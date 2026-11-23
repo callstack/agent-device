@@ -2196,6 +2196,8 @@ Exact behavior: `agent-device help react-devtools`.
 
 <!-- /generated -->
 
+Install `@agent-device/react-devtools` alongside agent-device. Run `agent-device help react-devtools` for the versioned install command.
+
 ```bash
 agent-device react-devtools tree [@ref|Name] [--depth 8] [--limit 60]
 agent-device react-devtools find <Name> [--exact] [--limit 20]

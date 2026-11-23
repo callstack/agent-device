@@ -15,6 +15,8 @@ When UI automation is not enough, use these commands to collect runtime evidence
 
 ## React Native components
 
+React DevTools requires the optional `@agent-device/react-devtools` package. Run `agent-device help react-devtools` for the install command that matches your agent-device version.
+
 To see what React renders behind a screen, read the component tree and inspect a component:
 
 ```bash

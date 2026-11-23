@@ -28,6 +28,7 @@ export function commandHarness(
   const options: ReactDevtoolsCommandOptions = {
     stateDir,
     session: 'qa',
+    resolveMetroServerUrl: () => new URL('http://localhost:8081'),
   };
   vi.stubGlobal('fetch', async (url: URL) => {
     requested.push(String(url));

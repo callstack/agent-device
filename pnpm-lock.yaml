@@ -98,6 +98,9 @@ importers:
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:packages/proxy
+      '@agent-device/react-devtools':
+        specifier: workspace:*
+        version: link:packages/react-devtools
       '@agent-device/react-native':
         specifier: workspace:*
         version: link:packages/react-native
@@ -1165,6 +1168,21 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+
+  packages/react-devtools:
+    devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/react-native:
     dependencies:

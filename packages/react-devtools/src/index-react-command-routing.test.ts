@@ -2,7 +2,11 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { runReactDevtools } from './index.ts';
 
-const options = { stateDir: '/tmp/agent-device-state', session: 'default' };
+const options = {
+  stateDir: '/tmp/agent-device-state',
+  session: 'default',
+  resolveMetroServerUrl: () => new URL('http://localhost:8081'),
+};
 
 test('unknown react-devtools commands are invalid arguments that list the commands', async () => {
   await assert.rejects(
@@ -16,7 +20,7 @@ test('unknown react-devtools commands are invalid arguments that list the comman
   );
 });
 
-test('react-devtools profile routes to the built-in profiler', async () => {
+test('react-devtools profile routes to the React profiler', async () => {
   await assert.rejects(
     runReactDevtools(['profile', 'export', 'out.json'], options),
     /Unknown react-devtools profile command: export/,

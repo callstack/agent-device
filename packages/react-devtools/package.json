@@ -1,0 +1,45 @@
+{
+  "name": "@agent-device/react-devtools",
+  "version": "0.22.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Optional React Native component inspection and render profiling for agent-device.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/build-config": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/test-kit": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "node --experimental-strip-types build.mjs",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      }
+    },
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/react-devtools"
+  },
+  "homepage": "https://agent-device.dev/docs/debugging-profiling#react-native-components"
+}

@@ -43,6 +43,7 @@
     { "path": "packages/provider-webdriver" },
     { "path": "packages/provision-kit" },
     { "path": "packages/proxy" },
+    { "path": "packages/react-devtools" },
     { "path": "packages/react-native" },
     { "path": "packages/remote" },
     { "path": "packages/replay" },

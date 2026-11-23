@@ -1,18 +1,18 @@
-import type { MetroSessionOptions, MetroSessionOpenInput } from './metro/metro-session-hints.ts';
+import type {
+  MetroSessionOptions,
+  MetroSessionOpenInput,
+  MetroSessionScope,
+} from './metro/metro-session-hints.ts';
+import type { MetroReloadTargetInput } from './metro/metro-reload-endpoints.ts';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveRuntimeTransportHints } from '@agent-device/host-kit/runtime-transport-hints';
 import type { PrepareMetroRuntimeOptions, ReloadMetroOptions } from './metro/client-metro.ts';
 import type { PrepareMetroRuntimeResult, ReloadMetroResult } from '@agent-device/contracts/remote';
-import { AppError } from '@agent-device/kernel/errors';
-import type { ReactDevtoolsCommandOptions } from './react-devtools/react-devtools-connection.ts';
-import type { ReactDevtoolsOutput } from './react-devtools/react-devtools-output.ts';
 
 export type { PrepareMetroRuntimeOptions, ReloadMetroOptions } from './metro/client-metro.ts';
 export type { PrepareMetroRuntimeResult, ReloadMetroResult } from '@agent-device/contracts/remote';
 export type { MetroBridgeDescriptor } from './metro/metro-types.ts';
-export type { ReactDevtoolsCommandOptions } from './react-devtools/react-devtools-connection.ts';
-export type { ReactDevtoolsOutput } from './react-devtools/react-devtools-output.ts';
 export type { MetroSessionOptions, MetroSessionOpenInput } from './metro/metro-session-hints.ts';
 
 export type StopMetroTunnelOptions = {
@@ -47,30 +47,17 @@ export async function reloadMetro(input: ReloadMetroOptions = {}): Promise<Reloa
   return await runtime.reloadMetro(input);
 }
 
+export async function resolveSessionMetroServerUrl(
+  scope: MetroSessionScope,
+  input: MetroReloadTargetInput,
+): Promise<URL> {
+  const session = await import('./metro/metro-session-hints.ts');
+  return session.resolveSessionMetroServerUrl(scope, input);
+}
+
 export async function stopMetroTunnel(options: StopMetroTunnelOptions): Promise<void> {
   const { stopMetroCompanion } = await import('./companion/client-metro-companion.ts');
   await stopMetroCompanion(options);
-}
-
-export async function runReactDevtools(
-  args: string[],
-  options: ReactDevtoolsCommandOptions,
-): Promise<ReactDevtoolsOutput> {
-  const [command, ...rest] = args;
-  let output: ReactDevtoolsOutput | undefined;
-  if (command === 'profile') {
-    const { runReactProfileCommand } = await import('./react-devtools/react-profile-command.ts');
-    output = await runReactProfileCommand(rest, options);
-  } else {
-    const { isInspectCommand, runReactInspectCommand } =
-      await import('./react-devtools/react-devtools-inspect-command.ts');
-    if (isInspectCommand(command)) output = await runReactInspectCommand(command, rest, options);
-  }
-  if (!output)
-    throw new AppError('INVALID_ARGS', `Unknown react-devtools command: ${command ?? '(none)'}.`, {
-      hint: 'Use react-devtools tree, find, inspect, errors, or profile.',
-    });
-  return output;
 }
 
 export async function recordPreparedMetroSession(

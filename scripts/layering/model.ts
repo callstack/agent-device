@@ -142,6 +142,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'provider-tizen',
   'tv-cdp',
   'proxy',
+  'react-devtools',
   'react-native',
   'xml',
 ]);
