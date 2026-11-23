@@ -43,7 +43,8 @@ const GESTURE_PLAN_REFUSAL_REASONS = {
   pathInvalidTimeline: { reason: 'GESTURE_PATH_INVALID_TIMELINE' },
   // A trajectory sample carries a non-finite coordinate.
   trajectoryNonFinite: { reason: 'GESTURE_TRAJECTORY_NON_FINITE' },
-  // A trajectory sample leaves the viewport, so the contact would press outside the screen.
+  // A trajectory sample leaves the viewport, so the contact would press outside the screen, or a
+  // two-finger path cannot keep its contacts the minimum span apart inside it.
   trajectoryOutOfBounds: { reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS' },
 } as const satisfies ReasonTable<'gesture'>;
 const GESTURE_FLING_DEFAULT_DISTANCE = 180;

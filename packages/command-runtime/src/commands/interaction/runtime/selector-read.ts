@@ -1,4 +1,6 @@
 import {
+  FIND_NO_MATCH_HINT,
+  FIND_NO_MATCH_MESSAGE,
   FIND_VALUE_REQUIRED_MESSAGE,
   findBestMatchesByLocator,
   buildSelectorChainForNode,
@@ -119,7 +121,9 @@ export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommand
 
   const { capture, match } = await findFirstLocatorMatch(runtime, options, locator);
   if (!match) {
-    throw new AppError('COMMAND_FAILED', 'find did not match any element');
+    throw new AppError('COMMAND_FAILED', FIND_NO_MATCH_MESSAGE, {
+      hint: FIND_NO_MATCH_HINT,
+    });
   }
 
   if (options.action === 'exists') return { kind: 'found', found: true };
