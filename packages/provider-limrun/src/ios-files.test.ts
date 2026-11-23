@@ -1,3 +1,5 @@
+import { normalizeError } from '@agent-device/kernel/errors';
+import { parseApplePlist } from '@agent-device/platform-apple/plist';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -40,4 +42,27 @@ test('invalid file list and staging JSON preserve status without a decoder cause
       cause: undefined,
     });
   }
+});
+
+test('readInfoPlist reports a malformed Info.plist as COMMAND_FAILED with reason apple_plist_malformed', async () => {
+  const token = 'syntheticInstanceCredential';
+  vi.stubGlobal('fetch', async () => new Response('not a plist', { status: 200 }));
+  const { readInfoPlist } = createLimrunSimulatorFiles(
+    { apiUrl: 'https://instance.invalid/api', token } as Parameters<
+      typeof createLimrunSimulatorFiles
+    >[0],
+    parseApplePlist,
+    new AbortController().signal,
+  );
+  const error = await readInfoPlist({
+    device: limrunIosSimulator,
+    bundleId: 'com.example.app',
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(normalizeError(error)).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'apple_plist_malformed' },
+  });
 });
