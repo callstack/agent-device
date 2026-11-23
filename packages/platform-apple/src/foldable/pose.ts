@@ -323,8 +323,9 @@ async function awaitPoseLitPanel(
     startedAtMs,
   );
   const { value } = await pollUntilSettled({
-    // Each read's timeout ends at the settle deadline, so the poll costs about one full read. A zero
-    // exec timeout means no timeout, so a read that starts after the deadline still gets 1 ms.
+    // Each read's timeout ends at the settle deadline, so the poll costs about one full read, plus
+    // the 1 s kill grace when a read times out. A zero exec timeout means no timeout, so a read that
+    // starts after the deadline still gets 1 ms.
     probe: () =>
       readGuestPanelTable(device, helper, signal, {
         timeoutMs: Math.max(settleDeadline.remainingMs(), 1),

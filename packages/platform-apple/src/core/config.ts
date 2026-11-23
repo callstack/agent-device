@@ -58,7 +58,8 @@ export const IOS_FOLD_POSE_STABLE_DEGREES = 0.5;
  * How long a verified named pose waits for the guest panel table to light that pose's panel. The
  * hinge reaches its stop before panel power switches, and the table can report both panels lit for
  * a few seconds in between. Lit-panel reads repeat at the interval below. Each read's timeout ends
- * at this deadline, so the wait costs about one read at `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS`.
+ * at this deadline, so the wait costs about one read at `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS`. A read
+ * that times out also gets the helper's 1 s kill grace, so the wait can end up to 1 s past it.
  */
 export const IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS = 5_000;
 export const IOS_FOLD_PANEL_READ_INTERVAL_MS = 500;
