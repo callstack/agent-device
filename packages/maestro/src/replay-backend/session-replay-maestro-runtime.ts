@@ -431,7 +431,11 @@ function resolveMaestroPlatform(
   const platform = req.flags?.platform;
   if (platform === 'android' || platform === 'ios') return platform;
   if (sessionDevice?.platform === 'android') return 'android';
-  if (sessionDevice?.platform === 'apple' && sessionDevice.appleOs === 'ios') return 'ios';
+  if (
+    sessionDevice?.platform === 'apple' &&
+    (sessionDevice.appleOs === 'ios' || sessionDevice.appleOs === 'ipados')
+  )
+    return 'ios';
   throw new AppError(
     'INVALID_ARGS',
     'Maestro replay requires --platform android|ios or an active mobile session.',

@@ -16,6 +16,7 @@ import {
   launchUrlInput,
   launchUrlSimulator,
   resetUrlOwner,
+  simulator,
   urlOwner,
 } from './lifecycle.fixtures.ts';
 
@@ -103,28 +104,32 @@ test.each([
   },
 );
 
-test('a launch URL held behind a confirmation for the session app is accepted and reported', async () => {
-  const { lifecycle, events, resolutions } = launchUrlSimulator(
-    async () => CONFIRMATION,
-    [UNOBSERVABLE, OBSERVABLE],
-  );
+test.each(['ios', 'ipados'] as const)(
+  'a %s simulator accepts a launch URL confirmation for the session app',
+  async (appleOs) => {
+    const { lifecycle, events, resolutions } = launchUrlSimulator(
+      async () => CONFIRMATION,
+      [UNOBSERVABLE, OBSERVABLE],
+      { device: { ...simulator, appleOs } },
+    );
 
-  const outcome = await lifecycle.openApplication(launchUrlInput());
+    const outcome = await lifecycle.openApplication(launchUrlInput());
 
-  expect(outcome.launchConfirmation).toBe('accepted');
-  // One resolution dispatches the open; one more serves both the alert read and the accept.
-  expect(resolutions()).toBe(2);
-  expect(outcome.timing.runnerDemand).toBe('required');
-  expect(outcome.timing.postOpenObservation).toBe('observable');
-  expect(events).toEqual([
-    'release',
-    `open ${LAUNCH_URL}`,
-    'observe unobservable',
-    'alert wait',
-    'alert accept',
-    'observe observable',
-  ]);
-});
+    expect(outcome.launchConfirmation).toBe('accepted');
+    // One resolution dispatches the open; one more serves both the alert read and the accept.
+    expect(resolutions()).toBe(2);
+    expect(outcome.timing.runnerDemand).toBe('required');
+    expect(outcome.timing.postOpenObservation).toBe('observable');
+    expect(events).toEqual([
+      'release',
+      `open ${LAUNCH_URL}`,
+      'observe unobservable',
+      'alert wait',
+      'alert accept',
+      'observe observable',
+    ]);
+  },
+);
 
 test('the reported settle spans both observations and the answer between them', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });

@@ -104,6 +104,7 @@ test('refuses release bytes with a mismatched checksum before extracting or depl
   const directory = await mkdtempForTest('runner-products-');
   await expect(
     prepareLimrunRunnerProducts({
+      appPath: '',
       directory,
       version: '0.1.0',
       bindAddress: '10.244.1.2',

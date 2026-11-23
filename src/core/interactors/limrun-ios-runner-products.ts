@@ -30,7 +30,7 @@ export async function prepareLimrunRunnerProducts(input: {
   const products = path.join(input.directory, `runner-${randomUUID()}`);
   await fs.mkdir(products);
   const platform = input.platform ?? 'ios';
-  const appPath = input.appPath ?? (await downloadReleaseRunner(input, platform));
+  const appPath = input.appPath || (await downloadReleaseRunner(input, platform));
   input.signal.throwIfAborted();
   if (
     !appPath.endsWith('.app') ||
