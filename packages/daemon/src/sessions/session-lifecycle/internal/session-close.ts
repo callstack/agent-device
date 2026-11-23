@@ -12,7 +12,7 @@ import { successText, withSuccessText } from '@agent-device/kernel/success-text'
 import { resolveCommandDevice } from '../../../resources/session-device-resolution.ts';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
-import { releaseSessionLease } from '../../lease-lifecycle.ts';
+import { beginSessionLeaseEnd, releaseSessionLease } from '../../lease-lifecycle.ts';
 import { recordEndedLease } from '../../../core/request-ended-leases.ts';
 import { releaseTargetLease } from '../../target-lease-release.ts';
 import {
@@ -139,6 +139,17 @@ async function prepareRepairClose(params: {
   };
 }
 
+function providerShutdownRequested(
+  req: DaemonRequest,
+  lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear,
+): boolean {
+  return (
+    req.flags?.shutdown === true &&
+    lifecycle.operations.shutdownTarget !== undefined &&
+    lifecycle.owner.kind === 'provider-runtime'
+  );
+}
+
 async function releaseProviderLeaseForClose(params: {
   shutdownPrepared: boolean;
   cleanupFailures: SessionCleanupFailure[];
@@ -149,19 +160,18 @@ async function releaseProviderLeaseForClose(params: {
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
 }): Promise<{
+  endedLeaseId?: string;
   providerData?: Record<string, unknown>;
   shutdownResult?: TargetShutdownResult;
   response?: DaemonResponse;
 }> {
   try {
-    let providerRelease: { providerData?: Record<string, unknown> } | undefined;
+    let providerRelease:
+      | { endedLeaseId: string; providerData?: Record<string, unknown> }
+      | undefined;
     let shutdownResult: TargetShutdownResult | undefined;
     const shutdownTarget = params.lifecycle.operations.shutdownTarget;
-    if (
-      params.req.flags?.shutdown &&
-      shutdownTarget &&
-      params.lifecycle.owner.kind === 'provider-runtime'
-    ) {
+    if (shutdownTarget && providerShutdownRequested(params.req, params.lifecycle)) {
       if (!params.shutdownPrepared) {
         throw (
           closeCleanupError(params.sessionName, params.cleanupFailures, { sessionKept: true }) ??
@@ -175,15 +185,14 @@ async function releaseProviderLeaseForClose(params: {
             owner: params.lifecycle.owner,
             leaseId,
           });
-          providerRelease = { providerData: result.provider };
+          providerRelease = { endedLeaseId: leaseId, providerData: result.provider };
           return result.shutdown;
         },
       });
     }
     if (providerRelease) return { ...providerRelease, shutdownResult };
     const { endedLeaseId, providerData } = await releaseSessionLease(params);
-    if (endedLeaseId) recordEndedLease(params.req, endedLeaseId);
-    return { providerData, shutdownResult };
+    return { endedLeaseId, providerData, shutdownResult };
   } catch (error) {
     const normalized = normalizeError(error);
     return {
@@ -463,6 +472,7 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
   } = params;
   const { address: sessionName } = ref;
+  beginSessionLeaseEnd(ref.session.lease, leaseRegistry, providerShutdownRequested(req, lifecycle));
   const cleanupFailures: SessionCleanupFailure[] = [];
   const {
     platformCloseError,
@@ -529,8 +539,17 @@ async function runCloseTeardownAndRelease(params: {
   session = sessionStore.resolveCurrent(ref) ?? session;
   const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });
   const closeError = platformCloseError ?? cleanupError;
-  if (!closeError) await clearDeviceClaim(session.deviceClaim, params.env);
-  sessionStore.retire(ref, { retainExecutionHost });
+  await retireClosedSession({
+    env: params.env,
+    req,
+    ref,
+    session,
+    sessionStore,
+    leaseRegistry,
+    retainExecutionHost,
+    closeError,
+    endedLeaseId: leaseRelease.endedLeaseId,
+  });
   if (closeError) throw closeError;
   if (saveScriptOutcome.error) throw saveScriptOutcome.error;
   return {
@@ -545,6 +564,49 @@ async function runCloseTeardownAndRelease(params: {
     implicitShutdownLaunchedProcessUnverified,
     shutdownStopUnconfirmed,
   };
+}
+
+async function retireClosedSession(params: {
+  env: HostEnvironment['env'];
+  req: DaemonRequest;
+  ref: SessionRef;
+  session: SessionState;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  retainExecutionHost: boolean;
+  closeError: unknown;
+  endedLeaseId?: string;
+}): Promise<void> {
+  const {
+    env,
+    req,
+    ref,
+    session,
+    sessionStore,
+    leaseRegistry,
+    retainExecutionHost,
+    closeError,
+    endedLeaseId,
+  } = params;
+  const leaseId = session.lease?.leaseId;
+  if (leaseId && leaseRegistry.isLeaseEndPending(leaseId)) {
+    try {
+      if ((await clearDeviceClaim(session.deviceClaim, env)) === 'unattributable')
+        throw new AppError('DEVICE_IN_USE', 'Lease device claim release is unknown');
+    } catch (error) {
+      leaseRegistry.markLeaseReleaseUnknown(leaseId, 'device-claim-release-unconfirmed');
+      throw leaseRegistry.leaseEndRefusal(leaseId) ?? error;
+    }
+  } else if (!closeError) await clearDeviceClaim(session.deviceClaim, env);
+  sessionStore.retire(ref, { retainExecutionHost });
+  if (
+    leaseId &&
+    sessionStore.leasedSessionRefs(leaseId).length === 0 &&
+    sessionStore.listRetainedExecutionHosts(leaseId).length === 0
+  )
+    leaseRegistry.confirmLeaseEnd(leaseId, 'sessionsSettled');
+  if (endedLeaseId && !leaseRegistry.isLeaseEndPending(endedLeaseId))
+    recordEndedLease(req, endedLeaseId);
 }
 
 function buildCloseSuccessResponse(params: {

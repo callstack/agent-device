@@ -1,5 +1,6 @@
 import type http from 'node:http';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import { releaseLease } from '../resources/lease-release.ts';
+import type { DeviceLease, LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { sendRestJsonError } from './http-errors.ts';
 import {
@@ -10,7 +11,6 @@ import {
 } from './human-control-http.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import {
-  leaseReleaseRequestFor,
   normalizeRequiredLeaseId,
   type AllocateLeaseRequest,
 } from '../resources/lease-registry-scope.ts';
@@ -45,6 +45,8 @@ type HostAdminHttpParams = {
   res: http.ServerResponse;
   expectedToken: string;
   registry: LeaseRegistry;
+  startupRecovered?: Promise<void>;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
   endSessionsForLease?: (leaseId: string) => Promise<void>;
 };
 
@@ -74,19 +76,30 @@ async function handleHostLeaseRoute(
       return;
     case 'put': {
       const request = parseHostLeaseRequest(await readHostAdminJsonBody(req, 'Host lease'));
+      await params.startupRecovered;
       sendJson(res, { ok: true, lease: registry.putHostLease(route.leaseId, request) });
       return;
     }
     case 'remove': {
       const leaseId = normalizeRequiredLeaseId(route.leaseId);
-      const lease = registry
-        .listActiveLeases()
-        .find((entry) => entry.leaseId === leaseId && isMacOsAppLease(entry));
-      const released = lease
-        ? registry.releaseLease(leaseReleaseRequestFor(lease)).released
-        : false;
-      if (lease && released) await params.endSessionsForLease?.(lease.leaseId);
-      sendJson(res, { ok: true, released, ...(lease && released ? { lease } : {}) });
+      const lease = registry.getHostLease(leaseId);
+      if (!lease) {
+        sendJson(res, { ok: true, released: false });
+        return;
+      }
+      const options = {
+        sessionsSettled: !params.endSessionsForLease,
+        requestRelease: 'release',
+      } as const;
+      registry.beginLeaseEnd(lease, { ...options, providerRelease: 'pending' });
+      await params.endSessionsForLease?.(leaseId);
+      await releaseLease(registry, params.leaseLifecycleProvider, lease, options);
+      const released = !registry.isLeaseEndPending(leaseId);
+      sendJson(res, {
+        ok: true,
+        released,
+        ...(released ? { lease } : registry.leaseEndRefusal(leaseId)?.details),
+      });
       return;
     }
     case 'unsupported':

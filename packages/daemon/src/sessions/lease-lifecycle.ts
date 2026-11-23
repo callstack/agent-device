@@ -15,20 +15,18 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
-export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
-
 export type SessionTeardown = (ref: SessionRef) => Promise<void>;
 
 export type LeaseEndReason = 'LEASE_RELEASED' | 'LEASE_EXPIRED' | 'PROVIDER_INSTANCE_ENDED';
 
 export async function releaseExpiredProviderLease(
-  recoverExpiredLease: ExpiredProviderLeaseRecovery | undefined,
+  recoverExpiredLease: ((lease: DeviceLease) => Promise<void | boolean>) | undefined,
   lease: DeviceLease,
 ): Promise<boolean> {
   if (!lease.leaseProvider || !recoverExpiredLease) return false;
 
   try {
-    await recoverExpiredLease(lease);
+    if ((await recoverExpiredLease(lease)) === false) return false;
     emitDiagnostic({
       level: 'info',
       phase: 'provider_lease_expired_released',
@@ -105,6 +103,27 @@ function closeLeaseDecision(
   return activeLease && provider?.release ? 'provider-release' : 'local-release';
 }
 
+export function beginSessionLeaseEnd(
+  lease: SessionState['lease'],
+  registry: LeaseRegistry,
+  shutdownRequested: boolean,
+): void {
+  if (!lease) return;
+  let current: DeviceLease | undefined;
+  try {
+    current = registry.inspectLeaseForClose(leaseReleaseRequestFor(lease));
+  } catch {
+    // The release step reports scope errors after local teardown.
+    return;
+  }
+  if (!current || (current.retainOnClose && !shutdownRequested)) return;
+  registry.beginLeaseEnd(current, {
+    sessionsSettled: false,
+    providerRelease: 'pending',
+    requestRelease: 'close',
+  });
+}
+
 export function inspectSessionLeaseRetainedOnClose(params: {
   session: SessionState;
   leaseRegistry: LeaseRegistry;
@@ -148,7 +167,7 @@ export async function releaseSessionLease(params: {
   const lease = params.session.lease;
   if (!lease) return {};
   const releaseRequest = leaseReleaseRequestFor(lease);
-  const activeLease = params.leaseRegistry.getLease(releaseRequest);
+  const activeLease = params.leaseRegistry.getLease(releaseRequest, true);
   const decision = closeLeaseDecision(activeLease, params.leaseLifecycleProvider);
   if (decision === 'retained') {
     emitDiagnostic({
@@ -164,12 +183,15 @@ export async function releaseSessionLease(params: {
     return {};
   }
   const { releaseLease } = await import('../resources/lease-release.ts');
+  if (!activeLease) return { endedLeaseId: lease.leaseId };
   const result = await releaseLease(
     params.leaseRegistry,
     decision === 'provider-release' ? params.leaseLifecycleProvider : undefined,
     activeLease,
-    releaseRequest,
+    { sessionsSettled: false, requestRelease: 'close' },
   );
+  if (result.release === 'unknown')
+    throw result.error ?? params.leaseRegistry.leaseEndRefusal(lease.leaseId);
   const providerData = result.provider;
   emitDiagnostic({
     level: 'info',
@@ -177,7 +199,7 @@ export async function releaseSessionLease(params: {
     data: {
       session: params.session.name,
       leaseId: lease.leaseId,
-      released: result.registryReleased,
+      released: true,
     },
   });
   return { endedLeaseId: lease.leaseId, ...(providerData ? { providerData } : {}) };

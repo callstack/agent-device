@@ -40,8 +40,8 @@ After daemon shutdown begins, no new lease-end teardown starts.
 Shutdown waits for any lease-end teardown that already started before it tears sessions down itself.
 
 A daemon that dies while it holds a provider lease leaves the rented device running on the provider side, and that device stays billed.
-Thus, the daemon journals the live leases of each provider that can recover an expired lease, in `live-provider-leases.json` in its state directory.
-At startup, the daemon reserves the leases in both journals and checks durable device claims before accepting requests. The provider ends each rental it can identify from the existing evidence.
+The daemon journals live provider leases in `live-provider-leases.json` in its state directory.
+At startup, allocation and session commands wait until the daemon adopts both journals, checks durable device claims, and gives providers time to recover each rental. Host lease PUT also waits. A recovered scope stays fenced when its provider cannot identify the rental or confirm its release.
 It reads both lease records only after it holds the daemon registration for the state directory, because until then they can belong to a daemon that is still running.
 The lease itself is not restored, and its controller connects again.
 A lease that leaves the registry for expiry stays in the journal until its expired-lease record is durable, and a journal write that fails is retried until this daemon shuts down.

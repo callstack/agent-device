@@ -300,9 +300,15 @@ export async function createRequestExecutionScope(params: {
     const leaseAdmission = { ...params, env: params.host.env, inspectOnly: true };
     const settlementFor = (ref: SessionRef | undefined) =>
       ref && params.leaseSessionEnd?.settlementFor(ref.lifetime);
+    const isRetryableClose = (ref: SessionRef | undefined) => {
+      const lease = ref?.session.lease;
+      return command === 'close' && lease && leaseRegistry.canRetryClose(lease.leaseId);
+    };
     const isInactive = (ref: SessionRef | undefined) => {
       const lease = readsSessionLease && ref?.session.lease;
-      return Boolean(lease && !leaseRegistry.inspectActiveLease(lease.leaseId));
+      return Boolean(
+        lease && !isRetryableClose(ref) && !leaseRegistry.inspectActiveLease(lease.leaseId),
+      );
     };
     const authenticateExpiry = async (ref: SessionRef, leaseId: string) => {
       assertRequestTenantAdmission(unscopedReq, ref.session);
@@ -355,6 +361,7 @@ export async function createRequestExecutionScope(params: {
     };
     const admitLease = (ref: SessionRef | undefined, assertCurrent?: () => void) => {
       assertCurrent?.();
+      if (isRetryableClose(ref)) return scopedReq;
       return admitRequestLeaseForLockedScope({
         env: params.host.env,
         req: scopedReq,

@@ -30,7 +30,12 @@ async function withServer(
   const server = await createDaemonHttpServer({
     token: 'daemon-token',
     leaseRegistry: registry,
-    endSessionsForLease,
+    endSessionsForLease:
+      endSessionsForLease &&
+      (async (leaseId) => {
+        await endSessionsForLease(leaseId);
+        registry.confirmLeaseEnd(leaseId, 'sessionsSettled');
+      }),
     handleRequest: async () => ({ ok: true, data: {} }),
     env: process.env,
     cwd: process.cwd(),

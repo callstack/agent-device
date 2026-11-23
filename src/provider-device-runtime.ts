@@ -187,7 +187,9 @@ function composeLeaseProvider(
     heartbeat: async (lease, context) =>
       await firstProviderResult(runtimes, 'heartbeat', lease, context),
     release: async (lease, context) =>
-      await firstProviderResult(runtimes, 'release', lease, context),
+      await runtimes
+        .find((runtime) => runtimeMatchesProvider(runtime, lease.leaseProvider))
+        ?.leaseLifecycle.release?.(lease, context),
   };
 }
 
@@ -268,7 +270,7 @@ async function firstCloudArtifactsResult(
 
 async function firstProviderResult(
   runtimes: ProviderDeviceRuntime[],
-  method: keyof LeaseLifecycleProvider,
+  method: 'allocate' | 'heartbeat',
   lease: DeviceLease,
   context?: LeaseLifecycleContext,
 ): Promise<Record<string, unknown> | undefined> {

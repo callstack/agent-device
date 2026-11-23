@@ -1,4 +1,8 @@
-import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createTestHostEnvironment,
+  deviceClaimFilePath,
+} from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
@@ -164,6 +168,34 @@ const cleanupIncomplete = {
   }),
 };
 
+test('close fences the lease when its durable claim has no attributable owner', async () => {
+  const sessionName = 'close-unattributable-claim';
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = await openSession(sessionName, { lease: { registry: leaseRegistry } });
+  const claimKey = sessionStore.get(sessionName)?.deviceClaim?.deviceKey;
+  if (!claimKey) throw new Error('expected a durable claim');
+  fs.writeFileSync(deviceClaimFilePath(claimKey), '{corrupt');
+  const { loader } = lifecycleOperationsSpy();
+
+  const refusal = {
+    reason: 'DEVICE_LEASE_BUSY',
+    releaseStatus: 'unknown',
+    releaseReason: 'device-claim-release-unconfirmed',
+  };
+  await expect(close(sessionStore, sessionName, loader, { leaseRegistry })).rejects.toMatchObject({
+    details: refusal,
+  });
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  expect(() =>
+    leaseRegistry.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseBackend: 'android-instance',
+      deviceKey: 'android:' + device.id,
+    }),
+  ).toThrow(expect.objectContaining({ details: expect.objectContaining(refusal) }));
+});
+
 test('a retried close reruns the failed cleanup and then releases the device claim', async () => {
   const sessionName = 'close-retry-releases-claim';
   const sessionStore = await openSession(sessionName);
@@ -223,7 +255,8 @@ test('a leased session keeps its lease until a retried close confirms the cleanu
   await expect(close(sessionStore, sessionName, loader, { leaseRegistry })).rejects.toMatchObject(
     cleanupIncomplete,
   );
-  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  const leaseId = sessionStore.get(sessionName)?.lease?.leaseId;
+  expect(leaseId && leaseRegistry.isLeaseEndPending(leaseId)).toBe(true);
 
   const retried = await close(sessionStore, sessionName, loader, { leaseRegistry });
 
@@ -313,7 +346,7 @@ test.each([
     const release = vi
       .fn<NonNullable<LeaseLifecycleProvider['release']>>()
       .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'provider unreachable'))
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ release: 'confirmed' });
     const options = { leaseRegistry, leaseLifecycleProvider: { release } };
     const diagnosticsLogPath = path.join(claimsRoot, 'diagnostics.ndjson');
 

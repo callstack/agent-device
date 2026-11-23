@@ -56,9 +56,9 @@ function scenario(
   };
   const events: string[] = [];
   const release = vi.fn(async () => {
-    expect(leaseRegistry.listActiveLeases()).toContainEqual(lease);
+    expect(leaseRegistry.isLeaseEndPending(lease.leaseId)).toBe(true);
     events.push('release');
-    return { limrunInstanceId: 'instance' };
+    return { release: 'confirmed' as const, provider: { limrunInstanceId: 'instance' } };
   });
   const base = lifecycleRuntimeFacts(device);
   const facts = {
@@ -176,7 +176,7 @@ test('failed provider deletion keeps the session and lease for close --shutdown 
   world.release.mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Delete failed'));
   expect(await world.run()).toMatchObject({ ok: false, error: { retriable: true } });
   expect(world.sessionStore.get('test')).toBeDefined();
-  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(0);
   expect(world.req.internal?.endedLeases).toEqual([]);
   expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
   expect(world.sessionStore.get('test')).toBeUndefined();
@@ -246,7 +246,7 @@ test('failed shutdown preparation keeps the session and retained lease for retry
   });
   expect(world.release).not.toHaveBeenCalled();
   expect(world.sessionStore.get('test')).toBeDefined();
-  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(world.leaseRegistry.listActiveLeases()).toHaveLength(0);
   expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
 });
 

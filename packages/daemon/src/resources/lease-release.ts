@@ -3,45 +3,34 @@ import type {
   DeviceLease,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
+  ProviderLeaseRelease,
 } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { ReleaseLeaseRequest } from './lease-registry-scope.ts';
 import { providerSessionIdFromData } from './provider-session-ownership.ts';
 
-export type LeaseReleaseOutcome = {
-  registryReleased: boolean;
-  provider?: Record<string, unknown>;
-};
-
-/** Keep the registry record until the provider confirms release, so failed cleanup remains retryable. */
 export async function releaseLease(
-  leaseRegistry: LeaseRegistry,
-  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
-  lease: DeviceLease | undefined,
-  request: ReleaseLeaseRequest,
-  context?: LeaseLifecycleContext,
-): Promise<LeaseReleaseOutcome> {
-  if (!lease) return { registryReleased: false };
-  const provider = await releaseProviderRental(leaseLifecycleProvider, lease, context);
-  recordProviderSession(leaseRegistry, lease, provider);
-  if (provider?.releaseStatus === 'unknown') {
-    leaseRegistry.beginProviderLeaseEnd(lease.leaseId, true);
-    leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');
-    return { registryReleased: true, provider };
-  }
-  const registryReleased = leaseRegistry.releaseLease(request).released;
-  if (!registryReleased) leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased');
-  return { registryReleased, provider };
-}
-
-export async function releaseProviderRental(
+  registry: LeaseRegistry,
   provider: LeaseLifecycleProvider | undefined,
   lease: DeviceLease,
-  context?: LeaseLifecycleContext,
-): Promise<Record<string, unknown> | undefined> {
-  if (!provider?.release && leaseProviderRequiringRuntime(lease))
-    return { releaseStatus: 'unknown' };
-  return await provider?.release?.(lease, context);
+  options: {
+    sessionsSettled: boolean;
+    requestRelease?: 'release' | 'close';
+    context?: LeaseLifecycleContext;
+  },
+): Promise<ProviderLeaseRelease> {
+  registry.beginLeaseEnd(lease, { ...options, providerRelease: 'pending' });
+  return await registry.joinProviderRelease(lease.leaseId, async () => {
+    const outcome = await Promise.resolve()
+      .then(() => provider?.release?.(lease, options.context))
+      .catch((error: unknown): ProviderLeaseRelease => ({ release: 'unknown', error }));
+    if (outcome?.release === 'confirmed' || (!outcome && !leaseProviderRequiringRuntime(lease))) {
+      recordProviderSession(registry, lease, outcome?.provider);
+      registry.confirmLeaseEnd(lease.leaseId, 'providerReleased');
+      return outcome ?? { release: 'confirmed' };
+    }
+    registry.markLeaseReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');
+    return outcome?.release === 'unknown' ? outcome : { release: 'unknown' };
+  });
 }
 
 export function recordProviderSession(

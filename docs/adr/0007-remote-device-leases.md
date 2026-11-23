@@ -49,10 +49,9 @@ A cloud provider runtime refuses to allocate a lease that it is ending. It forge
 The daemon keeps the lease end reservation when provider creation fails or the caller cancels.
 If creation succeeds after cancellation, the provider adapter releases the exact instance.
 The daemon owns the reservation. The provider adapter owns instance creation, lookup, and release.
-Revyl uses the [shared provider lease table](https://github.com/callstack/agent-device/pull/4158).
-If a caller sends only the [run labels](https://github.com/callstack/agent-device/pull/4947), refuse lease renewal.
 
-At startup, reserve the leases from the live and pending provider journals before accepting requests.
+At startup, reserve the leases from the live and pending provider journals.
+Wait for this recovery before you admit an allocation or a session command.
 Examine durable device claims under the host-global lock.
 Recover only rentals that the provider can attribute to the recorded lease.
 If the daemon cannot confirm provider release or clear the exact claim, keep the scope reserved and report `releaseStatus: unknown` with a typed `releaseReason`.
@@ -114,7 +113,7 @@ The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-dev
 - Holds and ordinary proxy leases are in memory, so controllers reconnect after daemon restart.
 - Local human-control takeover remains deferred. A future host-global fence must coexist with local session claims.
 - Limrun has not moved its lease ownership onto the shared provider lease table ([#4102](https://github.com/callstack/agent-device/issues/4102)).
-- The existing journals cover recoverable providers. A crash can occur before there is durable evidence of the rental. [#4972](https://github.com/callstack/agent-device/issues/4972) tracks the durable rental journal.
+- The existing journals record provider lease scopes. A crash can occur before there is durable evidence of the rental. [#4972](https://github.com/callstack/agent-device/issues/4972) tracks the durable rental journal.
 - An older client or a direct RPC caller that sent no lease id on a leased session is refused. It must send the lease id that its allocation returned.
 - `session_list` still shows session names to every holder of the proxy token ([#4908](https://github.com/callstack/agent-device/issues/4908)).
 - A web open can be admitted under a non-`macos-app` lease for another backend; admission does not compare the request platform with the lease backend.

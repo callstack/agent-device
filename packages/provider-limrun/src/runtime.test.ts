@@ -188,7 +188,7 @@ test('a release that arrives before the create answered ends the instance that c
     reportCreate();
 
     // The release cannot answer before the instance it is waiting for exists, so it names what it ended.
-    assert.deepEqual(await released, { limrunInstanceId: 'android-instance-1' });
+    assert.deepEqual((await released)?.provider, { limrunInstanceId: 'android-instance-1' });
     // The allocation whose instance was taken from it is refused rather than handed a dead session.
     const error = await refused;
     assert.ok(
@@ -275,7 +275,7 @@ test('a release that arrives before the allocation yields ends the instance its 
     const released = runtime.leaseLifecycle.release?.(lease);
 
     // The release had an owner to take, so it answers for the instance that create went on renting.
-    assert.deepEqual(await released, { limrunInstanceId: 'android-instance-1' });
+    assert.deepEqual((await released)?.provider, { limrunInstanceId: 'android-instance-1' });
     assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
     const error = await refused;
     assert.ok(
@@ -406,7 +406,7 @@ test('a release that arrives while a tunnel is opening ends the tunnel that answ
     const released = runtime.leaseLifecycle.release?.(lease);
     reportTunnel();
 
-    const record = (await released) as Record<string, unknown>;
+    const record = (await released)?.provider as Record<string, unknown>;
     assert.equal(record.limrunInstanceId, 'android-instance-1');
     assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
     // The release wrote the capture's record as well, so `artifacts` can still name the HAR.
@@ -457,7 +457,7 @@ test('a release stops waiting on a stuck ADB tunnel, deletes the instance and sa
 
     // The release's own budget for the local teardown elapses; the delete it ran beside is already answered.
     await vi.advanceTimersByTimeAsync(LOCAL_TEARDOWN_WAIT_MS);
-    const [warning] = warningsOf(await released);
+    const [warning] = warningsOf((await released)?.provider);
     assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
     assert.equal(warning?.code, 'LIMRUN_TEARDOWN_INCOMPLETE');
     // The report names the work this route stopped waiting for, and the instance it left a host endpoint on.
@@ -694,7 +694,7 @@ test('a network capture writes a private HAR with its failures on artifacts and 
       },
     });
 
-    const released = (await runtime.leaseLifecycle.release?.(lease)) as {
+    const released = (await runtime.leaseLifecycle.release?.(lease))?.provider as {
       cloudArtifacts?: { cloudArtifacts: { url?: string }[]; message?: string };
     };
     assert.equal(released.cloudArtifacts?.cloudArtifacts[0]?.url, harPath);
@@ -763,10 +763,10 @@ test('a release refuses a delete that never answers, within that delete’s own 
   vi.useFakeTimers();
   try {
     await runtime.leaseLifecycle.allocate?.(lease);
-    const refused = refusalOf(runtime.leaseLifecycle.release?.(lease));
+    const refused = runtime.leaseLifecycle.release?.(lease);
     await vi.advanceTimersByTimeAsync(DELETE_ANSWER_WAIT_MS);
     // The lease is still held: Limrun never confirmed the instance was gone.
-    const refusedDelete = (await refused) as AppError;
+    const refusedDelete = (await refused)?.error as AppError;
     assert.equal(refusedDelete.details?.reason, 'limrun_instance_delete_unconfirmed');
     assert.equal(refusedDelete.details.limrunInstanceId, 'android-instance-1');
     assert.match(String(refusedDelete.details.cause), /delete/i);
@@ -794,11 +794,11 @@ test('a create that answers after its disposal gave up ends the instance it rent
   try {
     const refusedAllocation = refusalOf(runtime.leaseLifecycle.allocate?.(lease));
     await waitForCreate(creates + 1);
-    const refusedRelease = refusalOf(runtime.leaseLifecycle.release?.(lease));
+    const refusedRelease = runtime.leaseLifecycle.release?.(lease);
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(CREATE_ANSWER_WAIT_MS);
     // The release refused rather than waiting longer, and the create has still not named anything.
-    assert.ok((await refusedRelease) instanceof AppError, 'expected the expired release to refuse');
+    assert.equal((await refusedRelease)?.release, 'unknown');
     assert.deepEqual(deletedInstances(deletes), []);
     // The POST answers after that: the instance it names, and the session built on it, belong to the
     // disposal that is already over, so that disposal ends them.

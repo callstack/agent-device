@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expect, test, vi } from 'vitest';
@@ -274,7 +275,7 @@ test('request diagnostics route does not serve a tenant that held a macos-app le
     leaseBackend: 'macos-app',
     deviceKey: 'com.example.app',
   });
-  leaseRegistry.releaseLease({
+  finishTestLease(leaseRegistry, {
     leaseId,
     tenantId: 'tenant-a',
     runId: 'run-1',

@@ -844,7 +844,7 @@ test('runLocked rejects a request canceled while waiting for its execution lock'
 test('router: deferred tenant connect with no daemon session closes as SESSION_NOT_FOUND without touching the provider', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
-  const release = vi.fn(async () => ({}));
+  const release = vi.fn(async () => ({ release: 'confirmed' as const }));
 
   const scope = await createTestRequestScope({
     req: makeRequest({

@@ -36,7 +36,7 @@ test('session allocation preserves its primary failure when provider cleanup als
       },
     );
     assert.equal(cleanupCalled, true);
-    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { releaseStatus: 'unknown' });
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { release: 'unknown' });
   } finally {
     await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
@@ -76,7 +76,7 @@ test('a create-timeout surfaces provider evidence for the maybe-leaked session',
     await createEntered;
     await vi.advanceTimersByTimeAsync(40);
     await rejected;
-    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { releaseStatus: 'unknown' });
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { release: 'unknown' });
   } finally {
     vi.useRealTimers();
     await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
@@ -108,11 +108,28 @@ test.each([
   try {
     await runtime.leaseLifecycle.allocate!(lease);
     assert.deepEqual(await runtime.leaseLifecycle.release!(lease), {
-      provider: 'webdriver-test',
-      providerSessionId: 'session-1',
+      release: 'confirmed',
+      provider: { provider: 'webdriver-test', providerSessionId: 'session-1' },
     });
   } finally {
     await runtime.shutdown();
+  }
+});
+
+test('a lost create response keeps the WebDriver rental unresolved', async () => {
+  globalThis.fetch = async () => {
+    throw new TypeError('connection closed after POST');
+  };
+  const runtime = makeRuntime({ requestPolicy: { retryAttempts: 0 } });
+  const lease = makeLease();
+  try {
+    await assert.rejects(
+      runtime.leaseLifecycle.allocate!(lease),
+      (error) => error instanceof AppError && error.details?.dispatched === 'unknown',
+    );
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { release: 'unknown' });
+  } finally {
+    await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
   }
 });
 

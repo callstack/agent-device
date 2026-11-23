@@ -283,12 +283,13 @@ async function startDaemonRuntimeOnHost(
     recoverExpiredLease: deps.recoverExpiredLease,
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
-    onRecovered: (lease) => leaseRegistry.reserveExpiredLease(lease, true),
+    onRecovered: (lease) =>
+      leaseRegistry.beginLeaseEnd(lease, { sessionsSettled: true, providerRelease: 'pending' }),
     needsProviderRelease: (lease) => leaseRegistry.needsProviderRelease(lease.leaseId),
     onReleaseUnknown: (lease, reason) =>
-      leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId, reason),
+      leaseRegistry.markLeaseReleaseUnknown(lease.leaseId, reason),
     onReleased: (lease) => {
-      if (leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased'))
+      if (leaseRegistry.confirmLeaseEnd(lease.leaseId, 'providerReleased'))
         leaseSessionEnd.forgetClosing(lease.leaseId);
     },
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
@@ -300,7 +301,6 @@ async function startDaemonRuntimeOnHost(
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease, reason) => {
-      if (reason !== 'LEASE_RELEASED' && !leaseRegistry.reserveExpiredLease(lease)) return;
       let finishProvider!: () => void;
       const providerEnd = new Promise<void>((resolve) => {
         finishProvider = resolve;
@@ -330,10 +330,7 @@ async function startDaemonRuntimeOnHost(
             }
           },
           (error: unknown) => {
-            leaseRegistry.markExpiredProviderReleaseUnknown(
-              lease.leaseId,
-              'provider-release-unconfirmed',
-            );
+            leaseRegistry.markLeaseReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');
             void emitDaemonDiagnostic(logPath, 'provider_lease_release_outcome_failed', {
               leaseId: lease.leaseId,
               error: error instanceof Error ? error.message : String(error),
@@ -495,9 +492,8 @@ async function startDaemonRuntimeOnHost(
     cleanupSessionlessExecutionHost: deps.platformResourceCleanup.cleanupSessionlessExecutionHost,
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
     onClaimReleaseUnconfirmed: (leaseId) =>
-      leaseRegistry.markExpiredProviderReleaseUnknown(leaseId, 'device-claim-release-unconfirmed'),
-    confirmExpiredSessions: (leaseId) =>
-      leaseRegistry.confirmExpiredLeaseEnd(leaseId, 'sessionsSettled'),
+      leaseRegistry.markLeaseReleaseUnknown(leaseId, 'device-claim-release-unconfirmed'),
+    confirmExpiredSessions: (leaseId) => leaseRegistry.confirmLeaseEnd(leaseId, 'sessionsSettled'),
   });
 
   const endSessionsForLease = async (
@@ -552,10 +548,12 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
   });
 
-  // Quiesce is answered before dispatch and never joins `inFlightRequests`, so the
-  // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
-  // before `close` exists, and a daemon answers `draining` only once it has a drain path to run.
+  // Quiesce runs before dispatch. It may drain once startup installs the close path.
   let startingUp = true;
+  let finishRecovery!: () => void;
+  const startupRecovered = new Promise<void>((resolve) => {
+    finishRecovery = resolve;
+  });
   const lifecycleAdmission = createDaemonLifecycleAdmission({
     token,
     identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
@@ -563,6 +561,7 @@ async function startDaemonRuntimeOnHost(
     leaseRegistry,
     inFlightRequestCount: () => inFlightRequests.size,
     startingUp: () => startingUp,
+    startupRecovered,
     drain: () => {
       void close();
     },
@@ -659,9 +658,7 @@ async function startDaemonRuntimeOnHost(
     scope: createRecoveryPlatformScope(),
     onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
   });
-  // Only the registered daemon may read the state directory's lease records and act on them. Loading and
-  // adoption run before the first await, so their report reaches this startup's diagnostics.
-  void withDaemonDiagnosticsScope({ logPath }, async () => {
+  const providerRecovery = withDaemonDiagnosticsScope({ logPath }, async () => {
     await expiredProviderLeaseReleaser.recoverInherited((diagnostic) =>
       startupDiagnostics.push(diagnostic),
     );
@@ -695,6 +692,8 @@ async function startDaemonRuntimeOnHost(
     daemonServerMode,
     {
       handleRequest,
+      startupRecovered,
+      leaseLifecycleProvider: deps.leaseLifecycleProvider,
       leaseRegistry,
       endSessionsForLease: async (leaseId) => await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
       token,
@@ -735,6 +734,7 @@ async function startDaemonRuntimeOnHost(
   options.startupProgress?.close();
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
   await reportPluginStartupFailures(logPath, deps.pluginInventory);
+  // Publication truncates the log. Recover claims afterward to retain their diagnostics.
   await reconcileDeviceClaimsForDaemonStartup(
     logPath,
     createOwnerScopedDeviceClaimReconciler({
@@ -745,11 +745,9 @@ async function startDaemonRuntimeOnHost(
     baseDir,
     env,
   );
-  // Arms the initial idle-reap timer: a daemon that starts and never
-  // receives a request must still be able to reap itself.
+  await settleWithin(() => providerRecovery, 5_000);
+  finishRecovery();
   idleReap.noteActivity();
-  // The #2833 deadline needs no equivalent arm: the store is empty until a request puts a session
-  // in it, and that request's own completion re-arms the reaper.
 
   // Spawn the PNG worker ahead of the first screenshot request so its
   // cold-start cost is not paid on a user-visible call. Best effort: when it
@@ -821,6 +819,7 @@ async function startDaemonRuntimeOnHost(
           leaseRegistry,
           expiredProviderLeaseReleaser,
           timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
+          failedLeases: tornDown.failedLeases,
         });
         await leaseSessionEnd.finishShutdown(
           tornDown.failedLeases,

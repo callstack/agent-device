@@ -217,6 +217,7 @@ export function createDaemonLifecycleAdmission(params: {
   inFlightRequestCount: () => number;
   /** Whether the daemon has yet to build the drain path `drain` runs. */
   startingUp: () => boolean;
+  startupRecovered?: Promise<void>;
   /** Starts the drain once, after sending the response. */
   drain: () => void;
   /** Who owns this process and may close it. */
@@ -283,15 +284,8 @@ export function createDaemonLifecycleAdmission(params: {
       if (
         params.startingUp() &&
         (req.command === 'lease_allocate' || shouldLockSessionExecution(req.command))
-      ) {
-        return refuse(
-          new AppError('COMMAND_FAILED', 'Daemon startup recovery is in progress.', {
-            reason: DAEMON_LIFECYCLE_REASONS.busy.reason,
-            startingUp: true,
-            retriable: true,
-          }),
-        );
-      }
+      )
+        await params.startupRecovered;
       return admitting ? await handler(req) : daemonShuttingDownResponse();
     },
   };

@@ -20,8 +20,6 @@ export const DEVICE_LEASE_REASONS = {
   // Another lease, or this tenant run, already holds the device; retry after that lease is released
   // or expires.
   busy: { reason: 'DEVICE_LEASE_BUSY' },
-  // The provider could not confirm that it ended the rental.
-  releaseUnconfirmed: { reason: 'provider-release-unconfirmed' },
 } as const satisfies ReasonTable<'leases'>;
 
 export type LeaseRegistryOptions = {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderLeaseRelease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverRuntime, type CloudWebDriverRuntimeOptions } from './runtime.ts';
 import { consumeAllProfileFields, refuseAllProfileFields } from './profile-fields.fixtures.ts';
@@ -135,7 +135,10 @@ test('a release during creation disposes the session that creation makes', async
 
     assert.deepEqual(await releasing, {
       status: 'resolved',
-      value: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      value: {
+        release: 'confirmed',
+        provider: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      },
     });
     assert.deepEqual(hub.deleted, ['session-1']);
     assert.equal(preparation.cleanups, 1);
@@ -226,7 +229,10 @@ test('an allocation that arrives during a release still disposing creates no sec
     assert.equal(preparation.cleanups, 1);
     assert.deepEqual(await releasing, {
       status: 'resolved',
-      value: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      value: {
+        release: 'confirmed',
+        provider: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      },
     });
   } finally {
     hub.answerHeldDeletes();
@@ -269,7 +275,10 @@ test('a repeated allocation cannot answer that a released lease is alive', async
     hub.answerHeldDeletes();
     assert.deepEqual(await releasing, {
       status: 'resolved',
-      value: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      value: {
+        release: 'confirmed',
+        provider: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      },
     });
     assert.deepEqual(hub.deleted, ['session-1']);
   } finally {
@@ -336,7 +345,10 @@ test('a release issued before provider preparation begins disposes the session t
 
     assert.deepEqual(await releasing, {
       status: 'resolved',
-      value: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      value: {
+        release: 'confirmed',
+        provider: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+      },
     });
     assertRejectedWith(await allocating, 'provider_session_released_during_allocation', {
       leaseId: lease.leaseId,
@@ -395,11 +407,11 @@ test('an artifact callback that never answers holds neither the lease nor shutdo
 
     const result = await releasing;
     assert.equal(result.status, 'resolved', describe(result));
-    const value = (result as Readonly<{ value: Record<string, unknown> | undefined }>).value;
-    assert.equal(value?.providerSessionId, 'session-1');
+    const value = (result as Readonly<{ value: ProviderLeaseRelease | undefined }>).value;
+    assert.equal(value?.provider?.providerSessionId, 'session-1');
     // What the lookup could not answer for becomes an unavailable report, the way its failures do.
     assert.equal(
-      (value?.cloudArtifacts as Record<string, unknown> | undefined)?.status,
+      (value?.provider?.cloudArtifacts as Record<string, unknown> | undefined)?.status,
       'unavailable',
     );
     assert.deepEqual(hub.created, ['session-1', 'session-2']);
@@ -443,11 +455,11 @@ test('a provider cleanup that outlives its budget ends the disposal as uncertain
 
     const result = await releasing;
     assert.equal(result.status, 'resolved', describe(result));
-    const value = (result as Readonly<{ value: Record<string, unknown> | undefined }>).value;
-    assert.deepEqual(warningCodes(value?.warnings), ['PROVIDER_CLEANUP_FAILED']);
-    assert.match(String(warningMessages(value?.warnings)[0]), /40ms/);
+    const value = (result as Readonly<{ value: ProviderLeaseRelease | undefined }>).value;
+    assert.deepEqual(warningCodes(value?.provider?.warnings), ['PROVIDER_CLEANUP_FAILED']);
+    assert.match(String(warningMessages(value?.provider?.warnings)[0]), /40ms/);
 
-    assert.equal(value?.releaseStatus, 'unknown');
+    assert.equal(value?.release, 'unknown');
     assertRejectedWith(
       await settle(() => runtime.leaseLifecycle.allocate!(lease)),
       'provider_session_release_in_progress',
@@ -477,10 +489,13 @@ test('a release the provider refused reports the session left running', async ()
 
     const result = await releasing;
     assert.equal(result.status, 'resolved', describe(result));
-    const value = (result as Readonly<{ value: Record<string, unknown> | undefined }>).value;
-    assert.equal(value?.providerSessionId, 'session-1');
-    assert.deepEqual(warningCodes(value?.warnings), ['WEBDRIVER_SESSION_DELETE_FAILED']);
-    assert.match(String(warningMessages(value?.warnings)[0]), /provider rejected the delete/);
+    const value = (result as Readonly<{ value: ProviderLeaseRelease | undefined }>).value;
+    assert.equal(value?.provider?.providerSessionId, 'session-1');
+    assert.deepEqual(warningCodes(value?.provider?.warnings), ['WEBDRIVER_SESSION_DELETE_FAILED']);
+    assert.match(
+      String(warningMessages(value?.provider?.warnings)[0]),
+      /provider rejected the delete/,
+    );
     assert.deepEqual(hub.deleted, []);
   } finally {
     hub.allowDeletes();
@@ -527,7 +542,7 @@ test('a create the hub refused still answers when its provider cleanup hangs', a
     assert.equal(details.status, 500, 'the hub refusal is what the caller is told');
     assert.match(String(details.cleanupError), /did not answer within 40ms/);
 
-    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { releaseStatus: 'unknown' });
+    assert.deepEqual(await runtime.leaseLifecycle.release!(lease), { release: 'unknown' });
     assert.deepEqual(hub.created, []);
   } finally {
     answerCleanup?.();

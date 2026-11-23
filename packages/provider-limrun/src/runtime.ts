@@ -161,7 +161,14 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
     heartbeat: async (lease, context) => await this.heartbeat(lease, context),
-    release: async (lease) => await this.release(lease),
+    release: async (lease) => {
+      if (lease.leaseProvider !== this.provider) return undefined;
+      try {
+        return { release: 'confirmed', provider: await this.release(lease) };
+      } catch (error) {
+        return { release: 'unknown', error };
+      }
+    },
   };
 
   readonly appCatalog: ProviderAppCatalogHandler = async (query, signal) => {
@@ -439,14 +446,13 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       return;
     }
     if (create.status === 'refused_caller') throw create.error;
-    // A create that failed has no release coming for it, so this call is the only route left to end an
-    // instance it made before failing. What it came to outranks why the create did not finish: an instance
-    // Limrun is still billing is the caller's problem first.
     const outcome = await this.settleFailedCreate(owner);
     if (outcome?.cleanup === 'uncertain') {
       const { createLeftInstanceRunning } = await import('./lease-release.ts');
       throw createLeftInstanceRunning(owner.lease, outcome, create.error);
     }
+    if (outcome && create.error instanceof AppError)
+      create.error.details = { ...create.error.details, releaseStatus: 'confirmed' };
     throw create.error;
   }
 
@@ -567,9 +573,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       const rent = (instanceId: string): void => {
         owner.rentedInstanceId = instanceId;
       };
-      // The session is recorded in the step that answers for it, so every later step of this allocation
-      // fails with its handles still owned: the instance client and the host ADB endpoint are released by
-      // whoever ends this lease, whether or not the allocation ever answered.
       owner.createSubmitted = true;
       const session =
         platform === 'ios'
@@ -582,6 +585,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       };
       return { status: 'ready', session, appAlias };
     } catch (error) {
+      const status = error instanceof AppError ? error.details?.status : undefined;
+      if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408)
+        delete owner.createSubmitted;
       return { status: 'failed', error };
     }
   }
@@ -603,12 +609,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (this.options.keepAlive) this.startKeepAlive(owner, session);
   }
 
-  /**
-   * Closes an owner whose create made nothing, and ends the instance one that made an instance before it
-   * failed. A create that failed has no release coming for it — its caller is being refused — so this is
-   * the route that ends what it left running, through the same take every other teardown goes through.
-   * The outcome is reported to that caller, which is the only one left to hear it.
-   */
   private async settleFailedCreate(
     owner: LimrunLeaseOwner,
   ): Promise<LimrunDisposalOutcome | undefined> {

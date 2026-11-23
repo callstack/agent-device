@@ -346,7 +346,7 @@ export class FakeProviderDeviceRuntime implements ProviderDeviceRuntime {
         leaseId: lease.leaseId,
         provider: lease.leaseProvider,
       });
-      return { provider: this.provider };
+      return { release: 'confirmed', provider: { provider: this.provider } };
     },
   };
 

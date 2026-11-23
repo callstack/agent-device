@@ -249,7 +249,7 @@ test('close preserves the session and lease when provider release fails so it ca
         if (releaseAttempts === 1) {
           throw new AppError('COMMAND_FAILED', 'provider cleanup failed');
         }
-        return { releasedBy: 'provider' };
+        return { release: 'confirmed' as const, provider: { releasedBy: 'provider' } };
       },
     },
     invoke: noopInvoke,
@@ -266,7 +266,7 @@ test('close preserves the session and lease when provider release fails so it ca
     },
   });
   expect(sessionStore.get(sessionName)?.lease?.leaseId).toBe(lease.leaseId);
-  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 
   const retried = await handleSessionCommands(request);
   expect(retried).toMatchObject({
@@ -305,9 +305,14 @@ test('close cannot retire a replacement session while its provider release waits
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
+  let dispatch!: () => void;
+  const disposing = new Promise<void>((resolve) => {
+    dispatch = resolve;
+  });
   const providerRelease = vi.fn(async () => {
+    dispatch();
     await held;
-    return { releasedBy: 'provider' };
+    return { release: 'confirmed' as const, provider: { releasedBy: 'provider' } };
   });
   const closing = handleSessionCommands({
     host: createTestHostEnvironment(),
@@ -322,7 +327,17 @@ test('close cannot retire a replacement session while its provider release waits
     invoke: noopInvoke,
   });
   try {
-    await vi.waitFor(() => expect(providerRelease).toHaveBeenCalledOnce());
+    await disposing;
+    expect(() =>
+      leaseRegistry.heartbeatLease({
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseProvider: lease.leaseProvider,
+        clientId: lease.clientId,
+        deviceKey: lease.deviceKey,
+      }),
+    ).toThrow(expect.objectContaining({ code: 'UNAUTHORIZED' }));
     sessionStore.retire(ref);
     const successor = sessionStore.publish(address, makeSession('default', WEB_DESKTOP_DEVICE));
     sessionStore.setRuntimeHints(address, { metroPort: 9090 });

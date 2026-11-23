@@ -38,7 +38,7 @@ for (const releaseThrows of [false, true])
         release: async (lease) => {
           releases.push(lease.leaseId);
           if (releaseThrows) throw new Error('release failed');
-          return {};
+          return { release: 'confirmed', provider: {} };
         },
       },
     });
@@ -267,7 +267,7 @@ test('lease_release still releases a retainOnClose lease through the provider', 
     leaseLifecycleProvider: {
       release: async (active) => {
         released.push(active);
-        return { providerSessionId: 'provider-1' };
+        return { release: 'confirmed', provider: { providerSessionId: 'provider-1' } };
       },
     },
   });
@@ -299,6 +299,7 @@ test('lease_release ends the sessions opened under the released lease', async ()
       leaseRegistry: registry,
       endSessionsForLease: async (id) => {
         ended.push(id);
+        registry.confirmLeaseEnd(id, 'sessionsSettled');
       },
     });
 
@@ -337,7 +338,7 @@ test('lease_release refuses a host-allocated macos-app lease and keeps it', asyn
       leaseLifecycleProvider: {
         release: async (active) => {
           released.push(active);
-          return {};
+          return { release: 'confirmed', provider: {} };
         },
       },
     });
@@ -399,7 +400,7 @@ test('activation drains canceled provider allocation and its release cleanup', a
       release: async () => {
         assert.equal(registry.listHumanControlHolds({ kind: 'host' })[0]?.state, 'activating');
         providerReleased = true;
-        return {};
+        return { release: 'confirmed', provider: {} };
       },
     },
   });
@@ -574,7 +575,7 @@ test('a repeat allocation canceled by its requester releases the reused lease', 
         },
         release: async (released) => {
           releasedSessions.push(released.leaseId);
-          return { providerSessionId: 'session-1' };
+          return { release: 'confirmed', provider: { providerSessionId: 'session-1' } };
         },
       },
     });

@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import { expect, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -65,7 +66,7 @@ test.each(['sessionsSettled', 'providerReleased'] as const)(
     let now = 1_000;
     const registry = new LeaseRegistry({
       now: () => now,
-      onLeaseExpired: (lease) => registry.reserveExpiredLease(lease),
+      onLeaseExpired: () => {},
     });
     const request = { ...HUMAN_CONTROL_LEASE_REQUEST, leaseProvider: 'fixture' };
     const lease = registry.allocateLease(request);
@@ -80,10 +81,10 @@ test.each(['sessionsSettled', 'providerReleased'] as const)(
       );
 
     expectBusy();
-    expect(registry.confirmExpiredLeaseEnd(lease.leaseId, first)).toBe(false);
+    expect(registry.confirmLeaseEnd(lease.leaseId, first)).toBe(false);
     expectBusy();
     const second = first === 'sessionsSettled' ? 'providerReleased' : 'sessionsSettled';
-    expect(registry.confirmExpiredLeaseEnd(lease.leaseId, second)).toBe(true);
+    expect(registry.confirmLeaseEnd(lease.leaseId, second)).toBe(true);
     expect(registry.allocateLease(next).leaseId).not.toBe(lease.leaseId);
   },
 );
@@ -92,17 +93,17 @@ test('an ending lease without a device key keeps its run binding until confirmat
   let now = 1_000;
   const registry = new LeaseRegistry({
     now: () => now,
-    onLeaseExpired: (lease) => registry.reserveExpiredLease(lease),
+    onLeaseExpired: () => {},
   });
   const request = { tenantId: 'tenant', runId: 'run', leaseProvider: 'fixture' };
   const lease = registry.allocateLease(request);
   now = lease.expiresAt;
   registry.consumeExpiredLeases();
-  registry.confirmExpiredLeaseEnd(lease.leaseId, 'sessionsSettled');
+  registry.confirmLeaseEnd(lease.leaseId, 'sessionsSettled');
   expect(() => registry.allocateLease(request)).toThrow(
     expect.objectContaining({ details: expect.objectContaining({ reason: 'DEVICE_LEASE_BUSY' }) }),
   );
-  expect(registry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased')).toBe(true);
+  expect(registry.confirmLeaseEnd(lease.leaseId, 'providerReleased')).toBe(true);
   expect(registry.allocateLease(request).leaseId).not.toBe(lease.leaseId);
 });
 
@@ -118,7 +119,9 @@ test('a delayed expiry reservation cannot fence a renewed host lease with the sa
   now = lease.expiresAt;
   const expired = registry.consumeExpiredLease(leaseId);
   assert.ok(expired);
-  const reservation = beforeReservation.then(() => registry.reserveExpiredLease(expired));
+  const reservation = beforeReservation.then(() =>
+    registry.beginLeaseEnd(expired, { sessionsSettled: true, providerRelease: 'confirmed' }),
+  );
 
   const reissued = registry.putHostLease(leaseId, HUMAN_CONTROL_LEASE_REQUEST);
   const work = registry.retainLeaseWork(reissued, () => true);
@@ -128,7 +131,9 @@ test('a delayed expiry reservation cannot fence a renewed host lease with the sa
   resume();
 
   const reserved = await reservation;
-  expect(registry.releaseLease({ ...HUMAN_CONTROL_LEASE_REQUEST, leaseId }).released).toBe(true);
+  expect(finishTestLease(registry, { ...HUMAN_CONTROL_LEASE_REQUEST, leaseId }).released).toBe(
+    true,
+  );
   expect(registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST).leaseId).not.toBe(leaseId);
   expect(reserved).toBe(false);
 });

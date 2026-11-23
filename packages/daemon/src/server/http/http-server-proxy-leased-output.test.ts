@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -179,7 +180,7 @@ async function expectLeasedOutputRefusal(response: Response): Promise<void> {
 /** Ends the session and its lease, as a close of the leased session does. */
 function endLeasedSession(daemon: NonNullable<typeof world>): void {
   daemon.sessionStore.retire(daemon.sessionStore.lookup(daemon.sessionName)!);
-  daemon.leaseRegistry.releaseLease({ ...OWNER_SCOPE, leaseId: daemon.leaseId });
+  finishTestLease(daemon.leaseRegistry, { ...OWNER_SCOPE, leaseId: daemon.leaseId });
   expect(daemon.leaseRegistry.listActiveLeases()).toEqual([]);
 }
 

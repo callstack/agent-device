@@ -1,9 +1,10 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { leaseReleaseRequestFor } from '../../resources/lease-registry-scope.ts';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderLeaseRelease } from '@agent-device/contracts/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import path from 'node:path';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
@@ -22,9 +23,9 @@ test('retries an expired live-only provider lease release after a transient fail
     leaseProvider: 'browserstack',
   });
   const release = vi
-    .fn<(lease: DeviceLease) => Promise<Record<string, unknown>>>()
+    .fn<(lease: DeviceLease) => Promise<ProviderLeaseRelease>>()
     .mockRejectedValueOnce(new Error('temporary provider outage'))
-    .mockResolvedValueOnce({ limrunInstanceId: 'instance-1' });
+    .mockResolvedValueOnce({ release: 'confirmed', provider: { limrunInstanceId: 'instance-1' } });
   const releaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: { release },
     providerRuntimeIds: ['browserstack'],
@@ -94,7 +95,7 @@ test('a timer-driven release retry records its diagnostics in the daemon scope',
     leaseProvider: 'browserstack',
   });
   const release = vi
-    .fn<(lease: DeviceLease) => Promise<Record<string, unknown>>>()
+    .fn<(lease: DeviceLease) => Promise<ProviderLeaseRelease>>()
     .mockRejectedValue(new Error('provider outage'));
   const releaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: { release },
@@ -128,9 +129,9 @@ test('retries a persisted expired provider lease after daemon restart', async ()
     leaseProvider: 'limrun',
   });
   const release = vi
-    .fn<(lease: DeviceLease) => Promise<Record<string, unknown>>>()
+    .fn<(lease: DeviceLease) => Promise<ProviderLeaseRelease>>()
     .mockRejectedValueOnce(new Error('temporary provider outage'))
-    .mockResolvedValueOnce({ limrunInstanceId: 'instance-1' });
+    .mockResolvedValueOnce({ release: 'confirmed', provider: { limrunInstanceId: 'instance-1' } });
   const options = {
     recoverExpiredLease: async (expiredLease: typeof lease) => {
       await release(expiredLease);
@@ -149,9 +150,9 @@ test('retries a persisted expired provider lease after daemon restart', async ()
     const daemonWithoutLimrun = createExpiredProviderLeaseReleaser({
       ...options,
       recoverableProviderIds: [],
-      onRecovered: (lease) => registry.reserveExpiredLease(lease, true),
-      onReleaseUnknown: (lease, reason) =>
-        registry.markExpiredProviderReleaseUnknown(lease.leaseId, reason),
+      onRecovered: (lease) =>
+        registry.beginLeaseEnd(lease, { sessionsSettled: true, providerRelease: 'pending' }),
+      onReleaseUnknown: (lease, reason) => registry.markLeaseReleaseUnknown(lease.leaseId, reason),
     });
     await daemonWithoutLimrun.recoverInherited();
     expect(() =>
@@ -233,9 +234,9 @@ test('shutdown drain reports releases completed before and during its final retr
   });
   const release = vi
     .fn()
-    .mockResolvedValueOnce({})
+    .mockResolvedValueOnce({ release: 'confirmed' })
     .mockRejectedValueOnce(new Error('temporary outage'))
-    .mockResolvedValue({});
+    .mockResolvedValue({ release: 'confirmed' });
   const releaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: { release },
     providerRuntimeIds: ['browserstack'],
@@ -315,8 +316,11 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
   });
   try {
     const held = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
-    // A provider with no recovery has nothing a restart could do, so it is not journaled.
-    registry.allocateLease({ tenantId: 't', runId: 'run-2', leaseProvider: 'browserstack' });
+    const unprovable = registry.allocateLease({
+      tenantId: 't',
+      runId: 'run-2',
+      leaseProvider: 'browserstack',
+    });
     // The process dies here: no release, no expiry, nothing drained.
     killedDaemon.shutdown();
 
@@ -326,7 +330,11 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
     expect(startupDiagnostics).toEqual([
       expect.objectContaining({
         phase: 'provider_lease_orphans_adopted',
-        data: { leaseIds: [held.leaseId] },
+        data: { leaseIds: [held.leaseId, unprovable.leaseId] },
+      }),
+      expect.objectContaining({
+        phase: 'provider_lease_release_refused',
+        data: expect.objectContaining({ leaseId: unprovable.leaseId, releaseStatus: 'unknown' }),
       }),
     ]);
     expect(recoverExpiredLease.mock.calls.map(([lease]) => lease.leaseId)).toEqual([held.leaseId]);
@@ -353,7 +361,7 @@ test('a provider lease released before the daemon stops is not recovered again',
   });
   try {
     const lease = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
-    registry.releaseLease(leaseReleaseRequestFor(lease));
+    finishTestLease(registry, leaseReleaseRequestFor(lease));
     daemon.shutdown();
 
     const restartedDaemon = createExpiredProviderLeaseReleaser(options);
@@ -594,7 +602,7 @@ test('release after shutdown starts no provider call and retries nothing', async
     runId: 'run-2',
     leaseProvider: 'limrun',
   });
-  const release = vi.fn(async (_lease: DeviceLease) => ({}));
+  const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
   const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
   const releaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: { release },

@@ -91,9 +91,9 @@ test('packaged Cloud WebDriver release still returns artifacts when session dele
 
     const data = assertRpcOk<{
       released?: boolean;
+      releaseStatus?: 'unknown';
       provider?: {
         provider?: string;
-        releaseStatus?: 'unknown';
         providerSessionId?: string;
         warnings?: Array<{ code?: string; message?: string }>;
         cloudArtifacts?: {
@@ -102,9 +102,9 @@ test('packaged Cloud WebDriver release still returns artifacts when session dele
         };
       };
     }>(release);
-    assert.equal(data.released, true);
+    assert.equal(data.released, false);
     assert.equal(data.provider?.provider, WEBDRIVER_PROVIDER);
-    assert.equal(data.provider?.releaseStatus, 'unknown');
+    assert.equal(data.releaseStatus, 'unknown');
     const overlap = await daemon.callCommand('lease_allocate', [], leaseFlags(), {
       meta: leaseMeta(),
     });

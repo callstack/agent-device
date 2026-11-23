@@ -32,31 +32,41 @@ export async function finalizeDaemonLeases(params: {
   leaseRegistry: LeaseRegistry;
   expiredProviderLeaseReleaser: ExpiredProviderLeaseReleaser;
   timeoutMs: number;
+  failedLeases?: ReadonlyMap<string, string[]>;
 }): Promise<DaemonLeaseReleaseSummary> {
   const { leaseRegistry, expiredProviderLeaseReleaser, timeoutMs } = params;
   const settlements = await Promise.all(
-    leaseRegistry.listActiveLeases().map(async (lease): Promise<LeaseReleaseSettlement> => {
-      leaseRegistry.beginProviderLeaseEnd(lease.leaseId, true);
-      try {
-        const outcome = await releaseWithinTimeout(
-          expiredProviderLeaseReleaser.release(lease),
-          timeoutMs,
-        );
-        if (outcome === undefined) return { lease, timedOut: true };
-        if (outcome.status === 'released' || outcome.status === 'not-required')
-          leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased');
-        else if (outcome.status === 'refused')
-          leaseRegistry.markExpiredProviderReleaseUnknown(
-            lease.leaseId,
-            outcome.reason === 'provider-runtime-unavailable'
-              ? outcome.reason
-              : 'provider-release-unconfirmed',
+    [...leaseRegistry.listActiveLeases(), ...leaseRegistry.pendingRequestedLeaseEnds()].map(
+      async (lease): Promise<LeaseReleaseSettlement> => {
+        const failedSteps = params.failedLeases?.get(lease.leaseId);
+        leaseRegistry.beginLeaseEnd(lease, {
+          sessionsSettled: !failedSteps,
+          providerRelease: 'pending',
+        });
+        if (failedSteps?.includes('device_claim'))
+          leaseRegistry.markLeaseReleaseUnknown(lease.leaseId, 'device-claim-release-unconfirmed');
+        else if (!failedSteps) leaseRegistry.confirmLeaseEnd(lease.leaseId, 'sessionsSettled');
+        try {
+          const outcome = await releaseWithinTimeout(
+            expiredProviderLeaseReleaser.release(lease),
+            timeoutMs,
           );
-        return { lease, outcome };
-      } catch (error) {
-        return { lease, error };
-      }
-    }),
+          if (outcome === undefined) return { lease, timedOut: true };
+          if (outcome.status === 'released' || outcome.status === 'not-required')
+            leaseRegistry.confirmLeaseEnd(lease.leaseId, 'providerReleased');
+          else if (outcome.status === 'refused')
+            leaseRegistry.markLeaseReleaseUnknown(
+              lease.leaseId,
+              outcome.reason === 'provider-runtime-unavailable'
+                ? outcome.reason
+                : 'provider-release-unconfirmed',
+            );
+          return { lease, outcome };
+        } catch (error) {
+          return { lease, error };
+        }
+      },
+    ),
   );
   const refused: string[] = [];
   for (const settlement of settlements) {

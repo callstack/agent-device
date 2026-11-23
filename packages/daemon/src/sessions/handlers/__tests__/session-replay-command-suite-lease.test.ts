@@ -27,7 +27,7 @@ test.each(['uncontended', 'retry', 'replacement'] as const)(
   async (cleanup) => {
     const sessionStore = makeSessionStore();
     const leaseRegistry = new LeaseRegistry();
-    const release = vi.fn(async (_lease: DeviceLease) => ({}));
+    const release = vi.fn(async (_lease: DeviceLease) => ({ release: 'confirmed' as const }));
     const root = mkdtempForTestSync('agent-device-test-suite-provider-lease-');
     fs.writeFileSync(path.join(root, '01-open.ad'), 'context platform=android\nopen "Settings"\n');
     const lease = leaseRegistry.allocateLease({

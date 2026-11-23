@@ -2,7 +2,11 @@ import type {
   CloudArtifactsQuery,
   CloudArtifactsResult,
 } from '@agent-device/contracts/observability';
-import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
+import type {
+  DeviceLease,
+  LeaseLifecycleContext,
+  ProviderLeaseRelease,
+} from '@agent-device/contracts/device';
 import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
@@ -192,25 +196,24 @@ export class WebDriverSessionManager {
     return this.allocationResult(session);
   }
 
-  async release(lease: DeviceLease): Promise<LeaseResult> {
+  async release(lease: DeviceLease): Promise<ProviderLeaseRelease | undefined> {
     if (lease.leaseProvider !== this.options.provider) return undefined;
     const entry = this.entriesByLeaseId.get(lease.leaseId);
-    // Nothing holds the lease: it was never allocated here, or its release finished and gave the lease
-    // back. A release that arrives while another one disposes joins that disposal.
-    if (entry === undefined) return undefined;
+    if (!entry) return { release: 'confirmed' };
     const take = this.take(entry, 'release');
     const outcome = await take.disposal;
-    if (outcome.session === undefined)
-      return outcome.cleanup === 'uncertain' ? { releaseStatus: 'unknown' } : undefined;
-    // Report artifacts even when the provider refused release.
+    const release = outcome.cleanup === 'uncertain' ? 'unknown' : 'confirmed';
+    if (!outcome.session) return { release };
     const artifacts = await take.artifacts;
     return {
-      provider: this.options.provider,
-      providerSessionId: outcome.session.providerSessionId,
-      ...outcome.cleanupPayload,
-      ...(outcome.cleanup === 'uncertain' ? { releaseStatus: 'unknown' } : {}),
-      ...(outcome.warnings.length > 0 ? { warnings: outcome.warnings } : {}),
-      ...(artifacts ? { cloudArtifacts: artifacts } : {}),
+      release,
+      provider: {
+        provider: this.options.provider,
+        providerSessionId: outcome.session.providerSessionId,
+        ...outcome.cleanupPayload,
+        ...(outcome.warnings.length ? { warnings: outcome.warnings } : {}),
+        ...(artifacts ? { cloudArtifacts: artifacts } : {}),
+      },
     };
   }
 
@@ -287,7 +290,8 @@ export class WebDriverSessionManager {
       (error: unknown) => {
         if (
           error instanceof AppError &&
-          (error.details?.reason === WEBDRIVER_SESSION_REASONS.sessionCreateTimeout.reason ||
+          (error.details?.dispatched === 'unknown' ||
+            error.details?.reason === WEBDRIVER_SESSION_REASONS.sessionCreateTimeout.reason ||
             error.details?.cleanupError !== undefined)
         )
           entry.createReleaseUnknown = true;
