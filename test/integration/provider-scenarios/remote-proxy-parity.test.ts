@@ -162,31 +162,30 @@ function parityScript(): readonly ScenarioRequest[] {
 
 /**
  * The published form of a response with transport identity removed: JSON drops `undefined`
- * exactly like the wire does, every path under the world's session root becomes the same
- * token, and request diagnostics files lose the record id in their name.
+ * exactly like the wire does. Normalize the daemon state directory and generated record IDs.
  */
-function stripVolatile(value: unknown, sessionRoot: string): unknown {
-  return stripVolatileKeys(JSON.parse(JSON.stringify(value)), sessionRoot);
+function stripVolatile(value: unknown, stateDir: string): unknown {
+  return stripVolatileKeys(JSON.parse(JSON.stringify(value)), stateDir);
 }
 
-function stripVolatileKeys(value: unknown, sessionRoot: string): unknown {
-  if (Array.isArray(value)) return value.map((entry) => stripVolatileKeys(entry, sessionRoot));
+function stripVolatileKeys(value: unknown, stateDir: string): unknown {
+  if (Array.isArray(value)) return value.map((entry) => stripVolatileKeys(entry, stateDir));
   if (typeof value === 'string') {
     return value
-      .split(sessionRoot)
-      .join('<session-root>')
-      .replace(/\/request-records\/[^/]+\.ndjson$/, '/request-records/<record-id>.ndjson');
+      .split(stateDir)
+      .join('<state-dir>')
+      .replace(/\/request-records\/[^/]+\.ndjson$/, '/request-records/<record-id>.ndjson')
+      .replace(
+        /\/session-journals\/[a-f0-9-]{36}\/events\.ndjson$/,
+        '/session-journals/<lifetime-id>/events.ndjson',
+      );
   }
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .filter(([key]) => !VOLATILE_KEYS.has(key))
-      .map(([key, entry]) => [key, stripVolatileKeys(entry, sessionRoot)]),
+      .map(([key, entry]) => [key, stripVolatileKeys(entry, stateDir)]),
   );
-}
-
-function sessionRootOf(daemon: ProviderScenarioHarness): string {
-  return path.dirname(daemon.sessionDir());
 }
 
 const ERROR_ENVELOPE_KEYS = [
@@ -332,7 +331,7 @@ const PUBLISHED_SNAPSHOT_DATA_KEYS = [
   'warnings',
 ] as const;
 
-type LegRun = { responses: DaemonResponse[]; sessionRoot: string };
+type LegRun = { responses: DaemonResponse[]; stateDir: string };
 
 function assertPublishedParity(direct: LegRun, proxied: LegRun): void {
   const script = parityScript();
@@ -341,8 +340,8 @@ function assertPublishedParity(direct: LegRun, proxied: LegRun): void {
     const proxiedResponse = proxied.responses[index];
     const step = `${index + 1}:${script[index]?.command}`;
     assert.deepEqual(
-      stripVolatile(proxiedResponse, proxied.sessionRoot),
-      stripVolatile(directResponse, direct.sessionRoot),
+      stripVolatile(proxiedResponse, proxied.stateDir),
+      stripVolatile(directResponse, direct.stateDir),
       `proxy diverged from direct execution at step ${step}`,
     );
     if (directResponse.ok || !proxiedResponse || proxiedResponse.ok) return;
@@ -403,7 +402,7 @@ test(
           async (request) => await callDaemonCommand(directWorld.daemon, request),
           'direct',
         ),
-        sessionRoot: sessionRootOf(directWorld.daemon),
+        stateDir: directWorld.daemon.stateDir,
       };
     } finally {
       await directWorld.close();
@@ -422,7 +421,7 @@ test(
         ).length,
         1,
       );
-      return { responses, sessionRoot: sessionRootOf(world.daemon) };
+      return { responses, stateDir: world.daemon.stateDir };
     });
 
     assertPublishedParity(direct, proxied);
@@ -618,10 +617,10 @@ test(
         [...PUBLISHED_SNAPSHOT_DATA_KEYS],
         'the published snapshot payload carried a field it does not publish',
       );
-      const sessionRoot = sessionRootOf(world.daemon);
+      const stateDir = world.daemon.stateDir;
       assert.deepEqual(
-        stripVolatile(rpcBody.result, sessionRoot),
-        stripVolatile(response, sessionRoot),
+        stripVolatile(rpcBody.result, stateDir),
+        stripVolatile(response, stateDir),
         'the result on the wire is not the response the client published',
       );
     });

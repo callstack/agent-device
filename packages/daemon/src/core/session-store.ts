@@ -8,19 +8,18 @@ import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import {
   AppError,
   createRequestCanceledError,
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
-import { ignoresSessionLease } from './daemon-command-registry.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import {
   LEASE_ADMISSION_REASONS,
   assertRequestHoldsSessionLease,
   assertRequestPresentsLease,
-  compareRequestLeaseClaims,
   sessionLeaseOf,
 } from './lease-context.ts';
 import {
@@ -68,9 +67,12 @@ import { successText } from '@agent-device/kernel/success-text';
 import {
   appendActionEvent,
   appendSessionEvent,
+  buildRequestFinishedEvent,
+  buildRequestStartedEvent,
   flushSessionEventLogWrites,
   readSessionEventLog,
   resolveSessionEventLogPath,
+  type BoundJournal,
   type SessionEventLogInput,
   type SessionEventLogPage,
 } from '@agent-device/session-journal/session-event-log';
@@ -83,7 +85,8 @@ const SESSION_STORE_REASONS = {
 } as const satisfies ReasonTable<'sessions'>;
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
-type SessionEntry = { current: SessionState };
+type SessionEntry = SessionRef['lifetime'] & { current: SessionState };
+type EventPageOptions = Parameters<typeof readSessionEventLog>[1];
 type SessionUpdate = Partial<Omit<SessionState, 'lease'>>;
 type SessionPatch = SessionUpdate | ((current: SessionState) => SessionUpdate);
 export type RetainedExecutionHost = Readonly<{
@@ -146,7 +149,7 @@ export class SessionStore {
 
   publish(address: string, session: SessionState): SessionRef {
     this.assertPublishable(address);
-    const entry = { current: session };
+    const entry = { current: session, journalId: randomUUID() };
     this.sessions.set(address, entry);
     for (const retained of this.retainedExecutionHosts.values()) {
       if (devicesOverlap(retained.device.id, session.device.id)) {
@@ -282,38 +285,20 @@ export class SessionStore {
   recordAction(ref: SessionRef, entry: RecordActionEntry): void {
     const action = recordActionEntry(this.requireCurrent(ref), entry, this.host.cwd);
     if (action) {
-      appendActionEvent(this.resolveEventLogPath(ref.address), ref.address, action, this.host.env);
+      appendActionEvent(this.resolveEventLogPath(ref), ref.address, action, this.host.env);
     }
   }
 
-  recordEvent(sessionName: string, event: SessionEventLogInput): void {
-    appendSessionEvent(this.resolveEventLogPath(sessionName), sessionName, event, this.host.env);
+  recordEvent(ref: SessionRef, event: SessionEventLogInput): void {
+    appendSessionEvent(this.resolveEventLogPath(ref), ref.address, event, this.host.env);
   }
 
-  recordRequestEvent(
-    req: DaemonRequest,
-    address: string,
-    buildEvent: () => SessionEventLogInput,
-  ): boolean {
-    const lease = this.sessions.get(address)?.current.lease;
-    if (lease && (ignoresSessionLease(req.command) || compareRequestLeaseClaims(req, lease))) {
-      return false;
-    }
-    this.recordEvent(address, buildEvent());
-    return true;
+  readEvents(ref: SessionRef, options?: EventPageOptions): SessionEventLogPage {
+    return readSessionEventLog(this.resolveEventLogPath(ref), options);
   }
 
-  readEvents(
-    sessionName: string,
-    options: { cursor?: string; limit?: number | string } = {},
-  ): SessionEventLogPage {
-    return readSessionEventLog(this.resolveEventLogPath(sessionName), options);
-  }
-
-  async flushEvents(sessionName?: string): Promise<void> {
-    await flushSessionEventLogWrites(
-      sessionName ? this.resolveEventLogPath(sessionName) : undefined,
-    );
+  async flushEvents(ref?: SessionRef): Promise<void> {
+    await flushSessionEventLogWrites(ref ? this.resolveEventLogPath(ref) : undefined);
   }
 
   writeSessionLog(ref: SessionRef, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
@@ -628,8 +613,10 @@ export class SessionStore {
     return resolveSessionAppLogPidPath(this.sessionsDir, sessionName);
   }
 
-  resolveEventLogPath(sessionName: string): string {
-    return resolveSessionEventLogPath(this.resolveSessionDir(sessionName));
+  resolveEventLogPath(ref: SessionRef): string {
+    return resolveSessionEventLogPath(
+      path.join(this.resolveDaemonStateDir(), 'session-journals', ref.lifetime.journalId),
+    );
   }
 }
 
@@ -639,6 +626,7 @@ const openAuthority: unique symbol = Symbol();
 export type AuthorizedSession = Readonly<{
   [sessionAuthority]: true;
   current(): SessionRef | undefined;
+  journal: BoundJournal;
   writeScriptVersion(): ReturnType<SessionStore['writeRemoteScriptVersion']>;
 }>;
 
@@ -696,6 +684,7 @@ export class SessionCoordinator {
         published = true;
         req.internal?.onLifetimePublished?.(address, ref.lifetime);
         const authority = this.bind(ref, () => active() && !isRequestCanceled(req.meta?.requestId));
+        req.internal?.onJournalPublished?.(authority.journal);
         req.internal?.onSessionPublished?.(remoteScriptVersionDelivery(undefined, authority));
         return authority;
       },
@@ -705,9 +694,38 @@ export class SessionCoordinator {
   private bind(ref: SessionRef, active: () => boolean): AuthorizedSession {
     const current = () =>
       active() && this.#store.resolveCurrent(ref) ? this.#store.refresh(ref) : undefined;
+    const requireActive = () => {
+      if (!active()) throw createRequestCanceledError();
+      this.#store.requireCurrent(ref);
+    };
     return {
       [sessionAuthority]: true,
       current,
+      journal: {
+        read: async (options) => {
+          requireActive();
+          await this.#store.flushEvents(ref);
+          requireActive();
+          return this.#store.readEvents(ref, options);
+        },
+        beginRequest: (req, startedAtMs) => {
+          requireActive();
+          this.#store.recordEvent(ref, {
+            ...buildRequestStartedEvent({ req }),
+            ts: new Date(startedAtMs).toISOString(),
+          });
+          // Close can retire this lifetime before the request completes.
+          return (finishedReq, response) =>
+            this.#store.recordEvent(
+              ref,
+              buildRequestFinishedEvent({
+                req: finishedReq,
+                response,
+                durationMs: Math.max(0, Date.now() - startedAtMs),
+              }),
+            );
+        },
+      },
       writeScriptVersion: () => {
         if (!current()) throw createRequestCanceledError();
         return this.#store.writeRemoteScriptVersion(ref);

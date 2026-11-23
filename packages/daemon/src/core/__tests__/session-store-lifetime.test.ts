@@ -223,8 +223,8 @@ test('action recording uses the latest matching record and its scoped journal', 
   assert.equal(ref.session.scriptPublication, undefined);
   assert.equal(current.scriptPublication?.kind, 'authoring');
   assert.equal(publicSlot.session.actions.length, 0);
-  assert.equal(fs.existsSync(store.resolveEventLogPath('default')), false);
-  assert.equal(store.readEvents(ADDRESS).events[0]?.session, ADDRESS);
+  assert.equal(fs.existsSync(store.resolveEventLogPath(publicSlot)), false);
+  assert.equal(store.readEvents(ref).events[0]?.session, ADDRESS);
 });
 
 test.each([{}, { noRecord: true }])(
@@ -248,8 +248,8 @@ test.each([{}, { noRecord: true }])(
     assert.equal(store.requireCurrent(successor), session);
     assert.equal(session.actions.length, 0);
     assert.equal(session.scriptPublication, undefined);
-    assert.equal(fs.existsSync(store.resolveEventLogPath(ADDRESS)), false);
-    assert.equal(fs.existsSync(store.resolveEventLogPath('default')), false);
+    assert.equal(fs.existsSync(store.resolveEventLogPath(ref)), false);
+    assert.equal(fs.existsSync(store.resolveEventLogPath(successor)), false);
   },
 );
 

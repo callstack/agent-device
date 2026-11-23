@@ -622,7 +622,7 @@ test('#1391: a close-time script save failure still clears the device claim and 
       target: { kind: 'explicit', path: targetPath, force: false },
     },
   });
-  store.publish('close-save-script-failure', session);
+  const ref = store.publish('close-save-script-failure', session);
   mockDispatch.mockResolvedValue(undefined);
 
   // Like the platform-close-error tests above, a failed close-time save is
@@ -670,9 +670,9 @@ test('#1391: a close-time script save failure still clears the device claim and 
     session.actions.map((action) => action.command),
     ['close'],
   );
-  await store.flushEvents('close-save-script-failure');
+  await store.flushEvents(ref);
   const durableCloseEvents = store
-    .readEvents('close-save-script-failure')
+    .readEvents(ref)
     .events.filter((event) => event.kind === 'action.recorded' && event.command === 'close');
   assert.equal(durableCloseEvents.length, session.actions.length);
 });

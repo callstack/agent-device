@@ -58,6 +58,14 @@ export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' |
 };
 
 type ReadSessionEventLogOptions = { cursor?: string; limit?: number | string };
+export type BoundJournal = Readonly<{
+  read(options?: ReadSessionEventLogOptions): Promise<SessionEventLogPage>;
+  beginRequest(
+    req: DaemonRequest,
+    startedAtMs: number,
+  ): (req: DaemonRequest, response: DaemonResponse) => void;
+}>;
+
 type RawSessionEventLogEntry = Record<string, unknown> &
   Pick<SessionEventLogEntry, 'version' | 'ts' | 'session' | 'kind'>;
 

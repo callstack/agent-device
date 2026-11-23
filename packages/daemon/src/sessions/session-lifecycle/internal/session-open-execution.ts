@@ -414,12 +414,27 @@ export async function completeOpenCommand(params: {
     durationMs: timing.totalDurationMs,
     data: timing,
   });
+  const takeoverWarning =
+    tookOverDeviceClaim && deviceClaimTakeoverWarning(tookOverDeviceClaim, req, sessionStore);
+  const nextRef = publishOpenSession({
+    req,
+    sessionStore,
+    sessionName,
+    existingRef: openDispatchRef,
+    device,
+    surface,
+    appBundleId: sessionAppBundleId,
+    appName,
+    deviceClaim,
+    bootOwnership,
+    androidLaunchIdentity: params.androidLaunchIdentity,
+  });
   const openResult = buildOpenResult({
     sessionName: openDispatchSession?.name ?? resolvePublicSessionName(req),
     sessionStateDir,
     runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
     requestLogPath,
-    eventLogPath: sessionStore.resolveEventLogPath(sessionName),
+    eventLogPath: sessionStore.resolveEventLogPath(nextRef),
     appName,
     appBundleId: sessionAppBundleId,
     surface,
@@ -432,11 +447,8 @@ export async function completeOpenCommand(params: {
     selection: preparedSelection,
     launchConfirmation: launchConfirmationReport(outcome),
   });
-  if (tookOverDeviceClaim) {
-    appendResponseWarning(
-      openResult,
-      deviceClaimTakeoverWarning(tookOverDeviceClaim, req, sessionStore),
-    );
+  if (takeoverWarning) {
+    appendResponseWarning(openResult, takeoverWarning);
   }
   if (outcome.launchConfirmation === 'unanswered') {
     appendResponseWarning(
@@ -456,19 +468,6 @@ export async function completeOpenCommand(params: {
         : openNotForegroundWarning(foregroundVerification),
     );
   }
-  const nextRef = publishOpenSession({
-    req,
-    sessionStore,
-    sessionName,
-    existingRef: openDispatchRef,
-    device,
-    surface,
-    appBundleId: sessionAppBundleId,
-    appName,
-    deviceClaim,
-    bootOwnership,
-    androidLaunchIdentity: params.androidLaunchIdentity,
-  });
   sessionStore.clearCloseEffectsUnconfirmed(nextRef);
   const nextSession = sessionStore.requireCurrent(nextRef);
   markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);

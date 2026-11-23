@@ -268,6 +268,58 @@ test('a request that a leased session refused reads its own record, which names 
   expect(served).not.toContain(OTHER_LEASE_ID);
 });
 
+test('case-variant session addresses keep separate journals behind one proxy token', async () => {
+  if (!world) return;
+  const variant = SESSION.toLowerCase();
+  const variantAddress = tenantScopedSessionName(TENANT, variant);
+  const otherScope = { tenantId: TENANT, runId: 'case-variant' };
+  const otherLease = world.leaseRegistry.allocateLease({
+    ...otherScope,
+    leaseBackend: 'ios-instance',
+  });
+  const other = { ...otherScope, leaseId: otherLease.leaseId };
+  world.sessionStore.publish(
+    variantAddress,
+    makeAndroidSession(variantAddress, {
+      sessionScope: { kind: 'tenant', id: TENANT },
+      lease: sessionLeaseOf(otherLease),
+    }),
+  );
+
+  const owned = await world.send('press', SESSION, world.owner);
+  const refused = await world.send('press', SESSION, other);
+  expect(refused.error?.data?.details?.reason).toBe('LEASE_SESSION_MISMATCH');
+  const record = refused.error?.data?.diagnosticsRecord;
+  expect(record?.requestId).toMatch(/^[a-f0-9]{32}-[a-f0-9]{64}$/);
+  const route = (ref: DiagnosticsRecordRef) =>
+    `/sessions/${encodeURIComponent(ref.session)}/requests/${ref.requestId}/diagnostics`;
+  const ownDiagnostics = await world.get(route(record!), other.leaseId);
+  expect(ownDiagnostics.status).toBe(200);
+  expect(await ownDiagnostics.text()).toContain('"phase":"request_failed"');
+  await expectLeasedOutputRefusal(await world.get(route(record!), world.leaseId));
+  await expectLeasedOutputRefusal(
+    await world.get(route(owned.error!.data!.diagnosticsRecord!), other.leaseId),
+  );
+
+  const upper = await world.send('events', SESSION, world.owner);
+  const lower = await world.send('events', variant, other);
+  expect(upper.result?.data?.events).toMatchObject([
+    { command: 'press', kind: 'request.started' },
+    { command: 'press', kind: 'request.finished' },
+  ]);
+  expect(lower.result?.data?.events).toEqual([]);
+  expect(lower.result?.data?.path).not.toBe(upper.result?.data?.path);
+});
+
+test('the proxy refuses a legacy diagnostics file without producer proof', async () => {
+  if (!world) return;
+  const directory = path.join(world.sessionStore.ensureSessionDir(world.sessionName), 'requests');
+  fs.mkdirSync(directory);
+  fs.writeFileSync(path.join(directory, 'legacy-request.ndjson'), '{"phase":"private"}\n');
+  const route = `/sessions/${encodeURIComponent(world.sessionName)}/requests/legacy-request/diagnostics`;
+  expect((await world.get(route, world.leaseId)).status).toBe(404);
+});
+
 test('a non-string lease claim reaches lease admission and gets an unleased diagnostics record', async () => {
   if (!world) return;
   const refused = await world.send('press', SESSION, { leaseId: 42 });

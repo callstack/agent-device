@@ -201,6 +201,12 @@ describe('state-dir residue rules', () => {
   test.each<[string, StateEntry, DaemonLeakPhaseSelection, 'expected' | 'stray']>([
     ['session event log', file('sessions/default/events.ndjson'), AFTER_SHUTDOWN, 'expected'],
     [
+      'lifetime journal window',
+      file('session-journals/33cd82c9-f0a4-4908-bf80-d1aa073c145d/events.ndjson.window.json'),
+      AFTER_SHUTDOWN,
+      'expected',
+    ],
+    [
       'request diagnostics',
       file('sessions/d/request-records/abc.ndjson'),
       AFTER_SHUTDOWN,

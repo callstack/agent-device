@@ -55,6 +55,11 @@ Under tenant isolation, a web session's browser key derives from the tenant and 
 
 - A daemon refuses unsupported device-spec keys. The backend echoes the granted device on the lease as `lease.device`. A live proxy lease refuses a later command whose named spec keys differ, with `CONNECTION_DEVICE_CONFLICT`.
 
+The `events` command reads the journal of the admitted session lifetime.
+When a request is refused before admission, its diagnostics stay in a separate request record.
+A remote reader of a leased request record must present the lease ID that the request presented.
+The daemon refuses remote reads of legacy records with no proof of owner.
+
 The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-device-lease-contracts.md), [daemon client](../../packages/daemon-client/docs/remote-device-leases.md), [provider lease table](../../packages/provision-kit/docs/remote-device-leases.md), and [device specification](../../packages/contracts/docs/lease-device-spec.md) documentation.
 
 ## Rationale

@@ -78,7 +78,6 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   audioProbeAdmissionLedger,
   perfCaptureAdmissionLedger,
   throwIfCanceled,
-  resolveSessionRef,
 }) =>
   await handleSessionObservabilityCommands({
     host,
@@ -92,7 +91,6 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
     throwIfCanceled,
-    resolveSessionRef,
   } satisfies SessionObservabilityCommandInput);
 
 /**

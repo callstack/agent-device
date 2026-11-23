@@ -355,7 +355,7 @@ test('devices with no lease id stays detached from a leased session and its reco
   );
 });
 
-test('events shows the start and failed finish of a policy-refused capabilities request', async () => {
+test('a pre-admission policy refusal leaves the current journal empty', async () => {
   if (!world) return;
   await world.close();
   world = await startDaemon(
@@ -368,15 +368,7 @@ test('events shows the start and failed finish of a policy-refused capabilities 
 
   const events = await world.send('events', [], {});
   expect(events.result?.ok).toBe(true);
-  expect(events.result?.data?.events).toMatchObject([
-    { command: 'capabilities', kind: 'request.started' },
-    {
-      command: 'capabilities',
-      kind: 'request.finished',
-      status: 'error',
-      details: { code: 'UNAUTHORIZED' },
-    },
-  ]);
+  expect(events.result?.data?.events).toEqual([]);
 });
 
 test('events shows the start and failed finish when an invalidated recording blocks capabilities', async () => {
@@ -492,7 +484,12 @@ test.each([
       publishLeasedSession(sessionName);
     };
 
-    expectLeaseIdRefusal(await world.send(command, [], scope));
+    const response = await world.send(command, [], scope);
+    if (command === 'events') {
+      expect(response.error?.data?.code).toBe('SESSION_NOT_FOUND');
+    } else {
+      expectLeaseIdRefusal(response);
+    }
 
     expect(world.hostDiagnostics.deviceChecks).not.toHaveBeenCalled();
     expect(world.runtime.inspectFacts).not.toHaveBeenCalled();
@@ -501,6 +498,45 @@ test.each([
     if (!sendsOtherLease) expect(await world.requestEvents(sessionName)).toEqual([]);
   },
 );
+
+test('close and reopen at one address give a second lease a fresh journal', async () => {
+  if (!world) return;
+  const { owner, send } = world;
+  const opened = await send('open', ['com.example.app'], owner);
+  expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+  const firstPath = String(opened.result?.data?.eventLogPath);
+  const firstPage = await send('events', ['1'], owner);
+  expect(firstPage.result?.data).toMatchObject({
+    path: firstPath,
+    limit: 1,
+    nextCursor: '1',
+    events: [{ command: 'open', kind: 'request.started' }],
+  });
+
+  const closed = await send('close', [], owner);
+  expect(closed.result?.ok, JSON.stringify(closed)).toBe(true);
+  const secondOwner = world.allocateOtherClient();
+  const reopened = await send('open', ['com.example.app'], secondOwner);
+  expect(reopened.result?.ok, JSON.stringify(reopened)).toBe(true);
+  const secondPage = await send('events', [], secondOwner);
+  expect(secondPage.result?.data).toMatchObject({
+    path: reopened.result?.data?.eventLogPath,
+    events: [
+      { command: 'open', kind: 'request.started' },
+      { command: 'open', kind: 'action.recorded' },
+      { command: 'open', kind: 'request.finished' },
+    ],
+  });
+  expect(secondPage.result?.data?.path).not.toBe(firstPath);
+  expectLeaseIdRefusal(await send('events', [], owner));
+  await world.sessionStore.flushEvents();
+  const retiredEvents = fs.readFileSync(firstPath, 'utf8').trim().split('\n');
+  expect(JSON.parse(retiredEvents.at(-1)!)).toMatchObject({
+    command: 'close',
+    kind: 'request.finished',
+    status: 'ok',
+  });
+});
 
 test.each(['doctor', 'capabilities', 'artifacts'] as const)(
   '%s leaves no start when a leased replacement opens before the handler read',

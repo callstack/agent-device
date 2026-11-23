@@ -4,6 +4,10 @@
 
 Partly accepted.
 The session event log contract is accepted and implemented in `packages/session-journal/src`: `events.ndjson` v1 entries, size-capped rotation to one retained generation, the verifying retention-window sidecar, and the typed `EVENT_LOG_CURSOR_EXPIRED` and `EVENT_LOG_WINDOW_UNVERIFIED` cursor errors of the `events` command.
+
+Under [ADR 0040](0040-daemon-ownership-state-machines.md), the daemon assigns a journal ID when it publishes a session lifetime.
+The admitted lifetime supplies the journal for request events and for `events` reads.
+When a request is refused before admission, the daemon keeps the diagnostics in its separate request record.
 Out-of-request work, such as the idle sweep and lease session end, runs in the daemon-level diagnostics scope (`session: 'daemon'`), not in a per-session teardown scope.
 The rest of this record remains proposed (2026-07-24) and is not implemented: the event catalog, the single journal append point, registered sinks, forked scopes with parent scope identity, and the usage record.
 The proposed names below (`EVENT_CATALOG`, `EventKind`, `UsageRecord`, `parentScopeId`) do not exist in code.

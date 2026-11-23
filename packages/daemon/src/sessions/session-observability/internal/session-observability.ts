@@ -32,10 +32,6 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
-import {
-  resolveRequestSessionRef,
-  type ResolveRequestSessionRef,
-} from '../../request-admission.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import {
   RUNTIME_GATEWAY_REASONS,
@@ -57,7 +53,6 @@ export type SessionObservabilityCommandInput = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
-  resolveSessionRef?: ResolveRequestSessionRef;
   bindDevice?: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -129,7 +124,7 @@ export async function handleSessionObservabilityCommands(
     return handleLogsCommand(params);
   }
   if (req.command === 'events') {
-    return await handleEventsCommand(params);
+    return await handleEventsCommand(req);
   }
   if (req.command === 'network') {
     return await handleNetworkCommand(params);
@@ -141,15 +136,13 @@ export async function handleSessionObservabilityCommands(
   return null;
 }
 
-async function handleEventsCommand(params: ObservabilityInput): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, resolveSessionRef = resolveRequestSessionRef } = params;
+async function handleEventsCommand(req: DaemonRequest): Promise<DaemonResponse> {
+  const read = req.internal?.readSessionEvents;
+  if (!read) return errorResponse('SESSION_NOT_FOUND', 'events requires an active session');
   try {
-    await sessionStore.flushEvents(sessionName);
-    // `events` holds no session lock, so a leased session can open here after admission.
-    resolveSessionRef(req, sessionStore.lookup(sessionName));
     return {
       ok: true,
-      data: sessionStore.readEvents(sessionName, {
+      data: await read({
         limit: req.positionals?.[0],
         cursor: req.positionals?.[1],
       }),
