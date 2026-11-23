@@ -1,11 +1,8 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
-  readRemoteConnectionState,
   sessionLeaseScope,
   writeRemoteConnectionState,
   type RemoteConnectionRequestMetadata,
@@ -22,7 +19,6 @@ import {
   connectionProviderCapabilities,
   providerRouteForConnection,
 } from '../connection/provider-policy.ts';
-import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
   acquireConnectionLease,
   createLeaseLedger,
@@ -35,11 +31,54 @@ import {
   stopMetroCleanup,
 } from './connection-metro-runtime.ts';
 import { grantedLeaseDevice } from './proxy-lease-device.ts';
+import type { CommandConnection } from '../connection/command-connection.ts';
+
+type ConnectionSelection = {
+  stateDir: string;
+  state: RemoteConnectionState;
+  existing: boolean;
+};
+
+export async function selectRemoteConnectionForCommand(
+  connection: CommandConnection,
+  flags: CliFlags,
+  host: HostEnvironment,
+): Promise<ConnectionSelection> {
+  const { stateDir, storedState, remoteConfigPath, profile } = connection;
+  if (storedState && storedState.remoteConfigPath !== remoteConfigPath) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'A different remote connection is already active for this session. Run connect --force or disconnect before using a different --remote-config.',
+      {
+        session: storedState.session,
+        activeRemoteConfig: storedState.remoteConfigPath,
+        requestedRemoteConfig: remoteConfigPath,
+      },
+    );
+  }
+
+  const provider = connectionLeaseProvider(storedState, profile.leaseProvider);
+  await admitProviderForRoute(
+    provider,
+    providerRouteForConnection({ daemonBaseUrl: flags.daemonBaseUrl, env: host.env }),
+    host.env,
+  );
+  const state = storedState
+    ? { ...storedState, leaseProvider: provider }
+    : createRemoteConnectionStateFromFlags(
+        flags,
+        remoteConfigPath,
+        { ...profile, leaseProvider: provider },
+        host.env,
+      );
+  return { stateDir, state, existing: storedState !== null };
+}
 
 export async function materializeRemoteConnectionForCommand(options: {
   host: HostEnvironment;
   command: string;
   flags: CliFlags;
+  selection: ConnectionSelection;
   client: AgentDeviceClient;
   runtime?: SessionRuntimeHints;
   positionals?: string[];
@@ -52,65 +91,11 @@ export async function materializeRemoteConnectionForCommand(options: {
   leaseDevice?: LeaseDevice;
 }> {
   const { command, flags, client, host } = options;
-  if (!flags.remoteConfig) {
-    return { flags, runtime: options.runtime };
-  }
-
-  const stateDir = resolveDaemonPaths(flags.stateDir, {
-    cwd: host.cwd,
-    env: host.env,
-  }).baseDir;
-  const remoteConfig = resolveRemoteConfigProfile({
-    configPath: flags.remoteConfig,
-    cwd: host.cwd,
-    env: host.env,
-  });
-  const profileFlags = profileToCliFlags(remoteConfig.profile);
-  const mergedFlags = {
-    ...profileFlags,
-    ...flags,
-    remoteConfig: remoteConfig.resolvedPath,
-  };
-  const existingState = readRemoteConnectionState({
-    stateDir,
-    session: mergedFlags.session ?? 'default',
-  });
-  if (existingState && existingState.remoteConfigPath !== remoteConfig.resolvedPath) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'A different remote connection is already active for this session. Run connect --force or disconnect before using a different --remote-config.',
-      {
-        session: existingState.session,
-        activeRemoteConfig: existingState.remoteConfigPath,
-        requestedRemoteConfig: remoteConfig.resolvedPath,
-      },
-    );
-  }
-
-  // A connection driven by a configured remote daemon needs no plugin here: that daemon's own
-  // provider registration supplies the runtime, and this command only leases and dispatches. Its
-  // connection metadata still has to be read and saved, so the profile is loaded either way.
-  const provider = connectionLeaseProvider(existingState, remoteConfig.profile.leaseProvider);
-  await admitProviderForRoute(
-    provider,
-    providerRouteForConnection({
-      daemonBaseUrl: mergedFlags.daemonBaseUrl,
-      env: host.env,
-    }),
-    host.env,
-  );
-  const state =
-    existingState ??
-    createRemoteConnectionStateFromFlags(
-      mergedFlags,
-      remoteConfig.resolvedPath,
-      remoteConfig.profile,
-      host.env,
-    );
-  const nextFlags = { ...mergedFlags, session: state.session };
+  const { stateDir, state, existing } = options.selection;
+  const nextFlags = { ...flags, session: state.session };
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
-  let changed = !existingState;
+  let changed = !existing;
 
   // Unknown creation evidence permits discard before binding, but only confirmed creation permits
   // rollback after a later failure. A committed session record takes over either lease.

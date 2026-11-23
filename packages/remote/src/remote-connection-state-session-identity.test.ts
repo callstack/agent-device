@@ -263,7 +263,7 @@ test('remote command defaults resolve from an older Demo.json without moving it'
   });
 
   const defaults = resolveRemoteConnectionDefaults({
-    stateDir,
+    state: readRemoteConnectionState({ stateDir, session: 'Demo' }),
     session: 'Demo',
     cwd: stateDir,
     env: {},

@@ -10,7 +10,7 @@ import {
   seedConnectionState,
   unexpectedCommandCall,
 } from '../../__tests__/remote-connection.fixtures.ts';
-import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 
 vi.mock('@agent-device/plugins/store', async (importOriginal) =>
   (await import('../../__tests__/test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(

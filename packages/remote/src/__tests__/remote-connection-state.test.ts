@@ -12,6 +12,7 @@ import {
   hashRemoteConfigFile,
   resolveConnectionDeviceScope,
   resolveRemoteConnectionDefaults,
+  readRemoteConnectionDefault,
   readRemoteConnectionState,
   requireLeasedConnectionSession,
   writeRemoteConnectionState,
@@ -180,7 +181,7 @@ test('resolveRemoteConnectionDefaults falls back to the environment token', asyn
   writeRemoteConnectionState({ stateDir, state });
 
   const defaults = resolveRemoteConnectionDefaults({
-    stateDir,
+    state: readRemoteConnectionDefault({ stateDir, session: undefined }),
     session: 'adc-env-fallback',
     cwd: tempRoot,
     env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: FAKE_DAEMON_TOKEN },

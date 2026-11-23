@@ -5,7 +5,7 @@ import { afterEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '@agent-device/client';
 import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
-import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 
 const capabilities = {
   leaseKind: 'direct-device-provider',
