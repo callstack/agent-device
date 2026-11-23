@@ -250,21 +250,19 @@ export function refuseOversizedDaemonRequest(payload: string, requestId: string 
 /** Who must upgrade so every link speaks the client's protocol. Client-local: never serialized. */
 type ProtocolUpgradeSide = 'remote' | 'client' | 'client-and-proxy';
 
+type HealthLinkLabel = Readonly<{ service?: string; version?: string }>;
+
 /** The `/health` link whose advertised RPC protocol differs from the client's. */
-type SkewedHealthLink = Readonly<{
-  service?: string;
-  version?: string;
-  rpcProtocolVersion: number;
-}>;
+type SkewedHealthLink = HealthLinkLabel & Readonly<{ rpcProtocolVersion: number }>;
 
 /**
  * The refusal for a remote link on another RPC protocol. It names both versions and the side to
- * upgrade. `proxy` names the proxy when the skewed link is the daemon behind it.
+ * upgrade. `proxy` is the proxy's own link when the skewed link is the daemon behind it.
  */
 export function incompatibleRemoteProtocolError(
   daemonBaseUrl: string,
   link: SkewedHealthLink,
-  proxy: string | undefined,
+  proxy: HealthLinkLabel | undefined,
 ): AppError {
   const clientVersion = readVersion();
   const upgradeSide: ProtocolUpgradeSide =
@@ -274,11 +272,12 @@ export function incompatibleRemoteProtocolError(
         ? 'client-and-proxy'
         : 'client';
   const service = link.service ?? 'daemon';
-  const remote = proxy ? `the ${service} behind ${proxy}` : `the remote ${service}`;
+  const proxyName = proxy?.service || 'the proxy';
+  const remote = proxy ? `the ${service} behind ${proxyName}` : `the remote ${service}`;
   const upgradeTarget = {
     remote: proxy ? remote : 'the remote host',
     client: 'this client',
-    'client-and-proxy': `this client and on ${proxy}`,
+    'client-and-proxy': `this client and on ${proxyName}`,
   }[upgradeSide];
   const remoteVersion = link.version ? `runs ${link.version}` : 'does not report its version';
   return new AppError(

@@ -51,6 +51,17 @@ function proxyHealth(upstreamRpcProtocolVersion: number): Record<string, unknown
   };
 }
 
+async function readRefusal(
+  payload: Record<string, unknown>,
+): Promise<Error & { details?: Record<string, unknown> }> {
+  return await withHealthServer(payload, (baseUrl) =>
+    readRemoteDaemonHealth({ baseUrl, token: 't', pid: 0 }).then(
+      () => assert.fail('expected a protocol refusal'),
+      (error: unknown) => error as Error & { details?: Record<string, unknown> },
+    ),
+  );
+}
+
 test('a proxy whose daemon speaks the same protocol passes with the upstream link readable', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
@@ -88,36 +99,52 @@ test('a proxy whose daemon speaks another protocol is refused, naming the daemon
   });
 });
 
-test.each([
+test.for([
+  ['an older daemon', DAEMON_RPC_PROTOCOL_VERSION - 1, false, 'remote', 'the remote host'],
+  ['a newer daemon', DAEMON_RPC_PROTOCOL_VERSION + 1, false, 'client', 'this client'],
   [
-    'an older daemon',
-    { ...DAEMON_LINK, rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION - 1 },
+    'an older daemon behind a proxy',
+    DAEMON_RPC_PROTOCOL_VERSION - 1,
+    true,
     'remote',
+    'the agent-device-daemon behind agent-device-proxy',
   ],
-  [
-    'a newer daemon',
-    { ...DAEMON_LINK, rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION + 1 },
-    'client',
-  ],
-  ['an older daemon behind a proxy', proxyHealth(DAEMON_RPC_PROTOCOL_VERSION - 1), 'remote'],
   [
     'a newer daemon behind a proxy',
-    proxyHealth(DAEMON_RPC_PROTOCOL_VERSION + 1),
+    DAEMON_RPC_PROTOCOL_VERSION + 1,
+    true,
     'client-and-proxy',
+    'this client and on agent-device-proxy',
   ],
-] as const)('a refusal of %s names the side to upgrade', async (_label, payload, upgradeSide) => {
-  await withHealthServer(payload, async (baseUrl) => {
-    await assert.rejects(
-      readRemoteDaemonHealth({ baseUrl, token: 't', pid: 0 }),
-      (error: unknown) => {
-        const details = (error as { details?: Record<string, unknown> }).details;
-        assert.equal(details?.upgradeSide, upgradeSide);
-        assert.equal(details?.clientVersion, readVersion());
-        assert.equal(details?.remoteVersion, '98.0.0');
-        return true;
-      },
+] as const)(
+  'a refusal of %s names both versions, both protocols and the side to upgrade',
+  async ([_label, remoteProtocol, viaProxy, upgradeSide, upgradeTarget], t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+
+    const payload = viaProxy
+      ? proxyHealth(remoteProtocol)
+      : { ...DAEMON_LINK, rpcProtocolVersion: remoteProtocol };
+    const error = await readRefusal(payload);
+    assert.equal(error.details?.upgradeSide, upgradeSide);
+    assert.equal(error.details?.clientVersion, readVersion());
+    assert.equal(error.details?.remoteVersion, '98.0.0');
+    assert.equal(error.details?.supportedRpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
+    assert.equal(error.details?.remoteRpcProtocolVersion, remoteProtocol);
+    assert.ok(
+      error.message.includes(`${readVersion()} (RPC protocol ${DAEMON_RPC_PROTOCOL_VERSION})`),
     );
-  });
+    assert.ok(error.message.includes(`98.0.0 (RPC protocol ${remoteProtocol})`));
+    assert.ok(error.message.endsWith(`Upgrade agent-device on ${upgradeTarget}.`));
+  },
+);
+
+test('a proxy that reports an empty service name is still named as the proxy', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const error = await readRefusal({ ...proxyHealth(DAEMON_RPC_PROTOCOL_VERSION + 1), service: '' });
+  assert.equal(error.details?.upgradeSide, 'client-and-proxy');
+  assert.ok(error.message.includes('the agent-device-daemon behind the proxy'));
+  assert.ok(error.message.endsWith('Upgrade agent-device on this client and on the proxy.'));
 });
 
 test('a daemon health payload without an upstream link or host arch parses as before', async (t) => {
@@ -136,9 +163,11 @@ test('a daemon health payload without an upstream link or host arch parses as be
   );
 });
 
-test.each(['daemon', 'upstream'] as const)(
+test.for(['daemon', 'upstream'] as const)(
   'released protocol-2 %s cannot silently omit batch receipt delivery',
-  async (link) => {
+  async (link, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+
     const payload =
       link === 'upstream' ? proxyHealth(2) : { ...DAEMON_LINK, rpcProtocolVersion: 2 };
     await withHealthServer(payload, async (baseUrl) => {
