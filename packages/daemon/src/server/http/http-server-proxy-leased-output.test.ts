@@ -320,6 +320,22 @@ test('the proxy refuses a legacy diagnostics file without producer proof', async
   expect((await world.get(route, world.leaseId)).status).toBe(404);
 });
 
+test('an early flag refusal has a tenant-routable diagnostics record protected by the presented lease', async () => {
+  if (!world) return;
+  const response = await world.send('press', SESSION, world.owner, {
+    record: true,
+    noRecord: true,
+  });
+  expect(response.error?.data?.code).toBe('INVALID_ARGS');
+  const record = response.error?.data?.diagnosticsRecord;
+  expect(record?.session).toBe(tenantScopedSessionName(TENANT, 'request-diagnostics'));
+  const route = `/sessions/${encodeURIComponent(record!.session)}/requests/${record!.requestId}/diagnostics`;
+  await expectLeasedOutputRefusal(await world.get(route, OTHER_LEASE_ID));
+  const diagnostics = await world.get(route, world.leaseId);
+  expect(diagnostics.status).toBe(200);
+  expect(await diagnostics.text()).toContain('"phase":"request_failed"');
+});
+
 test('a non-string lease claim reaches lease admission and gets an unleased diagnostics record', async () => {
   if (!world) return;
   const refused = await world.send('press', SESSION, { leaseId: 42 });

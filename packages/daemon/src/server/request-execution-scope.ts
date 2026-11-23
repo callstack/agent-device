@@ -143,7 +143,6 @@ const requestScopeFinalizers = new WeakMap<
   RequestExecutionScope,
   (response: DaemonResponse) => DaemonResponse
 >();
-const HANDLER_JOURNAL_START_COMMANDS = new Set(['doctor', 'capabilities', 'artifacts']);
 
 export type RequestExecutionScope = AsyncDisposable & {
   /** The environment and working directory of the daemon serving this request. */
@@ -151,17 +150,13 @@ export type RequestExecutionScope = AsyncDisposable & {
   req: DaemonRequest;
   command: string;
   sessionName: string;
+  admittedRef?: SessionRef;
   requestLogPath: string;
   runnerLogPath: string;
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   /** For a request without the session lock: runs `task` under it, unless a request holds it. */
   tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
-  resolveSessionRef(
-    req: DaemonRequest,
-    ref: SessionRef | undefined,
-    phase?: 'handler',
-  ): SessionRef | undefined;
   bindJournal(req: DaemonRequest, ref: SessionRef | undefined): DaemonRequest;
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
@@ -384,22 +379,13 @@ export async function createRequestExecutionScope(params: {
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
-      resolveSessionRef(req, ref, phase) {
-        const resolved = resolveRequestSessionRef(req, ref);
-        if (resolved && phase === 'handler' && shouldRecordEventForRequest(req) && !finishEvent) {
-          startJournal(coordinator.authorize(req, resolved, () => true).journal);
-        }
-        return resolved;
-      },
       bindJournal(req, ref) {
         if (!ref) return req;
+        const { journal } = coordinator.authorize(req, ref, () => true);
         if (command === 'events') {
-          const { journal } = coordinator.authorize(req, ref, () => true);
           return { ...req, internal: { ...req.internal, readSessionEvents: journal.read } };
         }
-        if (attachesToSession || !HANDLER_JOURNAL_START_COMMANDS.has(command)) {
-          scope.resolveSessionRef(req, ref, 'handler');
-        }
+        startJournal(journal);
         return req;
       },
       recordFinished,
@@ -428,7 +414,6 @@ export async function createRequestExecutionScope(params: {
             sessionName,
             holdDeviceLock: scope.retainDeviceExecutionLock,
             admission: params,
-            resolveSessionRef: scope.resolveSessionRef,
             onSuccessorAdmitted: (lease) => {
               const retained = retainSuccessorLeaseWork(leaseRegistry, scopedReq, lease);
               scopedReq = retained.req;
@@ -500,6 +485,7 @@ export async function createRequestExecutionScope(params: {
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
           await cleanupExpiredLeasedSession({ ...expiry, ref: existingRef });
+          scope.admittedRef = existingRef;
           if (!successorWork) {
             scopedReq = admitRequestLeaseForLockedScope({
               env: params.host.env,
@@ -510,7 +496,8 @@ export async function createRequestExecutionScope(params: {
               providerAppCatalog: params.providerAppCatalog,
               pluginInventory: params.pluginInventory,
               daemonPolicy: params.daemonPolicy,
-              resolveSessionRef: scope.resolveSessionRef,
+              resolveSessionRef: (req, ref) =>
+                (scope.admittedRef = resolveRequestSessionRef(req, ref)),
             });
           }
           scope.req = scopedReq;
@@ -665,19 +652,14 @@ export async function prepareLockedRequestScope(params: {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
-  const readSessionRef = (): SessionRef | undefined =>
-    scope.resolveSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
-  // A request that holds the session lock keeps the lifetime that it captures here.
-  let seededRef = readSessionRef();
+  const seededRef = scope.admittedRef;
   if (scope.command === 'open' && seededRef) assertSameOpenOwner(scope.req, seededRef.session);
   const refreshHealth = scope.command !== 'events';
-  if (refreshHealth && !shouldLockSessionExecution(scope.command)) {
+  if (refreshHealth && seededRef && !shouldLockSessionExecution(scope.command)) {
     // Refresh only while holding the session lock. Yield to any request that already holds it.
     await scope.tryRunUnderSessionLock(async () => {
-      const ref = readSessionRef();
-      if (ref) await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
+      await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
     });
-    seededRef = readSessionRef();
   } else if (
     refreshHealth &&
     seededRef &&
@@ -711,7 +693,6 @@ export async function prepareLockedRequestScope(params: {
   const recordingInvalidatedReason =
     existingSession?.screenRecording?.handle.inspect().invalidatedReason;
   if (recordingInvalidatedReason && shouldBlockForInvalidRecording(scope.command)) {
-    scope.resolveSessionRef(lockedReq, existingRef, 'handler');
     return {
       type: 'response',
       response: {
@@ -743,7 +724,10 @@ export async function prepareLockedRequestScope(params: {
       logPath,
       existingSession,
       existingRef,
-      resolveSessionRef: (req, ref) => scope.resolveSessionRef(req, ref, 'handler'),
+      resolveSessionRef: (req, ref) => {
+        const resolved = resolveRequestSessionRef(req, ref);
+        return resolved?.lifetime === existingRef?.lifetime ? resolved : undefined;
+      },
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
       platformServices: scope.platformServices,
@@ -756,10 +740,7 @@ export async function prepareLockedRequestScope(params: {
         ({
           ...contextFromFlags(flags, appBundleId, traceLogPath),
           // Handlers may update surface during the request, so read the current session state.
-          surface: (seededRef
-            ? sessionStore.resolveCurrent(seededRef)
-            : sessionStore.get(scope.sessionName)
-          )?.surface,
+          surface: seededRef ? sessionStore.resolveCurrent(seededRef)?.surface : undefined,
         }) satisfies DaemonCommandContext,
     },
   };

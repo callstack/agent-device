@@ -279,7 +279,10 @@ test('request timeline records thrown request failures after scope creation', as
   ]);
 });
 
-test('a request refused during setup writes a detached diagnostics record', async () => {
+test.each([
+  { stage: 'lease preflight', meta: { leaseProvider: 'proxy' } },
+  { stage: 'tenant routing', meta: { sessionIsolation: 'tenant', tenantId: 'invalid/tenant' } },
+] as const)('a refusal during $stage writes a detached diagnostics record', async ({ meta }) => {
   const sessionStore = makeSessionStore('agent-device-router-events-setup-failure-');
 
   const handler = createRequestHandler({
@@ -299,12 +302,15 @@ test('a request refused during setup writes a detached diagnostics record', asyn
     command: 'open',
     positionals: ['Expo Go'],
     flags: {},
-    meta: { requestId: 'req-proxy-open', leaseProvider: 'proxy' },
+    meta: { requestId: 'req-proxy-open', ...meta },
   });
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.diagnosticsRecord?.requestId).toMatch(/^[a-f0-9]{32}-unleased$/);
+  if ('tenantId' in meta) {
+    expect(response.error.diagnosticsRecord?.session).toBe('request-diagnostics');
+  }
   expect(fs.readFileSync(response.error.logPath!, 'utf8')).toContain('"phase":"request_failed"');
   expect(fs.existsSync(path.join(sessionStore.resolveDaemonStateDir(), 'session-journals'))).toBe(
     false,

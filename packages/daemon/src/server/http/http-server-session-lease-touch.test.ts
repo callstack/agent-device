@@ -332,6 +332,46 @@ test('devices still checks the recording of a session that holds no lease', asyn
   );
 });
 
+test('recording-health preparation cannot switch to a replacement session', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  const { sessionName, sessionStore, observeRunnerSession, send } = daemon;
+  const session = makeIosAppSession(sessionName, { sessionScope: { kind: 'tenant', id: TENANT } });
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    runnerSessionId: 'runner-0',
+  });
+  const original = sessionStore.publish(sessionName, session);
+  const observed = deferred();
+  const resume = deferred();
+  observeRunnerSession.mockImplementationOnce(async () => {
+    observed.resolve();
+    await resume.promise;
+    return { alive: true, sessionId: 'runner-0' };
+  });
+
+  const devices = send('devices', [], {});
+  try {
+    await Promise.race([
+      observed.promise,
+      devices.then((response) => {
+        throw new Error(
+          `Devices finished before recording health was read: ${JSON.stringify(response)}`,
+        );
+      }),
+    ]);
+    expect(sessionStore.retire(original)).toBe(true);
+    sessionStore.publish(sessionName, makeIosAppSession(sessionName));
+  } finally {
+    resume.resolve();
+  }
+
+  expect((await devices).error?.data?.details?.reason).toBe('session_lifetime_ended');
+  const events = await send('events', [], {});
+  expect(events.result?.ok).toBe(true);
+  expect(events.result?.data?.events).toEqual([]);
+});
+
 test('devices with no lease id stays detached from a leased session and its recording', async () => {
   if (!world) return;
   const { session } = world.publishLeasedSession(world.sessionName);
@@ -410,7 +450,7 @@ test.each([
   { scenario: 'opened leased before dispatch', leased: true, openBeforeDispatch: true },
   { scenario: 'opened unleased before dispatch', leased: false, openBeforeDispatch: true },
 ])(
-  'events shows the doctor start for a session that is $scenario while the toolchain check is pending',
+  'doctor writes only to its admitted journal when the session is $scenario',
   async ({ leased, openBeforeDispatch }) => {
     const daemon = world;
     if (!daemon) return;
@@ -453,18 +493,38 @@ test.each([
       const events = await daemon.send('events', [], scope);
 
       expect(events.result?.ok).toBe(true);
-      expect(events.result?.data?.events).toContainEqual(
-        expect.objectContaining({ command: 'doctor', kind: 'request.started' }),
-      );
+      const started = expect.objectContaining({ command: 'doctor', kind: 'request.started' });
+      if (openBeforeDispatch) expect(events.result?.data?.events).not.toContainEqual(started);
+      else expect(events.result?.data?.events).toContainEqual(started);
     } finally {
       releaseToolchain.resolve();
       await doctor;
     }
     expect((await doctor).result?.ok).toBe(true);
-    expect(await daemon.requestEvents(sessionName, 'doctor')).toEqual([
-      'request.started',
-      'request.finished',
-    ]);
+    expect(await daemon.requestEvents(sessionName, 'doctor')).toEqual(
+      openBeforeDispatch ? [] : ['request.started', 'request.finished'],
+    );
+  },
+);
+
+test.each(['doctor', 'capabilities', 'artifacts'] as const)(
+  '%s leaves no events on a replacement with the same lease',
+  async (command) => {
+    const daemon = world;
+    if (!daemon) return;
+    const { sessionName, sessionStore, owner, hooks } = daemon;
+    const original = daemon.publishLeasedSession(sessionName);
+    hooks.beforeDispatch = () => {
+      hooks.beforeDispatch = undefined;
+      expect(sessionStore.retire(original)).toBe(true);
+      daemon.publishLeasedSession(sessionName);
+    };
+
+    await daemon.send(command, [], owner);
+
+    const events = await daemon.send('events', [], owner);
+    expect(events.result?.ok).toBe(true);
+    expect(events.result?.data?.events).toEqual([]);
   },
 );
 
