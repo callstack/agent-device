@@ -57,7 +57,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.',
   ],
   selectors: [
-    'One or more key=value terms separated by spaces. An element must match every term',
+    'One or more terms separated by spaces. An element must match every term',
     'A role word is not a key: write role=button label="Save", not button="Save"',
     'Text values match the whole field, ignoring case and extra whitespace',
   ],
