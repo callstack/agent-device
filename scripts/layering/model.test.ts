@@ -114,11 +114,13 @@ test('parseImports marks the names written with a per-specifier type marker', ()
 });
 
 test('parseImports keeps a source name at runtime if any binding is a value', () => {
-  const [edge] = parseImports(
+  const edges = parseImports(
     `import { "Mixed" as mixed, type "Mixed" as MixedType, type "OnlyType" as Alias } from './fixture.ts';`,
   );
-  assert.deepEqual(edge.symbols, ['Mixed', 'OnlyType']);
-  assert.deepEqual(edge.typeSymbols, ['OnlyType']);
+  assert.deepEqual(
+    edges.map(({ symbols, typeSymbols }) => ({ symbols, typeSymbols })),
+    [{ symbols: ['Mixed', 'OnlyType'], typeSymbols: ['OnlyType'] }],
+  );
 });
 
 test('parseImports records TSImportType edges separately from dynamic imports', () => {
