@@ -4,6 +4,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import path from 'node:path';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
+import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
@@ -83,6 +84,7 @@ const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
 const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFixture);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const mockResolveOpenTarget = vi.mocked(resolveOpenTargetFixture);
+type BindDevice = Parameters<typeof handleSessionCommands>[0]['bindDevice'];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -427,6 +429,7 @@ test('open --relaunch allows Android package names ending with apk-like suffix',
 async function runSessionCommand(
   sessionStore: ReturnType<typeof makeSessionStore>,
   req: Omit<DaemonRequest, 'token'>,
+  bindDevice?: BindDevice,
 ): Promise<DaemonResponse> {
   const response = await handleSessionCommands({
     host: createTestHostEnvironment(),
@@ -437,6 +440,7 @@ async function runSessionCommand(
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
+    bindDevice,
   });
   if (!response) throw new Error(`${req.command} was not handled`);
   return response;
@@ -449,6 +453,54 @@ function recordRuntimeHintApplies(): Array<{ appId?: string; host?: string; port
   });
   return applies;
 }
+
+test.each([
+  { storedBy: 'open flags', runtime: { metroPort: 8081 } },
+  { storedBy: 'runtime hints set before the first open', runtime: undefined },
+])(
+  'hints stored by $storedBy apply again on a reopen when the open reports another app id',
+  async ({ runtime }) => {
+    const sessionStore = makeSessionStore();
+    const session = 'runtime-hints-outcome-id';
+    const applies = recordRuntimeHintApplies();
+    mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+    if (!runtime) sessionStore.setRuntimeHints(session, { platform: 'android', metroPort: 8081 });
+    // The platform reports the app it saw after the launch, which can differ from the id the
+    // open resolved for its target before the launch.
+    const reportsOtherAppId: BindDevice = async (device, use) => {
+      const binding = await mockBindDeviceRuntime(device, use);
+      return {
+        ...binding,
+        operations: {
+          ...binding.operations,
+          openApplication: async (input: OpenApplicationInput) => ({
+            ...(await binding.operations.openApplication(input)),
+            appBundleId: 'com.example.foreground',
+          }),
+        },
+      };
+    };
+    for (const hints of [runtime, undefined]) {
+      const opened = await runSessionCommand(
+        sessionStore,
+        {
+          session,
+          command: 'open',
+          positionals: ['com.example.metro'],
+          flags: { platform: 'android' },
+          ...(hints ? { runtime: hints } : {}),
+        },
+        reportsOtherAppId,
+      );
+      expect(opened.ok).toBe(true);
+    }
+
+    expect(applies).toEqual([
+      { appId: 'com.example.metro', host: '10.0.2.2', port: '8081' },
+      { appId: 'com.example.metro', host: '10.0.2.2', port: '8081' },
+    ]);
+  },
+);
 
 test.each([
   {

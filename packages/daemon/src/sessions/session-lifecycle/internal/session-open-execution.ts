@@ -440,10 +440,12 @@ export async function completeOpenCommand(params: {
   sessionStore.clearCloseEffectsUnconfirmed(nextRef);
   const nextSession = sessionStore.requireCurrent(nextRef);
   markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
+  // Bind to the prepared id the hints were applied to, not the outcome's: a later open compares
+  // the binding with its own prepared id.
   if (req.runtime !== undefined) {
-    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, sessionAppBundleId);
+    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, appBundleId);
   } else if (runtimeHints) {
-    bindStoredRuntimeHintsToApp(sessionStore, sessionName, sessionAppBundleId);
+    bindStoredRuntimeHintsToApp(sessionStore, sessionName, appBundleId);
   }
   applyOrdinaryScriptRecordingOpenOutcome({
     session: nextSession,
