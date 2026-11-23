@@ -461,11 +461,7 @@ async function releaseLabeledInstances(
   const platform = platformForLimrunLeaseBackend(lease.backend);
   if (!platform || !limrun) return undefined;
   const { instanceId: exactId, reconciliationKey } = rental?.identity ?? {};
-  const key = reconciliationKey
-    ? `${platform}:rental:${reconciliationKey}`
-    : exactId
-      ? `${platform}:instance:${exactId}`
-      : `${platform}:lease:${lease.leaseId}`;
+  const key = labeledRecoveryKey(platform, lease.leaseId, rental?.identity);
   const byIdentity = labeledRecoveries.get(limrun) ?? new Map<string, LabeledRecovery>();
   labeledRecoveries.set(limrun, byIdentity);
   const recovery: LabeledRecovery = byIdentity.get(key) ?? { deletes: new Map() };
@@ -486,20 +482,7 @@ async function releaseLabeledInstances(
     });
     if (rental && instanceIds[0] !== undefined) rental.recordInstance(instanceIds[0]);
   }
-  const confirmed: string[] = [];
-  for (const instanceId of instanceIds) {
-    const deleted = await awaitLabeledDelete(recovery.deletes, limrun, platform, instanceId);
-    if (deleted.failure !== undefined) {
-      throwUnconfirmedDelete(
-        `Recovery could not confirm instance '${instanceId}' of lease '${lease.leaseId}' deleted`,
-        { limrunInstanceId: instanceId, limrunInstanceIds: instanceIds },
-        deleted.failure,
-        recoveryHint(instanceIds, confirmed),
-        deleted.cause,
-      );
-    }
-    confirmed.push(instanceId);
-  }
+  await deleteLabeledInstances(recovery.deletes, limrun, platform, lease.leaseId, instanceIds);
   if (byIdentity.get(key) === recovery && (instanceIds.length > 0 || recovery.deletes.size === 0))
     byIdentity.delete(key);
   if (instanceIds.length === 0) return undefined;
@@ -508,6 +491,39 @@ async function releaseLabeledInstances(
     limrunInstanceIds: instanceIds,
     limrunInstanceCount: instanceIds.length,
   };
+}
+
+function labeledRecoveryKey(
+  platform: LimrunPlatform,
+  leaseId: string,
+  identity?: ProviderRentalIdentity,
+): string {
+  if (identity?.reconciliationKey) return `${platform}:rental:${identity.reconciliationKey}`;
+  if (identity?.instanceId) return `${platform}:instance:${identity.instanceId}`;
+  return `${platform}:lease:${leaseId}`;
+}
+
+async function deleteLabeledInstances(
+  deletes: LabeledRecovery['deletes'],
+  limrun: Limrun,
+  platform: LimrunPlatform,
+  leaseId: string,
+  instanceIds: string[],
+): Promise<void> {
+  const confirmed: string[] = [];
+  for (const instanceId of instanceIds) {
+    const deleted = await awaitLabeledDelete(deletes, limrun, platform, instanceId);
+    if (deleted.failure !== undefined) {
+      throwUnconfirmedDelete(
+        `Recovery could not confirm instance '${instanceId}' of lease '${leaseId}' deleted`,
+        { limrunInstanceId: instanceId, limrunInstanceIds: instanceIds },
+        deleted.failure,
+        recoveryHint(instanceIds, confirmed),
+        deleted.cause,
+      );
+    }
+    confirmed.push(instanceId);
+  }
 }
 
 async function findReleaseInstances(
