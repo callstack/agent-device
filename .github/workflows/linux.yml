@@ -134,8 +134,9 @@ jobs:
           echo "::notice::Cached Linux desktop packages do not cover the package set; refreshing the apt index."
           echo "refreshed=true" >> "$GITHUB_OUTPUT"
           # A killed refresh starts over, so a slow mirror needs one window long enough to finish.
+          # The windows total 240s, which leaves dpkg two minutes of the 6-minute step.
           apt_bounded 60 2 update
-          apt_bounded 75 3 install -y --no-install-recommends --download-only "${PACKAGES[@]}"
+          apt_bounded 60 2 install -y --no-install-recommends --download-only "${PACKAGES[@]}"
           printf 'APT install start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${PACKAGES[@]}"
           printf 'APT install complete (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
