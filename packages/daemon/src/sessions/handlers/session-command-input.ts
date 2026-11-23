@@ -18,7 +18,11 @@ import type {
   BindExactDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
-import { type SessionStore, type WithSessionExecutionLock } from '../../core/session-store.ts';
+import {
+  type AuthorizedSession,
+  type SessionStore,
+  type WithSessionExecutionLock,
+} from '../../core/session-store.ts';
 import type { ResolveRequestSessionRef } from '../request-admission.ts';
 
 export type SessionCommandInput = {
@@ -43,6 +47,7 @@ export type SessionCommandInput = {
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
+  doctorSession?: AuthorizedSession;
   resolveSessionRef?: ResolveRequestSessionRef;
   withSessionExecutionLock?: WithSessionExecutionLock;
   requestScope: PlatformRequestScope;

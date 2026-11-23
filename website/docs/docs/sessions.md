@@ -196,9 +196,10 @@ If the session at the address has an expired lease, `open` with your own valid l
 cleanup within the request deadline. Use `--wait` to cap that wait. Your lease must still be valid
 when cleanup ends.
 
-Behind a shared proxy token, all clients share a tenant. A proxy client can see the holder's address
-in a refusal or in wait progress if it can list the holder and the holder has a lease or a tenant
-scope. To see the address of a leased holder, the caller must send that holder's lease id.
+When you connect through a shared proxy token, `session list`, `doctor`, wait progress, and
+contention errors use the same visibility rule. With tenant isolation, you see sessions in your
+tenant. Without tenant isolation, you see only leased sessions in your scope. For a leased session,
+send its lease ID to see its address.
 Open contention and claim conflicts can show the address of an unleased session in another
 workspace to a local caller. The owner can use that address to close the session from its workspace.
 

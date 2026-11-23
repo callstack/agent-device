@@ -7,6 +7,7 @@ import { withTestDeviceInventory } from '@agent-device/device-selection/inventor
 import { handleDoctorCommand } from './session-doctor.ts';
 import { hostDiagnosticsFixture } from '../../__tests__/support/host-diagnostics-fixture.ts';
 import { installProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
+import { SessionCoordinator } from '../../core/session-store.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 
 vi.mock('./session-doctor-app.ts', () => ({
@@ -36,24 +37,26 @@ beforeEach(() => {
 
 async function runDoctorWithSessionDevice(device: DeviceInfo): Promise<DaemonResponse | null> {
   const sessionStore = makeSessionStore('agent-device-doctor-warmup-');
-  sessionStore.publish('doctor-session', {
+  const ref = sessionStore.publish('doctor-session', {
     name: 'doctor-session',
     createdAt: Date.now(),
     device,
     actions: [],
   });
+  const req = {
+    token: 't',
+    session: 'doctor-session',
+    command: 'doctor',
+    positionals: [],
+    flags: { session: 'doctor-session' },
+  };
   return await withTestDeviceInventory(
     {},
     async () =>
       await handleDoctorCommand({
         host: createTestHostEnvironment(),
-        req: {
-          token: 't',
-          session: 'doctor-session',
-          command: 'doctor',
-          positionals: [],
-          flags: { session: 'doctor-session' },
-        },
+        req,
+        doctorSession: new SessionCoordinator(sessionStore).authorize(req, ref, () => true),
         sessionName: 'doctor-session',
         sessionStore,
         hostDiagnostics,

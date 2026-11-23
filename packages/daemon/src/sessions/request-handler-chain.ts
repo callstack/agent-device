@@ -12,7 +12,11 @@ import * as genericRequestHandlerModule from '../execution/request-generic-dispa
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
-import { type SessionStore, type WithSessionExecutionLock } from '../core/session-store.ts';
+import type {
+  AuthorizedSession,
+  SessionStore,
+  WithSessionExecutionLock,
+} from '../core/session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import type {
   BindDeviceRuntime,
@@ -71,6 +75,7 @@ type RequestHandlerChainParams = {
   perfCaptureAdmissionLedger: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
+  doctorSession?: AuthorizedSession;
   resolveSessionRef?: ResolveRequestSessionRef;
   withSessionExecutionLock?: WithSessionExecutionLock;
   requestScope: PlatformRequestScope;
@@ -205,6 +210,7 @@ async function runSessionHandler(
       perfCaptureAdmissionLedger: params.perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
       hostDiagnostics: params.hostDiagnostics,
+      doctorSession: params.doctorSession,
       resolveSessionRef: params.resolveSessionRef,
       withSessionExecutionLock: params.withSessionExecutionLock,
       requestScope: params.requestScope,

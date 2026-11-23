@@ -3,7 +3,7 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { deviceClaimConflictError } from './device-claim-conflict.ts';
+import type { AppError } from '@agent-device/kernel/errors';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
@@ -13,6 +13,7 @@ import {
   claimMatchesOwnership,
   type DeviceClaimReconciler,
   type DeviceClaimSessionOwnership,
+  type InspectedDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
 
 /**
@@ -63,6 +64,7 @@ export function createDeviceClaimAdmission(params: {
    */
   resolveScopeRoot: (workspace: string | undefined) => string | undefined;
   stateDir: string;
+  claimConflictError: (device: DeviceInfo, conflict: InspectedDeviceClaim) => AppError;
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observation?: () => NonNullable<DaemonRequest['internal']>['snapshotObservation'];
@@ -110,7 +112,7 @@ export function createDeviceClaimAdmission(params: {
       // it; the same claim seen by any other request is a live owner.
       const held = result.conflict.claim;
       if (held && acquired.some((ownership) => ownership.ownerToken === held.ownerToken)) return;
-      throw deviceClaimConflictError(device, result.conflict);
+      throw params.claimConflictError(device, result.conflict);
     }
   }
 

@@ -5,7 +5,8 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import { claimOwnerVisible, dropInvisibleClaimOwner, mayNameSession } from '../session-routing.ts';
+import { claimOwnerVisible, createSessionVisibilityPredicate } from '../session-routing.ts';
+import { buildDeviceClaimConflictError } from '../../resources/device/device-claim-conflict.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 
 // A reply names the session a host-global device claim records as its owner unless that owner is
@@ -49,32 +50,48 @@ function storeWithLeasedSession(): SessionStore {
   return store;
 }
 
-function claimConflictResponse(session: string, stateDir: string): DaemonResponse {
-  return {
-    ok: false,
-    error: {
-      code: 'DEVICE_IN_USE',
-      message: `apple device sim-1 is owned by session "${session}" in workspace "/work/a".`,
-      hint: 'Inspect the owner with: agent-device device status --platform ios --udid sim-1',
-      retriable: false,
-      details: {
-        reason: 'DEVICE_CLAIM_LIVE_OWNER',
-        classification: 'live',
-        deviceKey: 'local:apple:ios:sim-1',
-        owner: { session, workspace: '/work/a', stateDir },
+function claimConflictResponse(
+  req: DaemonRequest,
+  store: SessionStore,
+  session: string,
+  stateDir = store.resolveDaemonStateDir(),
+): DaemonResponse {
+  const deviceKey = 'local:apple:ios:sim-1';
+  return buildDeviceClaimConflictError(
+    IOS_SIMULATOR,
+    {
+      fileName: 'claim.json',
+      classification: 'live',
+      deviceKey,
+      claim: {
+        schemaVersion: 3,
+        claimOwnerKind: 'open-session',
+        deviceKey,
+        device: {
+          family: 'apple',
+          appleOs: 'ios',
+          id: IOS_SIMULATOR.id,
+          name: IOS_SIMULATOR.name,
+          kind: 'simulator',
+        },
+        session,
+        workspace: '/work/a',
+        stateDir,
+        ownerPid: 4242,
+        ownerStartTime: 'start',
+        ownerToken: 'token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
       },
     },
-  };
+    (owner) => claimOwnerVisible(req, store, owner),
+  );
 }
 
 test('a claim naming an invisible leased session loses its owner', () => {
   const store = storeWithLeasedSession();
 
-  const response = dropInvisibleClaimOwner(
-    request(),
-    store,
-    claimConflictResponse('e2b:agentA', store.resolveDaemonStateDir()),
-  );
+  const response = claimConflictResponse(request(), store, 'e2b:agentA');
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -89,10 +106,10 @@ test('a claim naming an invisible leased session loses its owner', () => {
 test('the lease holder keeps the named claim-conflict refusal', () => {
   const store = storeWithLeasedSession();
 
-  const response = dropInvisibleClaimOwner(
+  const response = claimConflictResponse(
     request({ leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }),
     store,
-    claimConflictResponse('e2b:agentA', store.resolveDaemonStateDir()),
+    'e2b:agentA',
   );
 
   expect(response).toMatchObject({
@@ -106,10 +123,10 @@ test('the lease holder keeps the named claim-conflict refusal', () => {
 test('a claim of this daemon whose session no longer resolves is not named', () => {
   const store = storeWithLeasedSession();
 
-  const response = dropInvisibleClaimOwner(
+  const response = claimConflictResponse(
     request({ leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }),
     store,
-    claimConflictResponse('e2b:expired', store.resolveDaemonStateDir()),
+    'e2b:expired',
   );
 
   expect(response.ok).toBe(false);
@@ -121,11 +138,7 @@ test('a claim of this daemon whose session no longer resolves is not named', () 
 test('a local request keeps the owner of a transient claim of this daemon', () => {
   const store = storeWithLeasedSession();
 
-  const response = dropInvisibleClaimOwner(
-    LOCAL_REQUEST,
-    store,
-    claimConflictResponse('transient:install', store.resolveDaemonStateDir()),
-  );
+  const response = claimConflictResponse(LOCAL_REQUEST, store, 'transient:install');
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -135,32 +148,18 @@ test('a local request keeps the owner of a transient claim of this daemon', () =
 test('a claim another daemon on this host wrote keeps its owner for a local request only', () => {
   const store = storeWithLeasedSession();
   const peerStateDir = mkdtempForTestSync('agent-device-reply-visibility-peer-');
-  const conflict = claimConflictResponse('default', path.join(peerStateDir, 'daemon'));
+  const stateDir = path.join(peerStateDir, 'daemon');
 
-  const local = dropInvisibleClaimOwner(LOCAL_REQUEST, store, conflict);
+  const local = claimConflictResponse(LOCAL_REQUEST, store, 'default', stateDir);
   expect(local.ok).toBe(false);
   if (local.ok) return;
   expect(local.error.message).toContain('default');
   expect(local.error.details?.owner).toMatchObject({ workspace: '/work/a' });
 
-  const proxied = dropInvisibleClaimOwner(request(), store, conflict);
+  const proxied = claimConflictResponse(request(), store, 'default', stateDir);
   expect(proxied.ok).toBe(false);
   if (proxied.ok) return;
   expect(proxied.error.details?.owner).toBeUndefined();
-});
-
-test('a refusal without a claim owner passes through', () => {
-  const store = storeWithLeasedSession();
-  const response: DaemonResponse = {
-    ok: false,
-    error: {
-      code: 'DEVICE_IN_USE',
-      message: 'Device is already in use by session "x".',
-      details: { session: 'x' },
-    },
-  };
-
-  expect(dropInvisibleClaimOwner(request(), store, response)).toBe(response);
 });
 
 test('only local device recovery names an unlistable local session', () => {
@@ -196,15 +195,18 @@ test('only local device recovery names an unlistable local session', () => {
     }),
     session: 'default',
   };
-  expect(mayNameSession(request(), foreignWorkspaceSession, 'device-recovery')).toBe(false);
-  expect(mayNameSession(cwdRequest, foreignWorkspaceSession)).toBe(false);
-  expect(mayNameSession(cwdRequest, foreignWorkspaceSession, 'device-recovery')).toBe(true);
-  expect(mayNameSession(LOCAL_REQUEST, foreignWorkspaceSession)).toBe(true);
   expect(
-    mayNameSession(
-      { ...LOCAL_REQUEST, internal: { publicNetworkOnly: true } },
+    createSessionVisibilityPredicate(request(), 'device-recovery')(foreignWorkspaceSession),
+  ).toBe(false);
+  expect(createSessionVisibilityPredicate(cwdRequest)(foreignWorkspaceSession)).toBe(false);
+  expect(
+    createSessionVisibilityPredicate(cwdRequest, 'device-recovery')(foreignWorkspaceSession),
+  ).toBe(true);
+  expect(createSessionVisibilityPredicate(LOCAL_REQUEST)(foreignWorkspaceSession)).toBe(true);
+  expect(
+    createSessionVisibilityPredicate({ ...LOCAL_REQUEST, internal: { publicNetworkOnly: true } })(
       foreignWorkspaceSession,
     ),
   ).toBe(false);
-  expect(mayNameSession(request(), store.get('e2b:agentA')!)).toBe(false);
+  expect(createSessionVisibilityPredicate(request())(store.get('e2b:agentA')!)).toBe(false);
 });

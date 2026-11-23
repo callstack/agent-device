@@ -33,7 +33,10 @@ import type { SessionStore } from '../core/session-store.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.ts';
 import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
-import { resolveEffectiveSessionName } from './session-routing.ts';
+import {
+  createSessionVisibilityPredicate,
+  resolveEffectiveSessionName,
+} from './session-routing.ts';
 
 /**
  * Under tenant isolation, the first string carrier routes the request. A meta tenant that it
@@ -145,6 +148,9 @@ export function resolveRequestSessionRef(
 ): SessionRef | undefined {
   if (ref?.session.lease && ignoresSessionLease(req.command)) return undefined;
   assertRequestHoldsSessionLease(req, ref?.session);
+  if (req.command === 'doctor' && ref && !createSessionVisibilityPredicate(req)(ref.session)) {
+    return undefined;
+  }
   return ref;
 }
 

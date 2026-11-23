@@ -29,6 +29,7 @@ import {
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import {
+  claimOwnerVisible,
   resolveCallerScopeRoot,
   resolvePublicSessionName,
   resolveSessionScope,
@@ -77,6 +78,7 @@ import {
 import {
   assertSameOpenOwner,
   SessionCoordinator,
+  type AuthorizedSession,
   type SessionStore,
 } from '../core/session-store.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
@@ -160,7 +162,13 @@ export type RequestExecutionScope = AsyncDisposable & {
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   /** Takes an available session lock and runs `task` if the admitted lifetime is still live. */
   tryRunUnderSessionLock(ref: SessionRef, task: () => Promise<void>): Promise<void>;
-  bindJournal(req: DaemonRequest, ref: SessionRef | undefined): DaemonRequest;
+  bindSession(
+    req: DaemonRequest,
+    ref: SessionRef | undefined,
+  ): {
+    req: DaemonRequest;
+    doctorSession?: AuthorizedSession;
+  };
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
@@ -180,6 +188,7 @@ export type LockedRequestScope = {
   existingSession: SessionState | undefined;
   existingRef: SessionRef | undefined;
   resolveSessionRef: ResolveRequestSessionRef;
+  doctorSession?: AuthorizedSession;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
@@ -400,6 +409,12 @@ export async function createRequestExecutionScope(params: {
     };
     let requestExecutionLocks: ReturnType<typeof createRequestExecutionLocks> | undefined;
     const dispatchLedger = requestDispatchLedger(scopedReq);
+    const claimConflictError: Parameters<
+      typeof createDeviceClaimAdmission
+    >[0]['claimConflictError'] = (device, conflict) =>
+      deviceClaimConflictError(device, conflict, (owner) =>
+        claimOwnerVisible(scopedReq, sessionStore, owner),
+      );
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       env: params.host.env,
       req: scopedReq,
@@ -420,6 +435,7 @@ export async function createRequestExecutionScope(params: {
       trackClaimRecoveryDisposal: params.trackClaimRecoveryDisposal,
       sessionStore,
       snapshotObservation: () => scopedReq.internal?.snapshotObservation,
+      claimConflictError,
     });
 
     let bindingCleanup: Promise<void> | undefined;
@@ -570,14 +586,17 @@ export async function createRequestExecutionScope(params: {
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
-      bindJournal(req, ref) {
-        if (!ref) return req;
-        const { journal } = coordinator.authorize(req, ref, () => true);
+      bindSession(req, ref) {
+        const session = ref && coordinator.authorize(req, ref, () => true);
+        if (!session) return { req };
+        const { journal } = session;
         if (command === 'events') {
-          return { ...req, internal: { ...req.internal, readSessionEvents: journal.read } };
+          return {
+            req: { ...req, internal: { ...req.internal, readSessionEvents: journal.read } },
+          };
         }
         startJournal(journal);
-        return req;
+        return command === 'doctor' ? { req, doctorSession: session } : { req };
       },
       recordFinished,
       runAdmitted: async (task, admitted) => {
@@ -662,7 +681,7 @@ export async function createRequestExecutionScope(params: {
                 stateDir: sessionStore.resolveDaemonStateDir(),
                 env: params.host.env,
                 observeDeviceBoot: scope.platformServices.deviceBootObservation,
-                claimConflictError: deviceClaimConflictError,
+                claimConflictError,
                 coveredClaimIsOwnedByRequest: (claim) => {
                   const root = resolveCallerScopeRoot(scopedReq.meta?.cwd);
                   return !root || resolveCallerScopeRoot(claim.workspace) === root;
@@ -741,6 +760,7 @@ function createRequestDeviceAccess(params: {
   trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   sessionStore: SessionStore;
   snapshotObservation: () => NonNullable<DaemonRequest['internal']>['snapshotObservation'];
+  claimConflictError: Parameters<typeof createDeviceClaimAdmission>[0]['claimConflictError'];
 }): {
   claimAdmission: DeviceClaimAdmission;
   runtimeBindings: RequestRuntimeBindings;
@@ -754,6 +774,7 @@ function createRequestDeviceAccess(params: {
     workspace: params.workspace,
     callerCwd: params.callerCwd,
     resolveScopeRoot: resolveCallerScopeRoot,
+    claimConflictError: params.claimConflictError,
     stateDir: params.stateDir,
     env: params.env,
     observation: params.snapshotObservation,
@@ -859,7 +880,7 @@ export async function prepareLockedRequestScope(params: {
     req: scope.req,
     existingRef: preparedSessionRef(ref, scope, sessionStore, canDetach),
   });
-  const lockedReq = scope.bindJournal(binding.req, binding.existingRef);
+  const { req: lockedReq, doctorSession } = scope.bindSession(binding.req, binding.existingRef);
   // `scope.sessionName` is the resolved store key, so `existingRef` carries the address every
   // recovery producer below must name — `existingRef.session.name` is only the public name.
   const existingRef = binding.existingRef;
@@ -906,6 +927,7 @@ export async function prepareLockedRequestScope(params: {
       logPath,
       existingSession,
       existingRef,
+      doctorSession,
       resolveSessionRef: (req, ref) => {
         const resolved = resolveRequestSessionRef(req, ref);
         return resolved?.lifetime === existingRef?.lifetime ? resolved : undefined;

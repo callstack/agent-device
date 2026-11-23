@@ -47,7 +47,7 @@ test.each(['owner-process-dead', 'owner-process-reused', 'owner-state-dir-gone']
 );
 
 test('routes conflict presentation through the canonical error response shape', () => {
-  const response = buildDeviceClaimConflictError(device, conflict('live'));
+  const response = buildDeviceClaimConflictError(device, conflict('live'), () => true);
   assert.equal(response.ok, false);
   if (response.ok) return;
   assert.equal(response.error.retriable, false);
@@ -61,7 +61,11 @@ test('routes conflict presentation through the canonical error response shape', 
 });
 
 test('routes a provably dead owner to the exact stale release command', () => {
-  const response = buildDeviceClaimConflictError(device, conflict('owner-process-dead'));
+  const response = buildDeviceClaimConflictError(
+    device,
+    conflict('owner-process-dead'),
+    () => true,
+  );
   assert.equal(response.ok, false);
   if (response.ok) return;
   assert.deepEqual(response.error.details?.recovery, {
@@ -91,6 +95,7 @@ test('an app device refused by its host claim names the host as the device in th
   const response = buildDeviceClaimConflictError(
     hostAppDevice(mac, 'com.apple.TextEdit'),
     hostClaim,
+    () => true,
   );
   assert.equal(response.ok, false);
   if (response.ok) return;

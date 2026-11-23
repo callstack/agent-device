@@ -251,11 +251,14 @@ export async function renewOpenSessionClaim(
   device: DeviceInfo,
   ownership: DeviceClaimSessionOwnership | undefined,
   env: HostEnvironment['env'],
+  canNameOwner: Parameters<typeof buildDeviceClaimConflictError>[2],
 ): Promise<DaemonResponse | undefined> {
   if (!ownership) return undefined;
   const renewal = await renewDeviceClaim(ownership, env);
   if (renewal.status === 'renewed') return undefined;
-  if (renewal.conflict) return buildDeviceClaimConflictError(device, renewal.conflict);
+  if (renewal.conflict) {
+    return buildDeviceClaimConflictError(device, renewal.conflict, canNameOwner);
+  }
   return errorResponse(
     'DEVICE_IN_USE',
     `${device.name} no longer holds the claim this open was made with.`,
@@ -627,7 +630,9 @@ export async function openNewSessionWithDeviceClaim(params: {
   if (ownerClaim.status === 'conflict')
     return {
       type: 'response',
-      response: buildDeviceClaimConflictError(device, ownerClaim.conflict),
+      response: buildDeviceClaimConflictError(device, ownerClaim.conflict, (owner) =>
+        claimOwnerVisible(req, sessionStore, owner),
+      ),
     };
   const deviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.ownership : undefined;
   const tookOverDeviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.tookOver : undefined;
@@ -661,7 +666,9 @@ export async function openNewSessionWithDeviceClaim(params: {
     // Stamping here is what covers a boot preparation caused for this very open; from
     // `completeOpenCommand` on, a relaunch-close or a runtime-hint write may already have touched the
     // app, so a failure from that point cannot prove ownership was never established.
-    const reclaimed = await renewOpenSessionClaim(device, deviceClaim, params.host.env);
+    const reclaimed = await renewOpenSessionClaim(device, deviceClaim, params.host.env, (owner) =>
+      claimOwnerVisible(req, sessionStore, owner),
+    );
     if (reclaimed) return { type: 'response', response: reclaimed };
     effects.mayHaveStarted = true;
     const requestedPositionals = req.positionals ?? [];
