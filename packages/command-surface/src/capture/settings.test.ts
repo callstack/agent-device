@@ -13,16 +13,16 @@ function expectInvalidArgs(run: () => unknown, message: string): void {
 
 describe('settings CLI', () => {
   test('reads and writes settings input', () => {
-    const input = settingsCliReader(['permission', 'grant', 'camera', 'limited'], flags());
+    const input = settingsCliReader(['permission', 'grant', 'photos', 'limited'], flags());
     expect(input).toMatchObject({
       setting: 'permission',
       state: 'grant',
-      permission: 'camera',
+      permission: 'photos',
       mode: 'limited',
     });
     expect(settingsDaemonWriter(input)).toMatchObject({
       command: 'settings',
-      positionals: ['permission', 'grant', 'camera', 'limited'],
+      positionals: ['permission', 'grant', 'photos', 'limited'],
     });
   });
 

@@ -439,8 +439,9 @@ test('settings usage documents canonical faceid states', async () => {
   assert.match(help, /match\|nonmatch\|enroll\|unenroll/);
   assert.match(
     help,
-    /camera\|microphone\|photos\|contacts\|contacts-limited\|notifications\|calendar\|location\|location-always\|media-library\|motion\|reminders\|siri/,
+    /camera\|microphone\|contacts\|contacts-limited\|notifications\|calendar\|location\|location-always\|media-library\|motion\|reminders\|siri>/,
   );
+  assert.match(help, /permission <grant\|deny\|reset> photos \[full\|limited\]/);
   assert.doesNotMatch(help, /validate\|unvalidate/);
 });
 
