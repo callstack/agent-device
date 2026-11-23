@@ -27,7 +27,6 @@ test('recording replay fixtures use the selected scoped journal without a public
   ).toMatchObject({ ok: true });
   await store.flushEvents();
   expect(store.requireCurrent(ref).actions).toHaveLength(1);
-  expect(store.readEvents(address).events).toHaveLength(1);
+  expect(store.readEvents(ref).events).toHaveLength(1);
   expect(store.lookup('default')).toBeUndefined();
-  expect(store.readEvents('default').events).toEqual([]);
 });

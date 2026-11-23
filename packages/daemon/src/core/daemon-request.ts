@@ -9,6 +9,7 @@ import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
 import type { EndedLeaseLedger } from './request-ended-leases.ts';
 import type { ScriptDeliveryLedger } from './request-script-delivery-ledger.ts';
 import type { LeaseClaims } from '@agent-device/contracts/lease-scope';
+import type { BoundJournal } from '@agent-device/session-journal/session-event-log';
 
 /**
  * The daemon's request vocabulary: the wire shape from `@agent-device/contracts/command`
@@ -51,6 +52,8 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   sessionAuthorityActive?: () => boolean;
   onLifetimePublished?: (address: string, lifetime: object) => void;
   onSessionPublished?: (commitScript: (response: DaemonResponse) => DaemonResponse) => void;
+  onJournalPublished?: (journal: BoundJournal) => void;
+  readSessionEvents?: BoundJournal['read'];
   /**
    * Lease labels the caller sent that an intake adapter replaced or collapsed: the tenant that HTTP
    * attestation replaced, and an RPC alias that lost to its sibling. Admission compares them too.

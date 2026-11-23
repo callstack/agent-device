@@ -16,13 +16,14 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 
 test('events reads the daemon-owned session timeline without appending poll noise', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-');
-  sessionStore.recordEvent('events-session', {
+  const ref = sessionStore.publish('events-session', makeIosSession('events-session'));
+  sessionStore.recordEvent(ref, {
     kind: 'action.recorded',
     command: 'click',
     summary: 'Tapped @14 (10, 20)',
     details: { ref: '14', x: 10, y: 20 },
   });
-  const eventLogPath = sessionStore.resolveEventLogPath('events-session');
+  const eventLogPath = sessionStore.resolveEventLogPath(ref);
 
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
@@ -59,12 +60,13 @@ test('events reads the daemon-owned session timeline without appending poll nois
 
 test('events accepts a blank limit placeholder for cursor-only reads', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-cursor-');
-  sessionStore.recordEvent('events-session', {
+  const ref = sessionStore.publish('events-session', makeIosSession('events-session'));
+  sessionStore.recordEvent(ref, {
     kind: 'action.recorded',
     command: 'open',
     summary: 'Opened session',
   });
-  sessionStore.recordEvent('events-session', {
+  sessionStore.recordEvent(ref, {
     kind: 'action.recorded',
     command: 'click',
     summary: 'Tapped @14',
@@ -105,7 +107,8 @@ test('events accepts a blank limit placeholder for cursor-only reads', async () 
 
 test('events returns structured errors for invalid limit and cursor', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-invalid-');
-  sessionStore.recordEvent('events-session', {
+  const ref = sessionStore.publish('events-session', makeIosSession('events-session'));
+  sessionStore.recordEvent(ref, {
     kind: 'action.recorded',
     command: 'open',
     summary: 'Opened session',
@@ -154,7 +157,8 @@ test('events returns structured errors for invalid limit and cursor', async () =
 
 test('events flushes pending event writes before reading', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-flush-');
-  sessionStore.recordEvent('events-session', {
+  const ref = sessionStore.publish('events-session', makeIosSession('events-session'));
+  sessionStore.recordEvent(ref, {
     kind: 'action.recorded',
     command: 'open',
     summary: 'Opened session',
@@ -192,8 +196,11 @@ test('events flushes pending event writes before reading', async () => {
 // every other platform.
 test('events reads the daemon-owned session timeline for a web-backed session', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-web-');
-  sessionStore.publish('web-session', makeSession('web-session', { device: WEB_DESKTOP_DEVICE }));
-  sessionStore.recordEvent('web-session', {
+  const ref = sessionStore.publish(
+    'web-session',
+    makeSession('web-session', { device: WEB_DESKTOP_DEVICE }),
+  );
+  sessionStore.recordEvent(ref, {
     kind: 'action.recorded',
     command: 'click',
     summary: 'Tapped Submit order',
@@ -232,7 +239,7 @@ test('events reads the daemon-owned session timeline for a web-backed session', 
 
 test('request timeline records thrown request failures after scope creation', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-throws-');
-  sessionStore.publish('events-session', makeIosSession('events-session'));
+  const ref = sessionStore.publish('events-session', makeIosSession('events-session'));
 
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
@@ -255,8 +262,8 @@ test('request timeline records thrown request failures after scope creation', as
   });
 
   expect(response.ok).toBe(false);
-  await sessionStore.flushEvents('events-session');
-  const page = sessionStore.readEvents('events-session');
+  await sessionStore.flushEvents(ref);
+  const page = sessionStore.readEvents(ref);
   expect(page.events).toEqual([
     expect.objectContaining({
       kind: 'request.started',
@@ -272,7 +279,10 @@ test('request timeline records thrown request failures after scope creation', as
   ]);
 });
 
-test('request timeline records setup failures after start is appended', async () => {
+test.each([
+  { stage: 'lease preflight', meta: { leaseProvider: 'proxy' } },
+  { stage: 'tenant routing', meta: { sessionIsolation: 'tenant', tenantId: 'invalid/tenant' } },
+] as const)('a refusal during $stage writes a detached diagnostics record', async ({ meta }) => {
   const sessionStore = makeSessionStore('agent-device-router-events-setup-failure-');
 
   const handler = createRequestHandler({
@@ -292,23 +302,17 @@ test('request timeline records setup failures after start is appended', async ()
     command: 'open',
     positionals: ['Expo Go'],
     flags: {},
-    meta: { requestId: 'req-proxy-open', leaseProvider: 'proxy' },
+    meta: { requestId: 'req-proxy-open', ...meta },
   });
 
   expect(response.ok).toBe(false);
-  await sessionStore.flushEvents('default');
-  const page = sessionStore.readEvents('default');
-  expect(page.events).toEqual([
-    expect.objectContaining({
-      kind: 'request.started',
-      command: 'open',
-      requestId: 'req-proxy-open',
-    }),
-    expect.objectContaining({
-      kind: 'request.finished',
-      command: 'open',
-      requestId: 'req-proxy-open',
-      status: 'error',
-    }),
-  ]);
+  if (response.ok) return;
+  expect(response.error.diagnosticsRecord?.requestId).toMatch(/^[a-f0-9]{32}-unleased$/);
+  if ('tenantId' in meta) {
+    expect(response.error.diagnosticsRecord?.session).toBe('request-diagnostics');
+  }
+  expect(fs.readFileSync(response.error.logPath!, 'utf8')).toContain('"phase":"request_failed"');
+  expect(fs.existsSync(path.join(sessionStore.resolveDaemonStateDir(), 'session-journals'))).toBe(
+    false,
+  );
 });

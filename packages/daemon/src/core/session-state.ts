@@ -132,7 +132,7 @@ export type DeferredSurface =
 export type SessionRef = Readonly<{
   address: string;
   session: SessionState;
-  lifetime: object;
+  lifetime: Readonly<{ journalId: string }>;
 }>;
 
 /**

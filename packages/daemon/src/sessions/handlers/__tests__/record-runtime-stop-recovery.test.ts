@@ -624,10 +624,10 @@ test('live record stop writes its action under the captured scoped address after
   await harness.sessionStore.flushEvents();
   expect(
     harness.sessionStore
-      .readEvents(harness.sessionName)
+      .readEvents(harness.sessionStore.lookup(harness.sessionName)!)
       .events.filter((event) => event.kind === 'action.recorded'),
   ).toHaveLength(2);
-  expect(harness.sessionStore.readEvents('default').events).toEqual([]);
+  expect(harness.sessionStore.lookup('default')).toBeUndefined();
 });
 
 test('a sessionless web record start resolves the session device of its request, never the host', async () => {
