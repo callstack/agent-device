@@ -12,8 +12,11 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 
 import {
+  IOS_FOLD_PANEL_READ_INTERVAL_MS,
+  IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS,
   IOS_FOLD_POSE_READ_INTERVAL_MS,
   IOS_FOLD_POSE_SETTLE_ATTEMPTS,
   IOS_FOLD_POSE_STABLE_DEGREES,
@@ -74,7 +77,10 @@ export async function setAppleFoldPose(
   });
 
   const hingeAngleDegrees = await awaitHingePose(device, helper, pose, options.signal, targetAngle);
-  const litPanel = await readLitPanel(device, helper, options.signal);
+  // Panels were measured only at the named poses, so a custom final angle keeps one panel read.
+  const litPanel = intent.pose
+    ? await awaitPoseLitPanel(device, helper, intent.pose, options.signal)
+    : litPanelOf(await readGuestPanelTable(device, helper, options.signal));
   return {
     pose: foldPoseForHingeAngle(hingeAngleDegrees)!,
     hingeAngleDegrees,
@@ -103,7 +109,7 @@ async function dispatchedUnverifiedPoseError(
   targetAngle: number | undefined,
   cause: unknown,
 ): Promise<AppError> {
-  const litPanel = await readLitPanel(device, helper, signal);
+  const litPanel = litPanelOf(await readGuestPanelTable(device, helper, signal));
   return new AppError(
     'COMMAND_FAILED',
     `${device.name} received the ${pose} pose request, but the first hinge-angle read returned no sample to verify it`,
@@ -290,16 +296,59 @@ function unsettledPoseError(
   );
 }
 
-async function readLitPanel(
+/**
+ * Reads the lit panel until it is the panel the named pose lights: the `primary` panel when closed
+ * and the other panel when open or half-open (ADR 0025). A pose whose panel is already lit settles
+ * on the first read. A table that cannot show a panel switch, because it is unresolved or no panel
+ * reports measured power, ends the poll at once.
+ */
+async function awaitPoseLitPanel(
+  device: DeviceInfo,
+  helper: FoldHelper,
+  pose: FoldPose,
+  signal: AbortSignal | undefined,
+): Promise<AppleDeviceDisplay | undefined> {
+  const posePanel = (inventory: AppleDisplayInventory) => {
+    const panel = litPanelOf(inventory);
+    return panel?.primary === (pose === 'closed') ? panel : undefined;
+  };
+  // CONSERVATIVE: The guest switches panel power after the hinge stop, so the first read can name
+  // the panel lit before the fold; wait for the pose's panel and omit `screen` at the deadline.
+  // Revisit only if the panel table reports the switch together with the hinge stop.
+  const deadline = Deadline.fromTimeoutMs(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS);
+  const { value } = await pollUntilSettled({
+    // The time left on the deadline bounds each read, so the poll costs about one full read.
+    probe: () =>
+      readGuestPanelTable(device, helper, signal, {
+        timeoutMs: Math.max(deadline.remainingMs(), IOS_FOLD_PANEL_READ_INTERVAL_MS),
+      }),
+    settled: (inventory) => !hasMeasuredPanelPower(inventory) || posePanel(inventory) !== undefined,
+    deadline,
+    intervalMs: IOS_FOLD_PANEL_READ_INTERVAL_MS,
+    signal,
+  });
+  return posePanel(value);
+}
+
+function hasMeasuredPanelPower(inventory: AppleDisplayInventory): boolean {
+  return !inventory.unresolved && inventory.displays.some((display) => display.power !== 'unknown');
+}
+
+async function readGuestPanelTable(
   device: DeviceInfo,
   foldHelper: FoldHelper,
   signal: AbortSignal | undefined,
-): Promise<AppleDeviceDisplay | undefined> {
-  const inventory = await queryAppleDisplayInventory(device, {
+  options: { timeoutMs?: number } = {},
+): Promise<AppleDisplayInventory> {
+  return await queryAppleDisplayInventory(device, {
     signal,
     source: 'guest',
     foldHelper,
+    timeoutMs: options.timeoutMs,
   });
+}
+
+function litPanelOf(inventory: AppleDisplayInventory): AppleDeviceDisplay | undefined {
   if (inventory.unresolved || inventory.ambiguous) return undefined;
   return inventory.activeDisplay;
 }

@@ -28,8 +28,14 @@ import {
   buildInventory,
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
+  type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
-import { IOS_FOLD_POSE_READ_INTERVAL_MS, IOS_FOLD_POSE_SETTLE_ATTEMPTS } from '../core/config.ts';
+import {
+  IOS_FOLD_PANEL_READ_INTERVAL_MS,
+  IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS,
+  IOS_FOLD_POSE_READ_INTERVAL_MS,
+  IOS_FOLD_POSE_SETTLE_ATTEMPTS,
+} from '../core/config.ts';
 import { createFoldHelper } from './fold-helper.ts';
 import { setAppleFoldPose } from './pose.ts';
 
@@ -84,6 +90,20 @@ function queueBudgetReadings(fill: (index: number) => number, last: readonly num
   const leading = IOS_FOLD_POSE_SETTLE_ATTEMPTS - last.length;
   for (let index = 0; index < leading; index += 1) mockHinge.mockResolvedValueOnce(fill(index));
   for (const angle of last) mockHinge.mockResolvedValueOnce(angle);
+}
+
+/** Runs one fold under fake timers: the lit-panel poll interval must not cost real time. */
+async function foldOnFakeClock(input: Parameters<typeof setAppleFoldPose>[1]) {
+  vi.useFakeTimers();
+  try {
+    const outcome = setAppleFoldPose(duo, input);
+    await vi.advanceTimersByTimeAsync(
+      IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS + IOS_FOLD_PANEL_READ_INTERVAL_MS,
+    );
+    return await outcome;
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 beforeEach(() => {
@@ -168,19 +188,78 @@ test("reports native panel points regardless of the display's own currentOrienta
   });
 });
 
-test('omits the screen report when panel selection is ambiguous, never inventing a viewport', async () => {
-  // Two lit panels make the inventory ambiguous, so `readLitPanel` refuses to name one; the pose is
+test('omits the screen report when panel selection stays ambiguous, never inventing a viewport', async () => {
+  // Two lit panels make the inventory ambiguous, so the panel read refuses to name one; the pose is
   // still verified but carries no `screen` rather than guessing the app viewport.
   const bothLit = buildInventory([panel({}), panel({ name: 'LCD-1', displayId: 3 })]);
   expect(bothLit.ambiguous).toBe(true);
-  mockInventory.mockResolvedValueOnce(bothLit).mockResolvedValueOnce(bothLit);
+  mockInventory.mockResolvedValue(bothLit);
   mockHinge.mockResolvedValue(180);
 
-  await expect(setAppleFoldPose(duo, { pose: 'open' })).resolves.toEqual({
+  await expect(foldOnFakeClock({ pose: 'open' })).resolves.toEqual({
     pose: 'open',
     hingeAngleDegrees: 180,
   });
 });
+
+test.each([
+  ['open', 180, 'outer', 'inner', { display: 'LCD-1', widthPt: 669, heightPt: 951 }],
+  ['closed', 0, 'inner', 'outer', { display: 'LCD', widthPt: 466, heightPt: 678 }],
+] as const)(
+  'fold %s waits past a first panel read that still names the panel lit before the fold',
+  async (pose, angle, before, after, screen) => {
+    mockInventory
+      .mockResolvedValueOnce(duoInventory(before))
+      .mockResolvedValueOnce(duoInventory(before))
+      .mockResolvedValueOnce(duoInventory(after));
+    mockHinge.mockResolvedValue(angle);
+
+    await expect(foldOnFakeClock({ pose })).resolves.toEqual({
+      pose,
+      hingeAngleDegrees: angle,
+      screen: { ...screen, coordinateSpace: 'native-panel' },
+    });
+    expect(mockInventory).toHaveBeenCalledTimes(3);
+  },
+);
+
+test('omits the screen when the panel lit before the fold is still lit at the deadline', async () => {
+  // The hinge verified open, but the table never lit the inner panel: the outer panel is stale
+  // evidence, so the pose is reported without a screen rather than with the pre-fold panel.
+  mockInventory.mockResolvedValue(duoInventory('outer'));
+  mockHinge.mockResolvedValue(180);
+
+  await expect(foldOnFakeClock({ pose: 'open' })).resolves.toEqual({
+    pose: 'open',
+    hingeAngleDegrees: 180,
+  });
+  const panelReads = mockInventory.mock.calls.length - 1;
+  expect(panelReads).toBe(IOS_FOLD_PANEL_SETTLE_TIMEOUT_MS / IOS_FOLD_PANEL_READ_INTERVAL_MS + 1);
+});
+
+test.each<[string, AppleDisplayInventory]>([
+  ['unresolved', { displays: [], multiScreen: false, ambiguous: false, unresolved: true }],
+  [
+    'reporting no measured panel power',
+    buildInventory([
+      panel({ power: 'unknown' }),
+      panel({ name: 'LCD-1', displayId: 3, primary: false, power: 'unknown' }),
+    ]),
+  ],
+])(
+  'omits the screen after one read when the panel table is %s, without waiting',
+  async (_label, table) => {
+    // Neither table can ever show the panel switch, so a further read cannot help.
+    mockInventory.mockResolvedValueOnce(duoInventory('outer')).mockResolvedValue(table);
+    mockHinge.mockResolvedValue(180);
+
+    await expect(foldOnFakeClock({ pose: 'open' })).resolves.toEqual({
+      pose: 'open',
+      hingeAngleDegrees: 180,
+    });
+    expect(mockInventory).toHaveBeenCalledTimes(2);
+  },
+);
 
 test('sends half-open and reports it only once the hinge has stopped', async () => {
   mockInventory
@@ -400,6 +479,9 @@ test.each([
       }),
     ).resolves.toMatchObject({ pose, hingeAngleDegrees: observed });
     expect(mockHinge).toHaveBeenCalledTimes(2);
+    // Panels were measured only at the named poses, so a custom final angle reads the panel once
+    // and reports the measured panel without requiring the one a named pose lights.
+    expect(mockInventory).toHaveBeenCalledTimes(2);
   },
 );
 

@@ -43,8 +43,8 @@ function guestHingeReading(angleDegrees: number): string {
   return `${JSON.stringify({ version: 1, angleDegrees, angleValid: true })}\n`;
 }
 
-/** The fold helper's `panels` mode output for a Duo with its inner panel lit. */
-function guestPanelReading(): string {
+/** The fold helper's `panels` mode output for a Duo with its inner panel lit, or its outer one. */
+function guestPanelReading(lit: 'inner' | 'outer' = 'inner'): string {
   const displays = [0, 1].map((displayId) => ({
     name: `LCD-${displayId}`,
     displayId,
@@ -52,7 +52,7 @@ function guestPanelReading(): string {
     pointScale: 3,
     type: { integrated: {} },
     primary: displayId === 0,
-    backlightState: displayId === 1 ? 'activeOn' : 'off',
+    backlightState: displayId === (lit === 'inner' ? 1 : 0) ? 'activeOn' : 'off',
     currentOrientation: 'rot0',
   }));
   return `${JSON.stringify({ version: 1, displays })}\n`;
@@ -184,6 +184,8 @@ function alternatingHingeAngle(readIndex: number): number {
 
 function createFoldLedgerAppleToolProvider(params: {
   hingeAngleAt: (readIndex: number) => number;
+  /** The panel every guest panel read reports lit; `outer` never matches an `open` pose. */
+  litPanel?: 'inner' | 'outer';
   onCall: (call: FoldLedgerCall, signal?: AbortSignal) => void | Promise<void>;
   isTracking: () => boolean;
 }): { provider: AppleToolProvider; ledger: FoldLedgerCall[]; hingeReadCount: () => number } {
@@ -237,7 +239,7 @@ function createFoldLedgerAppleToolProvider(params: {
       if (args[0] === 'launch') return ok;
       await record('simctl', args, options);
       if (args[0] === 'spawn' && args[3] === 'panels') {
-        return { ...ok, stdout: guestPanelReading() };
+        return { ...ok, stdout: guestPanelReading(params.litPanel) };
       }
       if (args[0] === 'spawn' && args[3] === 'hinge') {
         const angle = params.hingeAngleAt(hingeReads);
@@ -291,6 +293,9 @@ async function withColdFoldHelperCache<T>(fn: () => Promise<T>): Promise<T> {
 async function runFoldLedgerScenario(params: {
   hingeAngleAt: (readIndex: number) => number;
   withVirtualClock: boolean;
+  /** A named pose instead of the maximum-duration custom trajectory. */
+  pose?: 'open';
+  litPanel?: 'inner' | 'outer';
 }): Promise<{
   response: ProviderScenarioRpcResult;
   ledger: FoldLedgerCall[];
@@ -307,6 +312,7 @@ async function runFoldLedgerScenario(params: {
     let trackFoldCalls = false;
     const { provider, ledger, hingeReadCount } = createFoldLedgerAppleToolProvider({
       hingeAngleAt: params.hingeAngleAt,
+      litPanel: params.litPanel,
       isTracking: () => trackFoldCalls,
       onCall: (call) => {
         virtualElapsedMs += Math.max(0, call.timeoutMs - 1) + (call.graceMs ?? 0);
@@ -333,10 +339,10 @@ async function runFoldLedgerScenario(params: {
         const originNowMs = Date.now();
         dateSpy.mockImplementation(() => originNowMs + virtualElapsedMs);
       }
-      const response = await daemon.callCommand('fold', [], {
+      const response = await daemon.callCommand('fold', params.pose ? [params.pose] : [], {
         platform: 'ios',
         udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-        keyframes: JSON.stringify(trajectory),
+        ...(params.pose ? {} : { keyframes: JSON.stringify(trajectory) }),
       });
       return { response, ledger, hingeReadCount: hingeReadCount(), virtualElapsedMs };
     } finally {
@@ -420,12 +426,44 @@ test('fold worst-case ledger covers the client envelope with the daemon-result m
     flags: {},
   });
   assert.ok(envelopeMs !== undefined, 'fold must declare a bounded envelope');
+  assertWithinEnvelope(measured, envelopeMs!, REQUIRED_DAEMON_RESULT_MARGIN_MS);
+
+  // A named pose waits for its panel after the hinge settles. Its worst case settles the hinge on
+  // the last read it allows, then polls a panel table whose lit panel never matches the pose. Each
+  // poll read ends by the poll deadline, so one read that spends its whole budget is the poll's
+  // worst case, and the ledger records that one read.
+  const poseCalibration = await runFoldLedgerScenario({
+    hingeAngleAt: () => 170,
+    withVirtualClock: false,
+    pose: 'open',
+  });
+  assertRpcError(poseCalibration.response, 500, 'COMMAND_FAILED', /did not reach the open pose/);
+  const poseSettleAttempts = poseCalibration.hingeReadCount;
+  const measuredPose = await runFoldLedgerScenario({
+    hingeAngleAt: (readIndex) => (readIndex === poseSettleAttempts - 1 ? 180 : 170),
+    withVirtualClock: true,
+    pose: 'open',
+    litPanel: 'outer',
+  });
+  const measuredPoseData = assertRpcOk(measuredPose.response);
+  assert.equal(measuredPoseData.pose, 'open');
+  assert.equal(measuredPoseData.screen, undefined, 'the stale outer panel must not be reported');
+  assert.equal(measuredPose.hingeReadCount, poseSettleAttempts);
+  assertFoldLedgerPhaseCoverage(measuredPose.ledger);
+  assertWithinEnvelope(measuredPose, envelopeMs!, REQUIRED_DAEMON_RESULT_MARGIN_MS);
+}, 30_000);
+
+function assertWithinEnvelope(
+  measured: Readonly<{ virtualElapsedMs: number; ledger: readonly FoldLedgerCall[] }>,
+  envelopeMs: number,
+  marginMs: number,
+): void {
   assert.ok(
-    measured.virtualElapsedMs + REQUIRED_DAEMON_RESULT_MARGIN_MS <= envelopeMs!,
-    `fold ledger worst case (${measured.virtualElapsedMs}ms) + ${REQUIRED_DAEMON_RESULT_MARGIN_MS}ms margin ` +
+    measured.virtualElapsedMs + marginMs <= envelopeMs,
+    `fold ledger worst case (${measured.virtualElapsedMs}ms) + ${marginMs}ms margin ` +
       `exceeds the ${envelopeMs}ms envelope.\nLedger:\n${JSON.stringify(measured.ledger, null, 2)}`,
   );
-}, 20_000);
+}
 
 function assertCompositeFoldOutcome(params: {
   response: DaemonResponse;

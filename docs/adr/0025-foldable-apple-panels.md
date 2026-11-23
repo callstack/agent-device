@@ -9,6 +9,7 @@ The Android emulator pose amendment is dated 2026-10-10.
 The no-panel refusal correction (#3761) is dated 2026-10-18.
 The guest readback amendment is dated 2026-10-26.
 The runner surface amendment is dated 2026-10-31.
+The pose panel acceptance amendment is dated 2026-11-23. It adds an exception to the rejected pose-to-panel map.
 This ADR covers iPhone Duo (iOS 27.1, `iPhone19,4`) and Apple devices with more than one integrated CoreDevice display.
 The amendment below also covers foldable Android emulators.
 
@@ -31,6 +32,7 @@ Only inference answers the second question.
 | Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
 | Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports an exact pose only after hinge readings verify it. |
 | Pose request | `agent-device fold <closed\|half-open\|open>` sends private HID inside the simulator. Then it reads the hinge angle back inside the simulator until the angle agrees. For `half-open`, two consecutive readings must agree. If the readings never agree, refuse the pose. |
+| Lit panel after a named pose | Report only a measured lit panel that the pose lights: `primary` for `closed`, the other panel for `half-open` and `open`. Read the panel table again until a short deadline. Then omit `screen`. An unresolved table, or a table without measured panel power, ends the reads. A custom keyframe angle uses one read. |
 | The first hinge read returns no sample | Refuse with `fold-pose-dispatched-unverified`. Panel power does not verify the pose. |
 | The hinge reaches `half-open` but keeps moving | Refuse with `fold-pose-unsettled` and the observed and previous angles. An angle inside the open interval is an observed category, not a pose that the hinge holds. |
 | External display | It is not a panel. It creates neither multi-screen classification nor a pose. |
@@ -284,6 +286,13 @@ Before the amendment, one run read 175.1° one stream after Book and 130° two s
 If the budget ends at another pose, refuse with `fold-pose-unverified` and the observed angle.
 If it ends at unsettled `half-open`, refuse with `fold-pose-unsettled`.
 A verified response includes the angle and lit panel's point size.
+The guest switches panel power after the hinge stop, so the first panel read can name the panel lit before the fold.
+Amendment (2026-11-23): for a named pose, the reported panel must be the measured panel that the pose lights.
+That panel is `primary` for `closed` and the other panel for `half-open` and `open`, the only poses with panel measurements.
+Panel reads repeat until a short deadline, and each read ends by that deadline. Then the response omits `screen`.
+An unresolved table, or a table in which no panel reports measured power, cannot show the switch, so it ends the reads.
+A custom keyframe angle keeps one panel read, because no panel measurement exists for interior angles.
+This is an explicit exception to the rejected pose-to-panel map below: the pose selects among measured panels and never supplies a panel.
 That point size tells an agent its refs are stale.
 
 A single-panel simulator is refused before mutation with `single-panel-device`.
@@ -366,6 +375,7 @@ Rejected alternatives:
 - **Keep devicectl for the default set: rejected.** It keeps a known failure on 651.13.5 and two hinge readers.
 - **`simctl io enumerate` as the scoped panel table: rejected.** It reports every port as `Power state: On`, so it cannot identify the lit panel.
 - **The lit panel derived from the hinge pose: rejected.** Panel identity and power must be measured. A pose-to-panel map is a second authority.
+  Exception (2026-11-23): after a named pose, `fold` uses the pose to reject a measured panel that the pose does not light. The pose never supplies a panel.
 - **Refuse capture on a scoped multi-panel device: rejected.** The guest reports measured panel power, so the existing capture rules apply unchanged.
 
 ## Amendment: foldable rotation through guest HID (2026-10-26)
