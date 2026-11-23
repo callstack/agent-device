@@ -1,12 +1,23 @@
 import path from 'node:path';
 import { isRecord } from '@agent-device/kernel/record';
-import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  retriableForErrorCode,
+  toAppErrorCode,
+  type DaemonError,
+} from '@agent-device/kernel/errors';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest } from '../core/daemon-request.ts';
+import type { SessionStore } from '../core/session-store.ts';
+import { scopeRequestSession } from '../sessions/request-admission.ts';
+import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import { sessionIdleExpiredError } from './session-idle-expiry.ts';
+import type { IdleSessionTombstone } from '../core/session-idle-tombstone.ts';
 import type {
   DaemonArtifact,
   DaemonResponse,
@@ -213,4 +224,108 @@ function performanceResponseOutputPath(req: DaemonRequest, data: DaemonResponseD
   if (action === 'report' || action === 'stop') return data.outPath;
   if (area === 'trace' && operation === 'stop') return data.outPath;
   return undefined;
+}
+
+/**
+ * ADR 0012 decision 6, R7 (C5a, BLOCKER 2): when a request finds no session
+ * (SESSION_NOT_FOUND) but a live repair tombstone exists for its session key,
+ * rewrite the error to an actionable recovery error. Any other error, or the
+ * absence of a (non-expired) tombstone, passes through untouched.
+ *
+ * BLOCKER 2: a tombstone carrying `commitFailure` means the transaction
+ * actually COMPLETED and a commit was attempted at teardown but FAILED (e.g.
+ * no-clobber refusal, a filesystem error) — that is a materially different,
+ * more specific situation than "reaped before it ever finished", so it gets
+ * its own `REPAIR_COMMIT_FAILED` code carrying the real cause, rather than
+ * being folded into the generic `REPAIR_SESSION_EXPIRED` expiry message.
+ */
+export function repairExpiredIfTombstoned(
+  req: DaemonRequest,
+  error: DaemonError,
+  sessionStore: SessionStore,
+): DaemonError {
+  if (error.code !== 'SESSION_NOT_FOUND') return error;
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return error;
+  const tombstone = sessionStore.readRepairTombstone(address);
+  if (!tombstone) return error;
+  const reRun = tombstone.sourcePath
+    ? `re-run: replay ${tombstone.sourcePath} --save-script`
+    : 're-run your replay <script> --save-script from the start';
+  if (tombstone.commitFailure) {
+    return normalizeError(
+      new AppError(
+        'REPAIR_COMMIT_FAILED',
+        `The repair transaction for session "${req.session}" completed, but committing its healed script failed at teardown: ${tombstone.commitFailure.message}. ${reRun}.`,
+      ),
+    );
+  }
+  return normalizeError(
+    new AppError(
+      'REPAIR_SESSION_EXPIRED',
+      `The --save-script repair session "${req.session}" was reaped before it was finalized (idle-reap); ${reRun}.`,
+    ),
+  );
+}
+
+/**
+ * #2833: when a command finds no session because this daemon already expired it for idleness, the
+ * answer stays `SESSION_NOT_FOUND` — the session genuinely is gone — but carries the typed reason,
+ * the window it missed, and the device it released. A bare "Run open first" tells an agent on a
+ * shared machine to retry an `open` that will collide with its own expired session's claim if the
+ * release is still in flight, and gives it nothing to reason about either way.
+ *
+ * Consulted after the repair tombstone so an abandoned repair transaction keeps its own, more
+ * specific recovery guidance. The address is resolved through the same routing the request took; a
+ * name that cannot be resolved has no marker rather than an error that would replace the caller's.
+ */
+export function idleExpiredIfTombstoned(
+  req: DaemonRequest,
+  error: DaemonError,
+  sessionStore: SessionStore,
+): DaemonError {
+  if (error.code !== 'SESSION_NOT_FOUND') return error;
+  const tombstone = readIdleExpiryTombstoneSafely(req, sessionStore);
+  if (!tombstone) return error;
+  return normalizeError(sessionIdleExpiredError(tombstone.owner, tombstone));
+}
+
+function resolveTombstoneSessionAddress(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): string | undefined {
+  try {
+    return resolveEffectiveSessionName(scopeRequestSession(req), sessionStore, {
+      attachesToSession: false,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function readIdleExpiryTombstoneSafely(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): IdleSessionTombstone | undefined {
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return undefined;
+  try {
+    return sessionStore.readIdleExpiryTombstone(address);
+  } catch {
+    return undefined;
+  }
+}
+
+// Phase 2 typed-error graft: add machine-readable signals to an error response.
+// Returns the error unchanged unless a signal applies, so the default wire shape
+// is preserved for the common codes.
+export function enrichDaemonError(error: DaemonError): DaemonError {
+  // A throw-site classification (lifted from details by normalizeError) wins
+  // over the conservative code-level policy.
+  const retriable = error.retriable ?? retriableForErrorCode(error.code);
+  if (retriable === undefined) return error;
+  return {
+    ...error,
+    retriable,
+  };
 }
