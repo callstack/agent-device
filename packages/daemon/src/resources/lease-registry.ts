@@ -742,7 +742,8 @@ export class LeaseRegistry {
     this.providerSessionOwnership.markLeaseReleased(lease, releasedAt);
   }
 
-  reserveExpiredLease(lease: DeviceLease, sessionsSettled = false): void {
+  reserveExpiredLease(lease: DeviceLease, sessionsSettled = false): boolean {
+    if (this.leases.has(lease.leaseId)) return false;
     this.issuedLeaseIds.add(lease.leaseId);
     this.runBindings.set(leaseRunBindingKey(lease), lease.leaseId);
     this.ending.set(lease.leaseId, {
@@ -750,6 +751,7 @@ export class LeaseRegistry {
       sessionsSettled,
       providerRelease: lease.leaseProvider ? 'pending' : 'confirmed',
     });
+    return true;
   }
 
   markExpiredProviderReleaseUnknown(leaseId: string): void {

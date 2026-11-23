@@ -296,7 +296,7 @@ async function startDaemonRuntimeOnHost(
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease, reason) => {
-      if (reason) return;
+      if (reason || !leaseRegistry.reserveExpiredLease(lease)) return;
       let finishProvider!: () => void;
       const providerEnd = new Promise<void>((resolve) => {
         finishProvider = resolve;
@@ -305,7 +305,6 @@ async function startDaemonRuntimeOnHost(
       const sessionsEnd = new Promise<void>((resolve) => {
         allowRelease = resolve;
       });
-      leaseRegistry.reserveExpiredLease(lease);
       void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED', { done: providerEnd, allowRelease });
       void expiredProviderLeaseReleaser
         .release(lease, sessionsEnd)

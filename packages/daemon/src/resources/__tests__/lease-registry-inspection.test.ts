@@ -105,3 +105,30 @@ test('an ending lease without a device key keeps its run binding until confirmat
   expect(registry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased')).toBe(true);
   expect(registry.allocateLease(request).leaseId).not.toBe(lease.leaseId);
 });
+
+test('a delayed expiry reservation cannot fence a renewed host lease with the same ID', async () => {
+  let now = 1_000;
+  let resume!: () => void;
+  const beforeReservation = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const registry = new LeaseRegistry({ now: () => now });
+  const leaseId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+  const lease = registry.putHostLease(leaseId, HUMAN_CONTROL_LEASE_REQUEST);
+  now = lease.expiresAt;
+  const expired = registry.consumeExpiredLease(leaseId);
+  assert.ok(expired);
+  const reservation = beforeReservation.then(() => registry.reserveExpiredLease(expired));
+
+  const reissued = registry.putHostLease(leaseId, HUMAN_CONTROL_LEASE_REQUEST);
+  const work = registry.retainLeaseWork(reissued, () => true);
+  now += 1;
+  work.release();
+  expect(registry.inspectActiveLease(leaseId)?.heartbeatAt).toBe(now);
+  resume();
+
+  const reserved = await reservation;
+  expect(registry.releaseLease({ ...HUMAN_CONTROL_LEASE_REQUEST, leaseId }).released).toBe(true);
+  expect(registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST).leaseId).not.toBe(leaseId);
+  expect(reserved).toBe(false);
+});
