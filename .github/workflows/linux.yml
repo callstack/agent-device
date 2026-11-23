@@ -142,7 +142,7 @@ jobs:
             echo "::error::apt-get $1 did not finish within ${seconds}s on 2 attempts"
             return 1
           }
-          if all_installed; then
+          if all_installed > /dev/null; then
             exit 0
           fi
           mkdir -p "$CACHE/lists/partial" "$CACHE/archives/partial"
