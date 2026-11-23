@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 export function stripAtPrefix(ref: string | undefined): string | undefined {
   return ref?.startsWith('@') ? ref.slice(1) : ref;
@@ -80,12 +80,44 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
       text: selectorArgs.rest.length === 0 ? undefined : selectorArgs.rest.join(' '),
     };
   }
+  if (isFillTargetMissing(positionals)) {
+    throw new AppError('INVALID_ARGS', formatFillMissingTargetFailure(positionals), {
+      reason: FILL_TARGET_REFUSAL_REASONS.targetMissing.reason,
+    });
+  }
   const pointText = positionals.slice(2);
   return {
     kind: 'point',
     target: readPointTarget(positionals.slice(0, 2)),
     text: pointText.length === 0 ? undefined : pointText.join(' '),
   };
+}
+
+/** Why `fill` refused its positionals before it decoded a target. */
+const FILL_TARGET_REFUSAL_REASONS = {
+  // Only the text arrived: one value that is no target, or a blank target before the text.
+  targetMissing: { reason: 'fill_target_missing' },
+} as const satisfies ReasonTable<'fill'>;
+
+/**
+ * `fill $REF "136849"` with an unset `REF` reaches here as one value, and `fill "$REF" "136849"`
+ * as a blank target; either way the caller supplied text but no target. One value that holds a
+ * selector key (`label=Sign in`) or an unknown key is a malformed target, so its own diagnostic
+ * stays.
+ */
+function isFillTargetMissing(positionals: string[]): boolean {
+  const [target = '', ...rest] = positionals;
+  if (rest.length > 0) return target.trim() === '';
+  if (target.trim() === '' || detectUnknownSelectorKeyToken(target)) return false;
+  return !target.split(/\s+/).some(isSelectorToken);
+}
+
+function formatFillMissingTargetFailure(positionals: string[]): string {
+  const got =
+    positionals.length === 1
+      ? `got one value, ${quoteSelectorValue(positionals[0] ?? '')}`
+      : `got an empty target before ${quoteSelectorValue(positionals.slice(1).join(' '))}`;
+  return `fill needs <target> <text> but ${got}. If a ref variable expanded to nothing, the target is missing: pass an @ref from snapshot, a selector, or x y coordinates before the text.`;
 }
 
 function readPointTarget(positionals: string[]): { x: number; y: number } {

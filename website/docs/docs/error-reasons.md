@@ -106,6 +106,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `fill_record_as_requires_armed_recording` | `fill --record-as` needs an armed script recording; open a session with `--save-script` first. |
 | `fill_text_stdin_unparameterized_recording` | `fill --text-stdin` needs `--record-as` or `--no-record` while a recording is armed, so the stdin text stays out of the script. |
 | `android_test_ime_rebind_unconfirmed` | The test IME rebind could not be confirmed, so the focused field may have no input session. |
+| `fill_target_missing` | Only the text arrived: one value that is no target, or a blank target before the text. |
 | `fill_text_stdin_tty` | stdin is a terminal, so the command would wait for input no one is piping. |
 | `fill_text_stdin_too_large` | The piped input passed the byte limit of 64 KiB. |
 | `fill_text_stdin_empty` | The piped input decoded to an empty string. |

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
@@ -106,4 +107,47 @@ test('readFillTargetFromPositionals treats every token after a ref as text', () 
     target: { ref: '@e29~s317228' },
     text: 'good morning',
   });
+});
+
+function refusalReason(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'INVALID_ARGS');
+    return error.details?.reason;
+  }
+  assert.fail('expected an INVALID_ARGS refusal');
+}
+
+test('readFillTargetFromPositionals refuses a fill that received only its text', () => {
+  // fill $REF "136849" with an unset REF, and fill "$REF" "136849" with an unset REF.
+  for (const positionals of [['136849'], ['', '136849']]) {
+    assert.equal(
+      refusalReason(() => readFillTargetFromPositionals(positionals)),
+      'fill_target_missing',
+      JSON.stringify(positionals),
+    );
+  }
+});
+
+test('readFillTargetFromPositionals keeps the target diagnostics that are not a missing target', () => {
+  for (const positionals of [
+    [''],
+    ['button="Submit"'],
+    ['label=Sign in'],
+    ['role=button label=Sign in'],
+    ['label="Sign in'],
+    ['Email', 'qa@example.com'],
+  ]) {
+    assert.equal(
+      refusalReason(() => readFillTargetFromPositionals(positionals)),
+      undefined,
+      JSON.stringify(positionals),
+    );
+  }
+  assertInvalidArgs(
+    () => readFillTargetFromPositionals(['label=Sign in']),
+    'Selector values with spaces need quotes',
+  );
 });
