@@ -153,20 +153,27 @@ jobs:
             exit 0
           fi
           echo "::notice::The cached Linux desktop packages cannot install the package set; refreshing the apt index."
-          # A killed or failed dpkg run leaves state that makes apt refuse every later command.
+          # A killed or failed dpkg run leaves a journal that makes apt refuse every later command.
+          # Packages whose dependency that run never unpacked stay unconfigured, so this exits nonzero.
           if [ "$cached_dpkg" = true ]; then
-            sudo dpkg --configure -a
+            sudo dpkg --configure -a || true
           fi
           sudo rm -rf "$CACHE"
           mkdir -p "$CACHE/lists" "$CACHE/archives/partial"
           LIST_OPTS=()
           apt_bounded 60 true update
+          if [ "$cached_dpkg" = true ]; then
+            # On a broken system apt resolves only the named packages, so name what --fix-broken would install.
+            mapfile -t -O "${#PACKAGES[@]}" PACKAGES < <(sudo apt-get install --fix-broken -s -qq "${APT_OPTS[@]}" | awk '/^Inst /{print $2}')
+          fi
           apt_bounded 75 offline_plan install -y --no-install-recommends --download-only "${PACKAGES[@]}"
           stamp "install start"
           install_offline
           all_installed
           stamp "install complete"
           # Keep the lists that selected these archives; the cached attempt resolves against them.
+          # After a repair the set holds only what the repair fetched, so the next run's plan needs a
+          # download and that run saves a complete set.
           sudo find /var/lib/apt/lists -maxdepth 1 -type f \( -name '*Release*' -o -name '*_Packages*' \) -exec cp -t "$CACHE/lists/" {} +
           sudo rm -rf "$CACHE/archives/partial" "$CACHE/archives/lock"
           sudo chown -R "$(id -u):$(id -g)" "$CACHE"
