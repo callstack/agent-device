@@ -147,6 +147,37 @@ test('a proxy that reports an empty service name is still named as the proxy', a
   assert.ok(error.message.endsWith('Upgrade agent-device on this client and on the proxy.'));
 });
 
+test('a daemon whose service name has nothing printable is named as the daemon', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const error = await readRefusal({
+    ...DAEMON_LINK,
+    service: '\u0007\u001b\u202e\u200b',
+    rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION - 1,
+  });
+  assert.equal(error.details?.remoteService, undefined);
+  assert.ok(error.message.includes('the remote daemon runs 98.0.0'));
+});
+
+test('remote service and version labels lose control and format characters and are bounded', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const error = await readRefusal({
+    ...DAEMON_LINK,
+    service:
+      'agent-device-daemon\u001b[2J\r\nfake line\u0085 \u202edemaed\u202c\u2066x\u2069\u200e\u200f\u061c' +
+      '\u200b\ufeff\u00ad\u2028\u2029\ud800!',
+    version: `98.0.0-${'\u{1F680}'.repeat(5_000)}`,
+    rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION - 1,
+  });
+  const remoteVersion = String(error.details?.remoteVersion);
+  assert.equal(error.details?.remoteService, 'agent-device-daemon[2Jfake line demaedx!');
+  assert.equal(Array.from(remoteVersion).length, 64);
+  assert.doesNotMatch(remoteVersion, /\p{Surrogate}/u);
+  assert.doesNotMatch(error.message, /\p{Cc}/u);
+  assert.ok(error.message.includes(remoteVersion));
+});
+
 test('a daemon health payload without an upstream link or host arch parses as before', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 

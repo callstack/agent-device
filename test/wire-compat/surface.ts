@@ -157,6 +157,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'RemoteDaemonHealthLink',
         'readHealthPayload',
         'readHealthLink',
+        'readHealthLabel',
+        'HEALTH_LABEL_MAX_CHARS',
         'readDaemonHttpHealth',
         'readRemoteDaemonHealth',
       ),

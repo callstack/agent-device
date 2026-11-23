@@ -365,8 +365,8 @@ function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' |
 
 function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
   return {
-    service: typeof parsed.service === 'string' ? parsed.service : undefined,
-    version: typeof parsed.version === 'string' ? parsed.version : undefined,
+    service: readHealthLabel(parsed.service),
+    version: readHealthLabel(parsed.version),
     rpcProtocolVersion:
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
@@ -375,6 +375,21 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
       ? {}
       : { capabilities: readDaemonCapabilities(parsed.capabilities) }),
   };
+}
+
+const HEALTH_LABEL_MAX_CHARS = 64;
+
+/**
+ * A remote-reported name or version, made safe to print in a message: no control characters, which
+ * a terminal would act on, no format, line or paragraph separators or lone surrogates, which spoof
+ * or break how it reads, and a bounded length. Undefined when nothing printable is left.
+ */
+function readHealthLabel(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const label = Array.from(value.replaceAll(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, ''))
+    .slice(0, HEALTH_LABEL_MAX_CHARS)
+    .join('');
+  return label || undefined;
 }
 
 export async function sendRequest(

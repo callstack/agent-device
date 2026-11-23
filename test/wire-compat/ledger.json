@@ -65,10 +65,12 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:51f17269ac0a02116ba8af33c9884b10b74f78bcb54c40f77dd887f1f08d8246",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:75226219f3d2475b59b297593346879c5211f56530a45494ff696b435e002bce",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
+    "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_LABEL_MAX_CHARS": "sha256:d0b8ab9d8962140f547ebe0e4406c16b69d03128b0bedcf4a560d08bf298949a",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:96a79a8ff5a078916ee7bffed1d9624d0ba9c0dcbd8e2c55f9abf37fccfef744",
     "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
-    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:b709f88901784e767a542acc27d90ba080e7b016e85d6053a59df3495454ae3b",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLabel": "sha256:ec3579252fb62eda72ed2232e94730bb35c5a012509a498fb4c66e0c9a6bcaa7",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:ebed1315a73b3d83e59a4fd01ff2d35ddc9cf9fe0c2820d85a11dc4fc013cdb7",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
     "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:49849ab90412433dd2444a46725786fdc6916786dd50c593e93aa951a5808ada",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
@@ -364,8 +366,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink",
-      "digest": "sha256:b709f88901784e767a542acc27d90ba080e7b016e85d6053a59df3495454ae3b",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object."
+      "digest": "sha256:ebed1315a73b3d83e59a4fd01ff2d35ddc9cf9fe0c2820d85a11dc4fc013cdb7",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object. The service and version labels now go through readHealthLabel, which drops control and format characters and keeps at most 64 characters, because they reach error messages; released peers report short printable labels, which parse unchanged, and the /health request is unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",

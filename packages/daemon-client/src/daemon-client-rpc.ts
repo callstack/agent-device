@@ -272,7 +272,7 @@ export function incompatibleRemoteProtocolError(
         ? 'client-and-proxy'
         : 'client';
   const service = link.service ?? 'daemon';
-  const proxyName = proxy?.service || 'the proxy';
+  const proxyName = proxy?.service ?? 'the proxy';
   const remote = proxy ? `the ${service} behind ${proxyName}` : `the remote ${service}`;
   const upgradeTarget = {
     remote: proxy ? remote : 'the remote host',
