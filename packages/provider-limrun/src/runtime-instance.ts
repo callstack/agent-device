@@ -26,3 +26,34 @@ export function resolveLimrunRuntimeInstance(options: {
     ['attachedAndroid', options.instances?.android?.apiUrl],
   ]);
 }
+
+/** Read the names from the same operator setting the SDK reads at construction. */
+export function limrunCustomHeaderNames(config: string | undefined): string[] {
+  const names = new Set<string>();
+  for (const line of config?.split('\n') ?? []) {
+    const separator = line.indexOf(':');
+    if (separator < 0) continue;
+    const name = line.slice(0, separator).trim().toLowerCase();
+    if (name && name !== 'authorization') names.add(name);
+  }
+  return [...names].sort();
+}
+
+export function resolveLimrunRentalRecoveryPrincipal(
+  baseUrl: string,
+  headers: Headers,
+  customHeaderNames: readonly string[],
+): string | undefined {
+  const authorization = headers.get('authorization');
+  if (!authorization) return undefined;
+  return providerRuntimeInstance('limrun', [
+    ['authorization', authorization],
+    ['baseUrl', baseUrl],
+    [
+      'customHeaders',
+      customHeaderNames.length === 0
+        ? undefined
+        : JSON.stringify(customHeaderNames.map((name) => [name, headers.get(name)])),
+    ],
+  ]);
+}

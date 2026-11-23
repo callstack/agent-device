@@ -40,10 +40,7 @@ import type {
   PlatformRuntimeOwner,
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
-import {
-  providerRuntimeInstance,
-  providerRuntimeOwner,
-} from '@agent-device/contracts/platform-runtime';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import {
@@ -53,7 +50,11 @@ import {
   readLimrunTerminationReason,
   requireLimrunOrgClient,
 } from './client-options.ts';
-import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
+import {
+  limrunCustomHeaderNames,
+  resolveLimrunRentalRecoveryPrincipal,
+  resolveLimrunRuntimeInstance,
+} from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 import type {
@@ -141,6 +142,7 @@ export function createLimrunRuntime(
 
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly limrun: Limrun | undefined;
+  private readonly rentalRoutingHeaders: readonly string[];
   /**
    * A lease has an owner from the step it is allocated until the one disposal of it confirms. Allocate,
    * join, release, recovery, shutdown and every reader of a live session go through this one map, so an
@@ -216,6 +218,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     }
     this.options = options;
     this.dependencies = dependencies;
+    this.rentalRoutingHeaders = limrunCustomHeaderNames(process.env.LIMRUN_CUSTOM_HEADERS);
     this.limrun = options.apiKey
       ? new Limrun({
           apiKey: options.apiKey,
@@ -231,11 +234,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const request = await this.limrun
       .buildRequest({ method: 'get', path: '/' })
       .catch(() => undefined);
-    this.rentalRecoveryPrincipal = request?.req.headers.get('authorization')
-      ? providerRuntimeInstance(LIMRUN_PROVIDER, [
-          ['baseUrl', this.limrun.baseURL],
-          ['headers', JSON.stringify([...request.req.headers.entries()])],
-        ])
+    this.rentalRecoveryPrincipal = request
+      ? resolveLimrunRentalRecoveryPrincipal(
+          this.limrun.baseURL,
+          request.req.headers,
+          this.rentalRoutingHeaders,
+        )
       : undefined;
   }
 
