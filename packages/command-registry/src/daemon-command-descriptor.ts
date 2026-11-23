@@ -40,6 +40,7 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
   route: DaemonCommandRoute;
   sessionKind?: SessionCommandKind;
   refFrameEffect?: DaemonRefFrameEffect<TRequest>;
+  sessionObservation?: (req: TRequest) => boolean;
   leaseAdmissionExempt?: boolean;
   /**
    * This command uses neither the lease nor the device of the session it resolves, so only a lease

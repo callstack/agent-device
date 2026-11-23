@@ -23,7 +23,7 @@ agent-device diff snapshot               # Structural diff vs previous session b
 | `-s <scope>`     | Scope to label, value, identifier, or `@ref` ([Scope a snapshot](#scope-a-snapshot)) |
 | `--raw`          | Full provider tree instead of the visible-first agent view                       |
 | `--actions`      | Name the custom accessibility actions merged inside an element (iOS simulator)   |
-| `--observe-only` | Read the session app without activating it or repairing foreground (local iOS and iPadOS sessions only) |
+| `--observe-only` | Android ADB geometry without refs or session publication; local iOS/iPadOS refs without activation or foreground repair |
 | `--force-full`   | Re-emit the full tree even when it is unchanged since the previous snapshot      |
 | `--timeout <ms>` | Maximum wall-clock time for the snapshot command                                 |
 
@@ -42,12 +42,28 @@ agent-device diff snapshot               # Structural diff vs previous session b
 - You can't combine it with `--raw`. The CLI, the Node client, and MCP all reject the pair with
   `INVALID_ARGS` before touching the device.
 
+## Android observe-only snapshots
+
+Pass the serial of an ADB-connected Android device or name an open Android session:
+
+```bash
+agent-device snapshot --platform android --serial emulator-5554 --observe-only --json
+agent-device snapshot --session my-android-session --observe-only --json
+```
+
+The result includes the display viewport and element bounds, without action refs or
+`refsGeneration`. The read preserves the foreground, session baseline, and existing action refs.
+It does not publish a session. Use a regular snapshot to obtain action refs.
+Use the same daemon as the agent session to share its helper. Android Appium and `--diff` do not
+support this operation.
+
 ## iOS observe-only snapshots
 
 `agent-device snapshot --observe-only` reads the bound iOS or iPadOS app without activating it or
 repairing its foreground state. An ordinary snapshot brings a backgrounded session app back and
 discloses that with `targetActivation`; an observe-only snapshot refuses instead, so the screen is
-left exactly as it was. Other platforms, provider-owned sessions, and `--diff` are unsupported.
+left exactly as it was. The result still issues action refs and `refsGeneration` for the session.
+Provider-owned sessions and `--diff` are unsupported.
 
 The runner refuses with `OBSERVATION_UNAVAILABLE` (also named by `details.runnerErrorCode`) unless
 the app reports `runningForeground` before and after the capture under one process identity. It does

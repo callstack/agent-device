@@ -28,7 +28,11 @@ import {
   requestCwd,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
-import { resolveCallerScopeRoot, resolveSessionScope } from '../sessions/session-routing.ts';
+import {
+  resolveCallerScopeRoot,
+  resolvePublicSessionName,
+  resolveSessionScope,
+} from '../sessions/session-routing.ts';
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertProviderLeaseRequestNamesSession,
@@ -50,6 +54,8 @@ import {
   prepareLockedRequestBinding,
   resolveBoundedClaimDevice,
   resolveRequestExecutionLockPlan,
+  resolveDetachedObservationDevice,
+  admitSnapshotObservation,
   sessionExecutionLockKey,
   type RequestExecutionLockPlan,
 } from './request-binding.ts';
@@ -82,6 +88,7 @@ import {
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
+  isAndroidSessionObservation,
 } from '../core/daemon-command-registry.ts';
 import {
   shouldRecordEventForRequest,
@@ -142,6 +149,7 @@ export type RequestExecutionScope = AsyncDisposable & {
   req: DaemonRequest;
   command: string;
   sessionName: string;
+  detachedObservation: boolean;
   admittedRef?: SessionRef;
   requestLogPath: string;
   runnerLogPath: string;
@@ -232,7 +240,13 @@ export async function createRequestExecutionScope(params: {
   const startedAtMs = Date.now();
   const attachesToSession = shouldLockSessionExecution(command);
   const readsSessionLease = !ignoresSessionLease(command);
-  const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
+  const detachedObservationDevice = await resolveDetachedObservationDevice(
+    scopedReq,
+    params.host.env,
+  );
+  const sessionName = detachedObservationDevice
+    ? resolvePublicSessionName(scopedReq)
+    : resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({
     sessionDir,
@@ -282,7 +296,9 @@ export async function createRequestExecutionScope(params: {
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     const readAddressed = () =>
-      sessionStore.lookup(sessionName) ?? params.leaseSessionEnd?.closingAt(sessionName);
+      detachedObservationDevice
+        ? undefined
+        : (sessionStore.lookup(sessionName) ?? params.leaseSessionEnd?.closingAt(sessionName));
     const preflightRef = readAddressed();
     const preflightSession = preflightRef?.session;
     assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
@@ -403,10 +419,13 @@ export async function createRequestExecutionScope(params: {
       claimRecoveryGateway: params.claimRecoveryGateway,
       trackClaimRecoveryDisposal: params.trackClaimRecoveryDisposal,
       sessionStore,
+      snapshotObservation: () => scopedReq.internal?.snapshotObservation,
     });
 
     let bindingCleanup: Promise<void> | undefined;
+    let observationActive = true;
     const disposeBindings = (): Promise<void> => {
+      observationActive = false;
       bindingCleanup ??= (async () => {
         try {
           await runtimeBindings[Symbol.asyncDispose]();
@@ -493,7 +512,7 @@ export async function createRequestExecutionScope(params: {
           : resolveRequestExecutionLockPlan({
               req: scopedReq,
               sessionName,
-              existingDeviceId: observed?.session.device.id,
+              existingDeviceId: detachedObservationDevice?.id ?? observed?.session.device.id,
               env: sessionStore.host.env,
             });
       const lockPlan = plan instanceof Promise ? await plan : plan;
@@ -521,11 +540,18 @@ export async function createRequestExecutionScope(params: {
         : await requestExecutionLocks.run(run);
     };
 
+    const noteAdmittedSessionActivity = () => {
+      if (attachesToSession && !isRequestCanceled(scopedReq.meta?.requestId)) {
+        sessionStore.noteSessionActivity(sessionName);
+      }
+    };
+
     const scope: RequestExecutionScope = {
       host: params.host,
       req: scopedReq,
       command,
       sessionName,
+      detachedObservation: detachedObservationDevice !== undefined,
       requestLogPath,
       runnerLogPath,
       retainDeviceExecutionLock: async (deviceId) =>
@@ -556,6 +582,20 @@ export async function createRequestExecutionScope(params: {
       recordFinished,
       runAdmitted: async (task, admitted) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
+        const runObservation = async (device: DeviceInfo) => {
+          scopedReq = admitSnapshotObservation({
+            req: scopedReq,
+            originalReq: unscopedReq,
+            device,
+            sessionStore,
+            leaseRegistry,
+            admission: { ...params, env: params.host.env },
+            active: () => observationActive,
+          });
+          scope.req = scopedReq;
+          return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+        };
+        if (detachedObservationDevice) return await runObservation(detachedObservationDevice);
         const boundedStep =
           command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
         const addressed = admitted ? admitted.ref : await readNestedAddress();
@@ -564,6 +604,9 @@ export async function createRequestExecutionScope(params: {
         let admissionCompleted = false;
         try {
           const existingRef = resolveRequestSessionRef(scopedReq, addressed);
+          const existingDevice = existingRef?.session.device;
+          if (isAndroidSessionObservation(scopedReq, existingDevice))
+            return await runObservation(existingDevice);
           const session = existingRef?.session;
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
@@ -644,13 +687,7 @@ export async function createRequestExecutionScope(params: {
           });
         } finally {
           // Stamp completion under the session lock so the idle reaper cannot overtake live work.
-          if (
-            admissionCompleted &&
-            attachesToSession &&
-            !isRequestCanceled(scopedReq.meta?.requestId)
-          ) {
-            sessionStore.noteSessionActivity(sessionName);
-          }
+          if (admissionCompleted) noteAdmittedSessionActivity();
         }
       },
       runLocked: async <T>(task: () => Promise<T>): Promise<T> => {
@@ -703,6 +740,7 @@ function createRequestDeviceAccess(params: {
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   sessionStore: SessionStore;
+  snapshotObservation: () => NonNullable<DaemonRequest['internal']>['snapshotObservation'];
 }): {
   claimAdmission: DeviceClaimAdmission;
   runtimeBindings: RequestRuntimeBindings;
@@ -718,6 +756,7 @@ function createRequestDeviceAccess(params: {
     resolveScopeRoot: resolveCallerScopeRoot,
     stateDir: params.stateDir,
     env: params.env,
+    observation: params.snapshotObservation,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,
       beforeGateway: async (claim) => {
@@ -743,7 +782,13 @@ function createRequestDeviceAccess(params: {
               if (daemonPolicy) {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }
-              if (claimPolicy === 'require-owner' && !params.sessionStore.get(params.sessionName)) {
+              const observation = params.snapshotObservation();
+              if (observation) observation.assertCurrent();
+              if (
+                observation === undefined &&
+                claimPolicy === 'require-owner' &&
+                !params.sessionStore.get(params.sessionName)
+              ) {
                 const refusal = findSessionDeviceConflict({
                   req: params.req,
                   device,

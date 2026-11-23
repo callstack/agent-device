@@ -18,6 +18,7 @@ import {
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonRequest } from './daemon-request.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export type { DaemonCommandDescriptor, DaemonCommandRoute, SessionCommandKind };
 
@@ -86,6 +87,17 @@ export function shouldValidateSessionSelector(command: string): boolean {
 
 export function shouldLockSessionExecution(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.sessionExecutionLockExempt !== true;
+}
+
+export function isSessionObservationRequest(req: DaemonRequest): boolean {
+  return getDaemonCommandDescriptor(req.command)?.sessionObservation?.(req) === true;
+}
+
+export function isAndroidSessionObservation(
+  req: DaemonRequest,
+  device: DeviceInfo | undefined,
+): device is DeviceInfo {
+  return isSessionObservationRequest(req) && device?.platform === 'android';
 }
 
 export function canRunReplayScopedAction(command: string): boolean {

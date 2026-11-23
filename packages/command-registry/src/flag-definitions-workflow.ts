@@ -278,9 +278,9 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--observe-only',
     usageDescription:
-      'Snapshot: observe the iOS session app without activation or foreground repair',
+      'Snapshot: Android geometry without refs or session; iOS refs without foreground repair',
     inputDescription:
-      'iOS only. Refuse instead of activating or repairing the session app. Reports XCUIApplication state, which does not prove screen ownership (#2696).',
+      'Android ADB returns geometry without refs or session publication. iOS/iPadOS retains refs and refuses activation or foreground repair. iOS app state does not prove screen ownership (#2696).',
     projectConfig: false,
     recorded: false,
   },

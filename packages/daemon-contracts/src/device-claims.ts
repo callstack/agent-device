@@ -754,11 +754,12 @@ async function writeOwnedDeviceClaim<O, L>(
   });
 }
 
-function claimMatchesOwnership(
+export function claimMatchesOwnership(
   claim: DeviceClaim,
   ownership: DeviceClaimSessionOwnership,
 ): boolean {
   return (
+    claim.deviceKey === ownership.deviceKey &&
     claim.ownerToken === ownership.ownerToken &&
     ownerIdentityMatches(
       { pid: claim.ownerPid, startTime: claim.ownerStartTime },

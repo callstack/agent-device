@@ -714,6 +714,26 @@ export class SessionCoordinator {
     return this.bind(ref, () => active() && !isRequestCanceled(req.meta?.requestId));
   }
 
+  observeDevice(
+    req: DaemonRequest,
+    device: DeviceInfo,
+    active: () => boolean,
+    admit: (session: SessionState | undefined) => void,
+  ): NonNullable<NonNullable<DaemonRequest['internal']>['snapshotObservation']> {
+    const ref = this.#store.findByDevice(device.id);
+    const authority = ref ? this.authorize(req, ref, active) : undefined;
+    admit(ref?.session);
+    const assertCurrent = () => {
+      throwIfRequestCanceled(req.meta?.requestId);
+      if (active() && (authority === undefined || authority.current() !== undefined)) return;
+      throw createRequestCanceledError();
+    };
+    assertCurrent();
+    const ownership = ref?.session.deviceClaim;
+    const claimCoverage = ref && ownership ? { session: ref.address, ownership } : undefined;
+    return { device, assertCurrent, claimCoverage };
+  }
+
   reserve(req: DaemonRequest, address: string): AuthorizedOpenSlot {
     const admitted = req.internal?.admittedLease;
     const lease = admitted && sessionLeaseOf(admitted);

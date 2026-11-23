@@ -373,6 +373,12 @@ The original daemon response is available in `error.details.response`.
 
 `client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation. Scale and clip against it instead of inferring the screen from the largest rect. When no box was measured, the field is absent rather than zero; see [Coordinates and viewport](/docs/snapshots#coordinates-and-viewport) for what each producer answers with.
 
+With `observeOnly: true`, Android ADB returns geometry without refs or `refsGeneration`, preserves
+the session baseline and existing refs, and publishes no session. Select the device by serial or
+name its open session, using the same daemon to share the helper. On local iOS/iPadOS,
+`observeOnly` still issues refs and refuses activation or foreground repair.
+See [Observe-only snapshots](/docs/snapshots#android-observe-only-snapshots).
+
 It also carries an optional `presentedSurface: 'presented' | 'absent' | 'unknown'` on iOS captures: whether the capture saw a modal presentation over your app's content. `'absent'` is a reading that was earned, so it is safe to act on; `'unknown'` says the capture could not tell and is not `'absent'`. The field is absent on other platforms. See [Presented surface](/docs/snapshots#presented-surface).
 
 `client.observability.events({ cursor, limit })` reads paged JSON events for an active session. Each page returns `endCursor`, the absolute index after the last line it covered; `nextCursor` is present only when more lines follow. Pass `endCursor` from the previous page to continue reading. It counts lines that could not be parsed as events, so use the returned value directly. Start with a fresh cursor after you close and reopen the session. Cursors within the retained window survive file rotation. If a cursor expires, the call rejects with `COMMAND_FAILED` and `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`. Resume from `details.earliestCursor`.
