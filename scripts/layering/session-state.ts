@@ -83,7 +83,6 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   // Open execution owns the paired lease/claim transition after the handler has admitted one
   // lifecycle binding. Keeping the records together prevents request-policy routing from gaining
   // a second durable owner as the execution seam stays package-bound.
-  lease: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   deviceClaim: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
 
   // #1398 (ADR 0017 session-scoped echo protection amendment): the ephemeral
@@ -105,6 +104,7 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
  */
 export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'actions',
+  'lease',
   // #4162: `SessionStore.updateOpenDevice` binds boot ownership to the current device identity.
   // Close only reads the fact; a replacement cannot inherit it.
   'device',
@@ -182,7 +182,7 @@ export function sessionStateDeclarationFile(
 export function sessionStateFields(typesSource: string): string[] {
   const declaration = SESSION_STATE_DECLARATION.exec(typesSource);
   if (!declaration) throw new Error('SessionState declaration not found');
-  return [...declaration[1]!.matchAll(/^ {2}([a-zA-Z][A-Za-z0-9]*)\??:/gm)].map(
+  return [...declaration[1]!.matchAll(/^ {2}(?:readonly )?([a-zA-Z][A-Za-z0-9]*)\??:/gm)].map(
     (match) => match[1]!,
   );
 }

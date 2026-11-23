@@ -42,6 +42,8 @@ export function makeRecordRuntimeHarness(
     platform?: 'android' | 'apple' | 'linux' | 'vega';
     device?: SessionState['device'];
     runtime?: RuntimeOptions;
+    lease?: SessionState['lease'];
+    sessionScope?: SessionState['sessionScope'];
   } = {},
 ) {
   const sessionStore = makeSessionStore(prefix);
@@ -68,6 +70,8 @@ export function makeRecordRuntimeHarness(
     ...(options.recordOnlySession ? { recordOnlySession: true } : {}),
     createdAt: 1,
     actions: [],
+    lease: options.lease,
+    sessionScope: options.sessionScope,
   };
   sessionStore.publish(sessionName, session);
   const runtime = makeRuntime(session, options.runtime);

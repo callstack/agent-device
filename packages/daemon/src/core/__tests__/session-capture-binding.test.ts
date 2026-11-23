@@ -1,3 +1,4 @@
+import { SessionCoordinator } from '../session-store.ts';
 import { expect, test, vi } from 'vitest';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeRecordingSession } from '../../__tests__/support/session-teardown.fixtures.ts';
@@ -137,10 +138,15 @@ test('shutdown refuses draft publication while retaining unconfirmed recording c
     finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
     forceCleanup: cleanup,
   });
-  const draft = bindRecordOnlyScreenRecording(store, 'draft', {
-    ...session,
-    screenRecording: undefined,
-  });
+  const draft = bindRecordOnlyScreenRecording(
+    store,
+    'draft',
+    {
+      ...session,
+      screenRecording: undefined,
+    },
+    recordSlot(store, 'draft'),
+  );
   store.closeAdmission();
   await expect(
     adoptStartedScreenRecording({
@@ -184,10 +190,15 @@ test('a draft binding retains its latest observed recording after retirement', (
     sessionStore: store,
     finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
   }).screenRecording!;
-  const draft = bindRecordOnlyScreenRecording(store, 'draft', {
-    ...session,
-    screenRecording: undefined,
-  });
+  const draft = bindRecordOnlyScreenRecording(
+    store,
+    'draft',
+    {
+      ...session,
+      screenRecording: undefined,
+    },
+    recordSlot(store, 'draft'),
+  );
   draft.binding.adopt(first);
   const ref = draft.requireRef();
   store.update(ref, { screenRecording: latest });
@@ -205,10 +216,15 @@ test('a published draft cannot create another lifetime after retirement', () => 
     finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
   });
   const recording = session.screenRecording!;
-  const draft = bindRecordOnlyScreenRecording(store, 'draft', {
-    ...session,
-    screenRecording: undefined,
-  });
+  const draft = bindRecordOnlyScreenRecording(
+    store,
+    'draft',
+    {
+      ...session,
+      screenRecording: undefined,
+    },
+    recordSlot(store, 'draft'),
+  );
   draft.binding.adopt(recording);
   const ref = draft.requireRef();
   expect(store.retire(ref)).toBe(true);
@@ -234,7 +250,12 @@ test('an occupied recording draft is refused before publication', () => {
     sessionStore: store,
     finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
   });
-  const draft = bindRecordOnlyScreenRecording(store, 'occupied-draft', session);
+  const draft = bindRecordOnlyScreenRecording(
+    store,
+    'occupied-draft',
+    session,
+    recordSlot(store, 'occupied-draft'),
+  );
   expect(() => draft.binding.adopt(session.screenRecording!)).toThrowError(
     expect.objectContaining({
       details: expect.objectContaining({ reason: 'session_resource_changed' }),
@@ -242,3 +263,10 @@ test('an occupied recording draft is refused before publication', () => {
   );
   expect(store.lookup('occupied-draft')).toBeUndefined();
 });
+
+function recordSlot(store: ReturnType<typeof makeSessionStore>, address: string) {
+  return new SessionCoordinator(store).reserve(
+    { token: 't', session: address, command: 'record', positionals: [] },
+    address,
+  );
+}

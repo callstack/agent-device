@@ -6,7 +6,8 @@ import {
 } from '@agent-device/kernel/keyed-lock';
 import { hostDeviceIdOf } from '@agent-device/kernel/device';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import type { RequestExecutionLockKey } from './request-binding.ts';
+import { sessionExecutionLockKey, type RequestExecutionLockKey } from './request-binding.ts';
+import type { WithSessionExecutionLock } from '../core/session-store.ts';
 
 const REQUEST_EXECUTION_REASONS = {
   // Another request is using the device while this request holds another device of the same host;
@@ -137,4 +138,17 @@ export async function withRequestExecutionLockKeys<T>(
       await withRequestExecutionLockKeys(locks, remainingKeys, task, signal, beforeAcquire),
     signal,
   );
+}
+
+export function createSessionExecutionLock(
+  locks: Map<string, Promise<unknown>>,
+): WithSessionExecutionLock {
+  return async (address, task, signal) => {
+    const attemptLocks = createRequestExecutionLocks({
+      locks,
+      initialKeys: [sessionExecutionLockKey(address)],
+      scope: signal ? { signal } : undefined,
+    });
+    return await attemptLocks.run(() => task(attemptLocks.retainDevice));
+  };
 }

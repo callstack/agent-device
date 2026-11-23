@@ -354,13 +354,13 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
   async (clientOutPath) => {
     const harness = makeRecordRuntimeHarness('leased-remote-session-recording-', {
       sessionName: ADDRESS,
+      lease: {
+        backend: 'ios-simulator',
+        leaseId: LEASE_ID,
+        tenantId: TENANT,
+        runId: 'run-1',
+      },
     });
-    harness.session.lease = {
-      backend: 'ios-simulator',
-      leaseId: LEASE_ID,
-      tenantId: TENANT,
-      runId: 'run-1',
-    };
     const start = harness.runtime.start.getMockImplementation()!;
     harness.runtime.start.mockImplementation(async (input) => {
       fs.writeFileSync(input.outputPath, 'session-owned-video');

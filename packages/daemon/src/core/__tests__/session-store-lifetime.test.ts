@@ -1,3 +1,5 @@
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
+import { SessionCoordinator } from '../session-store.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
@@ -76,6 +78,37 @@ test('address reuse with the same record still starts a different lifetime', () 
   assert.equal(store.getRuntimeHints(ADDRESS)?.hints?.metroPort, 8082);
   assert.equal(store.retire(successor), true);
   assert.equal(store.getRuntimeHints(ADDRESS), undefined);
+});
+
+test.each(['callback exit', 'cancellation'])('session authority revokes on %s', (reason) => {
+  const store = makeSessionStore();
+  const sessions = new SessionCoordinator(store);
+  const draft = makeSession('default');
+  const requestId = `session-authority-${reason}`;
+  let active = true;
+  const req = {
+    token: 't',
+    session: ADDRESS,
+    command: 'open',
+    positionals: [],
+    meta: { requestId },
+    internal: { sessionAuthorityActive: () => active },
+  };
+  const authority = sessions.reserve(req, ADDRESS).publish(draft);
+  const pending = sessions.reserve(req, 'next');
+  assert.equal(authority.current()?.session.name, 'default');
+
+  try {
+    if (reason === 'callback exit') active = false;
+    else markRequestCanceled(requestId);
+
+    assert.equal(authority.current(), undefined);
+    assert.throws(() => authority.writeScriptVersion());
+    assert.throws(() => pending.publish(draft));
+    assert.equal(store.lookup('next'), undefined);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
 });
 
 test('retained execution-host ownership follows the current session lifetime', () => {

@@ -87,6 +87,7 @@ export async function captureAndroidFreshnessRecoveredAttempt<
     interactiveOnly: boolean;
     androidFreshnessMode?: SnapshotFreshnessMode;
     capture: () => Promise<T>;
+    assertCurrent?: () => void;
   },
   freshness: SnapshotFreshnessWindow,
 ): Promise<T> {
@@ -107,6 +108,9 @@ export async function captureAndroidFreshnessRecoveredAttempt<
       retryBudgetMs: ANDROID_FRESHNESS_RETRY_BUDGET_MS,
       delaysMs: ANDROID_FRESHNESS_RETRY_DELAYS_MS,
     },
-    onTrustworthyCapture: () => clearAndroidSnapshotFreshness(params.session),
+    onTrustworthyCapture: () => {
+      params.assertCurrent?.();
+      clearAndroidSnapshotFreshness(params.session);
+    },
   });
 }

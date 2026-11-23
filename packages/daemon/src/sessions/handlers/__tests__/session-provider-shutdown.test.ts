@@ -28,7 +28,12 @@ import { handleShutdownCommand } from '../session-shutdown.ts';
 
 bindTestCommandHost();
 
-function scenario(platform: 'ios' | 'android', activeSession = false, sessionAddress = 'test') {
+function scenario(
+  platform: 'ios' | 'android',
+  activeSession = false,
+  sessionAddress = 'test',
+  leasedSession = true,
+) {
   const host = createTestHostEnvironment();
   const root = mkdtempForTestSync('agent-device-provider-shutdown-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'), host);
@@ -101,13 +106,15 @@ function scenario(platform: 'ios' | 'android', activeSession = false, sessionAdd
       appBundleId: 'com.example.app',
       createdAt: Date.now(),
       actions: [],
-      lease: {
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        leaseId: lease.leaseId,
-        leaseProvider: 'limrun',
-        backend: lease.backend,
-      },
+      lease: leasedSession
+        ? {
+            tenantId: lease.tenantId,
+            runId: lease.runId,
+            leaseId: lease.leaseId,
+            leaseProvider: 'limrun',
+            backend: lease.backend,
+          }
+        : undefined,
     });
   }
   const bindDevice: NonNullable<Parameters<typeof handleShutdownCommand>[0]['bindDevice']> = async (
@@ -327,9 +334,8 @@ test.each(['tenant', 'cwd'] as const)(
 );
 
 test('local finalization failure retires the session instead of offering a provider retry', async () => {
-  const world = scenario('android', true);
+  const world = scenario('android', true, 'test', false);
   Object.assign(world.binding, { owner: localRuntimeOwner('android') });
-  world.sessionStore.get('test')!.lease = undefined;
   world.req.meta = {};
   vi.spyOn(world.binding.operations, 'finalizeApplicationClose').mockRejectedValueOnce(
     new Error('Local cleanup failed'),
