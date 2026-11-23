@@ -21,6 +21,7 @@ import {
   openDownloadableArtifact,
   requestTraceDiagnostics,
   reserveFileOutput,
+  settleCommittedFileOutputs,
   trackDownloadableArtifact,
   trackUploadedArtifact,
   type OpenedDownloadableArtifact,
@@ -44,7 +45,13 @@ test.each(['expiry', 'restart'] as const)(
         const ready = reserveFileOutput('screenshot', 'ready.png', producer);
         fs.writeFileSync(ready.path, 'finished frame');
         expect(await listDownloadableArtifacts(reader, {})).toEqual([]);
-        const { artifactId: id } = ready.commit({ field: 'path', fileName: 'ready.png' });
+        const artifact = ready.commit({ field: 'path', fileName: 'ready.png' });
+        const id = artifact.artifactId;
+        expect(await listDownloadableArtifacts(reader, {})).toEqual([]);
+        await expect(openDownloadableArtifact(id, reader, {})).rejects.toMatchObject({
+          details: { reason: 'RESOURCE_EXPIRED' },
+        });
+        settleCommittedFileOutputs([artifact], true);
         expect(await listDownloadableArtifacts(reader, {})).toMatchObject([{ id }]);
 
         if (end === 'expiry') {
@@ -84,7 +91,11 @@ test('a committed output refuses a replacement and leaves the replacement file a
   );
   try {
     fs.writeFileSync(reservation.path, 'first frame');
-    const id = runtime.run(() => reservation.commit({ field: 'path' }).artifactId);
+    const id = runtime.run(() => {
+      const artifact = reservation.commit({ field: 'path' });
+      settleCommittedFileOutputs([artifact], true);
+      return artifact.artifactId;
+    });
     const replacement = path.join(path.dirname(reservation.path), 'next.png');
     fs.writeFileSync(replacement, 'next frame');
     fs.renameSync(replacement, reservation.path);

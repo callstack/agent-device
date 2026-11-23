@@ -48,6 +48,7 @@ import { setSessionSnapshot } from './session-snapshot.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { admittedOutputLeaseVerifier, reserveFileOutput } from '../resources/artifact-tracking.ts';
+import { resolveLeaseScope } from '../core/lease-context.ts';
 
 /**
  * The `screenshot` leaf of the generic route. Argument policy is answered before any device work,
@@ -221,7 +222,7 @@ async function executeScreenshot(
     remote || clientPath
       ? reserveFileOutput('screenshot', 'screenshot.png', {
           lifetimeId: params.lifetimeId,
-          tenantId: normalizeTenantId(req.meta?.tenantId),
+          tenantId: screenshotProducerTenant(req, session),
           leaseVerifier: admittedOutputLeaseVerifier(req),
         })
       : undefined;
@@ -265,6 +266,15 @@ async function executeScreenshot(
     reservation?.discard();
     throw error;
   }
+}
+
+function screenshotProducerTenant(req: DaemonRequest, session: SessionState): string | undefined {
+  const scope = session.sessionScope;
+  return normalizeTenantId(
+    req.internal?.admittedLease?.tenantId ??
+      (scope?.kind === 'tenant' ? scope.id : undefined) ??
+      resolveLeaseScope(req).tenantId,
+  );
 }
 
 async function commitScreenshot(

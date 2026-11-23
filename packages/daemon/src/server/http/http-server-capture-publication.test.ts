@@ -4,6 +4,7 @@ import {
   DAEMON_HTTP_TENANT_HEADER,
 } from '@agent-device/contracts/daemon-http';
 import fs from 'node:fs';
+import { markRequestCanceled } from '@agent-device/host-kit/request';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { PNG } from '@agent-device/capture-kit/png';
@@ -15,6 +16,7 @@ import { makeAndroidSession } from '../../__tests__/support/session-factories.ts
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-runtime-fixture.ts';
 import { screenshotCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
+import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
@@ -117,46 +119,115 @@ test.each(['caller destination', 'remote placeholder', 'public remote'])(
   },
 );
 
-test('a screenshot whose device binding fails to dispose leaves no downloadable output', async () => {
-  const sessionStore = makeSessionStore('failed-screenshot-session-');
-  sessionStore.publish('capture', makeAndroidSession('capture'));
-  const runtime = screenshotRuntimeFixture();
+test.each(['failure', 'cancellation'] as const)(
+  'a screenshot stays hidden during binding disposal and is discarded on %s',
+  async (outcome) => {
+    const requestId = `capture-cleanup-${outcome}`;
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const sessionStore = makeSessionStore('failed-screenshot-session-');
+    sessionStore.publish('capture', makeAndroidSession('capture'));
+    const runtime = screenshotRuntimeFixture();
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: screenshotCommandSurface,
+      logPath: path.join(sessionStore.resolveDaemonStateDir(), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry: new LeaseRegistry(),
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      deviceRuntimeGateway: {
+        ...runtime.gateway,
+        bind: async (input) => {
+          const binding = await runtime.gateway.bind(input);
+          return {
+            ...binding,
+            [Symbol.asyncDispose]: async () => {
+              await binding[Symbol.asyncDispose]();
+              entered.resolve();
+              await release.promise;
+              if (outcome === 'failure') throw new Error('screenshot binding disposal failed');
+            },
+          };
+        },
+      },
+      trackDownloadableArtifact,
+    });
+    await withHttp(handler, async (post, base) => {
+      const reply = post({
+        command: 'screenshot',
+        session: 'capture',
+        positionals: [],
+        meta: { requestId },
+      });
+      try {
+        await Promise.race([
+          entered.promise,
+          reply.then(() => {
+            throw new Error('Expected deferred cleanup');
+          }),
+        ]);
+        expect(runtime.captureScreenshot).toHaveBeenCalledOnce();
+        const inventory = await fetch(`${base}/artifacts`, {
+          headers: { authorization: 'Bearer test-token' },
+        });
+        expect(inventory.status).toBe(200);
+        expect(await inventory.json()).toMatchObject({ artifacts: [] });
+        if (outcome === 'cancellation') markRequestCanceled(requestId);
+      } finally {
+        release.resolve();
+        const result = await reply;
+        if (outcome === 'cancellation') {
+          expect(result.error?.data?.details).toMatchObject({ reason: 'request_canceled' });
+        } else {
+          expect(result.error).toMatchObject({
+            message: expect.stringContaining('screenshot binding disposal failed'),
+          });
+        }
+      }
+      const capture = runtime.captureScreenshot.mock.calls[0]![0];
+      expect(fs.existsSync(path.dirname(capture.outPath))).toBe(false);
+    });
+  },
+);
+
+test('a leased screenshot uses the admitted tenant when the capture omits the tenant label', async () => {
+  const sessionStore = makeSessionStore('screenshot-lease-tenant-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({ tenantId: 'producer', runId: 'capture' });
+  sessionStore.publish('capture', makeAndroidSession('capture', { lease: sessionLeaseOf(lease) }));
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
     createCommandSurface: screenshotCommandSurface,
     logPath: path.join(sessionStore.resolveDaemonStateDir(), 'daemon.log'),
     token: 'test-token',
     sessionStore,
-    leaseRegistry: new LeaseRegistry(),
+    leaseRegistry,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    deviceRuntimeGateway: {
-      ...runtime.gateway,
-      bind: async (input) => {
-        const binding = await runtime.gateway.bind(input);
-        return {
-          ...binding,
-          [Symbol.asyncDispose]: async () => {
-            await binding[Symbol.asyncDispose]();
-            throw new Error('screenshot binding disposal failed');
-          },
-        };
-      },
-    },
+    deviceRuntimeGateway: screenshotRuntimeFixture().gateway,
     trackDownloadableArtifact,
   });
   await withHttp(handler, async (post, base) => {
-    const reply = await post({ command: 'screenshot', session: 'capture', positionals: [] });
-    expect(reply.error).toMatchObject({
-      message: expect.stringContaining('screenshot binding disposal failed'),
-    });
-    expect(runtime.captureScreenshot).toHaveBeenCalledOnce();
-    const capture = runtime.captureScreenshot.mock.calls[0]![0];
-    const inventory = await fetch(`${base}/artifacts`, {
-      headers: { authorization: 'Bearer test-token' },
-    });
-    expect(inventory.status).toBe(200);
+    const shot = successfulData(
+      await post({
+        command: 'screenshot',
+        session: 'capture',
+        positionals: [],
+        meta: { leaseId: lease.leaseId, sessionExplicit: true },
+      }),
+    );
+    const headers = {
+      authorization: 'Bearer test-token',
+      [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId,
+    };
+    const inventory = await fetch(`${base}/artifacts`, { headers });
     expect(await inventory.json()).toMatchObject({ artifacts: [] });
-    expect(fs.existsSync(path.dirname(capture.outPath))).toBe(false);
+    const artifact = shot.artifacts![0]!;
+    const own = await fetch(`${base}/artifacts/${artifact.artifactId}`, {
+      headers: { ...headers, [DAEMON_HTTP_TENANT_HEADER]: 'producer' },
+    });
+    expect(own.status).toBe(200);
+    expect((await own.arrayBuffer()).byteLength).toBeGreaterThan(0);
   });
 });
 

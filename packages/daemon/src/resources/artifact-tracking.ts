@@ -190,6 +190,7 @@ type ArtifactEntry = {
   directoryArchiveBuild?: DirectoryArchiveBuild;
   activeDownloads: Set<ArtifactDownload>;
   cleanupRequested: boolean;
+  awaitingDelivery: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -227,16 +228,17 @@ const artifactTracking = (): ArtifactTrackingState =>
   );
 const pendingArtifacts = () => artifactTracking().artifacts;
 const pendingUploads = () => artifactTracking().uploads;
-const committedFileOutputRevocations = new WeakMap<DaemonArtifact, () => void>();
+const committedFileOutputDeliveries = new WeakMap<DaemonArtifact, (delivered: boolean) => void>();
 
-/** Revoke only producer-committed outputs on the discarded success response. */
-export function revokeUndeliveredFileOutputs(
+/** Publish or discard the producer's entries when request cleanup settles. */
+export function settleCommittedFileOutputs(
   artifacts: readonly DaemonArtifact[] | undefined,
+  delivered: boolean,
 ): void {
   for (const artifact of artifacts ?? []) {
-    const revoke = committedFileOutputRevocations.get(artifact);
-    committedFileOutputRevocations.delete(artifact);
-    revoke?.();
+    const settle = committedFileOutputDeliveries.get(artifact);
+    committedFileOutputDeliveries.delete(artifact);
+    settle?.(delivered);
   }
 }
 
@@ -310,11 +312,11 @@ export function reserveFileOutput(
       );
       reservations.delete(discard);
       const artifact = { ...delivery, artifactType, artifactId: id };
-      committedFileOutputRevocations.set(artifact, () => {
+      committedFileOutputDeliveries.set(artifact, (delivered) => {
         const entry = artifacts.get(id);
         if (!entry) return;
-        requestArtifactCleanup(artifacts, id, entry);
-        for (const download of entry.activeDownloads) cancelArtifactDownload(id, entry, download);
+        if (delivered) entry.awaitingDelivery = false;
+        else requestArtifactCleanup(artifacts, id, entry);
       });
       return artifact;
     },
@@ -386,6 +388,7 @@ function addArtifactEntry(
     sourceCleanup,
     activeDownloads: new Set(),
     cleanupRequested: false,
+    awaitingDelivery: reservation !== undefined,
     createdAt,
     timer,
   });
@@ -620,8 +623,12 @@ function readDownloadableArtifactEntry(
   artifactId: string,
   reader: DownloadableArtifactReader,
 ): { entry: ArtifactEntry; stat: fs.Stats } {
+  const artifacts = pendingArtifacts();
+  if (artifacts.get(artifactId)?.awaitingDelivery) {
+    throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+  }
   const entry = requireTenantOwnedEntry(
-    pendingArtifacts(),
+    artifacts,
     artifactId,
     reader.tenantId,
     DOWNLOADABLE_ARTIFACT_RESOURCE,
@@ -778,6 +785,7 @@ function archiveFilename(fileName: string): string {
 function canReadArtifact(entry: ArtifactEntry, reader: DownloadableArtifactReader): boolean {
   return (
     !entry.cleanupRequested &&
+    !entry.awaitingDelivery &&
     (!entry.tenantId || entry.tenantId === reader.tenantId) &&
     requestHoldsOutputLease(entry.leaseVerifier, reader.leaseId)
   );

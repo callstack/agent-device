@@ -25,7 +25,7 @@ import {
 import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import {
-  revokeUndeliveredFileOutputs,
+  settleCommittedFileOutputs,
   type TrackDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
 import type {
@@ -791,9 +791,9 @@ async function finalizeRequestBindingCleanup(
   let finalResponse = response;
   try {
     await scope[Symbol.asyncDispose]();
+    if (response.ok && scope.command === 'screenshot') scope.throwIfCanceled();
   } catch (cleanupError) {
     if (response.ok) {
-      revokeUndeliveredFileOutputs(response.data?.artifacts);
       finalResponse = finalizeThrownRequestError(cleanupError);
     } else {
       emitDiagnostic({
@@ -807,7 +807,9 @@ async function finalizeRequestBindingCleanup(
       flushDiagnosticsToSessionFile({ force: true });
     }
   }
-  return finalizeRequestExecutionScope(scope, finalResponse);
+  const finalized = finalizeRequestExecutionScope(scope, finalResponse);
+  if (response.ok) settleCommittedFileOutputs(response.data?.artifacts, finalized.ok);
+  return finalized;
 }
 
 // Phase 4 (agent-cost) success-path grafts: a leveled response view and an
