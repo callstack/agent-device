@@ -80,7 +80,7 @@ type LeaseHandlerArgs = {
   resolveSessionRef?: ResolveRequestSessionRef;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
-  failedPlugins?: readonly PluginInventoryEntry[];
+  pluginInventory?: readonly PluginInventoryEntry[];
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -94,7 +94,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     sessionStore,
     leaseRegistry,
     providerRuntimeIds,
-    failedPlugins,
+    pluginInventory,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
@@ -128,7 +128,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           provider,
           'allocation',
           providerRuntimeIds,
-          failedPlugins,
+          pluginInventory,
         );
         if (error) throw error;
       }

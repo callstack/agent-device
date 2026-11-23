@@ -3,6 +3,12 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { LimrunPlatform } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 
+export const LIMRUN_CREDENTIAL_DORMANCY = Object.freeze({
+  reason: PROVIDER_CREDENTIAL_REASONS.missing.reason,
+  message: 'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
+  hint: 'Set LIMRUN_API_KEY for the account, or the full LIM_IOS_INSTANCE_* or LIM_ANDROID_INSTANCE_* set for an existing instance.',
+});
+
 /** The Limrun account and instance facts one host gives the provider. */
 export type LimrunCredentials = Readonly<{
   apiKey?: string;
@@ -63,14 +69,8 @@ export function limrunInstanceVariables(platform: LimrunPlatform): readonly stri
 export function requireLimrunCredentials(env: EnvMap): LimrunCredentials {
   const credentials = readLimrunCredentials(env);
   if (credentials) return credentials;
-  throw new AppError(
-    'INVALID_ARGS',
-    'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
-    {
-      reason: PROVIDER_CREDENTIAL_REASONS.missing.reason,
-      hint: 'Set LIMRUN_API_KEY for the account, or the full LIM_IOS_INSTANCE_* or LIM_ANDROID_INSTANCE_* set for an existing instance.',
-    },
-  );
+  const { message, reason, hint } = LIMRUN_CREDENTIAL_DORMANCY;
+  throw new AppError('INVALID_ARGS', message, { reason, hint });
 }
 
 /**

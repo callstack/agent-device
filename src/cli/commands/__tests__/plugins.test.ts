@@ -72,7 +72,20 @@ test('plugin schema exposes operator help and preserves scoped npm package specs
   ]);
 });
 
-test('plugins list reports the running daemon inventory next to the store selections', async () => {
+const DORMANT_LIMRUN = {
+  provider: 'limrun',
+  source: 'store',
+  package: '@agent-device/limrun',
+  state: 'dormant',
+  dormant: {
+    reason: 'missing_provider_credentials',
+    message: 'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
+    hint: 'Set LIMRUN_API_KEY for the account.',
+  },
+  credentials: { variables: ['LIMRUN_API_KEY'], byBackend: {} },
+};
+
+test('plugins list reports failed and dormant daemon claims next to the store selections', async () => {
   const { home } = pluginHome();
   const stateDir = path.join(home, 'state');
   vi.stubEnv('AGENT_DEVICE_HOME', home);
@@ -96,7 +109,7 @@ test('plugins list reports the running daemon inventory next to the store select
       port: 1,
       pid: owner.pid,
       processStartTime: owner.startTime,
-      plugins: [failed],
+      plugins: [failed, DORMANT_LIMRUN],
     }),
   );
   selectPlugin(home, 'example', pluginSource('example'));
@@ -108,7 +121,7 @@ test('plugins list reports the running daemon inventory next to the store select
       }),
     });
     const { data } = JSON.parse(stdoutCapture.read());
-    assert.deepEqual(data.daemon, { pid: owner.pid, stateDir, plugins: [failed] });
+    assert.deepEqual(data.daemon, { pid: owner.pid, stateDir, plugins: [failed, DORMANT_LIMRUN] });
     assert.equal(data.plugins[0].name, 'example');
   } finally {
     stdoutCapture.restore();
@@ -132,13 +145,17 @@ test('--state-dir belongs to plugins list and daemon status, not to the commands
   assert.match(help ?? '', /daemon status \[--state-dir <path>\]/);
 });
 
-async function listPluginsAsText(home: string, stateDir: string): Promise<string> {
+async function readPluginStatusText(
+  home: string,
+  stateDir: string,
+  args: string[],
+): Promise<string> {
   vi.stubEnv('AGENT_DEVICE_HOME', home);
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
   vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '1');
   const stdoutCapture = beginStdoutCapture();
   try {
-    await runCli(['plugins', 'list'], {
+    await runCli(args, {
       sendToDaemon: vi.fn(async () => {
         throw new Error('unexpected daemon access');
       }),
@@ -149,7 +166,7 @@ async function listPluginsAsText(home: string, stateDir: string): Promise<string
   }
 }
 
-test('plugins list names a plugin the running daemon did not register', async () => {
+test('plugins list and daemon status distinguish dormancy from failure in text', async () => {
   const { home } = pluginHome();
   const stateDir = path.join(home, 'state');
   const owner = readCurrentOwnerIdentity();
@@ -170,13 +187,22 @@ test('plugins list names a plugin the running daemon did not register', async ()
           error: { code: 'INVALID_ARGS', message: 'bad plugin', reason: 'invalid_plugin' },
           credentials: { variables: [], byBackend: {} },
         },
+        DORMANT_LIMRUN,
       ],
     }),
   );
   selectPlugin(home, 'example', pluginSource('example'));
-  const text = await listPluginsAsText(home, stateDir);
+  const text = await readPluginStatusText(home, stateDir, ['plugins', 'list']);
   assert.match(text, /example@.* \(example\)/);
   assert.match(text, /The running daemon did not register example: bad plugin/);
+  assert.match(
+    text,
+    /The running daemon lists @agent-device\/limrun as dormant \(missing_provider_credentials\): Limrun requires LIMRUN_API_KEY/,
+  );
+  assert.doesNotMatch(text, /did not register @agent-device\/limrun/);
+  const status = await readPluginStatusText(home, stateDir, ['daemon', 'status']);
+  assert.match(status, /example - failed: bad plugin/);
+  assert.match(status, /@agent-device\/limrun - dormant \(missing_provider_credentials\)/);
 });
 
 test('plugins list says when the daemon record cannot be used instead of hiding it', async () => {
@@ -184,7 +210,7 @@ test('plugins list says when the daemon record cannot be used instead of hiding 
   const stateDir = path.join(home, 'state');
   fs.mkdirSync(stateDir, { recursive: true });
   fs.writeFileSync(path.join(stateDir, 'daemon.json'), '{not json');
-  const text = await listPluginsAsText(home, stateDir);
+  const text = await readPluginStatusText(home, stateDir, ['plugins', 'list']);
   assert.match(text, /No provider plugins installed\./);
   assert.match(text, /daemon record for .* is invalid, so its providers are unknown/);
 });

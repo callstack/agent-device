@@ -38,7 +38,19 @@ function createAppsAdmissionHarness(apps: readonly string[] = []) {
     } satisfies DeviceRuntimeGateway<PlatformRuntimeOperations>,
     providerAppCatalog,
     providerRuntimeIds: ['limrun', 'browserstack'],
-    failedPlugins: [
+    pluginInventory: [
+      {
+        source: 'store',
+        provider: 'testmu',
+        package: '@agent-device/testmu',
+        state: 'dormant',
+        dormant: {
+          reason: 'test_credentials_missing',
+          message: 'TestMu credentials are missing.',
+          hint: 'Set LT_USERNAME and LT_ACCESS_KEY.',
+        },
+        credentials: { variables: ['LT_USERNAME', 'LT_ACCESS_KEY'], byBackend: {} },
+      },
       {
         source: 'store',
         package: '@agent-device/maestro',
@@ -129,6 +141,24 @@ test('tenant apps admits the runtime-declared catalog provider without device ac
 
   expect(response).toEqual({ ok: true, data: { apps: ['Example.app.zip'] } });
   expect(listProviderApps).toHaveBeenCalledTimes(1);
+  expect(inspectFacts).not.toHaveBeenCalled();
+  expect(bind).not.toHaveBeenCalled();
+});
+
+test('tenant apps reports the dormant provider prerequisite before device access', async () => {
+  const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness();
+  const response = await handler(appsRequest('testmu'));
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'INVALID_ARGS',
+      message: 'TestMu credentials are missing.',
+      hint: 'Set LT_USERNAME and LT_ACCESS_KEY.',
+      details: { provider: 'testmu', reason: 'test_credentials_missing' },
+    },
+  });
+  expect(listProviderApps).not.toHaveBeenCalled();
   expect(inspectFacts).not.toHaveBeenCalled();
   expect(bind).not.toHaveBeenCalled();
 });

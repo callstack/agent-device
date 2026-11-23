@@ -158,7 +158,7 @@ export type RequestRouterDeps = {
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   providerRuntimeIds?: readonly string[];
-  failedPlugins?: readonly PluginInventoryEntry[];
+  pluginInventory?: readonly PluginInventoryEntry[];
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -193,7 +193,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
     hostDiagnostics,
     providerRuntimeIds,
-    failedPlugins,
+    pluginInventory,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
@@ -271,7 +271,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           if (req.command === 'apps' && error.code === 'DEVICE_NOT_FOUND') {
             const { enrichProviderCatalogError } =
               await import('../sessions/provider-runtime-admission.ts');
-            error = enrichProviderCatalogError(error, providerRuntimeIds, failedPlugins);
+            error = enrichProviderCatalogError(error, providerRuntimeIds, pluginInventory);
           }
           return {
             ok: false,
@@ -438,7 +438,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       leaseRegistry,
       leaseLifecycleProvider,
       providerRuntimeIds,
-      failedPlugins,
+      pluginInventory,
       providerCredentials,
       cloudArtifactProvider,
       endSessionsForLease,

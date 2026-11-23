@@ -20,7 +20,7 @@ export type ProviderRuntimeComposition = Readonly<{
   resolveReplayExecution: import('@agent-device/contracts/replay-execution').ReplayExecutionResolver;
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];
-  /** Every plugin the registry saw, built-in or not, active or failed. */
+  /** The registry's active, dormant, and failed plugin claims. */
   inventory: readonly PluginInventoryEntry[];
   /** Shuts down every registered runtime and runs its plugin's cleanup; the one cleanup owner. */
   shutdown(): Promise<readonly PluginCleanupOutcome[]>;

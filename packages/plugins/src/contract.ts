@@ -1,5 +1,6 @@
 import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { PluginDormancy } from '@agent-device/contracts/plugin-inventory';
 import type {
   ConnectionProviderCapabilities,
   ProviderConnectionVerification,
@@ -109,11 +110,15 @@ export type PluginPlatformModule = Readonly<{
 
 /** A provider runtime the plugin builds itself. */
 export type PluginRuntimeSetup = Readonly<{
+  dormant?: never;
   runtime: PluginProviderRuntime;
   platformModule: PluginPlatformModule;
   /** Called once when the daemon shuts the plugin down, after `runtime.shutdown()`. */
   dispose?(): Promise<void> | void;
 }>;
+
+/** Keeps the provider claim when a prerequisite is absent, without starting a runtime. */
+export type PluginDormantSetup = Readonly<{ dormant: PluginDormancy }>;
 
 /** A `provider` contribution declares an id and builds a runtime with a provider host. */
 export type ProviderContribution = Readonly<{
@@ -122,8 +127,10 @@ export type ProviderContribution = Readonly<{
   provider: string;
   credentials: PluginCredentials;
   connection?: PluginConnection;
-  /** Builds the runtime. Keep it free of network I/O and device allocation. */
-  setup(host: ProviderPluginHost): Promise<PluginRuntimeSetup> | PluginRuntimeSetup;
+  /** Builds the runtime or reports an absent prerequisite. Keep it free of network I/O and device allocation. */
+  setup(
+    host: ProviderPluginHost,
+  ): Promise<PluginRuntimeSetup | PluginDormantSetup> | PluginRuntimeSetup | PluginDormantSetup;
 }>;
 
 export type {

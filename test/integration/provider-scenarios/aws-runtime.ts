@@ -12,11 +12,13 @@ export async function createAwsDeviceFarmRuntime(options: {
   runHostCommand: RunHostCommand;
 }) {
   const [contribution] = awsDeviceFarm().contributes;
-  const { runtime } = await contribution.setup({
+  const setup = await contribution.setup({
     ...(await createPluginHost({ env: options.env, cwd: '/' }, undefined)),
     clientVersion: options.clientVersion,
     runHostCommand: options.runHostCommand,
   });
+  if (!('runtime' in setup)) throw new Error('AWS Device Farm setup needs an active runtime');
+  const { runtime } = setup;
   return runtime as ProviderDeviceRuntime & {
     platformRuntimeModule: PlatformRuntimeProviderModule;
   };

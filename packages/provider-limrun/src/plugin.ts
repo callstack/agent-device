@@ -1,7 +1,11 @@
 import path from 'node:path';
 import type { PluginConnection, ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import type { DeviceProviderPluginHost } from 'agent-device/plugins/device-host';
-import { limrunCredentialDeclaration, requireLimrunCredentials } from './credentials.ts';
+import {
+  LIMRUN_CREDENTIAL_DORMANCY,
+  limrunCredentialDeclaration,
+  readLimrunCredentials,
+} from './credentials.ts';
 import { LIMRUN_CONNECTION_CAPABILITIES, LIMRUN_PROVIDER } from './device.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
@@ -44,7 +48,8 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
         credentials: limrunCredentialDeclaration(),
         connection: LIMRUN_CONNECTION,
         setup: async (host: DeviceProviderPluginHost) => {
-          const credentials = requireLimrunCredentials(host.env);
+          const credentials = readLimrunCredentials(host.env);
+          if (!credentials) return { dormant: LIMRUN_CREDENTIAL_DORMANCY };
           const [register, dependencies] = await Promise.all([
             import('./runtime.ts'),
             options.createDependencies

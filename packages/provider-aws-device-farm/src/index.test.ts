@@ -45,7 +45,9 @@ test('the plugin declares its provider, capabilities, and no credential variable
 });
 
 test('setup builds a runtime and platform owner for AWS Device Farm', async () => {
-  const { runtime, platformModule } = await providerOf(awsDeviceFarm()).setup(host());
+  const setup = await providerOf(awsDeviceFarm()).setup(host());
+  assert.ok('runtime' in setup);
+  const { runtime, platformModule } = setup;
   try {
     assert.equal(runtime.provider, 'aws-device-farm');
     assert.equal(platformModule.owner.provider, 'aws-device-farm');
@@ -55,7 +57,9 @@ test('setup builds a runtime and platform owner for AWS Device Farm', async () =
 });
 
 test('lease preparation reads the connect selectors before any host command runs', async () => {
-  const { runtime } = await providerOf(awsDeviceFarm()).setup(host());
+  const setup = await providerOf(awsDeviceFarm()).setup(host());
+  assert.ok('runtime' in setup);
+  const { runtime } = setup;
   const lease: DeviceLease = {
     leaseId: 'lease-aws',
     tenantId: 'team-a',

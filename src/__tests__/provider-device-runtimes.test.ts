@@ -8,7 +8,16 @@ import {
 import { limrunPluginCandidate } from './test-utils/limrun-plugin-store.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
+import {
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+  pluginHome,
+  selectPlugin,
+  pluginSource,
+} from '@agent-device/test-kit';
+import limrun from '@agent-device/limrun';
+import { startAgentDevice } from '../host.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 function createDaemonProviderRuntimeComposition(
   host: Parameters<typeof composeDaemonProviders>[0],
@@ -136,11 +145,41 @@ test('an installed Limrun names the credentials it needs when only the removed A
     runtimes.some((runtime) => runtime.provider === 'limrun'),
     false,
   );
-  const limrun = inventory.find(({ provider }) => provider === 'limrun');
-  assert.equal(limrun?.state, 'failed');
-  assert.equal(limrun?.error?.reason, 'missing_provider_credentials');
+  const claim = inventory.find(({ provider }) => provider === 'limrun');
+  assert.ok(claim?.state === 'dormant');
+  assert.equal(claim.dormant.reason, 'missing_provider_credentials');
   assertPlatformModuleCoverage(runtimes, platformModules);
   await shutdown();
+});
+
+test('the daemon returns the dormant Limrun credential error when a lease selects it', async () => {
+  const runtime = await startAgentDevice({
+    stateDir: mkdtempForTestSync('dormant-limrun-'),
+    host: createTestHostEnvironment({ env: pluginHome().env }),
+    plugins: [limrun()],
+  });
+  try {
+    await assert.rejects(
+      runtime.client.leases.allocate({
+        session: 'limrun-dormant',
+        tenant: 'team-a',
+        runId: 'run-a',
+        platform: 'ios',
+        leaseProvider: 'limrun',
+        leaseBackend: 'ios-instance',
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.details?.provider, 'limrun', error.message);
+        assert.equal(error.details?.reason, 'missing_provider_credentials');
+        assert.match(String(error.details?.hint), /Set LIMRUN_API_KEY/);
+        return true;
+      },
+    );
+  } finally {
+    await runtime.close();
+  }
 });
 
 test('an installed Limrun registers when a Limrun API key is configured', async () => {

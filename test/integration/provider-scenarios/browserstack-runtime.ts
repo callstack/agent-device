@@ -10,10 +10,12 @@ export async function createBrowserStackRuntime(options: {
   clientVersion: string;
 }) {
   const [contribution] = browserstack().contributes;
-  const { runtime } = await contribution.setup({
+  const setup = await contribution.setup({
     ...(await createPluginHost({ env: options.env, cwd: '/' }, undefined)),
     clientVersion: options.clientVersion,
   });
+  if (!('runtime' in setup)) throw new Error('BrowserStack setup needs an active runtime');
+  const { runtime } = setup;
   return runtime as ProviderDeviceRuntime & {
     platformRuntimeModule: PlatformRuntimeProviderModule;
   };

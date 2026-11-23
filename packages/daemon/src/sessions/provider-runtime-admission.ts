@@ -19,11 +19,17 @@ export function providerRuntimeAdmissionError(
   provider: string,
   route: 'allocation' | 'catalog',
   registeredProviders: readonly string[] = [],
-  failedPlugins: readonly PluginInventoryEntry[] = [],
+  pluginInventory: readonly PluginInventoryEntry[] = [],
 ): AppError | undefined {
   if (registeredProviders.includes(provider)) return undefined;
+  for (const plugin of pluginInventory) {
+    if (plugin.state === 'dormant' && plugin.provider === provider) {
+      const { reason, message, hint } = plugin.dormant;
+      return new AppError('INVALID_ARGS', message, { provider, reason, hint });
+    }
+  }
   const declaration = getProviderPluginDeclaration(provider);
-  const failures = failedPlugins.flatMap((plugin) =>
+  const failures = pluginInventory.flatMap((plugin) =>
     plugin.state === 'failed' &&
     plugin.backend === undefined &&
     plugin.platform === undefined &&
@@ -78,7 +84,7 @@ export function providerRuntimeAdmissionError(
 export function enrichProviderCatalogError(
   error: DaemonError,
   registeredProviders: readonly string[] | undefined,
-  failedPlugins: readonly PluginInventoryEntry[] | undefined,
+  pluginInventory: readonly PluginInventoryEntry[] | undefined,
 ): DaemonError {
   if (error.details?.reason !== PROVIDER_INVENTORY_REASONS.instanceUnallocated.reason) return error;
   const provider = error.details.leaseProvider;
@@ -87,7 +93,7 @@ export function enrichProviderCatalogError(
     provider,
     'catalog',
     registeredProviders,
-    failedPlugins,
+    pluginInventory,
   );
   if (!missing) return error;
   const { code, message, hint, details } = normalizeError(missing);
