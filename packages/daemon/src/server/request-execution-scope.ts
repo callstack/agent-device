@@ -63,11 +63,7 @@ import {
   createSessionExecutionLock,
   withRequestExecutionLockKeys,
 } from './request-execution-locks.ts';
-import {
-  getRequestDeadlineMs,
-  isRequestCanceled,
-  throwIfRequestCanceled,
-} from '@agent-device/host-kit/request';
+import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import {
   assertSameOpenOwner,
   SessionCoordinator,
@@ -75,7 +71,11 @@ import {
 } from '../core/session-store.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
-import { inactiveLease, runAdmittedLeaseWork } from './request-lease-work.ts';
+import {
+  inactiveLease,
+  runAdmittedLeaseWork,
+  waitForLeaseSettlement,
+} from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
   ignoresSessionLease,
@@ -87,15 +87,8 @@ import {
   shouldRecordEventForRequest,
   type BoundJournal,
 } from '@agent-device/session-journal/session-event-log';
-import type {
-  Admission,
-  LeaseSessionEnd,
-  LockedAttempt,
-  NeedSettlement,
-} from './lease-session-end.ts';
-import { deviceLeaseBusyError } from '../resources/lease-registry-scope.ts';
+import type { Admission, LeaseSessionEnd, LockedAttempt } from './lease-session-end.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
-import { recordEndedLease } from '../core/request-ended-leases.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
@@ -295,7 +288,6 @@ export async function createRequestExecutionScope(params: {
     const outerKeys = heldKeyedLockKeys(executionLocks);
     const hasOuterLocks = outerKeys.length > 0;
     const sessionKey = sessionExecutionLockKey(sessionName);
-    const signal = params.platformRequestScope.signal;
     const waitDeadline = openWaitBudgetMs === undefined ? Infinity : startedAtMs + openWaitBudgetMs;
     const leaseAdmission = { ...params, env: params.host.env, inspectOnly: true };
     const settlementFor = (ref: SessionRef | undefined) =>
@@ -370,24 +362,6 @@ export async function createRequestExecutionScope(params: {
         pluginInventory: params.pluginInventory,
         daemonPolicy: params.daemonPolicy,
       });
-    };
-    const waitForSettlement = async (attempt: NeedSettlement) => {
-      const { awaitExpiry } = await import('./lease-session-end.ts');
-      const deadline = getRequestDeadlineMs(scopedReq.meta?.requestId) ?? Infinity;
-      const settled = await awaitExpiry(
-        attempt.settlement.done,
-        signal,
-        Math.min(waitDeadline, deadline),
-      );
-      throwIfRequestCanceled(scopedReq.meta?.requestId);
-      if (attempt.ownerLeaseId) {
-        if (settled && command === 'close' && attempt.settlement.takeReceipt())
-          recordEndedLease(scopedReq, attempt.ownerLeaseId);
-        throw inactiveLease();
-      }
-      if (!attempt.successorIsCurrent?.()) throw inactiveLease();
-      if (!settled) throw leaseRegistry.leaseEndRefusal(attempt.leaseId) ?? deviceLeaseBusyError();
-      return attempt.successorIsCurrent;
     };
     let requestExecutionLocks: ReturnType<typeof createRequestExecutionLocks> | undefined;
     const dispatchLedger = requestDispatchLedger(scopedReq);
@@ -677,7 +651,13 @@ export async function createRequestExecutionScope(params: {
               if (!settlementFor(pinned)) pinned = undefined;
               continue;
             case 'need-settlement':
-              successorIsCurrent = await waitForSettlement(attempt);
+              successorIsCurrent = await waitForLeaseSettlement({
+                attempt,
+                req: scopedReq,
+                leaseRegistry,
+                signal: params.platformRequestScope.signal,
+                waitDeadline,
+              });
               pinned = undefined;
           }
         }
