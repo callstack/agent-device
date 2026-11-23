@@ -231,6 +231,18 @@ hint: Capture a fresh interactive snapshot or use a stable selector.
 The daemon cannot truthfully report `mintedGeneration` for a plain ref.
 When the actual failure is lifetime expiration, error messages must not claim that a found ref was missing or lacked bounds.
 
+#### 2026-11-24 amendment: a settled-diff frame names itself in the plain-ref refusal
+
+Issue #4571 measured the plain-ref refusal as the most common agent-blocking error after `--settle`: a bare ref from the earlier full snapshot is refused, the refusal offers nothing, and the agent pays a full `snapshot -i`.
+The frame now records which publication minted it: a bounded `origin` (`complete`, `settle-diff`, or `partial`) set at issuance through the same factories.
+The settle issuance path passes `settle-diff`; every other partial publication keeps `partial`.
+Origin is diagnostic only: it changes no admission decision and no ref lifetime — whether refs a diff left unchanged stay valid remains an open contract question for maintainers.
+
+When a settled diff replaced the frame and the refused plain ref is not one of its issued refs, the refusal names the settled diff as the replacement and carries `details.replacedBy: "settle-diff"` plus `details.replacementRefs`, each issued ref pinned to the frame epoch in the ready-to-copy `@eN~s<epoch>` form.
+The hint offers the same refs and keeps the fresh-snapshot escape.
+When the diff issued no refs, the refusal still names the diff and keeps the recapture guidance.
+The exact-emitted-ref suggestion (`details.suggestedRef`) keeps precedence when the refused body is itself in scope.
+
 ### Expiration occurs at the side-effect seam
 
 Expiration occurs after these and all other pre-action guards pass:
