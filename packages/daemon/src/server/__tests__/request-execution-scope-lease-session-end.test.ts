@@ -426,6 +426,49 @@ test.each([
   },
 );
 
+test('provider release waits for a successful cleanup retry and the address stays reserved', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+  try {
+    const store = makeSessionStore();
+    await publishLeasedSession(store, 'leased', 'lease-1');
+    const ref = store.lookup('leased')!;
+    const teardown = vi.fn(async () => {}).mockRejectedValueOnce(new Error('stop unconfirmed'));
+    let confirmed = false;
+    let finish!: () => void;
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const allowRelease = vi.fn();
+    const ender = createLeaseSessionEnd({
+      env: store.host.env,
+      sessionStore: store,
+      executionLocks: new Map(),
+      teardownSession: teardown,
+      cleanupSessionlessExecutionHost: async () => {},
+      confirmExpiredSessions: () => confirmed,
+    });
+
+    await ender.end('lease-1', 'LEASE_EXPIRED', { done, allowRelease });
+    expect(await ender.settlementFor(ref.lifetime)?.done).toBe(false);
+    expect(allowRelease).not.toHaveBeenCalled();
+    expect(ender.closingAt(ref.address)?.lifetime).toBe(ref.lifetime);
+
+    clock.mockReturnValue(11_000);
+    await ender.retryPending();
+    expect(allowRelease).toHaveBeenCalledOnce();
+    expect(teardown).toHaveBeenCalledTimes(2);
+    expect(store.lookup(ref.address)).toBeUndefined();
+    expect(ender.closingAt(ref.address)?.lifetime).toBe(ref.lifetime);
+
+    confirmed = true;
+    finish();
+    expect(await ender.settlementFor(ref.lifetime)?.done).toBe(true);
+    expect(ender.closingAt(ref.address)).toBeUndefined();
+  } finally {
+    clock.mockRestore();
+  }
+});
+
 test('end waits for the command still holding the session execution locks', async () => {
   const sessionStore = makeSessionStore('agent-device-lease-end-locked-');
   await publishLeasedSession(sessionStore, 'leased', 'lease-1');

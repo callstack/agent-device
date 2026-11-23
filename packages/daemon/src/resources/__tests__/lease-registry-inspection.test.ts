@@ -87,3 +87,21 @@ test.each(['sessionsSettled', 'providerReleased'] as const)(
     expect(registry.allocateLease(next).leaseId).not.toBe(lease.leaseId);
   },
 );
+
+test('an ending lease without a device key keeps its run binding until confirmation', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({
+    now: () => now,
+    onLeaseExpired: (lease) => registry.reserveExpiredLease(lease),
+  });
+  const request = { tenantId: 'tenant', runId: 'run', leaseProvider: 'fixture' };
+  const lease = registry.allocateLease(request);
+  now = lease.expiresAt;
+  registry.consumeExpiredLeases();
+  registry.confirmExpiredLeaseEnd(lease.leaseId, 'sessionsSettled');
+  expect(() => registry.allocateLease(request)).toThrow(
+    expect.objectContaining({ details: expect.objectContaining({ reason: 'DEVICE_LEASE_BUSY' }) }),
+  );
+  expect(registry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased')).toBe(true);
+  expect(registry.allocateLease(request).leaseId).not.toBe(lease.leaseId);
+});

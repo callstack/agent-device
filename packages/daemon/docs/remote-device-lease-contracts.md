@@ -64,7 +64,7 @@ This applies to every request that can close a session:
 - The session cleanup that `test` runs after each script.
 
 Nested requests record on the ledger of the outermost request, so a step reply never repeats the report.
-If a close finds its lease already inactive, it reports that lease as ended.
+If expiry wins, an owner close can report the confirmed lease end once in its refusal.
 A client never sends a release after such a request.
 If a client stores the lease id, it forgets that id when the reply names it.
 The CLI keeps the id of an ended proxy lease apart, and sends it only on `artifacts` while the connection holds no lease.
@@ -99,12 +99,12 @@ An expired `batch` refused with `LEASE_NOT_FOUND` also gets a separate request r
 To read a refused request's record remotely, use the locator in the error and send the lease ID that the request presented, if it presented one.
 If a lock-exempt command can take the session lock immediately, it can refresh the recording for the session lifetime it was admitted to use.
 A `test` suite reads, records, and closes an attempt session only with the lease id that the suite sent.
-After the lease deadline, a request that holds the session lock and sends the lease id of the session ends that session.
-A request that sends a different active lease, and that lease admission accepts for a new session, also ends that expired session under its locks. It then runs as the new owner. Its reply and its diagnostics do not name the expired lease.
-The successor starts admitted work before it ends the expired session.
-A `batch`, a `replay`, and a bounded step do not end the session, and the lease sweep ends it. With the expired lease id, they are refused with `LEASE_NOT_FOUND`. With a different active lease, they are refused with `LEASE_SESSION_MISMATCH`.
-A request without an active lease is refused and ends nothing. The lease sweep ends the session.
-A command that holds no session lock ends no session. It leaves the expired session to the lease-end teardown.
+The sweep and an authorized request share the daemon's expiry job.
+A request that needs settlement waits outside execution locks.
+A bounded step that needs settlement returns a step failure and unwinds.
+An expired owner request receives `LEASE_NOT_FOUND`.
+Only `open` with a separate valid lease can replace the expired session after settlement.
+The daemon checks that lease again before it starts work.
 Tenant, run id, lease backend, client id, device key, and lease provider are labels.
 The daemon refuses a label that differs from the session lease. A missing label is not a refusal and grants nothing.
 The daemon compares each value that a request sends for a label: the value in `meta`, the value in `flags`, and each alias of a param.

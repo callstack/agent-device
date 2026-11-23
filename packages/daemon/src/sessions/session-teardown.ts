@@ -1,3 +1,4 @@
+import { isProviderInstanceEndedError } from '@agent-device/contracts/lease-scope';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isCompletedDurableCaptureError } from '@agent-device/capture-kit/durable-capture';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -218,10 +219,17 @@ export async function teardownSessionResources(
 
 /** Settles session resources before finalizing the application. A failure preserves the session for retry. */
 export async function settleExpiredSession(
-  request: SessionResourceTeardownRequest & { finalizeApplication: () => Promise<void> },
+  request: SessionResourceTeardownRequest & {
+    finalizeApplication: () => Promise<void>;
+    providerEnded?: boolean;
+  },
 ): Promise<void> {
   await teardownSessionResources(request);
-  await request.finalizeApplication();
+  try {
+    await request.finalizeApplication();
+  } catch (error) {
+    if (!request.providerEnded || !isProviderInstanceEndedError(error)) throw error;
+  }
 }
 
 async function finishSessionScreenRecording(params: {

@@ -71,7 +71,7 @@ import {
 import { assertSameOpenOwner, SessionCoordinator, type SessionStore } from '../core/session-store.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
-import { runAdmittedLeaseWork } from './request-lease-work.ts';
+import { inactiveLease, runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
   ignoresSessionLease,
@@ -84,7 +84,12 @@ import {
   shouldRecordEventForRequest,
   type BoundJournal,
 } from '@agent-device/session-journal/session-event-log';
-import type { ExpirySettlement, LeaseSessionEnd } from './lease-session-end.ts';
+import type {
+  Admission,
+  LeaseSessionEnd,
+  LockedAttempt,
+  NeedSettlement,
+} from './lease-session-end.ts';
 import { deviceLeaseBusyError } from '../resources/lease-registry-scope.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { recordEndedLease } from '../core/request-ended-leases.ts';
@@ -169,27 +174,6 @@ async function resolveBoundedClaimDevice(
   return await resolveCommandDevice(params);
 }
 
-type Admission =
-  | { kind: 'admitted' }
-  | { kind: 'replan' }
-  | {
-      kind: 'need-settlement';
-      settlement: ExpirySettlement;
-      ownerLeaseId?: string;
-      successorIsCurrent?: () => boolean;
-    }
-  | { kind: 'refused'; error: AppError };
-
-type LockedAttempt<T> = Exclude<Admission, { kind: 'admitted' }> | { kind: 'admitted'; value: T };
-type NeedSettlement = Extract<Admission, { kind: 'need-settlement' }>;
-
-function inactiveLease(): AppError {
-  return new AppError('UNAUTHORIZED', 'Lease is not active', {
-    reason: LEASE_REASONS.notFound.reason,
-    dispatched: 'no',
-  });
-}
-
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
 const leaseRegistryExecutionLocks = new WeakMap<LeaseRegistry, Map<string, Promise<unknown>>>();
@@ -209,7 +193,7 @@ export type RequestExecutionScope = AsyncDisposable & {
   runnerLogPath: string;
   runAdmitted<T>(
     task: () => Promise<T>,
-    admitted?: { ref: SessionRef | undefined; successorIsCurrent?: () => boolean },
+    admitted?: { ref: SessionRef | undefined; assertSuccessorCurrent?: () => void },
   ): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   /** Takes an available session lock and runs `task` if the admitted lifetime is still live. */
@@ -268,7 +252,7 @@ export async function createRequestExecutionScope(params: {
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   platformRequestScope: PlatformRequestScope;
-  leaseSessionEnd?: Pick<LeaseSessionEnd, 'settlementFor'>;
+  leaseSessionEnd?: Pick<LeaseSessionEnd, 'settlementFor' | 'closingAt'>;
   providerAppCatalog?: ProviderAppCatalog;
   pluginInventory?: readonly PluginInventoryEntry[];
   daemonPolicy?: DaemonPolicy;
@@ -292,9 +276,6 @@ export async function createRequestExecutionScope(params: {
 
   const command = scopedReq.command;
   const startedAtMs = Date.now();
-  // The one trait that says a request acts *through* a session rather than merely resolving one:
-  // it is what puts the session's execution lock in this request's plan, and therefore the only
-  // trait under which an activity stamp can be written while holding that lock.
   const attachesToSession = shouldLockSessionExecution(command);
   const readsSessionLease = !ignoresSessionLease(command);
   const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
@@ -346,7 +327,8 @@ export async function createRequestExecutionScope(params: {
       : undefined;
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
-    const readAddressed = () => sessionStore.lookup(sessionName);
+    const readAddressed = () =>
+      sessionStore.lookup(sessionName) ?? params.leaseSessionEnd?.closingAt(sessionName);
     const preflightRef = readAddressed();
     const preflightSession = preflightRef?.session;
     assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
@@ -416,8 +398,8 @@ export async function createRequestExecutionScope(params: {
         throw expiry.kind === 'refused' ? expiry.error : inactiveLease();
       return addressed;
     };
-    const admitLease = (ref: SessionRef | undefined, successorIsCurrent?: () => boolean) => {
-      if (successorIsCurrent && !successorIsCurrent()) throw inactiveLease();
+    const admitLease = (ref: SessionRef | undefined, assertCurrent?: () => void) => {
+      assertCurrent?.();
       return admitRequestLeaseForLockedScope({
         env: params.host.env,
         req: scopedReq,
@@ -480,6 +462,41 @@ export async function createRequestExecutionScope(params: {
       })();
       return bindingCleanup;
     };
+    const runAdmittedAttempt = async <T>(
+      ref: SessionRef | undefined,
+      task: () => Promise<T>,
+      successorIsCurrent: (() => boolean) | undefined,
+    ): Promise<LockedAttempt<T>> => {
+      let acting = false;
+      try {
+        const value = await scope.runAdmitted(
+          async () => {
+            acting = true;
+            return await task();
+          },
+          {
+            ref,
+            assertSuccessorCurrent: () => {
+              if (successorIsCurrent && !successorIsCurrent()) throw inactiveLease();
+            },
+          },
+        );
+        return { kind: 'admitted', value };
+      } catch (error) {
+        if (
+          acting ||
+          !isInactive(ref) ||
+          !(error instanceof AppError) ||
+          error.details?.reason !== LEASE_REASONS.notFound.reason
+        )
+          throw error;
+        const expiry = await resolveExpiryAdmission(ref);
+        return expiry.kind === 'admitted' ? { kind: 'replan' } : expiry;
+      } finally {
+        if (acting) await Promise.allSettled([disposeBindings()]);
+      }
+    };
+
     const runLockPlan = async <T>(
       lockPlan: RequestExecutionLockPlan,
       task: () => Promise<T>,
@@ -501,14 +518,7 @@ export async function createRequestExecutionScope(params: {
       )
         return { kind: 'replan' };
 
-      try {
-        return {
-          kind: 'admitted',
-          value: await scope.runAdmitted(task, { ref: current, successorIsCurrent }),
-        };
-      } finally {
-        await Promise.allSettled([disposeBindings()]);
-      }
+      return await runAdmittedAttempt(current, task, successorIsCurrent);
     };
 
     const lockAndAdmit = async <T>(
@@ -665,11 +675,12 @@ export async function createRequestExecutionScope(params: {
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
           scope.admittedRef = existingRef;
-          scopedReq = admitLease(addressed, admitted?.successorIsCurrent);
+          scopedReq = admitLease(addressed, admitted?.assertSuccessorCurrent);
           scope.req = scopedReq;
           const admittedLease = scopedReq.internal?.admittedLease;
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           return await runAdmittedLeaseWork({
+            assertCurrent: admitted?.assertSuccessorCurrent,
             leaseRegistry,
             req: scopedReq,
             task: async () => {
@@ -678,18 +689,7 @@ export async function createRequestExecutionScope(params: {
             },
           });
         } finally {
-          // The #2833 inactivity deadline is measured from the end of the last admitted command
-          // that attached to this session, stamped here under the session's execution lock. The lock
-          // makes this one stamp enough: an expiry has to acquire it too, so it can never catch a
-          // session mid-command, and one command slower than the window keeps the session it is
-          // working on — the same guarantee admitted work gives a remote lease (ADR 0007).
-          //
-          // Two exclusions carry that parity. Inventory commands (`devices`, `doctor`, `session list`)
-          // resolve a session address only to locate their own artifacts, so on a shared host they run
-          // against a session they never act through — stamping there would let a bystander agent's
-          // polling keep another agent's abandoned claim alive forever. And a request whose client
-          // hung up preserves nothing, exactly as a canceled request renews no lease: an agent that
-          // timed out is the behavior this feature exists to catch.
+          // Stamp completion under the session lock so the idle reaper cannot overtake live work.
           if (
             admissionCompleted &&
             attachesToSession &&

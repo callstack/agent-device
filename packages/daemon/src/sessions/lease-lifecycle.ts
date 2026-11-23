@@ -17,7 +17,7 @@ import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
-export type SessionTeardown = (ref: SessionRef) => Promise<void>;
+export type SessionTeardown = (ref: SessionRef, reason?: LeaseEndReason) => Promise<void>;
 
 export type LeaseEndReason = 'LEASE_RELEASED' | 'LEASE_EXPIRED' | 'PROVIDER_INSTANCE_ENDED';
 

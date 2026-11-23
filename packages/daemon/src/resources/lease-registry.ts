@@ -145,12 +145,13 @@ export class LeaseRegistry {
       this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
       return this.refreshLease(existing, leaseTtlMs);
     }
-    const ending = this.ending.get(id);
-    if (ending) throw deviceLeaseBusyError(ending.lease, ending.providerRelease === 'unknown');
+    this.assertNoEndingLease(id);
     this.assertHumanControlAdmission(normalized);
     this.assertDeviceAvailable(normalized);
     if (normalized.backend === 'macos-app') this.macOsAppTenantIds.add(normalized.tenantId);
-    if (this.runBindings.has(leaseRunBindingKey(normalized))) {
+    const runBinding = this.runBindings.get(leaseRunBindingKey(normalized));
+    this.assertNoEndingLease(runBinding);
+    if (runBinding) {
       throw new AppError('DEVICE_IN_USE', 'This tenant run already holds a lease for the device.', {
         reason: DEVICE_LEASE_REASONS.busy.reason,
       });
@@ -229,6 +230,7 @@ export class LeaseRegistry {
     const bindingKey = leaseRunBindingKey(request);
     const existingId = this.runBindings.get(bindingKey);
     if (!existingId) return;
+    this.assertNoEndingLease(existingId);
     const existingLease = this.leases.get(existingId);
     if (!existingLease) {
       this.runBindings.delete(bindingKey);
@@ -293,14 +295,15 @@ export class LeaseRegistry {
     return { released: true, lease };
   }
 
-  endProviderLease(request: ReleaseLeaseRequest): void {
+  endProviderLease(request: ReleaseLeaseRequest): boolean {
     const lease = this.getLease(request);
-    if (!lease) return;
+    if (!lease) return false;
     this.leases.delete(lease.leaseId);
     this.unbindLease(lease);
     this.inFlightWork.forget(lease.leaseId);
     this.onLeaseExpired?.(lease, 'PROVIDER_INSTANCE_ENDED');
     this.reportProviderLeases(lease);
+    return true;
   }
 
   /**
@@ -741,6 +744,7 @@ export class LeaseRegistry {
 
   reserveExpiredLease(lease: DeviceLease, sessionsSettled = false): void {
     this.issuedLeaseIds.add(lease.leaseId);
+    this.runBindings.set(leaseRunBindingKey(lease), lease.leaseId);
     this.ending.set(lease.leaseId, {
       lease,
       sessionsSettled,
@@ -759,8 +763,15 @@ export class LeaseRegistry {
     if (part === 'providerReleased') end.providerRelease = 'confirmed';
     else end.sessionsSettled = true;
     if (!end.sessionsSettled || end.providerRelease !== 'confirmed') return false;
+    const binding = leaseRunBindingKey(end.lease);
+    if (this.runBindings.get(binding) === leaseId) this.runBindings.delete(binding);
     this.ending.delete(leaseId);
     return true;
+  }
+
+  private assertNoEndingLease(leaseId: string | undefined): void {
+    const end = leaseId && this.ending.get(leaseId);
+    if (end) throw deviceLeaseBusyError(end.lease, end.providerRelease === 'unknown');
   }
 
   private assertDeviceAvailable(params: {

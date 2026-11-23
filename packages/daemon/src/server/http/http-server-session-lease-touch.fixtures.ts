@@ -116,7 +116,7 @@ export async function startDaemon(daemonPolicy?: DaemonPolicy) {
     token: 'daemon-token',
     sessionStore,
     leaseRegistry,
-    leaseSessionEnd: { settlementFor },
+    leaseSessionEnd: { settlementFor, closingAt: leaseSessionEnd.closingAt },
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => {
         hooks.duringDeviceSelection?.();

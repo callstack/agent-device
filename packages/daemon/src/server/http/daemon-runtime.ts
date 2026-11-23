@@ -1,3 +1,4 @@
+import type { ExpiryProviderSettlement } from '../lease-session-end.ts';
 import type { ComposeDaemonRuntimeDeps } from './daemon-runtime-deps.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
@@ -282,7 +283,10 @@ async function startDaemonRuntimeOnHost(
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
     onRecovered: (lease) => leaseRegistry.reserveExpiredLease(lease, true),
-    onReleased: (lease) => leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased'),
+    onReleased: (lease) => {
+      if (leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased'))
+        leaseSessionEnd.forgetClosing(lease.leaseId);
+    },
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
   });
   rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
@@ -292,15 +296,17 @@ async function startDaemonRuntimeOnHost(
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease, reason) => {
+      if (reason) return;
       let finishProvider!: () => void;
       const providerEnd = new Promise<void>((resolve) => {
         finishProvider = resolve;
       });
-      let sessionsEnd: Promise<void> | undefined;
-      if (!reason) {
-        leaseRegistry.reserveExpiredLease(lease);
-        sessionsEnd = endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED', providerEnd);
-      }
+      let allowRelease!: () => void;
+      const sessionsEnd = new Promise<void>((resolve) => {
+        allowRelease = resolve;
+      });
+      leaseRegistry.reserveExpiredLease(lease);
+      void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED', { done: providerEnd, allowRelease });
       void expiredProviderLeaseReleaser
         .release(lease, sessionsEnd)
         .then(
@@ -355,7 +361,10 @@ async function startDaemonRuntimeOnHost(
     leaseRegistry,
     endSessionsForLease: async (leaseId, reason) =>
       await endSessionsForLease(leaseId, reason ?? 'LEASE_RELEASED'),
-    leaseSessionEnd: { settlementFor: (lifetime) => leaseSessionEnd.settlementFor(lifetime) },
+    leaseSessionEnd: {
+      closingAt: (address) => leaseSessionEnd.closingAt(address),
+      settlementFor: (lifetime) => leaseSessionEnd.settlementFor(lifetime),
+    },
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
@@ -432,7 +441,10 @@ async function startDaemonRuntimeOnHost(
   // survive so the next pass can retry rather than leave a claim owned by a process that no longer
   // knows what it holds. So: resources, then the platform finalization that stops the execution host
   // and releases its lease, then the claim, cleared last, by the reaper.
-  const settleIdleExpiredSession = async (ref: SessionRef): Promise<void> => {
+  const settleIdleExpiredSession = async (
+    ref: SessionRef,
+    reason?: LeaseEndReason,
+  ): Promise<void> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     const sessionName = ref.address;
     const runtimeHints = runtimeHintsClearInput(
@@ -444,6 +456,7 @@ async function startDaemonRuntimeOnHost(
       ref,
       sessionStore,
       platformCleanup: deps.platformResourceCleanup,
+      providerEnded: reason === 'PROVIDER_INSTANCE_ENDED',
       finalizeApplication: async () =>
         await finalizeDaemonSessionApplicationLifecycle({
           gateway: deviceRuntimeGateway,
@@ -478,7 +491,7 @@ async function startDaemonRuntimeOnHost(
   const endSessionsForLease = async (
     leaseId: string,
     reason: LeaseEndReason,
-    providerEnd?: Promise<void>,
+    providerEnd?: ExpiryProviderSettlement,
   ): Promise<void> => {
     await leaseSessionEnd.end(leaseId, reason, providerEnd);
     idleReap.noteActivity();
