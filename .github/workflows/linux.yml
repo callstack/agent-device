@@ -58,27 +58,27 @@ jobs:
         run: node --experimental-strip-types scripts/device-lane-impact.ts replay-linux linux-command-evidence
 
       # Unbounded, this step could not fail — it could only stall. On 2026-08-19 a slow mirror
-      # held apt past the job's 30-minute budget on four main-branch runs and several unrelated
-      # PRs, which reported as a red check on branches that never ran a line of project code.
-      # On 2026-10-22 it recurred: the step took 20-60s normally, but 10 of 73 runs hit the
-      # 6-minute backstop. The Azure mirror appears to be a pull-through cache. A package nobody
-      # else requested recently (poppler-data, fonts-urw-base35, pulled in by gnome-calculator)
-      # is fetched from a slow upstream on first request, and the download crawls or stalls. The
-      # retry that warmed the mirror then succeeded in seconds, which is why re-runs were green.
-      # Three bounds fix that: the downloaded .debs are cached so most runs never ask the mirror
-      # for them, a download that does stall is dropped and retried under a per-attempt deadline
-      # (apt resumes with the files already fetched), and `timeout-minutes` stays as the
-      # backstop. dpkg itself never runs under a deadline.
+      # held apt past the job's 30-minute budget. On 2026-10-22 a pull-through mirror crawled on
+      # packages nobody else had requested recently (poppler-data, fonts-urw-base35, pulled in by
+      # gnome-calculator). In November 2026 the index refresh itself became the failure: a slow
+      # archive.ubuntu.com mirror could not serve the ~41 MB of indexes within the deadline.
+      # The cached .debs already cover the package set, so a run installs them without
+      # `apt-get update` and never asks a mirror for anything. Only a miss, or an install that the
+      # cached .debs cannot satisfy (a changed package list or runner image), refreshes the index,
+      # downloads under a per-attempt deadline (apt resumes with the files already fetched), and
+      # saves a new cache entry. The key is unique per run attempt, so restore-keys always load
+      # the most recent entry and a refreshed set replaces a stale one. `timeout-minutes` stays as
+      # the backstop. dpkg itself never runs under a deadline.
       - name: Restore Linux desktop package archives
-        id: apt-archives
         if: steps.impact.outputs.run != 'false'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
         with:
           path: ~/apt-archives
-          key: apt-archives-${{ runner.os }}-${{ hashFiles('.github/workflows/linux.yml') }}
+          key: apt-archives-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: apt-archives-${{ runner.os }}-
 
       - name: Install Linux desktop dependencies
+        id: apt-install
         if: steps.impact.outputs.run != 'false'
         timeout-minutes: 6
         run: |
@@ -105,20 +105,36 @@ jobs:
           # Retry a network phase under a per-attempt deadline.
           apt_bounded() {
             local seconds="$1"
-            shift
-            for attempt in 1 2 3; do
+            local attempts="$2"
+            shift 2
+            for ((attempt = 1; attempt <= attempts; attempt++)); do
               printf 'APT %s attempt %s start (UTC): %s\n' "$1" "$attempt" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
               if sudo timeout --kill-after=5 "$seconds" apt-get "$@" "${APT_OPTS[@]}"; then
                 return 0
               fi
             done
-            echo "::error::apt-get $1 did not finish within ${seconds}s on 3 attempts"
+            echo "::error::apt-get $1 did not finish within ${seconds}s on ${attempts} attempts"
             return 1
           }
+          all_installed() {
+            local missing
+            missing="$(dpkg-query -W -f='${db:Status-Status} ${Package}\n' "${PACKAGES[@]}" 2>&1 | grep -v '^installed ' || true)"
+            [ -z "$missing" ] || { printf 'Not installed:\n%s\n' "$missing"; return 1; }
+          }
           mkdir -p ~/apt-archives
+          printf 'APT cached install start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if compgen -G "$HOME/apt-archives/*.deb" > /dev/null \
+            && sudo apt-get install -y --no-install-recommends --no-download "${APT_OPTS[@]}" "$HOME"/apt-archives/*.deb \
+            && all_installed; then
+            printf 'APT cached install complete (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            exit 0
+          fi
+          echo "::notice::Cached Linux desktop packages do not cover the package set; refreshing the apt index."
+          echo "refreshed=true" >> "$GITHUB_OUTPUT"
           sudo cp -n ~/apt-archives/*.deb /var/cache/apt/archives/ 2>/dev/null || true
-          apt_bounded 30 update
-          apt_bounded 75 install -y --no-install-recommends --download-only "${PACKAGES[@]}"
+          # A killed refresh starts over, so a slow mirror needs one window long enough to finish.
+          apt_bounded 60 2 update
+          apt_bounded 75 3 install -y --no-install-recommends --download-only "${PACKAGES[@]}"
           printf 'APT install start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${PACKAGES[@]}"
           printf 'APT install complete (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -131,11 +147,11 @@ jobs:
           fi
 
       - name: Save Linux desktop package archives
-        if: steps.impact.outputs.run != 'false' && steps.apt-archives.outputs.cache-hit != 'true'
+        if: steps.impact.outputs.run != 'false' && steps.apt-install.outputs.refreshed == 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
         with:
           path: ~/apt-archives
-          key: apt-archives-${{ runner.os }}-${{ hashFiles('.github/workflows/linux.yml') }}
+          key: apt-archives-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Start Xvfb and D-Bus
         if: steps.impact.outputs.run != 'false'
