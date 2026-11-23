@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../../../__tests__/support/finish-test-lease.ts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
@@ -116,7 +117,7 @@ test('close records a lease released before its lease-end teardown reached the s
   const leaseRegistry = new LeaseRegistry();
   const session = leasedSession(leaseRegistry);
   const lease = session.lease!;
-  const { released } = leaseRegistry.releaseLease({
+  const { released } = finishTestLease(leaseRegistry, {
     leaseId: lease.leaseId,
     tenantId: lease.tenantId,
     runId: lease.runId,

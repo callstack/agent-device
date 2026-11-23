@@ -383,7 +383,11 @@ class TortureWorld {
     if (!claimResult.ownership) {
       // A live claim under a held device lock means the store/claim disagreed.
       this.fail('session store consistent', `claim conflict opening ${name} on ${device.id}`);
-      this.releaseLease(lease.leaseId, client, deviceKey);
+      this.leaseRegistry.beginLeaseEnd(lease, {
+        sessionsSettled: true,
+        providerRelease: 'confirmed',
+      });
+      this.leaseRegistry.confirmLeaseEnd(lease.leaseId, 'providerReleased');
       return;
     }
     const leaseScope: LeaseScope = {
@@ -434,34 +438,27 @@ class TortureWorld {
     this.clientInstance.set(client, instanceId);
   }
 
-  private releaseLease(leaseId: string, client: number, deviceKey: string): void {
-    this.leaseRegistry.releaseLease({
-      leaseId,
-      tenantId: `t${client}`,
-      runId: `r${client}`,
-      leaseBackend: 'ios-simulator',
-      deviceKey,
-      clientId: `c${client}`,
-    });
-  }
-
   private reapInstance(instance: SessionInstance): void {
     if (instance.reaped) return;
+    let endingLeaseId: string | undefined;
     try {
-      this.leaseRegistry.releaseLease({
-        leaseId: instance.lease.leaseId,
-        tenantId: instance.lease.tenantId,
-        runId: instance.lease.runId,
-        leaseBackend: instance.lease.leaseBackend,
-        deviceKey: instance.lease.deviceKey,
-        clientId: instance.lease.clientId,
-      });
+      const lease = this.leaseRegistry.getLease(instance.lease);
+      if (
+        lease &&
+        this.leaseRegistry.beginLeaseEnd(lease, {
+          sessionsSettled: false,
+          providerRelease: 'confirmed',
+        })
+      ) {
+        endingLeaseId = lease.leaseId;
+      }
     } catch (error) {
       if (!(error instanceof AppError)) throw error;
       this.fail('no leaked leases', `release threw for ${instance.name}: ${error.message}`);
     }
     this.claims.clear(instance.claim);
     this.sessionStore.retire(instance.ref);
+    if (endingLeaseId) this.leaseRegistry.confirmLeaseEnd(endingLeaseId, 'sessionsSettled');
     instance.reaped = true;
     if (this.deviceOwner.get(instance.deviceId) === instance.instanceId) {
       this.deviceOwner.delete(instance.deviceId);

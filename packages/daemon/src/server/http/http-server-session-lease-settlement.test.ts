@@ -134,7 +134,7 @@ test('open --wait can run out while the daemon is still tearing down the expired
     const response = await open;
     expect(response.error?.data).toMatchObject({
       code: 'DEVICE_IN_USE',
-      details: { reason: 'DEVICE_LEASE_BUSY' },
+      details: { reason: 'session-cleanup-pending' },
     });
     expect(daemon.sessionStore.lookup(daemon.sessionName)?.lifetime).toBe(ref.lifetime);
   } finally {

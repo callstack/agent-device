@@ -43,20 +43,20 @@ export async function releaseTargetLease(params: {
     });
   }
   const request = leaseScopeToReleaseRequest(scope);
-  const lease = params.leaseRegistry.getLease(request);
+  const lease = params.leaseRegistry.getLease(request, true);
   if (!lease) {
     throw new AppError('UNAUTHORIZED', 'The target lease is no longer active.', {
       reason: LEASE_REASONS.notFound.reason,
       leaseId: params.leaseId,
     });
   }
-  const outcome = await releaseLease(
-    params.leaseRegistry,
-    params.leaseLifecycleProvider,
-    lease,
-    request,
-  );
-  recordEndedLease(params.req, lease.leaseId);
+  const outcome = await releaseLease(params.leaseRegistry, params.leaseLifecycleProvider, lease, {
+    sessionsSettled: !params.session,
+    requestRelease: params.session ? 'close' : 'release',
+  });
+  if (outcome.release === 'unknown')
+    throw outcome.error ?? params.leaseRegistry.leaseEndRefusal(lease.leaseId);
+  if (!params.session) recordEndedLease(params.req, lease.leaseId);
   return {
     provider: outcome.provider,
     shutdown: {

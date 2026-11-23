@@ -37,6 +37,7 @@ export type LimrunLeaseOwner = {
    * built on it. A create that could not finish still owes an end for it, and its disposal reads it here.
    */
   rentedInstanceId: string | undefined;
+  createSubmitted?: true;
   /**
    * The session this lease's create built, recorded the moment it existed. It is the handle that holds the
    * instance connection and the host ADB endpoint open, so it stays on the owner even when a later step of

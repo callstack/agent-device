@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../../__tests__/support/finish-test-lease.ts';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import {
@@ -71,7 +72,7 @@ test('takeover refuses missing, expired, and foreign lease ownership before chan
   const local = await handleRequest({ ...valid, meta: undefined, session: 'local-no-lease' });
   assert.equal(local.ok, false);
   if (!local.ok) assert.equal(local.error.code, 'UNSUPPORTED_OPERATION');
-  registry.releaseLease({ ...HUMAN_CONTROL_LEASE_REQUEST, leaseId: lease.leaseId });
+  finishTestLease(registry, { ...HUMAN_CONTROL_LEASE_REQUEST, leaseId: lease.leaseId });
   assert.equal((await handleRequest(valid)).ok, false);
 });
 

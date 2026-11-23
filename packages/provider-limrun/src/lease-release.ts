@@ -373,10 +373,22 @@ export async function releaseLimrunLease(
   limrun: Limrun | undefined,
   lease: DeviceLease,
   disposal: Promise<LimrunDisposalOutcome> | undefined,
+  requireEvidence = false,
 ): Promise<LimrunReleaseRecord | undefined> {
   // No disposal means this runtime holds nothing for the lease: it was never allocated here, or its disposal
   // confirmed and gave it back. What the lease has under its labels is the recovery route's.
-  if (disposal === undefined) return await releaseLabeledInstances(limrun, lease);
+  if (disposal === undefined) {
+    const released = await releaseLabeledInstances(limrun, lease);
+    if (!released && requireEvidence)
+      throwUnconfirmedDelete(
+        'Limrun lease release is unknown',
+        {},
+        undefined,
+        'Reconcile the rental using its lease label.',
+        undefined,
+      );
+    return released;
+  }
   const outcome = await disposal;
   if (outcome.cleanup === 'uncertain') throw releaseLeftInstanceRunning(lease.leaseId, outcome);
   if (outcome.instanceId === undefined) return undefined;
@@ -400,6 +412,13 @@ export async function releaseLimrunLease(
   };
 }
 
+type LabeledRecovery = {
+  instanceIds: string[];
+  deletes: Map<string, Promise<LimrunDeleteResult>>;
+};
+
+const labeledRecoveries = new WeakMap<Limrun, Map<string, Promise<LabeledRecovery>>>();
+
 /**
  * Ends every instance a lease's own labels name, for a lease this runtime no longer holds an owner for.
  * Every delete goes through the same helper every other route deletes with, so a 404 confirms here exactly
@@ -413,29 +432,18 @@ async function releaseLabeledInstances(
 ): Promise<LimrunReleaseRecord | undefined> {
   const platform = platformForLimrunLeaseBackend(lease.backend);
   if (!platform || !limrun) return undefined;
-  const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
-  const instances = await fromLimrunOrgApi(
-    platform === 'ios'
-      ? limrun.iosInstances.list({ labelSelector })
-      : limrun.androidInstances.list({ labelSelector }),
-  );
-  const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
-  const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
+  const byLease = labeledRecoveries.get(limrun) ?? new Map<string, Promise<LabeledRecovery>>();
+  labeledRecoveries.set(limrun, byLease);
+  const lookup =
+    byLease.get(lease.leaseId) ?? findLabeledInstances(limrun, platform, lease.leaseId);
+  byLease.set(lease.leaseId, lookup);
+  const { instanceIds, deletes } = await lookup.catch((error: unknown) => {
+    if (byLease.get(lease.leaseId) === lookup) byLease.delete(lease.leaseId);
+    throw error;
+  });
   const confirmed: string[] = [];
   for (const instanceId of instanceIds) {
-    const answer = await awaitLimrunWithinBudget(
-      deleteLimrunInstance(limrun, platform, instanceId),
-      DELETE_ANSWER_BUDGET_MS,
-    );
-    const deleted = answer.ok
-      ? answer.value
-      : {
-          failure: workOutstandingFailure(
-            `Delete of instance '${instanceId}'`,
-            DELETE_ANSWER_BUDGET_MS,
-          ),
-          cause: undefined,
-        };
+    const deleted = await awaitLabeledDelete(deletes, limrun, platform, instanceId);
     if (deleted.failure !== undefined) {
       throwUnconfirmedDelete(
         `Recovery could not confirm instance '${instanceId}' of lease '${lease.leaseId}' deleted`,
@@ -447,11 +455,52 @@ async function releaseLabeledInstances(
     }
     confirmed.push(instanceId);
   }
+  if (byLease.get(lease.leaseId) === lookup) byLease.delete(lease.leaseId);
   if (instanceIds.length === 0) return undefined;
   return {
     limrunInstanceId: instanceIds[0],
     limrunInstanceIds: instanceIds,
     limrunInstanceCount: instanceIds.length,
+  };
+}
+
+async function awaitLabeledDelete(
+  deletes: LabeledRecovery['deletes'],
+  limrun: Limrun,
+  platform: LimrunPlatform,
+  instanceId: string,
+): Promise<LimrunDeleteResult> {
+  const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
+  const requested = deletes.get(instanceId) ?? deleteLimrunInstance(limrun, platform, instanceId);
+  deletes.set(instanceId, requested);
+  const answer = await awaitLimrunWithinBudget(requested, DELETE_ANSWER_BUDGET_MS);
+  if (!answer.ok)
+    return {
+      cause: undefined,
+      failure: workOutstandingFailure(
+        `Delete of instance '${instanceId}'`,
+        DELETE_ANSWER_BUDGET_MS,
+      ),
+    };
+  if (answer.value.failure !== undefined && deletes.get(instanceId) === requested)
+    deletes.delete(instanceId);
+  return answer.value;
+}
+
+async function findLabeledInstances(
+  limrun: Limrun,
+  platform: LimrunPlatform,
+  leaseId: string,
+): Promise<LabeledRecovery> {
+  const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${leaseId}`;
+  const instances = await fromLimrunOrgApi(
+    platform === 'ios'
+      ? limrun.iosInstances.list({ labelSelector })
+      : limrun.androidInstances.list({ labelSelector }),
+  );
+  return {
+    instanceIds: instances.getPaginatedItems().map((instance) => instance.metadata.id),
+    deletes: new Map(),
   };
 }
 

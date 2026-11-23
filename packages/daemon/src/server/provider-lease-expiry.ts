@@ -7,8 +7,10 @@ import type {
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
 import { publishFileSync } from '@agent-device/host-kit/file';
+import type { ReleaseUnknownReason } from '../resources/lease-registry-scope.ts';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
 import { settleWithin } from '@agent-device/host-kit/settle-within';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
@@ -109,7 +111,10 @@ export function createExpiredProviderLeaseReleaser(options: {
   recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
   onRecovered?: (lease: DeviceLease) => void;
+  needsProviderRelease?: (lease: DeviceLease) => boolean;
+  /** The provider half is confirmed, including leases that had no provider to release. */
   onReleased?: (lease: DeviceLease) => void;
+  onReleaseUnknown?: (lease: DeviceLease, reason: ReleaseUnknownReason) => void;
   /** Gives a timer-driven retry, which runs outside any request, a diagnostics scope. */
   withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
 }): ExpiredProviderLeaseReleaser {
@@ -119,6 +124,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   let inherited = false;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
+  let nextRetryDelayMs = retryDelayMs;
   const activeReleaseAttempts = new Map<string, Promise<void>>();
   const releaseContext = new AsyncResource('ProviderLeaseExpiry');
   const sessionCleanup = new Map<string, Promise<void>>();
@@ -149,10 +155,15 @@ export function createExpiredProviderLeaseReleaser(options: {
     if (PHASE_RANK[next] > PHASE_RANK[phase]) phase = next;
   };
 
-  const recordReleasedLease = (lease: DeviceLease): void => {
+  const confirmProviderRelease = (
+    lease: DeviceLease,
+    status: 'released' | 'not-required' = 'released',
+  ): void => {
+    options.onReleased?.(lease);
+    if (status === 'not-required') return;
     // The drain window is the only period that reports releases, so the phase is the tracker and the
     // set cannot grow outside it.
-    options.onReleased?.(lease);
+    nextRetryDelayMs = retryDelayMs;
     if (phase === 'draining') drainReleasedLeases.set(lease.leaseId, lease);
   };
 
@@ -221,7 +232,10 @@ export function createExpiredProviderLeaseReleaser(options: {
     // `release` admits only recoverable leases to `pendingRecoveryLeases`, so both sources are already
     // recoverable. The recovery copy is spread last: for a lease in both, the expired one is current.
     const journal = new Map(
-      [...liveLeases, ...unpersisted].map((lease) => [lease.leaseId, lease] as const),
+      [
+        ...liveLeases.filter((lease) => !persistedRecoveryLeaseIds.has(lease.leaseId)),
+        ...unpersisted,
+      ].map((lease) => [lease.leaseId, lease] as const),
     );
     try {
       writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, [...journal.values()]);
@@ -254,13 +268,32 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
     for (const leaseId of pendingRecoveryLeases.keys()) persistedRecoveryLeaseIds.add(leaseId);
     adoptOrphanedLeases(onDiagnostic);
-    for (const lease of pendingRecoveryLeases.values()) options.onRecovered?.(lease);
+    for (const lease of pendingRecoveryLeases.values()) {
+      options.onRecovered?.(lease);
+      if (
+        !isRecoverableProviderAvailable(lease, options.recoverableProviderIds) ||
+        !options.recoverExpiredLease
+      ) {
+        const reason = 'provider-runtime-unavailable';
+        options.onReleaseUnknown?.(lease, reason);
+        onDiagnostic?.({
+          phase: 'provider_lease_release_refused',
+          resourcePath: options.stateDir
+            ? leaseRecordPath(options.stateDir, PENDING_RELEASES_FILE)
+            : PENDING_RELEASES_FILE,
+          data: {
+            leaseId: lease.leaseId,
+            provider: lease.leaseProvider,
+            releaseStatus: 'unknown',
+            reason,
+          },
+        });
+      }
+    }
     await retryPending();
   };
   const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
-    liveLeases = leases.filter((lease) =>
-      isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
-    );
+    liveLeases = leases.filter((lease) => leaseProviderRequiringRuntime(lease) !== undefined);
     writeJournal();
   };
 
@@ -277,8 +310,9 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
     retryTimer = setTimeout(() => {
       retryTimer = undefined;
+      nextRetryDelayMs = Math.min(nextRetryDelayMs * 2, 60_000);
       runScoped(retryPending);
-    }, retryDelayMs);
+    }, nextRetryDelayMs);
     retryTimer.unref?.();
     emitDiagnostic({
       level: 'warn',
@@ -286,7 +320,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       data: {
         pendingLiveLeaseCount: pendingLiveLeases.size,
         pendingRecoveryLeaseCount: pendingRecoveryLeases.size,
-        retryDelayMs,
+        retryDelayMs: nextRetryDelayMs,
       },
     });
   };
@@ -324,10 +358,13 @@ export function createExpiredProviderLeaseReleaser(options: {
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
     return startReleaseAttempt(lease.leaseId, key, async () => {
-      if (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease)) {
+      if (
+        options.needsProviderRelease?.(lease) === false ||
+        (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease))
+      ) {
         pendingLiveLeases.delete(lease.leaseId);
-        recordReleasedLease(lease);
-      }
+        confirmProviderRelease(lease);
+      } else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
     });
   };
 
@@ -339,11 +376,14 @@ export function createExpiredProviderLeaseReleaser(options: {
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
     return startReleaseAttempt(lease.leaseId, key, async () => {
-      if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
+      if (
+        options.needsProviderRelease?.(lease) === false ||
+        (await releaseExpiredProviderLease(options.recoverExpiredLease, lease))
+      ) {
         pendingRecoveryLeases.delete(lease.leaseId);
-        recordReleasedLease(lease);
+        confirmProviderRelease(lease);
         persistPendingLeases();
-      }
+      } else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
     });
   };
 
@@ -396,8 +436,14 @@ export function createExpiredProviderLeaseReleaser(options: {
       drainReleasedLeases = new Map();
     },
     release: async (lease, afterSessionCleanup) => {
-      if (!lease.leaseProvider) return { status: 'not-required' };
-      if (phase === 'closed') return refuseClosedRelease(lease);
+      if (!leaseProviderRequiringRuntime(lease)) {
+        confirmProviderRelease(lease, 'not-required');
+        return { status: 'not-required' };
+      }
+      if (phase === 'closed') {
+        options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
+        return refuseClosedRelease(lease);
+      }
       if (afterSessionCleanup) {
         sessionCleanup.set(lease.leaseId, afterSessionCleanup);
         const forget = () => {
@@ -416,10 +462,11 @@ export function createExpiredProviderLeaseReleaser(options: {
         }
         return releaseOutcomeFor(lease, pendingRecoveryLeases);
       }
-      if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) {
-        return { status: 'refused', reason: 'provider-runtime-unavailable', durable: false };
-      }
-      if (!options.leaseLifecycleProvider?.release) {
+      if (
+        !isProviderRuntimeAvailable(lease, options.providerRuntimeIds) ||
+        !options.leaseLifecycleProvider?.release
+      ) {
+        options.onReleaseUnknown?.(lease, 'provider-runtime-unavailable');
         return { status: 'refused', reason: 'provider-runtime-unavailable', durable: false };
       }
       pendingLiveLeases.set(lease.leaseId, lease);
@@ -505,7 +552,9 @@ async function releaseLiveProviderLease(
   return await releaseExpiredProviderLease(
     leaseLifecycleProvider?.release
       ? async (expiredLease) => {
-          await leaseLifecycleProvider.release?.(expiredLease);
+          const result = await leaseLifecycleProvider.release?.(expiredLease);
+          if (result?.release === 'unknown' && result.error) throw result.error;
+          return result?.release === 'confirmed';
         }
       : undefined,
     lease,

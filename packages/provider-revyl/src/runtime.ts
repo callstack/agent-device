@@ -115,7 +115,14 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: (lease, context) => this.allocate(lease, context),
-    release: async (lease) => await this.release(lease),
+    release: async (lease) => {
+      if (lease.leaseProvider !== this.provider) return undefined;
+      try {
+        return { release: 'confirmed', provider: await this.release(lease) };
+      } catch (error) {
+        return { release: 'unknown', error };
+      }
+    },
   };
 
   readonly recoverExpiredLease: ProviderExpiredLeaseRecovery = async (lease) => {

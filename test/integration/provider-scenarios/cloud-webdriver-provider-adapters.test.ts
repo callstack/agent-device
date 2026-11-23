@@ -71,7 +71,8 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
         });
         const release = await runtime.leaseLifecycle.release?.(lease);
         assert.equal(
-          (release?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts.length,
+          (release?.provider?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts
+            .length,
           5,
         );
       } finally {
@@ -406,7 +407,7 @@ test('AWS Device Farm facade uses the injected host-command capability for its f
 
       const release = await runtime.leaseLifecycle.release?.(lease);
       assert.deepEqual(
-        (release?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts.map(
+        (release?.provider?.cloudArtifacts as CloudArtifactsResult | undefined)?.cloudArtifacts.map(
           (artifact) => artifact.kind,
         ),
         ['video', 'device-log', 'appium-log'],

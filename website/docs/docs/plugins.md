@@ -78,7 +78,7 @@ When the daemon stops, it closes every plugin once: each runtime shuts down, the
 
 When two plugins claim the same provider, the first one wins: bundled providers, then installed plugins in package-name order, then plugins supplied by an embedding host. The others are `failed` with `duplicate_provider`. The first claim holds through both dormant and failed setup outcomes. `cloud` and `proxy` are reserved and can't be claimed.
 
-A lease that names an absent provider or one that failed to register returns `UNSUPPORTED_OPERATION` with reason `provider-not-registered` before it records a lease. The error lists the registered providers. The `failedPlugins` field lists failed registrations that name the provider or its package, and failures the daemon could not attribute to a package or claim. If a managed provider is absent, the error gives its package and the install command for your daemon's version. Run that command on the daemon host and restart the daemon. If you embed the runtime, call the plugin factory and pass its result in `plugins` when you recreate the runtime. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
+When the scope has no pending lease end, an allocation that names an absent provider or one that failed to register returns `UNSUPPORTED_OPERATION` with reason `provider-not-registered` before it records a lease. The error lists the registered providers. The `failedPlugins` field lists failed registrations that name the provider or its package, and failures the daemon could not attribute to a package or claim. If a managed provider is absent, the error gives its package and the install command for your daemon's version. Run that command on the daemon host and restart the daemon. If you embed the runtime, call the plugin factory and pass its result in `plugins` when you recreate the runtime. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
 
 ## Install Maestro support
 
@@ -132,6 +132,9 @@ The factory is called with the package's `options` from `config.json` (`plugins[
 The host resolves the `./agent-device` export with import conditions. It falls back to the package's root export only when that subpath does not exist. If the subpath exists but its import or `setup` throws, the plugin is reported as failed and the root export is not tried.
 
 `setup(host)` receives a `ProviderPluginHost` with `env`, `options`, `clientVersion`, `runHostCommand`, `diagnostics`, and `createError` for host-recognized errors. Build and return `{ runtime, platformModule, dispose? }` using the [provider runtime](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/provider-device-runtime.ts) and [platform module](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/platform-runtime-operations.ts) contracts. The runtime's `provider` and the module owner's `provider` must equal the plugin's `provider`. The module owner must declare `kind: 'provider-runtime'` and a nonempty `instance`.
+
+Provider runtimes must return a typed result from `leaseLifecycle.release`. Return `{ release: 'confirmed' }` when the rental is gone, or `{ release: 'unknown' }` when the provider cannot confirm it. Include optional artifact metadata in `provider`. Plugins built against the previous release hook must update their return value before upgrading the daemon.
+
 
 If your plugin uses Appium or WebDriver, bundle the engine with your plugin and build the runtime in `setup`. Use `host.diagnostics.emit(event)` to record a diagnostic in the active request log.
 

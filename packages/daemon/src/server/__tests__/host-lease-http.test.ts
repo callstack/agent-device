@@ -30,7 +30,12 @@ async function withServer(
   const server = await createDaemonHttpServer({
     token: 'daemon-token',
     leaseRegistry: registry,
-    endSessionsForLease,
+    endSessionsForLease:
+      endSessionsForLease &&
+      (async (leaseId) => {
+        await endSessionsForLease(leaseId);
+        registry.confirmLeaseEnd(leaseId, 'sessionsSettled');
+      }),
     handleRequest: async () => ({ ok: true, data: {} }),
     env: process.env,
     cwd: process.cwd(),
@@ -129,6 +134,27 @@ test('DELETE revokes the lease so the next admission fails and ends its session'
       ended.push(leaseId);
     },
   );
+});
+
+test('host DELETE leaves a provider rental reserved', async (t) => {
+  await withServer(t, async (origin, registry) => {
+    const request = {
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      leaseBackend: 'ios-instance' as const,
+      leaseProvider: 'limrun',
+      deviceKey: 'ios:mobile:fixture',
+    };
+    const lease = registry.allocateLease(request);
+    const response = await fetch(`${origin}${HOST_LEASE_HTTP_PREFIX}/${lease.leaseId}`, {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer daemon-token' },
+    });
+    assert.equal(((await response.json()) as { released: boolean }).released, false);
+    assert.throws(() => registry.allocateLease({ ...request, runId: 'overlap' }), {
+      code: 'DEVICE_IN_USE',
+    });
+  });
 });
 
 test('/health names macos-app among the lease backends only on a macOS host', async (t) => {

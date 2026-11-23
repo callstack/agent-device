@@ -17,6 +17,7 @@ import {
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
+  DAEMON_LIFECYCLE_REASONS,
   admitDaemonStateRoot,
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -188,9 +189,29 @@ export async function startDaemonRuntime(
       await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
         const rollback = createStartupRollback();
         rollback.onRollback(() => runtimeState.dispose());
+        let recovered!: () => void;
+        let failRecovery!: (error: AppError) => void;
+        const startupRecovered = new Promise<void>((resolve, reject) => {
+          recovered = resolve;
+          failRecovery = reject;
+        });
+        void startupRecovered.catch(() => {});
+
         try {
-          return await startDaemonRuntimeOnHost(runtimeOptions, rollback, runtimeState);
+          const runtime = await startDaemonRuntimeOnHost(
+            runtimeOptions,
+            rollback,
+            runtimeState,
+            startupRecovered,
+          );
+          recovered();
+          return runtime;
         } catch (error) {
+          failRecovery(
+            new AppError('COMMAND_FAILED', 'Daemon startup failed.', {
+              reason: DAEMON_LIFECYCLE_REASONS.startupFailed.reason,
+            }),
+          );
           await rollback.run();
           throw error;
         }
@@ -204,6 +225,7 @@ async function startDaemonRuntimeOnHost(
   },
   rollback: StartupRollback,
   runtimeState: RuntimeStateHandle,
+  startupRecovered: Promise<void>,
 ): Promise<DaemonRuntimeController> {
   const { host } = options;
   const { env } = host;
@@ -283,9 +305,13 @@ async function startDaemonRuntimeOnHost(
     recoverExpiredLease: deps.recoverExpiredLease,
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
-    onRecovered: (lease) => leaseRegistry.reserveExpiredLease(lease, true),
+    onRecovered: (lease) =>
+      leaseRegistry.beginLeaseEnd(lease, { sessionsSettled: true, providerRelease: 'pending' }),
+    needsProviderRelease: (lease) => leaseRegistry.needsProviderRelease(lease.leaseId),
+    onReleaseUnknown: (lease, reason) =>
+      leaseRegistry.markLeaseReleaseUnknown(lease.leaseId, reason),
     onReleased: (lease) => {
-      if (leaseRegistry.confirmExpiredLeaseEnd(lease.leaseId, 'providerReleased'))
+      if (leaseRegistry.confirmLeaseEnd(lease.leaseId, 'providerReleased'))
         leaseSessionEnd.forgetClosing(lease.leaseId);
     },
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
@@ -297,7 +323,6 @@ async function startDaemonRuntimeOnHost(
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease, reason) => {
-      if (!leaseRegistry.reserveExpiredLease(lease)) return;
       let finishProvider!: () => void;
       const providerEnd = new Promise<void>((resolve) => {
         finishProvider = resolve;
@@ -311,11 +336,12 @@ async function startDaemonRuntimeOnHost(
         allowRelease,
       });
       void expiredProviderLeaseReleaser
-        .release(lease, sessionsEnd)
+        .release(
+          lease,
+          sessionsEnd.then(() => leaseRegistry.awaitDeviceMutations(lease)),
+        )
         .then(
           (outcome) => {
-            if (outcome.status === 'refused' && !outcome.durable)
-              leaseRegistry.markExpiredProviderReleaseUnknown(lease.leaseId);
             // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
             // request, so this report goes to the daemon log rather than a request scope.
             const event = leaseReleaseDiagnosticEvent(lease, outcome);
@@ -326,6 +352,7 @@ async function startDaemonRuntimeOnHost(
             }
           },
           (error: unknown) => {
+            leaseRegistry.markLeaseReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');
             void emitDaemonDiagnostic(logPath, 'provider_lease_release_outcome_failed', {
               leaseId: lease.leaseId,
               error: error instanceof Error ? error.message : String(error),
@@ -486,8 +513,9 @@ async function startDaemonRuntimeOnHost(
     teardownSession: settleIdleExpiredSession,
     cleanupSessionlessExecutionHost: deps.platformResourceCleanup.cleanupSessionlessExecutionHost,
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
-    confirmExpiredSessions: (leaseId) =>
-      leaseRegistry.confirmExpiredLeaseEnd(leaseId, 'sessionsSettled'),
+    onClaimReleaseUnconfirmed: (leaseId) =>
+      leaseRegistry.markLeaseReleaseUnknown(leaseId, 'device-claim-release-unconfirmed'),
+    confirmExpiredSessions: (leaseId) => leaseRegistry.confirmLeaseEnd(leaseId, 'sessionsSettled'),
   });
 
   const endSessionsForLease = async (
@@ -542,9 +570,7 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
   });
 
-  // Quiesce is answered before dispatch and never joins `inFlightRequests`, so the
-  // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
-  // before `close` exists, and a daemon answers `draining` only once it has a drain path to run.
+  // Quiesce runs before dispatch. It may drain once startup installs the close path.
   let startingUp = true;
   const lifecycleAdmission = createDaemonLifecycleAdmission({
     token,
@@ -553,6 +579,7 @@ async function startDaemonRuntimeOnHost(
     leaseRegistry,
     inFlightRequestCount: () => inFlightRequests.size,
     startingUp: () => startingUp,
+    startupRecovered,
     drain: () => {
       void close();
     },
@@ -649,9 +676,7 @@ async function startDaemonRuntimeOnHost(
     scope: createRecoveryPlatformScope(),
     onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
   });
-  // Only the registered daemon may read the state directory's lease records and act on them. Loading and
-  // adoption run before the first await, so their report reaches this startup's diagnostics.
-  void withDaemonDiagnosticsScope({ logPath }, async () => {
+  const providerRecovery = withDaemonDiagnosticsScope({ logPath }, async () => {
     await expiredProviderLeaseReleaser.recoverInherited((diagnostic) =>
       startupDiagnostics.push(diagnostic),
     );
@@ -678,28 +703,23 @@ async function startDaemonRuntimeOnHost(
       error: error instanceof Error ? error.message : String(error),
     }).catch(() => undefined);
   });
-  options.startupProgress?.report('recovery-finished');
   const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
     await import('./server-startup.ts');
+  options.startupProgress?.report('recovery-finished');
   const { servers, socketPort, httpPort } = await openDaemonServers(
     daemonServerMode,
     {
       handleRequest,
+      startupRecovered,
+      leaseLifecycleProvider: deps.leaseLifecycleProvider,
       leaseRegistry,
       endSessionsForLease: async (leaseId) => await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
       token,
       retainArtifacts,
       env,
       cwd: host.cwd,
-      // A `/rpc` flow can reject after its own catches failed to answer, leaving this server's
-      // refusal as the only record the failure gets. It has no request scope — that opens later,
-      // inside the handler — so it reports through the pair every other out-of-request daemon
-      // event uses: a diagnostic scoped to the daemon log, and the runtime's error stream.
       onUnownedRequestFailure: (failure) => {
-        // The record goes first: an injected stream that throws on write must not cost `daemon.log`
-        // the event. The throw itself reaches the server's guard, which is the answer's owner.
-        // `.catch` because a detached diagnostic has nowhere to report its own failure — the same
-        // shape as the metadata-loss watch above.
+        // Log before writing to the injected stream, which can throw.
         void emitDaemonDiagnostic(logPath, 'daemon_rpc_request_flow_failed', {
           code: failure.code,
           message: failure.message,
@@ -725,8 +745,7 @@ async function startDaemonRuntimeOnHost(
   options.startupProgress?.close();
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
   await reportPluginStartupFailures(logPath, deps.pluginInventory);
-  // After publication: publishDaemonInfo truncates daemon.log, so anything
-  // written before it is lost — including reconciliation diagnostics.
+  // Publication truncates the log. Recover claims afterward to retain their diagnostics.
   await reconcileDeviceClaimsForDaemonStartup(
     logPath,
     createOwnerScopedDeviceClaimReconciler({
@@ -737,16 +756,10 @@ async function startDaemonRuntimeOnHost(
     baseDir,
     env,
   );
-  // Arms the initial idle-reap timer: a daemon that starts and never
-  // receives a request must still be able to reap itself.
+  await settleWithin(() => providerRecovery, 5_000);
   idleReap.noteActivity();
-  // The #2833 deadline needs no equivalent arm: the store is empty until a request puts a session
-  // in it, and that request's own completion re-arms the reaper.
 
-  // Spawn the PNG worker ahead of the first screenshot request so its
-  // cold-start cost is not paid on a user-visible call. Best effort: when it
-  // cannot start or later stops, PNG processing falls back to the in-process sync path and the
-  // daemon log records why, once, outside any request.
+  // Warm the PNG worker before the first screenshot request.
   const releasePngWorker = retainPngWorker((reason) => {
     void emitDaemonDiagnostic(logPath, 'png_worker_unavailable', {
       reason: reason.kind,
@@ -813,6 +826,7 @@ async function startDaemonRuntimeOnHost(
           leaseRegistry,
           expiredProviderLeaseReleaser,
           timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
+          failedLeases: tornDown.failedLeases,
         });
         await leaseSessionEnd.finishShutdown(
           tornDown.failedLeases,
@@ -961,9 +975,7 @@ async function startDaemonRuntimeOnHost(
     return closing;
   };
 
-  // Armed once `close` exists: the watch calls it.
-  // A detached daemon without its registration is one no new client can find, and a successor settles
-  // the device claims it held, so it leaves. An embedded runtime still serves its host.
+  // A detached daemon leaves when it loses its registration.
   stopMetadataLossWatch = armDaemonMetadataLossWatch(
     baseDir,
     infoPath,

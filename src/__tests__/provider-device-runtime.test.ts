@@ -180,7 +180,8 @@ function makeRuntime(options: {
     leaseLifecycle: {
       allocate: async () => options.leaseResult,
       heartbeat: async () => options.leaseResult,
-      release: async () => options.leaseResult,
+      release: async () =>
+        options.leaseResult ? { release: 'confirmed', provider: options.leaseResult } : undefined,
     },
     deviceInventoryProvider: async () => options.devices,
     ownsDevice: (device) => options.devices?.some((entry) => entry.id === device.id) ?? false,

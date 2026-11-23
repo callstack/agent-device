@@ -1,5 +1,9 @@
-import type { DeviceLease } from '@agent-device/contracts/device';
-import { LEASE_REASONS, normalizeLeaseId } from '@agent-device/contracts/lease-scope';
+import type { DeviceLease, ProviderLeaseRelease } from '@agent-device/contracts/device';
+import {
+  LEASE_REASONS,
+  leaseProviderRequiringRuntime,
+  normalizeLeaseId,
+} from '@agent-device/contracts/lease-scope';
 import type { HumanControlHold, HumanControlHoldScope } from '@agent-device/contracts/client';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
@@ -9,6 +13,7 @@ import {
 } from './provider-session-ownership.ts';
 import {
   type AdmissionRequest,
+  type ReleaseUnknownReason,
   type AllocateLeaseRequest,
   type HeartbeatLeaseRequest,
   type ReleaseLeaseRequest,
@@ -51,6 +56,31 @@ const LEASE_REGISTRY_REASONS = {
   capacityExceeded: { reason: 'LEASE_CAPACITY_EXCEEDED' },
 } as const satisfies ReasonTable<'leases'>;
 
+type LeaseEnd = {
+  lease: DeviceLease;
+  sessionsSettled: boolean;
+  providerRelease: 'pending' | 'confirmed';
+  claimReleaseUnknown?: true;
+  providerReleaseUnknown?: ReleaseUnknownReason;
+  providerEnded?: true;
+  requestRelease?: 'release' | 'close';
+  releaseAttempt?: Promise<ProviderLeaseRelease>;
+};
+
+function releaseReason(end: LeaseEnd): ReleaseUnknownReason | undefined {
+  if (end.claimReleaseUnknown) return 'device-claim-release-unconfirmed';
+  if (end.providerRelease === 'pending')
+    return end.providerReleaseUnknown ?? 'provider-release-unconfirmed';
+  return undefined;
+}
+
+function leaseEndBusyError(end: LeaseEnd, lease?: DeviceLease): AppError {
+  const reason = releaseReason(end);
+  return reason
+    ? deviceLeaseBusyError(lease, reason)
+    : deviceLeaseBusyError(lease, undefined, DEVICE_LEASE_REASONS.sessionCleanupPending.reason);
+}
+
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
 
 function requireActiveLease(lease: DeviceLease | undefined): DeviceLease {
@@ -65,15 +95,8 @@ export class LeaseRegistry {
   private readonly mutations = new DeviceMutationDrain();
   private readonly inFlightWork = new LeaseInFlightWorkRegistry();
   private readonly leases = new Map<string, DeviceLease>();
-  private readonly ending = new Map<
-    string,
-    {
-      lease: DeviceLease;
-      sessionsSettled: boolean;
-      providerRelease: 'pending' | 'confirmed' | 'unknown';
-      providerEnded?: true;
-    }
-  >();
+  private readonly allocating = new Set<string>();
+  private readonly ending = new Map<string, LeaseEnd>();
   /**
    * Every id this daemon has given a lease. Provider release retries and provider-session ownership
    * stay keyed by a lease id after the lease ends, so a caller-chosen id must never name one again.
@@ -89,7 +112,7 @@ export class LeaseRegistry {
   private readonly now: () => number;
   private readonly onLeaseExpired?: (
     lease: DeviceLease,
-    reason?: 'PROVIDER_INSTANCE_ENDED',
+    reason?: 'PROVIDER_INSTANCE_ENDED' | 'LEASE_RELEASED',
   ) => void;
   private readonly onProviderLeasesChanged?: (leases: readonly DeviceLease[]) => void;
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
@@ -108,20 +131,22 @@ export class LeaseRegistry {
     });
   }
 
-  allocateLease(request: AllocateLeaseRequest): DeviceLease {
+  allocateLease(request: AllocateLeaseRequest, providerAllocating = false): DeviceLease {
     const { chosenLeaseId, normalized, leaseTtlMs } = this.prepareAllocation(request);
     const requestedLease = this.refreshRequestedLease(chosenLeaseId, normalized, leaseTtlMs);
     if (requestedLease) return requestedLease;
+    this.assertNoEndingLease(chosenLeaseId);
     if (chosenLeaseId && this.issuedLeaseIds.has(chosenLeaseId)) {
       throw new AppError('INVALID_ARGS', 'Lease id already names a lease this daemon issued.', {
         reason: LEASE_REGISTRY_REASONS.idInUse.reason,
       });
     }
     this.assertHumanControlAdmission(normalized);
-    this.assertNoRunBindingLease(normalized);
     this.assertDeviceAvailable(normalized);
+    this.assertNoRunBindingLease(normalized);
     this.enforceCapacity(normalized.backend);
     const lease = createDeviceLease(normalized, leaseTtlMs, this.now(), chosenLeaseId);
+    if (providerAllocating) this.allocating.add(lease.leaseId);
     this.issueLease(lease);
     return { ...lease };
   }
@@ -151,7 +176,6 @@ export class LeaseRegistry {
     this.assertDeviceAvailable(normalized);
     if (normalized.backend === 'macos-app') this.macOsAppTenantIds.add(normalized.tenantId);
     const runBinding = this.runBindings.get(leaseRunBindingKey(normalized));
-    this.assertNoEndingLease(runBinding);
     if (runBinding) {
       throw new AppError('DEVICE_IN_USE', 'This tenant run already holds a lease for the device.', {
         reason: DEVICE_LEASE_REASONS.busy.reason,
@@ -214,7 +238,12 @@ export class LeaseRegistry {
   private reportProviderLeases(changed: DeviceLease): void {
     if (!changed.leaseProvider || !this.onProviderLeasesChanged) return;
     this.onProviderLeasesChanged(
-      [...this.leases.values()]
+      [
+        ...this.leases.values(),
+        ...[...this.ending.values()]
+          .filter((end) => end.providerRelease !== 'confirmed')
+          .map((end) => end.lease),
+      ]
         .filter((lease) => lease.leaseProvider)
         .map((lease) => ({ ...lease })),
     );
@@ -284,16 +313,63 @@ export class LeaseRegistry {
     };
   }
 
-  releaseLease(request: ReleaseLeaseRequest): { released: boolean; lease?: DeviceLease } {
-    const lease = this.getLease(request);
-    if (!lease) {
-      return { released: false };
+  beginLeaseEnd(
+    lease: DeviceLease,
+    options: {
+      sessionsSettled: boolean;
+      providerRelease: LeaseEnd['providerRelease'];
+      requestRelease?: LeaseEnd['requestRelease'];
+      releasedAt?: number;
+    },
+  ): boolean {
+    const { leaseId } = lease;
+    if (this.ending.has(leaseId)) return false;
+    const active = this.leases.get(leaseId);
+    if (active ? active.createdAt !== lease.createdAt : this.issuedLeaseIds.has(leaseId))
+      return false;
+    this.ending.set(leaseId, { ...options, lease: active ?? lease });
+    this.issuedLeaseIds.add(leaseId);
+    if (active) {
+      this.leases.delete(leaseId);
+      this.unbindLease(active, options.releasedAt);
+      this.inFlightWork.forget(leaseId);
+      this.finishProviderAllocation(leaseId);
+      this.reportProviderLeases(active);
     }
-    this.leases.delete(lease.leaseId);
-    this.unbindLease(lease);
-    this.inFlightWork.forget(lease.leaseId);
-    this.reportProviderLeases(lease);
-    return { released: true, lease };
+    return true;
+  }
+
+  finishProviderAllocation(leaseId: string): void {
+    this.allocating.delete(leaseId);
+  }
+
+  joinProviderRelease(leaseId: string, release: () => Promise<ProviderLeaseRelease>) {
+    const end = this.ending.get(leaseId);
+    if (!end || end.providerRelease === 'confirmed')
+      return Promise.resolve<ProviderLeaseRelease>({ release: 'confirmed' });
+    return (end.releaseAttempt ??= Promise.resolve()
+      .then(release)
+      .finally(() => {
+        delete end.releaseAttempt;
+      }));
+  }
+
+  canRetryClose(leaseId: string): boolean {
+    return this.ending.get(leaseId)?.requestRelease === 'close';
+  }
+
+  isLeaseEndPending(leaseId: string): boolean {
+    return this.ending.has(leaseId);
+  }
+
+  pendingRequestedLeaseEnds(): DeviceLease[] {
+    return [...this.ending.values()]
+      .filter((end) => end.requestRelease && end.providerRelease === 'pending')
+      .map(({ lease }) => lease);
+  }
+
+  retryProviderLeaseEnd(lease: DeviceLease): void {
+    this.onLeaseExpired?.(lease, 'LEASE_RELEASED');
   }
 
   /** Captures a heartbeat's issuance so its end result can also confirm a lease the sweep took. */
@@ -302,15 +378,10 @@ export class LeaseRegistry {
     return () => {
       if (!lease) return false;
       const active = this.leases.get(leaseId) === lease;
-      if (active) {
-        this.leases.delete(leaseId);
-        this.unbindLease(lease);
-        this.inFlightWork.forget(leaseId);
-        this.onLeaseExpired?.(lease, 'PROVIDER_INSTANCE_ENDED');
-        this.reportProviderLeases(lease);
-      }
+      if (active) this.beginLeaseEnd(lease, { sessionsSettled: false, providerRelease: 'pending' });
       const end = this.ending.get(leaseId);
       if (end?.lease === lease) end.providerEnded = true;
+      if (active) this.onLeaseExpired?.(lease, 'PROVIDER_INSTANCE_ENDED');
       return active;
     };
   }
@@ -319,26 +390,37 @@ export class LeaseRegistry {
     return this.ending.get(leaseId)?.providerEnded === true;
   }
 
-  /**
-   * Reads a releasable lease without committing its removal. Callers with an
-   * external provider use this to release the remote resource first, so a
-   * transient provider failure leaves the local lease available for retry.
-   */
-  getLease(request: ReleaseLeaseRequest): DeviceLease | undefined {
+  /** Include an authenticated request-initiated end when explicitly retrying release. */
+  getLease(request: ReleaseLeaseRequest, explicit = false): DeviceLease | undefined {
     const leaseId = normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
-    const lease = this.leases.get(leaseId);
+    const end = this.ending.get(leaseId);
+    const lease =
+      this.leases.get(leaseId) ?? (explicit && end?.requestRelease ? end.lease : undefined);
     if (!lease) return undefined;
     assertLeaseOwnerScope(lease, request);
     assertLeaseScopeMatch(lease, request);
     return { ...lease };
   }
 
+  /** Only the authenticated host-admin listener may look up leases without tenant scope. */
+  getHostLease(leaseId: string): DeviceLease | undefined {
+    this.cleanupExpiredLeases();
+    const end = this.ending.get(leaseId);
+    return this.leases.get(leaseId) ?? (end?.requestRelease ? end.lease : undefined);
+  }
+
   /** Mirrors close ownership and expiry checks without consuming any lease. */
   inspectLeaseForClose(request: ReleaseLeaseRequest): DeviceLease | undefined {
     const leaseId = normalizeRequiredLeaseId(request.leaseId);
-    const lease = this.leases.get(leaseId);
-    if (!lease || this.wouldConsumeExpiredLease(lease, this.now())) return undefined;
+    const lease =
+      this.leases.get(leaseId) ??
+      (this.canRetryClose(leaseId) ? this.ending.get(leaseId)?.lease : undefined);
+    if (
+      !lease ||
+      (!this.canRetryClose(leaseId) && this.wouldConsumeExpiredLease(lease, this.now()))
+    )
+      return undefined;
     assertLeaseOwnerScope(lease, request);
     assertLeaseScopeMatch(lease, request);
     return { ...lease };
@@ -348,6 +430,12 @@ export class LeaseRegistry {
     const scope = normalizeLeaseAdmissionRequest(request);
     this.cleanupExpiredLeases();
     assertLeaseScopeMatch(this.getActiveLease(scope.leaseId), scope);
+  }
+
+  inspectCloseRetryAdmission(request: HeartbeatLeaseRequest): DeviceLease | undefined {
+    const scope = normalizeLeaseAdmissionRequest(request);
+    if (!this.canRetryClose(scope.leaseId)) return undefined;
+    return this.inspectLeaseForClose(request);
   }
 
   /** Checks request admission and renewal without sweeping or refreshing any lease. */
@@ -547,13 +635,31 @@ export class LeaseRegistry {
     if (entry) throw humanControlActiveError(entry.hold);
   }
 
-  async runDeviceMutation<T>(lease: DeviceLease | undefined, task: () => Promise<T>): Promise<T> {
+  async runDeviceMutation<T>(
+    lease: DeviceLease | undefined,
+    task: () => Promise<T>,
+    mode: 'active' | 'close-retry' = 'active',
+  ): Promise<T> {
     if (!lease) return await task();
+    if (mode === 'close-retry') {
+      const end = this.ending.get(lease.leaseId);
+      const closingLease =
+        end?.requestRelease === 'close' && end.lease.createdAt === lease.createdAt
+          ? end.lease
+          : undefined;
+      return await this.runLeaseMutation(requireActiveLease(closingLease), task);
+    }
     this.cleanupExpiredLeases();
-    const activeLease = this.getActiveLease(lease.leaseId);
-    this.assertHumanControlAdmission(activeLease);
-    const key = leaseDeviceBindingKey(activeLease);
-    return key === undefined ? await task() : await this.mutations.run(key, task);
+    return await this.runLeaseMutation(this.getActiveLease(lease.leaseId), task);
+  }
+
+  private async runLeaseMutation<T>(lease: DeviceLease, task: () => Promise<T>): Promise<T> {
+    this.assertHumanControlAdmission(lease);
+    return await this.mutations.run(leaseDeviceBindingKey(lease) ?? lease.leaseId, task);
+  }
+
+  async awaitDeviceMutations(lease: DeviceLease): Promise<void> {
+    await this.mutations.wait(leaseDeviceBindingKey(lease) ?? lease.leaseId);
   }
 
   private requireHumanControlLease(leaseId: string): DeviceLease & { deviceKey: string } {
@@ -677,11 +783,8 @@ export class LeaseRegistry {
     const expired: DeviceLease[] = [];
     for (const lease of this.leases.values()) {
       if (this.isLeaseProtected(lease, now)) continue;
-      this.leases.delete(lease.leaseId);
-      this.unbindLease(lease, lease.expiresAt);
+      this.expireLease(lease);
       expired.push({ ...lease });
-      this.onLeaseExpired?.(lease);
-      this.reportProviderLeases(lease);
     }
     return expired;
   }
@@ -695,11 +798,18 @@ export class LeaseRegistry {
     if (!currentLease || this.isLeaseProtected(currentLease, now)) {
       return undefined;
     }
-    this.leases.delete(currentLease.leaseId);
-    this.unbindLease(currentLease, currentLease.expiresAt);
-    this.onLeaseExpired?.(currentLease);
-    this.reportProviderLeases(currentLease);
+    this.expireLease(currentLease);
     return { ...currentLease };
+  }
+
+  private expireLease(lease: DeviceLease): void {
+    this.beginLeaseEnd(lease, {
+      sessionsSettled: !this.onLeaseExpired,
+      providerRelease: leaseProviderRequiringRuntime(lease) ? 'pending' : 'confirmed',
+      releasedAt: lease.expiresAt,
+    });
+    if (this.onLeaseExpired) this.onLeaseExpired(lease);
+    else this.confirmLeaseEnd(lease.leaseId, 'providerReleased');
   }
 
   private cleanupExpiredLeases(): void {
@@ -753,55 +863,70 @@ export class LeaseRegistry {
     this.providerSessionOwnership.markLeaseReleased(lease, releasedAt);
   }
 
-  reserveExpiredLease(lease: DeviceLease, sessionsSettled = false): boolean {
-    if (this.leases.has(lease.leaseId)) return false;
-    this.issuedLeaseIds.add(lease.leaseId);
-    this.runBindings.set(leaseRunBindingKey(lease), lease.leaseId);
-    this.ending.set(lease.leaseId, {
-      lease,
-      sessionsSettled,
-      providerRelease: lease.leaseProvider ? 'pending' : 'confirmed',
-    });
-    return true;
-  }
-
-  markExpiredProviderReleaseUnknown(leaseId: string): void {
+  markLeaseReleaseUnknown(leaseId: string, reason: ReleaseUnknownReason): void {
     const end = this.ending.get(leaseId);
-    if (end?.providerRelease === 'pending') end.providerRelease = 'unknown';
+    if (!end) return;
+    if (reason === 'device-claim-release-unconfirmed') end.claimReleaseUnknown = true;
+    else end.providerReleaseUnknown = reason;
   }
 
-  confirmExpiredLeaseEnd(leaseId: string, part: 'sessionsSettled' | 'providerReleased'): boolean {
+  needsProviderRelease(leaseId: string): boolean {
+    return this.ending.get(leaseId)?.providerRelease === 'pending';
+  }
+
+  leaseEndRefusal(leaseId: string): AppError | undefined {
+    const end = this.ending.get(leaseId);
+    return end && leaseEndBusyError(end);
+  }
+
+  confirmLeaseEnd(leaseId: string, part: 'sessionsSettled' | 'providerReleased'): boolean {
     const end = this.ending.get(leaseId);
     if (!end) return true;
-    if (part === 'providerReleased') end.providerRelease = 'confirmed';
-    else end.sessionsSettled = true;
+    if (part === 'providerReleased') {
+      end.providerRelease = 'confirmed';
+      this.reportProviderLeases(end.lease);
+    } else {
+      end.sessionsSettled = true;
+      delete end.claimReleaseUnknown;
+    }
     if (!end.sessionsSettled || end.providerRelease !== 'confirmed') return false;
-    const binding = leaseRunBindingKey(end.lease);
-    if (this.runBindings.get(binding) === leaseId) this.runBindings.delete(binding);
     this.ending.delete(leaseId);
     return true;
   }
 
   private assertNoEndingLease(leaseId: string | undefined): void {
     const end = leaseId && this.ending.get(leaseId);
-    if (end) throw deviceLeaseBusyError(end.lease, end.providerRelease === 'unknown');
+    if (end) throw leaseEndBusyError(end, end.lease);
   }
 
-  private assertDeviceAvailable(params: {
-    backend: LeaseBackend;
-    leaseProvider?: string;
-    deviceKey?: string;
-  }): void {
-    const deviceBindingKey = leaseDeviceBindingKey({
-      backend: params.backend,
-      leaseProvider: params.leaseProvider,
-      deviceKey: params.deviceKey,
-    });
-    if (!deviceBindingKey) return;
-    for (const { lease, providerRelease } of this.ending.values()) {
-      if (leaseDeviceBindingKey(lease) === deviceBindingKey)
-        throw deviceLeaseBusyError(lease, providerRelease === 'unknown');
+  assertNoEndingOverlap(request: AllocateLeaseRequest | NormalizedAllocateLeaseRequest): void {
+    const scope = 'backend' in request ? request : normalizeAllocateLeaseRequest(request);
+    for (const end of this.ending.values())
+      if (this.overlaps(scope, end.lease)) throw leaseEndBusyError(end, end.lease);
+  }
+
+  private overlaps(scope: NormalizedAllocateLeaseRequest, lease: DeviceLease): boolean {
+    const key = leaseDeviceBindingKey(scope);
+    return (
+      (key !== undefined && key === leaseDeviceBindingKey(lease)) ||
+      ((!scope.deviceKey || !lease.deviceKey) &&
+        leaseRunBindingKey({ ...lease, deviceKey: undefined }) ===
+          leaseRunBindingKey({ ...scope, deviceKey: undefined }))
+    );
+  }
+
+  private assertDeviceAvailable(scope: NormalizedAllocateLeaseRequest): void {
+    const deviceBindingKey = leaseDeviceBindingKey(scope);
+    this.assertNoEndingOverlap(scope);
+    for (const leaseId of this.allocating) {
+      const lease = this.leases.get(leaseId);
+      if (lease && this.overlaps(scope, lease)) {
+        const error = deviceLeaseBusyError(lease);
+        error.details = { ...error.details, releaseStatus: 'unknown', allocationPhase: 'creating' };
+        throw error;
+      }
     }
+    if (!deviceBindingKey) return;
     const activeLeaseId = this.deviceBindings.get(deviceBindingKey);
     if (!activeLeaseId) return;
     const activeLease = this.leases.get(activeLeaseId);

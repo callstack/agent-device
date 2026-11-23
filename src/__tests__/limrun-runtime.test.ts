@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { deferred } from '../platform-runtime-device-ready-http.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -704,23 +705,20 @@ test('Limrun keeps session tracked when release fails so release can be retried'
     await allocateLease(lease);
     limrunMockState.androidDelete.mockRejectedValueOnce(new Error('temporary delete failure'));
 
-    // An unconfirmed delete is reported as such, with the instance still held, rather than as a release.
-    await assert.rejects(
-      () => releaseLease(lease),
-      (error: unknown) => {
-        const details = (error as AppError).details;
-        return (
-          error instanceof AppError &&
-          details?.reason === 'limrun_instance_delete_unconfirmed' &&
-          details.limrunInstanceId === 'android-instance-1' &&
-          details.cause === 'Limrun organization request failed.' &&
-          error.cause instanceof AppError &&
-          error.cause.details?.reason === 'limrun_api_failed' &&
-          error.cause.cause === undefined
-        );
-      },
-    );
-    assert.deepEqual(await releaseLease(lease), { limrunInstanceId: 'android-instance-1' });
+    const refused = await releaseLease(lease);
+    assert.equal(refused?.release, 'unknown');
+    const error = refused?.error;
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'limrun_instance_delete_unconfirmed');
+    assert.equal(error.details?.limrunInstanceId, 'android-instance-1');
+    assert.equal(error.details?.cause, 'Limrun organization request failed.');
+    assert.ok(error.cause instanceof AppError);
+    assert.equal(error.cause.details?.reason, 'limrun_api_failed');
+    assert.equal(error.cause.cause, undefined);
+    assert.deepEqual(await releaseLease(lease), {
+      release: 'confirmed',
+      provider: { limrunInstanceId: 'android-instance-1' },
+    });
   } finally {
     await runtime.shutdown();
   }
@@ -758,7 +756,10 @@ test('Limrun drives existing instances without an API key and never deletes them
 
     await releaseLease(iosLease('lease-attached-ios'));
     await releaseLease({ ...androidLease(), leaseId: 'lease-attached-android' });
-    assert.equal(await releaseLease(iosLease('lease-before-daemon-restart')), undefined);
+    assert.equal(
+      (await releaseLease(iosLease('lease-before-daemon-restart')))?.release,
+      'confirmed',
+    );
     assert.equal(limrunMockState.androidDisconnect.mock.calls.length, 1);
   } finally {
     await runtime.shutdown();
@@ -956,5 +957,44 @@ test('Limrun runtimes keep their hosts in concurrent deferred Android callbacks'
     expect(results.map((app) => app?.appId)).toEqual(['com.first', 'com.second']);
   } finally {
     await Promise.all(runtimes.map((runtime) => runtime.shutdown()));
+  }
+});
+
+test('Limrun restart requires evidence of the rental and deletes an attributed instance once', async () => {
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
+  const lease = iosLease('lease-recovered');
+  const lookup = deferred<LimrunInstancePage>();
+  limrunMockState.iosList.mockImplementationOnce(() => lookup.promise);
+  try {
+    const recovery = runtime.recoverExpiredLease!(lease);
+    lookup.resolve({ getPaginatedItems: () => [] });
+    await expect(recovery).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+    expect(limrunMockState.iosDelete).not.toHaveBeenCalled();
+    limrunMockState.iosList.mockResolvedValueOnce({
+      getPaginatedItems: () => [{ metadata: { id: 'recovered-instance' } }],
+    });
+    await runtime.recoverExpiredLease!(lease);
+    expect(limrunMockState.iosDelete.mock.calls.map(([id]) => id)).toEqual(['recovered-instance']);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('a definitive Limrun create refusal leaves the lease free without a lookup', async () => {
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
+  const lease = iosLease('lease-rejected-create');
+  limrunMockState.iosCreate.mockRejectedValueOnce(
+    Object.assign(new Error('quota'), { status: 429 }),
+  );
+  try {
+    await expect(runtime.leaseLifecycle.allocate!(lease)).rejects.toMatchObject({
+      details: { reason: 'limrun_api_rate_limited', releaseStatus: 'confirmed' },
+    });
+    await expect(runtime.leaseLifecycle.allocate!(lease)).resolves.toMatchObject({
+      limrunInstanceId: 'ios-instance-1',
+    });
+    expect(limrunMockState.iosList).not.toHaveBeenCalled();
+  } finally {
+    await runtime.shutdown();
   }
 });

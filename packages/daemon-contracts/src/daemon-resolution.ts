@@ -336,6 +336,8 @@ export const DAEMON_LIFECYCLE_REASONS = {
   ownerEmbedded: { reason: 'daemon-owner-embedded' },
   // The daemon has begun to leave, so it refuses every new request; retry against a new daemon.
   shuttingDown: { reason: 'daemon_shutting_down' },
+  // Startup failed while this request waited for recovery.
+  startupFailed: { reason: 'daemon-startup-failed' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**

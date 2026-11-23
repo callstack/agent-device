@@ -46,9 +46,17 @@ An expired owner request returns `LEASE_NOT_FOUND`.
 An owner `close` can report a confirmed end once in the outermost response.
 When a provider reports an instance ended, the daemon ends the lease and its sessions regardless of provider cleanup outcome.
 A cloud provider runtime refuses to allocate a lease that it is ending. It forgets a rented device only after the provider confirmed its stop.
-Recoverable provider leases are journaled so a later daemon can end rentals left by a dead daemon.
-Startup restores the reservation for an unresolved recoverable lease before it accepts overlapping allocations.
-Live sessions start empty, and persistent device claims are checked under their host-global lock.
+The daemon keeps the lease end reservation when provider creation fails or the caller cancels.
+If creation succeeds after cancellation, the provider adapter releases the exact instance.
+The daemon owns the reservation. The provider adapter owns instance creation, lookup, and release.
+
+At startup, reserve the leases from the live and pending provider journals.
+Wait for this recovery before you admit an allocation or a session command.
+Examine durable device claims under the host-global lock.
+Recover only rentals that the provider can attribute to the recorded lease.
+If the daemon cannot confirm provider release or clear the exact claim, keep the scope reserved and report `releaseStatus: unknown` with a typed `releaseReason`.
+If claim clear fails or the claim has no attributable owner, stop automatic session cleanup retries.
+The live session store starts empty.
 
 The registry checks the lease issuance, effective deadline, wanted work, and pending or active holds in the same expiry decision.
 Wanted admitted work and human-control holds defer expiry.
@@ -118,7 +126,7 @@ If `doctor` has no visible session, use detached checks.
 - Holds and ordinary proxy leases are in memory, so controllers reconnect after daemon restart.
 - Local human-control takeover remains deferred. A future host-global fence must coexist with local session claims.
 - Limrun has not moved its lease ownership onto the shared provider lease table ([#4102](https://github.com/callstack/agent-device/issues/4102)).
-- Provider allocation can still leave a rental outside registry recovery when a first allocation fails or a late allocation's release fails. Only the provider runtime that still holds the device can end that rental.
+- The existing journals record provider lease scopes. A crash can occur before there is durable evidence of the rental. [#4972](https://github.com/callstack/agent-device/issues/4972) tracks the durable rental journal.
 - An older client or a direct RPC caller that sent no lease id on a leased session is refused. It must send the lease id that its allocation returned.
 - `session_list` still shows session names to every holder of the proxy token ([#4908](https://github.com/callstack/agent-device/issues/4908)).
 - A web open can be admitted under a non-`macos-app` lease for another backend; admission does not compare the request platform with the lease backend.

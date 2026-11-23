@@ -1,3 +1,4 @@
+import { finishTestLease } from '../../__tests__/support/finish-test-lease.ts';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import * as retry from '@agent-device/host-kit/retry';
 import { heldKeyedLockKeys, withKeyedLock } from '@agent-device/kernel/keyed-lock';
@@ -150,7 +151,7 @@ test('a successor open cannot use a lease id reissued during the expired session
   let released = false;
   daemon.expiryTeardown.mockImplementationOnce(async () => {
     await Promise.resolve();
-    released = daemon.leaseRegistry.releaseLease(successor).released;
+    released = finishTestLease(daemon.leaseRegistry, successor).released;
     daemon.leaseRegistry.putHostLease(successor.leaseId, replacement);
   });
 

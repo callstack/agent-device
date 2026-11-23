@@ -77,9 +77,9 @@ test('WebDriver session creation is not retried on transient provider failures',
         /transient provider failure/,
       );
       assert.equal(server.calls.filter((call) => call.path === '/wd/hub/session').length, 1);
-      assert.equal(await runtime.leaseLifecycle.release?.(lease), undefined);
+      assert.deepEqual(await runtime.leaseLifecycle.release?.(lease), { release: 'unknown' });
     } finally {
-      await runtime.shutdown();
+      await assert.rejects(runtime.shutdown(), { code: 'COMMAND_FAILED' });
     }
   });
 });
