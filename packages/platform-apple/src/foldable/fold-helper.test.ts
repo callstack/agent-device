@@ -222,10 +222,20 @@ test.each([
   ],
   // A pose or a rotation can land after the deadline, so the refusal discloses an unknown dispatch.
   [
-    'setPose',
+    'setPose (named pose)',
     (helper: FoldHelper) => helper.setPose('open'),
     'fold-hid-dispatch-timed-out',
-    { dispatched: 'unknown' },
+    { dispatched: 'unknown', hint: expect.not.stringContaining('keyframe') },
+  ],
+  [
+    'setPose (keyframes)',
+    (helper: FoldHelper) =>
+      helper.setPose([
+        { atMs: 0, angle: 0 },
+        { atMs: 1000, angle: 180 },
+      ]),
+    'fold-hid-dispatch-timed-out',
+    { dispatched: 'unknown', hint: expect.stringContaining('first keyframe') },
   ],
   [
     'rotate',
