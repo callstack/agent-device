@@ -1,8 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { ArchiveBudget, type ArchiveManifestEntry } from './archive-safety.ts';
-import { extractTarArchive } from './archive-extraction-tar.ts';
-import { extractZipArchive } from './archive-extraction-zip.ts';
 
 export type SupportedArchiveType = 'tar' | 'tgz' | 'zip';
 
@@ -16,6 +14,13 @@ export type ExtractArchiveOptions = {
   validateManifest?: (manifest: readonly ArchiveManifestEntry[]) => void | Promise<void>;
 };
 
+/**
+ * Extracts one archive. The ZIP and TAR readers are loaded only for the format this call reads:
+ * `yauzl` and `tar-stream` are the heaviest code the install and upload paths carry, and a daemon
+ * that never extracts must not evaluate either (#4980). Keeping the guards, budgets and errors in
+ * this module means both readers share one contract and callers see one error surface whatever
+ * the format.
+ */
 export async function extractArchiveSafely(options: ExtractArchiveOptions): Promise<void> {
   options.signal?.throwIfAborted();
   const archivePath = path.resolve(options.archivePath);
@@ -26,8 +31,10 @@ export async function extractArchiveSafely(options: ExtractArchiveOptions): Prom
   await fs.mkdir(outputRoot, { recursive: false });
   try {
     if (options.type === 'zip') {
+      const { extractZipArchive } = await import('./archive-extraction-zip.ts');
       await extractZipArchive({ ...options, archivePath, outputRoot });
     } else {
+      const { extractTarArchive } = await import('./archive-extraction-tar.ts');
       await extractTarArchive({
         ...options,
         archivePath,
