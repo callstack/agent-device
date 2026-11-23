@@ -214,7 +214,11 @@ function setRuntimeCommand(params: {
       'runtime set requires at least one hint such as --metro-host, --metro-port, --bundle-url, or --launch-url.',
     );
   }
-  sessionStore.setRuntimeHints(sessionName, nextRuntime);
+  sessionStore.setRuntimeHints(
+    sessionName,
+    nextRuntime,
+    sessionStore.getRuntimeHintsAppId(sessionName),
+  );
   return {
     ok: true,
     data: {

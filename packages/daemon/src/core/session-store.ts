@@ -65,11 +65,14 @@ export type RetainedExecutionHost = Readonly<{
   lease: NonNullable<SessionState['lease']>;
 }>;
 
+// `appId` is the app an open applied the hints to; it stays absent until an open applies them.
+type StoredRuntimeHints = Readonly<{ hints: SessionRuntimeHints; appId?: string }>;
+
 export class SessionStore {
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly retainedExecutionHosts = new Map<string, RetainedExecutionHost>();
   private acceptingSessions = true;
-  private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
+  private readonly runtimeHints = new Map<string, StoredRuntimeHints>();
   private readonly sessionsDir: string;
   private readonly scriptWriter: SessionScriptWriter;
 
@@ -230,11 +233,15 @@ export class SessionStore {
   }
 
   getRuntimeHints(name: string): SessionRuntimeHints | undefined {
-    return this.runtimeHints.get(name);
+    return this.runtimeHints.get(name)?.hints;
   }
 
-  setRuntimeHints(address: string, hints: SessionRuntimeHints | undefined): void {
-    if (hints) this.runtimeHints.set(address, hints);
+  getRuntimeHintsAppId(name: string): string | undefined {
+    return this.runtimeHints.get(name)?.appId;
+  }
+
+  setRuntimeHints(address: string, hints: SessionRuntimeHints | undefined, appId?: string): void {
+    if (hints) this.runtimeHints.set(address, { hints, appId });
     else this.runtimeHints.delete(address);
   }
 

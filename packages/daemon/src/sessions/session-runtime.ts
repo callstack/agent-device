@@ -225,14 +225,34 @@ export function setSessionRuntimeHintsForOpen(
   sessionStore: SessionStore,
   sessionName: string,
   runtime: SessionRuntimeHints | undefined,
+  appId: string | undefined,
 ): SessionRuntimeHints | undefined {
   if (!runtime) return undefined;
   if (countConfiguredRuntimeHints(runtime) === 0) {
     sessionStore.setRuntimeHints(sessionName, undefined);
     return undefined;
   }
-  sessionStore.setRuntimeHints(sessionName, runtime);
+  sessionStore.setRuntimeHints(sessionName, runtime, appId);
   return runtime;
+}
+
+/** Binds stored hints that an open applied to the app it opened. */
+export function bindStoredRuntimeHintsToApp(
+  sessionStore: SessionStore,
+  sessionName: string,
+  appId: string | undefined,
+): void {
+  const runtime = sessionStore.getRuntimeHints(sessionName);
+  if (runtime && appId) sessionStore.setRuntimeHints(sessionName, runtime, appId);
+}
+
+/** Stored hints apply to the app they are bound to, or to any app while they are unbound. */
+export function storedRuntimeHintsForApp(
+  runtime: SessionRuntimeHints | undefined,
+  boundAppId: string | undefined,
+  appId: string | undefined,
+): SessionRuntimeHints | undefined {
+  return boundAppId === undefined || boundAppId === appId ? runtime : undefined;
 }
 
 function resolveSessionRuntimeHints(

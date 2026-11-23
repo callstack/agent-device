@@ -13,6 +13,7 @@ import {
   maybeClearRemovedRuntimeTransportHints,
   RUNTIME_HINTS_REASONS,
   shouldClearRemovedRuntimeTransportHints,
+  storedRuntimeHintsForApp,
   tryResolveOpenRuntimeHints,
 } from '../../session-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -37,6 +38,8 @@ export type ResolvedOpenRuntimeHintPlan = Readonly<{
   runtime: SessionRuntimeHints | undefined;
   previousRuntime: SessionRuntimeHints | undefined;
   replacedStoredRuntime: boolean;
+  /** The app the reused stored hints are bound to; absent for explicit or unbound hints. */
+  storedRuntimeAppId: string | undefined;
   applyRuntimeHints: boolean;
   clearRemovedRuntimeHints: boolean;
 }>;
@@ -125,6 +128,9 @@ export function resolveOpenRuntimeHintPlan(params: {
       runtime,
       previousRuntime,
       replacedStoredRuntime,
+      storedRuntimeAppId: replacedStoredRuntime
+        ? undefined
+        : params.sessionStore.getRuntimeHintsAppId(params.sessionName),
       applyRuntimeHints: hasRuntimeTransportHints(runtime),
       clearRemovedRuntimeHints: shouldClearRemovedRuntimeTransportHints({
         replacedStoredRuntime,
@@ -213,7 +219,11 @@ export async function prepareOpenCommandDetails(params: {
     details: {
       appBundleId,
       appName,
-      runtime: runtimeHintPlan.runtime,
+      runtime: storedRuntimeHintsForApp(
+        runtimeHintPlan.runtime,
+        runtimeHintPlan.storedRuntimeAppId,
+        appBundleId,
+      ),
     },
   };
 }
