@@ -173,7 +173,7 @@ test('daemon lifecycle finalization admits facts once, binds once, and disposes 
     scope: scope(),
     session,
     stateDir: '/state',
-    runtimeHints: { metroHost: '10.0.2.2', metroPort: '8081' },
+    runtimeHints: { values: { metroHost: '10.0.2.2', metroPort: '8081' } },
   });
 
   expect(runtime.inspectFacts).toHaveBeenCalledTimes(1);
@@ -200,7 +200,7 @@ test('a daemon that stays alive finalizes without the shutdown deferral', async 
     scope: scope(),
     session,
     stateDir: '/state',
-    runtimeHints: {},
+    runtimeHints: { values: {} },
     daemonLeaving: false,
   });
 
@@ -272,7 +272,7 @@ test.each([
       scope: scope(),
       session: providerSession,
       stateDir: '/state',
-      runtimeHints: {},
+      runtimeHints: { values: {} },
     });
 
     expect(inspectFacts).toHaveBeenCalledExactlyOnceWith(providerDevice);
@@ -297,7 +297,7 @@ test('daemon lifecycle finalization rejects a false fact before binding', async 
       scope: scope(),
       session,
       stateDir: '/state',
-      runtimeHints: {},
+      runtimeHints: { values: {} },
     }),
   ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
@@ -329,7 +329,7 @@ test('daemon lifecycle finalization admits its distinct runtime-hint cleanup bef
     scope: scope(),
     session: sessionWithApplication,
     stateDir: '/state',
-    runtimeHints,
+    runtimeHints: { appId: 'com.example.app', values: runtimeHints },
   });
 
   expect(runtime.inspectFacts).toHaveBeenCalledTimes(1);
@@ -358,7 +358,7 @@ test('daemon lifecycle finalization rejects a false runtime-hint cleanup fact be
       scope: scope(),
       session: sessionWithApplication,
       stateDir: '/state',
-      runtimeHints: { metroHost: '10.0.2.2' },
+      runtimeHints: { appId: 'com.example.app', values: { metroHost: '10.0.2.2' } },
     }),
   ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
@@ -388,7 +388,7 @@ test('daemon lifecycle finalization keeps an operation failure primary over bind
       scope: scope(events),
       session,
       stateDir: '/state',
-      runtimeHints: {},
+      runtimeHints: { values: {} },
     }),
   ).rejects.toBe(operationFailure);
 

@@ -2,6 +2,8 @@ import { daemonPlatformServicesFixture } from '../../../../__tests__/support/pla
 import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
@@ -55,6 +57,7 @@ import {
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import {
   applyRuntimeHintsFixture,
+  clearRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
   resolveOpenTargetFixture,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
@@ -77,6 +80,7 @@ bindTestCommandHost();
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
+const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFixture);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const mockResolveOpenTarget = vi.mocked(resolveOpenTargetFixture);
 
@@ -419,3 +423,188 @@ test('open --relaunch allows Android package names ending with apk-like suffix',
   expect(dispatchCalls[1]?.command).toBe('open');
   expect(dispatchCalls[1]?.positionals).toEqual(['com.example.apk']);
 });
+
+async function runSessionCommand(
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  req: Omit<DaemonRequest, 'token'>,
+): Promise<DaemonResponse> {
+  const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: { token: 't', ...req },
+    sessionName: req.session!,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  if (!response) throw new Error(`${req.command} was not handled`);
+  return response;
+}
+
+function recordRuntimeHintApplies(): Array<{ appId?: string; host?: string; port?: string }> {
+  const applies: Array<{ appId?: string; host?: string; port?: string }> = [];
+  mockApplyRuntimeHints.mockImplementation(async ({ appId, values }) => {
+    applies.push({ appId, host: values.metroHost, port: values.metroPort });
+  });
+  return applies;
+}
+
+test.each([
+  {
+    label: 'an Android emulator',
+    device: makeAndroidEmulator(),
+    platform: 'android' as const,
+    host: '10.0.2.2',
+    otherApp: 'com.google.android.apps.photos',
+  },
+  {
+    label: 'an iOS simulator',
+    device: makeAppleSimulator(),
+    platform: 'ios' as const,
+    host: '127.0.0.1',
+    otherApp: 'com.apple.mobileslideshow',
+  },
+])(
+  'open hints apply again only to the app they were set for on $label',
+  async ({ device, platform, host, otherApp }) => {
+    const sessionStore = makeSessionStore();
+    const session = `runtime-hints-per-app-${platform}`;
+    const openedTargets: string[][] = [];
+    const applies = recordRuntimeHintApplies();
+    mockResolveTargetDevice.mockResolvedValue(device);
+    mockDispatch.mockImplementation(async (_device, command, positionals) => {
+      if (command === 'open') openedTargets.push(positionals);
+      return {};
+    });
+    const open = async (target: string, runtime?: DaemonRequest['runtime']) =>
+      await runSessionCommand(sessionStore, {
+        session,
+        command: 'open',
+        positionals: [target],
+        flags: { platform },
+        ...(runtime ? { runtime } : {}),
+      });
+
+    const first = await open('com.example.metro', {
+      metroPort: 8081,
+      launchUrl: 'metroapp://dev-client',
+    });
+    const other = await open(otherApp);
+    const again = await open('com.example.metro');
+
+    expect([first.ok, other.ok, again.ok]).toEqual([true, true, true]);
+    expect(applies).toEqual([
+      { appId: 'com.example.metro', host, port: '8081' },
+      { appId: 'com.example.metro', host, port: '8081' },
+    ]);
+    expect(openedTargets).toEqual([
+      ['com.example.metro'],
+      ['metroapp://dev-client'],
+      [otherApp],
+      ['com.example.metro'],
+      ['metroapp://dev-client'],
+    ]);
+    expect(other.ok ? other.data?.runtime : 'failed').toBeUndefined();
+    expect(again.ok ? again.data?.runtime : 'failed').toMatchObject({
+      metroHost: host,
+      metroPort: 8081,
+      launchUrl: 'metroapp://dev-client',
+    });
+  },
+);
+
+test('hints stored before the first open bind to the app that open applied them to', async () => {
+  const sessionStore = makeSessionStore();
+  const session = 'runtime-hints-bind-on-first-open';
+  const applies = recordRuntimeHintApplies();
+  mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+  sessionStore.setRuntimeHints(session, { platform: 'android', metroPort: 8081 });
+
+  for (const target of ['com.example.metro', 'com.google.android.apps.photos']) {
+    const response = await runSessionCommand(sessionStore, {
+      session,
+      command: 'open',
+      positionals: [target],
+      flags: { platform: 'android' },
+    });
+    expect(response.ok).toBe(true);
+  }
+
+  expect(applies).toEqual([{ appId: 'com.example.metro', host: '10.0.2.2', port: '8081' }]);
+});
+
+test('runtime set keeps edited hints bound to the app an open applied them to', async () => {
+  const sessionStore = makeSessionStore();
+  const session = 'runtime-hints-set-keeps-app';
+  const applies = recordRuntimeHintApplies();
+  mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+  const open = async (target: string, runtime?: DaemonRequest['runtime']) =>
+    await runSessionCommand(sessionStore, {
+      session,
+      command: 'open',
+      positionals: [target],
+      flags: { platform: 'android' },
+      ...(runtime ? { runtime } : {}),
+    });
+
+  await open('com.example.metro', { metroPort: 8081 });
+  const set = await runSessionCommand(sessionStore, {
+    session,
+    command: 'runtime',
+    positionals: ['set'],
+    flags: { metroPort: 8082 },
+  });
+  await open('com.google.android.apps.photos');
+  await open('com.example.metro');
+
+  expect(set.ok).toBe(true);
+  expect(applies).toEqual([
+    { appId: 'com.example.metro', host: '10.0.2.2', port: '8081' },
+    { appId: 'com.example.metro', host: '10.0.2.2', port: '8082' },
+  ]);
+});
+
+test.each([
+  { clearer: 'close', req: { command: 'close', positionals: [], flags: {} } },
+  { clearer: 'runtime clear', req: { command: 'runtime', positionals: ['clear'], flags: {} } },
+  {
+    clearer: 'an open with only a launch URL',
+    req: {
+      command: 'open',
+      positionals: ['com.example.other'],
+      flags: { platform: 'android' as const },
+      runtime: { launchUrl: 'otherapp://home' },
+    },
+  },
+])(
+  '$clearer clears stored hints from the app they are bound to after another app opened',
+  async ({ req }) => {
+    const sessionStore = makeSessionStore();
+    const session = 'runtime-hints-clear-bound-app';
+    mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+    for (const [target, runtime] of [
+      ['com.example.metro', { metroPort: 8081 }],
+      ['com.google.android.apps.photos', undefined],
+    ] as const) {
+      const opened = await runSessionCommand(sessionStore, {
+        session,
+        command: 'open',
+        positionals: [target],
+        flags: { platform: 'android' },
+        ...(runtime ? { runtime } : {}),
+      });
+      expect(opened.ok).toBe(true);
+    }
+
+    const response = await runSessionCommand(sessionStore, { session, ...req });
+
+    expect(response.ok).toBe(true);
+    expect(mockClearRuntimeHints).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        appId: 'com.example.metro',
+        values: { metroHost: '10.0.2.2', metroPort: '8081' },
+      }),
+    );
+  },
+);

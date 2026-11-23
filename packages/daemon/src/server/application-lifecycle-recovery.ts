@@ -1,7 +1,4 @@
-import {
-  type RuntimeHintValues,
-  hasRuntimeTransportHintValues,
-} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { RuntimeHintsApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   finalizeApplicationCloseRuntimeUse,
   finalizeApplicationCloseWithRuntimeHintClearUse,
@@ -17,6 +14,7 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionState } from '../core/session-state.ts';
+import { requiresRuntimeHintsClear } from '../sessions/session-runtime.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -27,7 +25,7 @@ type SessionFinalization = Readonly<{
   bind: BindDeviceRuntime;
   session: SessionState;
   stateDir: string;
-  runtimeHints: RuntimeHintValues;
+  runtimeHints: RuntimeHintsApplicationInput;
   daemonShutdown?: boolean;
 }>;
 
@@ -41,7 +39,7 @@ async function finalizeSessionApplicationLifecycle(params: SessionFinalization):
     ...finalizationInput(session, stateDir),
     ...(params.daemonShutdown ? { daemonShutdown: true } : {}),
   };
-  if (!requiresRuntimeHintCleanup(session, runtimeHints)) {
+  if (!requiresRuntimeHintsClear(runtimeHints)) {
     const use = finalizeApplicationCloseRuntimeUse;
     assertLifecycleFacts(await inspectFacts(session.device), use.required, session);
     await (await bind(session.device, use)).operations.finalizeApplicationClose(input);
@@ -51,10 +49,7 @@ async function finalizeSessionApplicationLifecycle(params: SessionFinalization):
   assertLifecycleFacts(await inspectFacts(session.device), use.required, session);
   const runtime = await bind(session.device, use);
   await runtime.operations.finalizeApplicationClose(input);
-  await runtime.operations.clearRuntimeHints({
-    appId: session.appBundleId,
-    values: runtimeHints,
-  });
+  await runtime.operations.clearRuntimeHints(runtimeHints);
 }
 
 export async function finalizeBoundSessionApplicationLifecycle(params: {
@@ -62,7 +57,7 @@ export async function finalizeBoundSessionApplicationLifecycle(params: {
   bindDevice: BindDeviceRuntime;
   session: SessionState;
   stateDir: string;
-  runtimeHints: RuntimeHintValues;
+  runtimeHints: RuntimeHintsApplicationInput;
 }): Promise<void> {
   await finalizeSessionApplicationLifecycle({ ...params, bind: params.bindDevice });
 }
@@ -83,7 +78,8 @@ export async function finalizeDaemonSessionApplicationLifecycle(params: {
   scope: PlatformRequestScope;
   session: SessionState;
   stateDir: string;
-  runtimeHints: RuntimeHintValues;
+  /** The stored hints to clear and the app they are bound to, else the session's app. */
+  runtimeHints: RuntimeHintsApplicationInput;
   daemonLeaving?: boolean;
 }): Promise<void> {
   const { gateway, scope, session, stateDir, runtimeHints } = params;
@@ -147,11 +143,4 @@ function finalizationInput(session: SessionState, stateDir: string) {
     retainRunner: false,
     stateDir,
   };
-}
-
-function requiresRuntimeHintCleanup(
-  session: SessionState,
-  runtimeHints: RuntimeHintValues,
-): boolean {
-  return session.appBundleId !== undefined && hasRuntimeTransportHintValues(runtimeHints);
 }

@@ -440,7 +440,11 @@ test.each([false, true])(
     const address = 'cwd:shutdown-hints:default';
     const ref = sessionStore.publish(address, makeIosSession('default'));
     const publicRef = sessionStore.publish('default', makeIosSession('default'));
-    sessionStore.setRuntimeHints(address, { metroHost: 'scoped.example', metroPort: 8082 });
+    sessionStore.setRuntimeHints(
+      address,
+      { metroHost: 'scoped.example', metroPort: 8082 },
+      'com.example.bound',
+    );
     sessionStore.setRuntimeHints('default', { metroHost: 'public.example', metroPort: 8083 });
     let successor;
     if (retired) {
@@ -458,10 +462,10 @@ test.each([false, true])(
       platformCleanup: platformResourceCleanupFixture(),
     });
 
-    expect(finalizeApplicationLifecycle).toHaveBeenCalledWith(
-      ref.session,
-      retired ? {} : { metroHost: 'scoped.example', metroPort: '8082' },
-    );
+    expect(finalizeApplicationLifecycle).toHaveBeenCalledWith(ref.session, {
+      appId: retired ? undefined : 'com.example.bound',
+      values: retired ? {} : { metroHost: 'scoped.example', metroPort: '8082' },
+    });
     expect(sessionStore.resolveCurrent(publicRef)).toBe(publicRef.session);
     expect(sessionStore.getRuntimeHints('default')).toEqual({
       metroHost: 'public.example',

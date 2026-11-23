@@ -42,6 +42,7 @@ import {
 } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../../core/session-store.ts';
 import {
+  bindStoredRuntimeHintsToApp,
   countConfiguredRuntimeHints,
   openApplicationRuntimeHints,
   setSessionRuntimeHintsForOpen,
@@ -439,8 +440,11 @@ export async function completeOpenCommand(params: {
   sessionStore.clearCloseEffectsUnconfirmed(nextRef);
   const nextSession = sessionStore.requireCurrent(nextRef);
   markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
-  if (req.runtime !== undefined)
-    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints);
+  if (req.runtime !== undefined) {
+    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, sessionAppBundleId);
+  } else if (runtimeHints) {
+    bindStoredRuntimeHintsToApp(sessionStore, sessionName, sessionAppBundleId);
+  }
   applyOrdinaryScriptRecordingOpenOutcome({
     session: nextSession,
     existingSession: existingRef ? nextSession : undefined,

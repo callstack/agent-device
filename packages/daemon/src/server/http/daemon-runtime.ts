@@ -44,7 +44,7 @@ import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
 import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
-import { runtimeHintValues } from '../../sessions/session-runtime.ts';
+import { runtimeHintsClearInput } from '../../sessions/session-runtime.ts';
 import {
   closeDaemonServers,
   teardownDaemonSessionForShutdown,
@@ -419,7 +419,10 @@ async function startDaemonRuntimeOnHost(
   const settleIdleExpiredSession = async (ref: SessionRef): Promise<void> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     const sessionName = ref.address;
-    const runtimeHints = runtimeHintValues(sessionStore.getRuntimeHints(sessionName));
+    const runtimeHints = runtimeHintsClearInput(
+      sessionStore.getStoredRuntimeHints(sessionName),
+      session.appBundleId,
+    );
     await teardownSessionResources({
       appLog: 'run',
       ref,

@@ -13,6 +13,7 @@ import {
   maybeClearRemovedRuntimeTransportHints,
   RUNTIME_HINTS_REASONS,
   shouldClearRemovedRuntimeTransportHints,
+  storedRuntimeHintsForApp,
   tryResolveOpenRuntimeHints,
 } from '../../session-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -36,7 +37,11 @@ type ClearRuntimeHints = (input: RuntimeHintsApplicationInput) => Promise<void>;
 export type ResolvedOpenRuntimeHintPlan = Readonly<{
   runtime: SessionRuntimeHints | undefined;
   previousRuntime: SessionRuntimeHints | undefined;
+  /** The app the stored hints are bound to; absent while they are unbound. */
+  previousRuntimeAppId: string | undefined;
   replacedStoredRuntime: boolean;
+  // Admission may require the apply operation for stored hints that the open then drops because
+  // they are bound to another app: the target app is resolved only after admission.
   applyRuntimeHints: boolean;
   clearRemovedRuntimeHints: boolean;
 }>;
@@ -119,16 +124,19 @@ export function resolveOpenRuntimeHintPlan(params: {
   const runtimeResult = tryResolveOpenRuntimeHints(params);
   if (!runtimeResult.ok) return { type: 'response', response: runtimeResult };
   const { runtime, previousRuntime, replacedStoredRuntime } = runtimeResult.data;
+  const previousRuntimeAppId = params.sessionStore.getStoredRuntimeHints(params.sessionName)?.appId;
   return {
     type: 'plan',
     plan: {
       runtime,
       previousRuntime,
+      previousRuntimeAppId,
       replacedStoredRuntime,
       applyRuntimeHints: hasRuntimeTransportHints(runtime),
       clearRemovedRuntimeHints: shouldClearRemovedRuntimeTransportHints({
         replacedStoredRuntime,
         previousRuntime,
+        previousRuntimeAppId,
         runtime,
         session: params.existingSession,
       }),
@@ -202,6 +210,7 @@ export async function prepareOpenCommandDetails(params: {
     await maybeClearRemovedRuntimeTransportHints({
       replacedStoredRuntime: runtimeHintPlan.replacedStoredRuntime,
       previousRuntime: runtimeHintPlan.previousRuntime,
+      previousRuntimeAppId: runtimeHintPlan.previousRuntimeAppId,
       runtime: runtimeHintPlan.runtime,
       session: existingSession,
       clearRuntimeHints,
@@ -213,7 +222,13 @@ export async function prepareOpenCommandDetails(params: {
     details: {
       appBundleId,
       appName,
-      runtime: runtimeHintPlan.runtime,
+      runtime: runtimeHintPlan.replacedStoredRuntime
+        ? runtimeHintPlan.runtime
+        : storedRuntimeHintsForApp(
+            runtimeHintPlan.runtime,
+            runtimeHintPlan.previousRuntimeAppId,
+            appBundleId,
+          ),
     },
   };
 }
