@@ -12,7 +12,7 @@ import {
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { startPublicDaemonRuntime } from '../../__tests__/test-utils/public-daemon-runtime.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 
 test('an authenticated remote rollback inherits routing and ends only the replacement of an inactive recorded lease', async () => {
   const daemon = await startPublicDaemonRuntime({ serverMode: 'http' });

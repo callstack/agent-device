@@ -18,7 +18,7 @@ import {
   seedConnectionState,
 } from './remote-connection.fixtures.ts';
 import { connectCommand } from '../cli/commands/connection.ts';
-import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from './test-utils/materialize-connection.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 

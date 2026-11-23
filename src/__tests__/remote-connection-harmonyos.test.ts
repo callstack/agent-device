@@ -7,7 +7,7 @@ import {
   forceConnectFlags,
   seedConnectionState,
 } from './remote-connection.fixtures.ts';
-import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from './test-utils/materialize-connection.ts';
 import { resolveRequestedLeaseBackend } from '../cli/commands/connection-lease-transaction.ts';
 import { disconnectCommand } from '../cli/commands/connection.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';

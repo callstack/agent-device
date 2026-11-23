@@ -10,7 +10,7 @@ import {
   connectionWorkspace,
   createTestClient,
 } from '../../__tests__/remote-connection.fixtures.ts';
-import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 
 const LOCAL_CAPABILITIES = {
   leaseKind: 'direct-device-provider',
