@@ -423,9 +423,12 @@ function assertNoUnresolvedRefFallback(action: SessionAction): void {
   const refPositional =
     pinchElement ?? (action.command === 'get' ? action.positionals[1] : action.positionals[0]);
   if (!refPositional?.startsWith('@')) return;
+  const step = pinchElement
+    ? `gesture ${action.positionals.join(' ')}`
+    : `${action.command} ${refPositional}`;
   throw new AppError(
     'COMMAND_FAILED',
-    `Cannot write recorded step "${action.command} ${refPositional}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
+    `Cannot write recorded step "${step}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
   );
 }
 

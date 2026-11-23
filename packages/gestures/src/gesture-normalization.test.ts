@@ -248,6 +248,13 @@ test('the .ad preflight defers to dispatch for values it cannot know yet', () =>
   );
 });
 
+test('pinch refuses an element followed by more arguments', () => {
+  assert.throws(() => gesturePayloadFromPositionals(['pinch', '2', '@e17', '100']), {
+    code: 'INVALID_ARGS',
+    message: 'gesture pinch takes x y or one element after the scale, not both',
+  });
+});
+
 test('pinch and rotate syntax rejects a partial origin', () => {
   assert.throws(() => gesturePayloadFromPositionals(['pinch', '1.5', '100']), {
     code: 'INVALID_ARGS',

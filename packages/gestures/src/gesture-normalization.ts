@@ -557,8 +557,12 @@ function optionalPositionNumber(value: string | undefined): number | undefined {
 /** `gesture pinch <scale> <element>`: one non-numeric argument after the scale names a @ref or selector. */
 function pinchElementArgument(args: readonly string[]): string | undefined {
   const candidate = args[1];
-  if (args.length !== 2 || candidate === undefined || Number.isFinite(Number(candidate))) {
-    return undefined;
+  if (candidate === undefined || Number.isFinite(Number(candidate))) return undefined;
+  if (args.length > 2) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'gesture pinch takes x y or one element after the scale, not both',
+    );
   }
   return candidate;
 }
