@@ -938,8 +938,8 @@ Handle system alerts:
 - On iOS and Android, an unrecognized or ambiguous button fails with `ALERT_BUTTON_NOT_FOUND` or `alert_button_undecided`, and nothing is pressed. Read the labels with `alert get`, then press your choice with `snapshot -i` and `press @ref`. macOS falls back to the default or cancel button, then the first or last button.
 - `ALERT_UNRESOLVED` means the runner found an alert it cannot act on. Inspect it with `screenshot` and `snapshot -i`, then `press @ref` on the visible button.
 - `alert-window-expired`, `ALERT_CONFIRMATION_UNAVAILABLE`, `ALERT_DEADLINE_EXCEEDED`, and `dispatched: unknown` mean the press may have happened. Run `alert get` before you act again.
-- An `alert get` that fails with `runner_main_thread_timeout` does not mean there is no alert; that is `alert-not-found`.
-- On Android, `alert get --json` reports `status`: `visible`, `none`, or `undecided`. Branch on `status`, not on the message.
+- An `alert get` that fails with `runner_main_thread_timeout` does not mean there is no alert. Run `alert get` again.
+- A screen with no alert answers `alert get --json` with `status`: `none`, on every platform that serves `alert`. Branch on `status`, not on the message.
 - If a sheet or permission prompt is visible but `alert` reports none, run `snapshot -i -s "<visible label>"`, then `press @ref` on the visible button.
 
 ## Interactions
