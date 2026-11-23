@@ -9,6 +9,7 @@ import {
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { defineUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createDaemonHttpServer } from './http-server.ts';
@@ -122,10 +123,13 @@ test.each([false, true])(
       if (!stopped.ok) return;
       const artifactId = stopped.data?.artifacts?.[0]?.artifactId;
       expect(artifactId).toBeTypeOf('string');
-      expect(await listDownloadableArtifacts('tenant-b', {})).toEqual([]);
+      expect(await listDownloadableArtifacts({ tenantId: 'tenant-b' }, {})).toEqual([]);
       expect(
-        (await listDownloadableArtifacts(tenantId, {})).some(({ id }) => id === artifactId),
+        (await listDownloadableArtifacts({ tenantId, leaseId: lease.leaseId }, {})).some(
+          ({ id }) => id === artifactId,
+        ),
       ).toBe(true);
+      expect(await listDownloadableArtifacts({ tenantId }, {})).toEqual([]);
 
       const recovered = await stop();
       expect(recovered.ok, JSON.stringify(recovered)).toBe(true);
@@ -136,7 +140,11 @@ test.each([false, true])(
       });
       expect(otherTenant.status).toBe(401);
       const ownTenant = await fetch(`${base}/artifacts/${artifactId}`, {
-        headers: { authorization: 'Bearer capture-token', 'x-tenant': tenantId },
+        headers: {
+          authorization: 'Bearer capture-token',
+          'x-tenant': tenantId,
+          [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId,
+        },
       });
       expect(ownTenant.status).toBe(200);
       expect(await ownTenant.text()).toBe('private-recording');

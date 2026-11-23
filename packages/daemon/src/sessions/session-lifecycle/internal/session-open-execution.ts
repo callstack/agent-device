@@ -59,7 +59,8 @@ import {
   markDeferredInteractionOutcome,
   markPostOpenStabilization,
 } from '../../../core/deferred-interaction-outcome.ts';
-import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { requestDiagnosticsRecordId } from '../../../resources/artifact-tracking.ts';
 import {
   prepareOpenCommandDetails,
   type ReplacedRuntimeHints,
@@ -445,7 +446,8 @@ export async function completeOpenCommand(params: {
   const sessionStateDir = sessionStore.ensureSessionDir(sessionName);
   const requestLogPath = resolveSessionRequestLogPath(
     sessionStateDir,
-    req.meta?.requestId ?? getDiagnosticsMeta().requestId,
+    requestDiagnosticsRecordId(req),
+    'request-records',
   );
   timing.totalDurationMs = Math.max(0, Date.now() - openCommandStartedAtMs);
   emitDiagnostic({

@@ -40,7 +40,21 @@ type DiagnosticsScopeOptions = {
    * the locator cannot name different records (#1801).
    */
   logRecord?: DiagnosticsRecordRef;
+  /**
+   * The server-chosen name of the record that this scope writes. A scope that opens inside another
+   * scope writes to the record of that scope, so it keeps its `recordId`. `requestId` is the
+   * caller's tracking id and names no record.
+   */
+  recordId?: string;
+  /**
+   * Set for a log that only the host operator reads, such as the daemon log. It names a lease by
+   * its id, which the operator needs to end a rented device. Every other scope names a lease by
+   * a fingerprint.
+   */
+  operatorLog?: boolean;
   traceLogPath?: string;
+  traceLogWritable?: () => boolean;
+  runnerTraceLogWritable?: () => boolean;
 };
 
 type DiagnosticsScope = DiagnosticsScopeOptions & {
@@ -55,6 +69,7 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   phaseCounts: Map<string, number>;
   sensitiveValues: Set<string>;
   ensuredDirectories: Set<string>;
+  traceLogClosed?: true;
   // Sorted-longest-first view of `sensitiveValues`, recomputed lazily after a
   // registration invalidates it so replacement order stays deterministic.
   sortedSensitiveValues?: string[];
@@ -78,6 +93,7 @@ export async function withDiagnosticsScope<T>(
   fn: () => Promise<T> | T,
 ): Promise<T> {
   const scope: DiagnosticsScope = {
+    recordId: diagnosticsStorage.getStore()?.recordId,
     ...options,
     diagnosticId: createDiagnosticId(),
     events: [],
@@ -86,7 +102,14 @@ export async function withDiagnosticsScope<T>(
     sensitiveValues: new Set(),
     ensuredDirectories: new Set(),
   };
-  return await diagnosticsStorage.run(scope, fn);
+  try {
+    return await diagnosticsStorage.run(scope, fn);
+  } finally {
+    scope.traceLogClosed = true;
+    scope.traceLogPath = undefined;
+    scope.traceLogWritable = undefined;
+    scope.runnerTraceLogWritable = undefined;
+  }
 }
 
 export function updateDiagnosticsScope(options: DiagnosticsScopeOptions): void {
@@ -95,9 +118,40 @@ export function updateDiagnosticsScope(options: DiagnosticsScopeOptions): void {
   Object.assign(scope, options);
 }
 
+/**
+ * Binds a raw trace writer to the current request and trace. A runner can continue through an
+ * active caller-owned trace when it has a separate lifetime guard. An inactive binding still
+ * suppresses fallback to an unverified session path.
+ */
+export function captureDiagnosticTraceWriter(
+  source: 'request' | 'runner' = 'request',
+): ((line: string) => void) | undefined {
+  const scope = diagnosticsStorage.getStore();
+  if (!scope || !('traceLogPath' in scope)) return undefined;
+  const { traceLogPath } = scope;
+  const runnerTraceLogWritable = source === 'runner' ? scope.runnerTraceLogWritable : undefined;
+  return (line) => {
+    const writable = runnerTraceLogWritable?.() ?? activeTracePath(scope) === traceLogPath;
+    if (traceLogPath && writable) {
+      appendDiagnosticLine(
+        scope,
+        traceLogPath,
+        redactSensitiveString(line, sortedScopeSensitiveValues(scope)),
+      );
+    }
+  };
+}
+
+function activeTracePath(scope: DiagnosticsScope): string | undefined {
+  if (!scope.traceLogClosed && scope.traceLogPath && scope.traceLogWritable?.() !== false)
+    return scope.traceLogPath;
+  return undefined;
+}
+
 export function getDiagnosticsMeta(): {
   diagnosticId?: string;
   requestId?: string;
+  recordId?: string;
   session?: string;
   command?: string;
   debug?: boolean;
@@ -105,8 +159,8 @@ export function getDiagnosticsMeta(): {
 } {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return {};
-  const { diagnosticId, requestId, session, command, debug, flushOnSuccess } = scope;
-  return { diagnosticId, requestId, session, command, debug, flushOnSuccess };
+  const { diagnosticId, requestId, recordId, session, command, debug, flushOnSuccess } = scope;
+  return { diagnosticId, requestId, recordId, session, command, debug, flushOnSuccess };
 }
 
 /** Register a caller-declared literal that must not reach this request's diagnostics. */
@@ -189,16 +243,17 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
     };
     scope.events.push(payload);
     scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
-    if (!scope.debug && !scope.traceLogPath) return;
+    const tracePath = activeTracePath(scope);
+    if (!scope.debug && !tracePath) return;
     const fileLine = `${stringifyDiagnosticEvent(payload, sortedScopeSensitiveValues(scope))}\n`;
     if (scope.debug && scope.logPath) {
       appendDiagnosticLine(scope, scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
     }
-    if (scope.traceLogPath) {
-      appendDiagnosticLine(scope, scope.traceLogPath, fileLine);
+    if (tracePath) {
+      appendDiagnosticLine(scope, tracePath, fileLine);
     }
-    if (scope.debug && !scope.logPath && !scope.traceLogPath) {
+    if (scope.debug && !scope.logPath && !tracePath) {
       // The file form stays exact; the terminal copy is escaped, and its `\u00NN` form keeps the JSON parseable.
       process.stderr.write(`${DIAGNOSTIC_STDERR_PREFIX}${escapeTerminalText(fileLine)}`);
     }
@@ -313,7 +368,11 @@ function redactScopeData(
 ): Record<string, unknown> {
   const values = sortedScopeSensitiveValues(scope);
   try {
-    return replaceSensitiveValues(redactDiagnosticData(input), values) as Record<string, unknown>;
+    const redacted = redactDiagnosticData(input);
+    return replaceSensitiveValues(
+      scope.operatorLog ? redacted : fingerprintLeaseIds(redacted),
+      values,
+    ) as Record<string, unknown>;
   } catch {
     return replaceSensitiveValues({ reason: 'diagnostic-data-unserializable' }, values) as Record<
       string,
@@ -322,13 +381,17 @@ function redactScopeData(
   }
 }
 
+function redactSensitiveString(value: string, sensitiveValues: readonly string[]): string {
+  return sensitiveValues.reduce(
+    (output, sensitive) => output.replaceAll(sensitive, '[REDACTED]'),
+    value,
+  );
+}
+
 function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string[]): unknown {
   if (typeof value === 'bigint') value = value.toString();
   if (typeof value === 'string') {
-    return sensitiveValues.reduce(
-      (output, sensitive) => output.replaceAll(sensitive, '[REDACTED]'),
-      value,
-    );
+    return redactSensitiveString(value, sensitiveValues);
   }
   if (Array.isArray(value)) {
     return value.map((entry) => replaceSensitiveValues(entry, sensitiveValues));
@@ -338,6 +401,30 @@ function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string
     Object.entries(value).map(([key, entry]) => [
       key,
       replaceSensitiveValues(entry, sensitiveValues),
+    ]),
+  );
+}
+
+// `leaseId`, `releasedLeaseIds`, `lease_id`; never `releaseId`.
+const LEASE_ID_KEY_RE = /(?:^l|L|[_-]l)ease[_-]?[iI]ds?$/;
+
+/**
+ * A lease id is the credential for its session and its output, and a request record can reach
+ * another reader. Thus diagnostics name a lease by a fingerprint: the first 8 hex digits of the
+ * SHA-256 of the id.
+ */
+function fingerprintLeaseIds(value: unknown, namesLease = false): unknown {
+  if (typeof value === 'string') {
+    if (!namesLease) return value;
+    const digest = crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+    return digest.slice(0, 8);
+  }
+  if (Array.isArray(value)) return value.map((entry) => fingerprintLeaseIds(entry, namesLease));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      fingerprintLeaseIds(entry, LEASE_ID_KEY_RE.test(key)),
     ]),
   );
 }

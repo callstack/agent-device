@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -60,19 +60,17 @@ test('downloadable artifact inventory is filtered by tenant', async () => {
 
   try {
     assert.deepEqual(
-      (await listDownloadableArtifacts(undefined, process.env)).map(
-        (artifact) => artifact.filename,
-      ),
+      (await listDownloadableArtifacts({}, process.env)).map((artifact) => artifact.filename),
       ['public.txt'],
     );
     assert.deepEqual(
-      (await listDownloadableArtifacts('tenant-a', process.env)).map(
+      (await listDownloadableArtifacts({ tenantId: 'tenant-a' }, process.env)).map(
         (artifact) => artifact.filename,
       ),
       ['public.txt', 'tenant-a.txt'],
     );
     assert.deepEqual(
-      (await listDownloadableArtifacts('tenant-b', process.env)).map(
+      (await listDownloadableArtifacts({ tenantId: 'tenant-b' }, process.env)).map(
         (artifact) => artifact.filename,
       ),
       ['public.txt', 'tenant-b.txt'],
@@ -111,7 +109,7 @@ test('downloadable artifact inventory skips directory artifacts that fail to arc
         if (cmd !== 'tar') return undefined;
         throw new Error('tar unavailable');
       },
-      async () => await listDownloadableArtifacts(undefined, process.env),
+      async () => await listDownloadableArtifacts({}, process.env),
     );
     assert.deepEqual(
       artifacts.map((artifact) => artifact.filename),
@@ -430,7 +428,7 @@ test('downloadable artifact inventory reports a screenshot display rotation only
   });
 
   try {
-    const inventory = await listDownloadableArtifacts(undefined, process.env);
+    const inventory = await listDownloadableArtifacts({}, process.env);
     const rotated = inventory.find((entry) => entry.id === rotatedId);
     const plain = inventory.find((entry) => entry.id === plainId);
     assert.equal(rotated?.displayRotation, 'landscape-right');
@@ -439,5 +437,24 @@ test('downloadable artifact inventory reports a screenshot display rotation only
   } finally {
     cleanupDownloadableArtifact(rotatedId);
     cleanupDownloadableArtifact(plainId);
+  }
+});
+
+test('retiring stale inventory preserves the file now at its path', async () => {
+  const root = mkdtempForTestSync('stale-artifact-');
+  const artifactPath = path.join(root, 'artifact.png');
+  fs.writeFileSync(artifactPath, 'old');
+  const id = trackDownloadableArtifact({ artifactPath, artifactType: 'screenshot' });
+  const next = path.join(root, 'replacement.png');
+  fs.writeFileSync(next, 'replacement');
+  fs.renameSync(next, artifactPath);
+  try {
+    expect(await listDownloadableArtifacts({}, {})).not.toContainEqual(
+      expect.objectContaining({ id }),
+    );
+    expect(fs.readFileSync(artifactPath, 'utf8')).toBe('replacement');
+  } finally {
+    cleanupDownloadableArtifact(id);
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

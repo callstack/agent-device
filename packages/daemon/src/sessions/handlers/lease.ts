@@ -487,7 +487,7 @@ async function listArtifactsForRequest(
 ): Promise<AgentArtifactsResult> {
   const providerSessionId = readFlagString(req.flags, 'providerSessionId');
   if (shouldListDaemonArtifacts(leaseScope, providerSessionId)) {
-    return await listDaemonArtifacts(leaseScope.tenantId, hostEnv);
+    return await listDaemonArtifacts(leaseScope, hostEnv);
   }
 
   return await listCloudArtifactsForRequest(
@@ -507,10 +507,10 @@ function shouldListDaemonArtifacts(
 }
 
 async function listDaemonArtifacts(
-  tenantId: string | undefined,
+  reader: Pick<LeaseScope, 'tenantId' | 'leaseId'>,
   hostEnv: NodeJS.ProcessEnv,
 ): Promise<AgentArtifactsResult> {
-  const artifacts = await listDownloadableArtifacts(tenantId, hostEnv);
+  const artifacts = await listDownloadableArtifacts(reader, hostEnv);
   return {
     source: 'daemon',
     status: 'ready',

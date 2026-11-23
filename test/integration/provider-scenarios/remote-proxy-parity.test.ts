@@ -163,7 +163,7 @@ function parityScript(): readonly ScenarioRequest[] {
 /**
  * The published form of a response with transport identity removed: JSON drops `undefined`
  * exactly like the wire does, every path under the world's session root becomes the same
- * token, and per-request log files lose the request id in their name.
+ * token, and request diagnostics files lose the record id in their name.
  */
 function stripVolatile(value: unknown, sessionRoot: string): unknown {
   return stripVolatileKeys(JSON.parse(JSON.stringify(value)), sessionRoot);
@@ -175,7 +175,7 @@ function stripVolatileKeys(value: unknown, sessionRoot: string): unknown {
     return value
       .split(sessionRoot)
       .join('<session-root>')
-      .replace(/\/requests\/[^/]+\.ndjson$/, '/requests/<request>.ndjson');
+      .replace(/\/request-records\/[^/]+\.ndjson$/, '/request-records/<record-id>.ndjson');
   }
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(

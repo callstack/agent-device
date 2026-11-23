@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
@@ -56,30 +57,33 @@ test('runReplayCommand writes per-action timing events to active trace', async (
       booted: true,
     },
     createdAt: Date.now(),
-    trace: { outPath: tracePath, startedAt: Date.now() },
     actions: [],
   });
 
-  const response = await runReplayForTest({
-    req: {
-      token: 't',
-      session: 's',
-      command: 'replay',
-      positionals: [scriptPath],
-      flags: { replayScriptSource: replayScriptSourceBundleFor(scriptPath) },
-      meta: { cwd: root },
-    },
-    sessionName: 's',
-    logPath: path.join(root, 'log'),
-    sessionStore,
-    invoke: async (req) => ({
-      ok: true,
-      data:
-        req.command === 'click'
-          ? { timing: { totalDurationMs: 12, internal: { ignored: true } } }
-          : {},
-    }),
-  });
+  const response = await withDiagnosticsScope(
+    { traceLogPath: tracePath },
+    async () =>
+      await runReplayForTest({
+        req: {
+          token: 't',
+          session: 's',
+          command: 'replay',
+          positionals: [scriptPath],
+          flags: { replayScriptSource: replayScriptSourceBundleFor(scriptPath) },
+          meta: { cwd: root },
+        },
+        sessionName: 's',
+        logPath: path.join(root, 'log'),
+        sessionStore,
+        invoke: async (req) => ({
+          ok: true,
+          data:
+            req.command === 'click'
+              ? { timing: { totalDurationMs: 12, internal: { ignored: true } } }
+              : {},
+        }),
+      }),
+  );
 
   assert.equal(response.ok, true);
   const events = fs

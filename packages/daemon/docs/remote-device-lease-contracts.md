@@ -17,7 +17,7 @@ Idle reap then shuts the daemon down within one more idle window.
 
 A session cannot outlive the lease under which it was opened.
 When the lease is released, expires, or its provider reports the instance ended, the daemon tears the session down under its execution locks and clears its device claim.
-Any teardown of a leased session, including `close`, finishes an active recording. A finished export at a remote temp path then belongs to the lease's tenant as a downloadable artifact, like the artifact of any `record stop` (ADR 0024 2.5).
+Any teardown of a leased session, including `close`, finishes an active recording. A daemon-owned export stays downloadable under its producing owner, as with `record stop` (ADR 0024 2.5).
 This applies even when the device no longer answers.
 A release is a tenant `lease_release` or a host `DELETE /admin/leases/<lease-id>`.
 The daemon sweeps for expired leases every second.
@@ -55,6 +55,7 @@ Nested requests record on the ledger of the outermost request, so a step reply n
 If a close finds its lease already inactive, it reports that lease as ended.
 A client never sends a release after such a request.
 If a client stores the lease id, it forgets that id when the reply names it.
+The CLI keeps the id of an ended proxy lease apart, and sends it only on `artifacts` while the connection holds no lease.
 A gateway that relays the reply reads the lease end from it.
 
 Close and lease-end teardown take the same execution locks.
@@ -100,6 +101,30 @@ An allocate that repeats the labels of a live lease without that lease's id is r
 A caller-chosen lease id on allocate must have at least 32 hex digits (128 bits). A shorter id fails with reason `LEASE_ID_TOO_SHORT`.
 Commands that ignore the session lease, such as `devices`, `session_list`, and the lease RPCs, keep their own scope.
 On a leased session, these commands do not bind the session, refresh its recording, deliver its script, renew its lease, end it, or write request events to it.
+
+Output of a request that acted under a lease belongs to that lease.
+This applies to a downloadable artifact and to a request diagnostics record.
+The daemon gives such output only to a request that sends the lease id.
+The `artifacts` RPC reads the lease id from the request. `GET /artifacts`, `GET /artifacts/<id>`, and the diagnostics route read the `x-agent-device-lease-id` header, which the proxy forwards.
+This rule applies for as long as the daemon keeps the output, also after the lease ends. The lifetime of the output does not change.
+An inventory omits an artifact of another lease.
+A download or a diagnostics read without the lease id fails with `UNAUTHORIZED`, reason `LEASE_OUTPUT_MISMATCH`, and `field: 'leaseId'`.
+A downloadable screenshot or xctrace result has its own daemon-owned path. A write to the caller's destination does not change an earlier download.
+The daemon names each request diagnostics record. The name carries the owner of the record: the lease id that the request sent, or that it sent none.
+The request id of the caller names no record. A nested request uses the parent's record only when both requests send the same lease id or both send no lease id.
+A caller that sent a lease id reads only its own records, also the record of a request that a leased session refused.
+New records are stored in the session's `request-records` directory. The diagnostics route serves legacy records only from the host-verified directory.
+A recording manifest keeps the lease that started the recording, or that no lease started it.
+`record stop` returns a completed export to a request that sends that lease id, also after the lease ended. Such a request needs no active lease.
+A recording that still runs needs a request that is admitted under that lease.
+`record stop` does not return a completed remote export whose manifest names neither.
+The daemon keeps an owner as the SHA-256 of the lease id, never as the id.
+A request diagnostics record names a lease by the first 8 hex digits of that SHA-256, never by the lease id.
+An event that the daemon writes outside a request goes to the daemon log, which only the host operator reads. It names the lease id, because the operator needs it to end a rented device.
+Output of a request that acted under no lease keeps the tenant rule.
+
+Before you restore access to a legacy diagnostics record, verify its full contents came from unleased requests and contain no lease credentials. Move the file from the session's `requests` directory to its `requests-unleased` directory. Keep its filename.
+Before you restore access to a legacy recording in the daemon session directory, verify that the producing request was unleased. The daemon refuses replay from legacy remote temp paths. Set `metadata.remoteCaptureLease` to `"unleased"` in its recording manifest.
 
 ## Admitted request work
 

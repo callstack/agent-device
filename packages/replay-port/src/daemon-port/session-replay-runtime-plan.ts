@@ -150,7 +150,7 @@ export function prepareReplayPlan(params: {
         resolved,
         metadata,
       }),
-      actionTracePath: tracePath ?? preEntrySession?.trace?.outPath,
+      actionTracePath: tracePath,
     },
   };
 }

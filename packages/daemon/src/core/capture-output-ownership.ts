@@ -5,6 +5,8 @@ type CaptureOutputOwnership = 'daemon' | 'caller';
 type CaptureOutputOwner = Readonly<{
   ownership: CaptureOutputOwnership;
   tenantId?: string;
+  /** Null records an unleased producer. Undefined leaves ownership to the request. */
+  leaseVerifier?: string | null;
 }>;
 type CaptureOutputData = DaemonResponseData & {
   [CAPTURE_OUTPUT_OWNERSHIP]?: CaptureOutputOwner;
@@ -15,8 +17,9 @@ export function withCaptureOutputOwnership(
   data: DaemonResponseData,
   ownership: CaptureOutputOwnership,
   tenantId?: string,
+  leaseVerifier?: string | null,
 ): DaemonResponseData {
-  return { ...data, [CAPTURE_OUTPUT_OWNERSHIP]: { ownership, tenantId } };
+  return { ...data, [CAPTURE_OUTPUT_OWNERSHIP]: { ownership, tenantId, leaseVerifier } };
 }
 
 export function captureOutputOwnership(
@@ -29,6 +32,11 @@ export function captureOutputOwnership(
 export function captureOutputTenantId(data: DaemonResponseData): string | undefined {
   const capture: CaptureOutputData = data;
   return capture[CAPTURE_OUTPUT_OWNERSHIP]?.tenantId;
+}
+
+export function captureOutputLeaseVerifier(data: DaemonResponseData): string | null | undefined {
+  const capture: CaptureOutputData = data;
+  return capture[CAPTURE_OUTPUT_OWNERSHIP]?.leaseVerifier;
 }
 
 const DAEMON_DELIVERED_ARTIFACT = Symbol('daemonDeliveredArtifact');

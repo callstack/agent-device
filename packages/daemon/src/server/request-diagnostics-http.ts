@@ -19,12 +19,18 @@ import http from 'node:http';
 import { AppError, normalizeError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { isSafeSessionSegment } from '@agent-device/host-kit/session-paths';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { decodeUriSegment } from './http-request-target.ts';
 import {
   isTenantAddressableSessionName,
   type TenantSessionNamespace,
 } from '../core/session-tenant-scope.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
+import {
+  diagnosticsRecordOwner,
+  leasedOutputRefusal,
+  requestHoldsOutputLease,
+} from '../resources/artifact-tracking.ts';
 
 const REQUEST_DIAGNOSTICS_CONTENT_TYPE = 'application/x-ndjson';
 
@@ -59,7 +65,10 @@ export type RequestDiagnosticsHttpOptions = {
    * owns the session store, so this module never builds a session artifact path
    * of its own (AGENTS.md, "Session artifact paths come from session-store").
    */
-  resolveRecordPath: (ref: DiagnosticsRecordRef) => string;
+  resolveRecordPath: (
+    ref: DiagnosticsRecordRef,
+    directory: 'request-records' | 'requests-unleased',
+  ) => string;
 };
 
 export function tryHandleRequestDiagnosticsHttpRoute(
@@ -134,21 +143,22 @@ async function handleRequestDiagnostics(
       return;
     }
 
-    const recordPath = resolveRecordPath(ref);
-    const stats = await statRecord(recordPath);
+    const owner = diagnosticsRecordOwner(ref.requestId);
+    let recordPath = resolveRecordPath(ref, 'request-records');
+    let stats = owner === null ? null : await statRecord(recordPath);
+    if (stats && owner !== null) {
+      const leaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
+      if (!requestHoldsOutputLease(owner, typeof leaseId === 'string' ? leaseId : undefined)) {
+        sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
+        return;
+      }
+    } else {
+      // Only the host can attest a legacy record by moving it out of the old request-id namespace.
+      recordPath = resolveRecordPath(ref, 'requests-unleased');
+      stats = await statRecord(recordPath);
+    }
     if (!stats) {
-      sendRestJsonError(
-        res,
-        normalizeError(
-          new AppError(
-            'SESSION_NOT_FOUND',
-            `No diagnostics record for request ${ref.requestId} in session ${ref.session}`,
-            {
-              hint: 'The daemon keeps a request record only for the session it ran in; re-run the command against this daemon to produce a fresh one.',
-            },
-          ),
-        ),
-      );
+      sendRestJsonError(res, normalizeError(missingRecordError(ref)));
       return;
     }
 
@@ -172,4 +182,14 @@ async function statRecord(recordPath: string): Promise<fs.Stats | null> {
   } catch {
     return null;
   }
+}
+
+function missingRecordError(ref: { session: string; requestId: string }): AppError {
+  return new AppError(
+    'SESSION_NOT_FOUND',
+    `No diagnostics record for request ${ref.requestId} in session ${ref.session}`,
+    {
+      hint: 'The daemon keeps a request record only for the session it ran in; re-run the command against this daemon to produce a fresh one.',
+    },
+  );
 }
