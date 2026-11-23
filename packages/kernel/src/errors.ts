@@ -936,3 +936,15 @@ export function discloseUnclassifiedDispatch<Failure extends AppError>(
   if (error.details?.dispatched !== undefined) return error;
   return discloseDispatch(error, dispatched);
 }
+
+export const PROVIDER_CREDENTIAL_REASONS = {
+  // The host lacks the credential the provider requires to authenticate the request.
+  missing: { reason: 'missing_provider_credentials' },
+} as const satisfies ReasonTable<'provider credentials'>;
+
+export const PLUGIN_INSTALLATION_REASONS = {
+  // A command requires a plugin that is absent.
+  notInstalled: { reason: 'plugin-not-installed', commands: ['connect', 'replay', 'test'] },
+  // The selected plugin cannot supply the requested provider.
+  unavailable: { reason: 'plugin-unavailable', commands: ['connect'] },
+} as const satisfies ReasonTable<'plugins'>;

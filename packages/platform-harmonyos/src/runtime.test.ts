@@ -390,12 +390,19 @@ function openInputFixture(overrides: Partial<OpenApplicationInput> = {}): OpenAp
 
 test('openApplication verifies the launched bundle in the foreground after the direct dispatch', async () => {
   const hdc = createHarmonyHdcRunnerStub();
-  answerHarmonyShell(hdc, () => 'Mission ID #76\n\tstate #FOREGROUND\n\tmission name #[#com.example.harmony:entry:MainAbility]');
+  answerHarmonyShell(
+    hdc,
+    () =>
+      'Mission ID #76\n\tstate #FOREGROUND\n\tmission name #[#com.example.harmony:entry:MainAbility]',
+  );
   const interactor = { open: vi.fn(async () => undefined) };
-  const binding = await createHarmonyPlatformRuntime({
-    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
-    localInteractors: { resolve: async () => interactor },
-  } as unknown as PlatformRuntimeHost, createHarmonyToolboxWith(createHarmonyHostStub().toolbox, { hdc })).bind({
+  const binding = await createHarmonyPlatformRuntime(
+    {
+      processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+      localInteractors: { resolve: async () => interactor },
+    } as unknown as PlatformRuntimeHost,
+    createHarmonyToolboxWith(createHarmonyHostStub().toolbox, { hdc }),
+  ).bind({
     device,
     intent: { kind: 'ordinary' },
     scope: {
@@ -412,7 +419,7 @@ test('openApplication verifies the launched bundle in the foreground after the d
   expect(interactor.open).toHaveBeenCalledOnce();
   // A confirmed foreground reads as an ordinary open: no verification fact rides the outcome.
   const foregroundReads = hdc.calls.filter(
-    ({args}) => args.includes('dump') && args.includes('-l'),
+    ({ args }) => args.includes('dump') && args.includes('-l'),
   );
   expect(foregroundReads.length).toBeGreaterThanOrEqual(1);
   expect(outcome.timing.foregroundVerification).toBeUndefined();
@@ -421,12 +428,19 @@ test('openApplication verifies the launched bundle in the foreground after the d
 test('openApplication fails when --foreground demands the foreground and the launch never surfaces', async () => {
   vi.useFakeTimers();
   const hdc = createHarmonyHdcRunnerStub();
-  answerHarmonyShell(hdc, () => 'Mission ID #76\n\tstate #FOREGROUND\n\tmission name #[#com.ohos.launcher:entry:EntryAbility]');
+  answerHarmonyShell(
+    hdc,
+    () =>
+      'Mission ID #76\n\tstate #FOREGROUND\n\tmission name #[#com.ohos.launcher:entry:EntryAbility]',
+  );
   const interactor = { open: vi.fn(async () => undefined) };
-  const binding = await createHarmonyPlatformRuntime({
-    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
-    localInteractors: { resolve: async () => interactor },
-  } as unknown as PlatformRuntimeHost, createHarmonyToolboxWith(createHarmonyHostStub().toolbox, { hdc })).bind({
+  const binding = await createHarmonyPlatformRuntime(
+    {
+      processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+      localInteractors: { resolve: async () => interactor },
+    } as unknown as PlatformRuntimeHost,
+    createHarmonyToolboxWith(createHarmonyHostStub().toolbox, { hdc }),
+  ).bind({
     device,
     intent: { kind: 'ordinary' },
     scope: {

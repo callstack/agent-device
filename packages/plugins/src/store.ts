@@ -1,4 +1,4 @@
-import { PLUGIN_REASONS } from './reasons.ts';
+import { PLUGIN_REASONS } from './contract.ts';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';

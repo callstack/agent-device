@@ -86,7 +86,7 @@ const HELP_TOPICS = {
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',
     body: `agent-device help workflow
 
-Command shapes, refs, selectors, waits, recovery, and platform limits for open -> snapshot -i -> settle -> verify -> close loop.
+Command shapes, refs, selectors, waits, recovery for the open -> snapshot -i -> settle -> verify -> close loop.
 
 Command shape:
   Command lines only -- no prose, numbering, fences, pipes, or grep/head/tail/jq; raw output carries refs/hints for the next step. Order: subcommand, positionals, flags: agent-device open com.example.app --session checkout --platform android --relaunch

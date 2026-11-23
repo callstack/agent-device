@@ -990,14 +990,8 @@ function buildResponseCost(
 ): ResponseCost {
   const cost: ResponseCost = {
     wallClockMs: Date.now() - startedAt,
-    // Counts this request's real runner round-trips from the flush-surviving
-    // diagnostics phase tally. Reads 0 when no runner was hit (e.g. a no-op or a
-    // command served entirely from the daemon). Must run inside the request's
-    // diagnostics scope (see `applyAgentCostGrafts` call site).
     runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
   };
-  // nodeCount reads the ORIGINAL node tree (the digest view may have already
-  // collapsed `data.nodes`), so the count stays accurate.
   const nodes = originalData?.nodes;
   if (Array.isArray(nodes)) cost.nodeCount = nodes.length;
   return cost;

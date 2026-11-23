@@ -332,7 +332,8 @@ function claimSessionRecord(options: { stateDir: string; session: string }): {
       'The saved connection belongs to a different session.',
     );
   }
-  if (isRemoteConnectionState(file.record)) return { statePath, state: normalizeStoredProvider(file.record) };
+  if (isRemoteConnectionState(file.record))
+    return { statePath, state: normalizeStoredProvider(file.record) };
   warnInvalidRecord(options.session, statePath);
   removeRemoteConnectionStateFile(options, statePath);
   return { statePath, state: null };
