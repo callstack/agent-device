@@ -155,8 +155,8 @@ export type RequestExecutionScope = AsyncDisposable & {
   runnerLogPath: string;
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
-  /** For a request without the session lock: runs `task` under it, unless a request holds it. */
-  tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
+  /** Takes an available session lock and runs `task` if the admitted lifetime is still live. */
+  tryRunUnderSessionLock(ref: SessionRef, task: () => Promise<void>): Promise<void>;
   bindJournal(req: DaemonRequest, ref: SessionRef | undefined): DaemonRequest;
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
@@ -368,10 +368,12 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
       retainDeviceExecutionLock: async (deviceId) =>
         await requestExecutionLocks.retainDevice(deviceId),
-      tryRunUnderSessionLock: async (task) => {
+      tryRunUnderSessionLock: async (ref, task) => {
         const key = sessionExecutionLockKey(sessionName);
-        if (!executionLocks.has(key))
-          await withRequestExecutionLockKeys(executionLocks, [key], task);
+        if (executionLocks.has(key)) return;
+        await withRequestExecutionLockKeys(executionLocks, [key], async () => {
+          if (sessionStore.resolveCurrent(ref)) await task();
+        });
       },
       bindDevice: runtimeBindings.bindDevice,
       inspectFacts: runtimeBindings.inspectFacts,
@@ -644,6 +646,22 @@ function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
   };
 }
 
+function preparedSessionRef(
+  ref: SessionRef | undefined,
+  scope: RequestExecutionScope,
+  sessionStore: SessionStore,
+  canDetach: boolean,
+): SessionRef | undefined {
+  if (!ref) return undefined;
+  scope.throwIfCanceled();
+  if (canDetach) {
+    if (!sessionStore.resolveCurrent(ref)) return undefined;
+  } else {
+    sessionStore.requireCurrent(ref);
+  }
+  return sessionStore.refresh(ref);
+}
+
 export async function prepareLockedRequestScope(params: {
   scope: RequestExecutionScope;
   sessionStore: SessionStore;
@@ -652,30 +670,21 @@ export async function prepareLockedRequestScope(params: {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
-  const seededRef = scope.admittedRef;
-  if (scope.command === 'open' && seededRef) assertSameOpenOwner(scope.req, seededRef.session);
+  const ref = scope.admittedRef;
+  if (scope.command === 'open' && ref) assertSameOpenOwner(scope.req, ref.session);
   const refreshHealth = scope.command !== 'events';
-  if (refreshHealth && seededRef && !shouldLockSessionExecution(scope.command)) {
-    // Refresh only while holding the session lock. Yield to any request that already holds it.
-    await scope.tryRunUnderSessionLock(async () => {
-      await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
+  const canDetach = refreshHealth && !shouldLockSessionExecution(scope.command);
+  if (ref && canDetach) {
+    await scope.tryRunUnderSessionLock(ref, async () => {
+      await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
     });
-  } else if (
-    refreshHealth &&
-    seededRef &&
-    scope.command !== 'batch' &&
-    scope.command !== 'replay'
-  ) {
+  } else if (ref && refreshHealth && scope.command !== 'batch' && scope.command !== 'replay') {
     // A composite's resource health is checked by its admitted steps; the outer read can invalidate a durable recording.
-    await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
-  }
-  if (seededRef) {
-    scope.throwIfCanceled();
-    sessionStore.requireCurrent(seededRef);
+    await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
   }
   const binding = prepareLockedRequestBinding({
     req: scope.req,
-    existingRef: seededRef ? sessionStore.refresh(seededRef) : undefined,
+    existingRef: preparedSessionRef(ref, scope, sessionStore, canDetach),
   });
   const lockedReq = scope.bindJournal(binding.req, binding.existingRef);
   // `scope.sessionName` is the resolved store key, so `existingRef` carries the address every
@@ -740,7 +749,7 @@ export async function prepareLockedRequestScope(params: {
         ({
           ...contextFromFlags(flags, appBundleId, traceLogPath),
           // Handlers may update surface during the request, so read the current session state.
-          surface: seededRef ? sessionStore.resolveCurrent(seededRef)?.surface : undefined,
+          surface: existingRef ? sessionStore.resolveCurrent(existingRef)?.surface : undefined,
         }) satisfies DaemonCommandContext,
     },
   };

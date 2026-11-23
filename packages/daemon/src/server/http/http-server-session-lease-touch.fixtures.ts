@@ -48,6 +48,14 @@ export type RpcBody = {
   };
 };
 
+export function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 export async function startDaemon(daemonPolicy?: DaemonPolicy) {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-session-lease-touch-');

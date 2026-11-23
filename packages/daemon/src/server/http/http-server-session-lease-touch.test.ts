@@ -17,6 +17,7 @@ import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import {
+  deferred,
   startDaemon,
   TENANT,
   SESSION,
@@ -332,7 +333,7 @@ test('devices still checks the recording of a session that holds no lease', asyn
   );
 });
 
-test('recording-health preparation cannot switch to a replacement session', async () => {
+test('devices returns inventory detached when recording-health preparation loses its session', async () => {
   const daemon = world;
   if (!daemon) return;
   const { sessionName, sessionStore, observeRunnerSession, send } = daemon;
@@ -366,7 +367,11 @@ test('recording-health preparation cannot switch to a replacement session', asyn
     resume.resolve();
   }
 
-  expect((await devices).error?.data?.details?.reason).toBe('session_lifetime_ended');
+  const inventory = await devices;
+  expect(inventory.result, JSON.stringify(inventory)).toMatchObject({
+    ok: true,
+    data: { devices: [expect.objectContaining({ id: 'sim-1' })] },
+  });
   const events = await send('events', [], {});
   expect(events.result?.ok).toBe(true);
   expect(events.result?.data?.events).toEqual([]);
@@ -435,14 +440,6 @@ test('events shows the start and failed finish when an invalidated recording blo
     },
   ]);
 });
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 test.each([
   { scenario: 'leased', leased: true, openBeforeDispatch: false },
