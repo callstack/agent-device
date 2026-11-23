@@ -3,7 +3,7 @@ import type { PreresolvedInteractionTarget } from '@agent-device/contracts/inter
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { WebSessionIdentity } from '@agent-device/kernel/device';
+import type { DeviceInfo, WebSessionIdentity } from '@agent-device/kernel/device';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
 import type { EndedLeaseLedger } from './request-ended-leases.ts';
@@ -50,6 +50,7 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
   sessionAuthorityActive?: () => boolean;
+  snapshotObservation?: Readonly<{ device: DeviceInfo; assertCurrent(): void }>;
   onLifetimePublished?: (address: string, lifetime: object) => void;
   onSessionPublished?: (commitScript: (response: DaemonResponse) => DaemonResponse) => void;
   onJournalPublished?: (journal: BoundJournal) => void;

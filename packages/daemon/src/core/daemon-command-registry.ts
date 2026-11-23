@@ -88,6 +88,10 @@ export function shouldLockSessionExecution(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.sessionExecutionLockExempt !== true;
 }
 
+export function isSessionObservationRequest(req: DaemonRequest): boolean {
+  return getDaemonCommandDescriptor(req.command)?.sessionObservation?.(req) === true;
+}
+
 export function canRunReplayScopedAction(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.replayScopedAction === true;
 }

@@ -680,6 +680,49 @@ test('MCP command tool executor pins refs for runCommand while keeping rendered 
   assert.doesNotMatch(result.content[0]?.text ?? '', /~s500012/);
 });
 
+test('MCP preserves pins for Android observations and merges refs from iOS observations', async () => {
+  const calls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      if (name === 'snapshot') {
+        if (input.observeOnly === true && input.platform === 'android') {
+          return { nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Continue' }] };
+        }
+        return { nodes: [{ ref: 'e2' }], refsGeneration: 9 };
+      }
+      return { message: 'Tapped @e2 (10, 20)' };
+    },
+  });
+
+  await executor.execute('snapshot', { session: 'android-demo' });
+  const androidObservation = await executor.execute('snapshot', {
+    session: 'android-demo',
+    platform: 'android',
+    serial: 'emulator-5554',
+    observeOnly: true,
+  });
+  assert.equal(androidObservation.isError, false);
+  await executor.execute('press', { session: 'android-demo', ref: '@e2' });
+  assert.deepEqual(calls[2], {
+    name: 'press',
+    input: { session: 'android-demo', ref: '@e2~s9' },
+  });
+
+  const iosObservation = await executor.execute('snapshot', {
+    session: 'ios-demo',
+    platform: 'ios',
+    observeOnly: true,
+  });
+  assert.equal(iosObservation.isError, false);
+  await executor.execute('press', { session: 'ios-demo', ref: '@e2' });
+  assert.deepEqual(calls[4], {
+    name: 'press',
+    input: { session: 'ios-demo', ref: '@e2~s9' },
+  });
+});
+
 // --- ADR 0012 migration step 2: replay divergence is a ref-issuing error ---
 
 function replayDivergenceError(): AppError {

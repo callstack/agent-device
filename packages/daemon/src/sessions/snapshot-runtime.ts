@@ -33,6 +33,11 @@ export async function dispatchSnapshotViaRuntime(
         // The session-resolved scope wins over the raw flag.
         scope: snapshotScope,
       });
+      if (request.internal?.snapshotObservation) {
+        const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
+        const nodes = publicNodes.map(({ ref: _ref, ...node }) => node);
+        return { data: copySnapshotClickabilityEvidence(result, { ...result, nodes }) };
+      }
       // This request's own capture, read here rather than off the stored snapshot: a snapshot that
       // failed before capturing must not inherit the previous command's repair (#2682).
       if (result.targetActivation) captureProof.targetActivation ??= result.targetActivation;

@@ -32,6 +32,7 @@ import type {
 import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from '../core/session-store.ts';
+import type { SessionState } from '../core/session-state.ts';
 import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
 import {
   countDiagnosticEventsByPhase,
@@ -358,7 +359,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     scope: RequestExecutionScope | undefined,
     response: DaemonResponse,
   ): DaemonResponse {
-    const session = scope ? sessionStore.lookup(scope.sessionName)?.session : undefined;
+    let session: SessionState | undefined;
+    if (scope && scope.req.internal?.snapshotObservation === undefined) {
+      session = sessionStore.lookup(scope.sessionName)?.session;
+    }
     return isConfinedToAppLease(scope?.req ?? req, leaseRegistry, session, daemonPolicy)
       ? redactMacOsAppLeaseResponse(req.command, response)
       : response;

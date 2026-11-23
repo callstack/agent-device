@@ -28,7 +28,11 @@ import {
   requestCwd,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
-import { resolveCallerScopeRoot, resolveSessionScope } from '../sessions/session-routing.ts';
+import {
+  resolveCallerScopeRoot,
+  resolvePublicSessionName,
+  resolveSessionScope,
+} from '../sessions/session-routing.ts';
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertProviderLeaseRequestNamesSession,
@@ -50,7 +54,10 @@ import {
   prepareLockedRequestBinding,
   resolveBoundedClaimDevice,
   resolveRequestExecutionLockPlan,
+  resolveDetachedObservationDevice,
+  admitSnapshotObservation,
   sessionExecutionLockKey,
+  existingSessionExecutionLockKeys,
   type RequestExecutionLockPlan,
 } from './request-binding.ts';
 import {
@@ -82,6 +89,7 @@ import {
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
+  isSessionObservationRequest,
 } from '../core/daemon-command-registry.ts';
 import {
   shouldRecordEventForRequest,
@@ -232,7 +240,13 @@ export async function createRequestExecutionScope(params: {
   const startedAtMs = Date.now();
   const attachesToSession = shouldLockSessionExecution(command);
   const readsSessionLease = !ignoresSessionLease(command);
-  const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
+  const detachedObservationDevice = await resolveDetachedObservationDevice(
+    scopedReq,
+    params.host.env,
+  );
+  const sessionName = detachedObservationDevice
+    ? resolvePublicSessionName(scopedReq)
+    : resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({
     sessionDir,
@@ -282,7 +296,9 @@ export async function createRequestExecutionScope(params: {
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     const readAddressed = () =>
-      sessionStore.lookup(sessionName) ?? params.leaseSessionEnd?.closingAt(sessionName);
+      detachedObservationDevice
+        ? undefined
+        : (sessionStore.lookup(sessionName) ?? params.leaseSessionEnd?.closingAt(sessionName));
     const preflightRef = readAddressed();
     const preflightSession = preflightRef?.session;
     assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
@@ -403,10 +419,13 @@ export async function createRequestExecutionScope(params: {
       claimRecoveryGateway: params.claimRecoveryGateway,
       trackClaimRecoveryDisposal: params.trackClaimRecoveryDisposal,
       sessionStore,
+      snapshotObservation: () => scopedReq.internal?.snapshotObservation,
     });
 
     let bindingCleanup: Promise<void> | undefined;
+    let observationActive = true;
     const disposeBindings = (): Promise<void> => {
+      observationActive = false;
       bindingCleanup ??= (async () => {
         try {
           await runtimeBindings[Symbol.asyncDispose]();
@@ -487,8 +506,12 @@ export async function createRequestExecutionScope(params: {
         const admission = await resolveExpiryAdmission(pinned, pending);
         return admission.kind === 'admitted' ? { kind: 'replan' } : admission;
       }
-      const plan =
-        expired || !attachesToSession
+      const plan = detachedObservationDevice
+        ? {
+            keys: existingSessionExecutionLockKeys(sessionName, detachedObservationDevice.id),
+            deviceId: detachedObservationDevice.id,
+          }
+        : expired || !attachesToSession
           ? { keys: expired ? [sessionKey] : [], deviceId: undefined }
           : resolveRequestExecutionLockPlan({
               req: scopedReq,
@@ -497,14 +520,16 @@ export async function createRequestExecutionScope(params: {
               env: sessionStore.host.env,
             });
       const lockPlan = plan instanceof Promise ? await plan : plan;
-      const openWait = beginOpenDeviceWait({
-        req: scopedReq,
-        budgetMs:
-          openWaitBudgetMs === undefined ? undefined : Math.max(0, waitDeadline - Date.now()),
-        sessionName,
-        sessionStore,
-        deviceId: lockPlan.deviceId,
-      });
+      const openWait = detachedObservationDevice
+        ? undefined
+        : beginOpenDeviceWait({
+            req: scopedReq,
+            budgetMs:
+              openWaitBudgetMs === undefined ? undefined : Math.max(0, waitDeadline - Date.now()),
+            sessionName,
+            sessionStore,
+            deviceId: lockPlan.deviceId,
+          });
       if (openWait) await openWait.waitForDeviceOutsideLocks();
       if (settlementFor(pinned)) return { kind: 'replan' };
       requestExecutionLocks = createRequestExecutionLocks({
@@ -556,6 +581,20 @@ export async function createRequestExecutionScope(params: {
       recordFinished,
       runAdmitted: async (task, admitted) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
+        const runObservation = async (device: DeviceInfo) => {
+          scopedReq = admitSnapshotObservation({
+            req: scopedReq,
+            originalReq: unscopedReq,
+            device,
+            sessionStore,
+            leaseRegistry,
+            admission: { ...params, env: params.host.env },
+            active: () => observationActive,
+          });
+          scope.req = scopedReq;
+          return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+        };
+        if (detachedObservationDevice) return await runObservation(detachedObservationDevice);
         const boundedStep =
           command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
         const addressed = admitted ? admitted.ref : await readNestedAddress();
@@ -564,6 +603,12 @@ export async function createRequestExecutionScope(params: {
         let admissionCompleted = false;
         try {
           const existingRef = resolveRequestSessionRef(scopedReq, addressed);
+          if (
+            isSessionObservationRequest(scopedReq) &&
+            existingRef?.session.device.platform === 'android'
+          ) {
+            return await runObservation(existingRef.session.device);
+          }
           const session = existingRef?.session;
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
@@ -647,6 +692,7 @@ export async function createRequestExecutionScope(params: {
           if (
             admissionCompleted &&
             attachesToSession &&
+            scopedReq.internal?.snapshotObservation === undefined &&
             !isRequestCanceled(scopedReq.meta?.requestId)
           ) {
             sessionStore.noteSessionActivity(sessionName);
@@ -703,6 +749,7 @@ function createRequestDeviceAccess(params: {
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   sessionStore: SessionStore;
+  snapshotObservation: () => NonNullable<DaemonRequest['internal']>['snapshotObservation'];
 }): {
   claimAdmission: DeviceClaimAdmission;
   runtimeBindings: RequestRuntimeBindings;
@@ -743,7 +790,13 @@ function createRequestDeviceAccess(params: {
               if (daemonPolicy) {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }
-              if (claimPolicy === 'require-owner' && !params.sessionStore.get(params.sessionName)) {
+              const observation = params.snapshotObservation();
+              if (observation) observation.assertCurrent();
+              if (
+                observation === undefined &&
+                claimPolicy === 'require-owner' &&
+                !params.sessionStore.get(params.sessionName)
+              ) {
                 const refusal = findSessionDeviceConflict({
                   req: params.req,
                   device,

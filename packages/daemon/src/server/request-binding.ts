@@ -2,6 +2,7 @@ import {
   ignoresSessionLease,
   shouldLockSessionExecution,
   resolveCommandAndroidAvdSelection,
+  isSessionObservationRequest,
 } from '../core/daemon-command-registry.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
@@ -19,6 +20,65 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { remoteScriptVersionDelivery } from '../core/session-script-publication-capability.ts';
+import {
+  assertRequestLeaseAdmission,
+  assertRequestTenantAdmission,
+  assertProviderLeaseRequestNamesSession,
+} from '../sessions/request-admission.ts';
+import { createSessionVisibilityPredicate } from '../sessions/session-routing.ts';
+import type { LeaseRegistry } from '../resources/lease-registry.ts';
+
+export function admitSnapshotObservation(params: {
+  req: DaemonRequest;
+  originalReq: DaemonRequest;
+  device: DeviceInfo;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  admission: Parameters<typeof assertRequestLeaseAdmission>[3];
+  active: () => boolean;
+}): DaemonRequest {
+  const { req, device } = params;
+  if (req.flags?.snapshotDiff) {
+    throw new AppError('INVALID_ARGS', 'Android observe-only snapshots cannot use --diff.', {
+      reason: 'android_observe_only_snapshot_options',
+    });
+  }
+  let admittedLease: ReturnType<typeof assertRequestLeaseAdmission>;
+  const visible = createSessionVisibilityPredicate(req);
+  const coordinator = new SessionCoordinator(params.sessionStore);
+  const observation = coordinator.observeDevice(req, device, params.active, (session) => {
+    assertRequestTenantAdmission(params.originalReq, session);
+    assertProviderLeaseRequestNamesSession(req, session);
+    if (session && !visible(session)) {
+      throw new AppError(
+        'UNAUTHORIZED',
+        'The Android snapshot helper belongs to another session scope.',
+        {
+          reason: 'snapshot_observation_owner_mismatch',
+        },
+      );
+    }
+    admittedLease = assertRequestLeaseAdmission(
+      req,
+      params.leaseRegistry,
+      session,
+      params.admission,
+    );
+  });
+  return { ...req, internal: { ...req.internal, admittedLease, snapshotObservation: observation } };
+}
+
+export async function resolveDetachedObservationDevice(
+  req: DaemonRequest,
+  env: EnvMap,
+): Promise<DeviceInfo | undefined> {
+  if (isSessionObservationRequest(req) && req.flags?.serial) {
+    const { resolveRequestTargetDevice } = await import('../core/request-device-resolution.ts');
+    const device = await resolveRequestTargetDevice(req, { env });
+    if (device.platform === 'android') return device;
+  }
+  return undefined;
+}
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 
@@ -238,6 +298,7 @@ export async function withSessionScriptPublication(
   { req, existingRef }: LockedRequestBinding,
   dispatch: (req: DaemonRequest) => Promise<DaemonResponse>,
 ): Promise<DaemonResponse> {
+  if (req.internal?.snapshotObservation) return await dispatch(req);
   if (!shouldLockSessionExecution(req.command) || ignoresSessionLease(req.command))
     return await dispatch(req);
 

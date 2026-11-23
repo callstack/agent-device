@@ -29,6 +29,7 @@ import type { SessionRef, SessionState } from './session-state.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
+  requireRuntimeFacts,
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
@@ -182,24 +183,40 @@ export async function resolveBoundSnapshotCaptureRuntime(
   command: 'snapshot' | 'diff' | 'audit',
 ): Promise<ResolvedSnapshotCaptureRuntime> {
   const { req, sessionName, sessionStore } = params;
-  const { ref, session, device } = await resolveSessionDevice(
-    sessionStore,
-    sessionName,
-    req,
-    params.sessionRef,
-  );
+  const observation = req.internal?.snapshotObservation;
+  observation?.assertCurrent();
+  const { ref, session, device } = observation
+    ? { ref: undefined, session: undefined, device: observation.device }
+    : await resolveSessionDevice(sessionStore, sessionName, req, params.sessionRef);
   if (
     req.flags?.snapshotObserveOnly === true &&
-    (command !== 'snapshot' || !isHandheldAppleDevice(device) || !session?.appBundleId)
+    (command !== 'snapshot' ||
+      (observation === undefined && (!isHandheldAppleDevice(device) || !session?.appBundleId)))
   ) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
-      'observe-only snapshot requires an iOS or iPadOS app session.',
+      'observe-only snapshot requires admitted Android ADB observation or an iOS or iPadOS app session.',
     );
   }
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return { ok: false, response: resolvedScope };
 
+  const inspectFacts = observation
+    ? async (selected: SessionState['device']) => {
+        const inspect = requireRuntimeFacts(params.inspectFacts);
+        const facts = await inspect(selected);
+        if (facts.device.providerMode === 'provider-runtime') {
+          throw new AppError(
+            'UNSUPPORTED_OPERATION',
+            'Android observation requires an ADB device.',
+            {
+              reason: 'android_observe_only_adb_required',
+            },
+          );
+        }
+        return facts;
+      }
+    : params.inspectFacts;
   const bound = await admitAndBindSnapshotCapture({
     command,
     device,
@@ -209,7 +226,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
       audit: command === 'audit',
       hasActiveApp: session?.appBundleId !== undefined,
     }),
-    inspectFacts: params.inspectFacts,
+    inspectFacts,
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     readinessScope: session ? undefined : createPlatformRequestScope(req),
@@ -217,7 +234,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
   if (!bound.ok) return bound;
 
   const captureInput = buildRuntimeCaptureInput({
-    flags: req.flags,
+    flags: observation ? { ...req.flags, snapshotObserveOnly: undefined } : req.flags,
     logPath: params.logPath,
     meta: req.meta,
     session,
@@ -230,15 +247,19 @@ export async function resolveBoundSnapshotCaptureRuntime(
     device,
     snapshotScope: resolvedScope.scope,
     ...(bound.accessibilityAudit ? { accessibilityAudit: bound.accessibilityAudit } : {}),
-    captureSnapshot: async () =>
-      await bound.capture(
+    captureSnapshot: async () => {
+      observation?.assertCurrent();
+      const captured = await bound.capture(
         canUseShortAndroidSnapshotIdleWait(session)
           ? {
               ...captureInput,
               options: { ...captureInput.options, captureBasis: 'unchanged-since-observation' },
             }
           : captureInput,
-      ),
+      );
+      observation?.assertCurrent();
+      return captured;
+    },
   });
 }
 

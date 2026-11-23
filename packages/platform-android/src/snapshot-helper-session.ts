@@ -61,6 +61,7 @@ export async function captureFromAndroidSnapshotHelperSession(
       },
     };
   } catch (error) {
+    if (options.ownsHelperSession === false) throw error;
     // Read before the retirement below, which ends the process: a process that is still running
     // has no cause of its own to report, and the retirement never waits for one.
     const instrumentation = session.processRecord.current();

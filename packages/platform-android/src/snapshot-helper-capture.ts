@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import {
   androidCaptureFailureReasonDetail,
@@ -58,6 +58,26 @@ export type AndroidSnapshotHelperResolvedCaptureOptions = {
   runner: string;
   emitChunks?: boolean;
 };
+
+export function formatAndroidSnapshotHelperFailureReason(error: unknown): string {
+  const normalized = normalizeError(error);
+  const helperMessage = readHelperMessage(normalized.details?.helper);
+  if (helperMessage && helperMessage !== normalized.message) {
+    return `${normalized.message}: ${helperMessage}`;
+  }
+  if (helperMessage) return helperMessage;
+  // The cause line comes from the same diagnostic the details carry: a helper stream can hold
+  // snapshot text, so an unfiltered line must not become the reason (#4026).
+  const stderr = readAndroidHelperStderrDiagnostic(normalized.details?.stderr)?.stderr;
+  const firstLine = stderr?.split('\n').find((line) => line !== '');
+  return firstLine ? `${normalized.message}: ${firstLine}` : normalized.message;
+}
+
+function readHelperMessage(helper: unknown): string | undefined {
+  if (!helper || typeof helper !== 'object' || !('message' in helper)) return undefined;
+  const message = String(helper.message).trim();
+  return message && message !== 'null' ? message : undefined;
+}
 
 export async function captureAndroidSnapshotWithHelper(
   options: AndroidSnapshotHelperCaptureOptions,

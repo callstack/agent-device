@@ -826,7 +826,7 @@ agent-device snapshot [--diff] [-i] [--depth, -d <depth>] [--scope, -s <scope>] 
 | `--record` | Force-record this action into a repair-armed heal; per-invocation only, the retired config key "record" no longer opts in (mutually exclusive with --no-record) |
 | `-i` | Snapshot: interactive elements only |
 | `--actions` | Snapshot: name the affordances merged inside an element (iOS sim); not directly invokable — reach them via the detail screen, labeled children, or coordinates |
-| `--observe-only` | Snapshot: observe the iOS session app without activation or foreground repair |
+| `--observe-only` | Snapshot: Android geometry without refs or session; iOS refs without foreground repair |
 | `--force-full` | Snapshot: re-emit the full tree even when unchanged |
 
 Also accepts: [common options](#common-options): `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
@@ -866,6 +866,7 @@ agent-device get attrs @e1
 ```
 
 
+- `--observe-only` on Android ADB returns geometry without action refs or `refsGeneration`, preserves the session baseline and existing refs, and publishes no session. On local iOS/iPadOS, it issues refs for the existing session while refusing activation or foreground repair. See [Observe-only snapshots](/docs/snapshots#android-observe-only-snapshots).
 - `--raw` returns the full provider tree, including offscreen nodes and structural wrappers. See [iOS capture behavior](/docs/snapshots#ios-capture-behavior) and [Android capture behavior](/docs/snapshots#android-capture-behavior).
 - A source checkout must run `pnpm build:android` before Android verification, because Android snapshots install a bundled helper.
 - `truncated: true` means the capture hit a backend node limit and the last elements are missing; see [Truncated captures](/docs/snapshots#truncated-captures).

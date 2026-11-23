@@ -201,6 +201,19 @@ async function resolveAndroidSnapshotHelperSession(params: {
     });
     return undefined;
   }
+  const live = sessions().get(params.deviceKey);
+  if (
+    params.options.ownsHelperSession === false &&
+    (live === undefined || isReusableAndroidSnapshotHelperSession(live, params.identity) === false)
+  ) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'The active Android helper belongs to another capture identity.',
+      {
+        reason: 'android-snapshot-helper-ownership-mismatch',
+      },
+    );
+  }
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
   const existing = sessions().get(params.deviceKey);
   const session = existing ?? (await tryStartAndroidSnapshotHelperSession(params));

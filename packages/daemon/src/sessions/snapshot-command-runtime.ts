@@ -156,15 +156,17 @@ async function createSnapshotRuntime(params: {
   accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
 }) {
   const { req, sessionName, logPath, sessionStore, session, device, snapshotScope } = params;
-  const slot = params.ref
-    ? undefined
-    : new SessionCoordinator(sessionStore).reserve(req, sessionName);
+  const slot =
+    params.ref || req.internal?.snapshotObservation
+      ? undefined
+      : new SessionCoordinator(sessionStore).reserve(req, sessionName);
   const sessions = createDaemonRuntimeSessionStore({
     sessionName,
     sessionStore,
     ref: params.ref,
     recordOptions: { includeSnapshot: true },
     setRecord: (record, current, ref) => {
+      if (req.internal?.snapshotObservation) return;
       if (!ref) slot!.assertPublishable();
       assertSessionAuthorityActive(req);
       const snapshotRecord = assertSnapshotSessionRecord(record);

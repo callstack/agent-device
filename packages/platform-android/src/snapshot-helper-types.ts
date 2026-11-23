@@ -96,6 +96,8 @@ export type AndroidSnapshotHelperCaptureOptions = {
   maxNodes?: number;
   emitChunks?: boolean;
   idleWait?: 'full' | 'short' | 'none';
+  /** A read that reuses another caller's helper cannot retire or replace that session. */
+  ownsHelperSession?: boolean;
 };
 
 export type AndroidSnapshotHelperMetadata = {
