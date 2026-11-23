@@ -49,7 +49,7 @@ export function limrunAppDeploymentFacts(
     deployMaterializedApp: deployment,
     uninstallApp: deployment,
     sendPushNotification:
-      device.platform === 'apple'
+      device.appleOs === 'ios'
         ? deployment
         : sessionActive
           ? pushUnavailable
@@ -63,7 +63,8 @@ export function createLimrunAppDeploymentOperations(
   signal: AbortSignal,
   operationDrain?: LimrunRequestOperationDrain,
 ): Partial<PlatformRuntimeOperations> {
-  if (!limrunAppDeploymentFacts(options, device).deployApp.available) return {};
+  const facts = limrunAppDeploymentFacts(options, device);
+  if (!facts.deployApp.available) return {};
   const bind = options.bindDeployment!;
   const load = async () => {
     signal.throwIfAborted();
@@ -89,7 +90,7 @@ export function createLimrunAppDeploymentOperations(
     };
   };
   return {
-    ...(device.platform === 'apple'
+    ...(facts.sendPushNotification.available
       ? {
           sendPushNotification: async (
             input: import('@agent-device/contracts/app-deployment-runtime').PushNotificationInput,

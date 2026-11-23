@@ -82,6 +82,7 @@ export type LimrunRuntimeOptions = {
   /** Organization API key. It creates and deletes instances for platforms without `instances`. */
   apiKey?: string;
   region?: string;
+  iosModel?: 'iphone' | 'watch';
   /** Pings each leased instance every 30 s so Limrun's inactivity timeout does not end idle sessions. */
   keepAlive?: boolean;
   runtimeInstance?: string;
@@ -759,6 +760,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       lease,
       metadata: this.buildInstanceMetadata(lease),
       region: this.options.region,
+      iosModel: this.options.iosModel,
       app,
       dependencies: this.dependencies,
     };

@@ -17,7 +17,7 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import type { LimrunPlatformRuntimeOwnerOptions } from './app-log-runtime.ts';
-import { isSupportedLimrunAppLogDevice } from './device.ts';
+import { isSupportedLimrunRuntimeDevice } from './runtime-device.ts';
 import {
   limrunAppDeploymentFacts,
   type LimrunAppDeploymentRuntimeOptions,
@@ -97,9 +97,9 @@ export function limrunLifecycleFacts(device: DeviceInfo, live: boolean) {
     prepareApplicationOpen: openTarget,
     openApplication: openTarget,
     applyRuntimeHints:
-      isIosFamily(device) && openTarget.available ? available : runtimeHintsUnavailable,
+      device.appleOs === 'ios' && openTarget.available ? available : runtimeHintsUnavailable,
     clearRuntimeHints:
-      isIosFamily(device) && openTarget.available ? available : runtimeHintsUnavailable,
+      device.appleOs === 'ios' && openTarget.available ? available : runtimeHintsUnavailable,
     closeApplication: closeTarget,
     finalizeApplicationClose: closeTarget,
     prepareAppleRunner:
@@ -109,7 +109,7 @@ export function limrunLifecycleFacts(device: DeviceInfo, live: boolean) {
 }
 
 function limrunOpenTargetFact(device: DeviceInfo, live: boolean) {
-  return isSupportedLimrunAppLogDevice(device)
+  return isSupportedLimrunRuntimeDevice(device)
     ? live
       ? available
       : liveSessionUnavailable
@@ -117,7 +117,7 @@ function limrunOpenTargetFact(device: DeviceInfo, live: boolean) {
 }
 
 function limrunCloseTargetFact(device: DeviceInfo, live: boolean) {
-  return isSupportedLimrunAppLogDevice(device)
+  return isSupportedLimrunRuntimeDevice(device)
     ? live
       ? available
       : liveSessionUnavailable
@@ -218,7 +218,7 @@ export function limrunReleaseFacts(
       resolveOpenTarget: available,
       closeApplication: available,
       finalizeApplicationClose: available,
-      clearRuntimeHints: isIosFamily(device) ? available : runtimeHintsUnavailable,
+      clearRuntimeHints: device.appleOs === 'ios' ? available : runtimeHintsUnavailable,
       shutdownTarget: available,
     },
   };

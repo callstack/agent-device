@@ -36,6 +36,7 @@ type SessionAllocationParams = Readonly<{
     labels: Readonly<Record<string, string>>;
   }>;
   region?: string;
+  iosModel?: 'iphone' | 'watch';
   app?: LimrunAppAsset;
   dependencies: LimrunRuntimeDependencies;
 }>;
@@ -80,6 +81,7 @@ export async function allocateLimrunIosSession(
       metadata: params.metadata,
       spec: {
         inactivityTimeout: LIMRUN_INACTIVITY_TIMEOUT,
+        ...(params.iosModel ? { model: params.iosModel } : {}),
         ...(params.region ? { region: params.region } : {}),
         ...(params.app
           ? {

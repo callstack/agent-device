@@ -37,6 +37,14 @@ test('reads the API key alone and ignores the removed key alias', () => {
   expect(readLimrunCredentials({ LIM_API_KEY: 'lim_key', LIMRUN_REGION: 'eu' })).toBeUndefined();
 });
 
+test('reads the Watch model for allocation and rejects an unknown model', () => {
+  const env = { LIMRUN_API_KEY: 'key' };
+  expect(readLimrunCredentials({ ...env, LIMRUN_IOS_MODEL: 'watch' })?.iosModel).toBe('watch');
+  expect(() => readLimrunCredentials({ ...env, LIMRUN_IOS_MODEL: 'wrong' })).toThrow(
+    /LIMRUN_IOS_MODEL/,
+  );
+});
+
 test('rejects partial instance access instead of creating a new instance', () => {
   expect(() =>
     readLimrunCredentials({ LIMRUN_API_KEY: 'lim_key', LIM_IOS_INSTANCE_URL: 'https://x/api' }),

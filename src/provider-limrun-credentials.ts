@@ -5,6 +5,7 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 export type LimrunCredentials = Readonly<{
   apiKey?: string;
   region?: string;
+  iosModel?: 'iphone' | 'watch';
   keepAlive?: boolean;
   instances?: LimrunInstanceAccess;
   /** Directory the `--provider-network-logs` HAR files are written under. */
@@ -25,6 +26,7 @@ const INSTANCE_VARS = {
 /** Every variable that selects which Limrun account or instance the credentials reach. */
 export const LIMRUN_CREDENTIAL_VARIABLES: readonly string[] = [
   ...Object.values(ACCOUNT_VARS),
+  'LIMRUN_IOS_MODEL',
   ...INSTANCE_VARS.ios,
   ...INSTANCE_VARS.android,
 ];
@@ -57,7 +59,11 @@ export function limrunCredentialDeclaration(): Readonly<{
     byBackend: Object.fromEntries(
       [...LEASE_BACKEND_PLATFORMS].map(([backend, platform]) => [
         backend,
-        [...account, ...INSTANCE_VARS[platform]],
+        [
+          ...account,
+          ...(platform === 'ios' ? ['LIMRUN_IOS_MODEL'] : []),
+          ...INSTANCE_VARS[platform],
+        ],
       ]),
     ),
   };
@@ -87,7 +93,11 @@ export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefine
       adbUrl: android.LIM_ANDROID_INSTANCE_ADB_URL,
     },
   };
-  return { apiKey, region, keepAlive, instances: ios || android ? instances : undefined };
+  const iosModel = readValue(env, 'LIMRUN_IOS_MODEL');
+  if (iosModel !== undefined && iosModel !== 'watch' && iosModel !== 'iphone') {
+    throw new AppError('INVALID_ARGS', 'LIMRUN_IOS_MODEL must be iphone or watch.');
+  }
+  return { apiKey, region, iosModel, keepAlive, instances: ios || android ? instances : undefined };
 }
 
 function readInstanceVars<Name extends string>(

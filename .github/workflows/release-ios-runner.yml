@@ -24,14 +24,22 @@ permissions:
 
 jobs:
   publish-ios-simulator-runner:
-    name: Publish iOS Simulator Runner
+    name: Publish ${{ matrix.destination }} Simulator Runner
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ios
+            destination: iOS
+          - platform: watchos
+            destination: watchOS
     # Xcode 27 is this image's default. Limrun hosts load XCTest from their own Xcode 27, and the
     # packaging step refuses a runner from an older Xcode, which would embed XCTest.
     runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 90
     env:
-      AGENT_DEVICE_XCUITEST_PLATFORM: ios
-      AGENT_DEVICE_XCUITEST_DESTINATION: generic/platform=iOS Simulator
+      AGENT_DEVICE_XCUITEST_PLATFORM: ${{ matrix.platform }}
+      AGENT_DEVICE_XCUITEST_DESTINATION: generic/platform=${{ matrix.destination }} Simulator
       AGENT_DEVICE_IOS_CLEAN_DERIVED: '1'
     steps:
       - name: Checkout
@@ -66,13 +74,13 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      - name: Build iOS simulator runner
+      - name: Build simulator runner
         env:
           AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
         run: sh ./scripts/build-xcuitest-apple.sh
         shell: bash
 
-      - name: Package iOS simulator runner
+      - name: Package simulator runner
         id: package
         env:
           AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived

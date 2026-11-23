@@ -21,7 +21,10 @@ vi.mock('@limrun/api', () => ({
   },
 }));
 vi.mock('@limrun/api/ios-client', () => ({
-  createInstanceClient: async () => ({ disconnect: clients.disconnect }),
+  createInstanceClient: async () => ({
+    deviceInfo: { model: 'iPhone' },
+    disconnect: clients.disconnect,
+  }),
 }));
 
 for (const attached of [false, true]) {

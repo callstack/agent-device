@@ -69,7 +69,7 @@ vi.mock('@limrun/api/ios-client', async (importOriginal) => {
   });
   return {
     createInstanceClient: vi.fn(async () => ({
-      deviceInfo: { udid: 'remote-udid', screenWidth: 320, screenHeight: 240 },
+      deviceInfo: { model: 'iPhone', udid: 'remote-udid', screenWidth: 320, screenHeight: 240 },
       disconnect: limrunApiState.disconnect,
       simctl: limrunApiState.simctl,
     })),

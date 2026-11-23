@@ -8,6 +8,7 @@ import type { LimrunInstanceAccess } from './instance-access.ts';
 export function resolveLimrunRuntimeInstance(options: {
   apiKey?: string;
   region?: string;
+  iosModel?: 'iphone' | 'watch';
   runtimeInstance?: string;
   instances?: LimrunInstanceAccess;
 }): string {
@@ -19,6 +20,7 @@ export function resolveLimrunRuntimeInstance(options: {
   return providerRuntimeInstance('limrun', [
     ['region', options.region?.trim().toLowerCase() || 'default'],
     ['apiKey', options.apiKey],
+    ['iosModel', options.instances?.ios ? undefined : options.iosModel],
     ['attachedIos', options.instances?.ios?.apiUrl],
     ['attachedAndroid', options.instances?.android?.apiUrl],
   ]);

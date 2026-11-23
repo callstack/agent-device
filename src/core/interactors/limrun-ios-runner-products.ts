@@ -18,6 +18,7 @@ import { downloadLimrunFile } from '../limrun-download-file.ts';
 export async function prepareLimrunRunnerProducts(input: {
   directory: string;
   version: string;
+  platform?: 'ios' | 'watchos';
   appPath?: string;
   bindAddress: string;
   endpoint: { port: number; token: string };
@@ -28,19 +29,21 @@ export async function prepareLimrunRunnerProducts(input: {
   }
   const products = path.join(input.directory, `runner-${randomUUID()}`);
   await fs.mkdir(products);
+  const platform = input.platform ?? 'ios';
+  const sdk = platform === 'watchos' ? 'watchsimulator' : 'iphonesimulator';
   let appPath = input.appPath;
   if (!appPath) {
     if (!/^\d+\.\d+\.\d+$/.test(input.version)) {
       throw limrunRunnerError(
         'productsInvalid',
-        'Nightly and development builds require AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP',
+        `Nightly and development builds require AGENT_DEVICE_LIMRUN_${platform.toUpperCase()}_RUNNER_APP`,
         {
           hint: 'Point it at the simulator runner .app built from this agent-device checkout.',
         },
         'INVALID_ARGS',
       );
     }
-    const name = `agent-device-ios-runner-${input.version}`;
+    const name = `agent-device-${platform}-runner-${input.version}`;
     const release = `https://github.com/callstack/agent-device/releases/download/v${input.version}`;
     const manifestPath = path.join(input.directory, 'manifest.json');
     await downloadLimrunFile({
@@ -53,11 +56,11 @@ export async function prepareLimrunRunnerProducts(input: {
     const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as Record<string, unknown>;
     if (
       manifest.version !== input.version ||
-      manifest.platform_target !== 'iphonesimulator' ||
+      manifest.platform_target !== sdk ||
       typeof manifest.sha256 !== 'string' ||
       !/^[a-f0-9]{64}$/.test(manifest.sha256)
     ) {
-      throw limrunRunnerError('productsInvalid', 'Invalid iOS runner release manifest');
+      throw limrunRunnerError('productsInvalid', `Invalid ${sdk} runner release manifest`);
     }
     const archivePath = path.join(input.directory, 'runner.tar.gz');
     await downloadLimrunFile({
@@ -72,7 +75,10 @@ export async function prepareLimrunRunnerProducts(input: {
       .update(await fs.readFile(archivePath, { signal: input.signal }))
       .digest('hex');
     if (digest !== manifest.sha256)
-      throw limrunRunnerError('productsInvalid', 'iOS runner checksum mismatch');
+      throw limrunRunnerError(
+        'productsInvalid',
+        `${platform === 'ios' ? 'iOS' : 'watchOS'} runner checksum mismatch`,
+      );
     const extracted = path.join(input.directory, 'extracted');
     await extractArchiveSafely({
       archivePath,
@@ -94,7 +100,7 @@ export async function prepareLimrunRunnerProducts(input: {
   ) {
     throw limrunRunnerError(
       'productsInvalid',
-      'The Limrun XCTest runner must be an iOS simulator .app',
+      'The Limrun XCTest runner must be a simulator .app',
       {},
       'INVALID_ARGS',
     );
@@ -130,7 +136,7 @@ export async function prepareLimrunRunnerProducts(input: {
     );
   }
   await fs.cp(appPath, path.join(products, 'Runner.app'), { recursive: true });
-  await writeLimrunRunnerConfiguration(products, input.bindAddress, input.endpoint);
+  await writeLimrunRunnerConfiguration(products, input.bindAddress, input.endpoint, platform);
   return products;
 }
 
@@ -138,8 +144,11 @@ export async function writeLimrunRunnerConfiguration(
   directory: string,
   bindAddress: string,
   endpoint: { port: number; token: string },
+  platform: 'ios' | 'watchos',
 ): Promise<void> {
   const string = (value: string) => `<string>${escapeXmlTextAndAttribute(value)}</string>`;
+  const platformDirectory =
+    platform === 'watchos' ? 'WatchSimulator.platform' : 'iPhoneSimulator.platform';
   const environment = runnerListenerEnv(endpoint, bindAddress);
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -155,8 +164,8 @@ ${Object.entries(RUNNER_XCTESTRUN_CAPTURE_OPTIONS)
   .join('')}
 <key>OnlyTestIdentifiers</key><array><string>RunnerTests/testCommand</string></array>
 <key>TestingEnvironmentVariables</key><dict>
-<key>DYLD_FRAMEWORK_PATH</key><string>__PLATFORMS__/iPhoneSimulator.platform/Developer/Library/Frameworks</string>
-<key>DYLD_LIBRARY_PATH</key><string>__PLATFORMS__/iPhoneSimulator.platform/Developer/usr/lib</string>
+<key>DYLD_FRAMEWORK_PATH</key><string>__PLATFORMS__/${platformDirectory}/Developer/Library/Frameworks</string>
+<key>DYLD_LIBRARY_PATH</key><string>__PLATFORMS__/${platformDirectory}/Developer/usr/lib</string>
 </dict>
 <key>EnvironmentVariables</key><dict>${Object.entries(environment)
     .map(([key, value]) => `<key>${key}</key>${string(value)}`)

@@ -8,7 +8,8 @@ import { bindLimrunInteractionOperations } from './interaction-operations.ts';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
 import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
-import { isSupportedLimrunAppLogDevice, parseLimrunDeviceId } from './device.ts';
+import { parseLimrunDeviceId } from './device.ts';
+import { isSupportedLimrunRuntimeDevice } from './runtime-device.ts';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import {
   type DeviceBinding,
@@ -94,7 +95,7 @@ export function createLimrunPlatformRuntimeOwner(
 ): PlatformRuntimeOwner {
   const owner = providerRuntimeOwner('limrun', options.runtimeInstance);
   const ownsDevice = (device: DeviceInfo) =>
-    isSupportedLimrunAppLogDevice(device) && options.ownsDevice(device);
+    isSupportedLimrunRuntimeDevice(device) && options.ownsDevice(device);
   const hasLiveSession = (device: DeviceInfo) =>
     ownsDevice(device) && options.hasLiveSession(device);
   return Object.freeze({
@@ -110,10 +111,10 @@ export function createLimrunPlatformRuntimeOwner(
       if (request.intent.kind === 'exact-owner' && !sameRuntimeOwner(request.intent.owner, owner)) {
         throw new AppError('UNSUPPORTED_OPERATION', 'Limrun app-log owner identity does not match');
       }
-      if (!isSupportedLimrunAppLogDevice(request.device)) {
+      if (!isSupportedLimrunRuntimeDevice(request.device)) {
         throw new AppError(
           'UNSUPPORTED_PLATFORM',
-          'Limrun app logs require an iOS simulator or Android emulator device identity',
+          'Limrun app logs require an iOS or watchOS simulator or an Android emulator',
         );
       }
       const hasMatchingLiveSession = hasLiveSession(request.device);
@@ -278,7 +279,7 @@ function bindLimrunAppLogs(
 }
 
 function descriptorMatchesDevice(descriptor: LimrunAppLogDescriptor, device: DeviceInfo): boolean {
-  if (!isSupportedLimrunAppLogDevice(device)) return false;
+  if (!isSupportedLimrunRuntimeDevice(device)) return false;
   const parsed = parseLimrunDeviceId(device.id);
   return (
     parsed !== undefined &&

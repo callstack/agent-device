@@ -68,8 +68,12 @@ export async function createLimrunIosSession(
     logLevel: 'warn',
   });
   try {
-    const runner = await dependencies.ios.createRunner({ ...options, client });
-    return { ...options, platform: 'ios', client, runner, dependencies };
+    const { model, osVersion } = client.deviceInfo;
+    const device = model.startsWith('Apple Watch')
+      ? { ...options.device, appleOs: 'watchos' as const, name: model, model, osVersion }
+      : options.device;
+    const runner = await dependencies.ios.createRunner({ ...options, device, client });
+    return { ...options, device, platform: 'ios', client, runner, dependencies };
   } catch (error) {
     client.disconnect();
     throw error;
