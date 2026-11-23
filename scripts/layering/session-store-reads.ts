@@ -27,11 +27,19 @@ function countReads(ref?: string): number {
   }
 }
 
-const base = execFileSync(
-  'git',
-  ['merge-base', process.env['SESSION_STORE_READ_BASE'] || 'origin/main', 'HEAD'],
-  { encoding: 'utf8' },
-).trim();
+const baseRef = process.env['SESSION_STORE_READ_BASE'] || 'origin/main';
+let base: string;
+try {
+  base = execFileSync('git', ['merge-base', baseRef, 'HEAD'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+} catch {
+  console.error(
+    `No merge base with ${baseRef}. Fetch it, or set SESSION_STORE_READ_BASE to a fetched base.`,
+  );
+  process.exit(1);
+}
 const before = countReads(base);
 const after = countReads();
 console.log(

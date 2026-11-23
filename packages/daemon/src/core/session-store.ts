@@ -647,7 +647,7 @@ export class SessionCoordinator {
     const assertPublishable = () => {
       if (published) throw new TypeError('Session slot has already published');
       this.#store.assertPublishable(address);
-      if (!active()) throw new TypeError('Session slot is no longer active');
+      if (!active()) throw createRequestCanceledError();
     };
     assertPublishable();
     return {
@@ -674,7 +674,7 @@ export class SessionCoordinator {
       [sessionAuthority]: true,
       current,
       writeScriptVersion: () => {
-        if (!current()) throw new TypeError('Session authority is no longer active');
+        if (!current()) throw createRequestCanceledError();
         return this.#store.writeRemoteScriptVersion(ref);
       },
     };

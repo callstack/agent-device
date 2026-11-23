@@ -11,6 +11,7 @@ import type { RefFrame } from '../core/ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
 
 type InternalObservationLineage = Readonly<{
   ref: SessionRef;
@@ -40,8 +41,7 @@ export function bindInternalObservationAuthority(
   return {
     store: (snapshot) => {
       params.signal?.throwIfAborted();
-      if (params.isActive?.() === false)
-        throw new Error('Internal observation authority has ended.');
+      if (params.isActive?.() === false) throw createRequestCanceledError();
       return storeInternalObservation(params, snapshot);
     },
     finalize: (evidence, projection) =>
