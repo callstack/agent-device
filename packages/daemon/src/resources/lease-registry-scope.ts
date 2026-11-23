@@ -393,15 +393,23 @@ export function leaseOwnTtlMs(lease: Pick<DeviceLease, 'expiresAt' | 'heartbeatA
   return lease.expiresAt - lease.heartbeatAt;
 }
 
-export function deviceLeaseBusyError(activeLease: DeviceLease): AppError {
-  return new AppError('DEVICE_IN_USE', 'Device is already leased', {
-    reason: DEVICE_LEASE_REASONS.busy.reason,
-    deviceKey: activeLease.deviceKey,
-    backend: activeLease.backend,
-    leaseProvider: activeLease.leaseProvider,
-    expiresAt: activeLease.expiresAt,
-    hint: 'Retry after the lease expires or close the owning session.',
-  });
+export function deviceLeaseBusyError(activeLease?: DeviceLease): AppError {
+  return new AppError(
+    'DEVICE_IN_USE',
+    activeLease ? 'Device is already leased' : 'Expired lease cleanup is pending',
+    {
+      reason: DEVICE_LEASE_REASONS.busy.reason,
+      ...(activeLease
+        ? {
+            deviceKey: activeLease.deviceKey,
+            backend: activeLease.backend,
+            leaseProvider: activeLease.leaseProvider,
+            expiresAt: activeLease.expiresAt,
+            hint: 'Retry after the lease expires or close the owning session.',
+          }
+        : { dispatched: 'no' }),
+    },
+  );
 }
 
 export function leaseReleaseRequestFor(lease: SessionLease): ReleaseLeaseRequest {

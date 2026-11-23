@@ -16,12 +16,22 @@ If the caller stops heartbeats for a retained lease, that lease expires after it
 Idle reap then shuts the daemon down within one more idle window.
 
 A session cannot outlive the lease it binds at creation.
-When the lease is released, expires, or its provider reports the instance ended, the daemon tears the session down under its execution locks and clears its device claim.
+When the lease is released, expires, or its provider reports that the instance ended, the daemon tears the session down.
+The daemon keeps the device claim until teardown confirms that the runtime is safe to reuse.
 Any teardown of a leased session, including `close`, finishes an active recording. A daemon-owned export stays downloadable under its producing owner, as with `record stop` (ADR 0024 2.5).
 This applies even when the device no longer answers.
 A release is a tenant `lease_release` or a host `DELETE /admin/leases/<lease-id>`.
 The daemon sweeps for expired leases every second.
-Thus, expiry does not wait for a later request.
+A request can also trigger expiry.
+Both paths share one teardown for each expired session.
+The daemon keeps the lease reservation until session cleanup and any provider release are confirmed.
+If expiry wins, the old owner's request returns `LEASE_NOT_FOUND`.
+An owner `close` can report the confirmed lease end in `endedLeases` on that error.
+Only `open` with a separate valid lease can replace an expired session.
+It waits within the request deadline and the `--wait` budget, if set.
+The successor lease must still be valid when the wait ends.
+If cleanup remains pending, `open` can return `DEVICE_IN_USE` with reason `DEVICE_LEASE_BUSY`.
+Canceling a waiting request leaves teardown running.
 In-flight work and human-control holds still keep a lease from expiring.
 After daemon shutdown begins, no new lease-end teardown starts.
 Shutdown waits for any lease-end teardown that already started before it tears sessions down itself.

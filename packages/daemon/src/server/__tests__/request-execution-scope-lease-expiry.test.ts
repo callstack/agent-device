@@ -1,3 +1,4 @@
+import { createLeaseSessionEnd } from '../lease-session-end.ts';
 import { expect, test, vi } from 'vitest';
 import {
   daemonPlatformServicesFixture,
@@ -11,7 +12,10 @@ import {
 } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { createRequestExecutionScope } from '../request-execution-scope.ts';
+import {
+  getLeaseRegistryExecutionLocks,
+  createRequestExecutionScope,
+} from '../request-execution-scope.ts';
 import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
@@ -32,56 +36,19 @@ function makeRequest(overrides: Partial<DaemonRequest>): DaemonRequest {
   };
 }
 
-test('expired leases remove owned sessions before the next command and free capacity', async () => {
-  let now = 1_000;
-  const sessionStore = makeSessionStore('agent-device-request-scope-');
-  const leaseRegistry = new LeaseRegistry({
-    maxActiveSimulatorLeases: 1,
-    defaultLeaseTtlMs: 10,
-    minLeaseTtlMs: 1,
-    now: () => now,
-  });
-  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.publish(
-    'default',
-    makeSession('default', {
-      device: LINUX_DEVICE,
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        backend: lease.backend,
-        leaseProvider: 'proxy',
-        deviceKey: 'ios:SIM-001',
-      },
-    }),
-  );
-  now = 1_011;
-
-  const scope = await createRequestExecutionScope({
-    host: createTestHostEnvironment(),
-    platformServices: daemonPlatformServicesFixture(),
-    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
-    trackClaimRecoveryDisposal: () => {},
-    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
-    platformRequestScope: platformRequestScopeFixture(),
-    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
-    sessionStore,
-    leaseRegistry,
-  });
-  await scope.runLocked(async () => 'ran');
-
-  expect(sessionStore.get('default')).toBeUndefined();
-  const nextLease = leaseRegistry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2' });
-  expect(nextLease.tenantId).toBe('tenant-b');
-});
-
 test.each(['rebuild', 'retire'] as const)(
   'scoped lease expiry preserves a public-name session and a %s during held teardown',
   async (change) => {
     let now = 1_000;
     const store = makeSessionStore('request-scope-lease-lifetime-');
-    const leases = new LeaseRegistry({ defaultLeaseTtlMs: 10, minLeaseTtlMs: 1, now: () => now });
+    const leases = new LeaseRegistry({
+      defaultLeaseTtlMs: 10,
+      minLeaseTtlMs: 1,
+      now: () => now,
+      onLeaseExpired: (ended) => {
+        void leaseSessionEnd.end(ended.leaseId, 'LEASE_EXPIRED');
+      },
+    });
     const lease = leases.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
     const address = 'cwd:ownership:default';
     const original = store.publish(
@@ -117,6 +84,24 @@ test.each(['rebuild', 'retire'] as const)(
       await release;
     });
     now = 1_011;
+    const leaseSessionEnd = createLeaseSessionEnd({
+      env: {},
+      sessionStore: store,
+      executionLocks: getLeaseRegistryExecutionLocks(leases),
+      cleanupSessionlessExecutionHost: async () => {},
+      teardownSession: async (ref) =>
+        await teardownSessionResources({
+          appLog: 'run',
+          ref,
+          sessionStore: store,
+          platformCleanup: {
+            stopSnapshotHelper,
+            closeManagedBrowser: async () => {},
+            cleanupSessionlessExecutionHost: async () => {},
+            retainExecutionHostAfterClose: () => false,
+          },
+        }),
+    });
     const scope = await createRequestExecutionScope({
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
@@ -131,21 +116,12 @@ test.each(['rebuild', 'retire'] as const)(
       }),
       sessionStore: store,
       leaseRegistry: leases,
-      settleExpiredSession: async (ref) =>
-        await teardownSessionResources({
-          appLog: 'run',
-          ref,
-          sessionStore: store,
-          platformCleanup: {
-            stopSnapshotHelper,
-            closeManagedBrowser: async () => {},
-            cleanupSessionlessExecutionHost: async () => {},
-            retainExecutionHostAfterClose: () => false,
-          },
-        }),
+      leaseSessionEnd,
     });
     expect(scope.sessionName).toBe(address);
-    const running = scope.runLocked(async () => 'ran');
+    const running = expect(scope.runLocked(async () => 'ran')).rejects.toMatchObject({
+      details: { reason: 'LEASE_NOT_FOUND' },
+    });
     await entered;
     let successor: ReturnType<typeof store.publish> | undefined;
     if (change === 'retire') {
@@ -159,7 +135,7 @@ test.each(['rebuild', 'retire'] as const)(
       );
     } else store.update(original, { appName: 'latest' });
     resume();
-    await expect(running).resolves.toBe('ran');
+    await running;
     expect(stopSnapshotHelper).toHaveBeenCalledExactlyOnceWith(original.session.device);
     expect(store.requireCurrent(decoy)).toBe(decoy.session);
     if (successor) expect(store.requireCurrent(successor)).toBe(successor.session);

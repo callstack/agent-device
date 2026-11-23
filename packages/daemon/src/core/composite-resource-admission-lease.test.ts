@@ -55,7 +55,7 @@ test.each(['batch', 'replay'] as const)(
       expect(world.bind).not.toHaveBeenCalled();
       expect(owned.finish).not.toHaveBeenCalled();
       expect(world.sessionStore.requireCurrent(world.ref)).toMatchObject(owned.patch);
-      expect(world.leaseRegistry.consumeExpiredLease(lease.leaseId)?.leaseId).toBe(lease.leaseId);
+      expect(world.leaseRegistry.consumeExpiredLease(lease.leaseId)).toBeUndefined();
     } finally {
       await world.daemon.close();
     }

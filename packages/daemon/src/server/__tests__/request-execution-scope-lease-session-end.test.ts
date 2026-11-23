@@ -18,7 +18,8 @@ import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import type { SessionTeardown } from '../../sessions/lease-lifecycle.ts';
-import { createLeaseSessionEnd } from '../request-execution-scope.ts';
+import { createLeaseSessionEnd, EXPIRY_TRANSITIONS } from '../lease-session-end.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 bindTestCommandHost();
 
@@ -377,7 +378,7 @@ test('end tears down the session opened under the lease and clears its device cl
   expect(sessionStore.get('other')).toBeDefined();
 });
 
-test('end clears the claim of a session whose device no longer answers', async () => {
+test('end keeps the claim of a session whose teardown failed', async () => {
   const sessionStore = makeSessionStore('agent-device-lease-end-unreachable-');
   const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
 
@@ -385,9 +386,45 @@ test('end clears the claim of a session whose device no longer answers', async (
     throw new Error('device unreachable');
   }).ender.end('lease-1', 'LEASE_EXPIRED');
 
-  expect(sessionStore.get('leased')).toBeUndefined();
-  expect(fs.existsSync(claimPath)).toBe(false);
+  expect(sessionStore.get('leased')).toBeDefined();
+  expect(fs.existsSync(claimPath)).toBe(true);
 });
+
+test.each([
+  { firstAttemptFails: false, events: ['expired', 'settled'] },
+  { firstAttemptFails: true, events: ['expired', 'incomplete', 'retry', 'settled'] },
+] as const)(
+  'expiry logs each transition with cause when the first attempt fails=$firstAttemptFails',
+  async ({ firstAttemptFails, events }) => {
+    vi.mocked(emitDiagnostic).mockClear();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    try {
+      const store = makeSessionStore();
+      await publishLeasedSession(store, 'leased', 'lease-1');
+      const teardown = vi.fn(async () => {});
+      if (firstAttemptFails) teardown.mockRejectedValueOnce(new Error('teardown unavailable'));
+      const { ender } = leaseSessionEnd(store, teardown);
+      await ender.end('lease-1', 'LEASE_EXPIRED');
+      clock.mockReturnValue(11_000);
+      await ender.retryPending();
+
+      expect(store.get('leased')).toBeUndefined();
+      expect(teardown).toHaveBeenCalledTimes(firstAttemptFails ? 2 : 1);
+      const transitions = vi
+        .mocked(emitDiagnostic)
+        .mock.calls.map(([event]) => event)
+        .filter(({ phase }) => phase === 'lease_expiry_transition');
+      expect(transitions.map(({ data }) => data)).toEqual(
+        events.map((event) => {
+          const [oldState, newState] = EXPIRY_TRANSITIONS[event];
+          return { actor: 'daemon', event, oldState, newState, cause: 'LEASE_EXPIRED' };
+        }),
+      );
+    } finally {
+      clock.mockRestore();
+    }
+  },
+);
 
 test('end waits for the command still holding the session execution locks', async () => {
   const sessionStore = makeSessionStore('agent-device-lease-end-locked-');

@@ -216,31 +216,11 @@ export async function teardownSessionResources(
   if (aggregate) throw aggregate;
 }
 
-/**
- * Releases the resources of an expired session, then finalizes its application. An idle expiry
- * stops at a resource failure and retries later. A lease expiry retires the session whatever
- * happens, so it still finalizes the application, and the resource failure stays the error.
- */
+/** Settles session resources before finalizing the application. A failure preserves the session for retry. */
 export async function settleExpiredSession(
-  request: SessionResourceTeardownRequest & {
-    finalizeApplication: () => Promise<void>;
-    afterResourceFailure: 'stop' | 'finalize';
-  },
+  request: SessionResourceTeardownRequest & { finalizeApplication: () => Promise<void> },
 ): Promise<void> {
-  try {
-    await teardownSessionResources(request);
-  } catch (error) {
-    if (request.afterResourceFailure === 'finalize') {
-      await request.finalizeApplication().catch((finalizeError) => {
-        emitDiagnostic({
-          level: 'error',
-          phase: 'expired_session_lifecycle_cleanup_failed',
-          data: { session: request.ref.address, error: String(finalizeError) },
-        });
-      });
-    }
-    throw error;
-  }
+  await teardownSessionResources(request);
   await request.finalizeApplication();
 }
 

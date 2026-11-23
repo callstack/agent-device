@@ -1,4 +1,5 @@
-import type { LeaseEndReason, SessionTeardown } from '../sessions/lease-lifecycle.ts';
+import type { LeaseSessionEnd } from './lease-session-end.ts';
+import type { LeaseEndReason } from '../sessions/lease-lifecycle.ts';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import {
   createOwnerScopedDeviceClaimReconciler,
@@ -163,7 +164,7 @@ export type RequestRouterDeps = {
   createCommandSurface: CreateDaemonCommandSurface;
   platformResourceCleanup: PlatformResourceCleanup;
   /** Ends the resources of a session whose lease expired, for a request that holds its locks. */
-  settleExpiredSession: SessionTeardown;
+  leaseSessionEnd?: Pick<LeaseSessionEnd, 'settlementFor'>;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
   daemonPolicy?: DaemonPolicy;
@@ -195,7 +196,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     androidObservation,
     createCommandSurface,
     platformResourceCleanup,
-    settleExpiredSession,
+    leaseSessionEnd,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
     daemonPolicy,
@@ -326,7 +327,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               claimRecoveryGateway,
               trackClaimRecoveryDisposal,
               platformRequestScope,
-              settleExpiredSession,
+              leaseSessionEnd,
               providerAppCatalog,
               pluginInventory,
               daemonPolicy,
@@ -517,7 +518,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           claimRecoveryGateway,
           trackClaimRecoveryDisposal,
           platformRequestScope: createPlatformRequestScope(scopedReq),
-          settleExpiredSession,
+          leaseSessionEnd,
           providerAppCatalog,
           pluginInventory,
           daemonPolicy,

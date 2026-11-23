@@ -54,29 +54,27 @@ export type LockedRequestBinding = {
   existingRef: SessionRef | undefined;
 };
 
-export async function resolveRequestExecutionLockPlan(params: {
+export function resolveRequestExecutionLockPlan(params: {
   req: DaemonRequest;
   sessionName: string;
-  sessionStore: SessionStore;
-}): Promise<RequestExecutionLockPlan> {
-  const { req, sessionName, sessionStore } = params;
-  const existingSession = sessionStore.get(sessionName);
-  if (existingSession) {
+  existingDeviceId?: string;
+  env: EnvMap;
+}): RequestExecutionLockPlan | Promise<RequestExecutionLockPlan> {
+  const { req, sessionName, existingDeviceId, env } = params;
+  if (existingDeviceId !== undefined) {
     return {
-      keys: existingSessionExecutionLockKeys(sessionName, existingSession.device.id),
-      deviceId: existingSession.device.id,
+      keys: existingSessionExecutionLockKeys(sessionName, existingDeviceId),
+      deviceId: existingDeviceId,
     };
   }
 
-  const keys = new Set<RequestExecutionLockKey>([sessionExecutionLockKey(sessionName)]);
-  const device = await resolveFreshSessionDevice(req, sessionStore.host.env);
-  // A fresh app device `open` also locks its host (ADR 0035), before its own lock, so an
-  // `open --wait` looks at the host's sessions under a lock a whole-host open also takes. A replay
-  // or batch holds its locks for its whole run, so it locks only its device: the first-open lock
-  // keyed by host still serializes its opens. An open app session's commands lock only the app.
-  const ids = !device ? [] : req.command === 'open' ? hostAndDeviceIds(device) : [device.id];
-  for (const id of ids) keys.add(deviceExecutionLockKey(id));
-  return { keys: orderRequestExecutionLockKeys(keys), deviceId: device?.id };
+  return resolveFreshSessionDevice(req, env).then((device) => {
+    const keys = new Set<RequestExecutionLockKey>([sessionExecutionLockKey(sessionName)]);
+    // A fresh app open also locks its host (ADR 0035). A composite locks only its device.
+    const ids = !device ? [] : req.command === 'open' ? hostAndDeviceIds(device) : [device.id];
+    for (const id of ids) keys.add(deviceExecutionLockKey(id));
+    return { keys: orderRequestExecutionLockKeys(keys), deviceId: device?.id };
+  });
 }
 
 async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): Promise<DeviceInfo> {

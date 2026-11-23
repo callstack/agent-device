@@ -19,24 +19,32 @@ vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
   }
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
-vi.mock('../request-execution-scope.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../request-execution-scope.ts')>();
+vi.mock('../lease-session-end.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lease-session-end.ts')>();
   return {
     ...actual,
-    createLeaseSessionEnd: () => ({
-      end: async (leaseId: string, reason: string) => {
-        leaseProbe.ended.push([leaseId, reason]);
-      },
-      retryPending: async () => {
-        leaseProbe.retryCalls += 1;
-      },
-      cancel: () => {
-        leaseProbe.shutdownSteps.push('cancel');
-      },
-      drain: async () => {
-        leaseProbe.shutdownSteps.push('drain');
-      },
-    }),
+    createLeaseSessionEnd: (options: Parameters<typeof actual.createLeaseSessionEnd>[0]) => {
+      const ender = actual.createLeaseSessionEnd(options);
+      return {
+        ...ender,
+        end: async (...args) => {
+          leaseProbe.ended.push([args[0], args[1]]);
+          await ender.end(...args);
+        },
+        retryPending: async () => {
+          leaseProbe.retryCalls += 1;
+          await ender.retryPending();
+        },
+        cancel: () => {
+          leaseProbe.shutdownSteps.push('cancel');
+          ender.cancel();
+        },
+        drain: async () => {
+          leaseProbe.shutdownSteps.push('drain');
+          await ender.drain();
+        },
+      } satisfies import('../lease-session-end.ts').LeaseSessionEnd;
+    },
   };
 });
 
@@ -156,6 +164,65 @@ test('a lease that expires after shutdown is refused and reported, not sent to i
   } finally {
     vi.useRealTimers();
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('expiry reserves the provider device through a slow failed release and a successful retry', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-provider-expiry-reservation-');
+  let failFirstRelease!: (error: Error) => void;
+  const firstRelease = new Promise<never>((_resolve, reject) => {
+    failFirstRelease = reject;
+  });
+  const release = vi
+    .fn(async (_lease: DeviceLease) => ({}))
+    .mockImplementationOnce(async () => await firstRelease);
+  const runtime = await startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture({
+      leaseLifecycleProvider: { release },
+      providerRuntimeIds: ['browserstack'],
+    }),
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
+      },
+    }),
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  });
+  assert.ok(runtime);
+  const [registry] = leaseProbe.registries;
+  assert.ok(registry);
+  const request = {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+    deviceKey: 'fixture-device',
+    ttlMs: 10,
+  };
+  const lease = registry.allocateLease(request);
+  const next = { ...request, runId: 'run-2' };
+  const assertBusy = () =>
+    assert.throws(() => registry.allocateLease(next), {
+      code: 'DEVICE_IN_USE',
+    });
+  try {
+    await vi.advanceTimersByTimeAsync(1_000);
+    assert.equal(release.mock.calls.length, 1);
+    assertBusy();
+    failFirstRelease(new Error('provider temporarily unavailable'));
+    await vi.advanceTimersByTimeAsync(0);
+    assertBusy();
+    await vi.advanceTimersByTimeAsync(1_000);
+    assert.equal(release.mock.calls.length, 2);
+    assert.notEqual(registry.allocateLease(next).leaseId, lease.leaseId);
+  } finally {
+    vi.useRealTimers();
+    await runtime.close();
   }
 });
 

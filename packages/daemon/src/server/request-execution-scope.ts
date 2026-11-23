@@ -1,3 +1,5 @@
+import { heldKeyedLockKeys } from '@agent-device/kernel/keyed-lock';
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -19,7 +21,7 @@ import {
   getDiagnosticsMeta,
   updateDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   type DaemonCommandContext,
   contextFromFlags as contextFromFlagsWithLog,
@@ -30,6 +32,7 @@ import { resolveCallerScopeRoot, resolveSessionScope } from '../sessions/session
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertProviderLeaseRequestNamesSession,
+  assertRequestLeaseAdmission,
   assertRequestLeaseAdmissionPreflight,
   assertRequestTenantAdmission,
   resolveRequestSessionName,
@@ -38,19 +41,12 @@ import {
   scopeRequestSession,
   withTenantAdmissionOnRoutingError,
 } from '../sessions/request-admission.ts';
-import { isBoundedCompositeRequest } from '../core/lease-context.ts';
+import { isBoundedCompositeRequest, resolveLeaseScope } from '../core/lease-context.ts';
 import {
   admitRequestLeaseForLockedScope,
-  cleanupExpiredLeasedSession,
-  endLeasedSession,
-  type ExpiredSessionTeardown,
-  resolveLockedRequestSessionRef,
   inspectSessionProviderReleaseOnClose,
-  type LeaseEndReason,
-  type SessionTeardown,
 } from '../sessions/lease-lifecycle.ts';
 import {
-  existingSessionExecutionLockKeys,
   prepareLockedRequestBinding,
   resolveBoundedClaimDevice,
   resolveRequestExecutionLockPlan,
@@ -67,17 +63,19 @@ import {
   createSessionExecutionLock,
   withRequestExecutionLockKeys,
 } from './request-execution-locks.ts';
-import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import {
-  assertSameOpenOwner,
-  SessionCoordinator,
-  type SessionStore,
-} from '../core/session-store.ts';
+  getRequestDeadlineMs,
+  isRequestCanceled,
+  throwIfRequestCanceled,
+} from '@agent-device/host-kit/request';
+import { assertSameOpenOwner, SessionCoordinator, type SessionStore } from '../core/session-store.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
-import { retainSuccessorLeaseWork, runAdmittedLeaseWork } from './request-lease-work.ts';
+import { runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
+  ignoresSessionLease,
+  resolveCommandAndroidAvdSelection,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
@@ -86,7 +84,10 @@ import {
   shouldRecordEventForRequest,
   type BoundJournal,
 } from '@agent-device/session-journal/session-event-log';
-import type { LeaseRegistry, RetainedLeaseWork } from '../resources/lease-registry.ts';
+import { awaitExpiry, type ExpirySettlement, type LeaseSessionEnd } from './lease-session-end.ts';
+import { deviceLeaseBusyError } from '../resources/lease-registry-scope.ts';
+import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import { recordEndedLease } from '../core/request-ended-leases.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
@@ -107,7 +108,6 @@ import {
   applyCommandDefaults,
   resolveCommandDeviceClaimPolicy,
 } from '@agent-device/command-registry/registry';
-import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import {
   assertDaemonPolicyAdmitsDevice,
@@ -120,20 +120,74 @@ import {
   type RequestDispatchLedger,
 } from '../core/request-dispatch-ledger.ts';
 
-const expiredSessionSettleNotComposed: SessionTeardown = async () => {
-  throw new AppError(
-    'INTERNAL_ERROR',
-    'Expired-session teardown was not supplied by root runtime composition',
-  );
-};
+async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): Promise<DeviceInfo> {
+  const { resolveForegroundOpenRequest } =
+    await import('../sessions/session-lifecycle/internal/session-open.ts');
+  const foreground = await resolveForegroundOpenRequest({ req, hasExistingSession: false });
+  if (foreground.type === 'response') {
+    if (!foreground.response.ok) {
+      const { code, message, details } = foreground.response.error;
+      throw new AppError(code, message, details);
+    }
+    throw new AppError('INVALID_ARGS', 'Invalid open target');
+  }
+  const openReq = foreground.type === 'resolved' ? foreground.req : req;
+  const { resolveRequestTargetDeviceSelection } =
+    await import('../core/request-device-resolution.ts');
+  const { resolveOpenTargetDeviceOptions } =
+    await import('../core/open-target-device-resolution.ts');
+  return (
+    await resolveRequestTargetDeviceSelection(openReq, resolveOpenTargetDeviceOptions(openReq, env))
+  ).device;
+}
 
-function expiredSessionTeardown(
-  command: string,
-  holdsSessionLock: boolean,
-  boundedStep: boolean,
-): ExpiredSessionTeardown {
-  if (!holdsSessionLock) return 'lease-end-owner';
-  return command === 'batch' || command === 'replay' || boundedStep ? 'refuse' : 'inline';
+async function resolveBoundedClaimDevice(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+  env: EnvMap,
+  platformServices: DaemonPlatformServices,
+): Promise<DeviceInfo> {
+  const { resolveBootCommandSelection, resolveCommandDevice, requireSessionOrExplicitSelector } =
+    await import('../resources/session-device-resolution.ts');
+  if (req.command !== 'open') {
+    const guard = requireSessionOrExplicitSelector(req.command, session, req.flags);
+    if (guard && !guard.ok) {
+      const { code, message, details } = guard.error;
+      throw new AppError(code, message, details);
+    }
+  }
+  if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
+  if (req.command === 'install_source' && session) return session.device;
+  const params = {
+    session,
+    req,
+    env,
+    platformServices,
+    androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
+  };
+  if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
+  return await resolveCommandDevice(params);
+}
+
+type Admission =
+  | { kind: 'admitted' }
+  | { kind: 'replan' }
+  | {
+      kind: 'need-settlement';
+      settlement: ExpirySettlement;
+      ownerLeaseId?: string;
+      successorIsCurrent?: () => boolean;
+    }
+  | { kind: 'refused'; error: AppError };
+
+type LockedAttempt<T> = Exclude<Admission, { kind: 'admitted' }> | { kind: 'admitted'; value: T };
+type NeedSettlement = Extract<Admission, { kind: 'need-settlement' }>;
+
+function inactiveLease(): AppError {
+  return new AppError('UNAUTHORIZED', 'Lease is not active', {
+    reason: LEASE_REASONS.notFound.reason,
+    dispatched: 'no',
+  });
 }
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
@@ -153,7 +207,10 @@ export type RequestExecutionScope = AsyncDisposable & {
   admittedRef?: SessionRef;
   requestLogPath: string;
   runnerLogPath: string;
-  runAdmitted<T>(task: () => Promise<T>): Promise<T>;
+  runAdmitted<T>(
+    task: () => Promise<T>,
+    admitted?: { ref: SessionRef | undefined; successorIsCurrent?: () => boolean },
+  ): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   /** Takes an available session lock and runs `task` if the admitted lifetime is still live. */
   tryRunUnderSessionLock(ref: SessionRef, task: () => Promise<void>): Promise<void>;
@@ -211,8 +268,7 @@ export async function createRequestExecutionScope(params: {
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   platformRequestScope: PlatformRequestScope;
-  /** The daemon-owned teardown of a session whose lease expired (root runtime composition). */
-  settleExpiredSession?: SessionTeardown;
+  leaseSessionEnd?: Pick<LeaseSessionEnd, 'settlementFor'>;
   providerAppCatalog?: ProviderAppCatalog;
   pluginInventory?: readonly PluginInventoryEntry[];
   daemonPolicy?: DaemonPolicy;
@@ -240,6 +296,7 @@ export async function createRequestExecutionScope(params: {
   // it is what puts the session's execution lock in this request's plan, and therefore the only
   // trait under which an activity stamp can be written while holding that lock.
   const attachesToSession = shouldLockSessionExecution(command);
+  const readsSessionLease = !ignoresSessionLease(command);
   const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({
@@ -289,33 +346,106 @@ export async function createRequestExecutionScope(params: {
       : undefined;
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
-    const preflightSession = sessionStore.get(sessionName);
+    const readAddressed = () => sessionStore.lookup(sessionName);
+    const preflightRef = readAddressed();
+    const preflightSession = preflightRef?.session;
     assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
     assertRequestLeaseAdmissionPreflight(scopedReq, preflightSession);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
     // still supplies the device to wait for, but an out-of-range budget is refused before either.
     const openWaitBudgetMs =
       scopedReq.command === 'open' ? readOpenWaitBudgetMs(scopedReq) : undefined;
-    const lockPlan: RequestExecutionLockPlan = shouldLockSessionExecution(command)
-      ? await resolveRequestExecutionLockPlan({ req: scopedReq, sessionName, sessionStore })
-      : { keys: [], deviceId: undefined };
-    // An `--wait <ms>` open spends the first of its budget here, while the request holds no locks
-    // yet: the device execution lock is what every operation that could free the device also
-    // needs, so waiting after taking it would have an open block its own recovery.
-    const openWait = beginOpenDeviceWait({
-      req: scopedReq,
-      budgetMs: openWaitBudgetMs,
-      sessionName,
-      sessionStore,
-      deviceId: lockPlan.deviceId,
-    });
-    await openWait?.waitForDeviceOutsideLocks();
     const executionLocks = getLeaseRegistryExecutionLocks(leaseRegistry);
-    const requestExecutionLocks = createRequestExecutionLocks({
-      locks: executionLocks,
-      initialKeys: lockPlan.keys,
-      scope: params.platformRequestScope,
-    });
+    const outerKeys = heldKeyedLockKeys(executionLocks);
+    const hasOuterLocks = outerKeys.length > 0;
+    const sessionKey = sessionExecutionLockKey(sessionName);
+    const signal = params.platformRequestScope.signal;
+    const waitDeadline = openWaitBudgetMs === undefined ? Infinity : startedAtMs + openWaitBudgetMs;
+    const leaseAdmission = { ...params, env: params.host.env, inspectOnly: true };
+    const settlementFor = (ref: SessionRef | undefined) =>
+      ref && params.leaseSessionEnd?.settlementFor(ref.lifetime);
+    const isInactive = (ref: SessionRef | undefined) => {
+      const lease = readsSessionLease && ref?.session.lease;
+      return Boolean(lease && !leaseRegistry.inspectActiveLease(lease.leaseId));
+    };
+    const authenticateExpiry = async (ref: SessionRef, leaseId: string) => {
+      assertRequestTenantAdmission(unscopedReq, ref.session);
+      const presented = resolveLeaseScope(scopedReq).leaseId;
+      const successor =
+        command === 'open' && presented && presented !== leaseId
+          ? assertRequestLeaseAdmission(scopedReq, leaseRegistry, undefined, leaseAdmission)
+          : undefined;
+      if (!successor) {
+        resolveRequestSessionRef(scopedReq, ref);
+        return undefined;
+      }
+      const isCurrent = leaseRegistry.pinActiveLease(successor.leaseId);
+      if (successor.backend === 'macos-app') {
+        await assertMacOsAppLeaseProcess(successor);
+        throwIfRequestCanceled(scopedReq.meta?.requestId);
+        if (!isCurrent()) throw inactiveLease();
+        assertRequestLeaseAdmission(scopedReq, leaseRegistry, undefined, leaseAdmission);
+      }
+      return isCurrent;
+    };
+    const resolveExpiryAdmission = async (
+      ref: SessionRef | undefined,
+      settlement = settlementFor(ref),
+    ): Promise<Admission> => {
+      if (!ref || !readsSessionLease) return { kind: 'admitted' };
+      const lease = ref.session.lease;
+      if (!lease || (!settlement && !isInactive(ref))) return { kind: 'admitted' };
+      const successorIsCurrent = await authenticateExpiry(ref, lease.leaseId);
+      if (!settlement) {
+        leaseRegistry.consumeExpiredLease(lease.leaseId);
+        settlement = settlementFor(ref);
+        if (!settlement && !isInactive(ref)) return { kind: 'admitted' };
+      }
+      if (!settlement || hasOuterLocks) return { kind: 'refused', error: inactiveLease() };
+      return {
+        kind: 'need-settlement',
+        settlement,
+        successorIsCurrent,
+        ownerLeaseId: successorIsCurrent ? undefined : lease.leaseId,
+      };
+    };
+    const readNestedAddress = async () => {
+      const addressed = readAddressed();
+      const expiry = await resolveExpiryAdmission(addressed);
+      if (expiry.kind !== 'admitted')
+        throw expiry.kind === 'refused' ? expiry.error : inactiveLease();
+      return addressed;
+    };
+    const admitLease = (ref: SessionRef | undefined, successorIsCurrent?: () => boolean) => {
+      if (successorIsCurrent && !successorIsCurrent()) throw inactiveLease();
+      return admitRequestLeaseForLockedScope({
+        env: params.host.env,
+        req: scopedReq,
+        session: ref?.session,
+        leaseRegistry,
+        providerAppCatalog: params.providerAppCatalog,
+        pluginInventory: params.pluginInventory,
+        daemonPolicy: params.daemonPolicy,
+      });
+    };
+    const waitForSettlement = async (attempt: NeedSettlement) => {
+      const deadline = getRequestDeadlineMs(scopedReq.meta?.requestId) ?? Infinity;
+      const settled = await awaitExpiry(
+        attempt.settlement.done,
+        signal,
+        Math.min(waitDeadline, deadline),
+      );
+      throwIfRequestCanceled(scopedReq.meta?.requestId);
+      if (attempt.ownerLeaseId) {
+        if (settled && command === 'close' && attempt.settlement.takeReceipt())
+          recordEndedLease(scopedReq, attempt.ownerLeaseId);
+        throw inactiveLease();
+      }
+      if (!attempt.successorIsCurrent?.()) throw inactiveLease();
+      if (!settled) throw deviceLeaseBusyError();
+      return attempt.successorIsCurrent;
+    };
+    let requestExecutionLocks: ReturnType<typeof createRequestExecutionLocks> | undefined;
     const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       env: params.host.env,
@@ -349,14 +479,81 @@ export async function createRequestExecutionScope(params: {
       })();
       return bindingCleanup;
     };
-    const runAdmittedAndDispose = async <T>(task: () => Promise<T>): Promise<T> => {
+    const runLockPlan = async <T>(
+      lockPlan: RequestExecutionLockPlan,
+      task: () => Promise<T>,
+      successorIsCurrent: (() => boolean) | undefined,
+      expiryProbe: boolean,
+    ): Promise<LockedAttempt<T>> => {
+      if (successorIsCurrent && !successorIsCurrent())
+        return { kind: 'refused', error: inactiveLease() };
+      const current = readAddressed();
+      if (!lockPlan.keys.length && isInactive(current)) return { kind: 'replan' };
+      const admission = await resolveExpiryAdmission(current);
+      if (admission.kind !== 'admitted') return admission;
+      if (expiryProbe) return { kind: 'replan' };
+      if (
+        attachesToSession &&
+        current &&
+        current.session.device.id !== lockPlan.deviceId &&
+        !hasOuterLocks
+      )
+        return { kind: 'replan' };
+
       try {
-        return await scope.runAdmitted(task);
+        return {
+          kind: 'admitted',
+          value: await scope.runAdmitted(task, { ref: current, successorIsCurrent }),
+        };
       } finally {
-        // The router consumes the same cleanup outcome when it finalizes the response,
-        // preserving a primary command failure over a secondary disposal failure.
         await Promise.allSettled([disposeBindings()]);
       }
+    };
+
+    const lockAndAdmit = async <T>(
+      task: () => Promise<T>,
+      observed: SessionRef | undefined,
+      pinned: SessionRef | undefined,
+      successorIsCurrent: (() => boolean) | undefined,
+    ): Promise<LockedAttempt<T>> => {
+      const expired = isInactive(pinned);
+      const pending = settlementFor(pinned);
+      if (pending || (expired && outerKeys.includes(sessionKey))) {
+        const admission = await resolveExpiryAdmission(pinned, pending);
+        return admission.kind === 'admitted' ? { kind: 'replan' } : admission;
+      }
+      const plan =
+        expired || !attachesToSession
+          ? { keys: expired ? [sessionKey] : [], deviceId: undefined }
+          : resolveRequestExecutionLockPlan({
+              req: scopedReq,
+              sessionName,
+              existingDeviceId: observed?.session.device.id,
+              env: sessionStore.host.env,
+            });
+      const lockPlan = plan instanceof Promise ? await plan : plan;
+      const openWait = beginOpenDeviceWait({
+        req: scopedReq,
+        budgetMs:
+          openWaitBudgetMs === undefined ? undefined : Math.max(0, waitDeadline - Date.now()),
+        sessionName,
+        sessionStore,
+        deviceId: lockPlan.deviceId,
+      });
+      if (openWait) await openWait.waitForDeviceOutsideLocks();
+      if (settlementFor(pinned)) return { kind: 'replan' };
+      requestExecutionLocks = createRequestExecutionLocks({
+        locks: executionLocks,
+        initialKeys: lockPlan.keys,
+        scope: params.platformRequestScope,
+      });
+      const run = () => runLockPlan(lockPlan, task, successorIsCurrent, expired);
+      return openWait
+        ? await openWait.runWhenDeviceIsUnheld({
+            acquireLocks: requestExecutionLocks.run,
+            task: run,
+          })
+        : await requestExecutionLocks.run(run);
     };
 
     const scope: RequestExecutionScope = {
@@ -367,7 +564,8 @@ export async function createRequestExecutionScope(params: {
       requestLogPath,
       runnerLogPath,
       retainDeviceExecutionLock: async (deviceId) =>
-        await requestExecutionLocks.retainDevice(deviceId),
+        await (requestExecutionLocks?.retainDevice(deviceId) ??
+          scopedReq.internal?.retainDeviceExecutionLock?.(deviceId)),
       tryRunUnderSessionLock: async (ref, task) => {
         const key = sessionExecutionLockKey(sessionName);
         if (executionLocks.has(key)) return;
@@ -391,37 +589,16 @@ export async function createRequestExecutionScope(params: {
         return req;
       },
       recordFinished,
-      runAdmitted: async (task) => {
+      runAdmitted: async (task, admitted) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         const boundedStep =
           command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
-        // The session under the lock governs. A refusal here comes before the request inspects a
-        // resource, ends an expired session or stamps session activity.
-        const addressed = sessionStore.get(sessionName);
-        assertRequestTenantAdmission(unscopedReq, addressed);
-        assertProviderLeaseRequestNamesSession(scopedReq, addressed);
-        const expiry = {
-          env: params.host.env,
-          sessionStore,
-          leaseRegistry,
-          teardown: expiredSessionTeardown(command, attachesToSession, boundedStep),
-          teardownSession: params.settleExpiredSession ?? expiredSessionSettleNotComposed,
-        };
-        let successorWork: RetainedLeaseWork | undefined;
+        const addressed = admitted ? admitted.ref : await readNestedAddress();
+        assertRequestTenantAdmission(unscopedReq, addressed?.session);
+        assertProviderLeaseRequestNamesSession(scopedReq, addressed?.session);
         let admissionCompleted = false;
         try {
-          const existingRef = await resolveLockedRequestSessionRef({
-            ...expiry,
-            req: scopedReq,
-            sessionName,
-            holdDeviceLock: scope.retainDeviceExecutionLock,
-            admission: params,
-            onSuccessorAdmitted: (lease) => {
-              const retained = retainSuccessorLeaseWork(leaseRegistry, scopedReq, lease);
-              scopedReq = retained.req;
-              successorWork = retained.work;
-            },
-          });
+          const existingRef = resolveRequestSessionRef(scopedReq, addressed);
           const session = existingRef?.session;
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
@@ -486,36 +663,20 @@ export async function createRequestExecutionScope(params: {
             });
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
-          await cleanupExpiredLeasedSession({ ...expiry, ref: existingRef });
           scope.admittedRef = existingRef;
-          if (!successorWork) {
-            scopedReq = admitRequestLeaseForLockedScope({
-              env: params.host.env,
-              req: scopedReq,
-              sessionName,
-              sessionStore,
-              leaseRegistry,
-              providerAppCatalog: params.providerAppCatalog,
-              pluginInventory: params.pluginInventory,
-              daemonPolicy: params.daemonPolicy,
-              resolveSessionRef: (req, ref) =>
-                (scope.admittedRef = resolveRequestSessionRef(req, ref)),
-            });
-          }
+          scopedReq = admitLease(addressed, admitted?.successorIsCurrent);
           scope.req = scopedReq;
           const admittedLease = scopedReq.internal?.admittedLease;
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           return await runAdmittedLeaseWork({
             leaseRegistry,
             req: scopedReq,
-            retainedWork: successorWork,
             task: async () => {
               admissionCompleted = true;
               return await task();
             },
           });
         } finally {
-          successorWork?.release();
           // The #2833 inactivity deadline is measured from the end of the last admitted command
           // that attached to this session, stamped here under the session's execution lock. The lock
           // makes this one stamp enough: an expiry has to acquire it too, so it can never catch a
@@ -537,15 +698,27 @@ export async function createRequestExecutionScope(params: {
           }
         }
       },
-      runLocked: async (task) => {
-        throwIfRequestCanceled(scopedReq.meta?.requestId);
-        if (!openWait) {
-          return await requestExecutionLocks.run(async () => await runAdmittedAndDispose(task));
+      runLocked: async <T>(task: () => Promise<T>): Promise<T> => {
+        let pinned = readsSessionLease ? preflightRef : undefined;
+        let successorIsCurrent: (() => boolean) | undefined;
+        for (;;) {
+          throwIfRequestCanceled(scopedReq.meta?.requestId);
+          const observed = readAddressed();
+          if (readsSessionLease) pinned ??= observed;
+          const attempt = await lockAndAdmit(task, observed, pinned, successorIsCurrent);
+          switch (attempt.kind) {
+            case 'admitted':
+              return attempt.value;
+            case 'refused':
+              throw attempt.error;
+            case 'replan':
+              if (!settlementFor(pinned)) pinned = undefined;
+              continue;
+            case 'need-settlement':
+              successorIsCurrent = await waitForSettlement(attempt);
+              pinned = undefined;
+          }
         }
-        return await openWait.runWhenDeviceIsUnheld({
-          acquireLocks: requestExecutionLocks.run,
-          task: async () => await runAdmittedAndDispose(task),
-        });
       },
       // Claims outlive the bindings they guard: release only once no device
       // operation from this request can still run.
@@ -793,151 +966,4 @@ export function getLeaseRegistryExecutionLocks(
     leaseRegistryExecutionLocks.set(leaseRegistry, locks);
   }
   return locks;
-}
-
-export type LeaseSessionEnd = Readonly<{
-  /**
-   * Ends sessions and retained execution hosts owned by `leaseId` under their execution locks.
-   * Clears live sessions' device claims after teardown. Never rejects.
-   */
-  end: (leaseId: string, reason: LeaseEndReason) => Promise<void>;
-  /** Retries retained-host cleanup that failed after the registry removed its lease. */
-  retryPending: () => Promise<void>;
-  /**
-   * Called when the daemon begins to leave. Shutdown tears every session down without taking an
-   * execution lock, so no lease end may start a teardown after this, including one already queued
-   * on the locks.
-   */
-  cancel: () => void;
-  /** Resolves once every lease end already started has finished. */
-  drain: () => Promise<void>;
-}>;
-
-const LEASE_END_RETRY_INTERVAL_MS = 10_000;
-
-export function createLeaseSessionEnd(params: {
-  env: HostEnvironment['env'];
-  sessionStore: SessionStore;
-  executionLocks: Map<string, Promise<unknown>>;
-  teardownSession: SessionTeardown;
-  cleanupSessionlessExecutionHost: PlatformResourceCleanup['cleanupSessionlessExecutionHost'];
-  withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
-}): LeaseSessionEnd {
-  const { sessionStore, executionLocks, teardownSession } = params;
-  let closing = false;
-  const inFlight = new Map<string, Set<Promise<void>>>();
-  const pending = new Map<string, { reason: LeaseEndReason; nextRetryAt: number }>();
-
-  const endLiveSessions = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
-    const refs = sessionStore.leasedSessionRefs(leaseId);
-    await Promise.all(
-      refs.map(
-        async (ref) =>
-          await withRequestExecutionLockKeys(
-            executionLocks,
-            existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
-            async () => {
-              if (closing) return;
-              const current = sessionStore.currentRefForLease(ref, leaseId);
-              if (!current) return;
-              await endLeasedSession(
-                current,
-                sessionStore,
-                teardownSession,
-                reason,
-                params.env,
-                true,
-              );
-            },
-          ),
-      ),
-    );
-  };
-
-  const endUnderLocks = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
-    await endLiveSessions(leaseId, reason);
-    // A close queued before this lease end can retire its session while we wait for its locks.
-    const retainedHosts = sessionStore.listRetainedExecutionHosts(leaseId);
-    await Promise.all(
-      retainedHosts.map(async (host) => {
-        try {
-          await withRequestExecutionLockKeys(
-            executionLocks,
-            existingSessionExecutionLockKeys(host.address, host.device.id),
-            async () => {
-              if (closing || !sessionStore.ownsRetainedExecutionHost(host)) return;
-              if (!sessionStore.findByDevice(host.device.id)) {
-                await params.cleanupSessionlessExecutionHost(host.device);
-              }
-              sessionStore.releaseRetainedExecutionHost(host);
-            },
-          );
-        } catch (error) {
-          emitDiagnostic({
-            level: 'warn',
-            phase: 'retained_execution_host_cleanup_failed',
-            data: { leaseId, reason, deviceId: host.device.id, error: errorMessage(error) },
-          });
-        }
-      }),
-    );
-    // A reopen can publish its same-lease session while retained-host cleanup waits for the device.
-    await endLiveSessions(leaseId, reason);
-  };
-
-  const run = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
-    try {
-      await endUnderLocks(leaseId, reason);
-    } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'leased_session_end_failed',
-        data: { leaseId, reason, error: errorMessage(error) },
-      });
-    } finally {
-      if (
-        !closing &&
-        sessionStore.listRetainedExecutionHosts(leaseId).length === 0 &&
-        sessionStore.leasedSessionRefs(leaseId).length === 0
-      ) {
-        pending.delete(leaseId);
-      } else if (!closing) {
-        pending.set(leaseId, { reason, nextRetryAt: Date.now() + LEASE_END_RETRY_INTERVAL_MS });
-      }
-    }
-  };
-
-  const end = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
-    if (closing) return;
-    pending.set(leaseId, { reason, nextRetryAt: 0 });
-    const ending = params.withinDiagnosticsScope
-      ? params.withinDiagnosticsScope(async () => await run(leaseId, reason))
-      : run(leaseId, reason);
-    const running = inFlight.get(leaseId) ?? new Set<Promise<void>>();
-    running.add(ending);
-    inFlight.set(leaseId, running);
-    try {
-      await ending;
-    } finally {
-      running.delete(ending);
-      if (running.size === 0) inFlight.delete(leaseId);
-    }
-  };
-
-  return {
-    end,
-    retryPending: async () => {
-      await Promise.all(
-        Array.from(pending, async ([leaseId, { reason, nextRetryAt }]) => {
-          if (!inFlight.has(leaseId) && Date.now() >= nextRetryAt) await end(leaseId, reason);
-        }),
-      );
-    },
-    cancel: () => {
-      closing = true;
-    },
-    drain: async () => {
-      await Promise.allSettled(Array.from(inFlight.values()).flatMap((running) => [...running]));
-    },
-  };
 }

@@ -12,7 +12,7 @@ import {
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { sessionLeaseOf } from '../../../core/lease-context.ts';
-import { createLeaseSessionEnd } from '../../../server/request-execution-scope.ts';
+import { createLeaseSessionEnd } from '../../../server/lease-session-end.ts';
 import { handleLeaseCommands } from '../../handlers/lease.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';

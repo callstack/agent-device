@@ -1,3 +1,5 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { createLeaseSessionEnd, type LeaseSessionEnd } from '../lease-session-end.ts';
 import path from 'node:path';
 import { vi } from 'vitest';
 import {
@@ -23,11 +25,7 @@ import { platformResourceCleanupFixture } from '../../__tests__/support/platform
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import {
-  createLeaseSessionEnd,
-  getLeaseRegistryExecutionLocks,
-  type LeaseSessionEnd,
-} from '../request-execution-scope.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 
 export const TENANT = 'e2b';
 export const SESSION = 'agentA';
@@ -44,7 +42,10 @@ export type RpcBody = {
   result?: { ok?: boolean; data?: Record<string, unknown> };
   error?: {
     message?: string;
-    data?: { code?: string; details?: { reason?: string; field?: string } };
+    data?: {
+      code?: string;
+      details?: { reason?: string; field?: string; endedLeases?: unknown[] };
+    };
   };
 };
 
@@ -98,13 +99,14 @@ export async function startDaemon(daemonPolicy?: DaemonPolicy) {
   };
   const observeRunnerSession = vi.fn(async () => ({ alive: true, sessionId: 'runner-1' }));
   const hostDiagnostics = hostDiagnosticsFixture();
-  // A request that ends an expired session itself stops the snapshot helper of that session.
   const requestTeardown = platformResourceCleanupFixture();
   const runtime = createLifecycleDeviceRuntimeGatewaySpies();
   const hooks: {
     beforeDispatch?: () => void | Promise<void>;
     duringDeviceSelection?: () => void;
+    afterRequest?: (response: DaemonResponse) => void;
   } = {};
+  const settlementFor = vi.fn(leaseSessionEnd.settlementFor);
   const handleRequest = createRequestHandler({
     host: createTestHostEnvironment({
       env: { ...process.env, AGENT_DEVICE_MACOS_APP_BACKEND: 'native' },
@@ -114,6 +116,7 @@ export async function startDaemon(daemonPolicy?: DaemonPolicy) {
     token: 'daemon-token',
     sessionStore,
     leaseRegistry,
+    leaseSessionEnd: { settlementFor },
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => {
         hooks.duringDeviceSelection?.();
@@ -140,30 +143,43 @@ export async function startDaemon(daemonPolicy?: DaemonPolicy) {
   });
   const daemon = await createDaemonHttpServer({
     token: 'daemon-token',
-    handleRequest,
+    handleRequest: async (req) => {
+      const response = await handleRequest(req);
+      hooks.afterRequest?.(response);
+      return response;
+    },
     env: {},
     cwd: process.cwd(),
   });
   const daemonPort = await listenOnLoopback(daemon);
+  let requestNumber = 0;
   const send = async (
     command: string,
     positionals: string[],
     meta: Record<string, unknown>,
-    request: { session?: string; flags?: Record<string, unknown> } = {},
+    request: { session?: string; flags?: Record<string, unknown>; signal?: AbortSignal } = {},
   ) => {
+    const requestId = `lease-touch-${++requestNumber}`;
     const response = await fetch(`http://127.0.0.1:${daemonPort}/rpc`, {
       method: 'POST',
+      signal: request.signal,
       headers: { authorization: 'Bearer daemon-token', 'content-type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: command,
+        id: requestId,
         method: 'agent_device.command',
         params: {
           session: request.session ?? SESSION,
           command,
           positionals,
           flags: request.flags ?? {},
-          meta: { tenantId: TENANT, sessionIsolation: 'tenant', sessionExplicit: true, ...meta },
+          meta: {
+            requestId,
+            tenantId: TENANT,
+            sessionIsolation: 'tenant',
+            sessionExplicit: true,
+            ...meta,
+          },
         },
       }),
     });
@@ -189,6 +205,7 @@ export async function startDaemon(daemonPolicy?: DaemonPolicy) {
     leaseRegistry,
     publishLeasedSession,
     expiryTeardown,
+    settlementFor,
     observeRunnerSession,
     hostDiagnostics,
     requestTeardown,
