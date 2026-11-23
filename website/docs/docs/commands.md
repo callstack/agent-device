@@ -1008,6 +1008,7 @@ agent-device scroll down --until 'label="Sign in"'
 agent-device scroll refresh           # pull-to-refresh at the top of the list
 agent-device gesture pinch 2.0          # zoom in 2x
 agent-device gesture pinch 0.5 200 400 # zoom out at coordinates
+agent-device gesture pinch 2 @e17       # zoom in 2x centered on an element
 agent-device gesture rotate 35 200 420 # rotate app content
 agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and rotate
 agent-device gesture tap 80 300 200 450 310 600        # three fingers at once

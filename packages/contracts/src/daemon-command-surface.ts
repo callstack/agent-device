@@ -20,6 +20,7 @@ import type {
   GestureContactCount,
   GestureIntent,
   GestureSemanticInput,
+  TargetedPinchGestureInput,
 } from './gesture-plan-types.ts';
 import type { FindLocator } from './snapshot-types.ts';
 import type {
@@ -250,7 +251,7 @@ export type DaemonHoverOptions = CommandContext &
 
 export type DaemonGestureOptions = CommandContext &
   (
-    | Readonly<{ gesture: GestureSemanticInput }>
+    | Readonly<{ gesture: GestureSemanticInput | TargetedPinchGestureInput }>
     | Readonly<{
         gesture: DragGestureInput;
         expectedResolvedTargets?: {
@@ -269,6 +270,8 @@ export type DaemonCoordinateGestureResult = Readonly<{
   to: Point;
   backendResult?: Record<string, unknown>;
   message?: string;
+  /** The selector a pinch element resolved, so a recorded `.ad` line replays without a ref. */
+  recordedTargetSelector?: string;
 }>;
 
 /** A drag additionally reports its two endpoints and what a replay needs to re-issue them. */

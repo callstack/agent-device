@@ -232,6 +232,9 @@ const gestureFields = {
   delta: pointField('Movement delta for pan or transform gestures.'),
   distance: integerField('Fling distance.', { min: 0 }),
   scale: numberField('Pinch or transform scale.'),
+  element: stringField(
+    'Element to pinch, as an @ref or selector; the pinch centers on it, in place of origin.',
+  ),
   degrees: numberField('Rotation in degrees.'),
   durationMs: integerField('Pan/transform duration.', { min: 16, max: 10_000 }),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),

@@ -5,6 +5,7 @@ import {
   type DragGesturePayload,
   type GesturePayload,
   type PanGesturePayload,
+  type PinchGesturePayload,
   type TapGesturePayload,
 } from '@agent-device/contracts/gesture-input';
 import { readOptionalInteger } from '@agent-device/contracts/input-validation';
@@ -38,6 +39,7 @@ const TAP_ONLY_FIELDS = ['points', 'count', 'pauseMs'] as const;
 export function readGesturePayload(input: unknown): GesturePayload {
   const record = readRecord(input);
   const kind = readEnum(record, 'kind', GESTURE_KINDS);
+  assertNoPinchOnlyFields(kind, record);
   if (kind === 'tap') {
     return readTapGesturePayload(record);
   }
@@ -81,11 +83,7 @@ export function readGesturePayload(input: unknown): GesturePayload {
     };
   }
   if (kind === 'pinch') {
-    return {
-      kind,
-      scale: readNumber(record, 'scale'),
-      origin: readOptionalPoint(record, 'origin'),
-    };
+    return readPinchGesturePayload(record);
   }
   if (kind === 'rotate') {
     if (record.velocity !== undefined) {
@@ -178,6 +176,22 @@ function assertTapSeriesFitsRequest(input: TapGesturePayload): void {
       hint: 'Reduce --count, --pause-ms or --hold-ms.',
     },
   );
+}
+
+function readPinchGesturePayload(record: Record<string, unknown>): PinchGesturePayload {
+  const scale = readNumber(record, 'scale');
+  if (record.element === undefined) {
+    return { kind: 'pinch', scale, origin: readOptionalPoint(record, 'origin') };
+  }
+  if (record.origin !== undefined) {
+    throw new AppError('INVALID_ARGS', 'gesture pinch takes an element or an origin, not both');
+  }
+  return { kind: 'pinch', scale, element: readNonEmptyString(record, 'element') };
+}
+
+function assertNoPinchOnlyFields(kind: string, record: Record<string, unknown>): void {
+  if (kind === 'pinch' || record.element === undefined) return;
+  throw new AppError('INVALID_ARGS', 'element is supported only for gesture pinch');
 }
 
 function assertNoTapOnlyFields(kind: string, record: Record<string, unknown>): void {

@@ -48,6 +48,8 @@ export type PinchGesturePayload = {
   kind: 'pinch';
   scale: number;
   origin?: Point;
+  /** A `@ref` or selector the pinch centers on, in place of `origin`. */
+  element?: string;
 };
 
 export type RotateGesturePayload = {

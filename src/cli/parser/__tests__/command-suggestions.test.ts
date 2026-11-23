@@ -71,6 +71,18 @@ for (const guess of ['start', 'restart']) {
   });
 }
 
+for (const guess of ['pinch', 'zoom']) {
+  test(`${guess} suggests gesture pinch on an element`, () => {
+    assert.throws(
+      () => parseArgs([guess, '2', '@e17']),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.message ===
+          `Unknown command: ${guess}. Did you mean gesture pinch <scale> <@ref|selector>?`,
+    );
+  });
+}
+
 test('touch suggests press', () => {
   assert.throws(
     () => parseArgs(['touch', '100', '200']),

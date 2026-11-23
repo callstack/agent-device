@@ -3,7 +3,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { dragGesturePayloadFromPositionals } from '@agent-device/gestures/gesture-normalization';
+import {
+  dragGesturePayloadFromPositionals,
+  pinchElementFromPositionals,
+} from '@agent-device/gestures/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { recordedSelectorExpression } from '@agent-device/selectors';
@@ -252,11 +255,9 @@ function handleSessionScriptWriteFailure(params: {
 }
 
 function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
-  const detail = error instanceof Error ? error.message : String(error);
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+  return toScriptWriteFailure(
+    error,
+    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}`,
     {
       reason: SCRIPT_WRITE_REASONS.writeFailed.reason,
       ...(scriptPath ? { path: scriptPath } : {}),
@@ -264,6 +265,18 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
     },
     error,
   );
+}
+
+/** An AppError passes through; any other failure is wrapped with its message appended. */
+function toScriptWriteFailure(
+  error: unknown,
+  message: string,
+  details: Record<string, unknown>,
+  cause?: unknown,
+): AppError {
+  if (error instanceof AppError) return error;
+  const detail = error instanceof Error ? error.message : String(error);
+  return new AppError('COMMAND_FAILED', `${message}: ${detail}`, details, cause);
 }
 
 /**
@@ -274,11 +287,9 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
  * message and hint so the two are distinguishable to the agent.
  */
 function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
-  const detail = error instanceof Error ? error.message : String(error);
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+  return toScriptWriteFailure(
+    error,
+    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}`,
     {
       hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
     },
@@ -406,12 +417,18 @@ function assertNoUnresolvedRefFallback(action: SessionAction): void {
     assertNoUnresolvedDragEndpoint(drag);
     return;
   }
-  if (!isSelectorTargetingCommand(action.command)) return;
-  const refPositional = action.command === 'get' ? action.positionals[1] : action.positionals[0];
+  const pinchElement =
+    action.command === 'gesture' ? pinchElementFromPositionals(action.positionals) : undefined;
+  if (!pinchElement && !isSelectorTargetingCommand(action.command)) return;
+  const refPositional =
+    pinchElement ?? (action.command === 'get' ? action.positionals[1] : action.positionals[0]);
   if (!refPositional?.startsWith('@')) return;
+  const step = pinchElement
+    ? `gesture ${action.positionals.join(' ')}`
+    : `${action.command} ${refPositional}`;
   throw new AppError(
     'COMMAND_FAILED',
-    `Cannot write recorded step "${action.command} ${refPositional}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
+    `Cannot write recorded step "${step}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
   );
 }
 

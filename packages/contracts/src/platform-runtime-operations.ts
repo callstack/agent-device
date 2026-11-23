@@ -16,7 +16,7 @@ import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-
 import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { FocusRuntimeOperations } from './focus-runtime.ts';
-import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
+import type { GestureCommandInput } from './gesture-plan-types.ts';
 import type { GestureRuntimeTier } from './gesture-tier.ts';
 import type { GestureRuntimeOperations } from './gesture-runtime.ts';
 import type { ScrollRuntimeOperations } from './scroll-runtime.ts';
@@ -368,7 +368,7 @@ export type GestureRuntimePlan = {
 
 /** Selects the one owner-fact-backed gesture plan a normalized gesture input needs. */
 /** Pinch, rotate, transform, an explicit two-pointer pan, and a multi-finger tap hold several contacts. */
-function isMultiTouchGesture(input: GestureSemanticInput): boolean {
+function isMultiTouchGesture(input: Exclude<GestureCommandInput, { intent: 'drag' }>): boolean {
   if (input.intent === 'pan') return ('pointerCount' in input ? input.pointerCount : 1) === 2;
   return (
     input.intent === 'pinch' ||

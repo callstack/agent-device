@@ -178,7 +178,7 @@ function buildGestureOutcome(
       ? { ...result, message: `Tapped ${input.points.length} points ${input.count} times` }
       : result;
   return {
-    positionals: dragRecordingPositionals(input, recording),
+    positionals: recordedGesturePositionals(input, result),
     flags: gestureReplayFlags(input, flags),
     responseData: gestureResponseData(responseResult, {
       executionProfile: resolveExecutionProfile(gesture),
@@ -381,13 +381,18 @@ function prepareGestureCommandInput(
   readiness: AndroidBlockingDialogReadinessResult,
 ): GestureCommandInput {
   const normalized = normalizeGestureCommandInput(input);
-  if (normalized.intent !== 'drag') return normalized;
   try {
-    return {
-      ...normalized,
-      source: prepareDragTarget(normalized.source, session),
-      destination: prepareDragTarget(normalized.destination, session),
-    };
+    if (normalized.intent === 'drag') {
+      return {
+        ...normalized,
+        source: prepareGestureTarget(normalized.source, session),
+        destination: prepareGestureTarget(normalized.destination, session),
+      };
+    }
+    if ('element' in normalized) {
+      return { ...normalized, element: prepareGestureTarget(normalized.element, session) };
+    }
+    return normalized;
   } catch (error) {
     if (readiness.status === 'recovered') {
       const failure = asAppError(error);
@@ -400,7 +405,7 @@ function prepareGestureCommandInput(
   }
 }
 
-function prepareDragTarget(target: string, session: SessionState): string {
+function prepareGestureTarget(target: string, session: SessionState): string {
   if (!target.startsWith('@')) return target;
   const split = splitRefGenerationSuffix(target);
   if (!split) {
@@ -420,16 +425,19 @@ function prepareDragTarget(target: string, session: SessionState): string {
   return split.base;
 }
 
-function dragRecordingPositionals(
-  input: GesturePayload,
-  recording: Extract<GestureRuntimeResult, { kind: 'drag' }>['recording'],
-): string[] {
-  if (input.kind !== 'drag' || !recording) return gesturePayloadToPositionals(input);
-  return gesturePayloadToPositionals({
-    ...input,
-    source: recording.sourceSelector ?? input.source,
-    destination: recording.destinationSelector ?? input.destination,
-  });
+/** The `.ad` line for a gesture: a resolved target records its selector, never a session ref. */
+function recordedGesturePositionals(input: GesturePayload, result: GestureRuntimeResult): string[] {
+  if (input.kind === 'drag' && result.kind === 'drag' && result.recording) {
+    return gesturePayloadToPositionals({
+      ...input,
+      source: result.recording.sourceSelector ?? input.source,
+      destination: result.recording.destinationSelector ?? input.destination,
+    });
+  }
+  if (input.kind === 'pinch' && result.kind !== 'drag' && result.recordedTargetSelector) {
+    return gesturePayloadToPositionals({ ...input, element: result.recordedTargetSelector });
+  }
+  return gesturePayloadToPositionals(input);
 }
 
 function readSwipeInput(input: unknown): SwipePayload {

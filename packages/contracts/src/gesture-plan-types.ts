@@ -31,6 +31,13 @@ export type DragGestureInput = {
   destinationHoldMs?: number;
 };
 
+/** A pinch centered on a `@ref` or selector; the runtime resolves the element to the origin. */
+export type TargetedPinchGestureInput = {
+  intent: 'pinch';
+  element: string;
+  scale: number;
+};
+
 /** Selects one-pointer release timing without changing semantic gesture intent. */
 export type GestureExecutionProfile = 'endpoint-hold' | 'timed-pan';
 
@@ -69,7 +76,10 @@ export type GestureSemanticInput =
       holdMs?: number;
     };
 
-export type GestureCommandInput = GestureSemanticInput | DragGestureInput;
+export type GestureCommandInput =
+  | GestureSemanticInput
+  | DragGestureInput
+  | TargetedPinchGestureInput;
 
 export type PointerTrajectorySample = { offsetMs: number; point: Point };
 
