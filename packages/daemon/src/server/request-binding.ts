@@ -1,4 +1,8 @@
-import { resolveCommandAndroidAvdSelection } from '../core/daemon-command-registry.ts';
+import {
+  ignoresSessionLease,
+  shouldLockSessionExecution,
+  resolveCommandAndroidAvdSelection,
+} from '../core/daemon-command-registry.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   hasDeviceSelectionInput,
@@ -7,10 +11,12 @@ import {
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
-import type { SessionStore } from '../core/session-store.ts';
+import { type SessionStore, SessionCoordinator } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef } from '../core/session-state.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { remoteScriptVersionDelivery } from '../core/session-script-publication-capability.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 
@@ -176,4 +182,33 @@ function orderRequestExecutionLockKeys(
 
 function lockKeyCategoryOrder(key: RequestExecutionLockKey): number {
   return key.startsWith('session:') ? 0 : 1;
+}
+
+export async function withSessionScriptPublication(
+  store: SessionStore,
+  { req, existingRef }: LockedRequestBinding,
+  dispatch: (req: DaemonRequest) => Promise<DaemonResponse>,
+): Promise<DaemonResponse> {
+  if (!shouldLockSessionExecution(req.command) || ignoresSessionLease(req.command))
+    return await dispatch(req);
+
+  let active = true;
+  const authorized =
+    existingRef && new SessionCoordinator(store).authorize(req, existingRef, () => active);
+  let commitScript = remoteScriptVersionDelivery(existingRef?.session, authorized);
+  try {
+    const response = await dispatch({
+      ...req,
+      internal: {
+        ...req.internal,
+        sessionAuthorityActive: () => active,
+        onSessionPublished: (commit) => {
+          commitScript = commit;
+        },
+      },
+    });
+    return commitScript(response);
+  } finally {
+    active = false;
+  }
 }

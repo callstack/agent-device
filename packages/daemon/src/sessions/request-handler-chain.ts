@@ -12,7 +12,7 @@ import * as genericRequestHandlerModule from '../execution/request-generic-dispa
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
-import type { SessionStore } from '../core/session-store.ts';
+import { type SessionStore, type WithSessionExecutionLock } from '../core/session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import type {
   BindDeviceRuntime,
@@ -72,6 +72,7 @@ type RequestHandlerChainParams = {
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   resolveSessionRef?: ResolveRequestSessionRef;
+  withSessionExecutionLock?: WithSessionExecutionLock;
   requestScope: PlatformRequestScope;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
@@ -205,6 +206,7 @@ async function runSessionHandler(
       screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
       hostDiagnostics: params.hostDiagnostics,
       resolveSessionRef: params.resolveSessionRef,
+      withSessionExecutionLock: params.withSessionExecutionLock,
       requestScope: params.requestScope,
       retainDeviceExecutionLock: params.retainDeviceExecutionLock,
       throwIfCanceled: params.throwIfCanceled,

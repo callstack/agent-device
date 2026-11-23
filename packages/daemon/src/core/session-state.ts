@@ -148,7 +148,7 @@ export type CloseBootOwnership = 'proved' | 'inferred' | 'disproved' | 'none';
 export type SessionState = {
   name: string;
   sessionScope?: SessionScope;
-  lease?: SessionLease;
+  readonly lease?: SessionLease;
   /**
    * #2833: the instant a command that attaches to this session last finished, which is what the
    * opt-in inactivity deadline for a claim-holding session is measured from. Absent until then, in

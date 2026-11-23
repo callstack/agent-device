@@ -1,3 +1,4 @@
+import { SessionCoordinator } from '../../core/session-store.ts';
 /**
  * #4622: replay's target verification must read the screen through the SAME capture the commands it
  * dispatches read it through. Recorded `target-v1` evidence describes the tree one producer builds;
@@ -178,11 +179,15 @@ test.each(['close and reopen', 'open with refreshed device'])(
           if (req.command === 'close') scene.sessionStore.retire(initial);
           if (req.command === 'open') {
             generation++;
+            const existingRef = scene.sessionStore.lookup(scene.sessionName);
+            const openSlot = existingRef
+              ? undefined
+              : new SessionCoordinator(scene.sessionStore).reserve(req, scene.sessionName);
             publishOpenSession({
-              req,
+              req: { ...req, internal: { ...req.internal, openSlot } },
               sessionStore: scene.sessionStore,
               sessionName: scene.sessionName,
-              existingRef: scene.sessionStore.lookup(scene.sessionName),
+              existingRef,
               device: closes ? initial.session.device : { ...initial.session.device },
               surface: 'app',
               appBundleId: initial.session.appBundleId,

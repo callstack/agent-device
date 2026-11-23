@@ -203,6 +203,8 @@ jobs:
           # scripts/layering/check.ts and CONTEXT.md (Architecture: folder DAG +
           # layering lint).
           - name: Check import-direction DAG
+            env:
+              SESSION_STORE_READ_BASE: ${{ github.event.pull_request.base.sha }}
             uses: ./.github/actions/run-gate
             with: { gate: layering }
 

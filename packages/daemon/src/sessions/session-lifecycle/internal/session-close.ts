@@ -59,6 +59,7 @@ export type SessionCloseCommandInput = Readonly<{
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  sessionRef?: SessionRef;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -290,7 +291,7 @@ export async function handleSessionCloseCommands(
   params: SessionCloseCommandInput,
 ): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
-  const ref = sessionStore.lookup(sessionName);
+  const ref = params.sessionRef ?? sessionStore.lookup(sessionName);
   if (!ref) {
     return await closeWithoutSession({
       req,

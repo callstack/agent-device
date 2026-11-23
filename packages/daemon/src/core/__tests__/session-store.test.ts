@@ -110,7 +110,7 @@ test('defaultTracePath sanitizes session name', () => {
 
 test('session lease metadata round-trips through the store', () => {
   const { store, session } = makeFixture('agent-device-session-lease-');
-  session.lease = {
+  const lease = {
     leaseId: 'f'.repeat(32),
     tenantId: 'tenant-a',
     runId: 'run-1',
@@ -118,11 +118,11 @@ test('session lease metadata round-trips through the store', () => {
     backend: 'ios-simulator',
     leaseProvider: 'proxy',
     deviceKey: 'ios:SIM-001',
-  };
+  } as const;
 
-  store.publish(session.name, session);
+  store.publish(session.name, { ...session, lease });
 
-  assert.deepEqual(store.get(session.name)?.lease, session.lease);
+  assert.deepEqual(store.get(session.name)?.lease, lease);
 });
 
 test('sessions without lease metadata remain valid', () => {

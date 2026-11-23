@@ -15,7 +15,7 @@ Other leases, including human-control holds, do not.
 If the caller stops heartbeats for a retained lease, that lease expires after its `ttlMs`.
 Idle reap then shuts the daemon down within one more idle window.
 
-A session cannot outlive the lease under which it was opened.
+A session cannot outlive the lease it binds at creation.
 When the lease is released, expires, or its provider reports the instance ended, the daemon tears the session down under its execution locks and clears its device claim.
 Any teardown of a leased session, including `close`, finishes an active recording. A daemon-owned export stays downloadable under its producing owner, as with `record stop` (ADR 0024 2.5).
 This applies even when the device no longer answers.
@@ -76,6 +76,10 @@ A request on that session, including `close`, `artifacts`, and other admission-e
 Lease heartbeat and release name the lease id too.
 If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reason `LEASE_SESSION_MISMATCH`, and `field: 'leaseId'`.
 The daemon never fills a missing lease id from the session.
+When a command creates a session, it binds the admitted lease or creates an unleased session.
+This also applies to recording-only and snapshot-only sessions.
+To use a different lease, close the session with its current credentials and then open it under the new lease.
+If you try to change the lease of a live session with `open`, the daemon returns `LEASE_SESSION_MISMATCH` before launch.
 The daemon checks the lease id before the request reads, changes, or ends the session.
 A request writes request events to the session journal only after that check. Thus, a request that is refused for the session lease id writes none, and it does not stamp session activity.
 If a command writes request events and the request has access to an existing session, the daemon records its start before it runs the command.

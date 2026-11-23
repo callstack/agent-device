@@ -46,6 +46,7 @@ type CaptureSnapshotParams = {
   snapshotScope?: string;
   androidFreshnessMode?: SnapshotFreshnessMode;
   signal?: AbortSignal;
+  assertCurrent?: () => void;
   /**
    * Request-bound platform capture. Migrated callers inject the selected
    * runtime operation; legacy consumers keep the existing interactor path
@@ -85,16 +86,25 @@ type CaptureSnapshotResult = {
 export async function captureSnapshot(
   params: CaptureSnapshotParams,
 ): Promise<CaptureSnapshotResult> {
+  const assertCurrent = params.session
+    ? () => {
+        params.assertCurrent?.();
+        params.signal?.throwIfAborted();
+      }
+    : undefined;
+  assertCurrent?.();
   const deferred = await resolveDeferredInteractionOutcome({
     session: params.session,
     device: params.device,
     interactiveOnly: params.flags?.snapshotInteractiveOnly === true,
     androidFreshnessMode: params.androidFreshnessMode,
-    capture: () => captureSnapshotAttempt(params),
+    assertCurrent,
+    capture: () => captureSnapshotAttempt(params, assertCurrent),
   });
   if (deferred) return deferred;
 
-  const latest = await captureSnapshotAttempt(params);
+  const latest = await captureSnapshotAttempt(params, assertCurrent);
+  assertCurrent?.();
   clearAndroidSnapshotFreshness(params.session);
   return {
     snapshot: latest.snapshot,
@@ -135,9 +145,14 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
   });
 }
 
-async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<SnapshotAttempt> {
+async function captureSnapshotAttempt(
+  params: CaptureSnapshotParams,
+  assertCurrent?: () => void,
+): Promise<SnapshotAttempt> {
   const startedAt = Date.now();
+  assertCurrent?.();
   const data = await captureSnapshotData(params);
+  assertCurrent?.();
   recordSnapshotTiming(params.session, {
     durationMs: Date.now() - startedAt,
     backend: data.backend,

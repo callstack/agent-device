@@ -26,7 +26,12 @@ Tenant, run id, lease backend, client id, device key, and lease provider are sco
 A lease id that a client chooses on allocate needs at least 128 random bits. The daemon returns a lease id only to the caller that allocated the lease.
 A daemon that enforces this rule reports the `session-lease-id` capability.
 
-Lease admission, heartbeats, stored session lease refresh, and request execution share the daemon request lock.
+A session binds its admitted lease when it is created. Recording and snapshot can also create a session.
+A session that starts without a lease stays unleased for its lifetime.
+If an `open` would change the session's lease, the daemon refuses it with `LEASE_SESSION_MISMATCH` before launch.
+Close the session under its current ownership before you open it under another lease.
+
+Lease admission and request execution share the daemon request lock.
 Scope resolution may precede the lock. Ownership mutation must not.
 A session cannot outlive its lease: lease end tears down its sessions and clears their device claims, even when the device no longer answers.
 When a provider reports an instance ended, the daemon ends the lease and its sessions regardless of provider cleanup outcome.

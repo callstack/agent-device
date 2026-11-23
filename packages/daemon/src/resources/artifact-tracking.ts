@@ -63,10 +63,7 @@ export function requestTraceDiagnostics(
     };
   }
   const unleasedCallerTrace = trace.outPath !== undefined && owner === null && !ref.session.lease;
-  const traceLogWritable = () => {
-    const current = store.resolveCurrent(ref);
-    return current?.trace === trace && (!unleasedCallerTrace || current.lease === undefined);
-  };
+  const traceLogWritable = () => store.resolveCurrent(ref)?.trace === trace;
   return {
     traceLogPath: trace.remoteCaptureOutputPath ?? trace.outPath,
     traceLogWritable,

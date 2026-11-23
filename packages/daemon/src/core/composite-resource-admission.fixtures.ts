@@ -1,3 +1,5 @@
+import type { DeviceLease } from '@agent-device/contracts/device';
+import { sessionLeaseOf } from './lease-context.ts';
 import replayPlugin from '@agent-device/replay/agent-device';
 import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
 import { bindReplayBackendResolver } from '@agent-device/replay-port/replay-backend-registry';
@@ -309,4 +311,14 @@ type ResourceRpcResult = { statusCode: number; json: any };
 export function assertRpcOk(response: ResourceRpcResult): void {
   expect(response.statusCode, JSON.stringify(response.json)).toBe(200);
   expect(response.json.error).toBeUndefined();
+}
+
+export function publishLeasedFixture(
+  world: Pick<Awaited<ReturnType<typeof resourceAdmissionWorld>>, 'sessionStore' | 'ref'>,
+  lease: DeviceLease,
+) {
+  const { sessionStore, ref } = world;
+  const session = sessionStore.requireCurrent(ref);
+  sessionStore.retire(ref);
+  world.ref = sessionStore.publish(ref.address, { ...session, lease: sessionLeaseOf(lease) });
 }

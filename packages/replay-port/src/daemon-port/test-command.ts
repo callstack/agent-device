@@ -153,6 +153,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
     request: req,
     session: { name: sessionName, logPath },
     createSession,
+    runAttempt,
     invoke,
     cleanupSession,
     video,
@@ -229,10 +230,11 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         sourceBundle: sourceBundlesByPath.get(filePath),
       });
 
-      const attemptSession = createSession(testSessionName, logPath);
+      const attemptSession = createSession(testSessionName, logPath, 'replay');
+      const attemptMeta = { ...req.meta, ...(requestId ? { requestId } : {}) };
       const videoRecordingParams = video
         ? {
-            req,
+            req: { ...req, meta: attemptMeta },
             sessionName: testSessionName,
             sessionStore: attemptSession.store,
             artifactsDir,
@@ -243,34 +245,33 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
       const openLifecycle = videoRecordingParams
         ? buildReplayTestVideoOpenLifecycle(videoRecordingParams)
         : undefined;
-      const replayResponse = await runReplayCommand({
-        ...nestedReplayCommand(command, {
-          request: {
-            ...req,
-            command: 'replay',
-            session: testSessionName,
-            positionals: [filePath],
-            flags: nestedFlags,
-            meta: {
-              ...(req.meta ?? {}),
-              ...(requestId ? { requestId } : {}),
+      const replayResponse = await runAttempt(testSessionName, requestId, () =>
+        runReplayCommand({
+          ...nestedReplayCommand(command, {
+            request: {
+              ...req,
+              command: 'replay',
+              session: testSessionName,
+              positionals: [filePath],
+              flags: nestedFlags,
+              meta: attemptMeta,
             },
+            openLifecycle,
+          }),
+          session: attemptSession,
+          tracePath,
+          onStep,
+          publicNetworkOnly: command.publicNetworkOnly,
+          invoke: async (nestedReq) => {
+            const startResponse = videoRecordingParams
+              ? await startReplayTestVideoRecordingIfReady(videoRecordingParams)
+              : undefined;
+            if (startResponse && !startResponse.ok) return startResponse;
+            const response = captureArtifacts(await invoke(nestedReq));
+            return response;
           },
-          openLifecycle,
         }),
-        session: attemptSession,
-        tracePath,
-        onStep,
-        publicNetworkOnly: command.publicNetworkOnly,
-        invoke: async (nestedReq) => {
-          const startResponse = videoRecordingParams
-            ? await startReplayTestVideoRecordingIfReady(videoRecordingParams)
-            : undefined;
-          if (startResponse && !startResponse.ok) return startResponse;
-          const response = captureArtifacts(await invoke(nestedReq));
-          return response;
-        },
-      });
+      );
       return withOriginalTestRefusalGuidance(toReplayTestAttemptOutcome(replayResponse));
     },
     finalizeAttempt: async ({
@@ -284,7 +285,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         await finalizeReplayTestVideoRecording({
           req,
           sessionName: testSessionName,
-          sessionStore: createSession(testSessionName, logPath).store,
+          sessionStore: createSession(testSessionName, logPath, 'finalize').store,
           artifactsDir,
           appendTimingEvent,
           artifactPaths,

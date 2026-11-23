@@ -15,7 +15,6 @@ import { makeAndroidSession } from '../../__tests__/support/session-factories.ts
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-runtime-fixture.ts';
 import { screenshotCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
-import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
@@ -165,61 +164,7 @@ test('direct HTTP recording replay requires known remote output provenance', asy
   );
 });
 
-test('record stop keeps the unleased producer when the stop runs under a lease', async () => {
-  const harness = makeRecordRuntimeHarness('remote-recording-later-lease-');
-  const start = harness.runtime.start.getMockImplementation()!;
-  harness.runtime.start.mockImplementation(async (input) => {
-    fs.writeFileSync(input.outputPath, 'unleased-video');
-    return await start(input);
-  });
-  const lease = new LeaseRegistry().allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-a',
-    leaseBackend: 'android-instance',
-  });
-  await withHttp(
-    async (request) => {
-      const admitted =
-        request.positionals?.[0] === 'stop'
-          ? { ...request, internal: { ...request.internal, admittedLease: lease } }
-          : request;
-      return finalizeDaemonResponse(
-        admitted,
-        await harness.run(admitted.positionals, admitted.meta, admitted.flags, admitted.internal),
-        trackDownloadableArtifact,
-      );
-    },
-    async (post, base) => {
-      successfulData(await post({ command: 'record', positionals: ['start'] }));
-      harness.sessionStore.update(harness.sessionStore.lookup(harness.sessionName)!, {
-        lease: sessionLeaseOf(lease),
-      });
-      const output = successfulData(
-        await post({
-          command: 'record',
-          positionals: ['stop'],
-        }),
-      );
-      const id = output.artifacts?.[0]?.artifactId;
-      expect(id).toBeTypeOf('string');
-      const url = `${base}/artifacts/${id}`;
-      const other = await fetch(url, {
-        headers: { authorization: 'Bearer test-token', [DAEMON_HTTP_TENANT_HEADER]: 'tenant-b' },
-      });
-      expect(other.status).toBe(401);
-      const download = await fetch(url, {
-        headers: {
-          authorization: 'Bearer test-token',
-          [DAEMON_HTTP_TENANT_HEADER]: lease.tenantId,
-        },
-      });
-      expect(download.status).toBe(200);
-      expect(await download.text()).toBe('unleased-video');
-    },
-  );
-});
-
-test.each(['leased at start', 'leased after start'])(
+test.each(['leased at start', 'unleased'])(
   'a downloadable trace preserves producer ownership when the session is %s',
   async (scenario) => {
     const sessionStore = makeSessionStore('leased-trace-session-');
@@ -281,9 +226,6 @@ test.each(['leased at start', 'leased after start'])(
         });
       } else {
         successfulData(await wait('trace-owner-request', unleased));
-        sessionStore.update(sessionStore.lookup('capture')!, {
-          lease: sessionLeaseOf(lease),
-        });
         successfulData(await wait('trace-other-request', owner));
       }
       const id = successfulData(await trace('stop', owner)).artifacts?.[0]?.artifactId;
