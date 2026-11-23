@@ -4,11 +4,13 @@ import {
   REMOTE_CONFIG_PROFILE_FIELD_SPECS,
   getRemoteConfigEnvNames,
   getRemoteConfigFieldSpec,
+  type RemoteConfigFieldSpec,
   type RemoteConfigProfile,
   type RemoteConfigProfileOptions,
   type ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { parseSourceValue, type EnvMap } from '@agent-device/kernel/source-value';
 
@@ -63,12 +65,7 @@ export function readRemoteConfigFile(
         `Unsupported remote config key "${rawKey}" in remote config file ${resolvedPath}.`,
       );
     }
-    const parsedValue = parseSourceValue(
-      spec,
-      rawValue,
-      `remote config file ${resolvedPath}`,
-      rawKey,
-    );
+    const parsedValue = parseProfileFieldValue(spec, rawValue, resolvedPath);
     (profile as Record<string, unknown>)[spec.key] =
       typeof parsedValue === 'string' && 'path' in spec && spec.path
         ? resolveUserPath(parsedValue, { cwd: configDir, env })
@@ -76,6 +73,17 @@ export function readRemoteConfigFile(
   }
 
   return { resolvedPath, profile };
+}
+
+function parseProfileFieldValue(
+  spec: RemoteConfigFieldSpec,
+  rawValue: unknown,
+  configPath: string,
+): unknown {
+  if (spec.key === 'leaseProvider' && typeof rawValue === 'string') {
+    return canonicalLeaseProvider(rawValue);
+  }
+  return parseSourceValue(spec, rawValue, `remote config file ${configPath}`, spec.key);
 }
 
 function readRemoteConfigEnvDefaults(env: EnvMap): RemoteConfigProfile {

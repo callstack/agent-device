@@ -36,7 +36,7 @@ test('connect names a missing provider plugin and returns installation guidance 
     reason: 'plugin-not-installed',
     provider: 'testmu',
     package: '@agent-device/testmu',
-    installCommand: 'agent-device plugins add @agent-device/testmu',
+    installCommand: 'agent-device plugins add @agent-device/testmu@nightly-0.22',
   });
   assert.match(error.hint, /agent-device plugins add @agent-device\/testmu/);
   assert.match(error.hint, /retry your original command/);
@@ -115,7 +115,7 @@ test('connect reports a failed selected plugin even when its error text describe
   assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
   assert.equal(error.details.installCommand, undefined);
   assert.match(error.hint, /plugins list --json/);
-  assert.doesNotMatch(error.hint, /plugins add/);
+  assert.match(error.hint, /plugins add @agent-device\/testmu@nightly-0.22/);
 });
 
 test('connect does not call a selected plugin missing when it has no connection callbacks', async () => {
@@ -186,7 +186,7 @@ test('a stable core prescribes the plain package for the same plugin', async () 
   assert.ok(help?.includes(`${error.details.installCommand}\n`));
 });
 
-test('a 0.22 nightly core still prescribes the plain package for a full-channel plugin', async () => {
+test('a 0.22 nightly core prescribes its exact TestMu plugin release', async () => {
   vi.mocked(readVersion).mockReturnValue(NIGHTLY_0_22);
   const { home, env } = pluginHome();
   const result = await runCliCapture(
@@ -196,7 +196,10 @@ test('a 0.22 nightly core still prescribes the plain package for a full-channel 
   assert.equal(result.code, 1);
   assert.deepEqual(result.calls, []);
   const { error } = JSON.parse(result.stdout);
-  assert.equal(error.details.installCommand, 'agent-device plugins add @agent-device/testmu');
+  assert.equal(
+    error.details.installCommand,
+    `agent-device plugins add @agent-device/testmu@${NIGHTLY_0_22}`,
+  );
 });
 
 test('connect reports an unreadable plugin selection instead of prescribing a new installation', async () => {

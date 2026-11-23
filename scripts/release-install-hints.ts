@@ -12,13 +12,13 @@
  * Run from the repository root, where the workspace links resolve:
  *   node --experimental-strip-types scripts/release-install-hints.ts
  */
+import { providerPluginDeclarations } from '@agent-device/contracts/provider-plugin-catalog';
 import { getReplayPluginInstallation, type ReplayFormat } from '@agent-device/ad-script';
 import { OPTIONAL_PLATFORMS } from '@agent-device/contracts/platform-module';
 import {
   getOptionalPlatformPluginDeclaration,
   MACOS_PLATFORM_PLUGIN_DECLARATION,
 } from '@agent-device/contracts/plugin-installation';
-import { providerPluginDeclarations } from '../src/commands/provider-plugin-catalog.ts';
 
 // Totals `ReplayFormat`, so TypeScript refuses a new replay format without an installation row —
 // the same shape the optional-platform catalog enforces.

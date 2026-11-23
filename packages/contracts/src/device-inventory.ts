@@ -17,8 +17,6 @@ import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 const DEVICE_INVENTORY_REFUSAL_REASONS = {
   // A device-pin selector names a platform, device, udid, or serial the request cannot carry.
   invalidDevicePin: { reason: 'invalid_device_pin' },
-  // The provider connection has no allocated instance to route to.
-  providerInstanceUnallocated: { reason: 'provider_instance_unallocated' },
 } as const satisfies ReasonTable<'device inventory'>;
 
 export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = [
@@ -135,10 +133,15 @@ export function isDeviceClaimConflictReason(value: unknown): value is DeviceClai
   return typeof value === 'string' && DEVICE_CLAIM_CONFLICT_REASON_VALUES.has(value);
 }
 
+export const PROVIDER_INVENTORY_REASONS = {
+  // The provider connection has no live instance. Allocate one with open, boot, or leases.allocate.
+  instanceUnallocated: { reason: 'provider_instance_unallocated' },
+} as const satisfies ReasonTable<'provider inventory'>;
+
 /** A provider connection that has no live instance: none was allocated, or the last one ended. */
 export function providerInstanceUnallocatedError(leaseProvider: string): AppError {
   return new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
-    reason: DEVICE_INVENTORY_REFUSAL_REASONS.providerInstanceUnallocated.reason,
+    reason: PROVIDER_INVENTORY_REASONS.instanceUnallocated.reason,
     hint: 'Run boot or open to allocate an instance. SDK callers allocate one with leases.allocate and pass its leaseId.',
     leaseProvider,
   });

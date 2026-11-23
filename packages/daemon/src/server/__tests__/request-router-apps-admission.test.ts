@@ -37,6 +37,16 @@ function createAppsAdmissionHarness(apps: readonly string[] = []) {
       shutdown: async () => {},
     } satisfies DeviceRuntimeGateway<PlatformRuntimeOperations>,
     providerAppCatalog,
+    providerRuntimeIds: ['limrun', 'browserstack'],
+    failedPlugins: [
+      {
+        source: 'store',
+        package: '@agent-device/maestro',
+        state: 'failed',
+        error: { code: 'INVALID_ARGS', message: 'Plugin failed to load' },
+        credentials: { variables: [], byBackend: {} },
+      },
+    ],
     trackDownloadableArtifact: () => 'artifact-id',
   });
   return { handler, listProviderApps, inspectFacts, bind };
@@ -49,7 +59,12 @@ function appsRequest(leaseProvider: string): DaemonRequest {
     command: 'apps',
     positionals: [],
     flags: { platform: 'ios', leaseProvider },
-    meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+    meta: {
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      sessionIsolation: 'tenant',
+      requestId: 'apps-admission',
+    },
   };
 }
 
@@ -83,6 +98,28 @@ test.each([
     expect(bind).not.toHaveBeenCalled();
   },
 );
+
+test('tenant apps names the plugin when a managed provider is absent', async () => {
+  const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness();
+  const response = await handler(appsRequest('aws-device-farm'));
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      diagnosticId: expect.any(String),
+      logPath: expect.stringContaining('apps-admission'),
+      details: {
+        reason: 'provider-not-registered',
+        package: '@agent-device/aws-device-farm',
+        installCommand: 'agent-device plugins add @agent-device/aws-device-farm@nightly-0.22',
+      },
+    },
+  });
+  expect(listProviderApps).not.toHaveBeenCalled();
+  expect(inspectFacts).not.toHaveBeenCalled();
+  expect(bind).not.toHaveBeenCalled();
+});
 
 test('tenant apps admits the runtime-declared catalog provider without device access', async () => {
   const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness([

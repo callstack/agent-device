@@ -4,7 +4,7 @@ import { AppError, BOUNDED_COMPOSITE_REASONS, type ReasonTable } from '@agent-de
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import { ignoresSessionLease } from './daemon-command-registry.ts';
-import { readLeaseBackend } from '@agent-device/kernel/contracts';
+import { readLeaseProvider, readLeaseBackend } from '@agent-device/kernel/contracts';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
@@ -87,7 +87,7 @@ export const LEASE_FIELD_NORMALIZERS = {
   tenantId: normalizeTenantId,
   leaseBackend: (raw) => (typeof raw === 'string' ? readLeaseBackend(raw) : undefined),
   runId: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,128}$/),
-  leaseProvider: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,64}$/),
+  leaseProvider: readLeaseProvider,
   clientId: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,128}$/),
   deviceKey: trimmedLeaseLabel(/^[\u0020-\u007E]{1,256}$/),
 } as const satisfies Record<LeaseClaimField, (raw: unknown) => string | undefined>;

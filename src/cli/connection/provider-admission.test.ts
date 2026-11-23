@@ -11,6 +11,7 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { makeTempWorkspace } from '@agent-device/test-kit';
 import { runCliCapture } from '../../__tests__/cli-capture.ts';
+import { buildConnectClientId } from './client-id.ts';
 import { resolveCloudAccessForConnect, resolveRemoteAuthForCli } from '../auth-session.ts';
 
 // No plugin is installed in this file. Authentication is the seam: a refusal that precedes it never
@@ -43,7 +44,7 @@ function snapshotTree(directory: string): Record<string, string> {
   return files;
 }
 
-function limrunProfile(project: string): string {
+function limrunProfile(project: string, leaseProvider = 'limrun'): string {
   const remoteConfig = path.join(project, 'limrun.remote.json');
   fs.writeFileSync(
     remoteConfig,
@@ -51,7 +52,7 @@ function limrunProfile(project: string): string {
       daemonBaseUrl: CLOUD_DAEMON,
       tenant: 'team-a',
       runId: 'run-a',
-      leaseProvider: 'limrun',
+      leaseProvider,
       leaseBackend: 'android-instance',
       platform: 'android',
     }),
@@ -71,19 +72,39 @@ test.each([
   { route: 'non-interactive', extra: ['--no-login'] },
   { route: 'interactive', extra: [] },
 ])(
-  'connect --remote-config with a Limrun profile refuses the missing plugin before $route authentication',
+  'connect --remote-config with a padded Limrun provider refuses the missing plugin before $route authentication',
   async ({ extra }) => {
     const { root, home, project } = makeTempWorkspace();
     const stateDir = path.join(root, 'state');
-    const remoteConfig = limrunProfile(project);
+    const remoteConfig = limrunProfile(project, ' limrun ');
+    const profile = JSON.parse(fs.readFileSync(remoteConfig, 'utf8'));
+    delete profile.daemonBaseUrl;
+    fs.writeFileSync(remoteConfig, JSON.stringify(profile));
 
+    const token = 'adc_live_profile_refusal_token';
     const result = await runCliCapture(
-      ['connect', '--remote-config', remoteConfig, '--session', 'ci', ...extra, '--json'],
+      [
+        'connect',
+        '--remote-config',
+        remoteConfig,
+        '--session',
+        'ci',
+        '--daemon-auth-token',
+        token,
+        ...extra,
+        '--json',
+      ],
       { cwd: project, env: { HOME: home, AGENT_DEVICE_STATE_DIR: stateDir } },
     );
 
     assert.equal(result.code, 1);
     assertLimrunPluginMissing(result.stdout);
+    const { error } = JSON.parse(result.stdout);
+    assert.equal(typeof error.logPath, 'string');
+    const log = fs.readFileSync(error.logPath, 'utf8');
+    assert.match(log, /cli_plugin_refused/);
+    assert.ok(!log.includes(token));
+    assert.ok(!log.includes('--daemon-auth-token'));
     assert.equal(vi.mocked(resolveRemoteAuthForCli).mock.calls.length, 0);
     assert.equal(result.calls.length, 0);
     assert.deepEqual(snapshotTree(path.join(stateDir, 'remote-connections')), {});
@@ -279,8 +300,11 @@ test('an open command on a remote Limrun connection allocates with the idle TTL 
 // `connection status` reads the record in this process and dispatches nothing, so a plugin this host
 // lacks is not its answer either. The record still keeps Limrun's preparation, which is what the
 // connect help promises: run `apps` to list uploaded assets, then `open` one by name.
-test('connection status answers for a stored Limrun connection without the plugin and keeps its preparation', async () => {
+test('connection status normalizes a legacy padded Limrun provider and keeps its preparation', async () => {
   const { root, home, project, stateDir } = storedLimrunConnection();
+  const record = path.join(stateDir, 'remote-connections', 'limrun-a.json');
+  const state = JSON.parse(fs.readFileSync(record, 'utf8'));
+  fs.writeFileSync(record, JSON.stringify({ ...state, leaseProvider: ' limrun ' }));
   const before = snapshotTree(stateDir);
 
   const result = await runCliCapture(
@@ -411,4 +435,87 @@ test('connect cloud refuses a Limrun profile from the control plane before anyth
   assert.equal(readActiveConnectionState({ stateDir })?.session, 'active-b');
   assert.deepEqual(snapshotTree(stateDir), before);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('cloud reconnect reuses an equivalent legacy profile on a remote daemon without the plugin', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const session = 'cloud-limrun';
+  const cloudBaseUrl = 'https://cloud.example';
+  const accessToken = 'adc_agent_cloud';
+  const clientId = buildConnectClientId(stateDir, cloudBaseUrl, CLOUD_DAEMON, session);
+  const profile = {
+    daemonBaseUrl: CLOUD_DAEMON,
+    tenant: 'acme',
+    runId: 'run-1',
+    leaseProvider: ' limrun ',
+    clientId,
+  };
+  const configDir = path.join(stateDir, 'remote-connections', 'generated');
+  const configPath = path.join(configDir, 'cloud-0123456789abcdef.json');
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(profile));
+  const now = new Date().toISOString();
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session,
+      remoteConfigPath: configPath,
+      remoteConfigHash: hashRemoteConfigFile(configPath),
+      tenant: profile.tenant,
+      runId: profile.runId,
+      clientId,
+      leaseProvider: 'limrun',
+      connectedAt: now,
+      updatedAt: now,
+      daemon: { baseUrl: CLOUD_DAEMON },
+    },
+  });
+  const { clientId: _clientId, ...cloudProfile } = profile;
+  vi.mocked(resolveCloudAccessForConnect).mockResolvedValue({ accessToken, cloudBaseUrl });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({ ok: true, connection: { remoteConfigProfile: cloudProfile } }),
+    ),
+  );
+
+  const result = await runCliCapture(
+    ['connect', 'cloud', '--session', session, '--state-dir', stateDir, '--json'],
+    { cwd: project, env: { HOME: home } },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  const state = readRemoteConnectionState({ stateDir, session });
+  assert.equal(state?.leaseProvider, 'limrun');
+  assert.equal(state?.remoteConfigPath, configPath);
+  assert.deepEqual(fs.readdirSync(configDir), ['cloud-0123456789abcdef.json']);
+  const { data } = JSON.parse(result.stdout);
+  assert.equal(data.verification.status, 'verified');
+  assert.deepEqual(data.nextSteps, [
+    'agent-device apps --session cloud-limrun',
+    'agent-device open <uploaded-asset-name> --session cloud-limrun',
+  ]);
+  assert.deepEqual(data.leasePreparation.nextSteps, data.nextSteps);
+});
+
+test('a daemon-backed Limrun profile keeps configured status and uploaded asset guidance', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = limrunProfile(project, ' limrun ');
+  const result = await runCliCapture(
+    ['connect', '--remote-config', remoteConfig, '--session', 'ci', '--json'],
+    { cwd: project, env: { HOME: home, AGENT_DEVICE_STATE_DIR: stateDir } },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.deepEqual(result.calls, []);
+  const { data } = JSON.parse(result.stdout);
+  assert.equal(data.verification.status, 'configured');
+  assert.deepEqual(data.nextSteps, [
+    'agent-device apps --session ci',
+    'agent-device open <uploaded-asset-name> --session ci',
+  ]);
+  assert.deepEqual(data.leasePreparation.nextSteps, data.nextSteps);
 });

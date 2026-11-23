@@ -1,3 +1,4 @@
+import { providerPluginConnectionCapabilities } from '@agent-device/contracts/provider-plugin-catalog';
 import assert from 'node:assert/strict';
 import { expect, test } from 'vitest';
 import {
@@ -16,7 +17,6 @@ import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import limrun from '@agent-device/limrun';
 import awsDeviceFarm from '@agent-device/aws-device-farm';
 import browserstack from '@agent-device/browserstack';
-import { providerPluginConnectionCapabilities } from '../../commands/provider-plugin-catalog.ts';
 import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
 test('provider policy projects provider identity into semantic capabilities', async () => {

@@ -259,11 +259,16 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           // hits a live repair tombstone gets `REPAIR_SESSION_EXPIRED` with
           // re-run guidance, never a bare SESSION_NOT_FOUND. #2833 adds the
           // sibling case: an idle-expired session explains itself the same way.
-          const error = idleExpiredIfTombstoned(
+          let error = idleExpiredIfTombstoned(
             req,
             repairExpiredIfTombstoned(req, response.error, sessionStore),
             sessionStore,
           );
+          if (req.command === 'apps' && error.code === 'DEVICE_NOT_FOUND') {
+            const { enrichProviderCatalogError } =
+              await import('../sessions/provider-runtime-admission.ts');
+            error = enrichProviderCatalogError(error, providerRuntimeIds, failedPlugins);
+          }
           return {
             ok: false,
             error: redactSensitiveFillTextInError(req, enrichDaemonError(error)),

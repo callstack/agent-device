@@ -25,7 +25,7 @@ const capabilities = {
 
 afterEach(() => vi.unstubAllEnvs());
 
-function fixture(home: string, leaseProvider = provider) {
+function fixture(home: string, leaseProvider = provider, daemonBaseUrl?: string) {
   const stateDir = path.join(home, 'state');
   const remoteConfigPath = path.join(home, 'remote.json');
   fs.writeFileSync(
@@ -36,9 +36,7 @@ function fixture(home: string, leaseProvider = provider) {
       leaseProvider,
       leaseBackend: 'android-instance',
       platform: 'android',
-      ...(leaseProvider === 'ordinary-remote'
-        ? { daemonBaseUrl: 'https://daemon.example.test' }
-        : {}),
+      daemonBaseUrl,
     }),
   );
   return { stateDir, remoteConfigPath };
@@ -92,7 +90,9 @@ test.each(['missing', 'failed'] as const)(
     );
     assert.equal(disconnected.code, null);
     assert.equal(readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' }), null);
-    for (const result of [connect, status, snapshot]) {
+    assert.equal(status.code, null, status.stdout);
+    assert.deepEqual(status.calls, []);
+    for (const result of [connect, snapshot]) {
       const parsed = JSON.parse(result.stdout);
       assert.equal(result.code, 1, result.stdout);
       assert.equal(parsed.error?.code, 'UNSUPPORTED_OPERATION', result.stdout);
@@ -105,7 +105,7 @@ test.each(['missing', 'failed'] as const)(
 
 test('a generic remote profile remains connectable without a plugin', async () => {
   const { home, env } = pluginHome();
-  const f = fixture(home, 'ordinary-remote');
+  const f = fixture(home, 'ordinary-remote', 'https://daemon.example.test');
   const result = await runCliCapture(
     ['connect', '--remote-config', f.remoteConfigPath, '--state-dir', f.stateDir, '--json'],
     { cwd: home, env: { ...env, AGENT_DEVICE_SESSION: 'default' } },
@@ -128,7 +128,7 @@ test('routed status uses capabilities from the supplied host store rather than t
       extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() { return { provider: 'browserstack', service: 'BrowserStack', verificationMessage: 'verified' }; } },`,
     }),
   );
-  const f = fixture(home);
+  const f = fixture(home, ' browserstack ');
   const capture = beginStdoutCapture();
   const sendToDaemon = vi.fn(async () => {
     throw new Error('unexpected daemon access');
@@ -147,10 +147,9 @@ test('routed status uses capabilities from the supplied host store rather than t
       { sendToDaemon },
       suppliedHost,
     );
-    assert.equal(
-      readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' })?.leaseProvider,
-      provider,
-    );
+    const statePath = path.join(f.stateDir, 'remote-connections', 'default.json');
+    assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).leaseProvider, provider);
+    assert.match(capture.read(), /BrowserStack/);
     const statusOutputStart = capture.read().length;
     await runCli(
       ['connection', 'status', '--state-dir', f.stateDir],
@@ -164,4 +163,60 @@ test('routed status uses capabilities from the supplied host store rather than t
   } finally {
     capture.restore();
   }
+});
+
+test.each(['missing', 'local verifier'] as const)(
+  'a remote profile with a %s client plugin connects and keeps status readable',
+  async (plugin) => {
+    const { home, env } = pluginHome();
+    if (plugin === 'local verifier') {
+      selectPlugin(
+        home,
+        packageName,
+        pluginSource(provider, {
+          extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() { throw new Error('client verification requires credentials'); } },`,
+        }),
+      );
+    }
+    const f = fixture(home, ' browserstack ', 'https://daemon.example.test');
+    const opts = { cwd: home, env: { ...env, AGENT_DEVICE_SESSION: 'default' } };
+    const connect = await runCliCapture(
+      ['connect', '--remote-config', f.remoteConfigPath, '--state-dir', f.stateDir, '--json'],
+      opts,
+    );
+    assert.equal(connect.code, null, connect.stdout + connect.stderr);
+    const record = path.join(f.stateDir, 'remote-connections', 'default.json');
+    const saved = JSON.parse(fs.readFileSync(record, 'utf8'));
+    assert.equal(saved.leaseProvider, provider);
+    fs.writeFileSync(record, JSON.stringify({ ...saved, leaseProvider: ' browserstack ' }));
+    const status = await runCliCapture(
+      ['connection', 'status', '--state-dir', f.stateDir, '--json'],
+      opts,
+    );
+    assert.equal(status.code, null, status.stdout + status.stderr);
+    assert.equal(JSON.parse(status.stdout).data.leaseProvider, provider);
+    assert.deepEqual(status.calls, []);
+  },
+);
+
+test('connect verifies and saves a registry provider id longer than a daemon lease label', async () => {
+  const { home, env } = pluginHome();
+  const longProvider = 'provider-' + 'x'.repeat(64);
+  selectPlugin(
+    home,
+    packageName,
+    pluginSource(longProvider, {
+      extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() { return { provider: '${longProvider}', service: 'Long provider', verificationMessage: 'verified' }; } },`,
+    }),
+  );
+  const f = fixture(home, ` ${longProvider} `);
+  const result = await runCliCapture(
+    ['connect', '--remote-config', f.remoteConfigPath, '--state-dir', f.stateDir, '--json'],
+    { cwd: home, env: { ...env, AGENT_DEVICE_SESSION: 'default' } },
+  );
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.equal(
+    readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' })?.leaseProvider,
+    longProvider,
+  );
 });
