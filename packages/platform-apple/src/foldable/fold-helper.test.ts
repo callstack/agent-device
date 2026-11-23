@@ -64,12 +64,15 @@ test.each(['success', 'dispatch'] as const)(
     expect(calls.map((call) => call.args)).toEqual([
       ['simctl', 'spawn', 'selected-duo', '/cache/fold-helper', 'set', 'half-open'],
     ]);
-    if (outcome === 'success') expect(value).toBeUndefined();
-    else
-      expect(value).toMatchObject({
-        code: 'COMMAND_FAILED',
-        details: { reason: 'fold-hid-dispatch-failed', deviceId: 'selected-duo' },
-      });
+    if (outcome === 'success') {
+      expect(value).toBeUndefined();
+      return;
+    }
+    expect(value).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'fold-hid-dispatch-failed', deviceId: 'selected-duo' },
+    });
+    expect((value as AppError).details).not.toHaveProperty('dispatched');
   },
 );
 
@@ -205,7 +208,6 @@ test.each([
 });
 
 test.each([
-  ['setPose', (helper: FoldHelper) => helper.setPose('open'), 'fold-hid-dispatch-failed', {}],
   [
     'readHingeAngle',
     (helper: FoldHelper) => helper.readHingeAngle(),
@@ -218,7 +220,13 @@ test.each([
     'fold-helper-panels-unreadable',
     {},
   ],
-  // The rotation can land after the deadline, so the refusal discloses an unknown dispatch.
+  // A pose or a rotation can land after the deadline, so the refusal discloses an unknown dispatch.
+  [
+    'setPose',
+    (helper: FoldHelper) => helper.setPose('open'),
+    'fold-hid-dispatch-timed-out',
+    { dispatched: 'unknown' },
+  ],
   [
     'rotate',
     (helper: FoldHelper) => helper.rotate('landscape-left'),

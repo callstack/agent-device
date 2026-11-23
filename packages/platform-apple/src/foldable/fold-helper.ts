@@ -14,6 +14,8 @@ import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cac
 export const FOLD_HELPER_REASONS = {
   // The fold helper could not send the hinge pose to the iOS simulator.
   hidDispatchFailed: { reason: 'fold-hid-dispatch-failed' },
+  // The fold helper did not finish sending the hinge pose in time, so the pose may have applied.
+  hidDispatchTimedOut: { reason: 'fold-hid-dispatch-timed-out' },
   // An iOS simulator hinge read returned no usable sample; `details` say why.
   hingeAngleNoSample: { reason: 'fold-hinge-angle-no-sample' },
 } as const satisfies ReasonTable<'fold'>;
@@ -176,6 +178,14 @@ type ModeFailure = ModeFailureShape &
 const DISPATCH_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator hinge pose',
   details: { reason: FOLD_HELPER_REASONS.hidDispatchFailed.reason },
+  timedOut: {
+    message: 'Timed out sending the simulator hinge pose; the pose may have applied',
+    details: {
+      reason: FOLD_HELPER_REASONS.hidDispatchTimedOut.reason,
+      dispatched: 'unknown',
+      hint: 'Check the pose with a screenshot or snapshot. A retry of a named pose sends it again and reads the hinge back; a keyframe retry replays the motion from its first keyframe.',
+    },
+  },
 };
 
 const ROTATE_FAILURE: ModeFailure = {
