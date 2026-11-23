@@ -206,7 +206,7 @@ function isCloseTo(measured: number, expected: number): boolean {
   return Math.abs(measured - expected) <= COLLAPSED_BANNER_SIDE_INSET_TOLERANCE;
 }
 
-export function isFullScreenOverlayRect(rect: RawSnapshotNode['rect']): boolean {
+function isFullScreenOverlayRect(rect: RawSnapshotNode['rect']): boolean {
   if (!rect) return false;
   return rect.x <= 1 && rect.y <= 1 && rect.width >= 300 && rect.height >= 600;
 }
