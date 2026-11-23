@@ -174,6 +174,13 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
       'The registry and identity stamp are the provenance contract every capture path already evaluates; this is the module boundary only (#4309, #4205). Measured: +1 module and +5 to +9 top-level statements per closure that reaches snapshot-model.',
     owner: 'thymikee',
   },
+  {
+    module: 'packages/command-surface/src/system/lock-screen.ts',
+    issue: '#4798',
+    reason:
+      'The lock-screen command facet. The system family keeps one module per command (command-output-schemas-system.test.ts), so a new command is a new module in every entry that composes the family. Measured: +1 module and +15 top-level statements for the client, CLI and command-surface entries.',
+    owner: 'pending maintainer approval',
+  },
 ]);
 
 /** The category is a function of the path, never a hand-written column. */
