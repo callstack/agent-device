@@ -25,7 +25,7 @@ const SESSION_STORE_AUTHORITY_TARGET = `${DAEMON_SOURCE_ROOT}core/session-store.
 export type SessionAuthorityOverlay = Readonly<{
   /** Production files importing the SessionState symbol from its declaring module, sorted. */
   shapeFiles: readonly string[];
-  /** Production files importing the SessionStore symbol from packages/daemon/src/core/session-store.ts, sorted. */
+  /** Production files with a named SessionStore edge or a whole-module edge to its declaration. */
   authorityFiles: readonly string[];
 }>;
 

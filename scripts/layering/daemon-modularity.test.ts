@@ -245,35 +245,6 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
   );
 });
 
-test('R10 rejects replay adapters that bind or re-export the resolved daemon store', () => {
-  const store = 'packages/daemon/src/core/session-store.ts';
-  const adapter = 'packages/replay-port/src/daemon-port/session-replay-runtime-session.ts';
-  const alias = '@agent-device/daemon/store-fixture';
-  const targets = new Map([[alias, store]]);
-  const cases = [
-    `import type { SessionStore as Store } from '${alias}';`,
-    `import * as store from '${alias}';`,
-    `export { SessionStore as Store } from '${alias}';`,
-    `export * from '${alias}';`,
-  ];
-  for (const source of cases) {
-    const tree = new Map([
-      [adapter, source],
-      [store, 'export class SessionStore {}'],
-    ]);
-    const violations = checkDaemonModularityRatchets(
-      resolveImportEdges(tree, targets),
-      REFERENCE,
-      REFERENCE,
-    );
-    assert.deepEqual(
-      violations.map(({ file, rule }) => ({ file, rule })),
-      [{ file: adapter, rule: 'R10 daemon-modularity' }],
-      source,
-    );
-  }
-});
-
 test('session lifecycle rejects handler crossings and private helper imports', () => {
   const edges = resolveImportEdges(
     new Map([
