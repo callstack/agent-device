@@ -1,51 +1,12 @@
-import type { CliFlags } from '@agent-device/contracts/command';
-import type { RemoteConnectionRequestMetadata } from '@agent-device/remote/remote-connection-state';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import { parseRawArgs } from '../parser/args.ts';
 import {
   admitProviderForRoute,
-  connectionLeaseProvider,
   primeProviderConnection,
   providerRouteForConnection,
   requiresOwnProviderAdmission,
 } from './provider-policy.ts';
-
-type AdmissionContext = Readonly<{
-  host: HostEnvironment;
-  command: string;
-  flags: CliFlags;
-  /** The lease provider an explicit remote config profile names. */
-  remoteConfigLeaseProvider: string | undefined;
-  connectionDefaults: { connection?: RemoteConnectionRequestMetadata } | null;
-  /** Whether the command materializes its remote connection. Cleanup commands do not. */
-  materializes: boolean;
-  /** The daemon this command dispatches to, once the stored connection and profile are merged. */
-  daemonBaseUrl: string | undefined;
-}>;
-
-/**
- * Admits the provider a materializing command is about to attach to, before that command
- * authenticates: a provider whose plugin cannot supply it refuses with its install or repair
- * guidance, so no login starts and no auth state is written. Cleanup commands admit no provider, so
- * they work after a plugin is removed. `connect` admits its own provider earlier, where it names it.
- * A command that dispatches to a configured remote daemon is not driven by this host's plugin: the
- * daemon's own provider registration answers for the provider there, so this host loads its plugin
- * when it has one and proceeds when it does not.
- */
-export async function admitConnectionProvider(context: AdmissionContext): Promise<void> {
-  if (!context.materializes) return;
-  const provider = connectionLeaseProvider(
-    context.connectionDefaults?.connection,
-    context.remoteConfigLeaseProvider,
-  );
-  if (!requiresOwnProviderAdmission(provider)) return;
-  await admitProviderForRoute(
-    provider,
-    providerRouteForConnection({ daemonBaseUrl: context.daemonBaseUrl, env: context.host.env }),
-    context.host.env,
-  );
-}
 
 /** Admits a provider named as a connect positional before credential handling. */
 export async function admitConnectProviderNamedInArguments(

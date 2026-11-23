@@ -16,7 +16,7 @@ vi.mock('@agent-device/react-native', async (importOriginal) => ({
 }));
 
 import { stopMetroTunnel } from '@agent-device/react-native';
-import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 
 bindTestCommandHost();
 

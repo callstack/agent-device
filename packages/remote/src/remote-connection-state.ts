@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
+import type { RemoteConfigProfile } from './remote-config-schema.ts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   deviceIdentityFlag,
@@ -480,23 +481,36 @@ function isMissingPathError(error: unknown): boolean {
   return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 }
 
-/**
- * The stored connection a command runs on, and the flags it contributes.
- *
- * `session` is the session the caller named (`--session`, `AGENT_DEVICE_SESSION`, or config), or
- * `undefined` when it named none. Only a caller that named none falls back to the machine-wide
- * active-session pointer, which names whichever connection was saved last, and it is refused a
- * leased connection there (#3931).
- */
-export function resolveRemoteConnectionDefaults(options: {
+/** Reads the named connection, or the default session and then the active-session pointer. */
+export function readRemoteConnectionDefault(options: {
   stateDir: string;
+  session: string | undefined;
+}): RemoteConnectionState | null {
+  const { stateDir, session } = options;
+  if (session !== undefined) return readRemoteConnectionState({ stateDir, session });
+  const defaultState = readRemoteConnectionState({ stateDir, session: 'default' });
+  if (defaultState) return defaultState;
+  const activeSession = activeRecordOwner(stateDir);
+  return activeSession && activeSession !== 'default'
+    ? readRemoteConnectionState({ stateDir, session: activeSession })
+    : null;
+}
+
+export function resolveRemoteConnectionDefaults(options: {
+  state: RemoteConnectionState | null;
   session: string | undefined;
   remoteConfig?: string;
   cwd: string;
   env: Record<string, string | undefined>;
   validateRemoteConfigHash?: boolean;
-}): RemoteConnectionDefaults | null {
-  return remoteConnectionDefaults(selectRemoteConnectionState(options), options);
+}):
+  | (RemoteConnectionDefaults & { profile: RemoteConfigProfile; state: RemoteConnectionState })
+  | null {
+  const { state } = options;
+  if (!state || !matchesRequestedRemoteConfig(state, options)) return null;
+  requireLeasedConnectionSession(state, options.session);
+  const resolved = remoteConnectionDefaults(state, options);
+  return resolved ? { ...resolved.defaults, profile: resolved.profile, state } : null;
 }
 
 /**
@@ -520,7 +534,7 @@ export function claimRemoteConnectionDefaults(options: {
     ...options,
     validateRemoteConfigHash: false,
   });
-  return { flags: {}, ...defaults, claimed };
+  return { flags: {}, ...defaults?.defaults, claimed };
 }
 
 function remoteConnectionDefaults(
@@ -530,7 +544,7 @@ function remoteConnectionDefaults(
     env: Record<string, string | undefined>;
     validateRemoteConfigHash?: boolean;
   },
-): RemoteConnectionDefaults | null {
+): { defaults: RemoteConnectionDefaults; profile: RemoteConfigProfile } | null {
   const validateRemoteConfigHash = options.validateRemoteConfigHash ?? true;
   if (!state) return null;
   if (
@@ -544,6 +558,13 @@ function remoteConnectionDefaults(
     );
   }
   const profile = resolveConnectionProfile(state, options);
+  return { defaults: buildRemoteConnectionDefaults(state, profile), profile };
+}
+
+export function buildRemoteConnectionDefaults(
+  state: RemoteConnectionState,
+  profile: RemoteConfigProfile,
+): RemoteConnectionDefaults {
   const leaseScope = leaseScopeFromOptions(state);
   return {
     runtime: state.runtime,
@@ -566,23 +587,6 @@ function remoteConnectionDefaults(
       target: state.target ?? profile.target,
     },
   };
-}
-
-function selectRemoteConnectionState(options: {
-  stateDir: string;
-  session: string | undefined;
-  remoteConfig?: string;
-  cwd: string;
-  env: Record<string, string | undefined>;
-}): RemoteConnectionState | null {
-  const state =
-    options.session === undefined
-      ? (readRemoteConnectionState({ stateDir: options.stateDir, session: 'default' }) ??
-        readActiveConnectionState({ stateDir: options.stateDir }))
-      : readRemoteConnectionState({ stateDir: options.stateDir, session: options.session });
-  if (!state || !matchesRequestedRemoteConfig(state, options)) return null;
-  requireLeasedConnectionSession(state, options.session);
-  return state;
 }
 
 function matchesRequestedRemoteConfig(
@@ -875,7 +879,7 @@ function resolveConnectionProfile(
     env: Record<string, string | undefined>;
     validateRemoteConfigHash?: boolean;
   },
-): Partial<CliFlags> {
+): RemoteConfigProfile {
   try {
     return resolveRemoteConfigProfile({
       configPath: state.remoteConfigPath,

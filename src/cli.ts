@@ -5,10 +5,7 @@ import {
   normalizeError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import {
-  admitDaemonStateRoot,
-  resolveDaemonPaths,
-} from '@agent-device/daemon-contracts/daemon-resolution';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -53,11 +50,12 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
+import type { CommandConnection } from './cli/connection/command-connection.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import { remoteSessionRequiredError } from '@agent-device/contracts/lease-scope';
 import {
-  claimRemoteConnectionDefaults,
-  resolveRemoteConnectionDefaults,
+  buildRemoteConnectionRequestMetadata,
+  type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
@@ -333,9 +331,9 @@ type CliRunContext = {
   flags: CliFlags;
   daemonPaths: ReturnType<typeof resolveDaemonPaths>;
   sessionName: string;
-  connectionDefaults: ReturnType<typeof resolveActiveConnectionDefaults>;
-  /** The lease provider an explicit remote config profile names; the flags do not carry it. */
-  remoteConfigLeaseProvider: string | undefined;
+  hadConnectionDefaults: boolean;
+  claimedConnection?: RemoteConnectionState | null;
+  commandConnection: CommandConnection | null;
   explicitFlagKeys: Set<FlagKey>;
   // Mutated in place by resolveRemoteContext (auth, materialization) so the
   // failure handler always sees the same state the throwing phase saw.
@@ -393,35 +391,31 @@ async function resolveRunContextOrExit(
     if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
       throw remoteSessionRequiredError(parsed.remoteConfigLeaseProvider);
     }
-    const daemonPaths = resolveDaemonPaths(flags.stateDir, {
-      env: base.host.env,
-      cwd: base.host.cwd,
-    });
-    // The connection defaults below read, and the upgrade notifier writes, this directory.
-    admitDaemonStateRoot({ paths: daemonPaths, mode: 'repair' });
-    const sessionName = flags.session ?? 'default';
-    const connectionDefaults = resolveActiveConnectionDefaults({
+    const { resolveCommandConnection } = await import('./cli/connection/command-connection.ts');
+    const { daemonPaths, effectiveFlags, defaults, connection } = resolveCommandConnection({
       host: base.host,
-      command: base.command,
-      stateDir: daemonPaths.baseDir,
-      session: flags.session,
-      remoteConfig: flags.remoteConfig,
+      flags,
+      explicitFlagKeys,
+      readDefaults:
+        base.command !== 'connect' &&
+        base.command !== 'connection' &&
+        runsOnRemoteConnection(base.command),
+      materializes: shouldMaterializeRemoteConnection(base.command),
+      claimForDisconnect: base.command === 'disconnect',
     });
-    const effectiveFlags = connectionDefaults
-      ? mergeConnectionFlags(flags, connectionDefaults.flags, explicitFlagKeys)
-      : flags;
     return {
       ...base,
       binding,
       flags,
       daemonPaths,
-      sessionName,
-      connectionDefaults,
-      remoteConfigLeaseProvider: parsed.remoteConfigLeaseProvider,
+      sessionName: flags.session ?? 'default',
+      hadConnectionDefaults: defaults !== null,
+      claimedConnection: defaults?.claimed,
+      commandConnection: connection,
       explicitFlagKeys,
       effectiveFlags,
-      resolvedRuntime: connectionDefaults?.runtime,
-      connectionMetadata: connectionDefaults?.connection,
+      resolvedRuntime: defaults?.runtime,
+      connectionMetadata: defaults?.connection,
       parsedBatchSteps: undefined,
       devicePin: parsed.devicePin,
     };
@@ -463,15 +457,19 @@ async function resolveRemoteContext(
     ctx.parsedBatchSteps = readBatchSteps(ctx.flags);
   }
 
-  // A missing provider plugin answers with its install command before any login or auth state, unless
-  // this command dispatches to a configured remote daemon, whose own registration supplies it.
-  if (ctx.command === 'connect' || ctx.effectiveFlags.remoteConfig) {
-    const { admitConnectionProvider } = await import('./cli/connection/provider-admission.ts');
-    await admitConnectionProvider({
-      ...ctx,
-      materializes: shouldMaterializeRemoteConnection(ctx.command),
-      daemonBaseUrl: ctx.effectiveFlags.daemonBaseUrl,
-    });
+  const remote = ctx.commandConnection
+    ? await import('./cli/commands/connection-runtime.ts')
+    : undefined;
+  const selection =
+    remote && ctx.commandConnection
+      ? await remote.selectRemoteConnectionForCommand(
+          ctx.commandConnection,
+          ctx.effectiveFlags,
+          ctx.host,
+        )
+      : undefined;
+  if (selection) {
+    ctx.connectionMetadata = buildRemoteConnectionRequestMetadata(selection.state);
   }
 
   if (shouldResolveRemoteAuth(ctx.command)) {
@@ -484,15 +482,14 @@ async function resolveRemoteContext(
     ctx.effectiveFlags = authResolution.flags;
   }
 
-  if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
+  if (remote && selection) {
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
       host: ctx.host,
       devicePin: ctx.devicePin,
       transport: createClientDaemonTransport(transport),
     });
-    const { materializeRemoteConnectionForCommand } =
-      await import('./cli/commands/connection-runtime.ts');
-    const materialized = await materializeRemoteConnectionForCommand({
+    const materialized = await remote.materializeRemoteConnectionForCommand({
+      selection,
       host: ctx.host,
       command: ctx.command,
       flags: ctx.effectiveFlags,
@@ -513,7 +510,7 @@ async function resolveRemoteContext(
       flags: ctx.effectiveFlags,
       runtime: ctx.resolvedRuntime,
       explicitFlagKeys: ctx.explicitFlagKeys,
-      hadConnectionDefaults: Boolean(ctx.connectionDefaults),
+      hadConnectionDefaults: ctx.hadConnectionDefaults,
     })
   ) {
     writeStderr(
@@ -650,7 +647,7 @@ async function dispatchCliCommand(
       replayTestReporterRuntime,
       commandProgress,
       leaseDevice: ctx.leaseDevice,
-      claimedConnection: ctx.connectionDefaults?.claimed,
+      claimedConnection: ctx.claimedConnection,
     })
   ) {
     return;
@@ -762,32 +759,6 @@ function isDaemonStartupFailure(error: AppError): boolean {
   return typeof error.details?.infoPath === 'string' || typeof error.details?.lockPath === 'string';
 }
 
-function resolveActiveConnectionDefaults(options: {
-  host: HostEnvironment;
-  command: string;
-  stateDir: string;
-  session: string | undefined;
-  remoteConfig?: string;
-}) {
-  if (
-    options.command === 'connect' ||
-    options.command === 'connection' ||
-    !runsOnRemoteConnection(options.command)
-  ) {
-    return null;
-  }
-  const request = {
-    stateDir: options.stateDir,
-    session: options.session,
-    remoteConfig: options.remoteConfig,
-    cwd: options.host.cwd,
-    env: options.host.env,
-  };
-  return options.command === 'disconnect'
-    ? claimRemoteConnectionDefaults(request)
-    : resolveRemoteConnectionDefaults(request);
-}
-
 // A command that cannot take a session runs on no remote connection. Reading, authenticating or
 // leasing one would act for a session the command cannot name.
 function runsOnRemoteConnection(command: string): boolean {
@@ -809,6 +780,7 @@ function shouldWarnOpenMayMissRemoteRuntime(options: {
   runtime?: SessionRuntimeHints;
   explicitFlagKeys: Set<FlagKey>;
   hadConnectionDefaults: boolean;
+  claimedConnection?: RemoteConnectionState | null;
 }): boolean {
   if (options.command !== 'open') return false;
   if (options.runtime) return false;
@@ -828,20 +800,6 @@ function hasExplicitRemoteScopeFlags(explicitFlagKeys: Set<FlagKey>): boolean {
     explicitFlagKeys.has('leaseId') ||
     explicitFlagKeys.has('leaseBackend')
   );
-}
-
-function mergeConnectionFlags(
-  flags: CliFlags,
-  defaults: Partial<CliFlags>,
-  explicitFlagKeys: Set<FlagKey>,
-): CliFlags {
-  const merged = { ...flags };
-  for (const [key, value] of Object.entries(defaults) as Array<[FlagKey, unknown]>) {
-    if (value === undefined) continue;
-    if (explicitFlagKeys.has(key)) continue;
-    (merged as Record<string, unknown>)[key] = value;
-  }
-  return merged;
 }
 
 function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boolean {
