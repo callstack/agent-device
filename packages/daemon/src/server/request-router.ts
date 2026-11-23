@@ -24,7 +24,10 @@ import {
 } from '@agent-device/kernel/contracts';
 import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
-import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import {
+  revokeUndeliveredFileOutputs,
+  type TrackDownloadableArtifact,
+} from '../resources/artifact-tracking.ts';
 import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
@@ -790,6 +793,7 @@ async function finalizeRequestBindingCleanup(
     await scope[Symbol.asyncDispose]();
   } catch (cleanupError) {
     if (response.ok) {
+      revokeUndeliveredFileOutputs(response.data?.artifacts);
       finalResponse = finalizeThrownRequestError(cleanupError);
     } else {
       emitDiagnostic({

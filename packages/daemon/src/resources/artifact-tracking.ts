@@ -227,6 +227,18 @@ const artifactTracking = (): ArtifactTrackingState =>
   );
 const pendingArtifacts = () => artifactTracking().artifacts;
 const pendingUploads = () => artifactTracking().uploads;
+const committedFileOutputRevocations = new WeakMap<DaemonArtifact, () => void>();
+
+/** Revoke only producer-committed outputs on the discarded success response. */
+export function revokeUndeliveredFileOutputs(
+  artifacts: readonly DaemonArtifact[] | undefined,
+): void {
+  for (const artifact of artifacts ?? []) {
+    const revoke = committedFileOutputRevocations.get(artifact);
+    committedFileOutputRevocations.delete(artifact);
+    revoke?.();
+  }
+}
 
 /** What a finished request registers for each artifact it hands back to the client. */
 export type DownloadableArtifactRegistration = {
@@ -297,7 +309,14 @@ export function reserveFileOutput(
         { directory, lifetimeId },
       );
       reservations.delete(discard);
-      return { ...delivery, artifactType, artifactId: id };
+      const artifact = { ...delivery, artifactType, artifactId: id };
+      committedFileOutputRevocations.set(artifact, () => {
+        const entry = artifacts.get(id);
+        if (!entry) return;
+        requestArtifactCleanup(artifacts, id, entry);
+        for (const download of entry.activeDownloads) cancelArtifactDownload(id, entry, download);
+      });
+      return artifact;
     },
   };
 }

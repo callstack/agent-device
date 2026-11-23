@@ -117,6 +117,49 @@ test.each(['caller destination', 'remote placeholder', 'public remote'])(
   },
 );
 
+test('a screenshot whose device binding fails to dispose leaves no downloadable output', async () => {
+  const sessionStore = makeSessionStore('failed-screenshot-session-');
+  sessionStore.publish('capture', makeAndroidSession('capture'));
+  const runtime = screenshotRuntimeFixture();
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: screenshotCommandSurface,
+    logPath: path.join(sessionStore.resolveDaemonStateDir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    deviceRuntimeGateway: {
+      ...runtime.gateway,
+      bind: async (input) => {
+        const binding = await runtime.gateway.bind(input);
+        return {
+          ...binding,
+          [Symbol.asyncDispose]: async () => {
+            await binding[Symbol.asyncDispose]();
+            throw new Error('screenshot binding disposal failed');
+          },
+        };
+      },
+    },
+    trackDownloadableArtifact,
+  });
+  await withHttp(handler, async (post, base) => {
+    const reply = await post({ command: 'screenshot', session: 'capture', positionals: [] });
+    expect(reply.error).toMatchObject({
+      message: expect.stringContaining('screenshot binding disposal failed'),
+    });
+    expect(runtime.captureScreenshot).toHaveBeenCalledOnce();
+    const capture = runtime.captureScreenshot.mock.calls[0]![0];
+    const inventory = await fetch(`${base}/artifacts`, {
+      headers: { authorization: 'Bearer test-token' },
+    });
+    expect(inventory.status).toBe(200);
+    expect(await inventory.json()).toMatchObject({ artifacts: [] });
+    expect(fs.existsSync(path.dirname(capture.outPath))).toBe(false);
+  });
+});
+
 test('direct HTTP recording replay requires known remote output provenance', async () => {
   const harness = makeRecordRuntimeHarness('legacy-remote-recording-');
   const start = harness.runtime.start.getMockImplementation()!;
