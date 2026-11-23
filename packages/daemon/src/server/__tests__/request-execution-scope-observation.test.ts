@@ -101,7 +101,7 @@ test.each(['serial', 'platform and serial', 'named session'])(
     const agentRef = sessionStore.publish('agent', agent);
     const otherRef = sessionStore.publish('default', other);
     const noteActivity = vi.spyOn(sessionStore, 'noteSessionActivity');
-    const recordEvent = vi.spyOn(sessionStore, 'recordRequestEvent');
+    const recordEvent = vi.spyOn(sessionStore, 'recordEvent');
     vi.mocked(resolveTargetDevice).mockResolvedValue(agent.device);
 
     const response = await observe(

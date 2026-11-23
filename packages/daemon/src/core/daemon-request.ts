@@ -10,6 +10,7 @@ import type { EndedLeaseLedger } from './request-ended-leases.ts';
 import type { ScriptDeliveryLedger } from './request-script-delivery-ledger.ts';
 import type { LeaseClaims } from '@agent-device/contracts/lease-scope';
 import type { BoundJournal } from '@agent-device/session-journal/session-event-log';
+import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 
 /**
  * The daemon's request vocabulary: the wire shape from `@agent-device/contracts/command`
@@ -50,7 +51,11 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
   sessionAuthorityActive?: () => boolean;
-  snapshotObservation?: Readonly<{ device: DeviceInfo; assertCurrent(): void }>;
+  snapshotObservation?: Readonly<{
+    device: DeviceInfo;
+    assertCurrent(): void;
+    claimCoverage?: Readonly<{ session: string; ownsClaim(claim: DeviceClaim): boolean }>;
+  }>;
   onLifetimePublished?: (address: string, lifetime: object) => void;
   onSessionPublished?: (commitScript: (response: DaemonResponse) => DaemonResponse) => void;
   onJournalPublished?: (journal: BoundJournal) => void;

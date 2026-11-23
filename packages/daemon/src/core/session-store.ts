@@ -15,6 +15,7 @@ import {
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
+import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { DaemonRequest } from './daemon-request.ts';
 import {
   LEASE_ADMISSION_REASONS,
@@ -730,7 +731,20 @@ export class SessionCoordinator {
       throw createRequestCanceledError();
     };
     assertCurrent();
-    return { device, assertCurrent };
+    const ownership = ref?.session.deviceClaim;
+    const claimCoverage =
+      ref && ownership
+        ? {
+            session: ref.address,
+            ownsClaim: (claim: DeviceClaim) => {
+              assertCurrent();
+              return (
+                claim.ownerToken === ownership.ownerToken && claim.deviceKey === ownership.deviceKey
+              );
+            },
+          }
+        : undefined;
+    return { device, assertCurrent, claimCoverage };
   }
 
   reserve(req: DaemonRequest, address: string): AuthorizedOpenSlot {

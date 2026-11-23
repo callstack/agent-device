@@ -5,6 +5,7 @@ import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { deviceClaimConflictError } from './device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
   abandonDeviceClaim,
   acquireTransientDeviceClaim,
@@ -17,8 +18,7 @@ import {
  * The #1320 claim gate a request passes on its way from a device binding to
  * device operations. The device-claim rule of the admitted owner decides what
  * happens here, under every policy: an ordinary owner takes a transient claim
- * only when the executing command's declared {@link DeviceClaimPolicy} is
- * `transient-exclusive`; a provider owner takes nothing.
+ * for a transient command or a scoped observation. A provider owner takes nothing.
  *
  * `admit` is called once per device binding by the request runtime bindings,
  * which is where per-device deduplication already lives. A command handler has no other way to obtain
@@ -64,6 +64,7 @@ export function createDeviceClaimAdmission(params: {
   stateDir: string;
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  observation?: () => NonNullable<DaemonRequest['internal']>['snapshotObservation'];
 }): DeviceClaimAdmission {
   // The caller admits once per device binding, so this only has to remember what
   // it took in order to give it back.
@@ -71,18 +72,25 @@ export function createDeviceClaimAdmission(params: {
   const requestScopeRoot = params.resolveScopeRoot(params.callerCwd);
 
   /**
-   * Only `transient-exclusive` writes the claim store here: `observe`/`require-owner` never do,
-   * and `acquire-session`/`release-session` own the session claim through the open and close
-   * lifecycles instead.
+   * A scoped observation needs the owner's exact coverage or a claim of its own.
+   * Session open and close keep their existing claim lifecycles.
    */
   async function admitOrdinaryOwner(device: DeviceInfo): Promise<void> {
-    if (params.policy !== 'transient-exclusive') return;
+    const observation = params.observation?.();
+    if (params.policy !== 'transient-exclusive' && observation === undefined) return;
+    observation?.assertCurrent();
+    const coverage = observation?.claimCoverage;
     const result = await acquireTransientDeviceClaim({
       device,
       command: params.command,
-      coveredBySession: params.session,
-      coveredClaimIsOwnedByRequest: (claim) =>
-        !requestScopeRoot || params.resolveScopeRoot(claim.workspace) === requestScopeRoot,
+      coveredBySession: coverage?.session ?? params.session,
+      coveredClaimIsOwnedByRequest: (claim) => {
+        if (observation) return coverage?.ownsClaim(claim) === true;
+        return (
+          requestScopeRoot === undefined ||
+          params.resolveScopeRoot(claim.workspace) === requestScopeRoot
+        );
+      },
       workspace: params.workspace,
       stateDir: params.stateDir,
       env: params.env,
@@ -90,6 +98,7 @@ export function createDeviceClaimAdmission(params: {
     });
     if (result.status === 'acquired') {
       acquired.push(result.ownership);
+      observation?.assertCurrent();
       return;
     }
     if (result.status === 'conflict') {

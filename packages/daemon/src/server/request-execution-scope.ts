@@ -765,6 +765,7 @@ function createRequestDeviceAccess(params: {
     resolveScopeRoot: resolveCallerScopeRoot,
     stateDir: params.stateDir,
     env: params.env,
+    observation: params.snapshotObservation,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,
       beforeGateway: async (claim) => {
