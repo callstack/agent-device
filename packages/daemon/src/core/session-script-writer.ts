@@ -3,7 +3,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { dragGesturePayloadFromPositionals } from '@agent-device/gestures/gesture-normalization';
+import {
+  dragGesturePayloadFromPositionals,
+  pinchElementFromPositionals,
+} from '@agent-device/gestures/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { recordedSelectorExpression } from '@agent-device/selectors';
@@ -406,8 +409,11 @@ function assertNoUnresolvedRefFallback(action: SessionAction): void {
     assertNoUnresolvedDragEndpoint(drag);
     return;
   }
-  if (!isSelectorTargetingCommand(action.command)) return;
-  const refPositional = action.command === 'get' ? action.positionals[1] : action.positionals[0];
+  const pinchElement =
+    action.command === 'gesture' ? pinchElementFromPositionals(action.positionals) : undefined;
+  if (!pinchElement && !isSelectorTargetingCommand(action.command)) return;
+  const refPositional =
+    pinchElement ?? (action.command === 'get' ? action.positionals[1] : action.positionals[0]);
   if (!refPositional?.startsWith('@')) return;
   throw new AppError(
     'COMMAND_FAILED',

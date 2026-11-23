@@ -170,6 +170,13 @@ test('tap-only inputs are refused on other gesture kinds', () => {
   });
 });
 
+test('element is refused on gesture kinds other than pinch', () => {
+  assert.throws(() => readGesturePayload({ kind: 'rotate', degrees: 30, element: '@e1' }), {
+    code: 'INVALID_ARGS',
+    message: 'element is supported only for gesture pinch',
+  });
+});
+
 test('pinch refuses an element together with an origin', () => {
   assert.throws(
     () => readGesturePayload({ kind: 'pinch', scale: 2, element: '@e17', origin: { x: 1, y: 2 } }),

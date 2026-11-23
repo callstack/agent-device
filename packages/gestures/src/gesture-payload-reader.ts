@@ -42,6 +42,9 @@ export function readGesturePayload(input: unknown): GesturePayload {
     return readTapGesturePayload(record);
   }
   assertNoTapOnlyFields(kind, record);
+  if (kind !== 'pinch' && record.element !== undefined) {
+    throw new AppError('INVALID_ARGS', 'element is supported only for gesture pinch');
+  }
   if (kind !== 'pan') {
     assertNoHoldMs(kind, record);
   }

@@ -378,6 +378,12 @@ export function dragGesturePayloadFromPositionals(
   return payload.kind === 'drag' ? payload : undefined;
 }
 
+/** Reads the element a recorded `gesture pinch <scale> <element>` line targets, if any. */
+export function pinchElementFromPositionals(positionals: readonly string[]): string | undefined {
+  if (positionals[0] !== 'pinch') return undefined;
+  return pinchElementArgument(positionals.slice(1));
+}
+
 /** Serializes structured gesture input for `.ad` recordings. */
 export function gesturePayloadToPositionals(input: GesturePayload): string[] {
   switch (input.kind) {

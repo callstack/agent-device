@@ -95,6 +95,9 @@ const targetedPinchCommand: RuntimeCommand<
   TargetedPinchCommandOptions,
   CoordinateGestureCommandResult
 > = async (runtime, options) => {
+  if (!runtime.backend.performGesture) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'gesture is not supported by this backend');
+  }
   const { element, scale } = options.gesture;
   const resolved = await resolveInteractionTarget(
     runtime,
