@@ -155,6 +155,134 @@ test('an owner whose open restarts the app receives the relaunch as terminateRun
   ]);
 });
 
+test('a foreground read naming the open target marks the outcome and still dispatches', async () => {
+  const calls: string[] = [];
+  const reads: string[] = [];
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor(calls) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async () => {
+      reads.push('com.example.app');
+      return 'com.example.app';
+    },
+  });
+
+  const outcome = await lifecycle.openApplication(openInput());
+
+  expect(outcome).toMatchObject({ alreadyForeground: true });
+  expect(reads).toEqual(['com.example.app']);
+  // The read only informs the caller: the dispatch keeps its idempotent semantics.
+  expect(calls).toEqual(['open com.example.app terminate=undefined']);
+});
+
+test('a foreground read naming another app claims nothing about the open', async () => {
+  const calls: string[] = [];
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor(calls) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async () => 'com.other.app',
+  });
+
+  const outcome = await lifecycle.openApplication(openInput());
+
+  expect(outcome.alreadyForeground).toBeUndefined();
+  expect(calls).toEqual(['open com.example.app terminate=undefined']);
+});
+
+test('a failing foreground read does not fail the open', async () => {
+  const calls: string[] = [];
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor(calls) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async () => {
+      throw new Error('hdc read failed');
+    },
+  });
+
+  const outcome = await lifecycle.openApplication(openInput());
+
+  expect(outcome.alreadyForeground).toBeUndefined();
+  expect(calls).toEqual(['open com.example.app terminate=undefined']);
+});
+
+test('a relaunch open does not consult the foreground read', async () => {
+  const calls: string[] = [];
+  let reads = 0;
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor(calls) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async () => {
+      reads += 1;
+      return 'com.example.app';
+    },
+  });
+
+  await lifecycle.openApplication(openInput({ relaunch: true }));
+
+  expect(reads).toBe(0);
+  expect(calls).toEqual(['close com.example.app', 'open com.example.app terminate=undefined']);
+});
+
+test('a clear-app-state or --activity open does not consult the foreground read', async () => {
+  const calls: string[] = [];
+  let reads = 0;
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor(calls) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async () => {
+      reads += 1;
+      return 'com.example.app';
+    },
+  });
+
+  // Each open stops or replaces the running app, so a pre-dispatch read of the same bundle
+  // would claim a re-activation the open itself is about to end (#4860 review).
+  await lifecycle.openApplication(openInput({ execution: { clearAppState: true } }));
+  await lifecycle.openApplication(openInput({ execution: { activity: 'EntryAbility' } }));
+
+  expect(reads).toBe(0);
+  expect(calls).toEqual([
+    'open com.example.app terminate=undefined',
+    'open com.example.app terminate=undefined',
+  ]);
+});
+
+test('a URL pair open does not consult the foreground read', async () => {
+  let reads = 0;
+  const lifecycle = bindLocalDirectApplicationLifecycle({
+    owner: 'Linux',
+    openTargetIdentity: 'bundle-id',
+    host: { resolve: async () => lifecycleRecordingInteractor([]) },
+    device: LINUX_DEVICE,
+    signal: new AbortController().signal,
+    readForegroundBundle: async () => {
+      reads += 1;
+      return 'com.example.app';
+    },
+  });
+
+  await lifecycle.openApplication(
+    openInput({ positionals: ['com.example.app', 'example://home'] }),
+  );
+
+  expect(reads).toBe(0);
+});
+
 test.each([
   {
     name: 'more than two positionals',

@@ -206,6 +206,11 @@ function openNotForegroundWarning(verification: OpenForegroundVerification): str
   );
 }
 
+/** What the caller's `open` output says when the app already held the foreground at open time. */
+function alreadyForegroundWarning(): string {
+  return 'App was already foreground; open re-activated it without restarting. Use --relaunch to restart.';
+}
+
 // Default-on for emulators, opt-in via --test-ime on real devices; --no-test-ime forces off.
 function shouldActivateAndroidTestIme(device: DeviceInfo, req: DaemonRequest): boolean {
   if (device.platform !== 'android') return false;
@@ -425,6 +430,9 @@ export async function completeOpenCommand(params: {
         ? openProbeUnreadableWarning()
         : openNotForegroundWarning(foregroundVerification),
     );
+  }
+  if (outcome.alreadyForeground) {
+    appendResponseWarning(openResult, alreadyForegroundWarning());
   }
   const nextRef = publishOpenSession({
     req,

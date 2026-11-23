@@ -52,7 +52,7 @@ import {
   createHarmonyScreenRecordingOperations,
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
-import { readHarmonyAppState } from './app-state.ts';
+import { probeHarmonyForegroundBundle, readHarmonyAppState } from './app-state.ts';
 import { verifyHarmonyOpenForeground } from './app-lifecycle.ts';
 import {
   bindLocalDirectApplicationLifecycle,
@@ -140,6 +140,7 @@ function harmonyOpenVerifiedLifecycle(params: {
   host: { resolve: LocalApplicationLifecycleInteractorResolver };
   device: DeviceInfo;
   signal: AbortSignal;
+  readForegroundBundle?: (signal: AbortSignal) => Promise<string | undefined>;
 }): ApplicationLifecycleRuntimeOperations {
   const direct = bindLocalDirectApplicationLifecycle({
     owner: 'HarmonyOS',
@@ -147,6 +148,7 @@ function harmonyOpenVerifiedLifecycle(params: {
     host: params.host,
     device: params.device,
     signal: params.signal,
+    readForegroundBundle: params.readForegroundBundle,
   });
   return {
     ...direct,
@@ -410,6 +412,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               host: host.localInteractors,
               device: request.device,
               signal: request.scope.signal,
+              readForegroundBundle: (signal) =>
+                probeHarmonyForegroundBundle(request.device, signal),
             }),
             facts.operations,
           ),
