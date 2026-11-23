@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { readGesturePayload } from './gesture-payload-reader.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 test('structured gesture input rejects durations outside the planner range', () => {
   const cases = [
@@ -46,6 +47,56 @@ test('rotate does not accept velocity', () => {
   assert.throws(() => readGesturePayload({ kind: 'rotate', degrees: 45, velocity: 1 }), {
     code: 'INVALID_ARGS',
   });
+});
+
+test('drag refuses coordinate endpoints and carries the held pan that makes the move', () => {
+  const refusal = (source: string, destination: string, timing: Record<string, number> = {}) => {
+    try {
+      readGesturePayload({ kind: 'drag', source, destination, ...timing });
+    } catch (error) {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      const { reason, endpoint, pan } = error.details ?? {};
+      return { reason, endpoint, pan };
+    }
+    assert.fail(`expected drag ${source} -> ${destination} to be refused`);
+  };
+  const reason = 'drag_endpoint_is_coordinates';
+
+  // gesture drag "170 1595" "540 160" 1200 800 600: the pan keeps the hold and the move time.
+  assert.deepEqual(
+    refusal('170 1595', '540 160', { sourceHoldMs: 1200, moveMs: 800, destinationHoldMs: 600 }),
+    {
+      reason,
+      endpoint: 'source',
+      pan: { x: 170, y: 1595, dx: 370, dy: -1435, durationMs: 800, holdMs: 1200 },
+    },
+  );
+  assert.deepEqual(refusal('170,1595', '540,160'), {
+    reason,
+    endpoint: 'source',
+    pan: { x: 170, y: 1595, dx: 370, dy: -1435, durationMs: 500, holdMs: 800 },
+  });
+  assert.deepEqual(refusal('id="row-1"', '540 160'), {
+    reason,
+    endpoint: 'destination',
+    pan: undefined,
+  });
+  // Unquoted coordinates split into bare numbers, and an invalid moveMs: the endpoints are
+  // still named, without a pan.
+  assert.deepEqual(
+    refusal('170', '1595', { sourceHoldMs: 540, moveMs: 15, destinationHoldMs: 1200 }),
+    {
+      reason,
+      endpoint: 'source',
+      pan: undefined,
+    },
+  );
+  // A selector whose value is a number stays a selector.
+  assert.equal(
+    readGesturePayload({ kind: 'drag', source: 'label="170"', destination: '@e2' }).kind,
+    'drag',
+  );
 });
 
 test('drag requires two non-empty targets and validates each timing phase', () => {

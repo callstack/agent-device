@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
   GESTURE_KINDS,
@@ -220,6 +220,15 @@ function readPanGesturePayload(record: Record<string, unknown>): PanGesturePaylo
 }
 
 function readDragGesturePayload(record: Record<string, unknown>): DragGesturePayload {
+  const source = readNonEmptyString(record, 'source');
+  const destination = readNonEmptyString(record, 'destination');
+  assertDragEndpointsAreTargets(record, source, destination);
+  return { kind: 'drag', source, destination, ...readDragTiming(record) };
+}
+
+function readDragTiming(
+  record: Record<string, unknown>,
+): Pick<DragGesturePayload, 'sourceHoldMs' | 'moveMs' | 'destinationHoldMs'> {
   const sourceHoldMs = readOptionalInteger(record, 'sourceHoldMs', { min: 1, max: 10_000 });
   const moveMs = readOptionalInteger(record, 'moveMs', { min: 16, max: 10_000 });
   const destinationHoldMs = readOptionalInteger(record, 'destinationHoldMs', {
@@ -238,13 +247,75 @@ function readDragGesturePayload(record: Record<string, unknown>): DragGesturePay
       `gesture drag total duration must be at most ${GESTURE_DURATION_MAX_MS}`,
     );
   }
+  return { sourceHoldMs, moveMs, destinationHoldMs };
+}
+
+/** Why a `gesture` input was refused before planning. */
+const GESTURE_INPUT_REFUSAL_REASONS = {
+  // A gesture drag endpoint is a number or an "x y" point; drag takes a ref or a selector.
+  dragEndpointIsCoordinates: { reason: 'drag_endpoint_is_coordinates' },
+} as const satisfies ReasonTable<'gesture'>;
+
+type HeldPan = { x: number; y: number; dx: number; dy: number; durationMs: number; holdMs: number };
+
+/**
+ * A drag endpoint is a ref or a selector. A number or an "x y" pair is neither and would fail
+ * later as a malformed selector term, so name the held pan that makes the same move. This runs
+ * before the timing checks, so a bad timing cannot hide that the endpoints are coordinates.
+ */
+function assertDragEndpointsAreTargets(
+  record: Record<string, unknown>,
+  source: string,
+  destination: string,
+): void {
+  const from = readCoordinateEndpoint(source);
+  const to = readCoordinateEndpoint(destination);
+  if (!from && !to) return;
+  const pan = heldPan(record, from, to);
+  throw new AppError(
+    'INVALID_ARGS',
+    `gesture drag takes a @ref or selector for source and destination, not coordinates: "${from ? source : destination}".`,
+    {
+      reason: GESTURE_INPUT_REFUSAL_REASONS.dragEndpointIsCoordinates.reason,
+      endpoint: from ? 'source' : 'destination',
+      ...(pan ? { pan } : {}),
+      hint: pan
+        ? `For a coordinate hold-then-drag, use gesture pan ${pan.x} ${pan.y} ${pan.dx} ${pan.dy} ${pan.durationMs} --hold-ms ${pan.holdMs}.${record.destinationHoldMs ? ' gesture pan does not hold at the destination.' : ''}`
+        : 'For a coordinate hold-then-drag, use gesture pan <x> <y> <dx> <dy> [durationMs] --hold-ms <ms>.',
+    },
+  );
+}
+
+/** "170", "170 1595", or "170,1595". */
+function readCoordinateEndpoint(token: string): number[] | undefined {
+  const numbers = token.split(/[\s,]+/).map(Number);
+  return numbers.length <= 2 && numbers.every(Number.isFinite) ? numbers : undefined;
+}
+
+/** The pan that makes the drag's move, when both endpoints are points and its timing is valid. */
+function heldPan(
+  record: Record<string, unknown>,
+  from: number[] | undefined,
+  to: number[] | undefined,
+): HeldPan | undefined {
+  const [x, y] = from ?? [];
+  const [toX, toY] = to ?? [];
+  if (x === undefined || y === undefined || toX === undefined || toY === undefined)
+    return undefined;
+  let timing: ReturnType<typeof readDragTiming>;
+  try {
+    timing = readDragTiming(record);
+  } catch (error) {
+    if (error instanceof AppError) return undefined;
+    throw error;
+  }
   return {
-    kind: 'drag',
-    source: readNonEmptyString(record, 'source'),
-    destination: readNonEmptyString(record, 'destination'),
-    sourceHoldMs,
-    moveMs,
-    destinationHoldMs,
+    x,
+    y,
+    dx: toX - x,
+    dy: toY - y,
+    durationMs: timing.moveMs ?? DEFAULT_DRAG_MOVE_MS,
+    holdMs: timing.sourceHoldMs ?? DEFAULT_DRAG_SOURCE_HOLD_MS,
   };
 }
 
