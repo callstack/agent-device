@@ -157,14 +157,12 @@ export type RequestExecutionScope = AsyncDisposable & {
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   /** For a request without the session lock: runs `task` under it, unless a request holds it. */
   tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
-  /** Resolves an authorized session and starts the journal for a lock-exempt request. */
   resolveSessionRef(
     req: DaemonRequest,
     ref: SessionRef | undefined,
     phase?: 'handler',
   ): SessionRef | undefined;
   bindJournal(req: DaemonRequest, ref: SessionRef | undefined): DaemonRequest;
-  /** Completes the event pair bound at admission or first publication. */
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;

@@ -515,6 +515,7 @@ test('close and reopen at one address give a second lease a fresh journal', asyn
 
   const closed = await send('close', [], owner);
   expect(closed.result?.ok, JSON.stringify(closed)).toBe(true);
+  await world.sessionStore.flushJournalRemovals();
   expect(fs.existsSync(path.dirname(firstPath))).toBe(false);
   const secondOwner = world.allocateOtherClient();
   const reopened = await send('open', ['com.example.app'], secondOwner);
@@ -540,6 +541,7 @@ test('close and reopen at one address give a second lease a fresh journal', asyn
     expect((await send('events', [], lease)).result?.data?.events).toHaveLength(3);
     expect(fs.existsSync(journalPath)).toBe(true);
     expect((await send('close', [], lease)).result?.ok).toBe(true);
+    await world.sessionStore.flushJournalRemovals();
     expect(fs.existsSync(path.dirname(journalPath))).toBe(false);
   }
   expect(fs.existsSync(path.dirname(path.dirname(firstPath)))).toBe(false);

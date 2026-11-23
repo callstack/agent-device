@@ -527,7 +527,6 @@ async function runCloseTeardownAndRelease(params: {
   const closeError = platformCloseError ?? cleanupError;
   if (!closeError) await clearDeviceClaim(session.deviceClaim, params.env);
   sessionStore.retire(ref, { retainExecutionHost });
-  await sessionStore.flushEvents(ref);
   if (closeError) throw closeError;
   if (saveScriptOutcome.error) throw saveScriptOutcome.error;
   return {
