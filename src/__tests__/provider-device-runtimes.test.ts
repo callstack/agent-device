@@ -182,6 +182,35 @@ test('the daemon returns the dormant Limrun credential error when a lease select
   }
 });
 
+test('a sessionless tenant app catalog reports dormant Limrun before lease admission', async () => {
+  const runtime = await startAgentDevice({
+    stateDir: mkdtempForTestSync('dormant-limrun-catalog-'),
+    host: createTestHostEnvironment({ env: pluginHome().env }),
+    plugins: [limrun()],
+  });
+  try {
+    await assert.rejects(
+      runtime.client.apps.list({
+        session: 'catalog',
+        platform: 'ios',
+        tenant: 'team-a',
+        sessionIsolation: 'tenant',
+        leaseProvider: 'limrun',
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.details?.reason, 'missing_provider_credentials', error.message);
+        assert.equal(error.details?.provider, 'limrun');
+        assert.match(String(error.details?.hint), /Set LIMRUN_API_KEY/);
+        return true;
+      },
+    );
+  } finally {
+    await runtime.close();
+  }
+});
+
 test('an installed Limrun registers when a Limrun API key is configured', async () => {
   const { runtimes, platformModules, inventory, shutdown } = await composeWithLimrunInstalled({
     ...pluginHome().env,

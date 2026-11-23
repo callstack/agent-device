@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 
 import path from 'node:path';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
@@ -12,7 +13,7 @@ import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/tes
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 function createAppsAdmissionHarness(apps: readonly string[] = []) {
-  const listProviderApps = vi.fn(async () => apps);
+  const listProviderApps = vi.fn<ProviderAppCatalog['list']>(async () => apps);
   const providerAppCatalog = {
     supports: vi.fn((provider: string) => provider === 'limrun'),
     list: listProviderApps,
@@ -159,6 +160,23 @@ test('tenant apps reports the dormant provider prerequisite before device access
     },
   });
   expect(listProviderApps).not.toHaveBeenCalled();
+  expect(inspectFacts).not.toHaveBeenCalled();
+  expect(bind).not.toHaveBeenCalled();
+});
+
+test('tenant apps uses the active catalog provider in metadata over a dormant flag provider', async () => {
+  const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness([
+    'Example.app.zip',
+  ]);
+  const request = appsRequest('testmu');
+  const response = await handler({
+    ...request,
+    meta: { ...request.meta, leaseProvider: 'limrun' },
+  });
+
+  expect(response).toEqual({ ok: true, data: { apps: ['Example.app.zip'] } });
+  expect(listProviderApps).toHaveBeenCalledTimes(1);
+  expect(listProviderApps.mock.lastCall?.[0]).toMatchObject({ provider: 'limrun' });
   expect(inspectFacts).not.toHaveBeenCalled();
   expect(bind).not.toHaveBeenCalled();
 });

@@ -129,7 +129,6 @@ import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 import { withSessionScriptPublication } from './request-binding.ts';
 
 export type RequestRouterDeps = {
-  /** The environment and working directory every request of this daemon runs with. */
   host: HostEnvironment;
   logPath: string;
   token: string;
@@ -336,6 +335,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               platformRequestScope,
               settleExpiredSession,
               providerAppCatalog,
+              pluginInventory,
               daemonPolicy,
             });
             return await executeRequestScope(scope);
@@ -526,6 +526,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           platformRequestScope: createPlatformRequestScope(scopedReq),
           settleExpiredSession,
           providerAppCatalog,
+          pluginInventory,
           daemonPolicy,
         });
         // The outer replay keeps its stable session lock plus the device lock

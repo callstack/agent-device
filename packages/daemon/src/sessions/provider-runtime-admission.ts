@@ -3,12 +3,14 @@ import { pluginInstallationHint } from '@agent-device/contracts/plugin-installat
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { getProviderPluginDeclaration } from '@agent-device/contracts/provider-plugin-catalog';
 import { readVersion } from '@agent-device/host-kit/version';
+import { readLeaseProvider } from '@agent-device/kernel/contracts';
 import {
   AppError,
   normalizeError,
   type DaemonError,
   type ReasonTable,
 } from '@agent-device/kernel/errors';
+import { dormantProviderAdmissionError } from './request-admission.ts';
 
 const PROVIDER_RUNTIME_REASONS = {
   // The daemon has no runtime for the requested provider. Inspect failedPlugins or install the named managed plugin.
@@ -22,12 +24,8 @@ export function providerRuntimeAdmissionError(
   pluginInventory: readonly PluginInventoryEntry[] = [],
 ): AppError | undefined {
   if (registeredProviders.includes(provider)) return undefined;
-  for (const plugin of pluginInventory) {
-    if (plugin.state === 'dormant' && plugin.provider === provider) {
-      const { reason, message, hint } = plugin.dormant;
-      return new AppError('INVALID_ARGS', message, { provider, reason, hint });
-    }
-  }
+  const dormant = dormantProviderAdmissionError(provider, pluginInventory);
+  if (dormant) return dormant;
   const declaration = getProviderPluginDeclaration(provider);
   const failures = pluginInventory.flatMap((plugin) =>
     plugin.state === 'failed' &&
@@ -87,8 +85,8 @@ export function enrichProviderCatalogError(
   pluginInventory: readonly PluginInventoryEntry[] | undefined,
 ): DaemonError {
   if (error.details?.reason !== PROVIDER_INVENTORY_REASONS.instanceUnallocated.reason) return error;
-  const provider = error.details.leaseProvider;
-  if (typeof provider !== 'string') return error;
+  const provider = readLeaseProvider(error.details.leaseProvider);
+  if (provider === undefined) return error;
   const missing = providerRuntimeAdmissionError(
     provider,
     'catalog',

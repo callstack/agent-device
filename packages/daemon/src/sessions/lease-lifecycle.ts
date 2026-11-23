@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
@@ -230,6 +231,7 @@ export function admitRequestLeaseForLockedScope(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerAppCatalog?: ProviderAppCatalog;
+  pluginInventory?: readonly PluginInventoryEntry[];
   daemonPolicy?: DaemonPolicy;
   resolveSessionRef?: ResolveRequestSessionRef;
 }): DaemonRequest {
@@ -245,6 +247,7 @@ export function admitRequestLeaseForLockedScope(params: {
   const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, addressed?.session, {
     env: params.env,
     providerAppCatalog: params.providerAppCatalog,
+    pluginInventory: params.pluginInventory,
     daemonPolicy: params.daemonPolicy,
   });
   if (!activeLease) return params.req;
