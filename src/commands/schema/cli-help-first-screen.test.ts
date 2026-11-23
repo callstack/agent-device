@@ -56,6 +56,11 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'iOS transform/pinch/rotate use private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output',
     'Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.',
   ],
+  selectors: [
+    'One or more key=value terms separated by spaces. An element must match every term',
+    'A role word is not a key: write role=button label="Save", not button="Save"',
+    'Text values match the whole field, ignoring case and extra whitespace',
+  ],
   tv: [
     'Use this when the target is Android TV (including Fire TV devices on Fire OS over ADB), Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control',
     'Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB',

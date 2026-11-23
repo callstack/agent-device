@@ -74,7 +74,7 @@ Tips:
 A selector expression is one or more `key=value` terms separated by spaces. An element must match
 every term. Commands that take a target, such as `press`, `fill`, `longpress`, `get`, `is`, `wait`,
 and `scroll --until`, accept a selector wherever they accept an `@ref`. `find` accepts one as its
-query.
+query. `agent-device help selectors` prints this syntax.
 
 ```bash
 agent-device press 'role=button label="Continue"'
