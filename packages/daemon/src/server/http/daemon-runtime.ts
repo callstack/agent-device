@@ -46,6 +46,7 @@ import { runtimeHintsClearInput } from '../../sessions/session-runtime.ts';
 import {
   closeDaemonServers,
   teardownDaemonSessionForShutdown,
+  teardownDaemonSessions,
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
@@ -403,7 +404,7 @@ async function startDaemonRuntimeOnHost(
 
   const teardownDaemonSession = async (ref: SessionRef) => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
-    let claimSettled = false;
+    const failedSteps: string[] = [];
     try {
       const closed = await teardownDaemonSessionForShutdown({
         ref,
@@ -420,35 +421,17 @@ async function startDaemonRuntimeOnHost(
             stateDir: baseDir,
             runtimeHints,
           }),
+        onFailedSteps: (steps) => {
+          failedSteps.push(...steps);
+        },
         afterSuccessfulTeardown: async (current) => {
-          claimSettled = await shutdownClaimLedger.releaseClaim(current);
+          if (!(await shutdownClaimLedger.releaseClaim(current))) failedSteps.push('device_claim');
         },
       });
-      return { closed, claimSettled };
+      return { closed, failedSteps };
     } finally {
       shutdownClaimLedger.finalize(session);
     }
-  };
-
-  const teardownDaemonSessions = async () => {
-    sessionStore.closeAdmission();
-    const sessionsToStop = sessionStore.listRefs();
-    const failedLeases = new Set<string>();
-    const outcomes = await Promise.all(
-      sessionsToStop.map(async (ref) => {
-        const result = await teardownDaemonSession(ref).catch(() => undefined);
-        if (!(result?.closed && result.claimSettled) && ref.session.lease) {
-          failedLeases.add(ref.session.lease.leaseId);
-        }
-        return result?.closed ?? false;
-      }),
-    );
-    await sessionStore.flushJournalRemovals();
-    const closedCount = outcomes.filter(Boolean).length;
-    return {
-      sessions: { closed: closedCount, failed: outcomes.length - closedCount },
-      failedLeases,
-    };
   };
 
   // #2833: settles the resources of a session this daemon expires for idleness. Deliberately NOT
@@ -820,17 +803,16 @@ async function startDaemonRuntimeOnHost(
     expiredProviderLeaseReleaser.beginShutdown();
     // Session teardown, lease finalization and the release drain run outside any request, so they
     // share one daemon scope; without it every claim, lease and drain diagnostic here is dropped.
-    const { sessions, providerReleaseDrain } = await withDaemonDiagnosticsScope(
-      { logPath },
-      async () => {
-        const tornDown = await teardownDaemonSessions();
+    const { sessions, providerReleaseDrain, leaseCleanupFailures } =
+      await withDaemonDiagnosticsScope({ logPath }, async () => {
+        const tornDown = await teardownDaemonSessions(sessionStore, teardownDaemonSession);
         const leaseFinalization = await finalizeDaemonLeases({
           leaseRegistry,
           expiredProviderLeaseReleaser,
           timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
         });
-        await settleWithin(
-          () => leaseSessionEnd.finishShutdown(tornDown.failedLeases),
+        await leaseSessionEnd.finishShutdown(
+          tornDown.failedLeases,
           DAEMON_LEASE_RELEASE_TIMEOUT_MS,
         );
         try {
@@ -859,9 +841,16 @@ async function startDaemonRuntimeOnHost(
             orphanedDeviceKeys: shutdownClaimLedger.claims.orphaned.map((claim) => claim.deviceKey),
           },
         });
-        return { sessions: tornDown.sessions, providerReleaseDrain: drain };
-      },
-    );
+        const failures = Array.from(tornDown.failedLeases, ([leaseId, failedSteps]) => ({
+          leaseId,
+          failedSteps,
+        }));
+        return {
+          sessions: tornDown.sessions,
+          providerReleaseDrain: drain,
+          leaseCleanupFailures: failures,
+        };
+      });
     expiredProviderLeaseReleaser.shutdown();
     let gatewayShutdownFailed = false;
     const ownerClose = await settleWithin(
@@ -892,7 +881,9 @@ async function startDaemonRuntimeOnHost(
     }
     const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
+    const cleanupFailures = leaseCleanupFailures.length ? { leaseCleanupFailures } : {};
     const report: ShutdownReport = {
+      ...cleanupFailures,
       providerReleases: {
         completed: providerReleaseDrain.released.map((lease) => lease.leaseId),
         pending: providerReleaseDrain.pending
@@ -907,6 +898,7 @@ async function startDaemonRuntimeOnHost(
       plugins,
     };
     shutdownOutcome = {
+      ...cleanupFailures,
       providerReleases: providerReleaseDrain,
       claims: shutdownClaimLedger.claims,
     };

@@ -3,6 +3,7 @@ import { AsyncResource } from 'node:async_hooks';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import type { SessionStore } from '../core/session-store.ts';
 import type { SessionRef } from '../core/session-state.ts';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
@@ -55,7 +56,7 @@ export type LeaseSessionEnd = Readonly<{
   settlementFor: (lifetime: SessionRef['lifetime']) => ExpirySettlement | undefined;
   /** Retries retained-host cleanup that failed after the registry removed its lease. */
   retryPending: () => Promise<void>;
-  finishShutdown: (failedLeases: ReadonlySet<string>) => Promise<void>;
+  finishShutdown: (failedLeases: Map<string, string[]>, timeoutMs: number) => Promise<void>;
   /**
    * Called when the daemon begins to leave. Shutdown tears every session down without taking an
    * execution lock, so no lease end may start a teardown after this, including one already queued
@@ -354,16 +355,33 @@ export function createLeaseSessionEnd(params: {
     closingAt: (address) => closingRefs.get(address),
     forgetClosing,
     settlementFor: (lifetime) => settlements.get(lifetime),
-    finishShutdown: async (failedLeases) => {
-      await Promise.all(
-        [...pending].map(async ([leaseId, { reason, provider }]) => {
-          if (failedLeases.has(leaseId)) return;
-          await endRetainedHosts(leaseId, reason, true);
-          if (!cleanupConfirmed(leaseId)) return;
+    finishShutdown: async (failedLeases, timeoutMs) => {
+      await settleWithin(
+        async () =>
+          await Promise.all(
+            [...pending].map(async ([leaseId, { reason }]) => {
+              if (!failedLeases.has(leaseId)) await endRetainedHosts(leaseId, reason, true);
+            }),
+          ),
+        timeoutMs,
+      );
+      for (const [leaseId, { provider }] of pending) {
+        if (!failedLeases.has(leaseId) && cleanupConfirmed(leaseId)) {
           pending.delete(leaseId);
           confirmSessionCleanup(leaseId, provider);
-        }),
-      );
+          continue;
+        }
+        // Shutdown has retired the sessions. Provider disposal can proceed even if local effects remain.
+        provider?.allowRelease();
+        if (failedLeases.has(leaseId)) continue;
+        const failedSteps = ['retained_execution_host'];
+        failedLeases.set(leaseId, failedSteps);
+        emitDiagnostic({
+          phase: 'leased_session_ended',
+          level: 'warn',
+          data: { reason: 'DAEMON_SHUTDOWN', leaseId, failedSteps },
+        });
+      }
     },
     retryPending: async () => {
       await Promise.all(

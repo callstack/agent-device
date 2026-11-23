@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 
@@ -105,12 +106,13 @@ async function startProviderDaemon(deps: Partial<DaemonRuntimeDeps>) {
   vi.useFakeTimers({
     toFake: ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
   });
+  const stateDir = mkdtempForTestSync('agent-device-provider-lease-end-');
   const runtime = await startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture({ providerRuntimeIds: ['limrun'], ...deps }),
     host: createTestHostEnvironment({
       env: {
         ...process.env,
-        AGENT_DEVICE_STATE_DIR: mkdtempForTestSync('agent-device-provider-lease-end-'),
+        AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
         AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
@@ -120,7 +122,7 @@ async function startProviderDaemon(deps: Partial<DaemonRuntimeDeps>) {
     stdout: { write: () => {} },
   });
   assert.ok(runtime && leaseProbe.store && leaseProbe.registries[0]);
-  return { runtime, registry: leaseProbe.registries[0], store: leaseProbe.store };
+  return { runtime, registry: leaseProbe.registries[0], store: leaseProbe.store, stateDir };
 }
 
 async function heartbeatEnded(
@@ -160,7 +162,7 @@ async function closeProviderDaemon(
 ) {
   const shutdown = runtime.close();
   await vi.advanceTimersByTimeAsync(30_000);
-  await shutdown;
+  return await shutdown;
 }
 
 test('a provider-ended heartbeat disposes its exact lease once and keeps the reservation until disposal', async () => {
@@ -299,6 +301,44 @@ test('shutdown releases expired leases after in-flight teardown and retained-hos
     expect(hostStopped).toBeLessThan(providerReleased);
   } finally {
     finish.open();
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test('shutdown releases an expired rental whose local teardown failed', async () => {
+  const release = vi.fn(async (_lease: DeviceLease) => undefined);
+  const stopSnapshotHelper = vi.fn(async () => {
+    throw new Error('snapshot helper still active');
+  });
+  const { runtime, registry, store, stateDir } = await startProviderDaemon({
+    leaseLifecycleProvider: { release },
+    platformResourceCleanup: platformResourceCleanupFixture({ stopSnapshotHelper }),
+  });
+  const lease = registry.allocateLease(providerLease);
+  store.publish('leased', { ...makeIosSession('leased'), lease });
+  try {
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(stopSnapshotHelper).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+
+    const report = await closeProviderDaemon(runtime);
+    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([lease.leaseId]);
+    const failure = { leaseId: lease.leaseId, failedSteps: ['platform_snapshot_helper'] };
+    const reportFields = { leaseCleanupFailures: [failure] };
+    expect(report).toMatchObject(reportFields);
+    expect(readDaemonShutdownReport(stateDir)).toMatchObject(reportFields);
+    const diagnostics = fs
+      .readFileSync(`${stateDir}/daemon.log`, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        phase: 'leased_session_ended',
+        data: expect.objectContaining({ ...failure, reason: 'DAEMON_SHUTDOWN', session: 'leased' }),
+      }),
+    );
+  } finally {
     await closeProviderDaemon(runtime);
   }
 });
