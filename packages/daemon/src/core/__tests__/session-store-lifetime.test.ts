@@ -2,6 +2,7 @@ import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-ki
 import { SessionCoordinator } from '../session-store.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -78,6 +79,24 @@ test('address reuse with the same record still starts a different lifetime', () 
   assert.equal(store.getRuntimeHints(ADDRESS)?.metroPort, 8082);
   assert.equal(store.retire(successor), true);
   assert.equal(store.getRuntimeHints(ADDRESS), undefined);
+});
+
+test('retirement removes empty session directories and preserves artifacts', () => {
+  const store = makeSessionStore();
+  const empty = store.publish(ADDRESS, makeSession('default'));
+  const directory = store.ensureSessionDir(ADDRESS);
+  assert.equal(store.retire(empty), true);
+  assert.equal(fs.existsSync(directory), false);
+  assert.equal(fs.existsSync(path.dirname(directory)), false);
+
+  const successor = store.publish(ADDRESS, makeSession('default'));
+  store.ensureSessionDir(ADDRESS);
+  assert.equal(store.retire(empty), false);
+  assert.equal(fs.existsSync(directory), true);
+  const logPath = store.resolveAppLogPath(ADDRESS);
+  fs.writeFileSync(logPath, 'retained log');
+  assert.equal(store.retire(successor), true);
+  assert.equal(fs.readFileSync(logPath, 'utf8'), 'retained log');
 });
 
 test.each(['callback exit', 'cancellation'])('session authority revokes on %s', (reason) => {

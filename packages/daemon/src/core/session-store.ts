@@ -203,6 +203,10 @@ export class SessionStore {
       });
     }
     this.runtimeHints.delete(ref.address);
+    if (isSafeSessionSegment(ref.address)) {
+      removeEmptySessionDirectory(this.resolveSessionDir(ref.address));
+      removeEmptySessionDirectory(this.sessionsDir);
+    }
     return this.sessions.delete(ref.address);
   }
 
@@ -617,6 +621,20 @@ export class SessionStore {
     return resolveSessionEventLogPath(
       path.join(this.resolveDaemonStateDir(), 'session-journals', ref.lifetime.journalId),
     );
+  }
+}
+
+function removeEmptySessionDirectory(directory: string): void {
+  try {
+    fs.rmdirSync(directory);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTEMPTY' || code === 'EEXIST') return;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'session_empty_directory_cleanup_failed',
+      data: { directory, code },
+    });
   }
 }
 
