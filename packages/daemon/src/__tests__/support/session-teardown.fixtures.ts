@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { localRuntimeOwner, type RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { webSessionDevice } from '@agent-device/kernel/device';
@@ -12,6 +12,8 @@ export function makeRecordingSession(params: {
   name: string;
   sessionStore: SessionStore;
   finish: ScreenRecordingLiveHandle['finish'];
+  forceCleanup?: ScreenRecordingLiveHandle['forceCleanup'];
+  owner?: RuntimeOwnerRef;
 }): SessionState {
   const { name, sessionStore, finish } = params;
   const device = {
@@ -37,14 +39,14 @@ export function makeRecordingSession(params: {
     setRunnerSessionId: () => {},
     invalidate: () => {},
     finish,
-    forceCleanup: async () => ({ status: 'cleaned' }),
+    forceCleanup: params.forceCleanup ?? (async () => ({ status: 'cleaned' })),
     [Symbol.asyncDispose]: async () => {},
   };
   const envelope = createDurableResourceEnvelope({
     resourceKind: 'screen-recording',
     sessionId: name,
     device: { id: device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
-    owner: localRuntimeOwner('apple'),
+    owner: params.owner ?? localRuntimeOwner('apple'),
     fence: { token: `${name}-fence`, generation: 1 },
     lifecycle: 'open',
     descriptor: { version: 1, body: { recordingId: name } },

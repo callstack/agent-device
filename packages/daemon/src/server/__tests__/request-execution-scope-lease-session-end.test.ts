@@ -421,13 +421,12 @@ test('a confirmed provider end retires its session after resource cleanup fails'
     const stopSnapshotHelper = vi.fn(async () => {
       throw new Error('snapshot helper stop failed');
     });
-    const teardown: SessionTeardown = (ref, reason) =>
+    const teardown: SessionTeardown = (ref) =>
       settleExpiredSession({
         ref,
         sessionStore,
         appLog: 'run',
         platformCleanup: platformResourceCleanupFixture({ stopSnapshotHelper }),
-        providerEnded: reason === 'PROVIDER_INSTANCE_ENDED',
         finalizeApplication: async () => {},
       });
     const { ender } = leaseSessionEnd(sessionStore, teardown);

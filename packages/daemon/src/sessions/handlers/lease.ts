@@ -384,7 +384,7 @@ async function heartbeatLease(
   const { leaseRegistry, leaseLifecycleProvider, req, endSessionsForLease } = args;
   const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
   let providerData: Record<string, unknown> | undefined;
-  const isCurrent = leaseRegistry.pinActiveLease(lease.leaseId);
+  const confirmProviderEnd = leaseRegistry.pinProviderLeaseEnd(lease.leaseId);
   let ended: AppError | undefined;
   let endWon = false;
   try {
@@ -394,7 +394,7 @@ async function heartbeatLease(
     });
   } catch (error) {
     if (!(error instanceof AppError) || !isProviderInstanceEndedError(error)) throw error;
-    endWon = isCurrent() && leaseRegistry.endProviderLease(leaseReleaseRequestFor(lease));
+    endWon = confirmProviderEnd();
     ended = error;
   }
   if (ended) {

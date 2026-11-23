@@ -299,6 +299,7 @@ export async function teardownDaemonSessionForShutdown(params: {
     runtimeHints: RuntimeHintsApplicationInput,
   ) => Promise<void>;
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
+  providerInstanceEnded?: () => boolean;
 }): Promise<boolean> {
   const {
     ref,
@@ -337,6 +338,7 @@ export async function teardownDaemonSessionForShutdown(params: {
           ref,
           sessionStore,
           platformCleanup,
+          providerInstanceEnded: params.providerInstanceEnded,
         }),
     });
     const lifecycleTeardownSucceeded = finalizeApplicationLifecycle

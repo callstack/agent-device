@@ -71,6 +71,7 @@ export class LeaseRegistry {
       lease: DeviceLease;
       sessionsSettled: boolean;
       providerRelease: 'pending' | 'confirmed' | 'unknown';
+      providerEnded?: true;
     }
   >();
   /**
@@ -295,15 +296,27 @@ export class LeaseRegistry {
     return { released: true, lease };
   }
 
-  endProviderLease(request: ReleaseLeaseRequest): boolean {
-    const lease = this.getLease(request);
-    if (!lease) return false;
-    this.leases.delete(lease.leaseId);
-    this.unbindLease(lease);
-    this.inFlightWork.forget(lease.leaseId);
-    this.onLeaseExpired?.(lease, 'PROVIDER_INSTANCE_ENDED');
-    this.reportProviderLeases(lease);
-    return true;
+  /** Captures a heartbeat's issuance so its end result can also confirm a lease the sweep took. */
+  pinProviderLeaseEnd(leaseId: string): () => boolean {
+    const lease = this.leases.get(leaseId);
+    return () => {
+      if (!lease) return false;
+      const active = this.leases.get(leaseId) === lease;
+      if (active) {
+        this.leases.delete(leaseId);
+        this.unbindLease(lease);
+        this.inFlightWork.forget(leaseId);
+        this.onLeaseExpired?.(lease, 'PROVIDER_INSTANCE_ENDED');
+        this.reportProviderLeases(lease);
+      }
+      const end = this.ending.get(leaseId);
+      if (end?.lease === lease) end.providerEnded = true;
+      return active;
+    };
+  }
+
+  providerInstanceEnded(leaseId: string): boolean {
+    return this.ending.get(leaseId)?.providerEnded === true;
   }
 
   /**
@@ -666,10 +679,9 @@ export class LeaseRegistry {
       if (this.isLeaseProtected(lease, now)) continue;
       this.leases.delete(lease.leaseId);
       this.unbindLease(lease, lease.expiresAt);
-      const expiredLease = { ...lease };
-      expired.push(expiredLease);
-      this.onLeaseExpired?.(expiredLease);
-      this.reportProviderLeases(expiredLease);
+      expired.push({ ...lease });
+      this.onLeaseExpired?.(lease);
+      this.reportProviderLeases(lease);
     }
     return expired;
   }
@@ -685,10 +697,9 @@ export class LeaseRegistry {
     }
     this.leases.delete(currentLease.leaseId);
     this.unbindLease(currentLease, currentLease.expiresAt);
-    const expiredLease = { ...currentLease };
-    this.onLeaseExpired?.(expiredLease);
-    this.reportProviderLeases(expiredLease);
-    return expiredLease;
+    this.onLeaseExpired?.(currentLease);
+    this.reportProviderLeases(currentLease);
+    return { ...currentLease };
   }
 
   private cleanupExpiredLeases(): void {

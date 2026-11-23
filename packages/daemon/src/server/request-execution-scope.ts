@@ -75,7 +75,6 @@ import { inactiveLease, runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
   ignoresSessionLease,
-  resolveCommandAndroidAvdSelection,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
@@ -124,55 +123,6 @@ import {
   requestDispatchLedger,
   type RequestDispatchLedger,
 } from '../core/request-dispatch-ledger.ts';
-
-async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): Promise<DeviceInfo> {
-  const { resolveForegroundOpenRequest } =
-    await import('../sessions/session-lifecycle/internal/session-open.ts');
-  const foreground = await resolveForegroundOpenRequest({ req, hasExistingSession: false });
-  if (foreground.type === 'response') {
-    if (!foreground.response.ok) {
-      const { code, message, details } = foreground.response.error;
-      throw new AppError(code, message, details);
-    }
-    throw new AppError('INVALID_ARGS', 'Invalid open target');
-  }
-  const openReq = foreground.type === 'resolved' ? foreground.req : req;
-  const { resolveRequestTargetDeviceSelection } =
-    await import('../core/request-device-resolution.ts');
-  const { resolveOpenTargetDeviceOptions } =
-    await import('../core/open-target-device-resolution.ts');
-  return (
-    await resolveRequestTargetDeviceSelection(openReq, resolveOpenTargetDeviceOptions(openReq, env))
-  ).device;
-}
-
-async function resolveBoundedClaimDevice(
-  req: DaemonRequest,
-  session: SessionState | undefined,
-  env: EnvMap,
-  platformServices: DaemonPlatformServices,
-): Promise<DeviceInfo> {
-  const { resolveBootCommandSelection, resolveCommandDevice, requireSessionOrExplicitSelector } =
-    await import('../resources/session-device-resolution.ts');
-  if (req.command !== 'open') {
-    const guard = requireSessionOrExplicitSelector(req.command, session, req.flags);
-    if (guard && !guard.ok) {
-      const { code, message, details } = guard.error;
-      throw new AppError(code, message, details);
-    }
-  }
-  if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
-  if (req.command === 'install_source' && session) return session.device;
-  const params = {
-    session,
-    req,
-    env,
-    platformServices,
-    androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
-  };
-  if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
-  return await resolveCommandDevice(params);
-}
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.

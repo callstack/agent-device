@@ -55,6 +55,7 @@ export type LeaseSessionEnd = Readonly<{
   settlementFor: (lifetime: SessionRef['lifetime']) => ExpirySettlement | undefined;
   /** Retries retained-host cleanup that failed after the registry removed its lease. */
   retryPending: () => Promise<void>;
+  finishShutdown: (failedLeases: ReadonlySet<string>) => Promise<void>;
   /**
    * Called when the daemon begins to leave. Shutdown tears every session down without taking an
    * execution lock, so no lease end may start a teardown after this, including one already queued
@@ -119,7 +120,7 @@ export function createLeaseSessionEnd(params: {
       return;
     }
     try {
-      await teardownSession(ref, reason);
+      await teardownSession(ref);
     } catch (error) {
       const failedSteps = error instanceof AppError ? error.details?.failedSteps : undefined;
       emitDiagnostic({
@@ -191,23 +192,25 @@ export function createLeaseSessionEnd(params: {
     );
   };
 
-  const endUnderLocks = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
-    const attempted = new Set<SessionRef['lifetime']>();
-    await endLiveSessions(leaseId, reason, attempted);
+  const endRetainedHosts = async (leaseId: string, reason: LeaseEndReason, shutdown = false) => {
     // A close queued before this lease end can retire its session while we wait for its locks.
     const retainedHosts = sessionStore.listRetainedExecutionHosts(leaseId);
     await Promise.all(
       retainedHosts.map(async (host) => {
         try {
+          const stop = async () => {
+            if (!sessionStore.ownsRetainedExecutionHost(host)) return;
+            if (!sessionStore.findByDevice(host.device.id)) {
+              await params.cleanupSessionlessExecutionHost(host.device);
+            }
+            sessionStore.releaseRetainedExecutionHost(host);
+          };
+          if (shutdown) return await stop();
           await withRequestExecutionLockKeys(
             executionLocks,
             existingSessionExecutionLockKeys(host.address, host.device.id),
             async () => {
-              if (closing || !sessionStore.ownsRetainedExecutionHost(host)) return;
-              if (!sessionStore.findByDevice(host.device.id)) {
-                await params.cleanupSessionlessExecutionHost(host.device);
-              }
-              sessionStore.releaseRetainedExecutionHost(host);
+              if (!closing) await stop();
             },
           );
         } catch (error) {
@@ -219,6 +222,12 @@ export function createLeaseSessionEnd(params: {
         }
       }),
     );
+  };
+
+  const endUnderLocks = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
+    const attempted = new Set<SessionRef['lifetime']>();
+    await endLiveSessions(leaseId, reason, attempted);
+    await endRetainedHosts(leaseId, reason);
     // A reopen can publish its same-lease session while retained-host cleanup waits for the device.
     await endLiveSessions(leaseId, reason, attempted);
   };
@@ -237,11 +246,7 @@ export function createLeaseSessionEnd(params: {
         data: { leaseId, reason, error: errorMessage(error) },
       });
     } finally {
-      if (
-        !closing &&
-        sessionStore.listRetainedExecutionHosts(leaseId).length === 0 &&
-        sessionStore.leasedSessionRefs(leaseId).length === 0
-      ) {
+      if (cleanupConfirmed(leaseId)) {
         pending.delete(leaseId);
       } else if (!closing) {
         pending.set(leaseId, {
@@ -253,6 +258,17 @@ export function createLeaseSessionEnd(params: {
     }
   };
 
+  const cleanupConfirmed = (leaseId: string) =>
+    sessionStore.listRetainedExecutionHosts(leaseId).length === 0 &&
+    sessionStore.leasedSessionRefs(leaseId).length === 0;
+
+  const confirmSessionCleanup = (leaseId: string, provider?: ExpiryProviderSettlement) => {
+    const confirmed = params.confirmExpiredSessions?.(leaseId) ?? true;
+    if (confirmed) forgetClosing(leaseId);
+    provider?.allowRelease();
+    return confirmed;
+  };
+
   const registerExpiry = (
     leaseId: string,
     refs: readonly SessionRef[],
@@ -262,9 +278,7 @@ export function createLeaseSessionEnd(params: {
     let reported = false;
     const done = cleanup.then(async (retired) => {
       if (!retired) return false;
-      const settled = params.confirmExpiredSessions?.(leaseId) ?? true;
-      if (settled) forgetClosing(leaseId);
-      provider?.allowRelease();
+      const settled = confirmSessionCleanup(leaseId, provider);
       await provider?.done;
       if (settled) return true;
       const confirmed = params.confirmExpiredSessions?.(leaseId) ?? true;
@@ -289,17 +303,23 @@ export function createLeaseSessionEnd(params: {
   ): Promise<void> => {
     if (closing && !providerEnd) return;
     const expiry = reason === 'LEASE_EXPIRED';
-    if (expiry && inFlight.has(leaseId)) return;
     const previous = pending.get(leaseId);
     const provider = providerEnd ?? previous?.provider;
+    const settlement = expiry || provider !== undefined;
+    const existing = inFlight.get(leaseId);
+    if (settlement && existing) {
+      if (!expiry) await Promise.all(existing);
+      return;
+    }
     pending.set(leaseId, { reason, provider, nextRetryAt: 0 });
-    const refs = expiry ? collectClosingRefs(leaseId) : [];
+    if (closing) return;
+    const refs = settlement ? collectClosingRefs(leaseId) : [];
     const runScoped = async (): Promise<boolean> => {
       let retired = false;
       const cleanup = async () => {
         if (expiry) transitionExpiry(previous ? 'retry' : 'expired', refs);
         await run(leaseId, reason, provider);
-        retired = !closing && !pending.has(leaseId);
+        retired = !pending.has(leaseId);
         if (expiry)
           retired = transitionExpiry(retired ? 'settled' : 'incomplete', refs) === 'retired';
       };
@@ -313,11 +333,11 @@ export function createLeaseSessionEnd(params: {
       return retired;
     };
     // This promise enters a daemon context on its next turn, with no inherited request locks.
-    const cleanup = expiry
+    const cleanup = settlement
       ? daemonContext.runInAsyncScope(() => Promise.resolve().then(runScoped))
       : runScoped();
     const ending = cleanup.then(() => {});
-    if (expiry) registerExpiry(leaseId, refs, cleanup, provider);
+    if (settlement) registerExpiry(leaseId, refs, cleanup, provider);
     const running = inFlight.get(leaseId) ?? new Set<Promise<void>>();
     running.add(ending);
     inFlight.set(leaseId, running);
@@ -334,6 +354,17 @@ export function createLeaseSessionEnd(params: {
     closingAt: (address) => closingRefs.get(address),
     forgetClosing,
     settlementFor: (lifetime) => settlements.get(lifetime),
+    finishShutdown: async (failedLeases) => {
+      await Promise.all(
+        [...pending].map(async ([leaseId, { reason, provider }]) => {
+          if (failedLeases.has(leaseId)) return;
+          await endRetainedHosts(leaseId, reason, true);
+          if (!cleanupConfirmed(leaseId)) return;
+          pending.delete(leaseId);
+          confirmSessionCleanup(leaseId, provider);
+        }),
+      );
+    },
     retryPending: async () => {
       await Promise.all(
         Array.from(pending, async ([leaseId, { reason, nextRetryAt }]) => {

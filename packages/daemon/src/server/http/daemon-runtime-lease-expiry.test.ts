@@ -1,15 +1,30 @@
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { afterEach, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 
 const leaseProbe = vi.hoisted(() => ({
   registries: [] as import('../../resources/lease-registry.ts').LeaseRegistry[],
   ended: [] as Array<[string, string]>,
   retryCalls: 0,
   shutdownSteps: [] as string[],
+  store: undefined as import('../../core/session-store.ts').SessionStore | undefined,
 }));
+vi.mock('../../core/session-store.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../core/session-store.ts')>();
+  return {
+    ...actual,
+    SessionStore: class extends actual.SessionStore {
+      constructor(...args: ConstructorParameters<typeof actual.SessionStore>) {
+        super(...args);
+        leaseProbe.store = this;
+      }
+    },
+  };
+});
 vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../resources/lease-registry.ts')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
@@ -51,6 +66,11 @@ vi.mock('../lease-session-end.ts', async (importOriginal) => {
 
 import { SessionStore } from '../../core/session-store.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { makeRecordingSession } from '../../__tests__/support/session-teardown.fixtures.ts';
+import { makeIosSession } from '../../__tests__/support/session-factories.ts';
+import type { DaemonRuntimeDeps } from './daemon-runtime-deps.ts';
+import type { RpcBody } from './http-server-session-lease-touch.fixtures.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
@@ -61,6 +81,226 @@ afterEach(() => {
   leaseProbe.ended.length = 0;
   leaseProbe.retryCalls = 0;
   leaseProbe.shutdownSteps.length = 0;
+  leaseProbe.store = undefined;
+});
+
+function barrier() {
+  let open!: () => void;
+  const reached = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { reached, open };
+}
+
+const providerLease = {
+  leaseProvider: 'limrun',
+  leaseBackend: 'ios-instance',
+  tenantId: 'tenant-a',
+  runId: 'run-1',
+  deviceKey: 'ios:mobile:fixture',
+  ttlMs: 100,
+} as const;
+
+async function startProviderDaemon(deps: Partial<DaemonRuntimeDeps>) {
+  vi.useFakeTimers({
+    toFake: ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
+  });
+  const runtime = await startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture({ providerRuntimeIds: ['limrun'], ...deps }),
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: mkdtempForTestSync('agent-device-provider-lease-end-'),
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
+      },
+    }),
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  });
+  assert.ok(runtime && leaseProbe.store && leaseProbe.registries[0]);
+  return { runtime, registry: leaseProbe.registries[0], store: leaseProbe.store };
+}
+
+async function heartbeatEnded(
+  runtime: Awaited<ReturnType<typeof startProviderDaemon>>['runtime'],
+  leaseId: string,
+) {
+  const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'heartbeat',
+      method: 'agent_device.lease.heartbeat',
+      params: {
+        session: 'leased',
+        leaseId,
+        leaseProvider: providerLease.leaseProvider,
+        deviceKey: providerLease.deviceKey,
+        backend: providerLease.leaseBackend,
+        tenantId: providerLease.tenantId,
+        runId: providerLease.runId,
+      },
+    }),
+  });
+  const result = (await response.json()) as RpcBody;
+  expect(result.error?.data?.details?.reason).toBe(LEASE_REASONS.instanceEnded.reason);
+}
+
+function endedInstance(): AppError {
+  return new AppError('COMMAND_FAILED', 'Provider instance ended', {
+    reason: LEASE_REASONS.instanceEnded.reason,
+  });
+}
+
+async function closeProviderDaemon(
+  runtime: Awaited<ReturnType<typeof startProviderDaemon>>['runtime'],
+) {
+  const shutdown = runtime.close();
+  await vi.advanceTimersByTimeAsync(30_000);
+  await shutdown;
+}
+
+test('a provider-ended heartbeat disposes its exact lease once and keeps the reservation until disposal', async () => {
+  const dispose = barrier();
+  const release = vi.fn(async (_lease: DeviceLease) => {
+    await dispose.reached;
+    return undefined;
+  });
+  const { runtime, registry } = await startProviderDaemon({
+    leaseLifecycleProvider: {
+      heartbeat: async () => {
+        throw endedInstance();
+      },
+      release,
+    },
+  });
+  const lease = registry.allocateLease(providerLease);
+  const successor = { ...providerLease, runId: 'run-2' };
+  try {
+    await heartbeatEnded(runtime, lease.leaseId);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([lease.leaseId]);
+    expect(() => registry.allocateLease(successor)).toThrow(
+      expect.objectContaining({ code: 'DEVICE_IN_USE' }),
+    );
+    dispose.open();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(registry.allocateLease(successor).leaseId).not.toBe(lease.leaseId);
+  } finally {
+    dispose.open();
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test('a late provider-ended heartbeat settles the failed provider recording and waits for local cleanup', async () => {
+  const entered = barrier();
+  const reply = barrier();
+  const release = vi.fn(async (_lease: DeviceLease) => undefined);
+  let localStopReady = false;
+  const { runtime, registry, store } = await startProviderDaemon({
+    leaseLifecycleProvider: {
+      heartbeat: async () => {
+        entered.open();
+        await reply.reached;
+        throw endedInstance();
+      },
+      release,
+    },
+    platformResourceCleanup: platformResourceCleanupFixture({
+      stopSnapshotHelper: async () => {
+        if (!localStopReady) throw new Error('local helper still active');
+      },
+    }),
+  });
+  const lease = registry.allocateLease(providerLease);
+  const finish = vi.fn(async () => {
+    throw new Error('provider recorder disconnected');
+  });
+  store.publish('leased', {
+    ...makeRecordingSession({
+      name: 'leased',
+      sessionStore: store,
+      owner: providerRuntimeOwner('limrun', 'fixture'),
+      finish,
+      forceCleanup: async () => {
+        throw new Error('provider recorder disconnected');
+      },
+    }),
+    lease,
+  });
+  const heartbeat = heartbeatEnded(runtime, lease.leaseId);
+  try {
+    await Promise.race([entered.reached, heartbeat]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(finish).toHaveBeenCalledOnce();
+    expect(registry.inspectActiveLease(lease.leaseId)).toBeUndefined();
+    reply.open();
+    await heartbeat;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(release).not.toHaveBeenCalled();
+    localStopReady = true;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([lease.leaseId]);
+    expect(Boolean(store.get('leased'))).toBe(false);
+  } finally {
+    reply.open();
+    await heartbeat.catch(() => {});
+    await closeProviderDaemon(runtime);
+  }
+});
+
+test('shutdown releases expired leases after in-flight teardown and retained-host cleanup', async () => {
+  const entered = barrier();
+  const finish = barrier();
+  const release = vi.fn(async (_lease: DeviceLease) => undefined);
+  const cleanupSessionlessExecutionHost = vi.fn(async () => {});
+  const { runtime, registry, store } = await startProviderDaemon({
+    leaseLifecycleProvider: { release },
+    platformResourceCleanup: platformResourceCleanupFixture({
+      cleanupSessionlessExecutionHost,
+      stopSnapshotHelper: async () => {
+        entered.open();
+        await finish.reached;
+      },
+    }),
+  });
+  const lease = registry.allocateLease(providerLease);
+  store.publish('leased', { ...makeIosSession('leased'), lease });
+  try {
+    await vi.advanceTimersByTimeAsync(1_000);
+    await entered.reached;
+    const retainedLease = registry.allocateLease({
+      ...providerLease,
+      runId: 'retained',
+      deviceKey: 'ios:mobile:retained',
+    });
+    const retained = store.publish('retained', {
+      ...makeIosSession('retained'),
+      lease: retainedLease,
+    });
+    store.retire(retained, { retainExecutionHost: true });
+    vi.setSystemTime(retainedLease.expiresAt);
+    const shutdown = closeProviderDaemon(runtime);
+    finish.open();
+    await shutdown;
+    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([
+      lease.leaseId,
+      retainedLease.leaseId,
+    ]);
+    expect(cleanupSessionlessExecutionHost).toHaveBeenCalledExactlyOnceWith(
+      retained.session.device,
+    );
+    const [hostStopped] = cleanupSessionlessExecutionHost.mock.invocationCallOrder;
+    const [, providerReleased] = release.mock.invocationCallOrder;
+    assert.ok(hostStopped !== undefined && providerReleased !== undefined);
+    expect(hostStopped).toBeLessThan(providerReleased);
+  } finally {
+    finish.open();
+    await closeProviderDaemon(runtime);
+  }
 });
 
 test('an expired lease ends its session without any further request', async () => {
