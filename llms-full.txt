@@ -2127,8 +2127,41 @@ Remote daemons and tenants:
 Pause agent interactions while a person controls a device.
 
 ```bash
-agent-device takeover [status | release <hold-id>] [--session <name>]
+agent-device takeover [status | hold | release <hold-id>] [--session <name>]
 ```
+
+**`takeover hold`**
+
+| Option             | What it does                                                                            |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `--tenant <id>`    | Tenant scope identifier for isolated daemon sessions                                    |
+| `--run-id <id>`    | Run identifier used for tenant lease admission checks                                   |
+| `--lease-id <id>`  | Lease identifier bound to tenant/run admission scope                                    |
+| `--reason <text>`  | Human-control hold reason a blocked agent sees (takeover hold)                          |
+| `--ttl-ms <ms>`    | Human-control hold TTL in milliseconds, 1000 to 86400000 (takeover hold; default 60000) |
+| `--session <name>` | Named session (implicit default is scoped to this workspace + platform)                 |
+
+**`takeover status`**
+
+| Option                                  | What it does                                                            |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| `--daemon-transport auto\|socket\|http` | Daemon client transport preference                                      |
+| `--tenant <id>`                         | Tenant scope identifier for isolated daemon sessions                    |
+| `--session-isolation none\|tenant`      | Session isolation strategy (tenant prefixes session namespace)          |
+| `--run-id <id>`                         | Run identifier used for tenant lease admission checks                   |
+| `--lease-id <id>`                       | Lease identifier bound to tenant/run admission scope                    |
+| `--session <name>`                      | Named session (implicit default is scoped to this workspace + platform) |
+
+**`takeover release`**
+
+| Option                                  | What it does                                                            |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| `--daemon-transport auto\|socket\|http` | Daemon client transport preference                                      |
+| `--tenant <id>`                         | Tenant scope identifier for isolated daemon sessions                    |
+| `--session-isolation none\|tenant`      | Session isolation strategy (tenant prefixes session namespace)          |
+| `--run-id <id>`                         | Run identifier used for tenant lease admission checks                   |
+| `--lease-id <id>`                       | Lease identifier bound to tenant/run admission scope                    |
+| `--session <name>`                      | Named session (implicit default is scoped to this workspace + platform) |
 
 Exact behavior: `agent-device help takeover`.
 
