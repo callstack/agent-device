@@ -17,7 +17,9 @@ import { existingSessionExecutionLockKeys } from '../request-binding.ts';
 import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import type { SessionTeardown } from '../../sessions/lease-lifecycle.ts';
+import { settleExpiredSession } from '../../sessions/session-teardown.ts';
 import { createLeaseSessionEnd, EXPIRY_TRANSITIONS } from '../lease-session-end.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
@@ -408,6 +410,49 @@ test('end keeps the claim of a session whose teardown failed', async () => {
 
   expect(sessionStore.get('leased')).toBeDefined();
   expect(fs.existsSync(claimPath)).toBe(true);
+});
+
+test('a confirmed provider end retires its session after resource cleanup fails', async () => {
+  vi.mocked(emitDiagnostic).mockClear();
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+  try {
+    const sessionStore = makeSessionStore();
+    const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
+    const stopSnapshotHelper = vi.fn(async () => {
+      throw new Error('snapshot helper stop failed');
+    });
+    const teardown: SessionTeardown = (ref, reason) =>
+      settleExpiredSession({
+        ref,
+        sessionStore,
+        appLog: 'run',
+        platformCleanup: platformResourceCleanupFixture({ stopSnapshotHelper }),
+        providerEnded: reason === 'PROVIDER_INSTANCE_ENDED',
+        finalizeApplication: async () => {},
+      });
+    const { ender } = leaseSessionEnd(sessionStore, teardown);
+
+    await ender.end('lease-1', 'PROVIDER_INSTANCE_ENDED');
+    expect(Boolean(sessionStore.get('leased'))).toBe(false);
+    expect(fs.existsSync(claimPath)).toBe(false);
+    expect(emitDiagnostic).toHaveBeenCalledWith({
+      level: 'warn',
+      phase: 'leased_session_ended',
+      data: {
+        reason: 'PROVIDER_INSTANCE_ENDED',
+        session: 'leased',
+        deviceKey: 'ios:simulator:fixture',
+        leaseId: 'lease-1',
+        failedSteps: ['platform_snapshot_helper'],
+        error: expect.stringContaining('snapshot helper stop failed'),
+      },
+    });
+    clock.mockReturnValue(11_000);
+    await ender.retryPending();
+    expect(stopSnapshotHelper).toHaveBeenCalledTimes(1);
+  } finally {
+    clock.mockRestore();
+  }
 });
 
 test.each([

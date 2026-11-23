@@ -1,7 +1,7 @@
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import { AsyncResource } from 'node:async_hooks';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { type AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../core/session-store.ts';
 import type { SessionRef } from '../core/session-state.ts';
@@ -111,6 +111,30 @@ export function createLeaseSessionEnd(params: {
     deviceKey: session.lease?.deviceKey,
     leaseId: params.withinDiagnosticsScope ? session.lease?.leaseId : undefined,
   });
+  const teardownForLeaseEnd = async (ref: SessionRef, reason: LeaseEndReason) => {
+    const ended = { phase: 'leased_session_ended', data: { reason, ...diagnosticIdentity(ref) } };
+    if (reason !== 'PROVIDER_INSTANCE_ENDED') {
+      emitDiagnostic(ended);
+      await teardownSession(ref);
+      return;
+    }
+    try {
+      await teardownSession(ref, reason);
+    } catch (error) {
+      const failedSteps = error instanceof AppError ? error.details?.failedSteps : undefined;
+      emitDiagnostic({
+        ...ended,
+        level: 'warn',
+        data: {
+          ...ended.data,
+          failedSteps: failedSteps ?? ['application_lifecycle'],
+          error: errorMessage(error),
+        },
+      });
+      return;
+    }
+    emitDiagnostic(ended);
+  };
   const transitionExpiry = (
     event: keyof typeof EXPIRY_TRANSITIONS,
     refs: readonly SessionRef[],
@@ -149,16 +173,10 @@ export function createLeaseSessionEnd(params: {
               )
                 return;
               attempted.add(ref.lifetime);
-              emitDiagnostic({
-                phase: 'leased_session_ended',
-                data: { reason, ...diagnosticIdentity(ref) },
-              });
               await endLeasedSession(
                 sessionStore.refresh(ref),
                 sessionStore,
-                reason === 'PROVIDER_INSTANCE_ENDED'
-                  ? (currentRef) => teardownSession(currentRef, reason)
-                  : teardownSession,
+                (currentRef) => teardownForLeaseEnd(currentRef, reason),
                 params.env,
               ).catch((error) =>
                 emitDiagnostic({
