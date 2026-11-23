@@ -69,10 +69,17 @@ Tips:
 
 ## Selector syntax
 
-A selector expression is one or more `key=value` terms separated by spaces. An element must match
-every term. Commands that take a target, such as `press`, `fill`, `longpress`, `get`, `is`, `wait`,
-and `scroll --until`, accept a selector wherever they accept an `@ref`. `find` accepts one as its
-query. `agent-device help selectors` prints this syntax.
+A selector expression is one or more terms separated by spaces, and an element must match every
+term. A term is `key=value`, or a boolean key alone, which means `key=true`: `checked` is
+`checked=true`. `agent-device help selectors` prints this syntax.
+
+These commands take a selector:
+
+- `press`, `click`, `fill`, `longpress`, `hover`, `get`, `is`, and `wait`, as the target
+- `gesture drag`, as its source and destination
+- `gesture pinch`, as the element to pinch
+- `find`, as its query
+- `scroll --until` and `screenshot --crop-on`, as the flag value
 
 ```bash
 agent-device press 'role=button label="Continue"'
@@ -91,8 +98,12 @@ Text keys:
 | `value`       | The accessibility value                                                            |
 | `text`        | The first non-empty of label, value, and identifier                                |
 | `role`        | The role shown in brackets in snapshot output (`button`, `text-field`, `switch`, …) |
-| `appname`     | The owning app's name, on desktop targets that report it                           |
-| `windowtitle` | The owning window's title, on desktop targets that report it                       |
+| `appname`     | The owning app's name                                                              |
+| `windowtitle` | The owning window's title                                                          |
+
+Linux snapshots and the macOS `desktop`, `frontmost-app`, and `menubar` surfaces report `appname`
+and `windowtitle`. A macOS app session reports them only with `AGENT_DEVICE_MACOS_APP_BACKEND=native`.
+Elsewhere a non-empty value matches nothing.
 
 Text values match the whole field, ignoring case and extra whitespace: `label="sign in"` matches
 `Sign In` but not `Sign In Now`. For partial matches, use `find`.
