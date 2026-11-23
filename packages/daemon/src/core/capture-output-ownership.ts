@@ -66,26 +66,25 @@ export function daemonDeliveredArtifact(
   return delivered?.[DAEMON_DELIVERED_ARTIFACT];
 }
 
-const SCREENSHOT_DELIVERY_PATH = Symbol('screenshotDeliveryPath');
-type ScreenshotDeliveryData = DaemonResponseData & {
-  [SCREENSHOT_DELIVERY_PATH]?: string;
-};
+const screenshotDeliveryPaths = new WeakMap<DaemonArtifact, string>();
 
-/** Keeps the actual file available to nested commands until the HTTP reply is written. */
-export function withScreenshotDeliveryPath<T extends DaemonResponseData>(
-  data: T,
+/** Keep delivery metadata on the artifact that response views carry to the HTTP reply. */
+export function rememberScreenshotDeliveryPath(
+  artifact: DaemonArtifact,
   deliveryPath: string,
-): T {
-  return { ...data, [SCREENSHOT_DELIVERY_PATH]: deliveryPath };
+): void {
+  screenshotDeliveryPaths.set(artifact, deliveryPath);
 }
 
 export function screenshotWireData(data: DaemonResponseData): DaemonResponseData {
-  const screenshot: ScreenshotDeliveryData = data;
-  const deliveryPath = screenshot[SCREENSHOT_DELIVERY_PATH];
-  if (deliveryPath === undefined) return data;
-  return {
-    ...data,
-    path: deliveryPath,
-    ...(data.message === undefined ? {} : { message: `Saved screenshot: ${deliveryPath}` }),
-  };
+  for (const artifact of Array.isArray(data.artifacts) ? data.artifacts : []) {
+    const deliveryPath = screenshotDeliveryPaths.get(artifact);
+    if (deliveryPath === undefined) continue;
+    return {
+      ...data,
+      path: deliveryPath,
+      ...(data.message === undefined ? {} : { message: `Saved screenshot: ${deliveryPath}` }),
+    };
+  }
+  return data;
 }

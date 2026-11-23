@@ -7,7 +7,7 @@ import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 // in `http-rpc-envelope.ts`, the authorization decisions in
 // `http-authorization.ts`, and the RPC method vocabulary in `http-rpc-methods.ts`.
 import { responseDisconnectSignal } from './response-disconnect-signal.ts';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import { AsyncResource } from 'node:async_hooks';
 import http from 'node:http';
 import { TLSSocket } from 'node:tls';
@@ -828,7 +828,7 @@ function sendRpcRequestFailure(
 function rpcAnswerFor(rpcRequest: JsonRpcRequest, daemonResponse: DaemonResponse): JsonRpcResponse {
   if (daemonResponse.ok) {
     const result = daemonResponse.data
-      ? { ...daemonResponse, data: screenshotWireData(daemonResponse.data) }
+      ? { ...daemonResponse, data: httpResponseData(daemonResponse.data) }
       : daemonResponse;
     return { jsonrpc: '2.0', id: rpcRequest.id ?? null, result };
   }
@@ -838,6 +838,17 @@ function rpcAnswerFor(rpcRequest: JsonRpcRequest, daemonResponse: DaemonResponse
     daemonResponse.error.message,
     daemonResponse.error,
   );
+}
+
+function httpResponseData(data: DaemonResponseData): DaemonResponseData {
+  if (!Array.isArray(data.results)) return screenshotWireData(data);
+  return {
+    ...data,
+    results: data.results.map((step: unknown) => {
+      if (!isRecord(step) || step.command !== 'screenshot' || !isRecord(step.data)) return step;
+      return { ...step, data: screenshotWireData(step.data) };
+    }),
+  };
 }
 
 // A successful plain answer has no status to choose; 200 is `sendJson`'s own default.

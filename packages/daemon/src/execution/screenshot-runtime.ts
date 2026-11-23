@@ -49,7 +49,7 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { admittedOutputLeaseVerifier, reserveFileOutput } from '../resources/artifact-tracking.ts';
 import { resolveLeaseScope } from '../core/lease-context.ts';
-import { withScreenshotDeliveryPath } from '../core/capture-output-ownership.ts';
+import { rememberScreenshotDeliveryPath } from '../core/capture-output-ownership.ts';
 
 /**
  * The `screenshot` leaf of the generic route. Argument policy is answered before any device work,
@@ -291,7 +291,14 @@ async function commitScreenshot(
       : undefined;
   if (mirrorPath) await publishScreenshotFile(reservation.path, mirrorPath, signal);
   const fileName = path.basename(clientPath ?? mirrorPath ?? result.path);
-  const data = {
+  const artifact = reservation.commit({
+    field: 'path',
+    localPath: clientPath,
+    fileName,
+    displayRotation: result.displayRotation,
+  });
+  rememberScreenshotDeliveryPath(artifact, mirrorPath ?? clientPath ?? fileName);
+  return {
     ...result,
     ...(mirrorPath
       ? {
@@ -299,16 +306,8 @@ async function commitScreenshot(
           ...(result.message === undefined ? {} : { message: `Saved screenshot: ${mirrorPath}` }),
         }
       : {}),
-    artifacts: [
-      reservation.commit({
-        field: 'path',
-        localPath: clientPath,
-        fileName,
-        displayRotation: result.displayRotation,
-      }),
-    ],
+    artifacts: [artifact],
   };
-  return withScreenshotDeliveryPath(data, mirrorPath ?? clientPath ?? fileName);
 }
 
 /** Present exactly when the admitted plan carries a crop and the snapshot binding to serve it. */

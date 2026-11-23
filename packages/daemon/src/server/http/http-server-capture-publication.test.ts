@@ -23,12 +23,13 @@ import { finalizeDaemonResponse } from '../request-finalization.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
 import { successfulData, withHttp } from './http-output.fixtures.ts';
 
-test.each(['caller destination', 'remote placeholder', 'public remote'])(
+test.each(['caller destination', 'remote placeholder', 'public remote', 'public digest'])(
   'downloadable screenshots keep the published frame with a %s',
   async (destinationKind) => {
     const root = mkdtempForTestSync('immutable-screenshot-');
     const placeholder = destinationKind === 'remote placeholder';
-    const remote = destinationKind === 'public remote';
+    const digest = destinationKind === 'public digest';
+    const remote = destinationKind === 'public remote' || digest;
     const destination = placeholder
       ? buildRemoteTempArtifactPath('screenshot', '.png')
       : path.join(root, 'capture.png');
@@ -66,16 +67,22 @@ test.each(['caller destination', 'remote placeholder', 'public remote'])(
         await post(
           {
             ...capture,
-            meta: { clientArtifactPaths: { path: '/client/first.png' } },
+            meta: {
+              clientArtifactPaths: { path: '/client/first.png' },
+              ...(digest ? { responseLevel: 'digest' } : {}),
+            },
           },
           remote,
         ),
       );
       expect(first.path).toBe(placeholder || remote ? '/client/first.png' : destination);
       expect(first.message ?? '').not.toContain('agent-device-output-');
+      if (digest) expect(first).toMatchObject({ overlayCount: 0, overlayRefs: [] });
       let secondId: string | undefined;
       if (remote) {
-        const second = successfulData(await post(capture));
+        const second = successfulData(
+          await post(digest ? { ...capture, meta: { responseLevel: 'digest' } } : capture),
+        );
         secondId = second.artifacts?.[0]?.artifactId;
         expect(secondId).toBeTypeOf('string');
         expect(secondId).not.toBe(first.artifacts?.[0]?.artifactId);
