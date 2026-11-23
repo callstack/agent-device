@@ -13,6 +13,7 @@ Accepted
 - Every mutating attempt invalidates retained evidence before dispatch, including an attempt whose dispatch reports failure.
 - Keep geometry action-local. Never carry it across command boundaries.
 - Preserve upstream first-match and explicit-index semantics. Do not adopt the unique-match requirement of the public command surface.
+- For iOS `tapOn` selectors, check the resolved dispatch point against the capture's keyboard evidence before granting atomic selector or coordinate dispatch. Use the shared keyboard occlusion policy.
 - Maestro `optional` does not suppress an `AMBIGUOUS_MATCH` from a nested public command.
 - Before another mutating command, settle the pending stabilization boundary. Commands with specialized completion semantics settle inline instead.
 - An authored observation after a mutation skips the pending barrier and polls its own condition immediately.

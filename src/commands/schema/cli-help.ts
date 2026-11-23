@@ -119,7 +119,7 @@ Text entry:
   fill replaces; type appends to an already-focused field: fill 'id="field-email"' "qa@example.com"; type "Handle with care" --delay-ms 80
   fill <target> "" clears the field (replace with nothing); the empty argument must be present -- fill <target> alone is a missing argument.
   For dropped iOS text, retry with --delay-ms before clipboard paste (also Limrun iOS).
-  Keyboard covers the target (tap_keyboard_occludes_target): on iOS, press a visible Hide Keyboard key or app dismissal control. In apps with drag dismissal, use gesture pan. Android: keyboard dismiss. Use keyboard enter to send Return.
+  Keyboard blocks the target (tap_keyboard_occludes_target, including iOS Maestro tapOn): use a visible dismissal control or gesture pan if supported. Android: keyboard dismiss. keyboard enter sends Return.
   iOS paste-prompt limits and Android IME/handwriting capture quirks: help debugging.
 
 Session ordering:

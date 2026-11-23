@@ -56,6 +56,7 @@ export async function resolveDaemonMaestroTarget(params: {
       context,
       snapshot: currentSnapshot,
       platform: options.platform,
+      reusedObservation,
     });
     if (canUseResolvedTarget(match, reusedObservation)) return match;
     currentSnapshot = undefined;

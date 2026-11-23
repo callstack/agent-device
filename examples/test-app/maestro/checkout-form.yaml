@@ -28,10 +28,9 @@ onFlowComplete:
       - assertVisible: Checkout form
 - assertVisible:
     text: Checkout form
-- swipe:
-    start: 50%, 75%
-    end: 50%, 35%
-    duration: 300
+- scrollUntilVisible:
+    element:
+      id: shipping-pickup
 - repeat:
     times: ${PICKUP_TAPS}
     commands:
@@ -40,6 +39,9 @@ onFlowComplete:
       - assertVisible:
           id: shipping-pickup
           selected: true
+- scrollUntilVisible:
+    element:
+      id: payment-cash
 - tapOn:
     id: payment-cash
 - assertVisible:

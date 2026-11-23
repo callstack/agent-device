@@ -13,5 +13,14 @@
 - tapOn:
     id: field-email
 - inputText: ${CHECKOUT_EMAIL}
-- tapOn:
-    text: Checkout form
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - pressKey: Enter
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          text: Checkout form
