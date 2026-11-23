@@ -412,15 +412,15 @@ test('end keeps the claim of a session whose teardown failed', async () => {
   expect(fs.existsSync(claimPath)).toBe(true);
 });
 
-test('a confirmed provider end retires its session after resource cleanup fails', async () => {
+test('a confirmed provider end keeps the claim when independent cleanup fails', async () => {
   vi.mocked(emitDiagnostic).mockClear();
   const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
   try {
     const sessionStore = makeSessionStore();
     const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
-    const stopSnapshotHelper = vi.fn(async () => {
-      throw new Error('snapshot helper stop failed');
-    });
+    const stopSnapshotHelper = vi
+      .fn(async () => {})
+      .mockRejectedValueOnce(new Error('snapshot helper stop failed'));
     const teardown: SessionTeardown = (ref) =>
       settleExpiredSession({
         ref,
@@ -432,8 +432,8 @@ test('a confirmed provider end retires its session after resource cleanup fails'
     const { ender } = leaseSessionEnd(sessionStore, teardown);
 
     await ender.end('lease-1', 'PROVIDER_INSTANCE_ENDED');
-    expect(Boolean(sessionStore.get('leased'))).toBe(false);
-    expect(fs.existsSync(claimPath)).toBe(false);
+    expect(Boolean(sessionStore.get('leased'))).toBe(true);
+    expect(fs.existsSync(claimPath)).toBe(true);
     expect(emitDiagnostic).toHaveBeenCalledWith({
       level: 'warn',
       phase: 'leased_session_ended',
@@ -448,7 +448,9 @@ test('a confirmed provider end retires its session after resource cleanup fails'
     });
     clock.mockReturnValue(11_000);
     await ender.retryPending();
-    expect(stopSnapshotHelper).toHaveBeenCalledTimes(1);
+    expect(stopSnapshotHelper).toHaveBeenCalledTimes(2);
+    expect(Boolean(sessionStore.get('leased'))).toBe(false);
+    expect(fs.existsSync(claimPath)).toBe(false);
   } finally {
     clock.mockRestore();
   }

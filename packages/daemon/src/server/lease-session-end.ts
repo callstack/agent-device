@@ -133,7 +133,7 @@ export function createLeaseSessionEnd(params: {
           error: errorMessage(error),
         },
       });
-      return;
+      throw error;
     }
     emitDiagnostic(ended);
   };

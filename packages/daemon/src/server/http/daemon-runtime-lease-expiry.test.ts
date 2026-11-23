@@ -197,62 +197,72 @@ test('a provider-ended heartbeat disposes its exact lease once and keeps the res
   }
 });
 
-test('a late provider-ended heartbeat settles the failed provider recording and waits for local cleanup', async () => {
-  const entered = barrier();
-  const reply = barrier();
-  const release = vi.fn(async (_lease: DeviceLease) => undefined);
-  let localStopReady = false;
-  const { runtime, registry, store } = await startProviderDaemon({
-    leaseLifecycleProvider: {
-      heartbeat: async () => {
-        entered.open();
-        await reply.reached;
-        throw endedInstance();
+test.each([false, true])(
+  'a late provider end prevents further recording calls with an in-flight finish=%s',
+  async (inFlight) => {
+    const entered = barrier();
+    const reply = barrier();
+    const stop = barrier();
+    const release = vi.fn(async (_lease: DeviceLease) => undefined);
+    let localStopReady = false;
+    const { runtime, registry, store } = await startProviderDaemon({
+      leaseLifecycleProvider: {
+        heartbeat: async () => {
+          entered.open();
+          await reply.reached;
+          throw endedInstance();
+        },
+        release,
       },
-      release,
-    },
-    platformResourceCleanup: platformResourceCleanupFixture({
-      stopSnapshotHelper: async () => {
-        if (!localStopReady) throw new Error('local helper still active');
-      },
-    }),
-  });
-  const lease = registry.allocateLease(providerLease);
-  const finish = vi.fn(async () => {
-    throw new Error('provider recorder disconnected');
-  });
-  store.publish('leased', {
-    ...makeRecordingSession({
-      name: 'leased',
-      sessionStore: store,
-      owner: providerRuntimeOwner('limrun', 'fixture'),
-      finish,
-      forceCleanup: async () => {
-        throw new Error('provider recorder disconnected');
-      },
-    }),
-    lease,
-  });
-  const heartbeat = heartbeatEnded(runtime, lease.leaseId);
-  try {
-    await Promise.race([entered.reached, heartbeat]);
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(finish).toHaveBeenCalledOnce();
-    expect(registry.inspectActiveLease(lease.leaseId)).toBeUndefined();
-    reply.open();
-    await heartbeat;
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(release).not.toHaveBeenCalled();
-    localStopReady = true;
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([lease.leaseId]);
-    expect(Boolean(store.get('leased'))).toBe(false);
-  } finally {
-    reply.open();
-    await heartbeat.catch(() => {});
-    await closeProviderDaemon(runtime);
-  }
-});
+      platformResourceCleanup: platformResourceCleanupFixture({
+        stopSnapshotHelper: async () => {
+          if (!localStopReady) throw new Error('local helper still active');
+        },
+      }),
+    });
+    const lease = registry.allocateLease(providerLease);
+    const finish = vi.fn(async () => {
+      if (inFlight) await stop.reached;
+      throw new Error('provider recorder disconnected');
+    });
+    const forceCleanup = vi.fn(async () => {
+      throw new Error('provider recorder disconnected');
+    });
+    store.publish('leased', {
+      ...makeRecordingSession({
+        name: 'leased',
+        sessionStore: store,
+        owner: providerRuntimeOwner('limrun', 'fixture'),
+        finish,
+        forceCleanup,
+      }),
+      lease,
+    });
+    const heartbeat = heartbeatEnded(runtime, lease.leaseId);
+    try {
+      await Promise.race([entered.reached, heartbeat]);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(finish).toHaveBeenCalledOnce();
+      expect(registry.inspectActiveLease(lease.leaseId)).toBeUndefined();
+      reply.open();
+      await heartbeat;
+      stop.open();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(release).not.toHaveBeenCalled();
+      expect(finish).toHaveBeenCalledOnce();
+      expect(forceCleanup).toHaveBeenCalledTimes(inFlight ? 0 : 1);
+      localStopReady = true;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(release.mock.calls.map(([entry]) => entry.leaseId)).toEqual([lease.leaseId]);
+      expect(Boolean(store.get('leased'))).toBe(false);
+    } finally {
+      reply.open();
+      stop.open();
+      await heartbeat.catch(() => {});
+      await closeProviderDaemon(runtime);
+    }
+  },
+);
 
 test('shutdown releases expired leases after in-flight teardown and retained-host cleanup', async () => {
   const entered = barrier();

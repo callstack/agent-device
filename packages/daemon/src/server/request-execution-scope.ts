@@ -68,7 +68,11 @@ import {
   isRequestCanceled,
   throwIfRequestCanceled,
 } from '@agent-device/host-kit/request';
-import { assertSameOpenOwner, SessionCoordinator, type SessionStore } from '../core/session-store.ts';
+import {
+  assertSameOpenOwner,
+  SessionCoordinator,
+  type SessionStore,
+} from '../core/session-store.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
 import { inactiveLease, runAdmittedLeaseWork } from './request-lease-work.ts';

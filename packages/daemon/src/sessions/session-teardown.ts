@@ -239,21 +239,21 @@ async function finishSessionScreenRecording(params: {
   const binding = bindSessionScreenRecording(params.sessionStore, params.ref);
   const recording = binding.read();
   if (!recording) return;
-  const completion = await finishLiveScreenRecording({ binding, intent: 'disposal' }).catch(
-    async (error: unknown) => {
-      const { owner } = recording.envelope;
-      if (
-        !params.providerInstanceEnded?.() ||
-        owner.kind !== 'provider-runtime' ||
-        owner.provider !== params.ref.session.lease?.leaseProvider ||
-        binding.read() !== recording
-      )
-        throw error;
-      await screenRecordingDurableResource.confirmLiveMissing({ binding, resource: recording });
-      return undefined;
-    },
-  );
-  if (!completion) return;
+  const { owner } = recording.envelope;
+  const confirmedMissing = () =>
+    owner.kind === 'provider-runtime' &&
+    owner.provider === params.ref.session.lease?.leaseProvider &&
+    binding.read() === recording &&
+    params.providerInstanceEnded?.() === true;
+  if (confirmedMissing()) {
+    await screenRecordingDurableResource.confirmLiveMissing({ binding, resource: recording });
+    return;
+  }
+  const completion = await finishLiveScreenRecording({
+    binding,
+    intent: 'disposal',
+    confirmedMissing,
+  });
   if (!params.ref.session.lease) return;
   const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
   retainLeasedSessionRecording(params.ref, completion, recording.envelope.metadata);
