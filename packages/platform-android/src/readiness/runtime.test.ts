@@ -4,9 +4,29 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   countDiagnosticEventsByPhase,
+  emitDiagnostic,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { ensureAndroidReady } from './runtime.ts';
+
+// Spied so a test can read one diagnostic's payload; the real emitter still runs, so the scope's
+// phase tally that other tests count keeps working.
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn(actual.emitDiagnostic) };
+});
+
+function ownershipUnansweredPayload(): Record<string, unknown> {
+  const events = vi
+    .mocked(emitDiagnostic)
+    .mock.calls.map(([diagnostic]) => diagnostic)
+    .filter(
+      (diagnostic) =>
+        (diagnostic as { phase?: string }).phase === 'android_emulator_launch_ownership_unanswered',
+    );
+  expect(events).toHaveLength(1);
+  return (events[0] as { data: Record<string, unknown> }).data;
+}
 
 test('cancellation interrupts Android boot polling and terminates the emulator launched by the request', async () => {
   const controller = new AbortController();
@@ -616,16 +636,17 @@ test('a boot probe that spends the startup budget leaves the launched emulator b
     },
   });
 
-  await expect(
-    ensureAndroidReady(
-      host,
-      stoppedAvd(),
-      { headless: true, deadlineAtMs: 5_000 },
-      new AbortController().signal,
-    ),
-  ).rejects.toMatchObject({
-    details: { reason: 'ANDROID_BOOT_TIMEOUT', bootBudgetSpent: true },
-  });
+  const failure = await ensureAndroidReady(
+    host,
+    stoppedAvd(),
+    { headless: true, deadlineAtMs: 5_000 },
+    new AbortController().signal,
+  ).catch((error: unknown) => error);
+  expect(failure).toMatchObject({ details: { reason: 'ANDROID_BOOT_TIMEOUT' } });
+  // Keeping the launch is this boot wait's own knowledge, never a `details` field on the wire.
+  expect(
+    (failure as { details?: Record<string, unknown> }).details?.bootBudgetSpent,
+  ).toBeUndefined();
   expect(terminate).not.toHaveBeenCalled();
 });
 
@@ -671,6 +692,127 @@ test('an emulator that was already running is not stopped when its boot probe fa
     ),
   ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
   expect(terminate).not.toHaveBeenCalled();
+});
+
+// #4867: a second `open` can bind to the emulator this one is still booting. Whoever owns it then,
+// that open's failed boot must not stop it.
+test('a boot that fails while another owner holds the launched emulator stops nothing', async () => {
+  const { host, terminate } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }], {
+    launched: true,
+  });
+  const heldByOther = vi.fn(async () => true);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+  // The ownership question is asked for the emulator this boot discovered, not the AVD it started from.
+  expect(heldByOther).toHaveBeenCalledWith(expect.objectContaining({ id: 'emulator-5554' }));
+  expect(terminate).not.toHaveBeenCalled();
+});
+
+test('a boot that fails while no owner holds the launched emulator still stops it', async () => {
+  const { host, terminate } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }], {
+    launched: true,
+  });
+  const heldByOther = vi.fn(async () => false);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+// #4867: ownership is recorded under the emulator's serial, so a boot that failed before discovery
+// named one has nothing to ask about. It stops its launch the way base did: no emulator is left
+// running with no session to own it. Issue #4993 tracks giving that window an ownership answer.
+test('a failure before a serial is resolved stops the launch without asking', async () => {
+  let discoveries = 0;
+  const discoveryFailure = new AppError('COMMAND_FAILED', 'adb devices failed');
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => {
+      discoveries += 1;
+      if (discoveries === 1) return [stoppedAvd()];
+      throw discoveryFailure;
+    },
+  });
+  const heldByOther = vi.fn(async () => true);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(discoveryFailure);
+  expect(heldByOther).not.toHaveBeenCalled();
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+test('a cancel that arrives before discovery names a serial stops the launch', async () => {
+  const controller = new AbortController();
+  let discoveries = 0;
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => {
+      discoveries += 1;
+      if (discoveries === 1) return [stoppedAvd()];
+      controller.abort(new Error('cancel during discovery'));
+      throw new Error('cancel during discovery');
+    },
+  });
+  const heldByOther = vi.fn(async () => true);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+      controller.signal,
+    ),
+  ).rejects.toThrow('cancel during discovery');
+  expect(heldByOther).not.toHaveBeenCalled();
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+test('a boot whose owner question cannot be answered keeps the launched emulator running', async () => {
+  await withDiagnosticsScope({ command: 'open' }, async () => {
+    const { host, terminate } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }], {
+      launched: true,
+    });
+    const heldByOther = vi.fn(async () => {
+      throw new Error('claim state unreadable');
+    });
+
+    await expect(
+      ensureAndroidReady(
+        host,
+        stoppedAvd(),
+        { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+    // Nobody could say who owns the emulator, so nothing is signaled to it (#4764 rule).
+    expect(terminate).not.toHaveBeenCalled();
+    expect(countDiagnosticEventsByPhase(['android_emulator_launch_ownership_unanswered'])).toBe(1);
+    // `reason` is the code; the caller's own failure text rides beside it, never inside it.
+    expect(ownershipUnansweredPayload()).toEqual({
+      device: 'emulator-5554',
+      reason: 'ownership-query-failed',
+      error: 'claim state unreadable',
+    });
+  });
 });
 
 test('a host that refuses the stop still reports the boot failure and records the refusal', async () => {

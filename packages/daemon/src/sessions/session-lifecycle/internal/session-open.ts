@@ -61,7 +61,10 @@ import {
   type RuntimeHintApplyOperation,
   type OpenRuntimeHintClearOperation,
 } from './session-open-execution.ts';
-import { withFailedOpenLaunchCleanup } from './session-open-launch-cleanup.ts';
+import {
+  openSeesDeviceHeldByOtherUnderClaimLock,
+  withFailedOpenLaunchCleanup,
+} from './session-open-launch-cleanup.ts';
 import { requireOpenSessionAdmission } from './session-open-state.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
@@ -431,6 +434,15 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       launchReported = true;
       androidLaunchIdentity = identity;
     },
+    // #4867: while this open is still booting, a second open can bind to the booting serial and
+    // become the emulator's owner. Readiness asks this before it stops its own launch.
+    isAndroidEmulatorHeldByOther: (device) =>
+      openSeesDeviceHeldByOtherUnderClaimLock({
+        sessionStore,
+        sessionName,
+        workspace: requestCwd(req, params.host),
+        device,
+      }),
   });
   const selection = booted ? { ...markSelectionBootOccurred(resolved), device: booted } : resolved;
   const device = selection.device;
