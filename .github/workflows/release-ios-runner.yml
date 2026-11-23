@@ -4,6 +4,9 @@ on:
   # release.yml calls this after publishing a stable release; dispatch reruns it for one tag.
   workflow_call:
     inputs:
+      include_watchos:
+        type: boolean
+        default: true
       release_tag:
         description: GitHub Release tag to upload assets to, for example v0.12.6.
         required: true
@@ -14,6 +17,10 @@ on:
         description: GitHub Release tag to upload assets to, for example v0.12.6.
         required: true
         type: string
+      include_watchos:
+        description: Also publish Watch assets. Leave unchecked for historical iOS-only release tags.
+        type: boolean
+        default: false
       checkout_ref:
         description: Optional branch, tag, or commit SHA to build. Defaults to the selected workflow ref.
         required: false
@@ -28,17 +35,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: ios
-            destination: iOS
-          - platform: watchos
-            destination: watchOS
+        destination: ${{ fromJSON(inputs.include_watchos && '["iOS","watchOS"]' || '["iOS"]') }}
     # Xcode 27 is this image's default. Limrun hosts load XCTest from their own Xcode 27, and the
     # packaging step refuses a runner from an older Xcode, which would embed XCTest.
     runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 90
     env:
-      AGENT_DEVICE_XCUITEST_PLATFORM: ${{ matrix.platform }}
+      AGENT_DEVICE_XCUITEST_PLATFORM: ${{ matrix.destination == 'iOS' && 'ios' || 'watchos' }}
       AGENT_DEVICE_XCUITEST_DESTINATION: generic/platform=${{ matrix.destination }} Simulator
       AGENT_DEVICE_IOS_CLEAN_DERIVED: '1'
     steps:

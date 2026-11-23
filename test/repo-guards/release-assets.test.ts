@@ -17,7 +17,7 @@ type Step = {
   with?: Record<string, string>;
 };
 
-function fixture() {
+function fixture(sdk: 'iphonesimulator' | 'watchsimulator' = 'iphonesimulator') {
   const root = fs.realpathSync(mkdtempForTestSync('release-assets-'));
   const scripts = path.join(root, 'scripts');
   const bin = path.join(root, 'bin');
@@ -62,7 +62,7 @@ function fixture() {
     'plistbuddy',
     `case "$3" in
   *xctestrun) printf '%s\\n' '__TESTROOT__/Runner.app' ;;
-  *) case "$2" in *CFBundleIdentifier*) printf '%s\\n' 'com.example.runner' ;; *) printf '%s\\n' 'Runner "quoted" \\ path' ;; esac ;;
+  *) case "$2" in *DTPlatformName*) echo "${sdk}" ;; *CFBundleIdentifier*) printf '%s\\n' 'com.example.runner' ;; *) printf '%s\\n' 'Runner "quoted" \\ path' ;; esac ;;
 esac`,
   );
   const ios = path.join(scripts, 'package-ios-simulator-runner.sh');
@@ -83,7 +83,7 @@ printf 'apk=%s\\nversion_code=123\\n' "$apk"
   );
   const products = path.join(root, 'derived/Build/Products');
   fs.mkdirSync(path.join(products, 'Runner.app'), { recursive: true });
-  fs.writeFileSync(path.join(products, 'fixture-iphonesimulator.xctestrun'), '');
+  fs.writeFileSync(path.join(products, `fixture-${sdk}.xctestrun`), '');
   const env = {
     PATH: bin,
     HOME: root,
@@ -272,17 +272,24 @@ for (const [version, tag] of [
   ['1.2.3-dev', 'v1.2.3-dev'],
   ['1.2.3-rc.1+build.42', 'v1.2.3-rc.1+build.42'],
 ] as const) {
-  for (const helper of ['ios', 'snapshot', 'ime']) {
+  for (const helper of ['ios', 'watchos', 'snapshot', 'ime']) {
     for (const repository of ['', 'owner/repo']) {
       test(`${helper} ${version} manifest encodes ${repository ? 'URL' : 'null URL'} metadata`, () => {
-        const f = fixture();
+        const apple = helper === 'ios' || helper === 'watchos';
+        const sdk = helper === 'watchos' ? 'watchsimulator' : 'iphonesimulator';
+        const f = fixture(sdk);
         const output = path.join(f.root, `${helper}-${version}-${repository ? 'url' : 'null'}`);
-        const script =
-          helper === 'ios' ? 'package-ios-simulator-runner.sh' : 'package-android-helper.sh';
+        const script = apple ? 'package-ios-simulator-runner.sh' : 'package-android-helper.sh';
         const args = helper === 'ime' ? [version, output] : [version, tag, output];
         const result = run(
           f.root,
-          { ...f.env, GITHUB_REPOSITORY: repository, AGENT_DEVICE_ANDROID_HELPER: helper },
+          {
+            ...f.env,
+            GITHUB_REPOSITORY: repository,
+            ...(apple
+              ? { AGENT_DEVICE_XCUITEST_PLATFORM: helper }
+              : { AGENT_DEVICE_ANDROID_HELPER: helper }),
+          },
           path.join(f.scripts, script),
           args,
         );
@@ -291,11 +298,12 @@ for (const [version, tag] of [
         assert.ok(manifestName);
         const manifest = JSON.parse(fs.readFileSync(path.join(output, manifestName), 'utf8'));
         assert.equal(manifest.version, version);
-        if (helper === 'ios') {
+        if (apple) {
+          assert.equal(manifest.platform_target, sdk);
           assert.equal(manifest.release_tag, tag);
           assert.equal(manifest.bundle_name, String.raw`Runner "quoted" \ path`);
           assert.equal(manifest.bundle_id, 'com.example.runner');
-          assert.equal(manifest.asset_name, `agent-device-ios-runner-${version}.app.tar.gz`);
+          assert.equal(manifest.asset_name, `agent-device-${helper}-runner-${version}.app.tar.gz`);
           assert.equal(
             manifest.asset_url,
             repository
