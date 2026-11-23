@@ -55,6 +55,15 @@ const APPLE_SIMULATOR_SETTINGS = [
 
 export type AppleSimulatorSetting = (typeof APPLE_SIMULATOR_SETTINGS)[number];
 
+/** `simctl` has no network switch, so these settings only redraw the status bar. */
+function statusBarOnlyWarnings(setting: 'wifi' | 'airplane'): { warnings: string[] } {
+  return {
+    warnings: [
+      `settings ${setting} changes only the simulator status bar; the simulator keeps using the host Mac's network.`,
+    ],
+  };
+}
+
 // fallow-ignore-next-line complexity
 export async function setIosSetting(
   device: DeviceInfo,
@@ -118,7 +127,7 @@ export async function setIosSetting(
         },
         signal,
       );
-      return;
+      return statusBarOnlyWarnings('wifi');
     }
     case 'airplane': {
       const enabled = parseSettingState(state);
@@ -161,7 +170,7 @@ export async function setIosSetting(
         },
         signal,
       );
-      return;
+      return statusBarOnlyWarnings('airplane');
     }
     case 'faceid':
     case 'touchid': {

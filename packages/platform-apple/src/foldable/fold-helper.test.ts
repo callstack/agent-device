@@ -205,14 +205,27 @@ test.each([
 });
 
 test.each([
-  ['setPose', (helper: FoldHelper) => helper.setPose('open'), 'fold-hid-dispatch-failed'],
-  ['readHingeAngle', (helper: FoldHelper) => helper.readHingeAngle(), 'fold-hinge-angle-no-sample'],
+  ['setPose', (helper: FoldHelper) => helper.setPose('open'), 'fold-hid-dispatch-failed', {}],
+  [
+    'readHingeAngle',
+    (helper: FoldHelper) => helper.readHingeAngle(),
+    'fold-hinge-angle-no-sample',
+    {},
+  ],
   [
     'readPanelPayload',
     (helper: FoldHelper) => helper.readPanelPayload({ timeoutMs: 5000 }),
     'fold-helper-panels-unreadable',
+    {},
   ],
-] as const)('%s maps a helper timeout to its typed reason', async (_mode, use, reason) => {
+  // The rotation can land after the deadline, so the refusal discloses an unknown dispatch.
+  [
+    'rotate',
+    (helper: FoldHelper) => helper.rotate('landscape-left'),
+    'orientation-hid-dispatch-timed-out',
+    { dispatched: 'unknown' },
+  ],
+] as const)('%s maps a helper timeout to its typed reason', async (_mode, use, reason, extra) => {
   const value = await withAppleToolProvider(
     createLocalAppleToolProvider({
       runCommand: async () => {
@@ -223,8 +236,16 @@ test.each([
   );
   expect(value).toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason, deviceId: 'scoped-duo', timeoutMs: 4000 },
+    details: { reason, deviceId: 'scoped-duo', timeoutMs: 4000, ...extra },
   });
+});
+
+test('rotate maps a failed helper exit to its dispatch-failed reason', async () => {
+  const { value } = await withHelper(scopedDuo, { stdout: '', exitCode: 1 }, (helper) =>
+    caught(helper.rotate('landscape-left')),
+  );
+  expect(value).toMatchObject({ details: { reason: 'orientation-hid-dispatch-failed' } });
+  expect((value as AppError).details).not.toHaveProperty('dispatched');
 });
 
 test('never spawns the helper for an already cancelled read or dispatch', async () => {

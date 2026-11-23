@@ -21,6 +21,8 @@ export const FOLD_HELPER_REASONS = {
 const FOLD_HELPER_ORIENTATION_REASONS = {
   // The fold helper could not send the orientation to the iOS simulator.
   hidDispatchFailed: { reason: 'orientation-hid-dispatch-failed' },
+  // The fold helper did not finish sending the orientation in time, so the rotation may have applied.
+  hidDispatchTimedOut: { reason: 'orientation-hid-dispatch-timed-out' },
 } as const satisfies ReasonTable<'orientation'>;
 
 const FOLD_HELPER_PANEL_REASONS = {
@@ -107,10 +109,11 @@ export function createFoldHelper(device: DeviceInfo): FoldHelper {
       });
     } catch (error) {
       if (signal?.aborted || !isCommandTimeoutError(error)) throw error;
+      const timedOut = failure.timedOut ?? failure;
       throw new AppError(
         'COMMAND_FAILED',
-        failure.message,
-        { ...error.details, deviceId: device.id, ...failure.details },
+        timedOut.message,
+        { ...error.details, deviceId: device.id, ...timedOut.details },
         error,
       );
     }
@@ -159,10 +162,16 @@ export function createFoldHelper(device: DeviceInfo): FoldHelper {
   } satisfies FoldHelper);
 }
 
-type ModeFailure = Readonly<{
+type ModeFailureShape = Readonly<{
   message: string;
-  details: { reason: FoldHelperFailureReason; hint?: string };
+  details: { reason: FoldHelperFailureReason; hint?: string; dispatched?: 'unknown' };
 }>;
+
+type ModeFailure = ModeFailureShape &
+  Readonly<{
+    /** Replaces the failure on a timeout, for a mode whose dispatch may land after its deadline. */
+    timedOut?: ModeFailureShape;
+  }>;
 
 const DISPATCH_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator hinge pose',
@@ -172,6 +181,14 @@ const DISPATCH_FAILURE: ModeFailure = {
 const ROTATE_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator orientation',
   details: { reason: FOLD_HELPER_ORIENTATION_REASONS.hidDispatchFailed.reason },
+  timedOut: {
+    message: 'Timed out sending the simulator orientation; the rotation may have applied',
+    details: {
+      reason: FOLD_HELPER_ORIENTATION_REASONS.hidDispatchTimedOut.reason,
+      dispatched: 'unknown',
+      hint: 'Check the orientation with a screenshot or snapshot. A retry reads the lit panel first and sends nothing when it already shows the requested orientation.',
+    },
+  },
 };
 
 const NO_SAMPLE_FAILURE: ModeFailure = {
