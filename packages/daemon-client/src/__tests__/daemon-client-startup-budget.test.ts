@@ -622,6 +622,23 @@ test('an unproven registration exit reports startup-exited even under a short en
   assert.equal(failure.details?.startupTimeoutMs, 2_000);
 });
 
+test('a listen-denied exit fails once with startup-listen-denied and a host-access hint', async () => {
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-listen-denied-'));
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      { kind: 'exit', exit: { pid: 998_555, exitCode: DAEMON_STARTUP_EXIT_CODES.listenDenied } },
+      { kind: 'exit', exit: { pid: 998_556, exitCode: DAEMON_STARTUP_EXIT_CODES.listenDenied } },
+    ]),
+  );
+  pause.mockImplementation(async () => {
+    await realPause();
+  });
+  const failure = await expectStartupFailure(sendToDaemon(request(paths)));
+  assert.equal(failure.details?.reason, 'startup-listen-denied');
+  assert.match(String(failure.details?.hint), /listen EPERM or EACCES\). A sandbox/);
+  assert.equal(spawn.mock.calls.length, 1, 'a denied listen is not retried');
+});
+
 test('a startup ceiling that is not a positive integer is rejected before any daemon spawns', async () => {
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-bad-ceiling-'));
   for (const raw of ['0', '-5', 'abc', '12.5']) {

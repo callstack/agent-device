@@ -47,6 +47,9 @@ export const DAEMON_UNAVAILABLE_REASONS = {
   policyMismatch: { reason: 'DAEMON_POLICY_MISMATCH' },
   // The daemon process ended before it registered a reachable endpoint.
   startupExited: { reason: 'startup-exited' },
+  // The daemon process ended because the host refused its loopback listen, as a sandbox around the
+  // launching command does.
+  startupListenDenied: { reason: 'startup-listen-denied' },
   // The daemon stayed registered and reachable but never reported the startup phase that follows.
   startupStalled: { reason: 'startup-stalled' },
   // Startup passed the ceiling its own startup budget allows, so this client stopped waiting.

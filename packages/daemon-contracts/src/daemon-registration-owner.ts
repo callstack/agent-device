@@ -74,7 +74,15 @@ const DAEMON_OWNERSHIP_REFUSAL_REASONS = {
   privateStartupUnowned: { reason: 'daemon_private_startup_unowned' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
-export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
+/**
+ * The exit codes of a daemon startup that must not run. `listenDenied`: the host refused the
+ * loopback listen (EPERM or EACCES), as a sandbox around the launching command does.
+ */
+export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({
+  busy: 75,
+  listenDenied: 77,
+  unproven: 78,
+});
 export type DaemonRegistrationFields = Readonly<{
   socketPort?: number;
   httpPort?: number;

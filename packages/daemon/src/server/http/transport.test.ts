@@ -13,6 +13,8 @@ import {
 } from '@agent-device/host-kit/request';
 import { applicationLifecycleExecutionFromRequest } from '../../sessions/application-lifecycle-execution.ts';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
+import { AppError } from '@agent-device/kernel/errors';
+import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 
 test('Provider-backed integration daemon socket transport frames requests and normalizes malformed input', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) {
@@ -489,4 +491,36 @@ test('Provider-backed integration socket rejects malformed device pins before in
     server.destroyConnections?.();
     await closeLoopbackServer(server);
   }
+});
+
+function serverWhoseListenFails(code: string): net.Server {
+  const server = net.createServer();
+  server.listen = (() => {
+    process.nextTick(() =>
+      server.emit('error', Object.assign(new Error(`listen ${code}: 127.0.0.1`), { code })),
+    );
+    return server;
+  }) as typeof server.listen;
+  return server;
+}
+
+test.for(['EPERM', 'EACCES'])(
+  'a %s loopback listen fails with daemon_listen_denied and the listen-denied exit code',
+  async (code) => {
+    await assert.rejects(listenNetServer(serverWhoseListenFails(code)), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'daemon_listen_denied');
+      assert.equal(error.details?.code, code);
+      assert.equal(error.details?.exitCode, DAEMON_STARTUP_EXIT_CODES.listenDenied);
+      return true;
+    });
+  },
+);
+
+test('an EADDRINUSE loopback listen keeps its own error and no listen-denied exit code', async () => {
+  await assert.rejects(listenNetServer(serverWhoseListenFails('EADDRINUSE')), (error: unknown) => {
+    assert.ok(!(error instanceof AppError));
+    assert.equal((error as NodeJS.ErrnoException).code, 'EADDRINUSE');
+    return true;
+  });
 });
