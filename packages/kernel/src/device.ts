@@ -802,9 +802,18 @@ function preferVirtualCandidates(candidates: DeviceInfo[]): DeviceInfo[] {
   return virtual.length > 0 ? virtual : candidates;
 }
 
+/**
+ * Each kind's iPhones and iPads share a tier. Its only booted member wins, because booting one says
+ * which handheld is meant; with none or several booted, an iPhone still ranks above an iPad.
+ */
 function candidatesWithBestAppleRank(candidates: DeviceInfo[]): DeviceInfo[] {
-  const bestRank = Math.min(...candidates.map((device) => appleDeviceSelectionRank(device)));
-  return candidates.filter((device) => appleDeviceSelectionRank(device) === bestRank);
+  const tierRank = (device: DeviceInfo) => appleDeviceSelectionRank(device, true);
+  const bestTierRank = Math.min(...candidates.map(tierRank));
+  const tier = candidates.filter((device) => tierRank(device) === bestTierRank);
+  const booted = tier.filter((device) => device.booted);
+  if (booted.length === 1) return booted;
+  const bestRank = Math.min(...tier.map((device) => appleDeviceSelectionRank(device)));
+  return tier.filter((device) => appleDeviceSelectionRank(device) === bestRank);
 }
 
 /** Tie-break policies `boot --pick` accepts. */
@@ -943,12 +952,14 @@ function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(
   );
 }
 
-function appleDeviceSelectionRank(device: DeviceInfo): number {
+/** With `ipadAsIphone`, each kind's iPads share its iPhones' rank (the handheld tier). */
+function appleDeviceSelectionRank(device: DeviceInfo, ipadAsIphone = false): number {
   // A watch answers `--platform ios` only when no other Apple device can.
   if (device.appleOs === 'watchos') return 15;
-  if (device.kind === 'simulator') return appleTargetSelectionRank(device, 0, 1, 2, 3);
+  const ipadStep = ipadAsIphone ? 0 : 1;
+  if (device.kind === 'simulator') return appleTargetSelectionRank(device, 0, ipadStep, 2, 3);
   if (device.kind === 'device' && isApplePlatform(device.platform) && !isMacOs(device))
-    return appleTargetSelectionRank(device, 10, 11, 12, 13);
+    return appleTargetSelectionRank(device, 10, 10 + ipadStep, 12, 13);
   return 14;
 }
 
