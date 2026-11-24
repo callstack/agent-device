@@ -37,7 +37,7 @@ function admittedMutation(requestId: string) {
 }
 
 test.each(['cancellation', 'replacement'])(
-  'a revoked mutation authority refuses every effect on %s',
+  'a revoked mutation authority refuses new work on %s',
   (reason) => {
     const requestId = `mutation-${reason}`;
     const { store, ref, mutations } = admittedMutation(requestId);
@@ -62,10 +62,16 @@ test.each(['cancellation', 'replacement'])(
       // Crossing the side-effect seam is refused rather than silently skipped: a caller must not
       // read a no-op on a dead lifetime as its own expiry.
       assert.throws(() => mutations.expireRefFrame());
-      // The one effect that stays quiet is the recording: its entry belongs to the lifetime that
-      // ended with it, and attributing it to a successor would be the actual damage.
+      // A completed effect belongs to the admitted lifetime even when the request was canceled.
       mutations.recordAction({ command: 'find', positionals: ['Save', 'focus'], flags: {} });
-      assert.deepEqual(successor.actions, []);
+      if (reason === 'cancellation') {
+        assert.deepEqual(
+          store.requireCurrent(ref).actions.map(({ command }) => command),
+          ['find'],
+        );
+      } else {
+        assert.deepEqual(successor.actions, []);
+      }
     } finally {
       clearRequestCanceled(requestId);
     }

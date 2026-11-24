@@ -777,9 +777,7 @@ export class SessionCoordinator {
         expireRefFrame(this.#store.requireCurrent(ref));
       },
       recordAction: (entry) => {
-        // Recording an action of a lifetime that already ended belongs to nobody, and writing it to
-        // a successor would attribute work to a session that did not do it.
-        if (!admitted() || !this.#store.resolveCurrent(ref)) return;
+        if (!this.#store.resolveCurrent(ref)) return;
         this.#store.recordAction(ref, entry);
       },
     };
