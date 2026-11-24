@@ -1,11 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { readCloudJsonResponse } from '../cloud-response.ts';
-import {
-  admitDaemonStateRoot,
-  resolveDaemonPaths,
-} from '@agent-device/daemon-contracts/daemon-resolution';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { parseRawArgs } from '../parser/args.ts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { writeCommandOutput } from '../commands/shared.ts';
 import { resolveCloudCatalogAccess } from './cloud-catalog-access.ts';
 
@@ -41,32 +36,22 @@ export type CloudVendorRow = {
   availability?: CloudVendorAvailability;
 };
 
-export async function runCloudCatalog(
-  input: ReturnType<typeof parseRawArgs>,
-  host: HostEnvironment,
-): Promise<void> {
-  const { positionals, flags, providedFlags } = input;
-  const positionalCount = positionals[1] === 'list' ? 2 : 1;
-  if (positionals.length !== positionalCount) {
-    throw new AppError('INVALID_ARGS', 'A catalog listing accepts no additional arguments.');
-  }
-  const invalid = providedFlags.find(
-    ({ key }) => key !== 'live' && key !== 'json' && key !== 'stateDir',
-  );
-  if (invalid) {
-    throw new AppError('INVALID_ARGS', `${invalid.token} is unavailable for a catalog listing.`);
-  }
-  const paths = resolveDaemonPaths(flags.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, host);
-  admitDaemonStateRoot({ paths, mode: 'repair' });
+export async function runCloudCatalog(options: {
+  stateDir: string;
+  env: EnvMap;
+  live?: boolean;
+  json: boolean;
+}): Promise<void> {
+  const { stateDir, env, live, json } = options;
   const { accessToken, cloudBaseUrl, catalogCredentials } = await resolveCloudCatalogAccess({
-    stateDir: paths.baseDir,
-    env: host.env,
+    stateDir,
+    env,
   });
   const vendors = await listCloudVendors(cloudBaseUrl, accessToken, {
-    live: flags.live,
+    live,
     catalogCredentials,
   });
-  await writeCommandOutput(flags, vendors, () =>
+  await writeCommandOutput({ json }, vendors, () =>
     vendors.length === 0
       ? 'No cloud vendors listed.'
       : vendors.map(formatCloudVendorRow).join('\n'),

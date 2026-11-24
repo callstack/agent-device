@@ -1,4 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { DEFAULT_CLOUD_BASE_URL, writeCliSession } from '../cli/auth-session.ts';
 import { runCliCapture } from './cli-capture.ts';
@@ -57,6 +59,53 @@ test.each([DEFAULT_CLOUD_BASE_URL, 'https://issuer.example'])(
     });
     const [, list] = fetchMock.mock.calls[1]!;
     expect(new Headers(list.headers).get('authorization')).toBe('Bearer catalog-access-key');
+  },
+);
+
+test.each(['user config', 'configured file', 'explicit config'])(
+  'catalog reads an issuer-bound login from %s stateDir',
+  async (source) => {
+    const issuer = 'https://issuer.example';
+    const stateDir = storeSession(issuer);
+    const home = mkdtempForTestSync('agent-device-catalog-config-');
+    const config = path.join(home, source === 'user config' ? 'config.json' : 'operator.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify({ stateDir, daemonAuthToken: 'private-daemon-fixture-key' }),
+    );
+    const args = ['connect', 'list', '--json'];
+    const env: Record<string, string> = { AGENT_DEVICE_HOME: home };
+    if (source === 'configured file') env.AGENT_DEVICE_CONFIG = config;
+    if (source === 'explicit config') args.push('--config', config);
+    const rows = [
+      {
+        vendor: 'test-provider',
+        platform: 'ios',
+        usdPerMinute: 0.05,
+        capabilities: [],
+        viewer: false,
+        available: true,
+      },
+    ];
+    const fetchMock = vi.fn(async (url: URL, _init: RequestInit) =>
+      url.pathname.endsWith('/refresh')
+        ? Response.json({ accessToken: 'catalog-access-key' })
+        : Response.json(rows),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runCliCapture(args, { env });
+
+    expect(result.code, result.stdout + result.stderr).toBeNull();
+    expect(JSON.parse(result.stdout).data).toEqual(rows);
+    expect(result.calls).toEqual([]);
+    expect(fetchMock.mock.calls.map(([url]) => url.href)).toEqual([
+      `${issuer}/api/control-plane/cli-session/refresh`,
+      `${issuer}/v1/vendors`,
+    ]);
+    expect(new Headers(fetchMock.mock.calls[1]![1].headers).get('authorization')).toBe(
+      'Bearer catalog-access-key',
+    );
   },
 );
 

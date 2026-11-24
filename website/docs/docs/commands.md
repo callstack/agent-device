@@ -2599,6 +2599,7 @@ Use the CLI login for the selected cloud API, or set `AGENT_DEVICE_CLOUD_API_KEY
 
 | Catalog option | What it does |
 | --- | --- |
+| `--config <path>` | Read operator settings, including the state directory, from this config file |
 | `--state-dir <path>` | Read the stored CLI login from this state directory |
 | `--live` | Request advisory availability |
 | `--json` | Print the catalog rows as JSON |
