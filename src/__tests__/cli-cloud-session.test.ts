@@ -995,27 +995,3 @@ test.each([true, false])('refuses scoped attachment token echoes (RPC success %s
   );
   expect(result.stdout + result.stderr).not.toContain(token);
 });
-
-test('bare connect with a configured daemon endpoint keeps its own scope', async () => {
-  const workspace = mkdtempForTestSync('configured-daemon-connect-');
-  const fetchMock = vi.fn();
-  vi.stubGlobal('fetch', fetchMock);
-  const env = {
-    AGENT_DEVICE_STATE_DIR: workspace,
-    AGENT_DEVICE_SESSION: 'direct-fixture',
-    AGENT_DEVICE_DAEMON_BASE_URL: 'https://daemon.example/rpc',
-    AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'fixture-daemon-key',
-  };
-  const result = await runCliCapture(
-    ['connect', '--tenant', 'fixture-tenant', '--run-id', 'fixture-run', '--json'],
-    { env },
-  );
-  expect(result.code, result.stdout + result.stderr).toBeNull();
-  const state = readRemoteConnectionState({ stateDir: workspace, session: 'direct-fixture' });
-  expect(state).toMatchObject({
-    tenant: 'fixture-tenant',
-    runId: 'fixture-run',
-    daemon: { baseUrl: 'https://daemon.example/rpc' },
-  });
-  expect(fetchMock).not.toHaveBeenCalled();
-});

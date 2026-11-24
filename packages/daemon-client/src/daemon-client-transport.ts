@@ -44,12 +44,7 @@ type SendRequestOptions = {
   host: HostEnvironment;
   onProgress?: RequestProgressSink;
   dispatch?: DaemonDispatch;
-  /**
-   * The caller's per-request cancellation (#3178). Aborted at or before a send attempt, nothing
-   * leaves on that attempt; aborted in flight, the attempt's own connection is destroyed — which is
-   * what makes the daemon mark the request canceled — and the promise rejects with the typed
-   * canceled-request error. An abort is never a timeout: it never reaches `handleRequestTimeout`.
-   */
+  /** Caller cancellation refuses an unsent request or destroys its in-flight connection. */
   signal?: AbortSignal;
   /**
    * What a timed-out request may do to the daemon. `none`, the default, leaves every daemon alone,
@@ -60,13 +55,7 @@ type SendRequestOptions = {
   timeoutRecovery?: 'retire-unresponsive' | 'none';
 };
 
-/**
- * The typed canceled-request error for a caller's own abort. The reason the caller aborted with
- * survives unchanged as the cause — `AbortController.abort()` accepts any value — while the
- * rejection itself dispatches on `reason: 'request_canceled'` with the delivery evidence the
- * aborting layer can prove. A built-in transport rejects every abort through this, so a caller's
- * arbitrary abort reason never escapes as the outcome of a daemon request.
- */
+/** Preserve the caller's abort reason as the cause of the typed cancellation error. */
 function abortedRequestError(
   signal: AbortSignal,
   dispatched: 'no' | 'unknown',
