@@ -12,19 +12,21 @@ export {
   type ExecResult,
   type ExecStreamOptions,
   isCommandTimeoutError,
-  isExecutablePath,
   requireExecSuccess,
-  resolveExecutableOverridePath,
-  resolveFileOverridePath,
   runCmd,
   runCmdBackground,
   runCmdDetached,
   runCmdDetachedMonitored,
   runCmdStreaming,
   runCmdSync,
-  whichCmd,
   withCommandExecutorOverride,
   withCommandHost,
   withoutCommandExecutorOverride,
 } from './internal/exec.ts';
+export {
+  isExecutablePath,
+  resolveExecutableOverridePath,
+  resolveFileOverridePath,
+  whichCmd,
+} from './internal/exec-which.ts';
 export { EXEC_COMMAND_PHASE } from './internal/exec-trace.ts';

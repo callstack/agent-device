@@ -138,9 +138,12 @@ test('resolveRunnerProvisioningAuthArgs passes the xcodebuild authentication key
 
 test('resolveRunnerProvisioningAuthArgs refuses a key path that names no readable regular file', () => {
   const dir = mkdtempForTestSync('agent-device-auth-key-');
+  const unreadableFile = path.join(dir, 'AuthKey_UNREADABLE.p8');
+  fs.writeFileSync(unreadableFile, '-----BEGIN PRIVATE KEY-----\n', { mode: 0o000 });
   const cases = [
     ['a missing file', path.join(dir, 'AuthKey_MISSING.p8')],
     ['a directory', dir],
+    ['a mode-000 file in a readable directory', unreadableFile],
   ] as const;
   for (const [label, keyPath] of cases) {
     assert.throws(

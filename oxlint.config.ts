@@ -61,7 +61,6 @@ const LEGACY_FILE_LINE_CAPS = {
   'packages/daemon-client/src/__tests__/index.test.ts': 1340,
   'src/mcp/__tests__/command-tools.test.ts': 1029,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1227,
-  'packages/host-kit/src/internal/exec.ts': 1032,
   'packages/react-native/src/metro/client-metro.ts': 1123,
 };
 

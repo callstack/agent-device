@@ -151,6 +151,28 @@ test('a device build with a partial auth key trio refuses before xcodebuild runs
   assert.equal(runCmdStreaming.mock.calls.length, 0, 'no build was spawned');
 });
 
+test('a device build with an unreadable auth key file refuses before xcodebuild runs', async () => {
+  const keyFile = path.join(projectRoot, 'AuthKey_UNREADABLE.p8');
+  fs.writeFileSync(keyFile, '-----BEGIN PRIVATE KEY-----\n', { mode: 0o000 });
+  process.env.AGENT_DEVICE_IOS_AUTH_KEY_PATH = keyFile;
+  process.env.AGENT_DEVICE_IOS_AUTH_KEY_ID = 'KID12345';
+  process.env.AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID = 'ISSUER67890';
+
+  const failure = await ensureXctestrunArtifact(IOS_DEVICE, {}).catch((error: unknown) => error);
+
+  assert.ok(failure instanceof AppError, 'the refusal is an AppError');
+  assert.equal(failure.details?.reason, 'signing_auth_key_invalid_path');
+  assert.equal(failure.details?.envName, 'AGENT_DEVICE_IOS_AUTH_KEY_PATH');
+  const rendered = JSON.stringify(failure);
+  assert.equal(rendered.includes(keyFile), false, 'the value never reaches the error');
+  assert.equal(
+    /EACCES|EPERM|Operation not permitted/.test(rendered),
+    false,
+    'the raw filesystem error never reaches the error',
+  );
+  assert.equal(runCmdStreaming.mock.calls.length, 0, 'no build was spawned');
+});
+
 test('a device build without the auth key trio keeps the pre-change invocation byte for byte', async () => {
   runCmdStreaming.mockImplementation(async (_command: string, args: string[]) => {
     await seedBuiltRunner(args);

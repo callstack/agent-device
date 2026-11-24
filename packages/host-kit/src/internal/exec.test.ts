@@ -13,10 +13,10 @@ import {
   runCmdDetached,
   runCmdStreaming,
   runCmdSync,
-  whichCmd,
   withCommandHost,
   type ExecResult,
 } from './exec.ts';
+import { whichCmd } from './exec-which.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -599,7 +599,7 @@ test('a secret split across chunk boundaries is still one redaction', async () =
     'the joined chunks collapse to the placeholder',
   );
   assert.equal(
-    stdoutSeen.replace(/\[redacted\]/g, '').length,
+    stdoutSeen.replaceAll('[redacted]', '').length,
     0,
     'nothing but the placeholder remains',
   );
@@ -740,7 +740,7 @@ test('without redactions the streams and error argv stay byte for byte', async (
   );
 });
 
-test('envOmit deletes from the inherited environment outside a host scope', async () => {
+test('envOmit outside a host scope deletes only from an explicit env, never the inherited one', async () => {
   const inheritedName = 'AGENT_DEVICE_TEST_ENV_OMIT_INHERITED';
   const child = [
     '-e',
@@ -748,12 +748,19 @@ test('envOmit deletes from the inherited environment outside a host scope', asyn
   ];
   process.env[inheritedName] = 'inherited-value';
   try {
-    const [omitted, kept] = await Promise.all([
+    const [bare, explicit] = await Promise.all([
       runCmd(process.execPath, child, { envOmit: [inheritedName] }),
-      runCmd(process.execPath, child),
+      runCmd(process.execPath, child, {
+        env: { [inheritedName]: 'explicit-value' },
+        envOmit: [inheritedName],
+      }),
     ]);
-    assert.equal(omitted.stdout, 'unset', 'the omitted name is absent for the child');
-    assert.equal(kept.stdout, 'inherited-value', 'without envOmit the child inherits the value');
+    assert.equal(
+      bare.stdout,
+      'inherited-value',
+      'a bare out-of-scope spawn inherits natively; there is no captured env to delete from',
+    );
+    assert.equal(explicit.stdout, 'unset', 'an explicit env is the object envOmit deletes from');
   } finally {
     delete process.env[inheritedName];
   }

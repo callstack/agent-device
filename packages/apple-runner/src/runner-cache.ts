@@ -40,6 +40,7 @@ export {
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerProvisioningAuthArgs,
   resolveRunnerSandboxBuildArgs,
+  runnerSigningAuthSpawnOptions,
   resolveRunnerSigningBuildSettings,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache-metadata.ts';

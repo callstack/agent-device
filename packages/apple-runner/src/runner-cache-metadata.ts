@@ -332,11 +332,13 @@ function invalidAuthKeyPathError(envName: string): AppError {
   );
 }
 
-/** True only for a readable regular file; NUL bytes and every other stat failure answer false. */
+/** True only for a regular file the process can open for reading; NUL bytes and every other stat or access failure answer false. */
 function isReadableRegularFilePath(candidate: string): boolean {
   if (candidate.length === 0 || candidate.includes('\0')) return false;
   try {
-    return fs.statSync(candidate).isFile();
+    if (!fs.statSync(candidate).isFile()) return false;
+    fs.accessSync(candidate, fs.constants.R_OK);
+    return true;
   } catch {
     return false;
   }
@@ -384,9 +386,9 @@ export function resolveRunnerProvisioningAuthArgs(
     );
   }
   const [keyPath, keyId, issuerId] = values.map((entry) => entry.value);
-  // The path is validated before the argv is built: a missing file, a directory, or a NUL-bearing
-  // value refuses here with the typed config error instead of reaching xcodebuild, whose spawn
-  // failure would carry the value into the error details.
+  // The path is validated before the argv is built: a missing file, a directory, an unreadable
+  // file, or a NUL-bearing value refuses here with the typed config error instead of reaching
+  // xcodebuild, whose spawn failure would carry the value into the error details.
   if (!isReadableRegularFilePath(keyPath!)) {
     throw invalidAuthKeyPathError('AGENT_DEVICE_IOS_AUTH_KEY_PATH');
   }
@@ -398,6 +400,25 @@ export function resolveRunnerProvisioningAuthArgs(
     '-authenticationKeyIssuerID',
     issuerId!,
   ];
+}
+
+/**
+ * The exec options that keep the key path off the build's surfaces: when the trio rides the argv,
+ * the same three names leave the child environment, and the path scrubs from the streams and from
+ * every error argv — echoes in the child output and the argv in exit, timeout, and spawn errors
+ * included — so the value never reaches runner.log, the trace log, stderr, or an error payload.
+ * The flag names and the key ids stay, so the logs still name which args the build carried.
+ * Without the trio, nothing changes.
+ */
+export function runnerSigningAuthSpawnOptions(
+  env: NodeJS.ProcessEnv,
+  provisioningAuthArgs: readonly string[],
+): { envOmit?: readonly string[]; redactions?: readonly string[] } {
+  if (provisioningAuthArgs.length === 0) return {};
+  return {
+    envOmit: RUNNER_SIGNING_AUTH_ENV_NAMES,
+    redactions: [env.AGENT_DEVICE_IOS_AUTH_KEY_PATH?.trim() ?? ''],
+  };
 }
 
 export function resolveRunnerBundleBuildSettings(

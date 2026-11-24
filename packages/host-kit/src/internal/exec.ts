@@ -1,7 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { constants } from 'node:fs';
-import { access, stat } from 'node:fs/promises';
-import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -18,7 +15,9 @@ import type {
   ExecDetachedProcess,
 } from './exec-types.ts';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import { createArgRedactor, redactArgv } from './exec-redact.ts';
+import { normalizeExecutableCommand } from './exec-which.ts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type {
   CommandExecutorOverride,
@@ -123,8 +122,6 @@ export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
   stdio?: StdioOptions;
 };
 
-const BARE_COMMAND_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
-const WINDOWS_PATH_EXTENSIONS = ['.com', '.exe', '.bat', '.cmd'];
 const commandExecutorOverrideScope = new AsyncLocalStorage<CommandExecutorOverride | undefined>();
 
 export async function withCommandExecutorOverride<T>(
@@ -188,16 +185,9 @@ function resolveSpawnEnv(
 ): NodeJS.ProcessEnv | undefined {
   const scope = commandHostScope.getStore();
   if (!scope) {
-    if (env === undefined) {
-      if (omit?.length) {
-        // Snapshot the live environment explicitly so the omitted names are truly absent for the
-        // child; a native inherit offers no object to delete from.
-        const inherited = { ...process.env, ...overrides };
-        for (const name of omit) delete inherited[name];
-        return inherited;
-      }
-      return overrides;
-    }
+    // A bare out-of-scope spawn inherits the process environment natively, so there is no captured
+    // object to delete the omitted names from; deletion needs an explicit `env` or a host scope.
+    if (env === undefined) return overrides;
     const merged = { ...env, ...overrides };
     if (omit?.length) for (const name of omit) delete merged[name];
     return merged;
@@ -225,101 +215,6 @@ export async function runCmdStreaming(
   const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
   if (overrideResult) return coerceExecResult(await overrideResult);
   return await runSpawnedCommand(cmd, args, options);
-}
-
-/** The placeholder that replaces every redacted value in retained output and error argv. */
-const REDACTED_ARG = '[redacted]';
-
-function redactArgv(args: readonly string[], redactions: readonly string[] | undefined): string[] {
-  if (!redactions?.length) return [...args];
-  return args.map((arg) => (redactions.includes(arg) ? REDACTED_ARG : arg));
-}
-
-/**
- * One streaming scrubber over the caller's redactions. Every chunk joins the pending tail and the
- * whole buffer is scrubbed BEFORE the emit/hold split, so any secret already complete in the buffer
- * is replaced before its surrounding text can reach a callback; the hold (longest secret minus one)
- * keeps a still-incomplete tail occurrence pending. A secret a chunk boundary splits is still one
- * match. The close flush releases the held tail and masks a trailing fragment a cut-off stream
- * leaves — a fragment long enough to recognize never survives. Only the values the caller redacts
- * are scrubbed: the rest of the output, flag names and non-secret argv echoes included, reaches the
- * logs unchanged. `binaryStdout` capture is byte-exact by contract and is not scrubbed; do not pair
- * it with `redactions`.
- */
-function streamScrubber(redactions: readonly string[]): (chunk: string, flush?: boolean) => string {
-  const secrets = [...new Set(redactions)].filter((value) => value.length > 0);
-  const hold = secrets.reduce((max, value) => Math.max(max, value.length - 1), 0);
-  const FRAGMENT_MIN = 4;
-  let pending = '';
-  const scrubText = (text: string): string => {
-    for (const secret of secrets) {
-      if (text.includes(secret)) text = text.split(secret).join(REDACTED_ARG);
-    }
-    return text;
-  };
-  /** Masks a trailing proper prefix of a secret — the tail of an echo the stream cut mid-value. */
-  const maskPartialTail = (text: string): string => {
-    for (const secret of secrets) {
-      if (secret.length < 2 * FRAGMENT_MIN) continue;
-      const max = Math.min(text.length, secret.length - 1);
-      for (let length = max; length >= FRAGMENT_MIN; length--) {
-        if (text.endsWith(secret.slice(0, length))) {
-          return `${text.slice(0, text.length - length)}${REDACTED_ARG}`;
-        }
-      }
-    }
-    return text;
-  };
-  return (chunk, flush = false) => {
-    const text = scrubText(pending + chunk);
-    pending = '';
-    if (!flush) {
-      if (text.length > hold) {
-        pending = text.slice(-hold);
-        return text.slice(0, -hold);
-      }
-      pending = text;
-      return '';
-    }
-    return maskPartialTail(text);
-  };
-}
-
-/**
- * The redaction face one redacted command uses: the raw argv stays at the spawn boundary, the
- * chunk callbacks and the retained stdout/stderr receive scrubbed text, and `argv` is the sanitized
- * copy every error this module builds carries. Split matches stay single matches, and a value the
- * caller redacts beyond the argv — an echoed flag name — scrubs from the streams too.
- */
-function createArgRedactor(
-  args: readonly string[],
-  redactions: readonly string[] | undefined,
-): {
-  argv: readonly string[];
-  scrubOut(chunk: string): string;
-  scrubErr(chunk: string): string;
-  flushOut(): string;
-  flushErr(): string;
-} {
-  if (!redactions?.length) {
-    const pass = (chunk: string) => chunk;
-    return {
-      argv: [...args],
-      scrubOut: pass,
-      scrubErr: pass,
-      flushOut: () => '',
-      flushErr: () => '',
-    };
-  }
-  const scrubOut = streamScrubber(redactions);
-  const scrubErr = streamScrubber(redactions);
-  return {
-    argv: redactArgv(args, redactions),
-    scrubOut: (chunk) => scrubOut(chunk),
-    scrubErr: (chunk) => scrubErr(chunk),
-    flushOut: () => scrubOut('', true),
-    flushErr: () => scrubErr('', true),
-  };
 }
 
 /**
@@ -511,62 +406,6 @@ function runSpawnedCommand(
 /** Returns the result with `signal` added when a signal terminated the process. */
 function execResult(ended: { signalCode: string | null }, result: ExecResult): ExecResult {
   return ended.signalCode ? { ...result, signal: ended.signalCode } : result;
-}
-
-export async function whichCmd(cmd: string, env: EnvMap): Promise<boolean> {
-  const candidate = normalizeExecutableLookup(cmd);
-  if (!candidate) return false;
-
-  if (path.isAbsolute(candidate)) {
-    return isExecutablePath(candidate);
-  }
-
-  const pathValue = readPathVariable(env, 'PATH');
-  if (!pathValue) return false;
-  const pathExtensions = resolvePathExtensions(env);
-  for (const directory of pathValue.split(path.delimiter)) {
-    const trimmedDirectory = directory.trim();
-    if (!trimmedDirectory) continue;
-    for (const entry of resolveExecutableCandidates(candidate, pathExtensions)) {
-      if (await isExecutablePath(path.join(trimmedDirectory, entry))) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-export async function resolveExecutableOverridePath(
-  rawPath: string | undefined,
-  envName: string,
-): Promise<string | undefined> {
-  return await resolveOverridePath(rawPath, envName, 'executable', isExecutablePath);
-}
-
-export async function resolveFileOverridePath(
-  rawPath: string | undefined,
-  envName: string,
-): Promise<string | undefined> {
-  return await resolveOverridePath(rawPath, envName, 'file', isFilePath);
-}
-
-async function resolveOverridePath(
-  rawPath: string | undefined,
-  envName: string,
-  kind: 'executable' | 'file',
-  isUsable: (candidate: string) => Promise<boolean>,
-): Promise<string | undefined> {
-  const candidate = normalizeOverridePath(rawPath, envName, kind);
-  if (!candidate) return undefined;
-  if (!(await isUsable(candidate))) {
-    throw new AppError(
-      'TOOL_MISSING',
-      `${envName} points to a missing or non-${kind} ${kind === 'file' ? 'path' : 'file'}: ${candidate}`,
-      { envName, path: candidate },
-    );
-  }
-  return candidate;
 }
 
 // fallow-ignore-next-line complexity
@@ -774,17 +613,6 @@ export function runCmdBackground(
   return { child, wait };
 }
 
-function normalizeExecutableCommand(cmd: string): string {
-  const candidate = normalizeExecutableLookup(cmd);
-  if (!candidate) {
-    throw new AppError('INVALID_ARGS', `Invalid executable command: ${JSON.stringify(cmd)}`, {
-      cmd,
-      hint: 'Use a bare command name from PATH or an absolute executable path.',
-    });
-  }
-  return candidate;
-}
-
 /**
  * A spawn cause carries the raw argv in its `spawnargs`, and the serialized cause reaches error
  * payloads. A redacted command rebuilds that field on the sanitized face, so the raw values die at
@@ -970,79 +798,6 @@ function commandCloseFailure(
     return createExitError(executable, cmd, args, exitCode, stdout, stderr);
   }
   return null;
-}
-
-function normalizeOverridePath(
-  rawPath: string | undefined,
-  envName: string,
-  kind: 'executable' | 'file',
-): string | undefined {
-  const candidate = rawPath?.trim();
-  if (!candidate) return undefined;
-  if (!path.isAbsolute(candidate) || candidate.includes('\0')) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `${envName} must be an absolute ${kind} path, not ${JSON.stringify(rawPath)}`,
-      { envName, path: rawPath },
-    );
-  }
-  return candidate;
-}
-
-function normalizeExecutableLookup(cmd: string): string | null {
-  const candidate = cmd.trim();
-  if (!candidate || candidate.includes('\0')) return null;
-  if (path.isAbsolute(candidate)) return candidate;
-  if (candidate.includes('/') || candidate.includes('\\')) {
-    return null;
-  }
-  return BARE_COMMAND_RE.test(candidate) ? candidate : null;
-}
-
-/** Windows names an environment variable in any case; a captured copy no longer folds it. */
-function readPathVariable(env: EnvMap, name: 'PATH' | 'PATHEXT'): string | undefined {
-  if (process.platform !== 'win32') return env[name];
-  const key = Object.keys(env).find((candidate) => candidate.toUpperCase() === name);
-  return key === undefined ? undefined : env[key];
-}
-
-function resolvePathExtensions(env: EnvMap): string[] {
-  if (process.platform !== 'win32') return [''];
-  const rawPathExt = readPathVariable(env, 'PATHEXT');
-  if (!rawPathExt) return WINDOWS_PATH_EXTENSIONS;
-  const extensions = rawPathExt
-    .split(';')
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0);
-  return extensions.length > 0 ? extensions : WINDOWS_PATH_EXTENSIONS;
-}
-
-function resolveExecutableCandidates(cmd: string, pathExtensions: string[]): string[] {
-  if (process.platform !== 'win32') return [cmd];
-  const lowered = cmd.toLowerCase();
-  if (pathExtensions.some((extension) => lowered.endsWith(extension))) {
-    return [cmd];
-  }
-  return pathExtensions.map((extension) => `${cmd}${extension}`);
-}
-
-export async function isExecutablePath(filePath: string): Promise<boolean> {
-  try {
-    if (!(await isFilePath(filePath))) return false;
-    await access(filePath, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function isFilePath(filePath: string): Promise<boolean> {
-  try {
-    const fileStat = await stat(filePath);
-    return fileStat.isFile();
-  } catch {
-    return false;
-  }
 }
 
 function normalizeTimeoutMs(value: number | undefined): number | undefined {
