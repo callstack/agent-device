@@ -82,9 +82,9 @@ export const doctorCommandFacet = defineCommandFacet({
     summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',
     searchHint: 'health check setup troubleshoot',
     cliDetail:
-      'Metro reachability is inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
+      'Run doctor locally on the Metro host from your project directory. Doctor decides whether to check Metro reachability from the project or runtime settings. The daemon skips Metro checks for requests through the proxy and for all HTTP requests to a daemon with an auth hook. On iOS simulators doctor also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact. Use --json for full checks and evidence.',
     mcpDetail:
-      'On iOS simulators it also warms the XCTest runner build cache in the background when missing.',
+      'For Metro reachability, run doctor locally on the Metro host from your project directory. On iOS simulators doctor also warms the XCTest runner build cache in the background when missing.',
   },
   metadata: doctorCommandMetadata,
   run: (client, input) => client.command.doctor(input),
