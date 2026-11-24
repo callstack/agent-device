@@ -20,11 +20,12 @@ const LOCK_STATE_WINDOW_MS = 5_000;
 const LOCK_STATE_POLL_MS = 250;
 /**
  * A secure device whose "Power button instantly locks" is off shows the keyguard only after its
- * "Lock after screen timeout" delay (`lock_screen_lock_after_timeout`, 5 s when unset). The lock
- * waits that long on top of its own window, up to this cap, which keeps the command inside the
- * daemon's 90 s request envelope.
+ * "Lock after screen timeout" delay (`lock_screen_lock_after_timeout`). On an Android 16 emulator
+ * the keyguard showed about 0.2 s after that delay, and never sooner than 5 s, even with the
+ * setting unset, 0 or 2000. The lock waits that long on top of its own window, up to the cap,
+ * which keeps the command inside the daemon's 90 s request envelope.
  */
-const LOCK_AFTER_TIMEOUT_DEFAULT_MS = 5_000;
+const LOCK_AFTER_TIMEOUT_MIN_MS = 5_000;
 const LOCK_AFTER_TIMEOUT_CAP_MS = 60_000;
 
 const SECURE_LOCK_HINT =
@@ -211,7 +212,7 @@ function userBlock(dump: string, userId: number): string | undefined {
   return found ? lines.join('\n') : undefined;
 }
 
-/** `lock_screen_lock_after_timeout` in milliseconds; an unset or unreadable value is Android's 5 s default. */
+/** How long Android defers the keyguard: `lock_screen_lock_after_timeout`, never under 5 s. */
 async function readLockAfterTimeoutMs(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
@@ -222,5 +223,7 @@ async function readLockAfterTimeoutMs(
     signal,
   );
   const value = Number.parseInt(stdout.trim(), 10);
-  return Number.isInteger(value) && value >= 0 ? value : LOCK_AFTER_TIMEOUT_DEFAULT_MS;
+  return Number.isInteger(value)
+    ? Math.max(value, LOCK_AFTER_TIMEOUT_MIN_MS)
+    : LOCK_AFTER_TIMEOUT_MIN_MS;
 }

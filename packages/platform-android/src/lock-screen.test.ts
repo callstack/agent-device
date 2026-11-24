@@ -113,9 +113,11 @@ test('lock refuses a screen lock set to None before sending anything', async () 
 });
 
 // With "Power button instantly locks" off, a secure keyguard waits for "Lock after screen
-// timeout", so the window grows by that delay, Android's 5 s when unset, and never past 60 s.
+// timeout", so the window grows by that delay: never under 5 s, measured with the setting unset,
+// 0 and 2000 on an Android 16 emulator, and never past 60 s.
 test.each([
   ['an unset delay as 5 s', 'null', 10_000],
+  ['a delay under 5 s as 5 s', '2000', 10_000],
   ['a 30 s delay', '30000', 35_000],
   ['a delay past one minute as 60 s', '1800000', 65_000],
 ])('lock on a secure device waits for %s', async (_name, lockAfterTimeout, windowMs) => {
