@@ -2,9 +2,12 @@ import {
   AWS_DEVICE_FARM,
   BROWSERSTACK,
   LIMRUN,
+  getProviderPluginDeclaration,
 } from '@agent-device/contracts/provider-plugin-catalog';
 import {
   getReplayPluginInstallation,
+  getOptionalPlatformPluginDeclaration,
+  MACOS_PLATFORM_PLUGIN_DECLARATION,
   pluginInstallCommand,
 } from '@agent-device/contracts/plugin-installation';
 import { gestureHelpTopic } from './cli-help-gestures.ts';
@@ -34,7 +37,7 @@ import {
 import { renderCliHelpOverview } from './cli-help-overview.ts';
 import { foldableHelpTopic } from './cli-help-foldable.ts';
 import { reactNativeHelpTopic } from './cli-help-react-native.ts';
-import { TV_PLUGIN_FLOWS } from './cli-help-tv.ts';
+import { renderTvPluginFlows } from './cli-help-tv.ts';
 import { providerPluginHelp, providerPluginInstallCommand } from '../provider-plugin-catalog.ts';
 
 const CONFIGURATION_LINES = [
@@ -223,7 +226,7 @@ Recording:
   tv: {
     summary:
       'Android TV (incl. Fire TV on Fire OS), tvOS, and Vega VVD focus-first remote navigation',
-    body: `agent-device help tv
+    body: (coreVersion: string) => `agent-device help tv
 
 Use this when the target is Android TV (including Fire TV devices on Fire OS over ADB), Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
 
@@ -239,7 +242,7 @@ Vega OS:
   Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB.
   Initial support is VVD-only. Physical devices that run Vega OS remain unsupported until their discovery, lifecycle, and remote controls have durable hardware evidence.
   Use --platform vega --target tv for the running Vega Virtual Device.
-  agent-device plugins add @agent-device/vega
+  ${pluginInstallCommand(getOptionalPlatformPluginDeclaration('vega')!, coreVersion)}
   vega virtual-device start
   agent-device devices --platform vega --target tv
   agent-device open <component-id> --platform vega --target tv --session vega-tv
@@ -557,7 +560,7 @@ Cloud profile flow:
   agent-device disconnect
 
 TestMu AI virtual-device flow (emulators and simulators):
-  agent-device plugins add @agent-device/testmu
+  ${pluginInstallCommand(getProviderPluginDeclaration('testmu')!, coreVersion)}
   export LT_USERNAME=... LT_ACCESS_KEY=... AGENT_DEVICE_SESSION=checkout-ios
   agent-device connect testmu --platform ios --device "iPhone 16" --provider-os-version 18.0 --provider-app lt://APP-id
   agent-device open com.example.app
@@ -570,7 +573,10 @@ TestMu AI real-device flow:
   agent-device connect testmu --provider-device-type real --platform ios --device "iPhone 16" --provider-os-version 18 --provider-app ./MyApp.ipa --session checkout-real
   Real iOS devices are listed by major OS version (18, not 18.0) and install a signed .ipa. Real and virtual devices have separate upload APIs, so pass an lt:// id uploaded for the pool you connect to.
 
-${TV_PLUGIN_FLOWS}
+${renderTvPluginFlows(
+  pluginInstallCommand(getProviderPluginDeclaration('webos')!, coreVersion),
+  pluginInstallCommand(getProviderPluginDeclaration('tizen')!, coreVersion),
+)}
 BrowserStack hosted-device flow:
   ${providerPluginInstallCommand(BROWSERSTACK, coreVersion)}
   export BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=... AGENT_DEVICE_SESSION=checkout-android
@@ -609,7 +615,7 @@ Limrun direct-device flow:
   agent-device disconnect
 
 Revyl cloud-device flow (plugin, install separately):
-  agent-device plugins add @agent-device/revyl
+  ${pluginInstallCommand(getProviderPluginDeclaration('revyl')!, coreVersion)}
   export REVYL_API_KEY=... AGENT_DEVICE_SESSION=checkout-ios
   agent-device connect revyl --platform ios --provider-app https://downloads.example.test/app.zip
   agent-device open com.example.app
@@ -663,9 +669,10 @@ Rules:
   },
   macos: {
     summary: 'macOS desktop, frontmost-app, and menu bar surfaces',
-    body: `agent-device help macos
+    body: (coreVersion: string) => `agent-device help macos
 
-Use macOS only when the task targets desktop apps, desktop surfaces, or menu bar extras. It needs the macOS plugin; install it once with: agent-device plugins add @agent-device/macos
+Use macOS only when the task targets desktop apps, desktop surfaces, or menu bar extras. Install the macOS plugin before use.
+  ${pluginInstallCommand(MACOS_PLATFORM_PLUGIN_DECLARATION, coreVersion)}
 
 Open and inspect:
   agent-device open TextEdit --platform macos
@@ -698,7 +705,7 @@ Rules:
   },
   web: {
     summary: 'Minimal browser workflow with the managed web backend',
-    body: `agent-device help web
+    body: (coreVersion: string) => `agent-device help web
 
 Use --platform web only for the minimal browser command loop exposed through agent-device.
 
@@ -706,7 +713,7 @@ Dependency:
   Browser mechanics come from a managed, pinned agent-browser backend. agent-device owns command/session/replay integration, selectors/refs at the command surface, and artifact routing; agent-browser owns browser launch, page control, screenshots, and browser-specific behavior.
   Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow. Use agent-browser directly for standalone web automation.
   Before first use, set up and verify the managed backend:
-    agent-device plugins add @agent-device/web
+    ${pluginInstallCommand(getOptionalPlatformPluginDeclaration('web')!, coreVersion)}
     agent-device web setup
     agent-device web doctor
   Web automation requires Node 24+.
@@ -716,7 +723,7 @@ Planning rule:
 
 First-slice loop:
   Audio probe start uses duration seconds first, then bucket milliseconds.
-  agent-device plugins add @agent-device/web
+  ${pluginInstallCommand(getOptionalPlatformPluginDeclaration('web')!, coreVersion)}
   agent-device web setup
   agent-device web doctor
   agent-device open https://example.com --platform web

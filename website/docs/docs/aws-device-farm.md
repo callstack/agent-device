@@ -10,7 +10,7 @@ Use AWS Device Farm to run agent-device on hosted Android and iOS devices throug
 Install the plugin on the host that runs the daemon.
 
 ```bash
-agent-device plugins add @agent-device/aws-device-farm@nightly-0.22
+agent-device plugins add @agent-device/aws-device-farm
 ```
 
 If the CLI prints an install command in a missing-plugin error, use that command.

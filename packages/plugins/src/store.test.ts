@@ -137,26 +137,29 @@ test.each(['0.22.0-dev', '0.0.0'])(
   },
 );
 
-test('a registry target failure names the required plugin version and preserves selection', async () => {
-  const { env } = pluginHome();
-  const name = '@agent-device/limrun';
-  installFixture(name, 'limrun', '0.22.1');
-  await changePlugin('add', name, env, '0.22.1');
-  const before = readPluginConfig(env);
-  vi.mocked(runCmd).mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'npm install failed', {
-      stdout: '{"error":{"code":"ETARGET"}}',
-    }),
-  );
-  await assert.rejects(changePlugin('update', name, env, '0.22.2'), (error: unknown) => {
-    assert.ok(error instanceof AppError);
-    assert.equal(error.details?.reason, 'plugin_version_resolution_failed');
-    assert.equal(error.details?.package, name);
-    assert.equal(error.details?.version, '0.22.2');
-    return true;
-  });
-  assert.deepEqual(readPluginConfig(env), before);
-});
+test.each(['stdout', 'stderr'])(
+  'a registry target failure on %s names the required version and preserves selection',
+  async (stream) => {
+    const { env } = pluginHome();
+    const name = '@agent-device/limrun';
+    installFixture(name, 'limrun', '0.22.1');
+    await changePlugin('add', name, env, '0.22.1');
+    const before = readPluginConfig(env);
+    vi.mocked(runCmd).mockRejectedValue(
+      new AppError('COMMAND_FAILED', 'npm install failed', {
+        [stream]: '{"error":{"code":"ETARGET"}}',
+      }),
+    );
+    await assert.rejects(changePlugin('update', name, env, '0.22.2'), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'plugin_version_resolution_failed');
+      assert.equal(error.details?.package, name);
+      assert.equal(error.details?.version, '0.22.2');
+      return true;
+    });
+    assert.deepEqual(readPluginConfig(env), before);
+  },
+);
 
 test('failed npm install and incompatible replacement preserve the active selection', async () => {
   const { home, env } = pluginHome();

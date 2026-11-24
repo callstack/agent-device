@@ -216,3 +216,21 @@ test('connect reports an unreadable plugin selection instead of prescribing a ne
   assert.match(error.details.failedPlugins[0].error.message, /Plugin config/);
   assert.equal(error.details.installCommand, undefined);
 });
+
+test.each([
+  ['remote', ['testmu', 'revyl', 'webos', 'tizen']],
+  ['tv', ['vega']],
+  ['web', ['web']],
+  ['macos', ['macos']],
+  ['debugging', ['macos']],
+  ['maestro', ['maestro', 'replay']],
+] as const)(
+  'source checkout help for %s prints runnable install commands',
+  async (topic, plugins) => {
+    vi.mocked(readVersion).mockReturnValue('0.22.0-dev');
+    const help = await usageForCommand(topic);
+    for (const plugin of plugins) {
+      assert.ok(help?.includes(`agent-device plugins add @agent-device/${plugin}@nightly-0.22`));
+    }
+  },
+);

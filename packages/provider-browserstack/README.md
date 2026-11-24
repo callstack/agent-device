@@ -6,7 +6,7 @@ You need a BrowserStack account with App Automate access.
 Install the plugin on the daemon host, then connect with your BrowserStack credentials.
 
 ```sh
-agent-device plugins add @agent-device/browserstack@nightly-0.22
+agent-device plugins add @agent-device/browserstack
 export BROWSERSTACK_USERNAME=your-username
 export BROWSERSTACK_ACCESS_KEY=your-access-key
 agent-device connect browserstack --session checkout-android --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id

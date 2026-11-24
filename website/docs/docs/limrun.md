@@ -10,7 +10,7 @@ Use Limrun to run agent-device on remote iOS and watchOS simulators and Android 
 Install the plugin on the host that runs the daemon.
 
 ```bash
-agent-device plugins add @agent-device/limrun@nightly-0.22
+agent-device plugins add @agent-device/limrun
 ```
 
 If the CLI prints an install command in a missing-plugin error, use that command.

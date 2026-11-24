@@ -419,20 +419,20 @@ async function stagePlugin(
   name: string,
   version: string | undefined,
   env: NodeJS.ProcessEnv,
-  reportJson: boolean,
+  matchCore: boolean,
 ) {
   fs.mkdirSync(stage.project, { recursive: true, mode: 0o700 });
   fs.writeFileSync(
     path.join(stage.project, 'package.json'),
     JSON.stringify({ private: true, dependencies: { [name]: version ?? 'latest' } }),
   );
-  await installInProject(stage.project, env, undefined, reportJson);
+  await installInProject(stage.project, env, undefined, matchCore);
   const installation = await describeInstallation(
     name,
     installationDirectory(stage.home, name, stage.installation),
     { installation: stage.installation },
   );
-  if (isExactVersion(version) && installation.version !== version)
+  if (matchCore && installation.version !== version)
     throw new AppError(
       'INVALID_ARGS',
       `Expected ${name}@${version}, installed ${installation.version}.`,
@@ -526,7 +526,8 @@ export async function changePlugin(
       } catch (error) {
         if (!defaultVersion) throw error;
         const failure = normalizeError(error);
-        const npmCode = readNpmErrorCode(failure.details?.stdout);
+        const npmCode =
+          readNpmErrorCode(failure.details?.stdout) ?? readNpmErrorCode(failure.details?.stderr);
         const unavailable = npmCode === 'ETARGET' || npmCode === 'E404';
         throw new AppError(
           failure.code,
