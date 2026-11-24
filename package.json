@@ -234,6 +234,7 @@
     "bin",
     "dist",
     "apple/snapshot-bridge",
+    "!apple/snapshot-bridge/README.md",
     "apple/fold-helper",
     "android/snapshot-helper/dist",
     "!android/snapshot-helper/dist/*.idsig",
