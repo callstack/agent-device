@@ -1,6 +1,6 @@
 import type { DaemonIdentity, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonTransport } from './daemon-client-request.ts';

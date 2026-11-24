@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { hostPathRules, resolveHomeDirectory, resolveUserPath } from './path-resolution.ts';
+import { hostPathRules, resolveHomeDirectory, resolveUserPath } from '../path-resolution.ts';
 import { SCRIPT_ANCESTRY_REASONS, scriptAncestryFailure } from './script-destination-refusal.ts';
 
 /**

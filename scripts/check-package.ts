@@ -273,7 +273,46 @@ function smokeTestBin(installedRoot: string, manifest: PackedManifest): void {
   const binPath = path.join(installedRoot, manifest.bin['agent-device']!);
   const stateDir = ['--state-dir', path.join(workDir, 'state')];
   const version = run(process.execPath, [binPath, '--version'], consumerDir).trim();
-  run(process.execPath, [binPath, 'help'], consumerDir);
+  const help = run(process.execPath, [binPath, 'help'], consumerDir);
+  const loader = path.join(workDir, 'startup-loader.mjs');
+  fs.writeFileSync(
+    loader,
+    `import { appendFileSync } from 'node:fs';
+export async function load(url, context, nextLoad) {
+  appendFileSync(process.env.AGENT_DEVICE_STARTUP_TRACE, url + '\\n');
+  return nextLoad(url, context);
+}
+`,
+  );
+  for (const [args, expected] of [
+    [['mcp', '--version'], `${version}\n`],
+    [['--help', '--json'], help],
+  ] as const) {
+    const trace = path.join(workDir, `startup-${args[0]}.log`);
+    const result = execFileSync(
+      process.execPath,
+      ['--experimental-loader', loader, binPath, ...args],
+      {
+        cwd: consumerDir,
+        env: { ...process.env, AGENT_DEVICE_STARTUP_TRACE: trace },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    if (result !== expected) throw new Error(`Unexpected startup output for ${args.join(' ')}`);
+    const loaded = fs
+      .readFileSync(trace, 'utf8')
+      .split('\n')
+      .map((url) => path.basename(url));
+    if (!loaded.includes('process-entry.js') || !loaded.includes('resolve-cli-options.js')) {
+      throw new Error(`Startup trace missed parsing for ${args.join(' ')}`);
+    }
+    const forbidden = loaded.filter((name) =>
+      ['cli.js', 'host-process.js', 'exec.js'].includes(name),
+    );
+    if (forbidden.length)
+      throw new Error(`Startup loaded execution modules: ${forbidden.join(', ')}`);
+  }
   try {
     for (const args of [
       ['devices', '--json'],

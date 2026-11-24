@@ -363,6 +363,8 @@ test.skipIf(process.platform === 'win32').each(STOP_CASES)(
   'stopProcessAndConfirmExit $name',
   async (testCase) => {
     const host = driveHost(testCase);
+    // Load the lazy wait module before advancing the fake clock.
+    await import('./retry.ts');
     // Both stage budgets, advanced on a fake clock: a retained outcome must not cost real time.
     vi.useFakeTimers();
     const budget = testCase.gracefulSignal

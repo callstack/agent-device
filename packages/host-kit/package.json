@@ -44,6 +44,10 @@
       "types": "./src/diagnostics.ts",
       "default": "./src/diagnostics.ts"
     },
+    "./environment": {
+      "types": "./src/environment.ts",
+      "default": "./src/environment.ts"
+    },
     "./doctor-lines": {
       "types": "./src/doctor-lines.ts",
       "default": "./src/doctor-lines.ts"
@@ -63,6 +67,10 @@
     "./interaction-outcome": {
       "types": "./src/interaction-outcome.ts",
       "default": "./src/interaction-outcome.ts"
+    },
+    "./path-resolution": {
+      "types": "./src/path-resolution.ts",
+      "default": "./src/path-resolution.ts"
     },
     "./process": {
       "types": "./src/process.ts",

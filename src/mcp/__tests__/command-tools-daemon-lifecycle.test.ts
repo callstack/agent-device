@@ -12,7 +12,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 }));
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import * as daemonClient from '@agent-device/daemon-client';
-import * as hostProcess from '@agent-device/host-kit/process';
+import * as hostProcess from '@agent-device/host-kit/environment';
 import { createCommandToolExecutor } from '../command-tools.ts';
 
 // An MCP tool call builds its own client, so each call has to ensure the daemon it is about to use

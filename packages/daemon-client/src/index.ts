@@ -4,7 +4,7 @@ import type { DaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-r
 import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import {
   createRequestId,
   emitDiagnostic,

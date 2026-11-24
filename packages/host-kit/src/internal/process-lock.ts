@@ -25,7 +25,6 @@ import {
   readCurrentOwnerIdentityAsync,
   type OwnerLiveness,
 } from './owner-identity.ts';
-import { sleep } from './retry.ts';
 
 /** The refusals the process-lock rule answers with, beside the rule. */
 export const PROCESS_LOCK_REASONS = {
@@ -394,7 +393,7 @@ export async function acquireProcessLockAcquisition(
     if (attempt.status === 'acquired') return attempt.acquisition;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
-    await sleep(Math.min(pollMs, remaining), params.signal);
+    await (await import('./retry.ts')).sleep(Math.min(pollMs, remaining), params.signal);
     throwIfCanceled(params.signal);
   } while (Date.now() < deadline);
   throw await processLockTimeoutError(params);
@@ -831,7 +830,7 @@ async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
     )
   ) {
     if (Date.now() >= deadline) return false;
-    await sleep(RELEASE_GUARD_POLL_MS);
+    await (await import('./retry.ts')).sleep(RELEASE_GUARD_POLL_MS);
   }
   return true;
 }

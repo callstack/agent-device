@@ -7,12 +7,8 @@ import { isRecord } from '@agent-device/kernel/record';
 import { canonicalJson } from '@agent-device/kernel/collections';
 import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
-import {
-  acquireProcessLock,
-  publishFileSync,
-  resolveUserConfigPath,
-  withProcessLock,
-} from '@agent-device/host-kit/file';
+import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
+import { resolveUserConfigPath } from '@agent-device/host-kit/path-resolution';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginCandidate } from './registry.ts';
 import type { PluggedClaim } from './validate.ts';

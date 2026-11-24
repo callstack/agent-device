@@ -1,20 +1,17 @@
 import { asAppError } from '@agent-device/kernel/errors';
 import { daemonStartupExitCode, reportDaemonClose, startDaemonRuntime } from '@agent-device/daemon';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { openDaemonStartupProgress } from '@agent-device/daemon-contracts/daemon-startup-phases';
 
-// Captured once: the runtime resolves the state dir from this one host, so a relative
-// AGENT_DEVICE_STATE_DIR cannot land the daemon beside another directory's lock.
-const host = captureHostEnvironment(process);
-// The launch channel the launcher opened at spawn; without one (a manual start) reporting is a no-op.
-const startupProgress = openDaemonStartupProgress(host.env, process);
-startupProgress.report('modules-loaded');
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
 // The root's composition enters as a factory behind a function-scoped `await import`: the server
 // calls it before it acquires the registration, so startup order is unchanged, and the eager
 // closure of this entry stays exactly the operational server's (ADR 0019).
 async function runDaemon(): Promise<void> {
+  const { captureHostEnvironment } = await import('@agent-device/host-kit/environment');
+  const host = captureHostEnvironment(process);
+  const startupProgress = openDaemonStartupProgress(host.env, process);
+  startupProgress.report('modules-loaded');
   const runtime = await startDaemonRuntime({
     host,
     startupProgress,

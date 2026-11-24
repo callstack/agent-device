@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { withCommandHost } from './exec.ts';
+import { captureHostEnvironment } from '../environment.ts';
 import {
-  captureHostEnvironment,
   expandProcessTree,
   isProcessAlive,
   isProcessGroupAlive,

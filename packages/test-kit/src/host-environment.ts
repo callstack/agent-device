@@ -1,6 +1,6 @@
 import { aroundEach } from 'vitest';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 /**

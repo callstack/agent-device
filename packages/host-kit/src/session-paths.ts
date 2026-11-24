@@ -1,4 +1,4 @@
-import { resolveUserPath } from './file.ts';
+import { resolveUserPath } from './path-resolution.ts';
 
 export function safeSessionName(name: string): string {
   return name.replaceAll(/[^a-zA-Z0-9._-]/g, '_');

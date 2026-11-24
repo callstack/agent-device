@@ -1,5 +1,5 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
-import { resolveUserConfigPath } from '@agent-device/host-kit/file';
+import { resolveUserConfigPath } from '@agent-device/host-kit/path-resolution';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { PluginConnection, PluginConnectionContext } from './contract.ts';
 import { storePluginCandidates } from './store.ts';

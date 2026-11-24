@@ -28,7 +28,7 @@ import {
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
 import type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
-import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/path-resolution';
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
 import {
   DEVICE_CLAIM_SCHEMA_VERSION,
