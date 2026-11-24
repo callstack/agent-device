@@ -169,6 +169,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `lock-screen-secure` | The lock needs a PIN, pattern, password, or passcode, so unlock typed nothing and left it locked. |
 | `lock-screen-unverified` | The lock or unlock was sent, but the device still reports the previous lock state. |
 | `lock-screen-state-unreadable` | dumpsys reported no keyguard state, or no lock type for the foreground user, so nothing was sent. |
+| `lock-screen-disabled` | The screen lock is set to None, so there is no lock screen to show; nothing was sent. |
 
 ### `logs`
 
