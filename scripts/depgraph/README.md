@@ -22,8 +22,7 @@ Reverse reachability over the value-edge graph, plus the lookups that used to fo
 the `scripts/check-affected/` gate plan for the dependent set, the public commands whose handler
 chain reaches the file (value + dynamic edges, because handlers load through `import()`) with
 their owning live iOS scenarios when that manifest is in the tree, and the ADR 0011
-guarantee-matrix cells the file implements. See docs/agents/testing.md § "Before editing a shared
-module".
+guarantee-matrix cells the file implements. See [Code ownership](../../docs/agents/code-ownership.md).
 
 Two fields keep an empty or short list from reading as "nothing else is affected":
 
