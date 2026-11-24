@@ -76,13 +76,15 @@ function recordOf(record: Uint8Array | undefined): { sectionID: PlistValue; stat
 }
 
 /**
- * A simulator's `launchctl`: `stop` ends a job and `start` gives it a process, unless a test holds
- * the job in its old state; a SpringBoard stop ends the app, and `simctl launch` brings it back.
+ * A simulator's `launchctl`: launchd starts SpringBoard again with a new pid the moment it stops
+ * (iOS 27.2), `usernotificationsd` stays down until its start, and a held job ignores both verbs.
+ * The app keeps running across the restart, and `simctl launch` brings it up if it is not.
  */
 function recordingRunner(
   onRun: (args: string[]) => void = () => {},
-  { appRunning = false, held = [] as string[] } = {},
+  { appRunning = false, held = [] as string[], respawn = true } = {},
 ) {
+  let nextPid = 500;
   const pids = new Map<string, number | undefined>([
     ['com.apple.SpringBoard', 100],
     ['com.apple.usernotificationsd', 101],
@@ -92,11 +94,11 @@ function recordingRunner(
     onRun(args);
     const [, , tool, verb, label = ''] = args;
     if (tool === 'launchctl' && !held.includes(label)) {
-      if (verb === 'stop') pids.set(label, undefined);
-      if (verb === 'stop' && label === 'com.apple.SpringBoard') pids.set(APP_JOB, undefined);
-      if (verb === 'start') pids.set(label, 300);
+      const respawns = respawn && label === 'com.apple.SpringBoard';
+      if (verb === 'stop') pids.set(label, respawns ? nextPid++ : undefined);
+      if (verb === 'start') pids.set(label, pids.get(label) ?? nextPid++);
     }
-    if (args[0] === 'launch') pids.set(APP_JOB, 400);
+    if (args[0] === 'launch') pids.set(APP_JOB, pids.get(APP_JOB) ?? nextPid++);
     const rows = [...pids].map(([job, pid]) => `${pid ?? '-'}\t0\t${job}`);
     return {
       stdout: verb === 'list' ? ['PID\tStatus\tLabel', ...rows].join('\n') : '',
@@ -408,7 +410,7 @@ test('an app that was running is opened again once SpringBoard is back', async (
   expect(result).toEqual({
     permission: 'notifications',
     warnings: [
-      'Restarted SpringBoard to apply the notification permission, and opened com.example.app again because it was running.',
+      'Restarted SpringBoard to apply the notification permission, and brought com.example.app back to the front because it was running.',
     ],
   });
 });
@@ -445,13 +447,13 @@ test('the edit waits for SpringBoard to exit, so its last write cannot replace t
     if (args.join(' ') !== LIST.join(' ') || !stopped || started) return answer;
     exiting += 1;
     if (exiting < 3) return answer;
-    // SpringBoard writes its copy as it exits, then reports no process.
+    // SpringBoard writes its copy as it exits, and launchd starts a new one.
     const store = readSettings(file);
     (store.sectionInfo as Record<string, PlistValue>)['com.apple.Maps'] = flushed;
     fs.writeFileSync(file, build(store));
     return {
       ...answer,
-      stdout: answer.stdout.replace(/^\d+(\t0\tcom\.apple\.SpringBoard)$/m, '-$1'),
+      stdout: answer.stdout.replace(/^\d+(\t0\tcom\.apple\.SpringBoard)$/m, '900$1'),
     };
   });
 
@@ -496,7 +498,8 @@ test.for([
     try {
       const file = await settingsFile();
       const before = fs.readFileSync(file);
-      const fake = recordingRunner();
+      // Without a respawn, a SpringBoard that ignores its start stays down.
+      const fake = recordingRunner(() => {}, { respawn: verb !== 'start' });
       // The held job keeps the state it had before the verb.
       const runSimctl = vi.fn(async (args: string[]) => {
         if (args[3] === verb && args[4] === held) return { stdout: '', stderr: '' };
@@ -593,4 +596,15 @@ test('another running app is not the one reopened', async () => {
   await applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file));
 
   expect(runSimctl.mock.calls.map(([args]) => args)).toEqual(RESTART);
+});
+
+test('a usernotificationsd that was not running does not hold up the restart', async () => {
+  const file = await settingsFile();
+  const fake = recordingRunner();
+  await fake(['spawn', 'SIM-1', 'launchctl', 'stop', 'com.apple.usernotificationsd']);
+  fake.mockClear();
+
+  await applySimctlSetting(permission(fake, 'grant', 'notifications', file));
+
+  expect(fake.mock.calls.map(([args]) => args)).toEqual(RESTART);
 });

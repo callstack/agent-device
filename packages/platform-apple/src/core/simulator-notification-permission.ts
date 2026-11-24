@@ -57,8 +57,9 @@ type NotificationPermissionRequest = {
 };
 
 /**
- * What a change did: nothing when the file already held it, else a restart, which reopens the app
- * when it was running so a test that changes notifications mid-flow keeps its app in front.
+ * What a change did: nothing when the file already held it, else a restart, which brings back the
+ * app when it was running so a test that changes notifications mid-flow keeps its app in front. The
+ * app outlives the restart, but iOS ends it on a deny or reset, so `simctl launch` starts it fresh.
  */
 export type NotificationPermissionOutcome =
   | { restarted: false }
@@ -95,15 +96,21 @@ export async function setSimulatorNotificationPermission(
   const wanted = wantedStatus(request.action);
   const current = await readSettingsFile(request, settingsPath);
   if ((await recordedStatus(current, appBundleId)) === wanted) return { restarted: false };
-  const wasRunning = runningJobs(await listJobs(request)).some((label) =>
+  const before = jobProcesses(await listJobs(request));
+  const wasRunning = [...before.keys()].some((label) =>
     label.startsWith(`UIKitApplication:${appBundleId}[`),
   );
   try {
     for (const service of NOTIFICATION_SERVICES) {
       await runSimctl(['spawn', udid, 'launchctl', 'stop', service]);
     }
-    // `launchctl stop` only signals, and a service still exiting writes its copy over the edit.
-    await waitForJobs(request, NOTIFICATION_SERVICES, 'stopped');
+    // `launchctl stop` only signals, and a process still exiting writes its copy over the edit.
+    // launchd starts SpringBoard again at once (iOS 27.2), so a process is gone once its pid is.
+    await waitForJobs(request, 'stop', (pids) =>
+      NOTIFICATION_SERVICES.every(
+        (label) => !before.has(label) || pids.get(label) !== before.get(label),
+      ),
+    );
     const file = await readSettingsFile(request, settingsPath);
     if (request.action === 'reset') {
       delete file.sections[request.appBundleId];
@@ -119,7 +126,7 @@ export async function setSimulatorNotificationPermission(
       await runSimctl(['spawn', udid, 'launchctl', 'start', service]);
     }
   }
-  await waitForJobs(request, [SPRINGBOARD], 'running');
+  await waitForJobs(request, 'start', (pids) => pids.has(SPRINGBOARD));
   const written = await readSettingsFile(request, settingsPath);
   if ((await recordedStatus(written, appBundleId)) !== wanted) {
     throw new AppError(
@@ -149,7 +156,7 @@ export function notificationRestartWarnings(
   if (!outcome.restarted) return [];
   if (outcome.reopened) {
     return [
-      `Restarted SpringBoard to apply the notification permission, and opened ${appBundleId} again because it was running.`,
+      `Restarted SpringBoard to apply the notification permission, and brought ${appBundleId} back to the front because it was running.`,
     ];
   }
   if (outcome.reopenFailure !== undefined) {
@@ -165,28 +172,31 @@ async function listJobs({ runSimctl, udid }: NotificationPermissionRequest): Pro
   return (await runSimctl(['spawn', udid, 'launchctl', 'list'])).stdout;
 }
 
-/** The labels of the jobs that have a process. */
-function runningJobs(list: string): string[] {
-  return list.split('\n').flatMap((line) => {
-    const [pid, , label] = line.trim().split(/\s+/);
-    return label && /^\d+$/.test(pid ?? '') && Number(pid) > 0 ? [label] : [];
-  });
+/** The pid of each job that has a process. */
+function jobProcesses(list: string): Map<string, number> {
+  return new Map(
+    list.split('\n').flatMap((line) => {
+      const [pid, , label] = line.trim().split(/\s+/);
+      return label && /^\d+$/.test(pid ?? '') && Number(pid) > 0 ? [[label, Number(pid)]] : [];
+    }),
+  );
 }
 
-/** Polls until every label is stopped or running, and fails with a typed reason past the bound. */
+/** Polls `launchctl list` until `done` holds, and fails with a typed reason past the bound. */
 async function waitForJobs(
   request: NotificationPermissionRequest,
-  labels: readonly string[],
-  state: 'stopped' | 'running',
+  step: 'stop' | 'start',
+  done: (pids: ReadonlyMap<string, number>) => boolean,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(SERVICE_WAIT_MS);
   for (;;) {
-    const running = runningJobs(await listJobs(request));
-    if (labels.every((label) => running.includes(label) === (state === 'running'))) return;
+    if (done(jobProcesses(await listJobs(request)))) return;
     if (deadline.isExpired()) {
       throw new AppError(
         'COMMAND_FAILED',
-        `iOS simulator ${labels.join(' and ')} did not ${state === 'stopped' ? 'stop' : 'start'} within ${SERVICE_WAIT_MS / 1000} seconds.`,
+        step === 'stop'
+          ? `iOS simulator SpringBoard or usernotificationsd kept running within ${SERVICE_WAIT_MS / 1000} seconds of launchctl stop.`
+          : `iOS simulator SpringBoard did not start within ${SERVICE_WAIT_MS / 1000} seconds.`,
         {
           reason: SIMULATOR_NOTIFICATION_REASONS.restartTimeout.reason,
           deviceId: request.deviceId,
