@@ -169,6 +169,121 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
 
 const LAUNCHER_PACKAGE = 'com.google.android.apps.nexuslauncher';
 
+// #5034: a tap that opens another app flips the focused window only once the app transition lands.
+// A guard read taken before that transition names the session app and passes on stale state. The
+// after-command blocking-dialog readiness read already runs after the dispatch, so it is the later
+// look at the same screen: when its focused window names another app, the guard decides on that
+// evidence and spends no read of its own.
+test('press @ref fails when only the after-command readiness read sees the escape to Settings', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-late-settings-escape';
+  const session = makeAndroidSession(sessionName);
+  session.appBundleId = 'com.example.app';
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Open Settings',
+        rect: { x: 16, y: 40, width: 120, height: 48 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'android',
+  };
+  sessionStore.publish(sessionName, session);
+
+  mockTapPoint.mockResolvedValue({ pressed: true });
+  // The pre-dispatch readiness read names the session app; the post-dispatch one already names
+  // Settings. The guard's OWN read models the measured transition: the first `dumpsys window` after
+  // `input tap` still names the app (#5034), so the early guard passes on that stale answer.
+  mockGetAndroidBlockingDialogObservation
+    .mockResolvedValueOnce({ status: 'clear', focusedPackage: 'com.example.app' })
+    .mockResolvedValueOnce({ status: 'clear', focusedPackage: 'com.android.settings' });
+  mockGetAndroidAppState.mockResolvedValue({
+    package: 'com.example.app',
+    activity: 'Main',
+  });
+
+  await expect(
+    handleInteractionCommands({
+      createCommandSurface: touchCreateCommandSurface,
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['@e1'],
+        flags: {},
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+      ...getRuntimeBindings(),
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('foregrounded com.android.settings'),
+    details: {
+      expectedPackage: 'com.example.app',
+      foregroundPackage: 'com.android.settings',
+    },
+  });
+});
+
+// A window the dump cannot name is no evidence that the session app kept the focus, so the guard
+// still runs at its now-later position and its own read decides. An escape cannot turn into a pass
+// by hiding in a read that named nothing.
+test('press @ref still fails an escape when the after-command readiness read names no package', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-escape-unknown-focus';
+  const session = makeAndroidSession(sessionName);
+  session.appBundleId = 'com.example.app';
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Open Settings',
+        rect: { x: 16, y: 40, width: 120, height: 48 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'android',
+  };
+  sessionStore.publish(sessionName, session);
+
+  mockTapPoint.mockResolvedValue({ pressed: true });
+  mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'unknown' });
+  mockGetAndroidAppState.mockResolvedValue({
+    package: 'com.android.settings',
+    activity: 'Settings',
+  });
+
+  await expect(
+    handleInteractionCommands({
+      createCommandSurface: touchCreateCommandSurface,
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['@e1'],
+        flags: {},
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+      ...getRuntimeBindings(),
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('foregrounded com.android.settings'),
+  });
+});
+
 async function longPressAtPointWithFocusBefore(
   focusedPackageBefore: string,
   foregroundPackageAfter: string = LAUNCHER_PACKAGE,

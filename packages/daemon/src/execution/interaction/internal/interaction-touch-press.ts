@@ -9,6 +9,7 @@ import type {
 import type { resolveClickButton } from '@agent-device/contracts/click-button';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';
+import { focusedPackageOf } from './interaction-touch-android-readiness.ts';
 import { createInteractionRuntimeForRoute } from './interaction-runtime.ts';
 import { readSettleRequest } from './interaction-flags.ts';
 import { dispatchDirectIosSelectorTap } from './interaction-touch-direct-ios.ts';
@@ -122,14 +123,15 @@ function buildTargetedRuntimeOptions(
         expectedResolvedTarget: req.internal?.replayTargetGuard,
         preresolvedTarget: req.internal?.findResolvedTarget,
       }),
-    afterRun: async (result, readiness) => {
+    afterRun: async (result, readiness, beforeDispatchReadiness) => {
       if (session.lease?.leaseProvider) return undefined;
       return await assertAndroidPressStayedInApp(
         session,
         {
           command,
           targetLabel: formatTouchTargetLabel(target, result),
-          focusedPackageBefore: readiness.status === 'clear' ? readiness.focusedPackage : undefined,
+          focusedPackageBefore: focusedPackageOf(beforeDispatchReadiness),
+          focusedPackageAfter: focusedPackageOf(readiness),
         },
         params.androidObservation,
       );
