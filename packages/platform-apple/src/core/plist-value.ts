@@ -1,5 +1,5 @@
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
-import type { ReasonTable } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 /**
  * Reads one Apple property list — XML text or `bplist00` binary — into plain JS values, with no
@@ -48,12 +48,15 @@ export const APPLE_PLIST_PARSE_REASONS = {
 export type ApplePlistParseReason =
   (typeof APPLE_PLIST_PARSE_REASONS)[keyof typeof APPLE_PLIST_PARSE_REASONS]['reason'];
 
-/** An Apple property list that cannot become a JS value. */
-export class ApplePlistParseError extends Error {
+/**
+ * An Apple property list that cannot become a JS value. It is an `AppError` carrying `COMMAND_FAILED`
+ * with `details.reason` set to its reason, so `normalizeError` keeps that reason on the wire.
+ */
+export class ApplePlistParseError extends AppError {
   readonly reason: ApplePlistParseReason;
 
   constructor(reason: ApplePlistParseReason, message: string) {
-    super(message);
+    super('COMMAND_FAILED', message, { reason });
     this.name = 'ApplePlistParseError';
     this.reason = reason;
   }

@@ -1,3 +1,5 @@
+import { normalizeError } from '@agent-device/kernel/errors';
+import { parseApplePlist } from '@agent-device/platform-apple/plist';
 import { EventEmitter } from 'node:events';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createLimrunIosAppLogReader } from './ios-app-logs.ts';
@@ -34,6 +36,43 @@ test('scrubs retained, live console, and buffered unified app logs', async () =>
       );
     });
     expect(retained).toBe('retained [REDACTED]');
+  } finally {
+    await reader[Symbol.asyncDispose]();
+  }
+});
+
+test('an unsupported Info.plist read for log metadata surfaces as COMMAND_FAILED with its reason', async () => {
+  const stream = () => Object.assign(new EventEmitter(), { stop() {} });
+  vi.stubGlobal(
+    'fetch',
+    async () =>
+      new Response(
+        '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>A</key><openstep/></dict></plist>',
+        { status: 200 },
+      ),
+  );
+  const reader = createLimrunIosAppLogReader(
+    {
+      apiUrl: 'https://instance.invalid/api',
+      token: 'syntheticInstanceCredential',
+      client: { appLogTail: async () => '', streamAppLog: stream, streamSyslog: stream },
+    } as unknown as Parameters<typeof createLimrunIosAppLogReader>[0],
+    async () => parseApplePlist,
+  );
+  const signal = new AbortController().signal;
+  try {
+    let error: unknown;
+    await vi.waitFor(async () => {
+      error = await reader.readLogs('com.example.app', 20, signal).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(error).toBeDefined();
+    });
+    expect(normalizeError(error)).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'apple_plist_unsupported_type' },
+    });
   } finally {
     await reader[Symbol.asyncDispose]();
   }
