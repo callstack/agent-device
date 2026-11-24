@@ -252,13 +252,21 @@ test('connect on a named session that is already bound conflicts, and --force en
   });
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 test('slow hosted allocation reports bounded stderr progress and aborts the final status read', async () => {
   vi.useFakeTimers();
   const stateDir = freshStateDir();
   const deadline = new Date(Date.now() + 3600_000).toISOString();
-  const posted = Promise.withResolvers<void>();
-  const created = Promise.withResolvers<Response>();
-  const pendingPoll = Promise.withResolvers<Response>();
+  const posted = deferred<void>();
+  const created = deferred<Response>();
+  const pendingPoll = deferred<Response>();
   const polls: Array<{ url: URL; init: RequestInit }> = [];
   let requestKey: string | null = null;
   vi.stubGlobal(

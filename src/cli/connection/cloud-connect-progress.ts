@@ -1,4 +1,4 @@
-import { writeStderr } from '../process-exit.ts';
+import { writeStderrBestEffort } from '../process-exit.ts';
 
 const PROGRESS_INTERVAL_MS = 5_000;
 
@@ -23,11 +23,7 @@ export function startCloudConnectProgress(
     const elapsedSeconds = Math.floor((performance.now() - startedAt) / 1_000);
     const deadlineText =
       deadline === undefined ? '' : ` (session deadline ${new Date(deadline).toISOString()})`;
-    try {
-      writeStderr(`connect cloud: allocating, ${elapsedSeconds}s elapsed${deadlineText}\n`);
-    } catch {
-      // A closed stderr stream must not interrupt allocation.
-    }
+    writeStderrBestEffort(`connect cloud: allocating, ${elapsedSeconds}s elapsed${deadlineText}\n`);
     timer = schedule();
   }
 

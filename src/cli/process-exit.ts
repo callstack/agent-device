@@ -42,6 +42,24 @@ export function writeStderr(text: string): void {
   process.stderr.write(escapeTerminalText(text));
 }
 
+type OptionalStderr = Pick<NodeJS.WriteStream, 'write'> & {
+  on?: (event: 'error', listener: () => void) => unknown;
+};
+const errorAbsorbingStreams = new WeakSet<OptionalStderr>();
+
+/** Keep an asynchronous stderr write failure from interrupting the command. */
+export function writeStderrBestEffort(text: string, stream: OptionalStderr = process.stderr): void {
+  if (stream.on && !errorAbsorbingStreams.has(stream)) {
+    stream.on('error', () => {});
+    errorAbsorbingStreams.add(stream);
+  }
+  try {
+    stream.write(escapeTerminalText(text));
+  } catch {
+    // Optional output also tolerates a synchronous write failure.
+  }
+}
+
 export function writeStdoutRaw(text: string): void {
   process.stdout.write(text);
 }

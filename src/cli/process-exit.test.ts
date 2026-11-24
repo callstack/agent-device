@@ -1,6 +1,7 @@
+import { Writable } from 'node:stream';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { exitAfterFlush } from './process-exit.ts';
+import { exitAfterFlush, writeStderrBestEffort } from './process-exit.ts';
 
 const FLUSH_TIMEOUT_MS = 2000;
 
@@ -110,4 +111,19 @@ test('exitAfterFlush still exits when a stream never drains', async () => {
   }
 
   assert.deepEqual(exitSpy.calls, [3]);
+});
+
+test('best-effort stderr absorbs an asynchronous write error', async () => {
+  let attempted = '';
+  const stream = new Writable({
+    write(chunk, _encoding, done) {
+      attempted = String(chunk);
+      queueMicrotask(() => done(Object.assign(new Error('closed pipe'), { code: 'EPIPE' })));
+    },
+  });
+  const closed = new Promise<void>((resolve) => stream.once('close', resolve));
+
+  writeStderrBestEffort('allocation progress\n', stream);
+  await closed;
+  assert.equal(attempted, 'allocation progress\n');
 });
