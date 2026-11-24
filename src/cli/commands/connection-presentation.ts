@@ -201,7 +201,7 @@ export function serializeConnectionState(options: {
           cloudSessionId: state.cloudSession.id,
           vendor: state.cloudSession.vendor,
           deadlineAt: state.cloudSession.deadlineAt,
-          viewerAvailable: true,
+          viewerAvailable: state.cloudSession.viewerAvailable === true,
           ...(options.fallbackFrom?.length ? { fallbackFrom: options.fallbackFrom } : {}),
         }
       : {}),

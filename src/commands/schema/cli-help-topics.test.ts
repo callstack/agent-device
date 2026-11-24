@@ -442,7 +442,7 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /Proxy device leases are acquired on open/);
   assert.match(help, /expire after five minutes without commands/);
   assert.match(help, /Multiple agents can share one proxy/);
-  assert.match(help, /disconnect releases local connection state/);
+  assert.match(help, /Use disconnect to end a hosted session/);
   assert.match(help, /A busy direct-proxy device error means another agent owns the device/);
   assert.match(help, /AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote/);
   assert.match(help, /host-path install sources are rejected/);

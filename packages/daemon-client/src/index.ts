@@ -31,10 +31,11 @@ import type {
   DaemonRequest,
   DaemonResponse,
   DaemonTransportOptions,
+  DaemonTransport,
 } from './daemon-client-request.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-export type { DaemonRequest, DaemonResponse };
+export type { DaemonRequest, DaemonResponse, DaemonTransport };
 export { readRegisteredDaemon };
 export { formatDaemonTakeoverNotice } from './daemon-client-metadata.ts';
 
@@ -121,12 +122,11 @@ async function sendToDaemonOnHost(
       // A remote `/health` gate sends nothing until it opens, so it may wait out an outage for as
       // long as this command's own budget.
       async () =>
-        await connectToDaemon(
-          settings,
-          requestTimeoutMs === undefined
-            ? undefined
-            : { budgetMs: requestTimeoutMs, signal: options.signal },
-        ),
+        await connectToDaemon(settings, {
+          budgetMs: requestTimeoutMs,
+          signal: requestTimeoutMs === undefined ? undefined : options.signal,
+          dispatch: options.dispatch,
+        }),
       {
         requestId,
         session: req.session,

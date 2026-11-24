@@ -62,6 +62,7 @@ test('POSTs the requested limits with the cloud key and delivers the scoped atta
     vendor: 'provider-a',
     transport: 'agent-device-daemon',
     deadlineAt: '2026-11-19T15:00:00Z',
+    viewerAvailable: true,
   });
   expect(result.attachment).toEqual(response.attach);
 });

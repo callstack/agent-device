@@ -25,12 +25,11 @@ export async function resolveCloudAdmission(options: {
   const { command, usesSessions, stateDir, session, binding } = options;
   if (!usesSessions || command === 'auth') return;
   await cleanExpiredCloudAttachments(stateDir);
-  if (['connect', 'disconnect', 'connection'].includes(command)) return;
+  if (command === 'connect' || command === 'connection') return;
+  if (!binding) refuseLegacyCloudProfile(stateDir, options.remoteConfig);
+  if (command === 'disconnect') return;
   const location = { stateDir, session: session ?? 'default' };
-  if (!binding) {
-    refuseLegacyCloudProfile(stateDir, options.remoteConfig);
-    if (!readCloudConnection(location)) return;
-  }
+  if (!binding && !readCloudConnection(location)) return;
   await withCloudConnectionOwner(location, binding?.generation, () => {});
   return <T>(start: () => Promise<T>, _phase?: 'startup' | 'dispatch') =>
     withCloudConnectionOwner(location, binding?.generation, start);

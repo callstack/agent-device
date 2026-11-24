@@ -661,3 +661,67 @@ test('a transport failure invalidates cached health for a remote daemon only', a
     await closeLoopbackServer(server);
   }
 });
+
+test('refuses a follow-up artifact download after the admission closes', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const root = mkdtempForTestSync('daemon-admitted-artifact-');
+  const calls: string[] = [];
+  const server = http.createServer((request, response) => {
+    calls.push(request.url ?? '');
+    request.resume();
+    if (request.url === '/health') {
+      response.end('{}');
+    } else if (request.url === '/rpc') {
+      response.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'test',
+          result: {
+            ok: true,
+            data: {
+              artifacts: [
+                {
+                  artifactId: 'fixture-artifact',
+                  field: 'path',
+                  artifactType: 'screenshot',
+                  path: '/server/fixture.png',
+                  fileName: 'fixture.png',
+                },
+              ],
+            },
+          },
+        }),
+      );
+    } else {
+      response.end('unexpected artifact bytes');
+    }
+  });
+  let handoffs = 0;
+  try {
+    const port = await listenOnLoopback(server);
+    await assert.rejects(
+      sendToDaemon(
+        {
+          command: 'screenshot',
+          session: 'fixture',
+          positionals: [],
+          flags: { daemonBaseUrl: `http://127.0.0.1:${port}` },
+          meta: { cwd: root },
+        },
+        {
+          authToken: 'test-scoped-token',
+          dispatch: async (send) => {
+            if (++handoffs === 3)
+              throw new AppError('COMMAND_FAILED', 'The saved session changed.');
+            return await send();
+          },
+        },
+      ),
+      { message: 'The saved session changed.' },
+    );
+    assert.deepEqual(calls, ['/health', '/rpc']);
+    assert.deepEqual(fs.readdirSync(root), []);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

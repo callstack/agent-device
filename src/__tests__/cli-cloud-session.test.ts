@@ -239,6 +239,16 @@ test('shows the viewer only by request and preserves the connection after a fail
 
 const connectArgs = ['connect', 'cloud', '--platform', 'ios', '--json'];
 
+test('connect and status report when there is no viewer', async () => {
+  const env = cloudEnv();
+  stubCloudApi().mockResolvedValueOnce(Response.json({ ...hostedDevice, viewerUrl: undefined }));
+  for (const args of [connectArgs, ['connection', 'status', '--json']]) {
+    expect(JSON.parse((await runCliCapture(args, { env })).stdout).data.viewerAvailable).toBe(
+      false,
+    );
+  }
+});
+
 function locationOf(env: ReturnType<typeof cloudEnv>) {
   return { stateDir: env.AGENT_DEVICE_STATE_DIR, session: env.AGENT_DEVICE_SESSION };
 }

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { DaemonTransport } from '@agent-device/daemon-client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
@@ -111,9 +112,9 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
 }
 
 export async function protectHostedDaemonTransport(
-  transport: typeof import('@agent-device/daemon-client').sendToDaemon,
+  transport: DaemonTransport,
   token: string,
-): Promise<typeof import('@agent-device/daemon-client').sendToDaemon> {
+): Promise<DaemonTransport> {
   const { containsCloudCredential } = await import('../cloud-response.ts');
   const { normalizeError } = await import('@agent-device/kernel/errors');
   const safe = (value: unknown) => !containsCloudCredential(value, [token]);

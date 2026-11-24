@@ -204,3 +204,30 @@ test('an aborted or budgetless health caller sends no probe', async (t) => {
     await closeLoopbackServer(remote.handler);
   }
 });
+
+test.for([1, 2])(
+  'does not send an authenticated remote health probe after handoff %i is refused',
+  async (refused, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const { handler, healthProbes, rpcSends } = remoteWithHealthStatus(503, 200);
+    const port = await listenOnLoopback(handler);
+    const closed = new AppError('COMMAND_FAILED', 'The saved session changed.');
+    let handoffs = 0;
+    try {
+      await assert.rejects(
+        sendToDaemon(remotePress(`http://127.0.0.1:${port}`), {
+          authToken: 'test-scoped-token',
+          dispatch: async (send) => {
+            if (++handoffs === refused) throw closed;
+            return await send();
+          },
+        }),
+        (error: unknown) => error === closed,
+      );
+      assert.equal(healthProbes(), refused - 1);
+      assert.equal(rpcSends(), 0);
+    } finally {
+      await closeLoopbackServer(handler);
+    }
+  },
+);

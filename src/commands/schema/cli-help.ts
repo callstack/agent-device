@@ -475,7 +475,7 @@ Rules:
   },
   foldable: foldableHelpTopic,
   remote: {
-    summary: 'Direct proxy, cloud profiles, and remote config',
+    summary: 'Direct proxy, hosted sessions, and remote config',
     body: (coreVersion: string) => `agent-device help remote
 
 Remote connection providers use the same lifecycle:
@@ -639,14 +639,14 @@ Rules:
   A local daemon keeps the Limrun, BrowserStack, TestMu AI, and Revyl credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.
   A lease for a dormant provider returns the plugin's reason and credential hint. A lease for an absent provider or a provider that failed to register refuses with UNSUPPORTED_OPERATION, reason provider-not-registered, and lists the registered providers, plus the plugins that failed to register as failedPlugins; no lease is recorded. For an absent managed provider, the error includes its package and install command. Install the package on the daemon host and restart the daemon. If you embed the runtime, call the plugin factory and pass its result when you recreate it. Provider-less leases, proxy, and cloud need no provider runtime.
   Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
-  connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
-  To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
+  Provider connect requires --session or AGENT_DEVICE_SESSION. Concurrent callers must name their own session on every command.
+  To replace a hosted connection, pass --session <name> --force with the existing session name.
   Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys or instance tokens, BrowserStack or TestMu AI access keys, or AWS credentials.
   Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro URL because it cannot reach local host ports directly.
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Proxy device leases are acquired on open and expire after five minutes without commands; when a lease expires or is released, the daemon ends the session opened under it and frees its device; devices may inspect proxy inventory without allocating.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.
-  disconnect releases local connection state; close releases the active session and device lease.
+  Use disconnect to end a hosted session. For direct proxy connections, close also releases the device lease.
   A busy direct-proxy device error means another agent owns the device until it closes or its inactivity lease expires.
   Keep the proxy token secret. Anyone with the token can control the proxied daemon.
   The token authenticates the host, not each client. A leased session accepts only requests that send its lease id, which open saves in the connect proxy connection; a raw --tenant/--session request fails with UNAUTHORIZED, reason LEASE_SESSION_MISMATCH.

@@ -129,7 +129,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Configure remote or provider state',
       description:
-        'List cloud offerings with a CLI login or AGENT_DEVICE_CLOUD_API_KEY. For a custom catalog, set AGENT_DEVICE_CLOUD_API_KEY_ORIGIN to the same origin as AGENT_DEVICE_CLOUD_BASE_URL. Use AGENT_DEVICE_DAEMON_AUTH_TOKEN for remote connection setup. Direct providers validate credentials and resources before saving state and print any preparation needed before open.',
+        'List cloud offerings or start a hosted session with a CLI login or AGENT_DEVICE_CLOUD_API_KEY. For a custom cloud API, set AGENT_DEVICE_CLOUD_API_KEY_ORIGIN to the same origin as AGENT_DEVICE_CLOUD_BASE_URL. Use AGENT_DEVICE_DAEMON_AUTH_TOKEN for direct remote daemon connections. Direct providers validate credentials and resources before saving state and print any preparation needed before open.',
     },
     usageOverride:
       'connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login] [--vendor <id>] [--max-minutes <minutes>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer]',

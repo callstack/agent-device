@@ -478,7 +478,14 @@ function parseCloudSession(
   if (containsCloudCredential({ vendor, fallbackFrom, viewerUrl }, credentials))
     throw invalidSession();
   return {
-    binding: { id, baseUrl: access.cloudBaseUrl, vendor, transport: attachment.kind, deadlineAt },
+    binding: {
+      id,
+      baseUrl: access.cloudBaseUrl,
+      vendor,
+      transport: attachment.kind,
+      deadlineAt,
+      viewerAvailable: viewerUrl !== undefined,
+    },
     attachment,
     viewerUrl,
     ...(isCloudTextArray(fallbackFrom) &&

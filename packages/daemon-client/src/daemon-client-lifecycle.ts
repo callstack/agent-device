@@ -27,6 +27,7 @@ import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-co
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
 import { isRemoteDaemon, observedDaemonIdentityOf } from './daemon-client-metadata.ts';
+import type { DaemonDispatch } from './daemon-client-request.ts';
 import { cachedRemoteDaemonHealth } from './daemon-client-transport.ts';
 import {
   assertDaemonPolicyMatches,
@@ -236,8 +237,9 @@ function shouldUseOwnedReplayStateDir(
 
 /** The command budget for recovering a remote daemon health probe. */
 export type RemoteHealthRecovery = {
-  budgetMs: number;
+  budgetMs?: number;
   signal: AbortSignal | undefined;
+  dispatch?: DaemonDispatch;
 };
 
 export async function ensureStartedDaemon(
@@ -278,6 +280,7 @@ async function ensureRemoteDaemon(
     remoteInfo,
     healthRecovery?.budgetMs,
     healthRecovery?.signal,
+    healthRecovery?.dispatch,
   );
   if (!health.reachable) {
     // Loaded on the refusal: this module is not part of what every CLI start pays for.

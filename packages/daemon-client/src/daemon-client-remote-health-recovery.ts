@@ -35,7 +35,11 @@ export async function recoverRemoteDaemonHealth(params: {
   const { info, recovery, deadline, hint } = params;
   let attempts = 1;
   let probe = params.failedProbe;
-  while (recovery && isTransientHealthFailure(probe) && !recovery.signal?.aborted) {
+  while (
+    recovery?.budgetMs !== undefined &&
+    isTransientHealthFailure(probe) &&
+    !recovery.signal?.aborted
+  ) {
     const remainingMs = deadline - performance.now();
     if (remainingMs <= 0) {
       throw remoteDaemonUnavailableError({
@@ -49,7 +53,7 @@ export async function recoverRemoteDaemonHealth(params: {
     const probeMs = deadline - performance.now();
     if (probeMs <= 0 || recovery.signal?.aborted) continue;
     attempts += 1;
-    probe = await cachedRemoteDaemonHealth(info, probeMs, recovery.signal);
+    probe = await cachedRemoteDaemonHealth(info, probeMs, recovery.signal, recovery.dispatch);
     if (probe.reachable) return probe;
   }
   throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts, hint });

@@ -17,6 +17,7 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
+import type { DaemonDispatch } from './daemon-client-request.ts';
 import {
   DAEMON_REQUEST_MAX_BYTES,
   DAEMON_RPC_PROTOCOL_VERSION,
@@ -32,15 +33,16 @@ export function handleDaemonHttpResponseBody(
     req: DaemonWireRequest;
     stateDir: string;
     host: HostEnvironment;
+    dispatch?: DaemonDispatch;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, host, resolve, reject } = options;
+  const { info, req, stateDir, host, dispatch, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, reject });
+      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, dispatch, reject });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -52,7 +54,14 @@ export function handleDaemonHttpResponseBody(
       );
       return;
     }
-    void resolveDaemonHttpResult(info, req, parsed.result, { host, stateDir }, resolve, reject);
+    void resolveDaemonHttpResult(
+      info,
+      req,
+      parsed.result,
+      { host, stateDir, dispatch },
+      resolve,
+      reject,
+    );
   } catch (err) {
     reject(
       new AppError(
@@ -91,32 +100,35 @@ async function rejectDaemonHttpRpcError(
     info: DaemonInfo;
     req: DaemonWireRequest;
     stateDir: string;
+    dispatch?: DaemonDispatch;
     reject: (error: unknown) => void;
   },
 ): Promise<void> {
-  const { info, req, stateDir, reject } = options;
+  const { info, req, stateDir, dispatch, reject } = options;
   const requestId = req.meta?.requestId;
   const payload = toDaemonHttpRpcError(error);
   if (!info.baseUrl) {
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
-  const localized = await localizeRemoteDaemonError(payload, {
-    endpoint: {
-      baseUrl: info.baseUrl,
-      token: info.token,
-      tenantId: req.meta?.tenantId,
-      leaseId: leaseScopeFromRequest(req).leaseId,
-    },
-    stateDir,
-    requestId,
-  });
-  reject(
-    appErrorFromDaemonError(
-      await settleFailedDeliveryReceipt(info, req, stateDir, localized),
+  const baseUrl = info.baseUrl;
+  const hydrate = async () => {
+    const localized = await localizeRemoteDaemonError(payload, {
+      endpoint: {
+        baseUrl,
+        token: info.token,
+        tenantId: req.meta?.tenantId,
+        leaseId: leaseScopeFromRequest(req).leaseId,
+      },
+      stateDir,
       requestId,
-    ),
-  );
+    });
+    return await settleFailedDeliveryReceipt(info, req, stateDir, localized);
+  };
+  const mayDownload = payload.diagnosticsRecord || payload.details?.scriptDeliveryReceipt;
+  const report = dispatch && mayDownload ? () => dispatch(hydrate) : hydrate;
+  const errorToReport = await report().catch(() => ({ ...payload, logPath: undefined }));
+  reject(appErrorFromDaemonError(errorToReport, requestId));
 }
 
 /**
@@ -194,15 +206,24 @@ async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
   result: DaemonResponse,
-  client: { host: HostEnvironment; stateDir: string },
+  client: { host: HostEnvironment; stateDir: string; dispatch?: DaemonDispatch },
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
+    if (!info.baseUrl || !result.ok) {
+      resolve(result);
+      return;
+    }
+    const { data } = result;
+    const mayDownload =
+      data?.artifacts !== undefined ||
+      data?.scriptPublicationId !== undefined ||
+      data?.scriptDeliveryReceipt !== undefined;
+    const materialize = () =>
+      materializeRemoteArtifacts(info, req, result, client.host, client.stateDir);
     resolve(
-      info.baseUrl && result.ok
-        ? await materializeRemoteArtifacts(info, req, result, client.host, client.stateDir)
-        : result,
+      client.dispatch && mayDownload ? await client.dispatch(materialize) : await materialize(),
     );
   } catch (error) {
     // The daemon answered, so the request ran; only bringing its artifacts here failed.

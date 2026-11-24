@@ -40,6 +40,7 @@ export type CloudSessionBinding = {
   baseUrl: string;
   vendor: string;
   transport: 'agent-device-daemon';
+  viewerAvailable?: boolean;
   deadlineAt: string;
   generation: string;
 };
