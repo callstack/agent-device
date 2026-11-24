@@ -41,8 +41,6 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 
 | Reason | Meaning |
 | --- | --- |
-| `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
-| `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
@@ -89,14 +87,14 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | --- | --- |
 | `plugin-not-installed` | A command requires a plugin that is absent. |
 | `plugin-unavailable` | The selected plugin cannot supply the requested provider. |
-| `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
-| `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
 | `cloud_login_origin_mismatch` | The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued the stored CLI session, so the stored credential is not sent. Log in with the named origin, or unset the override. |
 | `cli_session_issuer_unverified` | The stored CLI session does not record the cloud that issued its credential, as a session saved by an older CLI does not, so the credential is not sent. Run agent-device auth login. |
 | `cloud_auth_redirect_refused` | A cloud auth request got a redirect it does not follow: to another origin, past the third hop, or to a missing Location or one with a username or password. Nothing was sent to the target. |
+| `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
+| `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 
 ### `events`
 
@@ -601,6 +599,13 @@ These reasons can come from more than one command.
 | `ARCHIVE_NESTING_LIMIT` | The archive nests deeper than the allowed archive-within-archive depth. |
 | `ARCHIVE_UNSAFE_ENTRY` | The archive holds a link, a special file, or an encrypted entry. |
 | `ARCHIVE_UNSAFE_PATH` | An archive entry's name is absolute, escaping, or otherwise not one relative path. |
+
+### Cloud catalog
+
+| Reason | Meaning |
+| --- | --- |
+| `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
+| `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 
 ### Command flags
 

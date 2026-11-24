@@ -73,7 +73,7 @@ export const connectCommand: ClientCommandHandler = async ({
     if (positionals.length !== 1) {
       throw new AppError('INVALID_ARGS', 'connect list accepts no additional arguments.');
     }
-    const { resolveCloudCatalogAccess } = await import('../auth-session.ts');
+    const { resolveCloudCatalogAccess } = await import('../connection/cloud-catalog-access.ts');
     const { formatCloudVendorRow, listCloudVendors } =
       await import('../connection/cloud-catalog.ts');
     const auth = await resolveCloudCatalogAccess({

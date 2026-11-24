@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { acquireProcessLock, publishFileSync } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -15,12 +14,7 @@ import {
 // The transport loads when a request is made, so a command that reads no cloud auth stays off it.
 const postCloudAuthJson: typeof import('./cloud-auth-request.ts').postCloudAuthJson = async (o) =>
   (await import('./cloud-auth-request.ts')).postCloudAuthJson(o);
-const LOOPBACK = new net.BlockList();
-LOOPBACK.addSubnet('127.0.0.0', 8, 'ipv4');
-LOOPBACK.addAddress('::1', 'ipv6');
-LOOPBACK.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
-
-const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
+export const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
 const DEVICE_AUTH_START_PATH = '/api/control-plane/device-auth/start';
 const DEVICE_AUTH_POLL_PATH = '/api/control-plane/device-auth/poll';
 const CLI_SESSION_REFRESH_PATH = '/api/control-plane/cli-session/refresh';
@@ -38,10 +32,6 @@ const MAX_CLI_SESSION_TOKEN_EXCHANGES = 2;
 
 /** Every `details.reason` the CLI session store publishes. */
 const CLI_SESSION_REASONS = {
-  // The cloud API origin is not HTTPS or loopback HTTP, or includes user information.
-  apiOriginFormat: { reason: 'cloud_invalid_origin', commands: ['connect'] },
-  // The configured cloud origin needs its own API key or CLI login.
-  apiKeyRequired: { reason: 'cloud_api_key_required', commands: ['connect'] },
   // The cloud answered a refresh by reporting the stored session revoked.
   revoked: { reason: 'cli_session_revoked', commands: ['connect'] },
   // The refresh answered without an access token, so the CLI has nothing to send.
@@ -179,46 +169,6 @@ export async function resolveRemoteAuth(options: {
     flags: { ...options.flags, daemonAuthToken: login.accessToken },
     source: 'login',
   };
-}
-
-export async function resolveCloudCatalogAccess(options: {
-  stateDir: string;
-  env: EnvMap;
-  explicitToken?: string;
-}): Promise<{ accessToken: string; cloudBaseUrl: string }> {
-  const { env, stateDir, explicitToken } = options;
-  const configuredOrigin =
-    env.AGENT_DEVICE_CLOUD_BASE_URL === undefined
-      ? undefined
-      : parseCloudApiOrigin(env.AGENT_DEVICE_CLOUD_BASE_URL);
-  const accessToken = explicitToken?.trim() || env.AGENT_DEVICE_DAEMON_AUTH_TOKEN?.trim();
-  const cloudBaseUrl = configuredOrigin ?? DEFAULT_CLOUD_BASE_URL;
-  if (accessToken) return catalogAccess(cloudBaseUrl, accessToken);
-  const access = await resolveCliSessionAccess({
-    env,
-    stateDir,
-    flags: { json: false, help: false, version: false },
-    requireSecureOrigin: true,
-  });
-  if (!access) throw cloudApiKeyRequired();
-  return catalogAccess(parseCloudApiOrigin(access.cloudBaseUrl), access.accessToken);
-}
-
-function catalogAccess(cloudBaseUrl: string, accessToken: string) {
-  if (
-    cloudBaseUrl === DEFAULT_CLOUD_BASE_URL &&
-    !/^adc_(?:live|cli)_[A-Za-z0-9_-]{43}$/i.test(accessToken)
-  ) {
-    throw cloudApiKeyRequired();
-  }
-  return { accessToken, cloudBaseUrl };
-}
-
-function cloudApiKeyRequired(): AppError {
-  return new AppError('UNAUTHORIZED', 'A cloud API key or CLI login is required.', {
-    reason: CLI_SESSION_REASONS.apiKeyRequired.reason,
-    hint: 'Run agent-device auth login or set AGENT_DEVICE_DAEMON_AUTH_TOKEN to your cloud API key.',
-  });
 }
 
 export async function resolveCloudAccessForConnect(options: {
@@ -582,12 +532,12 @@ export function summarizeCliSession(options: { stateDir: string; now?: () => num
   };
 }
 
-async function resolveCliSessionAccess(options: {
+export async function resolveCliSessionAccess(options: {
   stateDir: string;
   flags: CliFlags;
   env: EnvMap;
   io?: AuthIo;
-  requireSecureOrigin?: boolean;
+  validateIssuer?: (origin: string) => void;
 }): Promise<{ accessToken: string; expiresAt?: string; cloudBaseUrl: string } | null> {
   const { env, flags, io, stateDir } = options;
   // This read only asks whether there is a session to exchange, so a command that has none takes no
@@ -601,7 +551,7 @@ async function resolveCliSessionAccess(options: {
     async () => {
       const session = readExchangeableCliSession(stateDir);
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
-      if (options.requireSecureOrigin) parseCloudApiOrigin(session.cloudBaseUrl);
+      options.validateIssuer?.(session.cloudBaseUrl);
       assertStoredSessionOrigin(session, env);
       return await exchangeCliSessionAccess({ stateDir, session, flags, io });
     },
@@ -1047,26 +997,4 @@ function hasToken(value: unknown): value is string {
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function parseCloudApiOrigin(value: string): string {
-  const url = URL.parse(value);
-  if (
-    url &&
-    !url.username &&
-    !url.password &&
-    (url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackHostname(url.hostname)))
-  ) {
-    return url.origin;
-  }
-  throw new AppError('INVALID_ARGS', 'Invalid cloud session API origin.', {
-    reason: CLI_SESSION_REASONS.apiOriginFormat.reason,
-  });
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  if (hostname === 'localhost') return true;
-  const address = hostname.replace(/^\[(.*)\]$/, '$1');
-  const family = net.isIP(address);
-  return family !== 0 && LOOPBACK.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }

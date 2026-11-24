@@ -375,23 +375,7 @@ async function resolveRunContextOrExit(
             configuredPlatform: parsed.flags.platform,
             configuredSession: parsed.flags.session,
           });
-    const catalog = isCloudCatalogCommand(base);
-    if (base.command === 'connect' && flags.remoteConfig && !catalog) {
-      const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
-      await admitConnectProfileWithDiagnostics(
-        parsed.remoteConfigLeaseProvider,
-        flags.daemonBaseUrl,
-        base.host,
-      );
-    }
-    // A leased remote config, or a connect without one (it always leases through a provider), needs
-    // an explicit session before anything is resolved or leased (#3931).
-    const leasedRemoteConfig =
-      parsed.remoteConfigLeaseProvider && runsOnRemoteConnection(base.command) && !catalog;
-    const leasedConnect = base.command === 'connect' && !flags.remoteConfig && !catalog;
-    if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
-      throw remoteSessionRequiredError(parsed.remoteConfigLeaseProvider);
-    }
+    await preflightCommandConnection(base, flags, parsed.remoteConfigLeaseProvider);
     const { resolveCommandConnection } = await import('./cli/connection/command-connection.ts');
     const { daemonPaths, effectiveFlags, defaults, connection } = resolveCommandConnection({
       host: base.host,
@@ -435,6 +419,28 @@ async function resolveRunContextOrExit(
       });
     }
     return exitAfterFlush(1);
+  }
+}
+
+async function preflightCommandConnection(
+  base: Pick<CliRunContext, 'command' | 'positionals' | 'host'>,
+  flags: CliFlags,
+  remoteConfigLeaseProvider: string | undefined,
+): Promise<void> {
+  if (isCloudCatalogCommand(base)) return;
+  if (base.command === 'connect' && flags.remoteConfig) {
+    const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
+    await admitConnectProfileWithDiagnostics(
+      remoteConfigLeaseProvider,
+      flags.daemonBaseUrl,
+      base.host,
+    );
+  }
+  // A leased remote config, or a connect without one, needs a named session before leasing (#3931).
+  const leasedRemoteConfig = remoteConfigLeaseProvider && runsOnRemoteConnection(base.command);
+  const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
+  if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
+    throw remoteSessionRequiredError(remoteConfigLeaseProvider);
   }
 }
 
