@@ -19,10 +19,9 @@ const liveAvailability = {
   checkedAt,
   scope: 'broker_vendor',
 } as const;
-const now = () => Date.parse('2026-11-22T12:30:00.000Z');
-
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function stubVendors(body: unknown) {
@@ -70,7 +69,7 @@ test.each([
 
 test('a live listing asks for fresh availability with the API key and returns the signal', async () => {
   const fetchMock = stubVendors([{ ...legacyRow, availability: liveAvailability }]);
-  const rows = await listCloudVendors(baseUrl, 'example-key', { live: true, now });
+  const rows = await listCloudVendors(baseUrl, 'example-key', { live: true });
   expect(rows).toEqual([{ ...legacyRow, availability: liveAvailability }]);
   const { url, init, headers } = requestOf(fetchMock);
   expect(url.href).toBe('https://cloud.example/v1/vendors?availability=live');
@@ -79,8 +78,9 @@ test('a live listing asks for fresh availability with the API key and returns th
 });
 
 test('a live listing marks rows from a server without the signal as unknown', async () => {
+  vi.setSystemTime(new Date('2026-11-22T12:30:00.000Z'));
   stubVendors([legacyRow, { ...legacyRow, platform: 'ios', availability: liveAvailability }]);
-  const rows = await listCloudVendors(baseUrl, 'example-key', { live: true, now });
+  const rows = await listCloudVendors(baseUrl, 'example-key', { live: true });
   expect(rows[0]!.availability).toEqual({
     state: 'unknown',
     reason: 'live_availability_unsupported',
@@ -106,17 +106,15 @@ test.each([
   ['a non-object signal', 'available'],
 ])('a live listing rejects %s', async (_name, availability) => {
   stubVendors([{ ...legacyRow, availability }]);
-  await expect(listCloudVendors(baseUrl, 'example-key', { live: true, now })).rejects.toMatchObject(
-    {
-      message: 'Cloud session API returned an invalid vendor list.',
-    },
-  );
+  await expect(listCloudVendors(baseUrl, 'example-key', { live: true })).rejects.toMatchObject({
+    message: 'Cloud session API returned an invalid vendor list.',
+  });
 });
 
 test('a live listing keeps an available signal that carries no reason', async () => {
   const availability = { state: 'available', checkedAt, scope: 'broker_vendor' } as const;
   stubVendors([{ ...legacyRow, availability }]);
-  const [row] = await listCloudVendors(baseUrl, 'example-key', { live: true, now });
+  const [row] = await listCloudVendors(baseUrl, 'example-key', { live: true });
   expect(row!.availability).toEqual(availability);
 });
 

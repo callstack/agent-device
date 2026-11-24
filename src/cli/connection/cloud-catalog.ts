@@ -1,8 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { readCloudJsonResponse } from '../cloud-response.ts';
 
-const VENDORS_PATH = '/v1/vendors';
-const LIVE_QUERY = '?availability=live';
 const AVAILABILITY_STATES = ['available', 'unavailable', 'unknown'] as const;
 const AVAILABILITY_REASONS = [
   'sessions_paused',
@@ -43,12 +41,17 @@ export type CloudVendorRow = {
 export async function listCloudVendors(
   baseUrl: string,
   accessToken: string,
-  options: { live?: boolean; now?: () => number } = {},
+  options: { live?: boolean } = {},
 ): Promise<CloudVendorRow[]> {
-  const response = await requestCloud(baseUrl, `${VENDORS_PATH}${options.live ? LIVE_QUERY : ''}`, {
+  const url = new URL('/v1/vendors', baseUrl);
+  if (options.live) url.searchParams.set('availability', 'live');
+  const response = await fetch(url, {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
+    redirect: 'error',
     signal: AbortSignal.timeout(30_000),
+  }).catch(() => {
+    throw new AppError('COMMAND_FAILED', 'Could not reach the cloud session API.');
   });
   const rows = await readCloudJsonResponse<unknown>(response, {
     invalidJsonMessage: 'Cloud session API returned invalid JSON.',
@@ -58,7 +61,7 @@ export async function listCloudVendors(
     throw new AppError('COMMAND_FAILED', 'Cloud session API returned an invalid vendor list.');
   }
   if (!options.live) return rows;
-  const checkedAt = new Date((options.now ?? Date.now)()).toISOString();
+  const checkedAt = new Date().toISOString();
   return rows.map((row) =>
     row.availability ? row : { ...row, availability: unsupportedAvailability(checkedAt) },
   );
@@ -125,17 +128,6 @@ export function formatCloudVendorRow(row: CloudVendorRow): string {
     ? `  availability: ${availability.state}${availability.reason ? ` (${availability.reason})` : ''}`
     : '';
   return `${row.vendor} ${row.platform}  $${row.usdPerMinute}/min${minimum}  capabilities: ${row.capabilities.join(', ') || 'none'}  live view: ${row.viewer ? 'yes' : 'no'}  available: ${row.available ? 'yes' : 'no'}${live}`;
-}
-
-async function requestCloud(baseUrl: string, pathname: string, init: RequestInit) {
-  try {
-    return await fetch(new URL(pathname, baseUrl), {
-      ...init,
-      redirect: 'error',
-    });
-  } catch {
-    throw new AppError('COMMAND_FAILED', 'Could not reach the cloud session API.');
-  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
