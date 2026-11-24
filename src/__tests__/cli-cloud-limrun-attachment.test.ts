@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+import * as browserLaunch from '../cli/browser-launch.ts';
 import { bindCloudAttachment } from '../cli/connection/cloud-attachment.ts';
 import {
   cloudAttachmentPath,
@@ -257,4 +258,33 @@ test('a failed local retirement still ends the hosted lease and preserves a fenc
   expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
   expect(stop).toHaveBeenCalledTimes(2);
   expect(readCloudConnection(location)).toBeNull();
+});
+
+test('a signed viewer link carrying the attachment credential stays out of the approved lease', async () => {
+  const env = limrunEnv('current');
+  const scopedFragment = Array.from(
+    scopedToken,
+    (char) => '%' + char.charCodeAt(0).toString(16),
+  ).join('');
+  const viewerUrl = `https://viewer.example/watch?view=live#token=${scopedFragment}`;
+  const fetchMock = stubCloudApi();
+  fetchMock.mockResolvedValueOnce(
+    Response.json({ ...limrunLease('ios'), viewerUrl }, { status: 201 }),
+  );
+  const open = vi.spyOn(browserLaunch, 'openUrlInBrowser').mockResolvedValue(true);
+
+  const result = await runCliCapture([...args('ios'), '--show-viewer'], { env });
+  expect(result.code, result.stderr || result.stdout).toBeNull();
+  expect(JSON.parse(result.stdout).data).toMatchObject({
+    viewerAvailable: false,
+    cloudSessionId: hostedDevice.id,
+  });
+  expect(open).not.toHaveBeenCalled();
+  expect(result.stdout + result.stderr).not.toContain(viewerUrl);
+  expect(result.stdout + result.stderr).not.toContain(scopedToken);
+  const record = readRemoteConnectionState(locationOf(env))!;
+  expect(JSON.stringify(record)).not.toContain(viewerUrl);
+  expect(fs.readFileSync(record.remoteConfigPath, 'utf8')).not.toContain(viewerUrl);
+  expect(fs.readFileSync(cloudAttachmentPath(locationOf(env)), 'utf8')).not.toContain(viewerUrl);
+  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
 });

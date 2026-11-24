@@ -543,7 +543,11 @@ function parseCloudSession(
   ) {
     throw invalidSession();
   }
-  const safeViewerUrl = readSafeCloudViewer(attachment, access.accessToken, { vendor, fallbackFrom, viewerUrl });
+  const safeViewerUrl = readSafeCloudViewer(attachment, access.accessToken, {
+    vendor,
+    fallbackFrom,
+    viewerUrl,
+  });
   return {
     binding: {
       id,
