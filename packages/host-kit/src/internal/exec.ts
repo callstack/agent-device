@@ -285,25 +285,15 @@ function runSpawnedCommand(
       if (finish(reason)) reject(error);
     }
     function settle(code: number | null): void {
-      const finalReason = abort.didAbort
-        ? 'abort'
-        : didTimeout
-          ? 'timeout'
-          : (code ?? 1) !== 0 && !options.allowFailure
-            ? 'exit_failure'
-            : 'success';
+      const finalReason = commandSettlementReason(
+        abort.didAbort,
+        didTimeout,
+        code,
+        options.allowFailure,
+      );
       if (!finish(finalReason)) return;
       const finalExitCode = code ?? 1;
-      // Release each stream's held tail before anything reads the retained output: every data
-      // event has landed by `close`, so the tail holds at most a partial secret. The tail reaches
-      // the chunk callbacks too, so a caller appending the callback stream ends with the same
-      // scrubbed bytes the result retains.
-      const flushedOut = redactor.flushOut();
-      const flushedErr = redactor.flushErr();
-      stdout += flushedOut;
-      stderr += flushedErr;
-      if (flushedOut) options.onStdoutChunk?.(flushedOut);
-      if (flushedErr) options.onStderrChunk?.(flushedErr);
+      ({ stdout, stderr } = appendRedactedTails(redactor, stdout, stderr, options));
       if (!abort.didAbort && didTimeout && timeoutMs) {
         reject(
           createTimeoutError(executable, cmd, safeArgs, timeoutMs, finalExitCode, stdout, stderr),
@@ -336,14 +326,7 @@ function runSpawnedCommand(
     // A deadline that fires after the child exited on its own still has to settle: the
     // group kill that would have ended the pipe holder can no longer run through a child
     // Node already reaped.
-    const settlement = createCommandKillSettlement({
-      killProcessTree: () => killProcessTree(child, options),
-      settle,
-    });
-    const abort = watchCommandAbort(options, () => {
-      execTrace.emit('abort');
-      settlement.requestKill();
-    });
+    const { settlement, abort } = watchCommandAbortSettlement(child, options, execTrace, settle);
     timeoutHandle = timeoutMs
       ? setTimeout(() => {
           execTrace.emit('deadline');
@@ -392,15 +375,42 @@ function runSpawnedCommand(
       );
     });
 
-    child.once('exit', (code, signal) => {
-      execTrace.emit('exit', { exitCode: code, signal });
-      settlement.recordExit(code);
-    });
-    child.once('close', (code, signal) => {
-      execTrace.emit('close', { exitCode: code, signal });
-      settle(code);
-    });
+    recordCommandExitAndClose(child, execTrace, settlement, settle);
   });
+}
+
+/**
+ * Releases each stream's held redaction tail once the child closed: every data event has landed
+ * by `close`, so a tail holds at most a partial secret. The tail reaches the chunk callbacks
+ * too, so a caller appending the callback stream ends with the same scrubbed bytes the result
+ * retains.
+ */
+function appendRedactedTails(
+  redactor: ReturnType<typeof createArgRedactor>,
+  stdout: string,
+  stderr: string,
+  onChunk: Pick<ExecStreamOptions, 'onStdoutChunk' | 'onStderrChunk'>,
+): { stdout: string; stderr: string } {
+  const flushedOut = redactor.flushOut();
+  const flushedErr = redactor.flushErr();
+  if (flushedOut) onChunk.onStdoutChunk?.(flushedOut);
+  if (flushedErr) onChunk.onStderrChunk?.(flushedErr);
+  return { stdout: stdout + flushedOut, stderr: stderr + flushedErr };
+}
+
+/**
+ * The settlement phase a command closed with: a cancelled request or an armed deadline wins
+ * over the exit code, and a non-zero exit settles as success only when the caller allows it.
+ */
+function commandSettlementReason(
+  didAbort: boolean,
+  timedOut: boolean,
+  exitCode: number | null,
+  allowFailure: boolean | undefined,
+): ExecSettlementReason {
+  if (didAbort) return 'abort';
+  if (timedOut) return 'timeout';
+  return (exitCode ?? 1) !== 0 && !allowFailure ? 'exit_failure' : 'success';
 }
 
 /** Returns the result with `signal` added when a signal terminated the process. */
@@ -561,11 +571,7 @@ export function runCmdBackground(
         reason:
           event === 'error'
             ? 'spawn_error'
-            : abort.didAbort
-              ? 'abort'
-              : (child.exitCode ?? 1) !== 0 && !options.allowFailure
-                ? 'exit_failure'
-                : 'success',
+            : commandSettlementReason(abort.didAbort, false, child.exitCode, options.allowFailure),
       });
       return true;
     }
@@ -588,26 +594,12 @@ export function runCmdBackground(
       }
       resolve({ stdout, stderr, exitCode: finalExitCode });
     }
-    const settlement = createCommandKillSettlement({
-      killProcessTree: () => killProcessTree(child, options),
-      settle,
-    });
-    const abort = watchCommandAbort(options, () => {
-      execTrace.emit('abort');
-      settlement.requestKill();
-    });
+    const { settlement, abort } = watchCommandAbortSettlement(child, options, execTrace, settle);
     child.on('error', (err) => {
       execTrace.emit('error');
       if (finish('error')) reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
-    child.once('exit', (code, signal) => {
-      execTrace.emit('exit', { exitCode: code, signal });
-      settlement.recordExit(code);
-    });
-    child.once('close', (code, signal) => {
-      execTrace.emit('close', { exitCode: code, signal });
-      settle(code);
-    });
+    recordCommandExitAndClose(child, execTrace, settlement, settle);
   });
 
   return { child, wait };
@@ -864,6 +856,44 @@ function watchCommandAbort(
       options.signal?.removeEventListener('abort', onAbort);
     },
   };
+}
+
+/**
+ * The kill settlement and abort watch every spawned command shares: a deadline or a cancelled
+ * request kills the process tree, and a settled command disposes the watch.
+ */
+function watchCommandAbortSettlement(
+  child: ChildProcess,
+  options: Pick<ExecOptions, 'detached' | 'kill' | 'signal'>,
+  execTrace: ReturnType<typeof createExecTraceContext>,
+  settle: (exitCode: number | null) => void,
+): { settlement: CommandKillSettlement; abort: ReturnType<typeof watchCommandAbort> } {
+  const settlement = createCommandKillSettlement({
+    killProcessTree: () => killProcessTree(child, options),
+    settle,
+  });
+  const abort = watchCommandAbort(options, () => {
+    execTrace.emit('abort');
+    settlement.requestKill();
+  });
+  return { settlement, abort };
+}
+
+/** The child lifecycle every spawned command shares: record the exit for the settlement, settle on close. */
+function recordCommandExitAndClose(
+  child: ChildProcess,
+  execTrace: ReturnType<typeof createExecTraceContext>,
+  settlement: CommandKillSettlement,
+  settle: (exitCode: number | null) => void,
+): void {
+  child.once('exit', (code, signal) => {
+    execTrace.emit('exit', { exitCode: code, signal });
+    settlement.recordExit(code);
+  });
+  child.once('close', (code, signal) => {
+    execTrace.emit('close', { exitCode: code, signal });
+    settle(code);
+  });
 }
 
 /**

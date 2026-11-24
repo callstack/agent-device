@@ -36,7 +36,7 @@ const RUNNER_SIGNING_AUTH_REASONS = {
  * `xcodebuild` arguments and omits the same names from the child environment, so the credentials
  * travel by argument only.
  */
-export const RUNNER_SIGNING_AUTH_ENV_NAMES = [
+const RUNNER_SIGNING_AUTH_ENV_NAMES = [
   'AGENT_DEVICE_IOS_AUTH_KEY_PATH',
   'AGENT_DEVICE_IOS_AUTH_KEY_ID',
   'AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID',
