@@ -134,6 +134,22 @@ extension RunnerTests {
     )
   }
 
+  /// Presses the lock button on a lit screen. On a blanked screen that is still unlocked, the first
+  /// press can wake the screen instead of locking it, so the screen is woken first and pressed
+  /// again only if it is still unlocked.
+  func dispatchLock(
+    screenIsBlanked: () -> Bool,
+    wake: () -> Response?,
+    readState: () -> LockScreenStateRead,
+    press: () -> Response?
+  ) -> Response? {
+    if screenIsBlanked() {
+      if let refusal = wake() { return refusal }
+      guard readState() == .unlocked else { return nil }
+    }
+    return press()
+  }
+
   private func lockScreenUnverifiedResponse(_ message: String) -> Response {
     Response(ok: false, error: ErrorPayload(
       code: RunnerWireErrorCode.lockScreenUnverified,
@@ -167,15 +183,13 @@ extension RunnerTests {
     return nil
   }
 
-  /// Presses the lock button on a lit screen. On a blanked screen that is still unlocked, the first
-  /// press can wake the screen instead of locking it, so the screen is woken first and pressed
-  /// again only if it is still unlocked.
   private func dispatchLock() -> Response? {
-    if screenIsBlanked() {
-      if let refusal = wakeBlankedScreen() { return refusal }
-      guard currentLockScreenState() == .unlocked else { return nil }
-    }
-    return dispatchLockButton()
+    dispatchLock(
+      screenIsBlanked: screenIsBlanked,
+      wake: wakeBlankedScreen,
+      readState: currentLockScreenState,
+      press: dispatchLockButton
+    )
   }
 
   /// Wakes a blanked screen with the lock button, then swipes up from the bottom edge, as a person

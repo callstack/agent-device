@@ -111,6 +111,50 @@ extension RunnerTests {
     XCTAssertEqual(script.log.filter { $0 == "passcode" }.count, 0, "an unlocked screen asks for no passcode")
   }
 
+  /// A dark screen is woken first; the lock button is pressed again only if the wake left it unlocked.
+  func testLockScreenWakesADarkScreenAndPressesAgainOnlyWhileUnlocked() {
+    for (afterWake, presses) in [(LockScreenStateRead.unlocked, 1), (.locked, 0)] {
+      var log: [String] = []
+      let refusal = dispatchLock(
+        screenIsBlanked: { true },
+        wake: { log.append("wake"); return nil },
+        readState: { afterWake },
+        press: { log.append("press"); return nil }
+      )
+      XCTAssertNil(refusal)
+      XCTAssertEqual(log, ["wake"] + Array(repeating: "press", count: presses), "\(afterWake)")
+    }
+  }
+
+  func testLockScreenPressesALitScreenOnceWithoutWaking() {
+    var log: [String] = []
+    let refusal = dispatchLock(
+      screenIsBlanked: { false },
+      wake: { log.append("wake"); return nil },
+      readState: { .unlocked },
+      press: { log.append("press"); return nil }
+    )
+    XCTAssertNil(refusal)
+    XCTAssertEqual(log, ["press"])
+  }
+
+  func testLockScreenPropagatesAWakeRefusalWithoutPressing() {
+    var presses = 0
+    let refusal = dispatchLock(
+      screenIsBlanked: { true },
+      wake: {
+        Response(ok: false, error: ErrorPayload(
+          code: RunnerWireErrorCode.hardwareControlUnavailable,
+          message: "no lock button"
+        ))
+      },
+      readState: { .unlocked },
+      press: { presses += 1; return nil }
+    )
+    XCTAssertEqual(refusal?.error?.code, RunnerWireErrorCode.hardwareControlUnavailable)
+    XCTAssertEqual(presses, 0)
+  }
+
   func testLockScreenNeverAsksForAPasscodePrompt() {
     let script = LockScreenScript(reads: [.unlocked], waitsAllowed: 1)
     script.passcodePrompt = true
