@@ -35,7 +35,10 @@ export async function resolveCloudCatalogAccess(options: {
     validateIssuer: parseCloudApiOrigin,
   });
   if (!access) throw cloudApiKeyRequired();
-  return catalogAccess(parseCloudApiOrigin(access.cloudBaseUrl), access.accessToken);
+  return {
+    cloudBaseUrl: parseCloudApiOrigin(access.cloudBaseUrl),
+    accessToken: access.accessToken,
+  };
 }
 
 function catalogAccess(cloudBaseUrl: string, accessToken: string) {

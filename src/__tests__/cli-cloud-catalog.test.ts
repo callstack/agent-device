@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { writeCliSession } from '../cli/auth-session.ts';
+import { DEFAULT_CLOUD_BASE_URL, writeCliSession } from '../cli/auth-session.ts';
 import { runCliCapture } from './cli-capture.ts';
 
 afterEach(() => {
@@ -22,35 +22,38 @@ test('catalog ignores ambient daemon settings and requires cloud authentication'
   expect(result.calls).toEqual([]);
 });
 
-test('catalog exchanges a stored session with its issuer for account access', async () => {
-  const stateDir = storeSession('https://issuer.example');
-  const fetchMock = vi.fn(async (url: URL, _init: RequestInit) =>
-    url.pathname.endsWith('/refresh')
-      ? Response.json({ accessToken: 'catalog-access-key' })
-      : Response.json([]),
-  );
-  vi.stubGlobal('fetch', fetchMock);
-  const result = await runCliCapture(['connect', 'list', '--json'], {
-    env: {
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_BASE_URL: 'https://daemon.example',
-      AGENT_DEVICE_SESSION: 'other-session',
-    },
-  });
-  expect(result.code).toBeNull();
-  expect(JSON.parse(result.stdout).data).toEqual([]);
-  expect(fetchMock.mock.calls.map(([url]) => url.href)).toEqual([
-    'https://issuer.example/api/control-plane/cli-session/refresh',
-    'https://issuer.example/v1/vendors',
-  ]);
-  const [, refresh] = fetchMock.mock.calls[0]!;
-  expect(JSON.parse(String(refresh.body))).toEqual({
-    refreshCredential: 'catalog-refresh-key',
-    acceptsRotatedRefreshCredential: true,
-  });
-  const [, list] = fetchMock.mock.calls[1]!;
-  expect(new Headers(list.headers).get('authorization')).toBe('Bearer catalog-access-key');
-});
+test.each([DEFAULT_CLOUD_BASE_URL, 'https://issuer.example'])(
+  'catalog exchanges a stored session with its issuer %s for account access',
+  async (issuer) => {
+    const stateDir = storeSession(issuer);
+    const fetchMock = vi.fn(async (url: URL, _init: RequestInit) =>
+      url.pathname.endsWith('/refresh')
+        ? Response.json({ accessToken: 'catalog-access-key' })
+        : Response.json([]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await runCliCapture(['connect', 'list', '--json'], {
+      env: {
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_BASE_URL: 'https://daemon.example',
+        AGENT_DEVICE_SESSION: 'other-session',
+      },
+    });
+    expect(result.code).toBeNull();
+    expect(JSON.parse(result.stdout).data).toEqual([]);
+    expect(fetchMock.mock.calls.map(([url]) => url.href)).toEqual([
+      `${issuer}/api/control-plane/cli-session/refresh`,
+      `${issuer}/v1/vendors`,
+    ]);
+    const [, refresh] = fetchMock.mock.calls[0]!;
+    expect(JSON.parse(String(refresh.body))).toEqual({
+      refreshCredential: 'catalog-refresh-key',
+      acceptsRotatedRefreshCredential: true,
+    });
+    const [, list] = fetchMock.mock.calls[1]!;
+    expect(new Headers(list.headers).get('authorization')).toBe('Bearer catalog-access-key');
+  },
+);
 
 test.each([
   ['http://issuer.example', undefined, 'cloud_invalid_origin'],
