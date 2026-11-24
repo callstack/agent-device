@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
-import { expect, test, vi } from 'vitest';
+import { expect, onTestFinished, test, vi } from 'vitest';
 import {
   createDaemonProxy,
   createDaemonProxyServer,
@@ -172,50 +172,45 @@ test('a client leaving the Node adapter mid-response after a garbage collection 
 test('the upstream health probe has its own bound without upstreamTimeoutMs', async () => {
   const healthBound = new AbortController();
   const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(healthBound.signal);
+  // A timed-out test never reaches a `finally`; the real timer test below needs the spy gone.
+  onTestFinished(() => timeout.mockRestore());
   const upstream = abortObservingUpstream();
-  try {
-    const proxy = proxyWith(upstream.fetch);
-    const clientRequest = new Request(`${PROXY_ORIGIN}/agent-device/health`);
-    const response = proxy.handle(clientRequest);
-    expect(timeout.mock.calls).toEqual([[5_000]]);
-    await upstream.received;
-    await collectGarbage();
-    healthBound.abort();
-    await upstream.aborted;
-    expect((await response).status).toBe(500);
-  } finally {
-    timeout.mockRestore();
-  }
+  const proxy = proxyWith(upstream.fetch);
+  const clientRequest = new Request(`${PROXY_ORIGIN}/agent-device/health`);
+
+  const response = proxy.handle(clientRequest);
+  expect(timeout.mock.calls).toEqual([[5_000]]);
+  await upstream.received;
+  await collectGarbage();
+  healthBound.abort();
+
+  await upstream.aborted;
+  expect((await response).status).toBe(500);
 });
 
 test('upstreamTimeoutMs still ends an rpc exchange after a garbage collection', async () => {
-  const bound = new AbortController();
-  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(bound.signal);
   const upstream = abortObservingUpstream();
-  try {
-    const proxy = createDaemonProxy({
-      upstreamBaseUrl: 'http://daemon.internal:4310',
-      upstreamToken: 'daemon-secret',
-      clientToken: 'client-secret',
-      upstreamFetch: upstream.fetch,
-      upstreamTimeoutMs: 1234,
-    });
-    const clientRequest = rpcRequest({
-      jsonrpc: '2.0',
-      id: 5,
-      method: 'agent-device.command',
-      params: {},
-    });
-    const response = proxy.handle(clientRequest);
-    await upstream.received;
-    expect(timeout.mock.calls).toEqual([[1234]]);
-    await collectGarbage();
-    bound.abort();
-    await upstream.aborted;
-    expect((await response).status).toBe(500);
-  } finally {
-    timeout.mockRestore();
-  }
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: 'daemon-secret',
+    clientToken: 'client-secret',
+    upstreamFetch: upstream.fetch,
+    // A real timer, long enough that the collection below runs before it fires.
+    upstreamTimeoutMs: 300,
+  });
+  const clientRequest = rpcRequest({
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'agent-device.command',
+    params: {},
+  });
+
+  const response = proxy.handle(clientRequest);
+  await upstream.received;
+  await collectGarbage();
+
+  await upstream.aborted;
+  expect((await response).status).toBe(500);
 });
 
 test('aborting the client request after a garbage collection aborts a pending authenticate', async () => {
