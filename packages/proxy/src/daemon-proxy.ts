@@ -258,15 +258,12 @@ async function authenticateCaller(
       : null;
   }
   const result = await options.authenticate(
-    keepAliveWith(
-      request,
-      new Request(request.url, {
-        method: request.method,
-        headers: request.headers,
-        signal: request.signal,
-        ...(rpcBody !== undefined ? { body: rpcBody } : {}),
-      }),
-    ),
+    forwardedRequest(request, request.url, {
+      method: request.method,
+      headers: request.headers,
+      signal: request.signal,
+      ...(rpcBody !== undefined ? { body: rpcBody } : {}),
+    }),
   );
   if (!result) return null;
   const tenantId = normalizeTenantId(
@@ -343,14 +340,11 @@ async function readUpstreamHealth(
   options: NormalizedProxyOptions,
 ): Promise<unknown> {
   const response = await options.upstreamFetch(
-    keepAliveWith(
-      request,
-      new Request(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
-        method: 'GET',
-        headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
-        signal: AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]),
-      }),
-    ),
+    forwardedRequest(request, buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
+      method: 'GET',
+      headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]),
+    }),
   );
   const text = await response.text();
   try {
@@ -371,20 +365,12 @@ async function forwardProxyRequest(params: {
   const body = resolveUpstreamBody(request, route, rpcBody, options.upstreamToken, caller.tenantId);
   const upstreamResponse = await options.upstreamTransport(
     route,
-    keepAliveWith(
-      request,
-      new Request(buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
-        method: request.method,
-        headers: buildUpstreamHeaders(
-          request.headers,
-          options.upstreamToken,
-          route,
-          caller.tenantId,
-        ),
-        signal: upstreamSignal(request, options),
-        ...(body ? { body, duplex: 'half' as const } : {}),
-      }),
-    ),
+    forwardedRequest(request, buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
+      method: request.method,
+      headers: buildUpstreamHeaders(request.headers, options.upstreamToken, route, caller.tenantId),
+      signal: upstreamSignal(request, options),
+      ...(body ? { body, duplex: 'half' as const } : {}),
+    }),
   );
 
   const headers = copyProxyResponseHeaders(upstreamResponse, request, route);
@@ -413,6 +399,11 @@ function keepAliveWith(owner: object, request: Request): Request {
   if (kept) kept.push(request);
   else keptRequests.set(owner, [request]);
   return request;
+}
+
+/** Builds a request for `owner` to send on, kept reachable for as long as `owner` is. */
+function forwardedRequest(owner: Request, url: string | URL, init: RequestInit): Request {
+  return keepAliveWith(owner, new Request(url, init));
 }
 
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
