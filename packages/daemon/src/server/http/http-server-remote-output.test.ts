@@ -213,9 +213,16 @@ test.each(['marker', 'auth-hook', 'batch'] as const)(
         expect(fs.readFileSync(victim, 'utf8')).toBe('protected-content');
         const data =
           route === 'batch'
-            ? (body.result!.data!.results as Array<{ data: { artifacts: DaemonArtifact[] } }>)[0]
-                ?.data
+            ? (
+                body.result!.data!.results as Array<{
+                  data: { path?: string; message?: string; artifacts: DaemonArtifact[] };
+                }>
+              )[0]?.data
             : body.result?.data;
+        if (route === 'batch') {
+          expect(data?.path).toBe('screenshot.png');
+          expect(data?.message ?? '').not.toContain('agent-device-output-');
+        }
         const artifact = data?.artifacts?.[0];
         expect(artifact?.artifactId).toBeTypeOf('string');
         const download = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {

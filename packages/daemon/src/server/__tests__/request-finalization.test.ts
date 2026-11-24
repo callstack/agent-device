@@ -225,113 +225,59 @@ test('finalizeDaemonResponse leaves unrelated local-path artifacts unregistered'
   expect(finalized).toEqual(response);
 });
 
-test('finalizeDaemonResponse keeps screenshot path fallback as screenshot artifact type', () => {
+test('a screenshot response path alone does not register an artifact', () => {
   const req: DaemonRequest = {
     token: 'token',
     session: 'default',
     command: 'screenshot',
     positionals: [],
-    meta: {
-      clientArtifactPaths: {
-        path: '/client/screenshot.png',
-      },
-      tenantId: 'tenant-a',
-    },
+    internal: { publicNetworkOnly: true },
+    meta: { clientArtifactPaths: { path: '/client/screenshot.png' } },
   };
-  const response: DaemonResponse = {
-    ok: true,
-    data: {
-      path: '/tmp/screenshot.png',
-    },
-  };
-  const tracked: Array<{
-    artifactPath: string;
-    tenantId?: string;
-    artifactType?: DaemonArtifactType;
-    fileName?: string;
-  }> = [];
+  const response: DaemonResponse = { ok: true, data: { path: '/tmp/screenshot.png' } };
 
-  const finalized = finalizeDaemonResponse(req, response, (opts) => {
-    tracked.push(opts);
-    return 'artifact-id';
-  });
-
-  expect(finalized).toEqual({
-    ok: true,
-    data: {
-      path: '/tmp/screenshot.png',
-      artifacts: [
-        {
-          field: 'path',
-          artifactType: 'screenshot',
-          artifactId: 'artifact-id',
-          fileName: 'screenshot.png',
-          localPath: '/client/screenshot.png',
-        },
-      ],
-    },
-  });
-  expect(tracked).toEqual([
-    {
-      artifactPath: '/tmp/screenshot.png',
-      tenantId: 'tenant-a',
-      artifactType: 'screenshot',
-      fileName: 'screenshot.png',
-    },
-  ]);
+  expect(
+    finalizeDaemonResponse(req, response, () => {
+      throw new Error('A screenshot needs a producer-committed artifact');
+    }),
+  ).toEqual(response);
 });
 
-test('finalizeDaemonResponse registers the screenshot display rotation with its artifact', () => {
-  const req: DaemonRequest = {
-    token: 'token',
-    session: 'default',
-    command: 'screenshot',
-    positionals: [],
-    meta: { tenantId: 'tenant-a', clientArtifactPaths: { path: '/client/shot.png' } },
+test('a committed screenshot keeps its ID alongside a delivered script revision', () => {
+  const screenshot = {
+    field: 'path',
+    artifactType: 'screenshot' as const,
+    artifactId: 'producer-id',
+    fileName: 'screenshot.png',
+    localPath: '/client/screenshot.png',
   };
+  const script = asDaemonDeliveredArtifact(
+    {
+      field: 'savedScript',
+      artifactType: 'session-script',
+      path: '/daemon/session.ad',
+      scriptPublicationId: 'publication',
+      scriptRevision: 2,
+    },
+    'tenant-a',
+  );
   const tracked: DownloadableArtifactRegistration[] = [];
-
-  finalizeDaemonResponse(
-    req,
-    { ok: true, data: { path: '/tmp/shot.png', displayRotation: 'landscape-left' } },
-    (registration) => {
-      tracked.push(registration);
-      return 'artifact-id';
+  const response = finalizeDaemonResponse(
+    { token: 'token', session: 'default', command: 'screenshot', positionals: [] },
+    { ok: true, data: { artifacts: [screenshot, script] } },
+    (entry) => {
+      tracked.push(entry);
+      return 'script-id';
     },
   );
 
-  expect(tracked).toEqual([
-    {
-      artifactPath: '/tmp/shot.png',
-      tenantId: 'tenant-a',
-      artifactType: 'screenshot',
-      fileName: 'shot.png',
-      displayRotation: 'landscape-left',
+  expect(response).toMatchObject({
+    ok: true,
+    data: {
+      artifacts: [screenshot, { artifactId: 'script-id', scriptRevision: 2 }],
     },
-  ]);
-});
-
-test('finalizeDaemonResponse registers no display rotation for a value outside the rotation vocabulary', () => {
-  const req: DaemonRequest = {
-    token: 'token',
-    session: 'default',
-    command: 'screenshot',
-    positionals: [],
-    meta: { clientArtifactPaths: { path: '/client/shot.png' } },
-  };
-  const tracked: DownloadableArtifactRegistration[] = [];
-
-  finalizeDaemonResponse(
-    req,
-    { ok: true, data: { path: '/tmp/shot.png', displayRotation: 'sideways' } },
-    (registration) => {
-      tracked.push(registration);
-      return 'artifact-id';
-    },
-  );
-
-  expect(tracked).toHaveLength(1);
-  expect(tracked[0]).not.toHaveProperty('displayRotation');
+  });
+  expect(tracked.map(({ artifactPath }) => artifactPath)).toEqual(['/daemon/session.ad']);
 });
 
 test('finalizeDaemonResponse registers the display rotation a handler put on its own artifact', () => {

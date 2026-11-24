@@ -20,10 +20,96 @@ import {
   listDownloadableArtifacts,
   openDownloadableArtifact,
   requestTraceDiagnostics,
+  reserveFileOutput,
+  settleCommittedFileOutputs,
   trackDownloadableArtifact,
   trackUploadedArtifact,
   type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
+
+test.each(['expiry', 'restart'] as const)(
+  'reserved outputs are absent from inventory until commit and stop serving after %s',
+  async (end) => {
+    const runtime = createRuntimeStateHandle();
+    const restarted = createRuntimeStateHandle();
+    vi.useFakeTimers();
+    try {
+      await runtime.run(async () => {
+        const producer = {
+          lifetimeId: 'capture-lifetime',
+          tenantId: 'tenant-a',
+          leaseVerifier: null,
+        };
+        const reader = { tenantId: 'tenant-a' };
+        const pending = reserveFileOutput('screenshot', 'pending.png', producer);
+        const ready = reserveFileOutput('screenshot', 'ready.png', producer);
+        fs.writeFileSync(ready.path, 'finished frame');
+        expect(await listDownloadableArtifacts(reader, {})).toEqual([]);
+        const artifact = ready.commit({ field: 'path', fileName: 'ready.png' });
+        const id = artifact.artifactId;
+        expect(await listDownloadableArtifacts(reader, {})).toEqual([]);
+        await expect(openDownloadableArtifact(id, reader, {})).rejects.toMatchObject({
+          details: { reason: 'RESOURCE_EXPIRED' },
+        });
+        settleCommittedFileOutputs([artifact], true);
+        expect(await listDownloadableArtifacts(reader, {})).toMatchObject([{ id }]);
+
+        if (end === 'expiry') {
+          vi.advanceTimersByTime(15 * 60 * 1000);
+          pending.discard();
+        } else {
+          runtime.dispose();
+        }
+        expect(fs.existsSync(path.dirname(pending.path))).toBe(false);
+        expect(fs.existsSync(path.dirname(ready.path))).toBe(false);
+        expect(await restarted.run(() => listDownloadableArtifacts(reader, {}))).toEqual([]);
+        await expect(
+          (end === 'restart' ? restarted : runtime).run(() =>
+            openDownloadableArtifact(id, reader, {}),
+          ),
+        ).rejects.toMatchObject({
+          code: 'COMMAND_FAILED',
+          details: { reason: 'RESOURCE_EXPIRED' },
+        });
+      });
+    } finally {
+      runtime.dispose();
+      restarted.dispose();
+      vi.useRealTimers();
+    }
+  },
+);
+
+test('a committed output refuses a replacement and leaves the replacement file alone', async () => {
+  const runtime = createRuntimeStateHandle();
+  const reservation = runtime.run(() =>
+    reserveFileOutput('screenshot', 'frame.png', {
+      lifetimeId: 'capture-lifetime',
+      tenantId: undefined,
+      leaseVerifier: null,
+    }),
+  );
+  try {
+    fs.writeFileSync(reservation.path, 'first frame');
+    const id = runtime.run(() => {
+      const artifact = reservation.commit({ field: 'path' });
+      settleCommittedFileOutputs([artifact], true);
+      return artifact.artifactId;
+    });
+    const replacement = path.join(path.dirname(reservation.path), 'next.png');
+    fs.writeFileSync(replacement, 'next frame');
+    fs.renameSync(replacement, reservation.path);
+
+    await expect(runtime.run(() => openDownloadableArtifact(id, {}, {}))).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'RESOURCE_EXPIRED' },
+    });
+    expect(fs.readFileSync(reservation.path, 'utf8')).toBe('next frame');
+  } finally {
+    runtime.dispose();
+    fs.rmSync(path.dirname(reservation.path), { recursive: true, force: true });
+  }
+});
 
 test('an unleased caller-owned trace accepts runner output after the request until the trace stops', async () => {
   const store = makeSessionStore('agent-device-runner-trace-scope-');

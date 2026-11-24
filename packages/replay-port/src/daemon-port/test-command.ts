@@ -366,8 +366,7 @@ function withOriginalTestRefusalGuidance(
  * this rewrites must land under that, matching where the client will actually put the files.
  *
  * Rewriting every artifact path in the response to that root, and registering the directory
- * itself as one downloadable artifact (the same generic `data.artifacts` -> `trackArtifact`
- * mechanism `screenshot`/`record` already use), are host concerns: the scheduler only ever
+ * itself as one downloadable artifact are host concerns: the scheduler only ever
  * reports paths on its own filesystem.
  *
  * A local daemon never sets `clientArtifactPaths` (the client only redirects for a remote one),

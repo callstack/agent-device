@@ -24,7 +24,10 @@ import {
 } from '@agent-device/kernel/contracts';
 import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
-import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import {
+  settleCommittedFileOutputs,
+  type TrackDownloadableArtifact,
+} from '../resources/artifact-tracking.ts';
 import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
@@ -718,6 +721,7 @@ async function dispatchGenericForLockedScope(params: {
   const runtimeExecution = await resolveGenericRuntimeExecution({
     req: lockedScope.req,
     session,
+    lifetimeId: ref.lifetime.journalId,
     hostCwd: sessionStore.host.cwd,
     // `scroll` parses its distance/timing flags during admission, so the resolved context is
     // needed before the dispatcher builds its own.
@@ -787,6 +791,7 @@ async function finalizeRequestBindingCleanup(
   let finalResponse = response;
   try {
     await scope[Symbol.asyncDispose]();
+    if (response.ok && scope.command === 'screenshot') scope.throwIfCanceled();
   } catch (cleanupError) {
     if (response.ok) {
       finalResponse = finalizeThrownRequestError(cleanupError);
@@ -802,7 +807,9 @@ async function finalizeRequestBindingCleanup(
       flushDiagnosticsToSessionFile({ force: true });
     }
   }
-  return finalizeRequestExecutionScope(scope, finalResponse);
+  const finalized = finalizeRequestExecutionScope(scope, finalResponse);
+  if (response.ok) settleCommittedFileOutputs(response.data?.artifacts, finalized.ok);
+  return finalized;
 }
 
 // Phase 4 (agent-cost) success-path grafts: a leveled response view and an
