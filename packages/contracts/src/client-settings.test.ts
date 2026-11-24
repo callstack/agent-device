@@ -51,16 +51,12 @@ describe('public client permission vocabulary', () => {
     expectTypeOf<Grant<'accessibility'> & { mode: 'full' }>().not.toExtend<SettingsUpdateOptions>();
   });
 
-  test('accepts union-valued permission targets and actions without a mode', () => {
-    type Update = {
-      setting: 'permission';
-      permission: (typeof MOBILE_TARGETS)[number] | (typeof MACOS_ONLY_TARGETS)[number];
-      state: 'grant' | 'deny' | 'reset';
-      platform: 'ios' | 'android';
-      app?: string;
-    };
-    expectTypeOf<Update>().toExtend<SettingsUpdateOptions>();
-    expectTypeOf<Update & { mode: 'limited' }>().not.toExtend<SettingsUpdateOptions>();
+  test('narrows permission options to the photos arm', () => {
+    expectTypeOf((options: Permission) => {
+      if (options.permission === 'photos') {
+        expectTypeOf(options).toEqualTypeOf<Extract<Permission, { permission: 'photos' }>>();
+      }
+    }).toBeFunction();
   });
 });
 

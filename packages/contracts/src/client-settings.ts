@@ -96,8 +96,13 @@ export type SettingsUpdateOptions =
       app?: string;
     })
   | (PermissionUpdateOptions & { permission: ModedPermissionTarget; mode?: PermissionMode })
-  /** A mode-free update accepts a target union without requiring the caller to narrow it. */
   | (PermissionUpdateOptions & {
-      permission: PermissionTarget;
+      permission: Exclude<PermissionTarget, ModedPermissionTarget>;
       mode?: never;
     });
+
+/** Call input for a permission that has not been narrowed to one target. */
+export type ModeFreePermissionUpdateOptions = PermissionUpdateOptions & {
+  permission: PermissionTarget;
+  mode?: never;
+};
