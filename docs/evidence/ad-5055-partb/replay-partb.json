@@ -5,14 +5,14 @@
     "message": "Daemon request deadline exceeded",
     "hint": "Check completed steps and the current device state before retrying the timed-out operation.",
     "diagnosticId": "mwu5xy7a-e5cc8bac",
-    "logPath": "/tmp/ad-5055-partb/state/sessions/cwd_e93f14f237f7fd4f_harmonyos/requests/619fa17961d1bd2f.ndjson",
+    "logPath": "<state-dir>/sessions/cwd_e93f14f237f7fd4f_harmonyos/requests/619fa17961d1bd2f.ndjson",
     "diagnosticsRecord": {
       "session": "cwd:e93f14f237f7fd4f:harmonyos",
       "requestId": "619fa17961d1bd2f"
     },
     "details": {
       "reason": "daemon_request_timeout",
-      "replayPath": "/Users/stringzhao/workspace/agent-device-wt-5055/docs/evidence/ad-5055-partb.ad",
+      "replayPath": "docs/evidence/ad-5055-partb.ad",
       "step": 1,
       "action": "open",
       "positionals": ["<arg>"],
@@ -23,7 +23,7 @@
         "step": {
           "index": 1,
           "source": {
-            "path": "/Users/stringzhao/workspace/agent-device-wt-5055/docs/evidence/ad-5055-partb.ad",
+            "path": "docs/evidence/ad-5055-partb.ad",
             "line": 3
           }
         },

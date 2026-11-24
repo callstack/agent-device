@@ -72,8 +72,8 @@ earlier analysis below still describes that surface.)
 ### Live run at the PR's code SHA
 
 The run was executed from the worktree at f42463d26 (= 1d6fc063d + docs);
-the post-run evidence commit 66e129b90a touches docs/evidence only, so the
-PR's code SHA stays 1d6fc063d.
+the post-run evidence commits (2b9d87533, 6df63a664) touch docs/evidence
+only, so the PR's code SHA stays 1d6fc063d.
 
 After `pnpm build` and `pnpm clean:daemon`, with the app already in the
 foreground (`aa dump -l` showed `app name [com.sankuai.dianping]` before the

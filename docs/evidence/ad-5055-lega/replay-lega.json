@@ -5,14 +5,14 @@
     "message": "Daemon request deadline exceeded",
     "hint": "Check completed steps and the current device state before retrying the timed-out operation.",
     "diagnosticId": "mwu8qema-6d287442",
-    "logPath": "/tmp/ad5055-lega-r2-130926/state/sessions/cwd_1dd430edfb664982_default/requests/97d848997a368c7f.ndjson",
+    "logPath": "<state-dir>/sessions/cwd_1dd430edfb664982_default/requests/97d848997a368c7f.ndjson",
     "diagnosticsRecord": {
       "session": "cwd:1dd430edfb664982:default",
       "requestId": "97d848997a368c7f"
     },
     "details": {
       "reason": "daemon_request_timeout",
-      "replayPath": "/tmp/ad5055-lega-r2-130926/one-line.ad",
+      "replayPath": "one-line.ad",
       "step": 1,
       "action": "open",
       "positionals": ["<arg>"],
@@ -23,7 +23,7 @@
         "step": {
           "index": 1,
           "source": {
-            "path": "/tmp/ad5055-lega-r2-130926/one-line.ad",
+            "path": "one-line.ad",
             "line": 1
           }
         },

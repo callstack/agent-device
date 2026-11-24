@@ -5,14 +5,14 @@
     "message": "Daemon request deadline exceeded",
     "hint": "Check completed steps and the current device state before retrying the timed-out operation.",
     "diagnosticId": "mwu60q2l-f83095c6",
-    "logPath": "/tmp/ad-5055-partb/state/sessions/cwd_e93f14f237f7fd4f_harmonyos/requests/571738ebf4f3424a.ndjson",
+    "logPath": "<state-dir>/sessions/cwd_e93f14f237f7fd4f_harmonyos/requests/571738ebf4f3424a.ndjson",
     "diagnosticsRecord": {
       "session": "cwd:e93f14f237f7fd4f:harmonyos",
       "requestId": "571738ebf4f3424a"
     },
     "details": {
       "reason": "daemon_request_timeout",
-      "replayPath": "/tmp/ad-5055-partb/one-line.ad",
+      "replayPath": "one-line.ad",
       "step": 1,
       "action": "open",
       "positionals": ["<arg>"],
@@ -23,7 +23,7 @@
         "step": {
           "index": 1,
           "source": {
-            "path": "/tmp/ad-5055-partb/one-line.ad",
+            "path": "one-line.ad",
             "line": 1
           }
         },
