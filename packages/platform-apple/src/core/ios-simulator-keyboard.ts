@@ -10,7 +10,7 @@ const KEYBOARD_PREFERENCES_DOMAIN = 'com.apple.keyboard.preferences';
 // "Type English and <language>" tip on a keyboard with a second typing language.
 const KEYBOARD_INTRO_KEYS = ['DidShowContinuousPathIntroduction', 'MultilingualKeyboardTip'];
 // Longer than the accessibility write's 2 s: right after a first boot, a guest write took 8-12 s,
-// and a write that runs out of time leaves the sheet to appear on the first text entry.
+// and a write stopped at its timeout does not land, so the sheet would still cover the keyboard.
 const KEYBOARD_INTRO_WRITE_TIMEOUT_MS = 15_000;
 
 // Keys written to simulators this host cannot read (a scoped, remote tool provider), so a later
