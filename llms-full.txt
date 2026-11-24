@@ -2528,6 +2528,7 @@ Exact behavior: `agent-device help audit`.
 `audit` checks the current screen for accessibility problems. Findings are review prompts, not failures, and `audit` changes nothing on the device.
 
 * It checks for small targets, controls with no accessible name, controls of one role that share a name, and controls covered by other UI. `agent-device help audit` describes each check and its exemptions.
+* On Android, `audit` also prints an estimated TalkBack swipe order for each app window, as refs. The estimate uses TalkBack’s ordering rules on the captured tree, so it can differ from TalkBack where TalkBack scrolls, moves between windows, or reads web content. Confirm an order problem with TalkBack on a device.
 * On iOS 17+ with the XCTest runner, `audit` also runs Apple’s native accessibility checks. Other targets run the heuristic checks only. Apple’s Dynamic Type and clipped-text checks are not run; `agent-device help accessibility` describes the large text check to use instead.
 * A system alert over the app stops Apple’s checks with `native_audit_blocked_by_alert`. Run `agent-device alert accept` or `agent-device alert dismiss`, then run `audit` again. A runner answer the CLI cannot read fails with `native-audit-invalid-result`.
 * When a native finding matches a captured element, it includes its ref. Otherwise, match its `rect` against a new snapshot before you act. A finding without a rect names no element, so report it without acting.
