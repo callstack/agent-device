@@ -185,7 +185,9 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
   try {
     suiteRequest = {
       ...toReplayTestSuiteRequest(req, sessionName, command.host.cwd),
-      ...(command.publicNetworkOnly ? { suiteInvocationId: randomUUID() } : {}),
+      ...(command.publicNetworkOnly || req.meta?.clientArtifactPaths?.artifactsDir
+        ? { suiteInvocationId: randomUUID() }
+        : {}),
     };
     sourceBundles = requireReplayTestScriptSources(req);
   } catch (error) {

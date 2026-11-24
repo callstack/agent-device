@@ -11,6 +11,7 @@ import {
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
+import { markRequestCanceled } from '@agent-device/host-kit/request';
 import { defineUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createDaemonHttpServer } from './http-server.ts';
@@ -24,9 +25,13 @@ import {
   cleanupDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
 
-test.each([false, true])(
-  'local stop keeps the producing tenant for a remote recording (client destination: %s)',
-  async (clientDestination) => {
+test.each([
+  { clientDestination: false, cancelStop: false },
+  { clientDestination: true, cancelStop: false },
+  { clientDestination: true, cancelStop: true },
+])(
+  'local stop keeps the producing tenant for a remote recording ($clientDestination, stop canceled: $cancelStop)',
+  async ({ clientDestination, cancelStop }) => {
     const root = mkdtempForTestSync('capture-producing-tenant-');
     const tenantId = 'tenant-a';
     const sessionName = tenantScopedSessionName(tenantId, 'capture');
@@ -44,8 +49,14 @@ test.each([false, true])(
       return await start(input);
     });
     const finish = harness.runtime.finish.getMockImplementation()!;
+    const canceledStopId = 'recording-response-canceled';
+    let cancelNextFinish = cancelStop;
     harness.runtime.finish.mockImplementation(async () => {
       const stopped = await finish();
+      if (cancelNextFinish) {
+        cancelNextFinish = false;
+        markRequestCanceled(canceledStopId);
+      }
       const { result } = stopped;
       const chunk = result.outPath.replace(/\.mp4$/, '.part-002.mp4');
       const telemetryPath = deriveRecordingTelemetryPath(result.outPath);
@@ -131,14 +142,32 @@ test.each([false, true])(
       const startBody = await started.json();
       expect(startBody.result?.ok, JSON.stringify(startBody)).toBe(true);
 
-      const stop = async () =>
+      const stop = async (requestId?: string) =>
         await handleRequest({
           token: 'capture-token',
           session: sessionName,
           command: 'record',
           positionals: ['stop'],
-          meta: { leaseId: lease.leaseId },
+          meta: { leaseId: lease.leaseId, requestId },
         });
+      if (cancelStop) {
+        expect(await stop(canceledStopId)).toMatchObject({
+          ok: false,
+          error: { details: { reason: 'request_canceled' } },
+        });
+        const owner = { tenantId, leaseId: lease.leaseId };
+        const retained = await listDownloadableArtifacts(owner, {});
+        expect(retained.map((entry) => entry.artifactType)).toEqual([
+          'screen-recording',
+          'screen-recording-chunk',
+          'screen-recording-telemetry',
+        ]);
+        expect(await listDownloadableArtifacts({ tenantId }, {})).toEqual([]);
+        expect(await listDownloadableArtifacts({ tenantId, leaseId: 'f'.repeat(32) }, {})).toEqual(
+          [],
+        );
+        expect(await listDownloadableArtifacts({ ...owner, tenantId: 'tenant-b' }, {})).toEqual([]);
+      }
       const stopped = await stop();
       expect(stopped.ok, JSON.stringify(stopped)).toBe(true);
       if (!stopped.ok) return;
@@ -187,6 +216,10 @@ test.each([false, true])(
       const sourcePath = harness.runtime.start.mock.calls[0]![0].outputPath;
       // A consumed export cannot be re-minted from a replacement written at that path.
       await expect.poll(() => fs.existsSync(sourcePath)).toBe(false);
+      expect(await stop()).toMatchObject({
+        ok: false,
+        error: { code: 'COMMAND_FAILED', details: { reason: 'RESOURCE_EXPIRED' } },
+      });
       fs.writeFileSync(sourcePath, 'unrelated-replacement');
       expect(await stop()).toMatchObject({ ok: false });
       expect(fs.readFileSync(sourcePath, 'utf8')).toBe('unrelated-replacement');

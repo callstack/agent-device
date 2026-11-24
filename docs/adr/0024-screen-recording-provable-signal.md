@@ -287,15 +287,23 @@ Artifact cleanup is a separate, explicit decision (rule 6).
 Session teardown and failed-start rollback dispose through the backend under the fence.
 They do this only after the manifest records that no recoverable export is lost.
 
-A remote recording reserves a daemon-chosen destination and records the producing lifetime, tenant, and lease verifier or unleased marker at start.
-The completed manifest records the file identities of the video, later chunks, and telemetry.
+A remote recording reserves a daemon-chosen destination at start.
+The manifest records the producing lifetime, a tenant or explicit global marker, and a lease verifier or unleased marker.
+The completed manifest records the verified file identities of the video, later chunks, and telemetry.
+If verification fails, keep the manifest open for an exact-owner retry.
 Explicit stop and teardown commit the verified files under that producer's authority.
+The producer can discover committed recordings after a canceled or failed response.
 The inventory names the session, and the usual delete-after-download and 15-minute expiry apply.
+If registry delivery fails during teardown, expire the verified standalone export at the same deadline.
+Only remove files that still match the original proof.
+A retry for consumed or expired bytes returns `RESOURCE_EXPIRED`.
 A retry can serve the same artifact IDs while the entries remain available.
 Only the original lease credential can list or download leased exports (ADR 0007).
 A manifest from an earlier release must carry its explicit owner before it can serve a remote export.
 A failed teardown finish still runs forced cleanup (disposal intent) and publishes no recording.
 A suite includes recordings committed by cleanup in its result and archive.
+Each remote suite gets a fresh daemon directory.
+A suite recording keeps its own retained copy so downloading the archive cannot consume its recording ID.
 
 ### 2.6 Native markers
 

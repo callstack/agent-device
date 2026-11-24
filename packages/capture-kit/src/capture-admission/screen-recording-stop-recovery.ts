@@ -56,7 +56,11 @@ export function resolveScreenRecordingStopRecovery(
   if (record.status !== 'decoded') return { kind: 'none' };
   assertManifestBelongsToRequest(params, record.envelope);
   if (record.envelope.lifecycle !== 'completed') return { kind: 'open', resourcePath };
-  const completion = readReplayableStoredCompletion(record.envelope.metadata);
+  const { metadata } = record.envelope;
+  const completion =
+    metadata?.remoteCaptureOutput === true
+      ? readStoredCompletion(metadata)
+      : readReplayableStoredCompletion(metadata);
   if (completion === undefined) {
     emitDiagnostic({
       level: 'warn',
@@ -133,6 +137,13 @@ function assertManifestBelongsToRequest(
 export function readReplayableStoredCompletion(
   metadata: JsonObject | undefined,
 ): ScreenRecordingCompletion | undefined {
+  const completion = readStoredCompletion(metadata);
+  return completion && fs.existsSync(completion.outPath) ? completion : undefined;
+}
+
+function readStoredCompletion(
+  metadata: JsonObject | undefined,
+): ScreenRecordingCompletion | undefined {
   const stored = metadata?.[SCREEN_RECORDING_COMPLETION_METADATA_KEY];
   if (
     !isRecord(stored) ||
@@ -142,8 +153,7 @@ export function readReplayableStoredCompletion(
   ) {
     return undefined;
   }
-  const completion = stored as unknown as ScreenRecordingCompletion;
-  return fs.existsSync(completion.outPath) ? completion : undefined;
+  return stored as unknown as ScreenRecordingCompletion;
 }
 
 /** The values a stop response computes on rather than repeats. */

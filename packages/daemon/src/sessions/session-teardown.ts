@@ -265,7 +265,7 @@ async function finishSessionScreenRecording(params: {
   )
     return;
   const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
-  retainLeasedSessionRecording(params.ref, completion, record.envelope);
+  await retainLeasedSessionRecording(params.ref, completion, record.envelope);
 }
 
 async function finishSessionAudioProbe(params: {

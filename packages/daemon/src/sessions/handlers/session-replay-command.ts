@@ -139,7 +139,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   const completed = (name: string) => (attempts.get(name)?.running ? undefined : pinned(name));
   const recordingOutputs = new Map<
     string,
-    ReturnType<typeof collectSuiteRecordingOutputs>[number]
+    Awaited<ReturnType<typeof collectSuiteRecordingOutputs>>[number]
   >();
   const video = createReplayTestVideoOwner({
     suiteRequest: req,
@@ -249,7 +249,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
               });
             } finally {
               if (video && req.flags?.recordVideo) {
-                for (const output of collectSuiteRecordingOutputs(sessionStore, ref)) {
+                for (const output of await collectSuiteRecordingOutputs(sessionStore, ref)) {
                   artifactPaths?.add(output.path);
                   if (artifactPaths) recordingOutputs.set(output.path, output);
                 }

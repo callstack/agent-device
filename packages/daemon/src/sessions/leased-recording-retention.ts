@@ -3,18 +3,17 @@ import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-r
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { errorMessage } from '@agent-device/kernel/errors';
 import type { SessionRef } from '../core/session-state.ts';
-import { settleCommittedFileOutputs } from '../resources/artifact-tracking.ts';
 import {
   isLegacyRemoteRecordingOutput,
   recordingOutputLeaseVerifier,
 } from './handlers/record-runtime-response.ts';
-import { commitRecordingOutputs } from './recording-outputs.ts';
+import { commitRecordingOutputs, expireFailedRecordingExport } from './recording-outputs.ts';
 
-export function retainLeasedSessionRecording(
+export async function retainLeasedSessionRecording(
   ref: SessionRef,
   completion: ScreenRecordingCompletion,
   envelope: DurableResourceEnvelope<'screen-recording'>,
-): void {
+): Promise<void> {
   const lease = ref.session.lease;
   const { metadata } = envelope;
   if (
@@ -27,9 +26,17 @@ export function retainLeasedSessionRecording(
   )
     return;
   try {
-    const artifacts = commitRecordingOutputs(envelope, completion, lease?.tenantId);
-    settleCommittedFileOutputs(artifacts, true);
+    await commitRecordingOutputs(envelope, completion, lease?.tenantId);
   } catch (error) {
+    try {
+      expireFailedRecordingExport(envelope, completion);
+    } catch (cleanupError) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'leased_recording_cleanup_unproven',
+        data: { session: ref.address, error: errorMessage(cleanupError) },
+      });
+    }
     emitDiagnostic({
       level: 'warn',
       phase: 'leased_session_recording_retention_failed',

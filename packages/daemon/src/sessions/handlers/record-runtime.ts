@@ -341,9 +341,13 @@ function withCaptureOwner(
             remoteCaptureOutput: true,
             remoteCapturePath: output.outputPath,
             remoteCaptureLifetime: lifetimeId,
+            remoteCaptureTenantId: tenantId ?? null,
+            ...(suiteCapture && req.meta?.clientArtifactPaths?.artifactsDir
+              ? { remoteCaptureArchive: true }
+              : {}),
           }
         : {}),
-      ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
+      ...(!output.daemonOwned && tenantId ? { remoteCaptureTenantId: tenantId } : {}),
       ...(suiteCapture ? { suiteRecordingLifetime: lifetimeId } : {}),
       remoteCaptureLease: leaseId ? leaseVerifier(leaseId) : UNLEASED_CAPTURE,
     },
@@ -500,7 +504,7 @@ async function stopRecording(
   const envelope = record.status === 'decoded' ? record.envelope : undefined;
   const artifacts =
     envelope?.metadata?.remoteCaptureOutput === true
-      ? commitRecordingOutputs(envelope, completion)
+      ? await commitRecordingOutputs(envelope, completion)
       : undefined;
   return buildRecordingStopResponse(completion, artifacts);
 }

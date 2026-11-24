@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -97,18 +98,30 @@ async function verifyRecordingExport(reservedPath: string, completion: ScreenRec
       true) &&
     (completion.telemetryPath === undefined ||
       completion.telemetryPath === deriveRecordingTelemetryPath(reservedPath));
-  return {
-    completedAt: Date.now(),
-    identities: matchesReservation ? files.map(readRecordingExportIdentity) : [],
-  };
+  if (!matchesReservation) {
+    throw new AppError('COMMAND_FAILED', 'Recording export does not match its reservation.');
+  }
+  const identities = files.map(readRecordingExportIdentity);
+  return { completedAt: Date.now(), identities };
 }
 
-function readRecordingExportIdentity(file: string): string | null {
+function readRecordingExportIdentity(file: string): string {
   try {
-    return recordingExportFileIdentity(fs.lstatSync(file, { throwIfNoEntry: false }));
-  } catch {
-    return null;
+    const identity = recordingExportFileIdentity(fs.lstatSync(file, { throwIfNoEntry: false }));
+    if (identity !== null) return identity;
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Recording export could not be verified.',
+      {
+        retriable: true,
+      },
+      error,
+    );
   }
+  throw new AppError('COMMAND_FAILED', 'Recording export is missing or is not a regular file.', {
+    retriable: true,
+  });
 }
 
 export function recordingExportFileIdentity(stat: fs.Stats | undefined): string | null {

@@ -1,3 +1,4 @@
+import type { RecordingSource } from './artifact-file-storage.ts';
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -139,7 +140,7 @@ export function diagnosticsRecordOwner(recordId: string): string | undefined | n
 
 // --- Downloadable artifact tracking ---
 
-const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
+export const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
 const ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS = 15 * 60 * 1000;
 
 const DOWNLOADABLE_ARTIFACT_RESOURCE: TenantOwnedResourceKind = {
@@ -177,7 +178,11 @@ type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
   leaseVerifier?: string;
-  reservation?: Readonly<{ directory?: string; lifetimeId: string; recording?: true }>;
+  reservation?: Readonly<{
+    directory?: string;
+    lifetimeId: string;
+    recording?: RecordingSource;
+  }>;
   /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
   output: string | undefined;
   artifactType: DaemonArtifactType | undefined;
@@ -242,7 +247,6 @@ export function settleCommittedFileOutputs(
   }
 }
 
-/** What a finished request registers for each artifact it hands back to the client. */
 export type DownloadableArtifactRegistration = {
   artifactPath: string;
   tenantId?: string;
@@ -319,65 +323,76 @@ export function reserveFileOutput(
 function bindFileOutputDelivery(
   artifacts: Map<string, ArtifactEntry>,
   artifact: DaemonArtifact & { artifactId: string },
-  preserveOnFailure = false,
 ) {
   committedFileOutputDeliveries.set(artifact, (delivered) => {
     const entry = artifacts.get(artifact.artifactId);
     if (!entry) return;
     if (delivered) entry.awaitingDelivery = false;
-    else if (!preserveOnFailure) requestArtifactCleanup(artifacts, artifact.artifactId, entry);
+    else requestArtifactCleanup(artifacts, artifact.artifactId, entry);
   });
   return artifact;
 }
 
-/** Commits files from an independently durable recording reservation. */
-export function commitRecordingFileOutputs(
+/** Commits verified recordings independently of the request that delivers their IDs. */
+export async function commitRecordingFileOutputs(
   files: readonly (DaemonArtifact & { path: string; stat: fs.Stats })[],
   producer: FileOutputProducer,
   sessionName: string | undefined,
   completedAt: number,
-  deleteAfterDownload: boolean,
-): DaemonArtifact[] {
+  sourceOutsideArchive: boolean,
+): Promise<DaemonArtifact[]> {
+  const { prepareRecordingDelivery, recordingOutputExpired } =
+    await import('./artifact-file-storage.ts');
   if (completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS <= Date.now()) {
-    throw new AppError('COMMAND_FAILED', 'Recording output retention expired.');
+    throw recordingOutputExpired();
   }
   const artifacts = pendingArtifacts();
-  return files.map(({ path: artifactPath, stat, ...delivery }) => {
-    const output = outputIdentity(stat, true);
-    const owner = producer.leaseVerifier ?? undefined;
-    const existing = [...artifacts].find(
-      ([, entry]) =>
-        !entry.cleanupRequested &&
-        entry.reservation?.lifetimeId === producer.lifetimeId &&
-        entry.artifactPath === artifactPath &&
-        entry.output === output &&
-        entry.tenantId === producer.tenantId &&
-        entry.leaseVerifier === owner,
+  const owner = producer.leaseVerifier ?? undefined;
+  const { directory, deliveries, registrations } = prepareRecordingDelivery(
+    files,
+    (source) => findCommittedRecording(artifacts, producer, source),
+    sourceOutsideArchive,
+  );
+  for (const { artifactId, delivery, recording, artifactPath, output } of registrations) {
+    addArtifactEntry(
+      artifacts,
+      artifactId,
+      {
+        artifactPath,
+        artifactType: delivery.artifactType,
+        fileName: delivery.fileName,
+        tenantId: producer.tenantId,
+        leaseVerifier: owner,
+        sessionName,
+      },
+      output,
+      { remainingEntries: 1, deleteAfterDownload: true },
+      { directory, lifetimeId: producer.lifetimeId, recording },
+      completedAt,
     );
-    const artifactId = existing?.[0] ?? crypto.randomUUID();
-    if (!existing) {
-      addArtifactEntry(
-        artifacts,
-        artifactId,
-        {
-          artifactPath,
-          artifactType: delivery.artifactType,
-          fileName: delivery.fileName,
-          tenantId: producer.tenantId,
-          leaseVerifier: owner,
-          sessionName,
-        },
-        output,
-        { remainingEntries: 1, deleteAfterDownload },
-        { lifetimeId: producer.lifetimeId, recording: true },
-        completedAt,
-      );
-    }
-    return bindFileOutputDelivery(artifacts, { ...delivery, artifactId }, true);
-  });
+  }
+  return deliveries;
 }
 
-/** What a request presents to list or download artifacts. */
+function findCommittedRecording(
+  artifacts: Map<string, ArtifactEntry>,
+  producer: FileOutputProducer,
+  source: RecordingSource,
+): string | undefined {
+  for (const [id, entry] of artifacts) {
+    if (
+      !entry.cleanupRequested &&
+      entry.reservation?.lifetimeId === producer.lifetimeId &&
+      entry.reservation.recording?.sourcePath === source.sourcePath &&
+      entry.reservation.recording.sourceIdentity === source.sourceIdentity &&
+      entry.tenantId === producer.tenantId &&
+      entry.leaseVerifier === (producer.leaseVerifier ?? undefined)
+    )
+      return id;
+  }
+  return undefined;
+}
+
 export type DownloadableArtifactReader = { tenantId?: string; leaseId?: string };
 
 type PreparedDownloadableArtifact = {
@@ -445,7 +460,7 @@ function addArtifactEntry(
     sourceCleanup,
     activeDownloads: new Set(),
     cleanupRequested: false,
-    awaitingDelivery: reservation !== undefined,
+    awaitingDelivery: reservation !== undefined && reservation.recording === undefined,
     createdAt,
     timer,
   });
@@ -482,7 +497,7 @@ function findArtifactSourceCleanup(
 }
 
 /** What tells one output at a path from the next one written there. A directory keeps its identity while its entries change. */
-function outputIdentity(stat: fs.Stats, recording?: true): string {
+function outputIdentity(stat: fs.Stats, recording = false): string {
   const inode = `${stat.dev}:${stat.ino}`;
   if (stat.isDirectory()) return inode;
   const file = `${inode}:${stat.size}:${stat.mtimeMs}`;
@@ -491,12 +506,12 @@ function outputIdentity(stat: fs.Stats, recording?: true): string {
 
 function readOutputIdentity(
   artifactPath: string,
-  reservation?: ArtifactEntry['reservation'],
+  reservation?: { recording?: RecordingSource },
 ): string | undefined {
   try {
     return outputIdentity(
       reservation ? fs.lstatSync(artifactPath) : fs.statSync(artifactPath),
-      reservation?.recording,
+      reservation?.recording !== undefined,
     );
   } catch {
     return undefined;
@@ -607,7 +622,10 @@ function openRegisteredFile(artifactId: string, entry: ArtifactEntry): fs.ReadSt
   );
   try {
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || outputIdentity(stat, entry.reservation?.recording) !== entry.output) {
+    if (
+      !stat.isFile() ||
+      outputIdentity(stat, entry.reservation?.recording !== undefined) !== entry.output
+    ) {
       cleanupDownloadableArtifact(artifactId);
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }
@@ -662,7 +680,8 @@ export async function listDownloadableArtifacts(
 function statRegisteredOutput(artifactId: string, entry: ArtifactEntry): fs.Stats | undefined {
   try {
     const stat = statArtifactPath(entry);
-    if (outputIdentity(stat, entry.reservation?.recording) === entry.output) return stat;
+    if (outputIdentity(stat, entry.reservation?.recording !== undefined) === entry.output)
+      return stat;
   } catch {
     // A missing output is cleaned up like a replaced one.
   }
@@ -711,7 +730,7 @@ function readDownloadableArtifactEntry(
     cleanupDownloadableArtifact(artifactId);
     throw new AppError('COMMAND_FAILED', `Artifact file is missing: ${entry.artifactPath}`);
   }
-  if (outputIdentity(stat, entry.reservation?.recording) !== entry.output) {
+  if (outputIdentity(stat, entry.reservation?.recording !== undefined) !== entry.output) {
     cleanupDownloadableArtifact(artifactId);
     throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   }
@@ -925,8 +944,6 @@ function cleanupDirectoryArchive(entry: ArtifactEntry): void {
   entry.directoryArchive.cleanup();
   entry.directoryArchive = undefined;
 }
-
-// --- Upload artifact tracking ---
 
 const UPLOAD_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
