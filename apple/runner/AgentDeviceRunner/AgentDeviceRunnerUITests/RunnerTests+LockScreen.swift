@@ -51,7 +51,7 @@ extension RunnerTests {
       lock: lock,
       steps: LockScreenTransitionSteps(
         readState: currentLockScreenState,
-        dispatch: lock ? dispatchLockButton : dispatchUnlock,
+        dispatch: lock ? dispatchLock : dispatchUnlock,
         lockScreenSurfaceIsVisible: lockScreenSurfaceIsVisible,
         passcodePromptIsVisible: passcodePromptIsVisible,
         shouldContinue: { Date() < deadline },
@@ -167,22 +167,38 @@ extension RunnerTests {
     return nil
   }
 
+  /// Presses the lock button on a lit screen. On a blanked screen that is still unlocked, the first
+  /// press can wake the screen instead of locking it, so the screen is woken first and pressed
+  /// again only if it is still unlocked.
+  private func dispatchLock() -> Response? {
+    if screenIsBlanked() {
+      if let refusal = wakeBlankedScreen() { return refusal }
+      guard currentLockScreenState() == .unlocked else { return nil }
+    }
+    return dispatchLockButton()
+  }
+
   /// Wakes a blanked screen with the lock button, then swipes up from the bottom edge, as a person
   /// dismisses the lock screen. A swipe on a blanked screen unlocks SpringBoard but leaves the
   /// screen off. The swipe lands on whatever was in front before the lock, unlike a Home press,
   /// which lands on the Home Screen.
   private func dispatchUnlock() -> Response? {
-    if screenIsBlanked() {
-      if let refusal = dispatchLockButton() { return refusal }
-      let wakeDeadline = Date().addingTimeInterval(Self.lockScreenVerificationTimeout)
-      while screenIsBlanked() && Date() < wakeDeadline {
-        RunLoop.current.run(until: Date().addingTimeInterval(Self.lockScreenPollInterval))
-      }
-    }
+    if screenIsBlanked(), let refusal = wakeBlankedScreen() { return refusal }
     guard currentLockScreenState() == .locked else { return nil }
     let start = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99))
     let end = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
     start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+    return nil
+  }
+
+  /// Presses the lock button to light a blanked screen and waits, within the verification
+  /// timeout, until SpringBoard reports it lit.
+  private func wakeBlankedScreen() -> Response? {
+    if let refusal = dispatchLockButton() { return refusal }
+    let wakeDeadline = Date().addingTimeInterval(Self.lockScreenVerificationTimeout)
+    while screenIsBlanked() && Date() < wakeDeadline {
+      RunLoop.current.run(until: Date().addingTimeInterval(Self.lockScreenPollInterval))
+    }
     return nil
   }
 

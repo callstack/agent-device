@@ -325,7 +325,9 @@ reply produced) and publishes its `details.reason`.
 reports the requested state; a lock also waits for the lock screen's date view or cover sheet
 window, and an unlock for `com.apple.springboard.hasBlankedScreen` to report the screen on. A swipe
 on a dark screen unlocks SpringBoard but leaves the screen off, so `unlockScreen` wakes a dark
-screen with the lock button before it swipes. The verification window starts after the lock button press or the unlock swipe returns,
+screen with the lock button before it swipes. On a dark screen that is still unlocked, the lock
+button can wake the screen instead of locking it, so `lockScreen` wakes it first and presses again
+only if it is still unlocked. The verification window starts after the lock button press or the unlock swipe returns,
 and the runner reads the state once more after its last wait. `LOCK_SCREEN_UNVERIFIED` means the
 state did not change in time, and `LOCK_SCREEN_SECURE` means the unlock swipe raised a passcode
 prompt, which the runner leaves unanswered. Either can follow a dispatch, so the host reports
