@@ -68,10 +68,19 @@ const FOOTER_LANDSCAPE_SIDE_INSET_MAX_DP = 80;
  */
 const FOOTER_MIN_COLUMNS_WITHOUT_SURFACE = 3;
 
+const EXPO_DEV_MENU_VERSION_PATTERN = /^(?:runtime|sdk) version: \S/;
+const EXPO_DEV_MENU_ACTION_LABELS = new Set(['reload', 'go home']);
+
 export function formatReactNativeOverlayWarning(
   nodes: SnapshotNode[],
   surface?: ReactNativeOverlaySurface,
 ): string | undefined {
+  if (showsExpoDevMenuText(nodes)) {
+    return [
+      'Hint: The Expo dev menu looks open. It takes every tap until it closes, so press its Close button first.',
+      "When you launch the app with your own expo-development-client URL, add disableAutoLaunch=1 to it, or turn off the menu's show-at-launch setting.",
+    ].join('\n');
+  }
   const overlay = analyzeReactNativeOverlay(nodes, surface);
   if (!overlay.detected) return undefined;
   return [
@@ -270,6 +279,22 @@ function isSafeCollapsedWarningCoordinateFallback(
 }
 
 /** Reads every text a node carries, lowercased, against a label classifier. */
+/**
+ * The Expo dev menu's header line and one of its first actions, read as text only: the menu's
+ * layout differs by platform, capture and Expo release. Android's interactive capture drops the
+ * header line, so only its full snapshot carries both.
+ */
+function showsExpoDevMenuText(nodes: readonly SnapshotNode[]): boolean {
+  return (
+    nodes.some((node) =>
+      nodeHasMatchingLabel(node, (label) => EXPO_DEV_MENU_VERSION_PATTERN.test(label)),
+    ) &&
+    nodes.some((node) =>
+      nodeHasMatchingLabel(node, (label) => EXPO_DEV_MENU_ACTION_LABELS.has(label)),
+    )
+  );
+}
+
 function nodeHasMatchingLabel(
   node: ReactNativeOverlayNode,
   matches: (label: string) => boolean,
