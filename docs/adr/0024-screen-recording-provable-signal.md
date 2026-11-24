@@ -301,6 +301,9 @@ A retry uses the artifact IDs derived from the persisted reservation and the ori
 The download records consumption before releasing its file.
 Only the original lease credential can list or download leased exports (ADR 0007).
 A manifest must carry explicit producer scope, completion time, and file identities before it can serve a remote export.
+After a daemon upgrade, remote `record stop` returns `LEASE_OUTPUT_MISMATCH` for an older manifest that lacks producer evidence, including for client-destination recordings.
+The daemon keeps any finished files on the host for local recovery.
+The old destination and lease verifier alone cannot prove the identity of the finished files.
 A failed teardown finish still runs forced cleanup (disposal intent) and publishes no recording.
 A suite includes recordings committed by cleanup in its result and archive.
 Each remote suite gets a fresh daemon directory.

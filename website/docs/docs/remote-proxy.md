@@ -110,6 +110,10 @@ After a remote recording finishes, its video, chunks, and telemetry stay availab
 list or download it, including after the session closes. A recorded test suite includes exports
 that finish during cleanup in its artifact archive.
 
+Stop and download active remote recordings before upgrading the daemon. If you upgrade during a
+recording and `record stop` returns `LEASE_OUTPUT_MISMATCH`, recover any finished files from the
+daemon host or start a fresh recording for remote download.
+
 By default, artifacts leave the inventory after download or after 15 minutes.
 `AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress
 can finish before their files are removed, including overlapping downloads of a directory archive.
