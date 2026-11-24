@@ -1,5 +1,4 @@
 import { providerRuntimeInstance } from '@agent-device/contracts/platform-runtime';
-import { isRecord } from '@agent-device/kernel/record';
 import type Limrun from '@limrun/api';
 import type { LimrunIosModel } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
@@ -34,6 +33,7 @@ export async function resolveLimrunRentalRecoveryPrincipal(
 ): Promise<string | undefined> {
   // The SDK retains its constructor-resolved overrides here, including those from its environment.
   // If a future SDK no longer exposes this shape, the runtime cannot prove its recovery scope.
+  const { isRecord } = await import('@agent-device/kernel/record');
   const options: unknown = Reflect.get(client, '_options');
   if (!isRecord(options)) return undefined;
   const defaults = options.defaultHeaders;
