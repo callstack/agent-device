@@ -11,6 +11,7 @@ import {
   simulatorAddressFor,
   type SimulatorAddress,
 } from './core/simctl.ts';
+import { readLaunchctlJobs, uiKitApplicationBundleId } from './core/launchctl-jobs.ts';
 import { runSimctlForDevice } from './core/simctl-execution.ts';
 import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
 
@@ -213,11 +214,8 @@ function readApplicationJob(
   output: string,
   appBundleId: string,
 ): { pid: number; label: string } | undefined {
-  for (const line of output.split('\n')) {
-    const [pidText, , label] = line.trim().split(/\s+/);
-    if (!pidText || !label || !label.startsWith(`UIKitApplication:${appBundleId}[`)) continue;
-    const pid = Number(pidText);
-    if (Number.isSafeInteger(pid) && pid > 0) return { pid, label };
+  for (const { label, pid } of readLaunchctlJobs(output)) {
+    if (pid !== undefined && uiKitApplicationBundleId(label) === appBundleId) return { pid, label };
   }
   return undefined;
 }

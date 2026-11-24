@@ -134,7 +134,6 @@ function resolveIosAppAlias(app: string): string {
 
 // Bounded so an error-path probe never turns into a long wait.
 const IOS_FOREGROUND_APP_PROBE_TIMEOUT_MS = 3_000;
-const UIKIT_APPLICATION_JOB_PATTERN = /UIKitApplication:([^[\s]+)\[/;
 
 /**
  * Identifies the sole installed app currently running on a booted simulator,
@@ -188,12 +187,11 @@ async function listRunningIosSimulatorBundleIds(device: DeviceInfo): Promise<str
   });
   if (result.exitCode !== 0) return [];
 
-  const bundleIds: string[] = [];
-  for (const line of result.stdout.split('\n')) {
-    const match = UIKIT_APPLICATION_JOB_PATTERN.exec(line);
-    if (match?.[1]) bundleIds.push(match[1]);
-  }
-  return bundleIds;
+  const { readLaunchctlJobs, uiKitApplicationBundleId } = await import('./launchctl-jobs.ts');
+  return readLaunchctlJobs(result.stdout).flatMap(({ label }) => {
+    const bundleId = uiKitApplicationBundleId(label);
+    return bundleId ? [bundleId] : [];
+  });
 }
 
 /**

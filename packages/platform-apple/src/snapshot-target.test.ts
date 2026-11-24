@@ -335,3 +335,13 @@ test('a discovery that settles leaves no timer or abort listener behind for its 
     vi.useRealTimers();
   }
 });
+
+test('an app job that launchctl lists without a process is not a target', async () => {
+  const fixture = targetFixture();
+  (fixture.state as { pid: number | string }).pid = '-';
+  await withAppleToolProvider(fixture.provider, async () => {
+    await expect(fixture.resolve(ios, app, signal())).rejects.toMatchObject({
+      details: { reason: 'simulator-target-unavailable' },
+    });
+  });
+});

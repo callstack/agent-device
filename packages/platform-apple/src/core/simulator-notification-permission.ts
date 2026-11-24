@@ -7,6 +7,7 @@ import {
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { PlistValue } from 'plist';
+import { readLaunchctlJobs, uiKitApplicationBundleId } from './launchctl-jobs.ts';
 import { readApplePlist } from './plist.ts';
 
 /** The file under a simulator's data directory where SpringBoard keeps each app's notification settings. */
@@ -97,8 +98,8 @@ export async function setSimulatorNotificationPermission(
   const current = await readSettingsFile(request, settingsPath);
   if ((await recordedStatus(current, appBundleId)) === wanted) return { restarted: false };
   const before = jobProcesses(await listJobs(request));
-  const wasRunning = [...before.keys()].some((label) =>
-    label.startsWith(`UIKitApplication:${appBundleId}[`),
+  const wasRunning = [...before.keys()].some(
+    (label) => uiKitApplicationBundleId(label) === appBundleId,
   );
   try {
     for (const service of NOTIFICATION_SERVICES) {
@@ -175,10 +176,7 @@ async function listJobs({ runSimctl, udid }: NotificationPermissionRequest): Pro
 /** The pid of each job that has a process. */
 function jobProcesses(list: string): Map<string, number> {
   return new Map(
-    list.split('\n').flatMap((line) => {
-      const [pid, , label] = line.trim().split(/\s+/);
-      return label && /^\d+$/.test(pid ?? '') && Number(pid) > 0 ? [[label, Number(pid)]] : [];
-    }),
+    readLaunchctlJobs(list).flatMap(({ label, pid }) => (pid === undefined ? [] : [[label, pid]])),
   );
 }
 

@@ -174,6 +174,23 @@ test('detectSoleRunningIosSimulatorApp cross-references launchctl against instal
   });
 });
 
+test('detectSoleRunningIosSimulatorApp counts an app job that launchctl lists without a process', async () => {
+  mockRunSimctl.mockImplementation(async (args: string[]) => {
+    if (args[0] === 'spawn') {
+      return {
+        exitCode: 0,
+        stdout: 'PID\tStatus\tLabel\n-\t0\tUIKitApplication:com.example.demo[abcd][rb-legacy]',
+      };
+    }
+    return { stdout: JSON.stringify({ 'com.example.demo': { CFBundleDisplayName: 'Demo' } }) };
+  });
+
+  assert.deepEqual(await detectSoleRunningIosSimulatorApp(bootedSimulator), {
+    bundleId: 'com.example.demo',
+    name: 'Demo',
+  });
+});
+
 test('detectSoleRunningIosSimulatorApp refuses to guess between two running apps', async () => {
   mockLaunchctlAndListapps(['com.apple.Preferences', 'com.example.demo']);
 
