@@ -37,7 +37,17 @@ try {
       assert.equal(error.code, 'INVALID_ARGS');
       assert.equal(error.details.reason, 'plugin-not-installed');
       assert.equal(error.details.package, '@agent-device/replay');
-      assert.equal(error.details.installCommand, 'agent-device plugins add @agent-device/replay');
+      const coreVersion = JSON.parse(
+        fs.readFileSync(path.join(core, 'package.json'), 'utf8'),
+      ).version;
+      const sourceBuild = coreVersion.endsWith('-dev');
+      assert.equal(
+        error.details.installCommand,
+        sourceBuild
+          ? 'agent-device plugins add @agent-device/replay@nightly-0.22'
+          : 'agent-device plugins add @agent-device/replay',
+      );
+      assert.equal(error.details.requiredVersion, sourceBuild ? undefined : coreVersion);
       return true;
     });
 } finally {

@@ -144,7 +144,17 @@ test('packed core excludes native execution and a standalone replay plugin uses 
       assert.equal(details.reason, 'plugin-not-installed');
       assert.equal(details.backend, 'ad');
       assert.equal(details.package, '@agent-device/replay');
-      assert.equal(details.installCommand, 'agent-device plugins add @agent-device/replay');
+      const coreVersion = JSON.parse(
+        fs.readFileSync(path.join(core, 'package.json'), 'utf8'),
+      ).version;
+      const sourceBuild = coreVersion.endsWith('-dev');
+      assert.equal(
+        details.installCommand,
+        sourceBuild
+          ? 'agent-device plugins add @agent-device/replay@nightly-0.22'
+          : 'agent-device plugins add @agent-device/replay',
+      );
+      assert.equal(details.requiredVersion, sourceBuild ? undefined : coreVersion);
       assertIsolatedDaemonStopped(cli, consumer, managedEnv, managedStateDir);
 
       const added = runCli(cli, ['plugins', 'add', pluginTarball, '--json'], consumer, managedEnv);
