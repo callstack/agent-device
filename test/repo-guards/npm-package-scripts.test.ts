@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCmdSync } from '@agent-device/host-kit/command';
 import { test } from 'vitest';
 import { getCheckSpec } from '../../scripts/check-affected/checks.ts';
 
@@ -143,18 +142,4 @@ test('MCP registry publishing verifies an immutable publisher before OIDC login'
   assert.ok(extractionIndex < smokeCheckIndex, 'installation must precede the version smoke check');
   assert.ok(smokeCheckIndex < loginIndex, 'version smoke check must precede OIDC login');
   assert.ok(loginIndex < publishIndex, 'OIDC login must precede publish');
-});
-
-test('npm package includes only the root README and retains bridge sources', () => {
-  const { stdout } = runCmdSync('npm', ['pack', '--dry-run', '--ignore-scripts', '--json'], {
-    cwd: repoRoot,
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  const [packed] = JSON.parse(stdout) as [{ files: { path: string }[] }];
-  const paths = packed.files.map((file) => file.path);
-  assert.deepEqual(
-    paths.filter((file) => /(^|\/)readme\.md$/i.test(file)),
-    ['README.md'],
-  );
-  assert.ok(paths.some((file) => file.startsWith('apple/snapshot-bridge/') && file.endsWith('.m')));
 });

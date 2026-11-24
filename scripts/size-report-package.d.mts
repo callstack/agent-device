@@ -2,6 +2,7 @@
 // it is not in the typechecked program). TypeScript resolves this file when a checked module
 // imports `./size-report-package.mjs`; keep it in step with the exports there.
 export type NpmPackEntry = Readonly<{ path: string; size: number }>;
+export function assertSnapshotBridgeAssets(presentPaths: Iterable<string>, context: string): void;
 export function assertBundledLicenseNotices(
   entries: readonly NpmPackEntry[],
   options?: Readonly<{ noticesRoot?: string; context?: string }>,

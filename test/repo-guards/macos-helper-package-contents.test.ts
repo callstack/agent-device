@@ -10,6 +10,7 @@ import {
   macosHelperPackFailures,
   readMacosHelperTestTargets,
 } from '../../scripts/lib/macos-helper-pack.mjs';
+import { assertSnapshotBridgeAssets } from '../../scripts/size-report-package.mjs';
 
 // The `@agent-device/macos` package ships `macos-helper` and builds it on the user's machine. Its
 // manifest declares the test targets, and `files` ships only each target's PackStub.swift: SwiftPM
@@ -80,9 +81,15 @@ test('the macOS plugin pack is a buildable helper package with one PackStub.swif
   );
 });
 
-test('the core pack carries no macOS helper', () => {
+test('the core pack retains bridge assets and ships only the root README', () => {
+  const paths = packedPaths(repoRoot);
+  assertSnapshotBridgeAssets(paths, 'Core pack snapshot bridge');
   assert.deepEqual(
-    packedPaths(repoRoot).filter((entryPath) => /(?:^|\/)macos-helper(?:\/|$)/.test(entryPath)),
+    paths.filter((entryPath) => /^readme(?:\.|$)/i.test(path.posix.basename(entryPath))),
+    ['README.md'],
+  );
+  assert.deepEqual(
+    paths.filter((entryPath) => /(?:^|\/)macos-helper(?:\/|$)/.test(entryPath)),
     [],
   );
 });
