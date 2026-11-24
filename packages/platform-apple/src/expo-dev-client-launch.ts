@@ -29,7 +29,10 @@ export async function resolveExpoDevClientLaunchUrl(
     if (isRequestCanceledError(error)) throw error;
     return undefined;
   }
-  return scheme
-    ? `${scheme}://expo-development-client/?url=${encodeURIComponent(serverUrl.toString().replace(/\/+$/, ''))}`
-    : undefined;
+  if (!scheme) return undefined;
+  const url = encodeURIComponent(serverUrl.toString().replace(/\/+$/, ''));
+  // `disableAutoLaunch=1` keeps the dev menu from opening over the app at launch. Expo documents it
+  // next to `url` for every SDK, and it also turns off the app's saved show-at-launch setting:
+  // https://docs.expo.dev/develop/development-builds/development-workflows/
+  return `${scheme}://expo-development-client/?url=${url}&disableAutoLaunch=1`;
 }

@@ -172,7 +172,7 @@ test('binary installed metadata uses shared Expo launch hints and explicit URL p
   expect(vi.mocked(f.session.client.simctl).mock.calls.map(([args]) => args)).toContainEqual([
     'openurl',
     'booted',
-    'exp+example://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081',
+    'exp+example://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081&disableAutoLaunch=1',
   ]);
   await lifecycle.openApplication({ ...input, runtimeLaunchUrl: 'custom://explicit' });
   const urls = vi

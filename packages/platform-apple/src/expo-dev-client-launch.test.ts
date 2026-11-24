@@ -33,12 +33,12 @@ test.each([
   [
     'an http server',
     undefined,
-    'exp+dev-slug://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8085',
+    'exp+dev-slug://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8085&disableAutoLaunch=1',
   ],
   [
     'an https server',
     'https://metro.example.test',
-    'exp+dev-slug://expo-development-client/?url=https%3A%2F%2Fmetro.example.test',
+    'exp+dev-slug://expo-development-client/?url=https%3A%2F%2Fmetro.example.test&disableAutoLaunch=1',
   ],
 ])('points an expo-dev-client at %s', async (_name, bundleUrl, expected) => {
   resolveScheme.mockResolvedValue('exp+dev-slug');
@@ -59,7 +59,7 @@ test('points at the server origin of a bundle URL, not at the bundle itself', as
   });
 
   await expect(resolveExpoDevClientLaunchUrl(SIMULATOR, input)).resolves.toBe(
-    'exp+dev-slug://expo-development-client/?url=http%3A%2F%2F10.0.0.5%3A8090',
+    'exp+dev-slug://expo-development-client/?url=http%3A%2F%2F10.0.0.5%3A8090&disableAutoLaunch=1',
   );
 });
 
@@ -70,7 +70,7 @@ test('keeps a single pair of brackets around an IPv6 bundle URL host', async () 
   });
 
   await expect(resolveExpoDevClientLaunchUrl(SIMULATOR, input)).resolves.toBe(
-    'exp+dev-slug://expo-development-client/?url=http%3A%2F%2F%5B%3A%3A1%5D%3A8090',
+    'exp+dev-slug://expo-development-client/?url=http%3A%2F%2F%5B%3A%3A1%5D%3A8090&disableAutoLaunch=1',
   );
 });
 
@@ -85,6 +85,15 @@ test('keeps the server mount when opening a path-prefixed Expo bundle', async ()
 
   const launchUrl = await resolveExpoDevClientLaunchUrl(SIMULATOR, input);
   expect(new URL(launchUrl!).searchParams.get('url')).toBe('https://metro.example.test/tenant-42');
+});
+
+test('asks the dev client to keep its menu closed, beside the server URL rather than inside it', async () => {
+  resolveScheme.mockResolvedValue('exp+dev-slug');
+
+  const launchUrl = new URL((await resolveExpoDevClientLaunchUrl(SIMULATOR, openInput()))!);
+
+  expect(launchUrl.searchParams.get('disableAutoLaunch')).toBe('1');
+  expect(launchUrl.searchParams.get('url')).toBe('http://127.0.0.1:8085');
 });
 
 test.each([
