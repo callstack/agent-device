@@ -115,7 +115,7 @@ test('connect reports a failed selected plugin even when its error text describe
   assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
   assert.equal(error.details.installCommand, undefined);
   assert.match(error.hint, /plugins list --json/);
-  assert.match(error.hint, /plugins add @agent-device\/testmu@nightly-0.22/);
+  assert.match(error.hint, /plugins update @agent-device\/testmu/);
 });
 
 test('connect does not call a selected plugin missing when it has no connection callbacks', async () => {
@@ -157,11 +157,15 @@ test('a 0.22 nightly core prescribes the matching channel plugin release', async
   assert.ok(help?.includes(`${error.details.installCommand}\n`));
 });
 
-test('a main-channel 0.22 nightly repairs a failed BrowserStack selection with the matching release', async () => {
+test('connect recommends a pin-preserving repair for a failed BrowserStack selection', async () => {
   const version = '0.22.0-nightly.20261118.186';
   vi.mocked(readVersion).mockReturnValue(version);
   const { home, env } = pluginHome();
   selectPlugin(home, '@agent-device/browserstack', 'throw new Error("Plugin failed to load.");');
+  const configPath = path.join(home, 'config.json');
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  config.plugins['@agent-device/browserstack'].version = '0.22.0-nightly.20261117.185';
+  fs.writeFileSync(configPath, JSON.stringify(config));
   const result = await runCliCapture(
     ['connect', 'browserstack', '--platform', 'android', '--session', 'checkout', '--json'],
     { cwd: home, env, stateDirPrefix: 'connect-nightly-broken-browserstack-' },
@@ -170,7 +174,8 @@ test('a main-channel 0.22 nightly repairs a failed BrowserStack selection with t
   assert.deepEqual(result.calls, []);
   const { error } = JSON.parse(result.stdout);
   assert.equal(error.details.reason, 'plugin-unavailable');
-  assert.ok(error.hint.includes('plugins add @agent-device/browserstack'));
+  assert.match(error.hint, /plugins update @agent-device\/browserstack/);
+  assert.doesNotMatch(error.hint, /plugins add/);
 });
 
 test('a stable core prescribes the plain package for the same plugin', async () => {
@@ -215,6 +220,7 @@ test('connect reports an unreadable plugin selection instead of prescribing a ne
   assert.equal(error.details.reason, 'plugin-unavailable');
   assert.match(error.details.failedPlugins[0].error.message, /Plugin config/);
   assert.equal(error.details.installCommand, undefined);
+  assert.doesNotMatch(error.hint, /plugins (add|update)/);
 });
 
 test.each([

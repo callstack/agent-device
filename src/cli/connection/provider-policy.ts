@@ -15,7 +15,6 @@ import {
   providerPluginAdmission,
   providerPluginConnectionCapabilities,
 } from '@agent-device/contracts/provider-plugin-catalog';
-import { providerPluginInstallCommand } from '../../commands/provider-plugin-catalog.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
 export type ConnectProvider = string;
@@ -181,12 +180,16 @@ function unavailableConnectPluginError(
     (entry) => entry === selected || entry.package === undefined,
   );
   if (selected || failures.length > 0) {
+    const repair =
+      selected?.package === declaration.package
+        ? ` or run agent-device plugins update ${declaration.package}`
+        : '';
     return new AppError('UNSUPPORTED_OPERATION', `${declaration.label} plugin is unavailable.`, {
       reason: PLUGIN_INSTALLATION_REASONS.unavailable.reason,
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run ${providerPluginInstallCommand(declaration)}, then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration${repair}, then retry your original command.`,
     });
   }
   return new AppError(
