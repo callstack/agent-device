@@ -173,8 +173,7 @@ async function openIosSimulatorUrl(
     throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE);
   }
   await ensureBootedSimulator(device);
-  const { prepareIosSimulatorAccessibility } = await import('./ios-simulator-accessibility.ts');
-  await prepareIosSimulatorAccessibility(device);
+  await prepareIosSimulatorForLaunch(device);
   const args = buildSimctlArgsForDevice(device, ['openurl', device.id, url]);
   try {
     await runXcrun(args, {
@@ -196,6 +195,14 @@ async function openIosSimulatorUrl(
       },
     );
   }
+}
+
+/** Runs after boot and before an app or URL launch on a simulator. */
+async function prepareIosSimulatorForLaunch(device: DeviceInfo): Promise<void> {
+  const { prepareIosSimulatorKeyboardIntros } = await import('./ios-simulator-keyboard.ts');
+  await prepareIosSimulatorKeyboardIntros(device);
+  const { prepareIosSimulatorAccessibility } = await import('./ios-simulator-accessibility.ts');
+  await prepareIosSimulatorAccessibility(device);
 }
 
 export async function openIosDevice(device: DeviceInfo): Promise<void> {
@@ -273,8 +280,7 @@ async function launchIosSimulatorApp(
 ): Promise<void> {
   await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
-  const { prepareIosSimulatorAccessibility } = await import('./ios-simulator-accessibility.ts');
-  await prepareIosSimulatorAccessibility(device);
+  await prepareIosSimulatorForLaunch(device);
 
   let consecutiveFBSFailures = 0;
   const MAX_CONSECUTIVE_FBS_FAILURES = 3;
