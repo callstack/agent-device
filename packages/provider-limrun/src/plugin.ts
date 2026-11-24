@@ -58,7 +58,7 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
                   module.createLimrunRuntimeDependencies(host),
                 ),
           ]);
-          return register.createLimrunRuntime(
+          const registration = register.createLimrunRuntime(
             {
               ...credentials,
               ...(host.stateDir === undefined
@@ -71,6 +71,8 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
             dependencies,
             { includePlatformModule: true },
           );
+          await registration.runtime.prepareRentalRecovery();
+          return registration;
         },
       },
     ],

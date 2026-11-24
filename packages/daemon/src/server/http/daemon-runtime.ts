@@ -299,11 +299,15 @@ async function startDaemonRuntimeOnHost(
   installProviderDeviceAdmission(deps.providerDeviceAdmission);
   installInteractorResolution(deps.interactorResolution);
   const { createLeaseSessionEnd } = await import('../lease-session-end.ts');
+  const { createProviderRentalJournal } =
+    await import('../../resources/provider-rental-journal.ts');
+  const providerRentals = createProviderRentalJournal(baseDir, deps.providerRentalPolicy);
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
     recoverExpiredLease: deps.recoverExpiredLease,
     stateDir: baseDir,
+    providerRentals,
     recoverableProviderIds: deps.recoverableProviderIds,
     onRecovered: (lease) =>
       leaseRegistry.beginLeaseEnd(lease, { sessionsSettled: true, providerRelease: 'pending' }),
@@ -313,11 +317,13 @@ async function startDaemonRuntimeOnHost(
     onReleased: (lease) => {
       if (leaseRegistry.confirmLeaseEnd(lease.leaseId, 'providerReleased'))
         leaseSessionEnd.forgetClosing(lease.leaseId);
+      return !leaseRegistry.isProviderRentalRetirementPending(lease.leaseId);
     },
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
   });
   rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
   const leaseRegistry = new LeaseRegistry({
+    providerRentals,
     maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
     defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
@@ -361,12 +367,10 @@ async function startDaemonRuntimeOnHost(
         )
         .finally(finishProvider);
     },
+    onProviderReleaseConfirmed: expiredProviderLeaseReleaser.confirmRelease,
     onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
   });
-  // The registry only notices an expired lease when something calls it; this sweep ends an
-  // abandoned lease (and, through `onLeaseExpired`, its session and claim) without a later request.
   const leaseExpirySweep = setInterval(() => {
-    // The sweep runs outside any request, so the releases it starts report into a daemon scope.
     void withDaemonDiagnosticsScope({ logPath }, () => {
       try {
         leaseRegistry.consumeExpiredLeases();
@@ -547,8 +551,6 @@ async function startDaemonRuntimeOnHost(
 
   // Reaps this daemon process when it sits fully idle (no open sessions, no
   // in-flight requests, no active recording) past AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS.
-  // `close` is defined below but only invoked asynchronously by the timer,
-  // well after this closure captures it.
   const inFlightRequests = new Set<ReturnType<DaemonInvokeFn>>();
   // Who owns this process decides what it publishes and which lifecycle request it answers. A host
   // that starts the runtime passes `embedded`; the daemon executable leaves it detached.
@@ -676,12 +678,12 @@ async function startDaemonRuntimeOnHost(
     scope: createRecoveryPlatformScope(),
     onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
   });
+  providerRentals.restore();
   const providerRecovery = withDaemonDiagnosticsScope({ logPath }, async () => {
     await expiredProviderLeaseReleaser.recoverInherited((diagnostic) =>
       startupDiagnostics.push(diagnostic),
     );
   }).catch((error) => {
-    // Startup has no request scope, so the failure goes to the daemon log directly.
     void emitDaemonDiagnostic(logPath, 'provider_lease_startup_recovery_failed', {
       error: error instanceof Error ? error.message : String(error),
     }).catch(() => undefined);
@@ -696,8 +698,6 @@ async function startDaemonRuntimeOnHost(
     openWebSessionNames: openWebSessionNames(sessionStore),
     ownedProcessRecords: deps.ownedProcessRecords,
   });
-  // Marker-gated lifecycle recovery owns test-IME orphan repair. Its implementation remains
-  // lazy until the marker exists, so a normal daemon startup does not load or probe adb.
   void applicationLifecycle.recoverStartupResources({ stateDir: baseDir }).catch((error) => {
     void emitDaemonDiagnostic(logPath, 'daemon_lifecycle_startup_recovery_failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -796,8 +796,7 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
     clearInterval(leaseExpirySweep);
     stopMetadataLossWatch();
-    // Cancellation and the listener close run together: a connection held by a request that ignores
-    // cancellation is force-closed at the same budget the drain gives it.
+    // Close uncooperative connections within the request drain budget.
     const serversClosed = closeDaemonServers(servers, requestDrainTimeoutMs);
     if (closeOptions.cause) await emitFatalDiagnostic(closeOptions.cause);
     const requests = await drainInFlightRequests();
@@ -928,6 +927,7 @@ async function startDaemonRuntimeOnHost(
       report = await closeSteps(closeOptions);
       return report;
     } finally {
+      expiredProviderLeaseReleaser.shutdown();
       await Promise.allSettled([
         settleWithin(async () => await releasePngWorker(), DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
         Promise.resolve().then(() => pluginClose.close()),
@@ -952,8 +952,6 @@ async function startDaemonRuntimeOnHost(
     }
   };
 
-  // Idle reap, external callers and the executable's signal handlers all close through here, and
-  // none of them runs inside the startup scope, so the close re-enters it.
   let closing: Promise<ShutdownReport> | undefined;
   let settleClosed: { resolve(report: ShutdownReport): void; reject(error: unknown): void };
   const closed = new Promise<ShutdownReport>((resolve, reject) => {
@@ -975,7 +973,6 @@ async function startDaemonRuntimeOnHost(
     return closing;
   };
 
-  // A detached daemon leaves when it loses its registration.
   stopMetadataLossWatch = armDaemonMetadataLossWatch(
     baseDir,
     infoPath,

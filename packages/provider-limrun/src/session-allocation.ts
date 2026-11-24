@@ -4,8 +4,13 @@ import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { createLimrunAndroidSession, type LimrunAndroidSession } from './android.ts';
-import { fromLimrunOrgApi, LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
-import { buildLimrunDevice, LIMRUN_PROFILE_FIELDS, type LimrunIosModel } from './device.ts';
+import { fromLimrunOrgApi, LIMRUN_CLIENT_ID, LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
+import {
+  buildLimrunDevice,
+  LIMRUN_PROFILE_FIELDS,
+  LIMRUN_PROVIDER,
+  type LimrunIosModel,
+} from './device.ts';
 import { createLimrunIosSession, type LimrunIosSession } from './ios.ts';
 import {
   assertLimrunUploadedAppAccess,
@@ -40,6 +45,20 @@ type SessionAllocationParams = Readonly<{
   app?: LimrunAppAsset;
   dependencies: LimrunRuntimeDependencies;
 }>;
+
+export function limrunRentalMetadata(lease: DeviceLease, rentalKey?: string) {
+  return {
+    displayName: `agent-device-${lease.tenantId}-${lease.runId}`,
+    labels: {
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseId: lease.leaseId,
+      ...(rentalKey ? { rentalKey } : {}),
+      provider: lease.leaseProvider ?? LIMRUN_PROVIDER,
+      source: LIMRUN_CLIENT_ID,
+    },
+  };
+}
 
 export function rejectRefusedLimrunProfileFields(context?: LeaseLifecycleContext): void {
   rejectRefusedProviderProfileFields(context?.flags, LIMRUN_PROFILE_FIELDS);

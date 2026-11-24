@@ -38,6 +38,7 @@ test('a create that answers late joins the delete its disposal already started',
     return { failure: undefined, cause: undefined };
   });
   const host: LimrunDisposalHost = {
+    findRentalInstance: async () => undefined,
     deleteInstance: deleteHost,
     endCapture: async () => undefined,
   };
@@ -83,6 +84,7 @@ test("a refused delete reports its own error as the refusal's cause", async () =
   await import('./lifecycle-budget.ts');
   const refusal = new Error('Limrun refused to delete the instance');
   const host: LimrunDisposalHost = {
+    findRentalInstance: async () => undefined,
     deleteInstance: async () => ({
       failure: 'Limrun refused to delete the instance',
       cause: refusal,
@@ -269,6 +271,7 @@ test('a take-refusal for an unconfirmed delete does not call the instance ended'
 test('a late create whose delete Limrun refused keeps disposal uncertain', async () => {
   await import('./lifecycle-budget.ts');
   const host: LimrunDisposalHost = {
+    findRentalInstance: async () => undefined,
     deleteInstance: async () => ({
       failure: 'Limrun refused to delete the instance',
       cause: undefined,
@@ -307,6 +310,7 @@ test('a late create whose delete Limrun refused keeps disposal uncertain', async
 test('a capture end that spends its tunnel budget is still joined in time', async () => {
   await import('./lifecycle-budget.ts');
   const host: LimrunDisposalHost = {
+    findRentalInstance: async () => undefined,
     deleteInstance: async () => ({ failure: undefined, cause: undefined }),
     // The tunnel answers at the very end of its own 20 s budget, then the record is written.
     endCapture: async () => {
@@ -345,6 +349,7 @@ test('a rejected capture report preserves its error without changing confirmed d
     Promise.resolve({ status: 'failed', error: new Error('boot failed') }),
   );
   const host: LimrunDisposalHost = {
+    findRentalInstance: async () => undefined,
     deleteInstance: async () => ({ failure: undefined, cause: undefined }),
     endCapture: async () => {
       throw refusal;
@@ -363,6 +368,7 @@ test('an unanswered create does not make a confirmed instance delete uncertain',
   });
   const owner = ownerWithRentedInstance(creation);
   const host: LimrunDisposalHost = {
+    findRentalInstance: async () => undefined,
     deleteInstance: async () => ({ failure: undefined, cause: undefined }),
     endCapture: async () => undefined,
   };

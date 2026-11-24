@@ -164,9 +164,11 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
             ...leaseLifecycleContext(req, args.host),
+            rental: leaseRegistry.providerRentalContext(lease),
             signal: getRequestSignal(requestId),
             deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
           });
+          leaseRegistry.persistProviderRentalInstance(lease);
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
           if (!reused) {
@@ -357,7 +359,7 @@ async function settleFailedFirstAllocation(
 ): Promise<ProviderLeaseRelease> {
   if (error instanceof AppError && error.details?.releaseStatus === 'confirmed') {
     registry.beginLeaseEnd(lease, { sessionsSettled: true, providerRelease: 'confirmed' });
-    registry.confirmLeaseEnd(lease.leaseId, 'providerReleased');
+    registry.confirmRequestProviderRelease(lease);
     return { release: 'confirmed' };
   }
   return await settleAllocationRelease(lease, provider, registry, undefined).catch(

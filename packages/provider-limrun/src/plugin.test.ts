@@ -32,6 +32,7 @@ vi.mock('./runtime.ts', () => ({
     return {
       runtime: {
         provider: 'limrun',
+        prepareRentalRecovery: async () => {},
         shutdown: async () => undefined,
         leaseLifecycle: {},
         ownsDevice: () => false,

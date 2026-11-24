@@ -1,4 +1,7 @@
-import { expect, test } from 'vitest';
+import Limrun from '@limrun/api';
+import { expect, test, vi } from 'vitest';
+import { limrunPlugin } from './plugin.ts';
+import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 
 test('derives a stable opaque identity without exposing the API key', () => {
@@ -46,3 +49,120 @@ test('keeps the durable digest of an account and of an attached instance', () =>
     }),
   ).toBe('principal-5e4bdc0668a05c1c16f984e4655fc1d1a3bcd25b5965e3b9f3a40838121d5110');
 });
+
+test('rental recovery binds routing but ignores generated client and SDK telemetry', async () => {
+  const [provider] = limrunPlugin({
+    createDependencies: (host) => ({
+      ...stubLimrunRuntimeDependencies(),
+      clientVersion: host.clientVersion,
+    }),
+  }).contributes;
+  if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
+  const principal = async (env: Record<string, string>, clientVersion = '1.0.0') => {
+    const setup = await provider.setup({
+      env,
+      options: {},
+      clientVersion,
+      diagnostics: { emit: () => {} },
+      createError: (_code, message) => {
+        throw new Error(message);
+      },
+      runHostCommand: async () => {
+        throw new Error('Expected no host command');
+      },
+    });
+    if (!('runtime' in setup)) throw new Error('Expected a configured Limrun runtime');
+    return setup.runtime.rentalRecoveryPrincipal;
+  };
+  const buildRequest = Limrun.prototype.buildRequest;
+  let sdkVersion = 'sdk-1';
+  const builtRequest = vi
+    .spyOn(Limrun.prototype, 'buildRequest')
+    .mockImplementation(async function (this: Limrun, ...args: Parameters<typeof buildRequest>) {
+      const built = await buildRequest.call(this, ...args);
+      built.req.headers.set('x-stainless-package-version', sdkVersion);
+      return built;
+    });
+  vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
+  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', undefined);
+  try {
+    const first = await principal({ LIMRUN_API_KEY: 'fixture-key', LIMRUN_IOS_MODEL: 'iphone' });
+    expect(first).toMatch(/^principal-[a-f0-9]{64}$/);
+    expect(
+      (await principal({
+        LIMRUN_API_KEY: 'fixture-key',
+        LIMRUN_CUSTOM_HEADERS: 'X-Host-Only: ignored',
+      })) === first,
+    ).toBe(true);
+    sdkVersion = 'sdk-2';
+    expect((await principal({ LIMRUN_API_KEY: 'fixture-key' }, '2.0.0')) === first).toBe(true);
+    expect(
+      await principal({
+        LIMRUN_API_KEY: 'fixture-key',
+        LIMRUN_IOS_MODEL: 'ipad',
+        LIMRUN_KEEP_ALIVE: '1',
+      }),
+    ).toBe(first);
+    expect(await principal({ LIMRUN_API_KEY: 'other-key' })).not.toBe(first);
+
+    vi.stubEnv('LIMRUN_BASE_URL', 'https://b.example.test');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
+    vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'Authorization: Bearer alternate-fixture-credential');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-a\nX-Route: region-a');
+    const routed = await principal({ LIMRUN_API_KEY: 'fixture-key' });
+    expect(routed).not.toBe(first);
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Route: region-a\nX-Account: account-a');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).toBe(routed);
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-b\nX-Route: region-a');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(routed);
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'User-Agent: operator-route-a');
+    const customAgent = await principal({ LIMRUN_API_KEY: 'fixture-key' });
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'User-Agent: operator-route-b');
+    expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(customAgent);
+    expect(
+      await principal({
+        LIM_IOS_INSTANCE_URL: 'https://attached.example.test',
+        LIM_IOS_INSTANCE_TOKEN: 'fixture-token',
+      }),
+    ).toBeUndefined();
+  } finally {
+    builtRequest.mockRestore();
+    vi.unstubAllEnvs();
+  }
+});
+
+test.each(['SDK', 'host'] as const)(
+  'keeps Limrun registered with a malformed %s header setting',
+  async (source) => {
+    const [provider] = limrunPlugin({
+      createDependencies: stubLimrunRuntimeDependencies,
+    }).contributes;
+    if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
+    const customHeaders = 'Invalid Header Name: fixture';
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', source === 'SDK' ? customHeaders : undefined);
+    try {
+      const setup = await provider.setup({
+        env: {
+          LIMRUN_API_KEY: 'fixture-key',
+          ...(source === 'host' ? { LIMRUN_CUSTOM_HEADERS: customHeaders } : {}),
+        },
+        options: {},
+        clientVersion: 'test-version',
+        diagnostics: { emit: () => {} },
+        createError: (_code, message) => {
+          throw new Error(message);
+        },
+        runHostCommand: async () => {
+          throw new Error('Expected no host command');
+        },
+      });
+      if (!('runtime' in setup)) throw new Error('Expected a configured Limrun runtime');
+      expect(setup.runtime.provider).toBe('limrun');
+      expect(setup.runtime.rentalRecoveryPrincipal !== undefined).toBe(source === 'host');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
+);

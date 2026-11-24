@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import type { DeviceLease } from '@agent-device/contracts/device';
 import { createAgentDeviceClient } from '@agent-device/client';
 import { mkdtempForTestSync, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { startPublicDaemonRuntime } from './__tests__/test-utils/public-daemon-runtime.ts';
@@ -25,11 +24,17 @@ vi.mock('@agent-device/plugins/store', async (importOriginal) =>
 
 vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
+    readonly baseURL = 'https://limrun.example.test';
+    readonly _options = {};
     readonly iosInstances = {
       create: limrun.iosCreate,
       list: limrun.iosList,
       delete: limrun.iosDelete,
     };
+
+    async buildRequest() {
+      return { req: { headers: new Headers({ authorization: 'Bearer fixture-account' }) } };
+    }
   },
 }));
 
@@ -40,7 +45,7 @@ vi.mock('@limrun/api/ios-client', () => ({
   })),
 }));
 
-test('Limrun retries an expired provider lease persisted by a daemon before restart', async (t) => {
+test('Limrun retries an expired provider rental by exact identity after restart', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const stateDir = mkdtempForTestSync('agent-device-limrun-expired-lease-restart-');
   const env = { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_LEASE_MIN_TTL_MS: '1' };
@@ -89,28 +94,23 @@ test('Limrun retries an expired provider lease persisted by a daemon before rest
     await firstDaemon.runtime.close();
     assert.ok(limrun.iosDisconnect.mock.calls.length > 0);
 
-    const pendingPath = path.join(stateDir, 'expired-provider-leases.json');
-    const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8')) as { leases: DeviceLease[] };
-    assert.deepEqual(
-      pending.leases.map(({ leaseId }) => leaseId),
-      [lease.leaseId],
-    );
+    const rentalPath = path.join(stateDir, 'provider-rentals.json');
+    const pending = JSON.parse(fs.readFileSync(rentalPath, 'utf8'));
+    assert.equal(pending.rentals.length, 1);
+    assert.equal(pending.rentals[0].releaseOnRestart.instanceId, 'ios-instance-1');
+    const deletesBeforeRestart = limrun.iosDelete.mock.calls.length;
+    const listsBeforeRestart = limrun.iosList.mock.calls.length;
 
     limrun.iosDelete.mockResolvedValue(undefined);
     restartedDaemon = await startPublicDaemonRuntime({ stateDir, env });
-    await vi.waitFor(() => assert.ok(limrun.iosDelete.mock.calls.length > 1), {
+    await vi.waitFor(() => assert.ok(limrun.iosDelete.mock.calls.length > deletesBeforeRestart), {
       interval: 10,
       timeout: 2_000,
     });
 
-    assert.deepEqual(limrun.iosList.mock.calls.at(-1), [
-      { labelSelector: `provider=limrun,leaseId=${lease.leaseId}` },
-    ]);
-    assert.deepEqual(limrun.iosDelete.mock.calls.at(-1), [
-      'ios-instance-recovered',
-      { maxRetries: 0 },
-    ]);
-    assert.equal(fs.existsSync(pendingPath), false);
+    assert.equal(limrun.iosList.mock.calls.length, listsBeforeRestart);
+    assert.deepEqual(limrun.iosDelete.mock.calls.at(-1), ['ios-instance-1', { maxRetries: 0 }]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(rentalPath, 'utf8')).rentals, []);
   } finally {
     dateNow.mockRestore();
     if (restartedDaemon) {

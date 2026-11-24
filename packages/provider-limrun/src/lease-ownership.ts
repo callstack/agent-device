@@ -38,6 +38,10 @@ export type LimrunLeaseOwner = {
    */
   rentedInstanceId: string | undefined;
   createSubmitted?: true;
+  rental?: Readonly<{
+    reconciliationKey: string;
+    recordInstance: (instanceId: string) => void;
+  }>;
   /**
    * The session this lease's create built, recorded the moment it existed. It is the handle that holds the
    * instance connection and the host ADB endpoint open, so it stays on the owner even when a later step of

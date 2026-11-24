@@ -329,6 +329,7 @@ export class WebDriverSessionManager {
       requestPolicy: this.options.requestPolicy,
     });
     const session = await this.createSessionWithPreparedCleanup(client, prepared, lease, req);
+    req?.rental?.rented(prepared.providerSessionId ?? session.sessionId);
     const device = this.deviceForLease(lease, prepared, session.capabilities);
     const capabilities = createCloudWebDriverCapabilities({
       provider: this.options.provider,

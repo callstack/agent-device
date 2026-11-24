@@ -1,5 +1,6 @@
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import Limrun from '@limrun/api';
+import { randomUUID } from 'node:crypto';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type {
   DeviceInventoryProvider,
@@ -44,14 +45,16 @@ import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import {
   deleteLimrunInstance,
-  LIMRUN_CLIENT_ID,
   LIMRUN_ORG_CLIENT_LOGGING,
   limrunUserAgent,
+  readLimrunTerminationReason,
   requireLimrunOrgClient,
 } from './client-options.ts';
-import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
+import {
+  resolveLimrunRentalRecoveryPrincipal,
+  resolveLimrunRuntimeInstance,
+} from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
-import type { LimrunAppAsset } from './app-catalog.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 import type {
   CloudArtifactProvider,
@@ -77,7 +80,6 @@ const LIMRUN_RUNTIME_REASONS = {
   runtimeShutDown: { reason: 'limrun_runtime_shut_down' },
 } as const satisfies ReasonTable<'limrun provider'>;
 
-const HEARTBEAT_PROBE_BUDGET_MS = 2_000;
 const KEEP_ALIVE_INTERVAL_MS = 30_000;
 
 export type LimrunRuntimeOptions = {
@@ -105,7 +107,9 @@ export type LimrunRuntime = ProviderDeviceRuntime & {
 };
 
 export type LimrunRuntimeRegistration = Readonly<{
-  runtime: LimrunRuntime;
+  runtime: LimrunRuntime & {
+    prepareRentalRecovery(): Promise<void>;
+  };
   platformModule: PlatformRuntimeProviderModule;
 }>;
 
@@ -157,9 +161,15 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly options: LimrunRuntimeOptions;
   private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
+  rentalRecoveryPrincipal?: string;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
+    recoverRental: async (lease, identity, recordInstance) => {
+      if (lease.leaseProvider !== this.provider) return false;
+      const { recoverLimrunRental } = await import('./lease-release.ts');
+      return await recoverLimrunRental(this.limrun, lease, identity, recordInstance);
+    },
     heartbeat: async (lease, context) => await this.heartbeat(lease, context),
     release: async (lease) => {
       if (lease.leaseProvider !== this.provider) return undefined;
@@ -215,6 +225,13 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
           ...LIMRUN_ORG_CLIENT_LOGGING,
         })
       : undefined;
+  }
+
+  async prepareRentalRecovery(): Promise<void> {
+    if (!this.limrun) return;
+    this.rentalRecoveryPrincipal = await resolveLimrunRentalRecoveryPrincipal(this.limrun).catch(
+      () => undefined,
+    );
   }
 
   /**
@@ -547,6 +564,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         allocateLimrunAndroidSession,
         allocateLimrunIosSession,
         rejectRefusedLimrunProfileFields,
+        limrunRentalMetadata,
         resolvePreinstalledAppId,
         resolveRequestedLimrunAppAsset,
       } = await import('./session-allocation.ts');
@@ -569,10 +587,28 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       }
       const limrun = this.orgClient('Creating an instance');
       const requestedAsset = await resolveRequestedLimrunAppAsset(limrun, platform, context);
-      const params = this.sessionAllocationParams(limrun, owner.lease, requestedAsset);
+      const rental = context?.rental;
+      const rentalKey = rental && randomUUID();
+      const params = {
+        limrun,
+        lease: owner.lease,
+        metadata: limrunRentalMetadata(owner.lease, rentalKey),
+        region: this.options.region,
+        iosModel: this.options.iosModel,
+        app: requestedAsset,
+        dependencies: this.dependencies,
+      };
       const rent = (instanceId: string): void => {
         owner.rentedInstanceId = instanceId;
+        rental?.rented(instanceId);
       };
+      if (rental && rentalKey) {
+        rental.beforeCreate(rentalKey);
+        owner.rental = {
+          reconciliationKey: rentalKey,
+          recordInstance: (instanceId) => rental.rented(instanceId),
+        };
+      }
       owner.createSubmitted = true;
       const session =
         platform === 'ios'
@@ -680,6 +716,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly disposalHost: LimrunDisposalHost = {
     deleteInstance: async (platform, instanceId) =>
       await this.deleteCreatedInstance(platform, instanceId),
+    findRentalInstance: async (platform, reconciliationKey) => {
+      const { findLimrunRentalInstance } = await import('./lease-release.ts');
+      return await findLimrunRentalInstance(this.limrun, platform, reconciliationKey);
+    },
     endCapture: async (owner) => await this.capturesInstance?.end(owner),
   };
 
@@ -754,27 +794,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return (
       ios && (await createLimrunIosSession({ ...target(ios.apiUrl), ...ios }, this.dependencies))
     );
-  }
-
-  private sessionAllocationParams(limrun: Limrun, lease: DeviceLease, app?: LimrunAppAsset) {
-    return {
-      limrun,
-      lease,
-      metadata: {
-        displayName: `agent-device-${lease.tenantId}-${lease.runId}`,
-        labels: {
-          tenantId: lease.tenantId,
-          runId: lease.runId,
-          leaseId: lease.leaseId,
-          provider: lease.leaseProvider ?? LIMRUN_PROVIDER,
-          source: LIMRUN_CLIENT_ID,
-        },
-      },
-      region: this.options.region,
-      iosModel: this.options.iosModel,
-      app,
-      dependencies: this.dependencies,
-    };
   }
 
   private async heartbeat(
@@ -959,42 +978,6 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
       hint: 'Start the daemon again to allocate a Limrun lease.',
     },
   );
-}
-
-/**
- * The termination reason of a created instance whose connection dropped, or `undefined` when the
- * instance is not terminated or the probe cannot tell. The budget only stops waiting, so the probe
- * aborts its own GET when the budget expires.
- */
-async function readLimrunTerminationReason(
-  limrun: Limrun,
-  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId' | 'token'>,
-  requestSignal: AbortSignal | undefined,
-): Promise<string | undefined> {
-  const expiry = new AbortController();
-  const signal = requestSignal ? AbortSignal.any([requestSignal, expiry.signal]) : expiry.signal;
-  try {
-    const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
-    const request =
-      session.platform === 'ios'
-        ? limrun.iosInstances.get(session.instanceId, { signal })
-        : limrun.androidInstances.get(session.instanceId, { signal });
-    const answer = await awaitLimrunWithinBudget(request, HEARTBEAT_PROBE_BUDGET_MS);
-    if (!answer.ok) {
-      if ('expired' in answer) expiry.abort();
-      return undefined;
-    }
-    if (answer.value.status.state !== 'terminated') return undefined;
-    // The termination reason is the account API's own text, and this request carries the account key in
-    // its header, so it goes through the same reader as an instance's error body before it is published.
-    const { safeTerminationReason } = await import('./error-text.ts');
-    return safeTerminationReason(answer.value.status.terminationReason, [
-      limrun.apiKey ?? undefined,
-      session.token,
-    ]);
-  } catch {
-    return undefined;
-  }
 }
 
 export type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
