@@ -477,6 +477,30 @@ test.each(['pending', 'committed', 'closing'] as const)(
   },
 );
 
+test('refuses dispatch while an allocation holds the named session lock', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  await withConnectionLock(location.stateDir, location.session, async () => {
+    writeCloudConnection(
+      location,
+      prepareCloudConnection(
+        location.session,
+        {
+          platform: 'ios',
+          vendor: undefined,
+          accepts: ['agent-device-daemon'],
+          maxMinutes: undefined,
+        },
+        env.AGENT_DEVICE_CLOUD_BASE_URL,
+        null,
+      ),
+    );
+    const blocked = await runCliCapture(['snapshot', '--json'], { env });
+    expect(JSON.parse(blocked.stdout).error.details.reason).toBe('cloud_connection_owns_session');
+    expect(blocked.calls).toEqual([]);
+  });
+});
+
 for (const scope of ['named', 'default']) {
   test(`CLI keeps the ${scope} local RPC on its existing daemon when cloud ownership appears during preparation`, async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;

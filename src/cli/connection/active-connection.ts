@@ -5,7 +5,9 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   type ConnectionLocation,
+  CLOUD_CONNECTION_REASONS,
   cleanExpiredCloudAttachments,
+  cloudConnectionUnavailable,
   readCloudConnection,
   withCloudConnectionOwner,
 } from './cloud-connection-record.ts';
@@ -29,10 +31,15 @@ export async function resolveCloudAdmission(options: {
   if (!binding) refuseLegacyCloudProfile(stateDir, options.remoteConfig);
   if (command === 'disconnect') return;
   const location = { stateDir, session: session ?? 'default' };
-  if (!binding && !readCloudConnection(location)) return;
-  await withCloudConnectionOwner(location, binding?.generation, () => {});
+  if (!binding) {
+    if (readCloudConnection(location)) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.ownsSession.reason);
+    }
+    return;
+  }
+  await withCloudConnectionOwner(location, binding.generation, () => {});
   return <T>(start: () => Promise<T>, _phase?: 'startup' | 'dispatch') =>
-    withCloudConnectionOwner(location, binding?.generation, start);
+    withCloudConnectionOwner(location, binding.generation, start);
 }
 
 function refuseLegacyCloudProfile(stateDir: string, remoteConfig: string | undefined): void {
