@@ -44,25 +44,36 @@ test('invalid file list and staging JSON preserve status without a decoder cause
   }
 });
 
-test('readInfoPlist reports a malformed Info.plist as COMMAND_FAILED with reason apple_plist_malformed', async () => {
-  const token = 'syntheticInstanceCredential';
-  vi.stubGlobal('fetch', async () => new Response('not a plist', { status: 200 }));
-  const { readInfoPlist } = createLimrunSimulatorFiles(
-    { apiUrl: 'https://instance.invalid/api', token } as Parameters<
-      typeof createLimrunSimulatorFiles
-    >[0],
-    parseApplePlist,
-    new AbortController().signal,
-  );
-  const error = await readInfoPlist({
-    device: limrunIosSimulator,
-    bundleId: 'com.example.app',
-  }).then(
-    () => undefined,
-    (error: unknown) => error,
-  );
-  expect(normalizeError(error)).toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'apple_plist_malformed' },
+const unreadableInfoPlists = [
+  ['a malformed', 'not a plist', 'apple_plist_malformed'],
+  [
+    'an unsupported',
+    '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>A</key><openstep/></dict></plist>',
+    'apple_plist_unsupported_type',
+  ],
+] as const;
+
+for (const [label, body, reason] of unreadableInfoPlists) {
+  test(`readInfoPlist reports ${label} Info.plist as COMMAND_FAILED with reason ${reason}`, async () => {
+    const token = 'syntheticInstanceCredential';
+    vi.stubGlobal('fetch', async () => new Response(body, { status: 200 }));
+    const { readInfoPlist } = createLimrunSimulatorFiles(
+      { apiUrl: 'https://instance.invalid/api', token } as Parameters<
+        typeof createLimrunSimulatorFiles
+      >[0],
+      parseApplePlist,
+      new AbortController().signal,
+    );
+    const error = await readInfoPlist({
+      device: limrunIosSimulator,
+      bundleId: 'com.example.app',
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(normalizeError(error)).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason },
+    });
   });
-});
+}

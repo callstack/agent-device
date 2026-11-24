@@ -48,7 +48,10 @@ export const APPLE_PLIST_PARSE_REASONS = {
 export type ApplePlistParseReason =
   (typeof APPLE_PLIST_PARSE_REASONS)[keyof typeof APPLE_PLIST_PARSE_REASONS]['reason'];
 
-/** An Apple property list that cannot become a JS value. */
+/**
+ * An Apple property list that cannot become a JS value. It is an `AppError` carrying `COMMAND_FAILED`
+ * with `details.reason` set to its reason, so `normalizeError` keeps that reason on the wire.
+ */
 export class ApplePlistParseError extends AppError {
   readonly reason: ApplePlistParseReason;
 
