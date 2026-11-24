@@ -910,7 +910,7 @@ async function resolveCloudBaseUrl(env: EnvMap, fallback?: string): Promise<stri
   const configured = env.AGENT_DEVICE_CLOUD_BASE_URL;
   return parseCloudUrl(
     configured ?? fallback ?? DEFAULT_CLOUD_BASE_URL,
-    configured !== undefined,
+    configured === undefined ? undefined : 'AGENT_DEVICE_CLOUD_BASE_URL',
   ).href.replace(/\/+$/, '');
 }
 

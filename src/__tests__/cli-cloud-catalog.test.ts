@@ -305,6 +305,25 @@ test('custom catalogs never receive an ambient daemon credential', async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+test('reports an invalid catalog key origin without offering a login or sending a request', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const result = await runCliCapture(['connect', 'cloud', 'list', '--json'], {
+    env: {
+      AGENT_DEVICE_STATE_DIR: mkdtempForTestSync('cloud-catalog-key-origin-'),
+      AGENT_DEVICE_CLOUD_API_KEY: 'test-catalog-key',
+      AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: 'http://untrusted.example/',
+    },
+  });
+  const { error } = JSON.parse(result.stdout);
+  expect(error).toMatchObject({
+    code: 'INVALID_ARGS',
+    message: 'Invalid AGENT_DEVICE_CLOUD_API_KEY_ORIGIN.',
+  });
+  expect(error.hint).not.toContain('auth login');
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
 test('a catalog API key cannot be used with a different API origin', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);

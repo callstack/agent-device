@@ -21,12 +21,13 @@ export async function resolveCloudCatalogAccess(options: {
   const { env, stateDir } = options;
   const cloudBaseUrl = parseCloudOrigin(
     env.AGENT_DEVICE_CLOUD_BASE_URL ?? DEFAULT_CLOUD_BASE_URL,
-    true,
+    'AGENT_DEVICE_CLOUD_BASE_URL',
   );
   const accessToken = env.AGENT_DEVICE_CLOUD_API_KEY?.trim();
   if (accessToken) {
     const issuer = parseCloudOrigin(
       env.AGENT_DEVICE_CLOUD_API_KEY_ORIGIN ?? DEFAULT_CLOUD_BASE_URL,
+      'AGENT_DEVICE_CLOUD_API_KEY_ORIGIN',
     );
     if (issuer !== cloudBaseUrl) {
       throw new AppError(

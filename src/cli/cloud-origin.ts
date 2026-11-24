@@ -11,16 +11,18 @@ LOOPBACK.addSubnet('127.0.0.0', 8, 'ipv4');
 LOOPBACK.addAddress('::1', 'ipv6');
 LOOPBACK.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
-export function parseCloudOrigin(value: string, configured = false): string {
+type CloudOriginVariable = 'AGENT_DEVICE_CLOUD_BASE_URL' | 'AGENT_DEVICE_CLOUD_API_KEY_ORIGIN';
+
+export function parseCloudOrigin(value: string, configured?: CloudOriginVariable): string {
   return parseCloudUrl(value, configured).origin;
 }
 
-export function parseCloudUrl(value: string, configured: boolean): URL {
+export function parseCloudUrl(value: string, configured?: CloudOriginVariable): URL {
   const url = parseCloudEndpoint(value);
   if (url) return url;
   throw new AppError(
     'INVALID_ARGS',
-    configured ? 'Invalid AGENT_DEVICE_CLOUD_BASE_URL.' : 'Invalid saved cloud API origin.',
+    configured ? `Invalid ${configured}.` : 'Invalid saved cloud API origin.',
     {
       reason: CLOUD_ORIGIN_REASONS.invalid.reason,
       ...(configured ? {} : { hint: 'Run agent-device auth login to save a valid cloud origin.' }),
