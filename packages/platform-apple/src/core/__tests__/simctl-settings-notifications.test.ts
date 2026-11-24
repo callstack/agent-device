@@ -19,6 +19,15 @@ const SETTINGS: Record<string, PlistValue> = {
   sectionInfoVersionNumber: 3,
 };
 
+// A poll's pause moves a faked clock on instead of waiting, so the 10-second bounds are reached in
+// no real time, whatever the host load.
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
+  sleep: vi.fn(async (ms: number) => {
+    if (vi.isFakeTimers()) vi.setSystemTime(Date.now() + ms);
+  }),
+}));
+
 vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/host-file')>();
   return { ...actual, renameHostPath: vi.fn(actual.renameHostPath) };
@@ -464,19 +473,6 @@ test('the edit waits for SpringBoard to exit, so its last write cannot replace t
   expect(recordOf(sections(file)['com.example.app']).status).toBe(2);
 });
 
-/** Moves fake time on between the real file reads until the change settles. */
-async function advanceUntilSettled(pending: Promise<unknown>): Promise<void> {
-  let settled = false;
-  pending.then(
-    () => (settled = true),
-    () => (settled = true),
-  );
-  for (let step = 0; step < 200 && !settled; step += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-    await vi.advanceTimersByTimeAsync(200);
-  }
-}
-
 test.for([
   { label: 'SpringBoard never exits', held: 'com.apple.SpringBoard', verb: 'stop', written: false },
   {
@@ -494,7 +490,7 @@ test.for([
 ])(
   'a restart where $label fails after 10 seconds and still starts both',
   async ({ held, verb, written }) => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.useFakeTimers({ toFake: ['Date'] });
     try {
       const file = await settingsFile();
       const before = fs.readFileSync(file);
@@ -506,13 +502,12 @@ test.for([
         return await fake(args);
       });
 
-      const pending = applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file));
-      const settled = expect(pending).rejects.toMatchObject({
+      await expect(
+        applySimctlSetting(permission(runSimctl, 'grant', 'notifications', file)),
+      ).rejects.toMatchObject({
         code: 'COMMAND_FAILED',
         details: { reason: SIMULATOR_NOTIFICATION_REASONS.restartTimeout.reason },
       });
-      await advanceUntilSettled(pending);
-      await settled;
 
       const argvs = runSimctl.mock.calls.map(([args]) => args.join(' '));
       expect(argvs).toContain('spawn SIM-1 launchctl start com.apple.SpringBoard');
@@ -560,7 +555,7 @@ test('a failed rename removes its temporary file and leaves the settings whole',
 });
 
 test('grant all fails on a restart that times out instead of skipping notifications', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  vi.useFakeTimers({ toFake: ['Date'] });
   try {
     const file = await settingsFile();
     const fake = recordingRunner();
@@ -570,15 +565,14 @@ test('grant all fails on a restart that times out instead of skipping notificati
         : await fake(args),
     );
 
-    const pending = applySimctlSetting(permission(runSimctl, 'grant', 'all', file));
-    const settled = expect(pending).rejects.toMatchObject({
+    await expect(
+      applySimctlSetting(permission(runSimctl, 'grant', 'all', file)),
+    ).rejects.toMatchObject({
       details: {
         reason: SIMULATOR_NOTIFICATION_REASONS.restartTimeout.reason,
         permissions: expect.arrayContaining(['camera']),
       },
     });
-    await advanceUntilSettled(pending);
-    await settled;
   } finally {
     vi.useRealTimers();
   }
