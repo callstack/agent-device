@@ -56,6 +56,7 @@ export type CliFlags = CloudProviderProfileFields &
     force?: boolean;
     clean?: boolean;
     noLogin?: boolean;
+    live?: boolean;
     kind?: string;
     perfTemplate?: string;
     sessionLock?: 'reject' | 'strip';

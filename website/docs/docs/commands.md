@@ -2591,12 +2591,27 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 - End with `disconnect` to release the lease and stop the Metro companion. It does not stop your Metro server. If it cannot release the lease, it prints the lease id so you can release it manually.
 - `metroProxyBaseUrl` is the bridge origin; do not add `/api/metro/...` paths. `metroPublicBaseUrl` is only for direct bundle hints without a bridge.
 
+### Cloud catalog
+
+Run `agent-device connect list` to browse offerings. If an installed provider uses the name `list`, use `agent-device connect cloud list` for the catalog. A listing does not open a device session.
+
+Use the CLI login for the selected cloud API, or set `AGENT_DEVICE_CLOUD_API_KEY`. A key without `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN` is bound to the default cloud. For a custom API, set the key's origin and select the same origin with `AGENT_DEVICE_CLOUD_BASE_URL`. The catalog does not use daemon or proxy tokens. Catalog requests and their login refreshes refuse redirects.
+
+| Catalog option | What it does |
+| --- | --- |
+| `--config <path>` | Read operator settings, including the state directory, from this config file |
+| `--state-dir <path>` | Read the stored CLI login from this state directory |
+| `--live` | Request advisory availability |
+| `--json` | Print the catalog rows as JSON |
+
+The following option table describes `connect [provider]`.
+
 <!-- generated:command connect -->
 
 Configure remote or provider state.
 
 ```bash
-agent-device connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
+agent-device connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
 ```
 
 | Option | What it does |

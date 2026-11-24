@@ -507,6 +507,8 @@ Device cloud interfaces:
   JavaScript can skip persisted connect state by passing leaseProvider plus provider fields to createAgentDeviceClient or per-command options.
   MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect; run CLI connect first in the same state dir before relying on MCP tools.
 
+Use agent-device connect list to see cloud offerings. Use connect cloud list if a provider owns the name list. The catalog uses an issuer-bound login or AGENT_DEVICE_CLOUD_API_KEY. Set AGENT_DEVICE_CLOUD_API_KEY_ORIGIN to use a key with a custom catalog. Add --live for advisory availability and --json for structured output.
+
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
     cloudflared tunnel --url http://127.0.0.1:4310

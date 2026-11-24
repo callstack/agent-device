@@ -146,9 +146,6 @@ export async function runCli(
 }
 
 async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment): Promise<void> {
-  // One transport per run: its ensure-once state is shared by the materialization client and the
-  // command client, so a run ensures the daemon once.
-  const transport = resolveRunTransport(deps, host);
   const requestId = createRequestId();
   const version = readVersion();
   const debugEnabled = isDebugRequested(argv);
@@ -167,14 +164,17 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
     async () => {
       // A provider this route cannot supply is refused here: before this run resolves an option that
       // can carry a credential, and before any credential value is registered for redaction.
-      const { admitConnectProviderOrExit } = await import('./cli/connect-preflight.ts');
-      await admitConnectProviderOrExit(argv, host, { jsonRequested, debugEnabled });
+      const { runConnectPreflight } = await import('./cli/connect-preflight.ts');
+      if (await runConnectPreflight(argv, host, { jsonRequested, debugEnabled })) return;
       const { parsed, command, positionals } = await parseCliInputOrExit(argv, {
         host,
         version,
         jsonRequested,
         debugEnabled,
       });
+      // One transport per run: its ensure-once state is shared by the materialization client and the
+      // command client, so a run ensures the daemon once.
+      const transport = resolveRunTransport(deps, host);
       const debugOutputEnabled = isParsedDebugRequested(command, parsed.providedFlags);
       const ctx = await resolveRunContextOrExit(parsed, {
         host,
@@ -375,22 +375,7 @@ async function resolveRunContextOrExit(
             configuredPlatform: parsed.flags.platform,
             configuredSession: parsed.flags.session,
           });
-    if (base.command === 'connect' && flags.remoteConfig) {
-      const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
-      await admitConnectProfileWithDiagnostics(
-        parsed.remoteConfigLeaseProvider,
-        flags.daemonBaseUrl,
-        base.host,
-      );
-    }
-    // A leased remote config, or a connect without one (it always leases through a provider), needs
-    // an explicit session before anything is resolved or leased (#3931).
-    const leasedRemoteConfig =
-      parsed.remoteConfigLeaseProvider && runsOnRemoteConnection(base.command);
-    const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
-    if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
-      throw remoteSessionRequiredError(parsed.remoteConfigLeaseProvider);
-    }
+    await preflightCommandConnection(base, flags, parsed.remoteConfigLeaseProvider);
     const { resolveCommandConnection } = await import('./cli/connection/command-connection.ts');
     const { daemonPaths, effectiveFlags, defaults, connection } = resolveCommandConnection({
       host: base.host,
@@ -434,6 +419,27 @@ async function resolveRunContextOrExit(
       });
     }
     return exitAfterFlush(1);
+  }
+}
+
+async function preflightCommandConnection(
+  base: Pick<CliRunContext, 'command' | 'positionals' | 'host'>,
+  flags: CliFlags,
+  remoteConfigLeaseProvider: string | undefined,
+): Promise<void> {
+  if (base.command === 'connect' && flags.remoteConfig) {
+    const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
+    await admitConnectProfileWithDiagnostics(
+      remoteConfigLeaseProvider,
+      flags.daemonBaseUrl,
+      base.host,
+    );
+  }
+  // A leased remote config, or a connect without one, needs a named session before leasing (#3931).
+  const leasedRemoteConfig = remoteConfigLeaseProvider && runsOnRemoteConnection(base.command);
+  const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
+  if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
+    throw remoteSessionRequiredError(remoteConfigLeaseProvider);
   }
 }
 
