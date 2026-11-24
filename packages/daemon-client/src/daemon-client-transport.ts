@@ -66,9 +66,8 @@ type SendRequestOptions = {
  *
  * - a signal already aborted before anything is sent — nothing may leave the process, so the refusal
  *   carries `details.dispatched: 'no'`;
- * - an abort during a phase with no connection to close, or a custom transport that ignores the
- *   signal — the caller's promise still settles, with `details.dispatched: 'unknown'` because the
- *   request may already have been written.
+ * - an abort during a guarded phase uses the evidence the caller supplied. It defaults to
+ *   `details.dispatched: 'unknown'` when a request may already have been written.
  *
  * Both reject with the typed canceled-request error (`details.reason: 'request_canceled'`) whatever
  * reason the caller aborted with, so every layer dispatches on the same reason and never on the
@@ -115,6 +114,7 @@ const NO_REQUEST_GUARD: RequestGuard = {
 export function createRequestGuard(params: {
   signal: AbortSignal | undefined;
   requestId?: string;
+  /** Use 'no' during a shared startup wait that sends no caller request. The launch continues. */
   dispatchedOnAbort?: 'no' | 'unknown';
 }): RequestGuard {
   const { signal, requestId, dispatchedOnAbort = 'unknown' } = params;
