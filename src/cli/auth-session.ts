@@ -152,7 +152,7 @@ export async function resolveRemoteAuth(options: {
         hint: 'Run agent-device auth login, unset --no-login, or set AGENT_DEVICE_DAEMON_AUTH_TOKEN.',
       });
     }
-    throw buildNonInteractiveLoginError(options.command, env);
+    throw await buildNonInteractiveLoginError(options.command, env);
   }
 
   const login = await loginWithDeviceAuth({
@@ -182,13 +182,13 @@ export async function resolveCloudAccessForConnect(options: {
   if (hasToken(options.flags.daemonAuthToken)) {
     return {
       accessToken: options.flags.daemonAuthToken,
-      cloudBaseUrl: resolveCloudBaseUrl(env),
+      cloudBaseUrl: await resolveCloudBaseUrl(env),
     };
   }
   if (hasToken(env.AGENT_DEVICE_DAEMON_AUTH_TOKEN)) {
     return {
       accessToken: env.AGENT_DEVICE_DAEMON_AUTH_TOKEN,
-      cloudBaseUrl: resolveCloudBaseUrl(env),
+      cloudBaseUrl: await resolveCloudBaseUrl(env),
     };
   }
   const sessionAccess = await resolveCliSessionAccess({
@@ -240,9 +240,9 @@ export async function loginWithDeviceAuth(options: {
   const { env } = options;
   const authMode = detectAuthMode(env, options.io);
   if (authMode === 'non-interactive') {
-    throw buildNonInteractiveLoginError(options.commandLabel ?? 'agent-device connect', env);
+    throw await buildNonInteractiveLoginError(options.commandLabel ?? 'agent-device connect', env);
   }
-  const cloudBaseUrl = resolveCloudBaseUrl(env);
+  const cloudBaseUrl = await resolveCloudBaseUrl(env);
   const start = await postCloudAuthJson<DeviceAuthStartResponse>({
     baseUrl: cloudBaseUrl,
     pathName: DEVICE_AUTH_START_PATH,
@@ -526,7 +526,6 @@ export async function resolveCliSessionAccess(options: {
   env: EnvMap;
   io?: AuthIo;
   catalog?: true;
-  validateIssuer?: (origin: string) => void;
 }): Promise<{
   accessToken: string;
   expiresAt?: string;
@@ -546,8 +545,7 @@ export async function resolveCliSessionAccess(options: {
     async () => {
       const session = readExchangeableCliSession(stateDir);
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
-      options.validateIssuer?.(session.cloudBaseUrl);
-      assertStoredSessionOrigin(session, env);
+      await assertStoredSessionOrigin(session, env);
       return await exchangeCliSessionAccess({ stateDir, session, flags, io, catalogCredentials });
     },
     { io },
@@ -558,7 +556,7 @@ export async function resolveCliSessionAccess(options: {
     catalogCredentials,
     ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
     // The refresh went to the stored URL. A same-origin override still names the connection.
-    cloudBaseUrl: resolveCloudBaseUrl(env, exchanged.session.cloudBaseUrl),
+    cloudBaseUrl: await resolveCloudBaseUrl(env, exchanged.session.cloudBaseUrl),
   };
 }
 
@@ -566,9 +564,10 @@ export async function resolveCliSessionAccess(options: {
  * The stored credential goes only to the cloud that issued it. An override that names another
  * origin would send it to that origin, so the command stops before any request.
  */
-function assertStoredSessionOrigin(session: CliSessionRecord, env: EnvMap): void {
-  const storedOrigin = new URL(resolveCloudBaseUrl({}, session.cloudBaseUrl)).origin;
-  if (new URL(resolveCloudBaseUrl(env, session.cloudBaseUrl)).origin === storedOrigin) return;
+async function assertStoredSessionOrigin(session: CliSessionRecord, env: EnvMap): Promise<void> {
+  const storedOrigin = new URL(await resolveCloudBaseUrl({}, session.cloudBaseUrl)).origin;
+  const requestedOrigin = new URL(await resolveCloudBaseUrl(env, storedOrigin)).origin;
+  if (requestedOrigin === storedOrigin) return;
   throw new AppError(
     'UNAUTHORIZED',
     'The stored CLI session belongs to another cloud API origin.',
@@ -729,7 +728,7 @@ async function refreshAgentToken(options: {
 }> {
   // The refresh goes to the URL stored with the session, never to an override.
   const response = await postCloudAuthJson<CliSessionRefreshResponse>({
-    baseUrl: resolveCloudBaseUrl({}, options.session.cloudBaseUrl),
+    baseUrl: await resolveCloudBaseUrl({}, options.session.cloudBaseUrl),
     pathName: CLI_SESSION_REFRESH_PATH,
     body: {
       refreshCredential: options.session.refreshCredential,
@@ -812,17 +811,18 @@ async function pollDeviceAuth(options: {
       body: { deviceCode: options.deviceCode },
       fetchImpl: options.fetchImpl,
     });
-    if (response.status === 'approved' || hasToken(response.accessToken)) return response;
-    if (response.status === 'slow_down' || response.error === 'slow_down') {
-      intervalMs += MIN_POLL_INTERVAL_MS;
-    } else if (
-      response.status !== 'authorization_pending' &&
-      response.error !== 'authorization_pending'
+    const { status, error } = response;
+    if (
+      error === undefined &&
+      (status === 'approved' || (status === undefined && hasToken(response.accessToken)))
     ) {
-      throw new AppError('UNAUTHORIZED', 'Device authorization was not approved.', {
-        status: response.status,
-        error: response.error,
-      });
+      return response;
+    }
+    const outcome = error ?? status;
+    if (outcome === 'slow_down') {
+      intervalMs += MIN_POLL_INTERVAL_MS;
+    } else if (outcome !== 'authorization_pending') {
+      throw new AppError('UNAUTHORIZED', 'Device authorization was not approved.');
     }
     await sleep(intervalMs);
   }
@@ -892,8 +892,8 @@ function isRemoteShell(env: EnvMap): boolean {
   );
 }
 
-function buildNonInteractiveLoginError(command: string, env: EnvMap): AppError {
-  const cloudBaseUrl = resolveCloudBaseUrl(env);
+async function buildNonInteractiveLoginError(command: string, env: EnvMap): Promise<AppError> {
+  const cloudBaseUrl = await resolveCloudBaseUrl(env);
   return new AppError(
     'UNAUTHORIZED',
     `${command} cannot perform interactive login in CI or a non-interactive shell.`,
@@ -905,18 +905,13 @@ function buildNonInteractiveLoginError(command: string, env: EnvMap): AppError {
   );
 }
 
-function resolveCloudBaseUrl(env: EnvMap, fallback?: string): string {
-  const raw = env.AGENT_DEVICE_CLOUD_BASE_URL ?? fallback ?? DEFAULT_CLOUD_BASE_URL;
-  try {
-    return new URL(raw).toString().replace(/\/+$/, '');
-  } catch (error) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Invalid AGENT_DEVICE_CLOUD_BASE_URL.',
-      { cloudBaseUrl: raw },
-      error instanceof Error ? error : undefined,
-    );
-  }
+async function resolveCloudBaseUrl(env: EnvMap, fallback?: string): Promise<string> {
+  const { parseCloudUrl } = await import('./cloud-origin.ts');
+  const configured = env.AGENT_DEVICE_CLOUD_BASE_URL;
+  return parseCloudUrl(
+    configured ?? fallback ?? DEFAULT_CLOUD_BASE_URL,
+    configured !== undefined,
+  ).href.replace(/\/+$/, '');
 }
 
 function shouldUseCloudAuth(daemonBaseUrl: string, env: EnvMap): boolean {

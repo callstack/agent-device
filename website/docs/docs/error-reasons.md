@@ -47,6 +47,7 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `cloud_login_origin_mismatch` | The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued the stored CLI session, so the stored credential is not sent. Log in with the named origin, or unset the override. |
 | `cli_session_issuer_unverified` | The stored CLI session does not record the cloud that issued its credential, as a session saved by an older CLI does not, so the credential is not sent. Run agent-device auth login. |
 | `cloud_auth_redirect_refused` | A cloud auth request got a redirect it does not follow: to another origin, past the third hop, or to a missing Location or one with a username or password. Nothing was sent to the target. |
+| `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
 
 ### `back`
 
@@ -601,11 +602,16 @@ These reasons can come from more than one command.
 | `ARCHIVE_UNSAFE_ENTRY` | The archive holds a link, a special file, or an encrypted entry. |
 | `ARCHIVE_UNSAFE_PATH` | An archive entry's name is absolute, escaping, or otherwise not one relative path. |
 
-### Cloud catalog
+### Cloud auth
 
 | Reason | Meaning |
 | --- | --- |
 | `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
+
+### Cloud catalog
+
+| Reason | Meaning |
+| --- | --- |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
 
