@@ -61,7 +61,7 @@ type DeviceAuthStartResponse = {
 
 type DeviceAuthPollResponse = {
   status?: string;
-  error?: string;
+  error?: string | null;
   accessToken?: string;
   expiresAt?: string;
   cliSession?: {
@@ -811,14 +811,10 @@ async function pollDeviceAuth(options: {
       body: { deviceCode: options.deviceCode },
       fetchImpl: options.fetchImpl,
     });
-    const { status, error } = response;
-    if (
-      error === undefined &&
-      (status === 'approved' || (status === undefined && hasToken(response.accessToken)))
-    ) {
+    if (isDeviceAuthApproved(response)) {
       return response;
     }
-    const outcome = error ?? status;
+    const outcome = (response.error === '' ? undefined : response.error) ?? response.status;
     if (outcome === 'slow_down') {
       intervalMs += MIN_POLL_INTERVAL_MS;
     } else if (outcome !== 'authorization_pending') {
@@ -827,6 +823,11 @@ async function pollDeviceAuth(options: {
     await sleep(intervalMs);
   }
   throw new AppError('TIMEOUT', 'Device authorization expired before approval.');
+}
+
+function isDeviceAuthApproved({ status, error, accessToken }: DeviceAuthPollResponse): boolean {
+  if (status === 'approved') return error === undefined || error === null || error === '';
+  return status === undefined && error === undefined && hasToken(accessToken);
 }
 
 type UnusableDeviceAuthStartField =
