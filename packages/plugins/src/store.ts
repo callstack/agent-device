@@ -417,25 +417,52 @@ async function transactSelection<T>(
 async function stagePlugin(
   stage: PluginStage,
   name: string,
-  version: string | undefined,
+  requested: string | undefined,
   env: NodeJS.ProcessEnv,
-  matchCore: boolean,
+  expectedVersion?: string,
 ) {
   fs.mkdirSync(stage.project, { recursive: true, mode: 0o700 });
   fs.writeFileSync(
     path.join(stage.project, 'package.json'),
-    JSON.stringify({ private: true, dependencies: { [name]: version ?? 'latest' } }),
+    JSON.stringify({
+      private: true,
+      dependencies: { [name]: expectedVersion ?? requested ?? 'latest' },
+    }),
   );
-  await installInProject(stage.project, env, undefined, matchCore);
+  try {
+    await installInProject(stage.project, env, undefined, expectedVersion !== undefined);
+  } catch (error) {
+    if (!expectedVersion) throw error;
+    const failure = normalizeError(error);
+    const npmCode =
+      readNpmErrorCode(failure.details?.stdout) ?? readNpmErrorCode(failure.details?.stderr);
+    const unavailable = npmCode === 'ETARGET' || npmCode === 'E404';
+    throw new AppError(
+      failure.code,
+      `Could not install ${name}@${expectedVersion}: ${failure.message}`,
+      {
+        ...failure.details,
+        ...(unavailable
+          ? {
+              reason: PLUGIN_STORE_REASONS.versionResolutionFailed.reason,
+              hint: 'Check whether this release and its dependencies are available in your npm registry. Use an explicit selector to choose another release.',
+            }
+          : {}),
+        package: name,
+        version: expectedVersion,
+      },
+      error,
+    );
+  }
   const installation = await describeInstallation(
     name,
     installationDirectory(stage.home, name, stage.installation),
     { installation: stage.installation },
   );
-  if (matchCore && installation.version !== version)
+  if (expectedVersion && installation.version !== expectedVersion)
     throw new AppError(
       'INVALID_ARGS',
-      `Expected ${name}@${version}, installed ${installation.version}.`,
+      `Expected ${name}@${expectedVersion}, installed ${installation.version}.`,
     );
   installation.assertCompatibleHost();
 }
@@ -515,37 +542,7 @@ export async function changePlugin(
         action === 'update' && isVersionSelector(previous?.version) ? previous.version : version;
       const defaultVersion =
         requested === undefined ? await managedPluginVersion(name, coreVersion) : undefined;
-      try {
-        await stagePlugin(
-          stage,
-          name,
-          requested ?? defaultVersion,
-          env,
-          defaultVersion !== undefined,
-        );
-      } catch (error) {
-        if (!defaultVersion) throw error;
-        const failure = normalizeError(error);
-        const npmCode =
-          readNpmErrorCode(failure.details?.stdout) ?? readNpmErrorCode(failure.details?.stderr);
-        const unavailable = npmCode === 'ETARGET' || npmCode === 'E404';
-        throw new AppError(
-          failure.code,
-          `Could not install ${name}@${defaultVersion}: ${failure.message}`,
-          {
-            ...failure.details,
-            ...(unavailable
-              ? {
-                  reason: PLUGIN_STORE_REASONS.versionResolutionFailed.reason,
-                  hint: 'Check whether this release and its dependencies are available in your npm registry. Use an explicit selector to choose another release.',
-                }
-              : {}),
-            package: name,
-            version: defaultVersion,
-          },
-          error,
-        );
-      }
+      await stagePlugin(stage, name, requested, env, defaultVersion);
       selections[name] = {
         installation: stage.installation,
         version: requested,
