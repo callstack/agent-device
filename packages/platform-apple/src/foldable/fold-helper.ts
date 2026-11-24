@@ -27,6 +27,13 @@ const FOLD_HELPER_ORIENTATION_REASONS = {
   hidDispatchTimedOut: { reason: 'orientation-hid-dispatch-timed-out' },
 } as const satisfies ReasonTable<'orientation'>;
 
+const FOLD_HELPER_HOME_REASONS = {
+  // The fold helper could not send the Home button to the iOS simulator.
+  hidDispatchFailed: { reason: 'home-hid-dispatch-failed' },
+  // The fold helper did not finish sending the Home button in time, so the press may have applied.
+  hidDispatchTimedOut: { reason: 'home-hid-dispatch-timed-out' },
+} as const satisfies ReasonTable<'home'>;
+
 const FOLD_HELPER_PANEL_REASONS = {
   // The fold helper returned no panel table for the iOS simulator.
   panelsUnreadable: { reason: 'fold-helper-panels-unreadable' },
@@ -35,6 +42,7 @@ const FOLD_HELPER_PANEL_REASONS = {
 type FoldHelperFailureReason =
   | (typeof FOLD_HELPER_REASONS)[keyof typeof FOLD_HELPER_REASONS]['reason']
   | (typeof FOLD_HELPER_ORIENTATION_REASONS)[keyof typeof FOLD_HELPER_ORIENTATION_REASONS]['reason']
+  | (typeof FOLD_HELPER_HOME_REASONS)[keyof typeof FOLD_HELPER_HOME_REASONS]['reason']
   | (typeof FOLD_HELPER_PANEL_REASONS)[keyof typeof FOLD_HELPER_PANEL_REASONS]['reason'];
 
 const HINGE_ANGLE_NO_SAMPLE_HINT =
@@ -58,14 +66,16 @@ export type SimulatorPanelPayload = { result: { displays: unknown[] } };
 
 /**
  * The fold helper bound to one simulator. Every mode is a separate `simctl spawn` of the cached
- * binary, so it reaches a simulator in any device set. `setPose` and `rotate` only dispatch HID;
- * the reads only observe, so a pose is verified by a process that never sent it.
+ * binary, so it reaches a simulator in any device set. `setPose`, `rotate`, and `pressHome` only
+ * dispatch HID; the reads only observe, so a pose is verified by a process that never sent it.
  */
 export type FoldHelper = Readonly<{
   /** Dispatches a preset pose or a keyframe trajectory through simulator HID. */
   setPose(pose: FoldPose | readonly FoldKeyframe[], signal?: AbortSignal): Promise<void>;
   /** Dispatches one picker value through the same simulator HID control channel. */
   rotate(orientation: FoldPickerValue, signal?: AbortSignal): Promise<void>;
+  /** Presses the Home button through simulator HID: once for home, twice for the app switcher. */
+  pressHome(presses: 1 | 2, signal?: AbortSignal): Promise<void>;
   /**
    * One fresh CoreMotion `CMAngleManager` subscription, the source `devicectl device motion
    * hinge-angle` relays. It reports the latest sample once `windowMs` has passed since the first,
@@ -148,6 +158,13 @@ export function createFoldHelper(device: DeviceInfo): FoldHelper {
         () => true,
       );
     },
+    async pressHome(presses, signal) {
+      await run(
+        ['home', String(presses)],
+        { signal, timeoutMs: 5_000, failure: HOME_FAILURE },
+        () => true,
+      );
+    },
     async readHingeAngle({ signal, windowMs = 0 } = {}) {
       return await run(
         ['hinge', String(windowMs)],
@@ -211,6 +228,19 @@ const ROTATE_FAILURE: ModeFailure = {
       reason: FOLD_HELPER_ORIENTATION_REASONS.hidDispatchTimedOut.reason,
       dispatched: 'unknown',
       hint: 'Check the orientation with a screenshot or snapshot. A retry reads the lit panel first and sends nothing when it already shows the requested orientation.',
+    },
+  },
+};
+
+const HOME_FAILURE: ModeFailure = {
+  message: 'Unable to send the simulator Home button',
+  details: { reason: FOLD_HELPER_HOME_REASONS.hidDispatchFailed.reason },
+  timedOut: {
+    message: 'Timed out sending the simulator Home button; the press may have applied',
+    details: {
+      reason: FOLD_HELPER_HOME_REASONS.hidDispatchTimedOut.reason,
+      dispatched: 'unknown',
+      hint: 'Check the foreground app with appstate or a screenshot before you press Home again.',
     },
   },
 };

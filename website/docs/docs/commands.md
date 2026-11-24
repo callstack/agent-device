@@ -396,6 +396,7 @@ Exact behavior: `agent-device help fold`.
 - `fold closed|half-open|open` sets the pose of an iPhone Duo simulator or a foldable Android emulator, such as `pixel_9_pro_fold`. It reports the pose only after the device confirms it. Physical devices are refused.
 - Take a new snapshot after every fold, even a failed one. Refs and coordinates from before it are stale.
 - On iOS, `fold` needs an Xcode with foldable HID support. The first fold on a host or Xcode builds a helper and takes longer. The response's panel size is not the next snapshot's viewport, so do not use it to place a tap.
+- On an iPhone Duo simulator, `home` and `app-switcher` press the Home button through the same helper, because the XCUITest Home press does not reach the home screen there.
 - `--keyframes` plays a timed hinge trajectory on iOS only, for example `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":5000,"angle":180}]'`.
 - For failure reasons, see [error reasons](/docs/error-reasons). For panels and poses, see `agent-device help foldable`.
 
