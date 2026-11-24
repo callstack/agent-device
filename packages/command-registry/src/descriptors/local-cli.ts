@@ -54,6 +54,7 @@ export const LOCAL_CLI_COMMAND_DESCRIPTORS = [
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
+    mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {

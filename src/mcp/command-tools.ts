@@ -4,7 +4,6 @@ import {
   COMMON_INPUT_AUDIENCE,
   commandInputExample,
   findCommandMetadata,
-  isCommandName,
   listCommandMetadata,
   listMcpCommandMetadata,
   operatorInputRefusal,
@@ -89,6 +88,10 @@ type McpToolConfig = {
   client: AgentDeviceClientConfig;
 };
 
+const mcpCommandMetadata: ReadonlyMap<string, CommandMetadata<CommandName, unknown>> = new Map(
+  listMcpCommandMetadata().map((metadata) => [metadata.name, metadata]),
+);
+
 /**
  * A common alias (`target` for `deviceTarget`) yields to a command that declares the same key
  * itself: `press` retired its own nested `target`, and that migration guidance must still answer.
@@ -159,7 +162,7 @@ export function listCommandTools(options: { outputSchemas: boolean }): Array<{
   outputSchema?: JsonSchema;
   _meta: ToolLoadingMeta;
 }> {
-  return listMcpCommandMetadata().map((definition) => {
+  return Array.from(mcpCommandMetadata.values(), (definition) => {
     // The registry is keyed by the typed-result commands only (CommandResultMap),
     // so guard the lookup; untyped tools resolve to no outputSchema.
     const outputSchema =
@@ -201,10 +204,12 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
   return {
     errorResult: async (error) =>
       await buildErrorToolResult(error, deps.structuredContent, refPins, undefined, undefined),
-    execute: async (name, input, options = {}) => {
-      if (!isCommandName(name)) {
-        throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
+    execute: async (toolName, input, options = {}) => {
+      const metadata = mcpCommandMetadata.get(toolName);
+      if (!metadata) {
+        throw new AppError('INVALID_ARGS', `Unknown command tool: ${toolName}`);
       }
+      const { name } = metadata;
       // Admission boundary. The MCP router (and the AI SDK adapter) forward raw
       // tools/call arguments verbatim, so this executor is the one place the
       // advertised schema is enforced. Every tool schema is
@@ -222,7 +227,6 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       // value, so `batch` cannot name them and declares that object free-form;
       // the flat scan below then looked straight past it. The second check
       // recurses there — see `findInadmissibleNestedCommandInput`.
-      const metadata = findCommandMetadata(name);
       const rejection =
         findInadmissibleInput(name, metadata, input) ??
         findInadmissibleNestedCommandInput(metadata.inputSchema, input, name);
