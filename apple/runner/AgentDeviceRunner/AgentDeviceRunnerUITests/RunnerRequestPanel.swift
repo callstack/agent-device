@@ -76,7 +76,20 @@ extension RunnerTests {
     var window: AnyObject?
     var frame = CGRect.null
     var screen: AnyObject?
-    let failure = RunnerResolveLitPanelWindow(app, litPanel, &window, &frame, &screen)
+    // A walk that raises past its own exception guards leaves this refusal, never a booking.
+    var failure = RunnerApplicationScreenFailure.unresolvedScreen
+    // The walk's issues are held only to be seen: each is recorded again as it would have been.
+    let walk = holdingRecordedIssues {
+      failure = RunnerResolveLitPanelWindow(app, litPanel, &window, &frame, &screen)
+    }
+    walk.issues.forEach { record($0) }
+    // XCTest reports a rejected tree, a window gone during the walk (#2995) and a hung query as an
+    // issue, not an exception, so a walk that recorded one and found no window has not shown that
+    // the app has none.
+    if failure == .unresolvedWindow, !walk.issues.isEmpty {
+      NSLog("AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW_UNREAD issues=%ld", walk.issues.count)
+      return .unreadableWindows
+    }
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }

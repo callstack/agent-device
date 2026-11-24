@@ -35,25 +35,25 @@ private func loadScreenCaptureMetadataTable() throws -> ScreenCaptureMetadataTab
 extension RunnerTests {
   func testScreenCaptureFailureCarriesTheBridgeReasonAsItsOwnCode() {
     XCTAssertEqual(
-      RunnerAppScreenCaptureFailure(.unresolvedWindow).rawValue,
+      RunnerAppScreenCaptureFailure(.unresolvedWindow).wireCode,
       "APP_SCREEN_WINDOW_UNRESOLVED"
     )
     XCTAssertEqual(
-      RunnerAppScreenCaptureFailure(.unresolvedScreen).rawValue,
+      RunnerAppScreenCaptureFailure(.unresolvedScreen).wireCode,
       "APP_SCREEN_UNRESOLVED"
     )
-    XCTAssertEqual(RunnerAppScreenCaptureFailure(.offLitPanel).rawValue, "APP_SCREEN_OFF_LIT_PANEL")
+    XCTAssertEqual(RunnerAppScreenCaptureFailure(.offLitPanel).wireCode, "APP_SCREEN_OFF_LIT_PANEL")
     // The display resolved and the image did not: a distinct code, because an operator chasing a
     // panel problem is chasing the wrong thing here. This one has no bridge counterpart, so it is
     // named on the Swift reason rather than mapped from one.
     XCTAssertEqual(
-      RunnerAppScreenCaptureFailure.unrenderableImage.rawValue,
+      RunnerAppScreenCaptureFailure.unrenderableImage.wireCode,
       "APP_SCREEN_CAPTURE_UNRENDERABLE"
     )
     // A success-shaped reason cannot become a success: the only way here is a caller that forgot to
     // branch, and the capture it describes did not happen.
     XCTAssertEqual(
-      RunnerAppScreenCaptureFailure(RunnerApplicationScreenFailure.none).rawValue,
+      RunnerAppScreenCaptureFailure(RunnerApplicationScreenFailure.none).wireCode,
       "APP_SCREEN_UNRESOLVED"
     )
   }
@@ -113,7 +113,7 @@ extension RunnerTests {
         return XCTFail("the system surface refused, so a refusal is what the caller must get")
       }
       XCTAssertEqual(
-        systemAnswer.rawValue,
+        systemAnswer.wireCode,
         "APP_SCREEN_CAPTURE_UNRENDERABLE",
         "the system surface's answer is the answer, not the session app's"
       )
@@ -134,7 +134,7 @@ extension RunnerTests {
       guard case .failure(let refusal) = outcome else {
         return XCTFail("a display that refused must not become a capture")
       }
-      XCTAssertEqual(refusal.rawValue, "APP_SCREEN_UNRESOLVED")
+      XCTAssertEqual(refusal.wireCode, "APP_SCREEN_UNRESOLVED")
     }
 
     /// A requested app whose windows are all on the dark panel is refused: the system surface would
