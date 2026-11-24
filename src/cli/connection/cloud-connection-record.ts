@@ -155,7 +155,13 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
     }
   } catch (error) {
     if (error instanceof AppError) throw error;
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    if (code === 'ENOENT') return null;
+    const ioCode =
+      code === 'EACCES' || code === 'EPERM' || code === 'EIO' || code === 'ENOTDIR'
+        ? code
+        : undefined;
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason, ioCode);
   }
   throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason);
 }
@@ -328,9 +334,11 @@ export async function withCloudConnectionOwner<T>(
 
 export function cloudConnectionUnavailable(
   reason: (typeof CLOUD_CONNECTION_REASONS)[keyof typeof CLOUD_CONNECTION_REASONS]['reason'],
+  recordReadCode?: 'EACCES' | 'EPERM' | 'EIO' | 'ENOTDIR',
 ): AppError {
   return new AppError('COMMAND_FAILED', 'The cloud connection cannot serve this command.', {
     reason,
+    ...(recordReadCode ? { recordReadCode } : {}),
     hint: 'Run agent-device disconnect in this session to recover it, then reconnect.',
   });
 }
