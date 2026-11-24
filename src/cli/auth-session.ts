@@ -565,8 +565,8 @@ export async function resolveCliSessionAccess(options: {
  * origin would send it to that origin, so the command stops before any request.
  */
 async function assertStoredSessionOrigin(session: CliSessionRecord, env: EnvMap): Promise<void> {
+  const requestedOrigin = new URL(await resolveCloudBaseUrl(env, session.cloudBaseUrl)).origin;
   const storedOrigin = new URL(await resolveCloudBaseUrl({}, session.cloudBaseUrl)).origin;
-  const requestedOrigin = new URL(await resolveCloudBaseUrl(env, storedOrigin)).origin;
   if (requestedOrigin === storedOrigin) return;
   throw new AppError(
     'UNAUTHORIZED',

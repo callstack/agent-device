@@ -266,6 +266,10 @@ test.each(['http://issuer.example', 'https://user:secret@issuer.example'])(
           const failure = normalizeError(error);
           return (
             failure.details?.reason === 'cloud_invalid_origin' &&
+            failure.message ===
+              (env.AGENT_DEVICE_CLOUD_BASE_URL
+                ? 'Invalid AGENT_DEVICE_CLOUD_BASE_URL.'
+                : 'Invalid saved cloud API origin.') &&
             !JSON.stringify(failure).includes(issuer)
           );
         },
