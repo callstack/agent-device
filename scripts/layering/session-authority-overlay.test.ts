@@ -366,3 +366,42 @@ test('R75 catches a new handler shape edge expressed as an import type', () => {
   assert.equal(violations[0]!.file, 'packages/daemon/src/sessions/handlers/new.ts');
   assert.match(violations[0]!.message, /new handler-owned SessionState shape edge/);
 });
+
+test('R75 catches new handler bindings and re-exports of the resolved raw store', () => {
+  const store = 'packages/daemon/src/core/session-store.ts';
+  const handler = 'packages/daemon/src/execution/handlers/new.ts';
+  const specifier = '../../core/session-store.js';
+  const alias = '@agent-device/daemon/store-fixture';
+  const targets = new Map([[alias, store]]);
+  const base = new Map([[store, STORE_STUB]]);
+  const reference = measureSessionAuthorityOverlay(base, resolveImportEdges(base, targets));
+  const cases = [
+    [`import { SessionStore } from '${specifier}';`, true],
+    [`import type { SessionStore as Store } from '${alias}';`, true],
+    [`import { "SessionStore" as Store } from '${specifier}';`, true],
+    [`import * as store from '${specifier}';`, true],
+    [`import type * as store from '${specifier}';`, true],
+    [`type Store = import('${specifier}').SessionStore;`, true],
+    [`type Store = typeof import('${specifier}');`, true],
+    [`export { SessionStore as Store } from '${specifier}';`, true],
+    [`export type { SessionStore as Store } from '${alias}';`, true],
+    [`export { "SessionStore" as Store } from '${specifier}';`, true],
+    [`export * from '${specifier}';`, true],
+    [`export type * from '${specifier}';`, true],
+    [`export * as store from '${specifier}';`, true],
+    [`import { resolveDaemonStateDir as SessionStore } from '${specifier}';`, false],
+    [`export { resolveDaemonStateDir as SessionStore } from '${specifier}';`, false],
+    [`import '${specifier}';`, false],
+  ] as const;
+
+  for (const [source, hasAuthority] of cases) {
+    const tree = new Map([...base, [handler, source]]);
+    const measured = measureSessionAuthorityOverlay(tree, resolveImportEdges(tree, targets));
+    const violations = checkSessionAuthorityOverlay(measured, reference);
+    assert.deepEqual(
+      violations.map(({ file, rule }) => ({ file, rule })),
+      hasAuthority ? [{ file: handler, rule: SESSION_AUTHORITY_OVERLAY_RULE }] : [],
+      source,
+    );
+  }
+});
