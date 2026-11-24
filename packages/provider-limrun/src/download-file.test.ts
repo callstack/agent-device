@@ -249,7 +249,7 @@ test('rejects a recording URL on a different origin before making a request', as
       destinationPath,
       timeoutMs: 5_000,
     }),
-  ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
+  ).rejects.toMatchObject({ details: { reason: 'limrun_download_endpoint_blocked' } });
   expect(traffic).not.toHaveBeenCalled();
 });
 
@@ -285,7 +285,7 @@ test('rejects an authenticated plaintext download to a non-loopback instance', a
         destinationPath,
         timeoutMs: 5_000,
       }),
-    ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
+    ).rejects.toMatchObject({ details: { reason: 'limrun_download_endpoint_blocked' } });
     expect(request).not.toHaveBeenCalled();
   } finally {
     request.mockRestore();

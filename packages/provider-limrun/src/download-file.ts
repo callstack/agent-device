@@ -21,6 +21,8 @@ const LIMRUN_DOWNLOAD_REASONS = {
   timeout: { reason: 'limrun_download_timeout' },
   // The transfer failed before it could ask the instance for the file.
   failed: { reason: 'limrun_download_failed' },
+  // An authenticated download must use the instance origin and a secure transport.
+  endpointBlocked: { reason: 'limrun_download_endpoint_blocked' },
 } as const satisfies ReasonTable<'limrun'>;
 
 /**
@@ -64,14 +66,13 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
 function instanceDownloadUrl(apiUrl: string, value: string): URL {
   const url = URL.parse(value);
   const instance = URL.parse(apiUrl);
-  if (!url || !instance || url.origin !== instance.origin || url.username || url.password) {
-    throw new TypeError('Invalid Limrun download endpoint.');
-  }
-  if (
-    url.protocol !== 'https:' &&
-    !(url.protocol === 'http:' && isLoopbackUrlHostname(url.hostname))
-  ) {
-    throw new TypeError('Invalid Limrun download endpoint.');
+  if (!url || !instance) throw new TypeError('Invalid Limrun download endpoint.');
+  const secure =
+    url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackUrlHostname(url.hostname));
+  if (url.origin !== instance.origin || url.username || url.password || !secure) {
+    throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download endpoint.', {
+      reason: LIMRUN_DOWNLOAD_REASONS.endpointBlocked.reason,
+    });
   }
   return url;
 }
