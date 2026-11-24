@@ -2570,6 +2570,8 @@ Use `AGENT_DEVICE_CLOUD_BASE_URL` for a custom cloud session API endpoint. Cloud
 
 A compatible [Limrun plugin](/docs/limrun) enables its scoped attachment transport. The CLI only offers that transport when the installed plugin supports hosted attachments. The attachment uses an isolated local daemon with the instance credentials for its platform. `disconnect` blocks new commands, stops that daemon, and releases the hosted lease. If the local daemon cannot be stopped, the CLI still releases the hosted lease. Run `disconnect` again to finish the local cleanup.
 
+For a Limrun iOS attachment on a nightly or development build, set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` before connecting. [iOS simulator runner setup](/docs/limrun#use-an-ios-simulator)
+
 Use the CLI with the session name to control the rental. MCP returns `cloud_connection_owns_session` for device commands that name a cloud-owned session.
 
 ## Remote Metro workflow
