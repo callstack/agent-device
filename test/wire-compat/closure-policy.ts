@@ -43,6 +43,8 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Error-code vocabulary is carried as a plain string in DaemonError.code; adding a code cannot change the envelope a peer parses.',
   'packages/kernel/src/errors.ts#AppErrorDetails':
     'Local detail bag behind AppError; the wire form is DaemonError.details, typed as Record<string, unknown> and listed.',
+  'packages/daemon-client/src/daemon-client-request.ts#DaemonDispatch':
+    'Client-local admission callback. It can allow or refuse an HTTP handoff without changing any request or response fields.',
   'packages/daemon-client/src/daemon-client-metadata.ts#DaemonInfo':
     'Client-side record of where a daemon is listening (pid, ports, state dir). Never serialized into a request or response.',
   'packages/daemon/src/core/daemon-request.ts#DaemonRequest':
