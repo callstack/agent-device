@@ -17,6 +17,10 @@ function harness(options: { bundledVersion?: string; cli?: EntryModules['cli'] }
   const exits: number[] = [];
   const mcpServers: Array<{ structured: boolean }> = [];
   const modules: EntryModules = {
+    rootHelp: async () => {
+      loaded.push('rootHelp');
+      return cliHelp.buildUsageText();
+    },
     help: async () => {
       loaded.push('help');
       return cliHelp;
@@ -86,11 +90,14 @@ test('--version prints the bundled version, or reads it when running from source
   assert.deepEqual([source.stdout, source.loaded], [['9.9.9-source\n'], ['version']]);
 });
 
-test('no command prints usage and exits 1 after flushing', async () => {
-  const entry = harness();
-  await entry.run([]);
-  assert.equal(entry.stdout.join(''), `${cliHelp.buildUsageText()}\n`);
-  assert.deepEqual(entry.exits, [1]);
+test('root usage loads only the overview and exits 1 only when no command is given', async () => {
+  for (const argv of [[], ['help'], ['--help'], ['-h']]) {
+    const entry = harness();
+    await entry.run(argv);
+    assert.equal(entry.stdout.join(''), `${cliHelp.buildUsageText()}\n`);
+    assert.deepEqual(entry.loaded, ['rootHelp']);
+    assert.deepEqual(entry.exits, argv.length === 0 ? [1] : []);
+  }
 });
 
 test('mcp and mcp --structured start the server; help prints usage and other arguments reach the CLI', async () => {

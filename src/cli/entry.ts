@@ -1,7 +1,7 @@
 /** The lazily loaded halves of the process; `bin.ts` supplies the real `import()` calls. */
 export type EntryModules = Readonly<{
+  rootHelp: () => Promise<string>;
   help: () => Promise<{
-    buildUsageText(): string;
     resolveHelpTargetUsageText(target: string): string | null;
   }>;
   cli: () => Promise<{ runCliProcess(argv: string[]): Promise<unknown> }>;
@@ -39,7 +39,7 @@ async function dispatch(argv: string[], modules: EntryModules, io: EntryIo): Pro
 }
 
 async function printUsageAndExit(modules: EntryModules, io: EntryIo): Promise<void> {
-  io.stdout(`${(await modules.help()).buildUsageText()}\n`);
+  io.stdout(`${await modules.rootHelp()}\n`);
   await (await modules.processExit()).exitAfterFlush(1);
 }
 
@@ -54,9 +54,11 @@ async function printHelp(
   modules: EntryModules,
   io: EntryIo,
 ): Promise<void> {
-  const help = await modules.help();
-  const text =
-    target === null ? `${help.buildUsageText()}\n` : help.resolveHelpTargetUsageText(target);
+  if (target === null) {
+    io.stdout(`${await modules.rootHelp()}\n`);
+    return;
+  }
+  const text = (await modules.help()).resolveHelpTargetUsageText(target);
   if (text === null) return await runCli(argv, modules);
   io.stdout(text);
 }
