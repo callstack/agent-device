@@ -10,6 +10,7 @@ import type {
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { runHarmonyShell } from './hdc.ts';
 import { parseHarmonyForegroundRead } from './app-state.ts';
+import { remainingReadBudgetMs } from './read-budget.ts';
 import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
 export function parseHarmonyBundleList(rawOutput: string): string[] {
@@ -371,13 +372,10 @@ export async function verifyHarmonyOpenForeground(
   // poll: a budget the deadline squeezed below the 5s default says deadline,
   // and the deadline hint fires only when no read had room to run.
   const requestDeadlineAtMs = input.execution.requestDeadlineAtMs;
-  const pollBudgetMs =
-    requestDeadlineAtMs === undefined
-      ? HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS
-      : Math.min(
-          HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
-          Math.max(0, requestDeadlineAtMs - Date.now()),
-        );
+  const pollBudgetMs = remainingReadBudgetMs(
+    HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
+    requestDeadlineAtMs,
+  );
   const verification = await pollHarmonyOpenForeground(device, bundleId, { signal, pollBudgetMs });
   if (verification === undefined) return outcome;
   if (input.execution.foreground !== true) {
