@@ -828,7 +828,7 @@ test.each(['first inspection', 'checkpoint write'])(
           phase: 'export-proof-pending',
           completion: { outPath: source },
           remoteCaptureExport: {
-            identities: fault === 'first inspection' ? [] : [expect.any(String)],
+            identities: fault === 'first inspection' ? [null] : [expect.any(String)],
           },
         },
       },
@@ -888,6 +888,11 @@ test('explicit stop keeps its binding but never serves an unproved sidecar', asy
       expect(await run('stop')).toMatchObject({
         ok: false,
         error: { message: 'Recording export is missing producer proof.' },
+      });
+      harness.runtime.finish.mockImplementation(finish);
+      expect(await run('stop')).toMatchObject({
+        ok: false,
+        error: { message: 'Recording export does not match its stored proof.' },
       });
       expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
     });

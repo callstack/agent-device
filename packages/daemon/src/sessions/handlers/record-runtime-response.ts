@@ -8,7 +8,6 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
 import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
-import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 
 export const UNLEASED_CAPTURE = 'unleased';
 
@@ -20,13 +19,6 @@ export function recordingOutputLeaseVerifier(
   if (owner === UNLEASED_CAPTURE) return null;
   if (typeof owner === 'string' && /^[a-f0-9]{64}$/.test(owner)) return owner;
   return undefined;
-}
-
-export function isLegacyRemoteRecordingOutput(completion: ScreenRecordingCompletion): boolean {
-  return (
-    completion.clientOutPath !== undefined &&
-    isRemoteTempArtifactPath(completion.outPath, 'recording', path.extname(completion.outPath))
-  );
 }
 
 export function buildRecordingStartResponse(

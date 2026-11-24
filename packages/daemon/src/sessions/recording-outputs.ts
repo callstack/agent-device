@@ -29,7 +29,6 @@ import {
   recordingRegistrySignal,
 } from '../resources/artifact-tracking.ts';
 import {
-  isLegacyRemoteRecordingOutput,
   recordingOutputLeaseVerifier,
   recordingStopArtifacts,
 } from './handlers/record-runtime-response.ts';
@@ -43,24 +42,22 @@ function readVerifiedRecording(envelope: RecordingEnvelope) {
   if (
     envelope.lifecycle !== 'completed' ||
     !completion ||
-    isLegacyRemoteRecordingOutput(completion) ||
-    completion.outPath !== metadata?.remoteCapturePath ||
-    metadata.remoteCaptureArchive === true ||
+    metadata?.remoteCaptureOutput !== true ||
+    completion.outPath !== metadata.remoteCapturePath ||
+    metadata.remoteCaptureReservation !== envelope.fence.token ||
     !isRecord(verified) ||
     !Array.isArray(verified.identities) ||
-    !Array.isArray(verified.outputIds) ||
     typeof verified.completedAt !== 'number' ||
     !Number.isFinite(verified.completedAt)
   )
     throw leasedOutputRefusal('Recording');
-  const { identities, outputIds } = verified;
+  const { identities } = verified;
   const artifacts = recordingStopArtifacts(completion);
   if (artifacts.length !== identities.length) throw leasedOutputRefusal('Recording');
   const files = artifacts.map((artifact, index) => {
     const sourceIdentity = identities[index];
-    const artifactId = outputIds[index];
-    if (typeof sourceIdentity !== 'string' || artifactId !== `${envelope.fence.token}-${index + 1}`)
-      throw leasedOutputRefusal('Recording');
+    if (typeof sourceIdentity !== 'string') throw leasedOutputRefusal('Recording');
+    const artifactId = `${envelope.fence.token}-${index + 1}`;
     return { ...artifact, path: artifact.path!, sourceIdentity, artifactId };
   });
   return {
@@ -69,6 +66,34 @@ function readVerifiedRecording(envelope: RecordingEnvelope) {
     completedAt: verified.completedAt,
     producer: recordingProducer(metadata),
   };
+}
+
+export async function retainSessionRecording(
+  ref: SessionRef,
+  envelope: RecordingEnvelope,
+): Promise<void> {
+  const { metadata } = envelope;
+  if (
+    metadata?.remoteCaptureOutput !== true ||
+    metadata.remoteCaptureLifetime !== ref.lifetime.journalId
+  )
+    return;
+  try {
+    await commitRecordingOutputs(
+      envelope,
+      metadata.remoteCaptureTenantId === null ? 'retain' : 'live',
+    );
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'leased_session_recording_retention_failed',
+      data: {
+        session: ref.address,
+        error: errorMessage(error),
+        hasExportProof: metadata.remoteCaptureExport !== undefined,
+      },
+    });
+  }
 }
 
 function recordingProducer(metadata: RecordingEnvelope['metadata']) {

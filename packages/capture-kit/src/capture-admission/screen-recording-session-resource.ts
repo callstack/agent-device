@@ -49,7 +49,6 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
           remoteCaptureExport: await verifyRecordingExport(
             metadata.remoteCapturePath,
             result,
-            metadata.remoteCaptureReservation,
             metadata,
             progress,
           ),
@@ -108,7 +107,6 @@ export function finishLiveScreenRecording(params: {
 async function verifyRecordingExport(
   reservedPath: string,
   completion: ScreenRecordingCompletion,
-  reservation: string,
   metadata: JsonObject,
   progress?: DurableCaptureProgress,
 ) {
@@ -133,31 +131,32 @@ async function verifyRecordingExport(
   if (!matchesReservation) {
     throw new AppError('COMMAND_FAILED', 'Recording export does not match its reservation.');
   }
-  const outputIds = files.map((_, index) => `${reservation}-${index + 1}`);
   const stored = metadata.remoteCaptureExport;
   if (stored !== undefined) {
-    const { completedAt, known } = readRecordingExportProgress(stored, outputIds);
-    if (known.some((identity, index) => readRecordingExportIdentity(files[index]!) !== identity)) {
+    const { completedAt, identities } = readRecordingExportProgress(stored, files.length);
+    if (
+      identities.some(
+        (identity, index) =>
+          identity !== null && readRecordingExportIdentity(files[index]!) !== identity,
+      )
+    ) {
       throw new AppError('COMMAND_FAILED', 'Recording export does not match its stored proof.');
     }
-    if (known.length !== files.length) throw missingProducerProof();
-    return { completedAt, identities: known, outputIds };
+    if (identities.includes(null)) throw missingProducerProof();
+    return { completedAt, identities };
   }
   if (!progress) throw missingProducerProof();
-  return checkpointRecordingExport(files, outputIds, progress);
+  return checkpointRecordingExport(files, progress);
 }
 
-function checkpointRecordingExport(
-  files: readonly string[],
-  outputIds: string[],
-  progress: DurableCaptureProgress,
-) {
+function checkpointRecordingExport(files: readonly string[], progress: DurableCaptureProgress) {
   const completedAt = Date.now();
-  const identities: string[] = [];
-  const proof = { completedAt, identities, outputIds };
+  const identities: (string | null)[] = files.map(() => null);
+  const proof = { completedAt, identities };
   const evidence = { remoteCaptureExport: proof };
   try {
-    for (const file of files) identities.push(readRecordingExportIdentity(file));
+    for (const [index, file] of files.entries())
+      identities[index] = readRecordingExportIdentity(file);
     progress.record(evidence);
   } catch (error) {
     if (error instanceof RecordingProofIoError) throw new RecordingProofIoError(evidence);
@@ -166,21 +165,20 @@ function checkpointRecordingExport(
   return proof;
 }
 
-function readRecordingExportProgress(previous: unknown, outputIds: string[]) {
-  const { completedAt, identities, outputIds: storedIds } = isRecord(previous) ? previous : {};
+function readRecordingExportProgress(previous: unknown, fileCount: number) {
+  const { completedAt, identities } = isRecord(previous) ? previous : {};
   if (
     typeof completedAt !== 'number' ||
     !Number.isFinite(completedAt) ||
     !Array.isArray(identities) ||
-    !identities.every((identity): identity is string => typeof identity === 'string') ||
-    identities.length > outputIds.length ||
-    !Array.isArray(storedIds) ||
-    storedIds.length !== outputIds.length ||
-    !outputIds.every((id, index) => id === storedIds[index])
+    identities.length !== fileCount ||
+    !identities.every(
+      (identity): identity is string | null => identity === null || typeof identity === 'string',
+    )
   ) {
     throw new AppError('COMMAND_FAILED', 'Recording export does not match its stored proof.');
   }
-  return { completedAt, known: identities };
+  return { completedAt, identities };
 }
 
 function readRecordingExportIdentity(file: string): string {
@@ -216,15 +214,10 @@ export async function finishPendingScreenRecordingProof(
         !screenRecordingNativeCleanupSettled(metadata) ||
         !completion ||
         typeof metadata.remoteCapturePath !== 'string' ||
-        typeof metadata.remoteCaptureReservation !== 'string'
+        metadata.remoteCaptureReservation !== expected.fence.token
       )
         throw unreadableRecordingProof();
-      const proof = await verifyRecordingExport(
-        metadata.remoteCapturePath,
-        completion,
-        metadata.remoteCaptureReservation,
-        metadata,
-      );
+      const proof = await verifyRecordingExport(metadata.remoteCapturePath, completion, metadata);
       return lease.transition('completed', {
         metadata: {
           ...lease.envelope.metadata,

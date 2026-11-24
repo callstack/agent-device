@@ -249,7 +249,7 @@ async function finishSessionScreenRecording(params: {
     await screenRecordingDurableResource.confirmLiveMissing({ binding, resource: recording });
     return;
   }
-  const completion = await finishLiveScreenRecording({
+  await finishLiveScreenRecording({
     binding,
     intent: 'disposal',
     confirmedMissing,
@@ -264,8 +264,8 @@ async function finishSessionScreenRecording(params: {
     record.envelope.fence.generation !== recording.envelope.fence.generation
   )
     return;
-  const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
-  await retainLeasedSessionRecording(params.ref, completion, record.envelope);
+  const { retainSessionRecording } = await import('./recording-outputs.ts');
+  await retainSessionRecording(params.ref, record.envelope);
 }
 
 async function finishSessionAudioProbe(params: {

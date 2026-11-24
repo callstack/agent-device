@@ -293,6 +293,14 @@ test('direct HTTP recording replay requires known remote output provenance', asy
       expect((await replay()).error?.data?.details).toMatchObject({
         reason: 'LEASE_OUTPUT_MISMATCH',
       });
+      const { remoteCaptureReservation: _reservation, ...unreserved } = metadata;
+      screenRecordingResourceStore.write(resourcePath, {
+        ...record.envelope,
+        metadata: { ...unreserved, remoteCaptureLease: 'unleased' },
+      });
+      expect((await replay()).error?.data?.details).toMatchObject({
+        reason: 'LEASE_OUTPUT_MISMATCH',
+      });
       const savedCompletion = metadata.completion;
       if (
         !savedCompletion ||
@@ -324,6 +332,7 @@ test('direct HTTP recording replay requires known remote output provenance', asy
       const data = successfulData(await replay());
       expect(data.artifacts?.[0]?.localPath).toBe(clientPath);
       const id = data.artifacts?.[0]?.artifactId;
+      expect(id).toBe(`${record.envelope.fence.token}-1`);
       const download = await fetch(`${base}/artifacts/${id}`, {
         headers: { authorization: 'Bearer test-token' },
       });

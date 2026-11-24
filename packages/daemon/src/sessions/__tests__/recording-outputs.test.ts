@@ -683,8 +683,7 @@ test('close persists verified files before retrying an unreadable sidecar', asyn
         phase: 'export-proof-pending',
         cleanupStatus: 'cleaned',
         remoteCaptureExport: {
-          identities: [expect.any(String)],
-          outputIds: [expect.any(String), expect.any(String)],
+          identities: [expect.any(String), null],
         },
       },
     },
