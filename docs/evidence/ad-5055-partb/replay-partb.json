@@ -15,9 +15,7 @@
       "replayPath": "/Users/stringzhao/workspace/agent-device-wt-5055/docs/evidence/ad-5055-partb.ad",
       "step": 1,
       "action": "open",
-      "positionals": [
-        "<arg>"
-      ],
+      "positionals": ["<arg>"],
       "artifactPaths": [],
       "divergence": {
         "version": 1,

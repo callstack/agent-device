@@ -15,9 +15,7 @@
       "replayPath": "/tmp/ad-5055-partb/one-line.ad",
       "step": 1,
       "action": "open",
-      "positionals": [
-        "<arg>"
-      ],
+      "positionals": ["<arg>"],
       "artifactPaths": [],
       "divergence": {
         "version": 1,
