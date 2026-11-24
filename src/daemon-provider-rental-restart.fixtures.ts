@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { startDaemonRuntime } from '@agent-device/daemon';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 
 export const rentalRestartFixturePath = new URL(import.meta.url);
