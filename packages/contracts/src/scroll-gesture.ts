@@ -21,8 +21,20 @@ export type ScrollInputDirection = (typeof SCROLL_INPUT_DIRECTIONS)[number];
 
 export const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 export type ScrollDirection = (typeof SCROLL_DIRECTIONS)[number];
-export const SWIPE_PRESETS = ['left', 'right', 'left-edge', 'right-edge'] as const;
+export const SWIPE_PRESETS = [
+  'left',
+  'right',
+  'left-edge',
+  'right-edge',
+  'split-view-left',
+  'split-view-right',
+] as const;
 export type SwipePreset = (typeof SWIPE_PRESETS)[number];
+/** Presets that move a full-screen app into one half of Split View on a foldable iOS simulator. */
+export type SplitViewSwipePreset = Extract<SwipePreset, `split-view-${string}`>;
+export function isSplitViewSwipePreset(preset: SwipePreset): preset is SplitViewSwipePreset {
+  return preset === 'split-view-left' || preset === 'split-view-right';
+}
 const SCREEN_EDGE_SWIPE_PRESETS: ReadonlySet<SwipePreset> = new Set(['left-edge', 'right-edge']);
 /** Edge presets drive screen-edge gestures, such as a back swipe. */
 export function isScreenEdgeSwipePreset(preset: SwipePreset): boolean {
@@ -254,7 +266,7 @@ export function assertScrollGestureInput(options: { amount?: number; pixels?: nu
 }
 
 export function buildSwipePresetGesturePlan(
-  preset: SwipePreset,
+  preset: Exclude<SwipePreset, SplitViewSwipePreset>,
   frame: GestureReferenceFrame,
 ): SwipePresetGesturePlan {
   if (preset === 'left' || preset === 'right') {

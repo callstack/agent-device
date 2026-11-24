@@ -5,6 +5,8 @@ import {
   buildSwipePresetGesturePlan,
   gestureDirectionDelta,
   isScreenEdgeSwipePreset,
+  isSplitViewSwipePreset,
+  type SplitViewSwipePreset,
   type SwipePreset,
 } from '@agent-device/contracts/scroll-gesture';
 import {
@@ -47,6 +49,24 @@ const GESTURE_PLAN_REFUSAL_REASONS = {
   // two-finger path cannot keep its contacts the minimum span apart inside it.
   trajectoryOutOfBounds: { reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS' },
 } as const satisfies ReasonTable<'gesture'>;
+
+/** Why a Split View swipe preset was refused before any touch went down. */
+const SPLIT_VIEW_GESTURE_REASONS = {
+  // Split View presets need an iOS simulator with more than one panel and its inner panel lit.
+  unavailable: { reason: 'split_view_unavailable' },
+} as const satisfies ReasonTable<'gesture'>;
+/** The refusal for a Split View preset on a device or backend without Split View. */
+export function splitViewUnavailableError(
+  message: string,
+  details?: Record<string, unknown>,
+): AppError {
+  return new AppError('UNSUPPORTED_OPERATION', message, {
+    ...details,
+    reason: SPLIT_VIEW_GESTURE_REASONS.unavailable.reason,
+    dispatched: 'no',
+    hint: 'Use an iPhone Duo simulator: run fold open, open the app full screen, then swipe again.',
+  });
+}
 const GESTURE_FLING_DEFAULT_DISTANCE = 180;
 
 const GESTURE_INITIAL_SPAN_RATIO = 0.25;
@@ -56,6 +76,8 @@ const GESTURE_MINIMUM_RELIABLE_SPAN_PX = 48;
 const GESTURE_VIEWPORT_INSET_PX = 1;
 const DEFAULT_PAN_DURATION_MS = 500;
 export const GESTURE_FLING_DURATION_MS = 100;
+const SPLIT_VIEW_DURATION_MS = 2100;
+const SPLIT_VIEW_EDGE_INSET_PX = 1;
 const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
 const MAX_ROTATION_DEFAULT_DURATION_MS = 2_400;
@@ -94,7 +116,7 @@ export function buildGesturePlan(
   const profile = gesturePlatformProfile(platform);
   switch (input.intent) {
     case 'fling':
-      return buildFlingPlan(input, frame);
+      return buildFlingPlan(input, frame, platform);
     case 'pan':
       return buildPanPlan(input, frame, profile);
     case 'pinch':
@@ -226,8 +248,12 @@ function withContactHolds(
 function buildFlingPlan(
   input: Extract<GestureSemanticInput, { intent: 'fling' }>,
   viewport: Rect,
+  platform: PublicPlatform | undefined,
 ): SinglePointerGesturePlan {
   if ('preset' in input) {
+    if (isSplitViewSwipePreset(input.preset)) {
+      return buildSplitViewPlan(input.preset, viewport, platform);
+    }
     const { from, to } = presetGestureEndpoints(input.preset, viewport);
     const plan = buildSinglePointerPlan(
       'fling',
@@ -262,6 +288,44 @@ function buildFlingPlan(
     viewport,
     'endpoint-hold',
   );
+}
+
+/**
+ * The system Split View drag: up from the bottom edge to the middle, a hold that lifts the app
+ * window, then sideways toward the requested half. The sideways end stays short of the vertical
+ * travel, so the edge touch keeps its upward swipe direction.
+ */
+function buildSplitViewPlan(
+  preset: SplitViewSwipePreset,
+  viewport: Rect,
+  platform: PublicPlatform | undefined,
+): SinglePointerGesturePlan {
+  if (platform !== 'ios') {
+    throw splitViewUnavailableError(`gesture swipe ${preset} works only on iOS`);
+  }
+  const centerX = viewport.x + viewport.width / 2;
+  const middleY = viewport.y + viewport.height / 2;
+  const endX = viewport.x + viewport.width * (preset === 'split-view-left' ? 0.2 : 0.8);
+  const samples: SinglePointerTrajectory['samples'] = [
+    {
+      offsetMs: 0,
+      point: { x: centerX, y: viewport.y + viewport.height - SPLIT_VIEW_EDGE_INSET_PX },
+    },
+    { offsetMs: 600, point: { x: centerX, y: middleY } },
+    { offsetMs: 1400, point: { x: centerX, y: middleY } },
+    { offsetMs: 1900, point: { x: endX, y: middleY } },
+    { offsetMs: SPLIT_VIEW_DURATION_MS, point: { x: endX, y: middleY } },
+  ];
+  assertSamplesInViewport(samples, viewport, { intent: 'fling', pointerId: 0 });
+  return {
+    topology: 'single',
+    intent: 'fling',
+    executionProfile: 'endpoint-hold',
+    contactOrigin: 'split-view-edge',
+    durationMs: SPLIT_VIEW_DURATION_MS,
+    viewport,
+    pointers: [{ pointerId: 0, samples }],
+  };
 }
 
 function buildPanPlan(
@@ -719,7 +783,10 @@ function interpolateGesturePoint(start: Point, end: Point, progress: number): Po
   };
 }
 
-function presetGestureEndpoints(preset: SwipePreset, viewport: Rect): { from: Point; to: Point } {
+function presetGestureEndpoints(
+  preset: Exclude<SwipePreset, SplitViewSwipePreset>,
+  viewport: Rect,
+): { from: Point; to: Point } {
   const relative = buildSwipePresetGesturePlan(preset, {
     referenceWidth: viewport.width,
     referenceHeight: viewport.height,

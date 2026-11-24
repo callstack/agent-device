@@ -21,5 +21,5 @@ Changing the pose:
 
 Home and app switcher:
   On a foldable iOS simulator, home and app-switcher press the Home button through the same helper's simulator HID, once for home and twice for the app switcher, because the XCUITest Home press does not reach the home screen there. Verified closed, half-open, and open. The first press on a host or Xcode builds the helper and takes longer.
-  Split View on the open device: run open com.apple.springboard, longpress an app icon, press "Open in Split View", then press the icon of the second app. Take the labels from snapshot -i.`,
+  Split View on the open device: with the session app full screen, run gesture swipe split-view-left or gesture swipe split-view-right. The app moves to that half and the Home Screen fills the other; open <bundle> launches a second app there and binds the session to it. Switch between the halves with open <bundle>; the split stays. Any other device, a closed Duo, or a WebDriver provider refuses with UNSUPPORTED_OPERATION and reason split_view_unavailable before any touch.`,
 } as const;
