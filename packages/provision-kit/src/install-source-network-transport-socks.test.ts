@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, test } from 'vitest';
+import { afterAll, beforeAll, test, vi } from 'vitest';
 
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 
@@ -215,6 +216,39 @@ test(
     // handshake facts. TLS trust is fixed when a process starts, so this runs the scenarios in a
     // child spawned with the loopback fixture certificate as an extra CA.
     const mark = lab.mark();
+    const bytesBeforeOriginConnect: number[] = [];
+    const write = vi.spyOn(net.Socket.prototype, 'write');
+    const connect = net.connect;
+    const dial = vi.spyOn(net, 'connect').mockImplementation((...args) => {
+      const [options]: unknown[] = args;
+      if (
+        typeof options !== 'object' ||
+        !options ||
+        !('port' in options) ||
+        options.port !== lab.tlsOriginPort
+      ) {
+        return Reflect.apply(connect, net, args);
+      }
+      const upstream = new net.Socket();
+      // Give the fixture the pending socket and count replies before it handles the real connect.
+      upstream.once('connect', () => {
+        const proxyClient = write.mock.contexts
+          .slice()
+          .reverse()
+          .find(
+            (socket): socket is net.Socket =>
+              socket instanceof net.Socket && socket.localPort === lab.socksPort,
+          );
+        bytesBeforeOriginConnect.push(proxyClient?.bytesWritten ?? 0);
+      });
+      queueMicrotask(() => Reflect.apply(upstream.connect, upstream, args));
+      return upstream;
+    });
+    t.onTestFinished(() => {
+      dial.mockRestore();
+      write.mockRestore();
+    });
+
     const results = await runSocksTlsScenarios({
       here: HERE,
       tlsOriginPort: lab.tlsOriginPort,
@@ -223,6 +257,12 @@ test(
       fixtureCertificatePath: FIXTURE_CERTIFICATE,
     });
 
+    // Only the two-byte SOCKS greeting reply may be sent before each origin connects.
+    assert.deepEqual(
+      bytesBeforeOriginConnect,
+      [2, 2],
+      'each CONNECT reply must wait for its origin',
+    );
     assert.deepEqual(results, [
       {
         scenario: 'socks5-tls-origin',

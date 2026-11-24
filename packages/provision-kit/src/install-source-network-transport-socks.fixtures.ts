@@ -326,23 +326,21 @@ function createSocksProxyFixture(params: {
         phase = 'relay';
         return address.offset;
       }
-      params.requests.push({
-        destination: `${address.host}:${address.port}`,
-        authMethod,
-      });
-      client.write(socksReply(SOCKS_REPLY_OK));
       startRelay(address.host, address.port, address.offset);
       return address.offset;
     }
 
     function startRelay(host: string, port: number, consumed: number): void {
       phase = 'relay';
+      client.pause();
       client.removeListener('data', onData);
       const upstream = net.connect({ host, port });
       upstream.on('error', () => client.destroy());
-      client.on('error', () => upstream.destroy());
+      client.once('close', () => upstream.destroy());
       const rest = pending.subarray(consumed);
       upstream.once('connect', () => {
+        params.requests.push({ destination: `${host}:${port}`, authMethod });
+        client.write(socksReply(SOCKS_REPLY_OK));
         if (rest.length > 0) upstream.write(rest);
         client.pipe(upstream);
         upstream.pipe(client);
