@@ -96,8 +96,8 @@ export type SettingsUpdateOptions =
       app?: string;
     })
   | (PermissionUpdateOptions & { permission: ModedPermissionTarget; mode?: PermissionMode })
-  /** Every other target refuses a mode at runtime, so the type refuses it too. */
+  /** A mode-free update accepts a target union without requiring the caller to narrow it. */
   | (PermissionUpdateOptions & {
-      permission: Exclude<PermissionTarget, ModedPermissionTarget>;
+      permission: PermissionTarget;
       mode?: never;
     });

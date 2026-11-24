@@ -50,6 +50,18 @@ describe('public client permission vocabulary', () => {
     expectTypeOf<Grant<'camera'> & { mode: 'limited' }>().not.toExtend<SettingsUpdateOptions>();
     expectTypeOf<Grant<'accessibility'> & { mode: 'full' }>().not.toExtend<SettingsUpdateOptions>();
   });
+
+  test('accepts union-valued permission targets and actions without a mode', () => {
+    type Update = {
+      setting: 'permission';
+      permission: (typeof MOBILE_TARGETS)[number] | (typeof MACOS_ONLY_TARGETS)[number];
+      state: 'grant' | 'deny' | 'reset';
+      platform: 'ios' | 'android';
+      app?: string;
+    };
+    expectTypeOf<Update>().toExtend<SettingsUpdateOptions>();
+    expectTypeOf<Update & { mode: 'limited' }>().not.toExtend<SettingsUpdateOptions>();
+  });
 });
 
 describe('public client settings cover the catalog', () => {
