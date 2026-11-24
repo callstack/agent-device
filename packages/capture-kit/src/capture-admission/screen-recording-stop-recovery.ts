@@ -14,6 +14,7 @@ import { isRecord } from '@agent-device/kernel/record';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DurableCaptureResourceRecord } from '../durable-capture/index.ts';
 import {
+  RecordingProofIoError,
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
   screenRecordingResourceStore,
 } from './screen-recording-resource-store.ts';
@@ -141,9 +142,7 @@ export function readReplayableStoredCompletion(
 }
 
 export function unreadableRecordingProof(): AppError {
-  return new AppError('COMMAND_FAILED', 'Recording ownership proof could not be read.', {
-    retriable: true,
-  });
+  return new RecordingProofIoError();
 }
 
 export function readStoredCompletion(

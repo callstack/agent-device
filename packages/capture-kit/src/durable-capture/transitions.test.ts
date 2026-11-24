@@ -91,6 +91,34 @@ test('finish failure remains primary when cleanup and cleanup-pending persistenc
   expect(context.sessions.get(context.sessionName)?.capture?.handle).toBe(start.handle);
 });
 
+test('a failed terminal write does not dispose a capture without a pending proof policy', async () => {
+  const context = makeDurableCaptureContext();
+  const writeError = new Error('completion write failed');
+  const definition = createTestCaptureDefinition({
+    ...testCaptureStore,
+    write(resourcePath, envelope) {
+      if (envelope.lifecycle === 'completed') throw writeError;
+      testCaptureStore.write(resourcePath, envelope);
+    },
+  });
+  const start = makeDurableCaptureStartResult(context);
+  await adoptStartedDurableCapture(
+    definition,
+    { ...context, ...start, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+
+  await expect(
+    finishLiveDurableCapture(
+      definition,
+      { binding: context.binding, intent: 'disposal' },
+      context.resourcePath,
+    ),
+  ).rejects.toBe(writeError);
+  expect(start.forceCleanup).not.toHaveBeenCalled();
+  expect(context.binding.read()?.handle).toBe(start.handle);
+});
+
 test('an uncertain finish preserves its error after confirmed compensating cleanup', async () => {
   const context = makeDurableCaptureContext();
   const start = makeDurableCaptureStartResult(context, {

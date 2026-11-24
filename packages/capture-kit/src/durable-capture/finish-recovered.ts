@@ -85,7 +85,6 @@ export async function finishRecoveredDurableCapture<
             await transitionFinishOutcome(definition, lease, {
               status: 'completed',
               result,
-              alreadyCompleted: true,
             });
           },
         });

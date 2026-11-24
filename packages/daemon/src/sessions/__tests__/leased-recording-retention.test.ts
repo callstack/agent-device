@@ -702,6 +702,11 @@ test('close persists verified files before retrying an unreadable sidecar', asyn
     manifest.mockRestore();
   }
 
+  fs.writeFileSync(sidecar, 'unproved sidecar');
+  await expect(stop()).resolves.toMatchObject({
+    ok: false,
+    error: { message: 'Recording export is missing producer proof.' },
+  });
   fs.writeFileSync(source, 'replacement before retry');
   await expect(stop()).resolves.toMatchObject({
     ok: false,
@@ -861,7 +866,7 @@ for (const first of ['archive', 'recording']) {
 }
 
 test.each([1, 2])(
-  'a transient stat failure on read %d leaves the export retriable',
+  'a transient stat failure on read %d permits retry only with producer proof',
   async (failureRead) => {
     const harness = makeRecordRuntimeHarness('recording-verification-retry-');
     const runtime = createRuntimeStateHandle();
@@ -893,10 +898,14 @@ test.each([1, 2])(
           stat.mockRestore();
         }
         const result = await run('stop');
-        expect(result).toMatchObject({
-          ok: true,
-          data: { recording: 'stopped', artifacts: [{ artifactId: expect.any(String) }] },
-        });
+        expect(result).toMatchObject(
+          failureRead === 1
+            ? { ok: false, error: { message: 'Recording export is missing producer proof.' } }
+            : {
+                ok: true,
+                data: { recording: 'stopped', artifacts: [{ artifactId: expect.any(String) }] },
+              },
+        );
         expect(fs.readFileSync(source, 'utf8')).toBe('original-export');
       });
     } finally {

@@ -1,4 +1,8 @@
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
 import { listDownloadableArtifacts } from '../../../resources/artifact-tracking.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
@@ -771,47 +775,83 @@ test.each([false, true])(
 
 const TENANT = 'tenant-a';
 
-test('close preserves completion for an exact-owner retry when export inspection fails', async () => {
-  const harness = makeRecordRuntimeHarness('recording-close-proof-io-', {
-    sessionName: 'tenant-a:checkout-flow',
-  });
-  const remote = { publicNetworkOnly: true } as const;
-  const run = (action: string, tenantId = TENANT) =>
-    harness.run([action], { tenantId }, undefined, remote);
-  expect(await run('start')).toMatchObject({ ok: true });
-  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
-  fs.writeFileSync(source, 'verified-after-close');
-  const lstat = fs.lstatSync;
-  const inspect = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
-    if (file === source)
-      throw Object.assign(new Error('verification unavailable'), { code: 'EIO' });
-    return lstat(file, options);
-  });
-  try {
-    await teardownSessionResources({
-      appLog: 'already-settled',
-      ref: harness.sessionStore.lookup(harness.sessionName)!,
-      sessionStore: harness.sessionStore,
-      platformCleanup: platformResourceCleanupFixture(),
+test.each(['first inspection', 'checkpoint write'])(
+  'close preserves completion after %s fails',
+  async (fault) => {
+    const harness = makeRecordRuntimeHarness('recording-close-proof-io-', {
+      sessionName: 'tenant-a:checkout-flow',
     });
-  } finally {
-    inspect.mockRestore();
-  }
-  expect(harness.runtime.forceCleanup).toHaveBeenCalledOnce();
-  expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
-  expect(await run('stop', 'other-tenant')).toMatchObject({
-    ok: false,
-    error: { code: 'UNAUTHORIZED' },
-  });
-  expect(await run('stop')).toMatchObject({
-    ok: true,
-    data: { artifacts: [{ artifactId: expect.any(String) }] },
-  });
-  expect(harness.runtime.finish).toHaveBeenCalledOnce();
-  expect(fs.readFileSync(source, 'utf8')).toBe('verified-after-close');
-});
+    const remote = { publicNetworkOnly: true } as const;
+    const run = (action: string, tenantId = TENANT) =>
+      harness.run([action], { tenantId }, undefined, remote);
+    expect(await run('start')).toMatchObject({ ok: true });
+    const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+    fs.writeFileSync(source, 'verified-after-close');
+    const lstat = fs.lstatSync;
+    const rename = fs.renameSync;
+    const manifest = recordingResourcePath(harness.sessionStore, harness.sessionName);
+    const ioError = Object.assign(new Error(`EIO accessing ${manifest}`), { code: 'EIO' });
+    let failed = false;
+    const inspect =
+      fault === 'first inspection'
+        ? vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+            if (file === source) throw ioError;
+            return lstat(file, options);
+          })
+        : vi.spyOn(fs, 'renameSync').mockImplementation((file, destination) => {
+            if (destination === manifest && harness.runtime.finish.mock.calls.length && !failed) {
+              failed = true;
+              throw ioError;
+            }
+            rename(file, destination);
+          });
+    try {
+      await teardownSessionResources({
+        appLog: 'already-settled',
+        ref: harness.sessionStore.lookup(harness.sessionName)!,
+        sessionStore: harness.sessionStore,
+        platformCleanup: platformResourceCleanupFixture(),
+      });
+    } finally {
+      inspect.mockRestore();
+    }
+    expect(harness.runtime.forceCleanup).toHaveBeenCalledOnce();
+    expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+    expect(await run('stop', 'other-tenant')).toMatchObject({
+      ok: false,
+      error: { code: 'UNAUTHORIZED' },
+    });
+    expect(screenRecordingResourceStore.read(manifest)).toMatchObject({
+      status: 'decoded',
+      envelope: {
+        metadata: {
+          phase: 'export-proof-pending',
+          completion: { outPath: source },
+          remoteCaptureExport: {
+            identities: fault === 'first inspection' ? [] : [expect.any(String)],
+          },
+        },
+      },
+    });
+    if (fault === 'first inspection') {
+      expect(await run('stop')).toMatchObject({
+        ok: false,
+        error: { message: 'Recording export is missing producer proof.' },
+      });
+      expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+    } else {
+      expect(failed).toBe(true);
+      expect(await run('stop')).toMatchObject({
+        ok: true,
+        data: { artifacts: [{ artifactId: expect.any(String) }] },
+      });
+    }
+    expect(harness.runtime.finish).toHaveBeenCalledOnce();
+    expect(fs.readFileSync(source, 'utf8')).toBe('verified-after-close');
+  },
+);
 
-test('explicit stop keeps its binding until the advertised sidecar can be verified', async () => {
+test('explicit stop keeps its binding but never serves an unproved sidecar', async () => {
   const harness = makeRecordRuntimeHarness('recording-sidecar-retry-');
   const finish = harness.runtime.finish.getMockImplementation()!;
   harness.runtime.finish.mockImplementation(async () => {
@@ -846,13 +886,70 @@ test('explicit stop keeps its binding until the advertised sidecar can be verifi
 
       fs.writeFileSync(deriveRecordingTelemetryPath(video), '{}');
       expect(await run('stop')).toMatchObject({
-        ok: true,
-        data: {
-          artifacts: [{ artifactId: expect.any(String) }, { artifactId: expect.any(String) }],
-        },
+        ok: false,
+        error: { message: 'Recording export is missing producer proof.' },
       });
+      expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
     });
   } finally {
     runtime.dispose();
   }
+});
+
+test.each([
+  ['live', 'read'],
+  ['recovered', 'read'],
+  ['live', 'write'],
+] as const)('%s stop redacts a proof checkpoint %s failure', async (route, operation) => {
+  const harness = makeRecordRuntimeHarness('recording-checkpoint-read-', {
+    runtime: { reattachActive: true },
+  });
+  const run = (action: string) =>
+    harness.run([action], { tenantId: TENANT, sessionExplicit: true }, undefined, {
+      publicNetworkOnly: true,
+    });
+  expect(await run('start')).toMatchObject({ ok: true });
+  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+  fs.writeFileSync(source, 'finished-export');
+  if (route === 'recovered')
+    harness.sessionStore.retire(harness.sessionStore.lookup(harness.sessionName)!);
+  const manifest = recordingResourcePath(harness.sessionStore, harness.sessionName);
+  const lstat = fs.lstatSync;
+  const rename = fs.renameSync;
+  const logPath = manifest + '.diagnostics.ndjson';
+  const ioError = `EIO at ${manifest}`;
+  let failed = false;
+  const failCheckpoint = (file: unknown) => {
+    if (file === manifest && harness.runtime.finish.mock.calls.length && !failed) {
+      failed = true;
+      throw Object.assign(new Error(ioError), { code: 'EIO' });
+    }
+  };
+  const inspect =
+    operation === 'read'
+      ? vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+          failCheckpoint(file);
+          return lstat(file, options);
+        })
+      : vi.spyOn(fs, 'renameSync').mockImplementation((file, destination) => {
+          failCheckpoint(destination);
+          rename(file, destination);
+        });
+  try {
+    const result = await withDiagnosticsScope({ command: 'record', logPath }, async () => {
+      const response = await run('stop');
+      flushDiagnosticsToSessionFile({ force: true });
+      return response;
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { message: 'Recording ownership proof could not be read.', retriable: true },
+    });
+    expect(JSON.stringify(result)).not.toContain(manifest);
+  } finally {
+    inspect.mockRestore();
+  }
+  expect(failed).toBe(true);
+  expect(fs.readFileSync(logPath, 'utf8')).toContain(ioError);
+  expect(await run('stop')).toMatchObject({ ok: true });
 });

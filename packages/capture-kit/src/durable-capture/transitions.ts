@@ -134,26 +134,30 @@ export async function finishDurableCaptureHandle<
         throw finishError;
       }
       if (finishOutcome.status === 'completed') {
-        await commitFinishedCapture(definition, lease, finishOutcome.result, async (proofError) => {
-          settleIfMissing(lease);
-          const settled = await respondToFailedFinish(
-            definition,
-            lease,
-            params,
-            proofError,
-            params.intent,
-            definition.pendingCompletionMetadata?.(finishOutcome.result, proofError),
-          );
-          if (params.intent === 'disposal' && settled) {
-            emitDiagnostic({
-              level: 'warn',
-              phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_unverified_export_disposed`,
-              data: { resourcePath: params.resourcePath, error: errorMessage(proofError) },
-            });
-            throw completedDurableCaptureError(definition.store);
-          }
-          throw proofError;
-        });
+        await commitFinishedCapture(
+          definition,
+          lease,
+          finishOutcome,
+          async (proofError, pending) => {
+            const settled = await respondToFailedFinish(
+              definition,
+              lease,
+              params,
+              proofError,
+              params.intent,
+              pending,
+            );
+            if (params.intent === 'disposal' && settled) {
+              emitDiagnostic({
+                level: 'warn',
+                phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_unverified_export_disposed`,
+                data: { resourcePath: params.resourcePath, error: errorMessage(proofError) },
+              });
+              throw completedDurableCaptureError(definition.store);
+            }
+            throw proofError;
+          },
+        );
         return finishOutcome.result;
       }
       transitionCleanupOutcome(lease, finishOutcome);
@@ -174,6 +178,7 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
   pendingCompletion?: JsonObject,
 ): Promise<boolean> {
   if (intent === 'capture' && definition.failedFinishPolicy === 'preserve-retry-material') {
+    if (pendingCompletion) preserveCompletionCheckpoint(lease, pendingCompletion);
     emitFailedFinishPreservedDiagnostic(definition, params, finishError);
     return false;
   }
@@ -386,7 +391,7 @@ export async function transitionFinishOutcome<K extends string, C>(
   outcome: FinishOutcome<C>,
 ): Promise<void> {
   if (outcome.status === 'completed') {
-    await commitFinishedCapture(definition, lease, outcome.result);
+    await commitFinishedCapture(definition, lease, { ...outcome, alreadyCompleted: true });
     return;
   }
   transitionCleanupOutcome(lease, outcome);
@@ -395,23 +400,39 @@ export async function transitionFinishOutcome<K extends string, C>(
 async function commitFinishedCapture<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureOpenResourceFenceLease<K>,
-  result: C,
-  onProofFailure?: (error: unknown) => Promise<never>,
+  outcome: Extract<FinishOutcome<C>, { status: 'completed' }>,
+  onProofFailure?: (error: unknown, pending: JsonObject | undefined) => Promise<never>,
 ): Promise<void> {
   let completion;
+  const { result, alreadyCompleted } = outcome;
   try {
     completion = await definition.completionMetadata(
       result,
       lease.envelope.metadata,
-      createStopProgress(lease),
+      alreadyCompleted ? undefined : createStopProgress(lease),
     );
+    lease.transition('completed', {
+      metadata: { ...lease.envelope.metadata, ...completion, phase: 'completed' },
+    });
   } catch (error) {
-    if (onProofFailure) await onProofFailure(error);
+    const pending = definition.pendingCompletionMetadata?.(result, error, completion);
+    if (onProofFailure && (completion === undefined || pending !== undefined)) {
+      await onProofFailure(error, pending);
+    }
+    if (pending) preserveCompletionCheckpoint(lease, pending);
     throw error;
   }
-  lease.transition('completed', {
-    metadata: { ...(lease.envelope.metadata ?? {}), ...completion, phase: 'completed' },
-  });
+}
+
+function preserveCompletionCheckpoint<K extends string>(
+  lease: DurableCaptureOpenResourceFenceLease<K>,
+  completion: JsonObject,
+): void {
+  try {
+    lease.transition('open', { metadata: { ...lease.envelope.metadata, ...completion } });
+  } catch {
+    // Report the original checkpoint error. The fence diagnoses further I/O failures.
+  }
 }
 
 /**

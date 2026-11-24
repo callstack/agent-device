@@ -42,7 +42,13 @@ export function createScreenRecordingLiveHandle(
     // Only a finished recording stays memoized. A finish the host refused has to be re-driven
     // by the next `record stop`, which is how a recording recovers without a daemon restart.
     terminalRequested = true;
-    finish ??= implementation.finish(snapshot, progress).catch((error: unknown) => {
+    if (finish) {
+      if (!progress) return finish;
+      return finish.then((outcome) =>
+        outcome.status === 'completed' ? { ...outcome, alreadyCompleted: true } : outcome,
+      );
+    }
+    finish = implementation.finish(snapshot, progress).catch((error: unknown) => {
       finish = undefined;
       throw error;
     });

@@ -22,6 +22,7 @@ export type DurableCaptureResourceRecord<K extends string> =
 export type DurableCaptureResourceStore<K extends string> = Readonly<{
   resourceKind: K;
   displayName: string;
+  checkpointError?(error: unknown): Error;
   resolvePath(sessionDir: string): string;
   read(resourcePath: string): DurableCaptureResourceRecord<K>;
   write(resourcePath: string, envelope: DurableResourceEnvelope<K>): void;
@@ -33,6 +34,7 @@ export function createDurableCaptureResourceStore<K extends string>(
     resourceKind: K;
     fileName: string;
     displayName: string;
+    checkpointError?(error: unknown): Error;
   }>,
 ): DurableCaptureResourceStore<K> {
   assertFileName(options.fileName);
@@ -40,6 +42,7 @@ export function createDurableCaptureResourceStore<K extends string>(
   return Object.freeze({
     resourceKind: options.resourceKind,
     displayName: options.displayName,
+    checkpointError: options.checkpointError,
     resolvePath,
     read(resourcePath: string): DurableCaptureResourceRecord<K> {
       let descriptor: number | undefined;

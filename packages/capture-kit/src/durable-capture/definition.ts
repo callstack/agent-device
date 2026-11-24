@@ -60,7 +60,7 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   completionMetadata(
     result: C,
     metadata: DurableResourceEnvelope<K>['metadata'],
-    progress: DurableCaptureProgress,
+    progress?: DurableCaptureProgress,
   ): JsonObject | Promise<JsonObject>;
   /**
    * The completion this kind stored in a record that is already committed, or nothing it can serve.
@@ -74,7 +74,11 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
    * Optional because a kind whose stored metadata cannot carry its whole outcome has nothing honest to
    * replay; its callers then get the terminal refusal.
    */
-  pendingCompletionMetadata?(result: C, error: unknown): JsonObject | undefined;
+  pendingCompletionMetadata?(
+    result: C,
+    error: unknown,
+    completion: JsonObject | undefined,
+  ): JsonObject | undefined;
   nativeCleanupSettled?(metadata: JsonObject | undefined): boolean;
   completionFromMetadata?(metadata: JsonObject | undefined): C | undefined | Promise<C | undefined>;
   failedFinishPolicy: DurableCaptureFailedFinishPolicy;

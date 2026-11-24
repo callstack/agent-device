@@ -59,20 +59,13 @@ export async function withDurableCaptureResourceFence<K extends string, Result>(
     store: DurableCaptureResourceStore<K>;
     resourcePath: string;
     expected: ResourceOwnershipFence;
-    unreadableRecordError?: () => Error;
     /** Answers a run whose record this fence found committed, before any of the run's work. */
     onCompleted(lease: DurableCaptureCompletedResourceFenceLease<K>): Result | Promise<Result>;
     run(lease: DurableCaptureOpenResourceFenceLease<K>): Promise<Result>;
   }>,
 ): Promise<Result> {
   return await serializeResource(params.resourcePath, async () => {
-    const read = () =>
-      requireAdmissibleRecord(
-        params.store,
-        params.resourcePath,
-        params.expected,
-        params.unreadableRecordError,
-      );
+    const read = () => requireAdmissibleRecord(params.store, params.resourcePath, params.expected);
     const admitted = read();
     if (admitted.envelope.lifecycle === 'completed') {
       return await params.onCompleted({ envelope: admitted.envelope });
@@ -92,13 +85,18 @@ export async function withDurableCaptureResourceFence<K extends string, Result>(
             throw completedDurableCaptureError(params.store);
           }
           if (!issued) throw releasedLeaseError(params.store);
-          current = Object.freeze({
+          const next = Object.freeze({
             ...persisted.envelope,
             lifecycle,
             ...(update.descriptor === undefined ? {} : { descriptor: update.descriptor }),
             ...(update.metadata === undefined ? {} : { metadata: update.metadata }),
           });
-          params.store.write(params.resourcePath, current);
+          try {
+            params.store.write(params.resourcePath, next);
+          } catch (error) {
+            throw params.store.checkpointError?.(error) ?? error;
+          }
+          current = next;
           return current;
         },
       });
@@ -113,12 +111,16 @@ function requireAdmissibleRecord<K extends string>(
   store: DurableCaptureResourceStore<K>,
   resourcePath: string,
   expected: ResourceOwnershipFence,
-  unreadableRecordError?: () => Error,
 ): Extract<DurableCaptureResourceRecord<K>, { status: 'decoded' }> {
-  const record = store.read(resourcePath);
+  let record;
+  try {
+    record = store.read(resourcePath);
+  } catch (error) {
+    throw store.checkpointError?.(error) ?? error;
+  }
   if (record.status !== 'decoded') {
-    if (record.status === 'unreattachable' && unreadableRecordError) {
-      throw unreadableRecordError();
+    if (record.status === 'unreattachable' && store.checkpointError) {
+      throw store.checkpointError(record.message);
     }
     throw fenceError(
       store,

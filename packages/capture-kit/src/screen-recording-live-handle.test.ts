@@ -126,6 +126,10 @@ test('retried finish re-drives a failed finish and replays a finished one', asyn
   await assert.rejects(async () => await handle.finish(), /could not confirm the recorder/);
   assert.deepEqual(await handle.finish(), completed());
   assert.deepEqual(await handle.finish(), completed());
+  assert.deepEqual(await handle.finish({ learned: undefined, record() {} }), {
+    ...completed(),
+    alreadyCompleted: true,
+  });
 
   assert.equal(finish.mock.calls.length, 2);
 });

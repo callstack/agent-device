@@ -22,12 +22,14 @@ import type {
   DurableCaptureRecoveryControl,
   DurableCaptureSessionBinding,
 } from '../durable-capture/index.ts';
-import { createStopProgress, withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
+import { withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import {
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
+  RecordingProofIoError,
+  recordingCheckpointError,
   screenRecordingResourceStore,
 } from './screen-recording-resource-store.ts';
 
@@ -48,14 +50,15 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
             metadata.remoteCapturePath,
             result,
             metadata.remoteCaptureReservation,
+            metadata,
             progress,
           ),
         }
       : {}),
   }),
-  pendingCompletionMetadata: (result, error) =>
+  pendingCompletionMetadata: (result, error, completion) =>
     error instanceof RecordingProofIoError
-      ? encodeScreenRecordingCompletionMetadata(result)
+      ? (completion ?? { ...encodeScreenRecordingCompletionMetadata(result), ...error.evidence })
       : undefined,
   nativeCleanupSettled: screenRecordingNativeCleanupSettled,
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
@@ -106,7 +109,8 @@ async function verifyRecordingExport(
   reservedPath: string,
   completion: ScreenRecordingCompletion,
   reservation: string,
-  progress: DurableCaptureProgress,
+  metadata: JsonObject,
+  progress?: DurableCaptureProgress,
 ) {
   const [{ chunkPathAt }, { deriveRecordingTelemetryPath }] = await Promise.all([
     import('../recording/output-path.ts'),
@@ -130,40 +134,45 @@ async function verifyRecordingExport(
     throw new AppError('COMMAND_FAILED', 'Recording export does not match its reservation.');
   }
   const outputIds = files.map((_, index) => `${reservation}-${index + 1}`);
-  const { completedAt, known } = readRecordingExportProgress(progress.learned, outputIds);
-  const identities: string[] = [];
-  const save = () =>
-    progress.record({
-      remoteCaptureExport: { completedAt, identities: [...identities], outputIds },
-    });
-  if (!progress.learned?.remoteCaptureExport) save();
-  for (const [index, file] of files.entries()) {
-    const identity = readRecordingExportIdentity(file);
-    if (index < known.length && identity !== known[index]) {
+  const stored = metadata.remoteCaptureExport;
+  if (stored !== undefined) {
+    const { completedAt, known } = readRecordingExportProgress(stored, outputIds);
+    if (known.some((identity, index) => readRecordingExportIdentity(files[index]!) !== identity)) {
       throw new AppError('COMMAND_FAILED', 'Recording export does not match its stored proof.');
     }
-    identities.push(identity);
-    if (index >= known.length) save();
+    if (known.length !== files.length) throw missingProducerProof();
+    return { completedAt, identities: known, outputIds };
   }
-  return { completedAt, identities, outputIds };
+  if (!progress) throw missingProducerProof();
+  return checkpointRecordingExport(files, outputIds, progress);
 }
 
-function readRecordingExportProgress(metadata: JsonObject | undefined, outputIds: string[]) {
-  const previous = metadata?.remoteCaptureExport;
-  if (previous === undefined) {
-    return {
-      completedAt:
-        typeof metadata?.remoteCaptureCompletedAt === 'number'
-          ? metadata.remoteCaptureCompletedAt
-          : Date.now(),
-      known: [],
-    };
+function checkpointRecordingExport(
+  files: readonly string[],
+  outputIds: string[],
+  progress: DurableCaptureProgress,
+) {
+  const completedAt = Date.now();
+  const identities: string[] = [];
+  const proof = { completedAt, identities, outputIds };
+  const evidence = { remoteCaptureExport: proof };
+  try {
+    for (const file of files) identities.push(readRecordingExportIdentity(file));
+    progress.record(evidence);
+  } catch (error) {
+    if (error instanceof RecordingProofIoError) throw new RecordingProofIoError(evidence);
+    throw error;
   }
+  return proof;
+}
+
+function readRecordingExportProgress(previous: unknown, outputIds: string[]) {
   const { completedAt, identities, outputIds: storedIds } = isRecord(previous) ? previous : {};
   if (
     typeof completedAt !== 'number' ||
     !Number.isFinite(completedAt) ||
     !Array.isArray(identities) ||
+    !identities.every((identity): identity is string => typeof identity === 'string') ||
     identities.length > outputIds.length ||
     !Array.isArray(storedIds) ||
     storedIds.length !== outputIds.length ||
@@ -179,17 +188,13 @@ function readRecordingExportIdentity(file: string): string {
     const identity = recordingExportFileIdentity(fs.lstatSync(file, { throwIfNoEntry: false }));
     if (identity !== null) return identity;
   } catch (error) {
-    throw new RecordingProofIoError(error);
+    throw recordingCheckpointError(error);
   }
-  throw new AppError('COMMAND_FAILED', 'Recording export is missing or is not a regular file.', {
-    retriable: true,
-  });
+  throw new RecordingProofIoError();
 }
 
-class RecordingProofIoError extends AppError {
-  constructor(error: unknown) {
-    super('COMMAND_FAILED', 'Recording export could not be verified.', { retriable: true }, error);
-  }
+function missingProducerProof(): AppError {
+  return new AppError('COMMAND_FAILED', 'Recording export is missing producer proof.');
 }
 
 export async function finishPendingScreenRecordingProof(
@@ -202,7 +207,6 @@ export async function finishPendingScreenRecordingProof(
     store: screenRecordingResourceStore,
     resourcePath,
     expected: expected.fence,
-    unreadableRecordError: unreadableRecordingProof,
     onCompleted: ({ envelope }) => envelope,
     run: async (lease) => {
       const { metadata } = lease.envelope;
@@ -219,7 +223,7 @@ export async function finishPendingScreenRecordingProof(
         metadata.remoteCapturePath,
         completion,
         metadata.remoteCaptureReservation,
-        createStopProgress(lease),
+        metadata,
       );
       return lease.transition('completed', {
         metadata: {
