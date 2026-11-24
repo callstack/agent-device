@@ -1,11 +1,9 @@
-import path from 'node:path';
 import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { hostHomeDirectory, readHostBinaryFile } from '@agent-device/host-kit/host-file';
-import { parseApplePlist } from './plist.ts';
-import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
-import { hasScopedAppleToolProvider, runXcrun } from './tool-provider.ts';
+import { buildSimctlArgsForDevice } from './simctl.ts';
+import { readHostSimulatorPreferences } from './simulator-host-preferences.ts';
+import { runXcrun } from './tool-provider.ts';
 
 const ACCESSIBILITY_PREPARE_TIMEOUT_MS = 2_000;
 
@@ -57,23 +55,10 @@ export async function prepareIosSimulatorAccessibility(device: DeviceInfo): Prom
 async function readHostAppAccessibility(
   device: DeviceInfo,
 ): Promise<'enabled' | 'disabled' | 'unknown'> {
-  if (hasScopedAppleToolProvider()) return 'unknown';
-  try {
-    const { udid, simulatorSetPath } = simulatorAddressFor(device);
-    const setPath =
-      simulatorSetPath ?? path.join(hostHomeDirectory(), 'Library/Developer/CoreSimulator/Devices');
-    const preferences = path.join(
-      setPath,
-      udid,
-      'data/Library/Preferences/com.apple.Accessibility.plist',
-    );
-    const parsed = await parseApplePlist(await readHostBinaryFile(preferences));
-    if (!parsed) return 'unknown';
-    const value = parsed.ApplicationAccessibilityEnabled;
-    if (value === undefined || value === true || value === 1) return 'enabled';
-    if (value === false || value === 0) return 'disabled';
-    return 'unknown';
-  } catch {
-    return 'unknown';
-  }
+  const parsed = await readHostSimulatorPreferences(device, 'com.apple.Accessibility');
+  if (!parsed) return 'unknown';
+  const value = parsed.ApplicationAccessibilityEnabled;
+  if (value === undefined || value === true || value === 1) return 'enabled';
+  if (value === false || value === 0) return 'disabled';
+  return 'unknown';
 }
