@@ -81,17 +81,30 @@ async function providerConnection(
   return await withPluginConnection(provider, [], host.env, async (connection) => connection);
 }
 
-export function usesCloudSessionApi(
+export function selectCloudSessionPath(
   provider: ConnectProvider | undefined,
   flags: CliFlags,
 ): boolean {
-  return (
+  const cloud =
     provider === 'cloud' ||
     (!provider &&
       !flags.remoteConfig &&
       !shouldUseProxyConnectShortcut(flags) &&
-      !flags.daemonBaseUrl)
-  );
+      !flags.daemonBaseUrl);
+  if (
+    !cloud &&
+    (flags.vendor !== undefined ||
+      flags.maxMinutes !== undefined ||
+      flags.maxUsd !== undefined ||
+      flags.needs !== undefined ||
+      flags.showViewer)
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--vendor, --max-minutes, --max-usd, --needs and --show-viewer require connect cloud.',
+    );
+  }
+  return cloud;
 }
 
 export async function resolveCloudSessionProfile(

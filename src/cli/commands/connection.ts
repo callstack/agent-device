@@ -56,7 +56,7 @@ import {
 import {
   resolveConnectProviderProfile,
   resolveCloudSessionProfile,
-  usesCloudSessionApi,
+  selectCloudSessionPath,
   type ResolvedConnectProfile,
   verifyResolvedConnectProvider,
 } from '../connection/connect-provider-adapters.ts';
@@ -97,19 +97,7 @@ export const connectCommand: ClientCommandHandler = async (input) => {
   const stateDir = resolveDaemonPaths(flags.stateDir, host).baseDir;
   const provider = await readConnectProvider(positionals, host.env);
   assertConnectProviderUsage(provider, flags);
-  const cloud = usesCloudSessionApi(provider, flags);
-  if (
-    !cloud &&
-    (flags.vendor !== undefined ||
-      flags.maxMinutes !== undefined ||
-      flags.needs !== undefined ||
-      flags.showViewer)
-  ) {
-    throw new AppError(
-      'INVALID_ARGS',
-      '--vendor, --max-minutes, --needs and --show-viewer require connect cloud.',
-    );
-  }
+  const cloud = selectCloudSessionPath(provider, flags);
 
   const location = { stateDir, session: flags.session ?? 'default' };
   return await withConnectionLock(

@@ -18,8 +18,14 @@ import {
   readCloudJsonResponse,
 } from '../cloud-response.ts';
 const CLOUD_SESSION_API_REASONS = {
+  // The spend cap is not a positive decimal in micro-USD precision.
+  budgetFormat: { reason: 'cloud_invalid_max_usd', commands: ['connect'] },
   // The cloud did not finish allocating a session before the connect deadline.
   timeout: { reason: 'cloud_session_connect_timeout', commands: ['connect'] },
+  // The cloud API has no route that can enforce a spend cap.
+  budgetUnsupported: { reason: 'budget_cap_unsupported', commands: ['connect'] },
+  // The requested spend cap cannot cover the cost to start the session.
+  budgetExceeded: { reason: 'budget_exceeded', commands: ['connect'] },
   // The account balance cannot cover the cost to start the session.
   insufficientBalance: { reason: 'insufficient_balance', commands: ['connect'] },
   // The cloud session uses an attachment transport this CLI cannot drive.
@@ -38,7 +44,9 @@ export type CreatedCloudSession = {
 };
 
 const SESSIONS_PATH = '/v1/sessions';
+const BOUNDED_SESSIONS_PATH = '/v1/sessions/bounded';
 const MICROS_PER_USD = 1_000_000n;
+const MAX_USD_PATTERN = /^(0|[1-9]\d{0,12})(?:\.(\d{1,6}))?$/;
 const TOP_UP_URL_PATTERN = /^[!-~]{1,2048}$/;
 const LIMIT_HINT = 'Raise the limit in the dashboard or wait for the next month.';
 const LIMIT_REFUSAL_MESSAGES = {
@@ -75,10 +83,27 @@ export function readCloudSessionRequest(flags: CliFlags) {
     vendor: flags.vendor?.trim(),
     accepts: ['agent-device-daemon'] as const,
     maxMinutes: flags.maxMinutes,
+    ...(flags.maxUsd !== undefined ? { maxUsdMicros: parseMaxUsdMicros(flags.maxUsd) } : {}),
     ...(needs ? { needs } : {}),
     ...(device ? { device } : {}),
     ...(os ? { os: qualifyCloudOs(os, flags.platform) } : {}),
   };
+}
+
+// A positive plain decimal of at most six fractional digits, as integer micro-USD in a string.
+export function parseMaxUsdMicros(value: string): string {
+  const match = MAX_USD_PATTERN.exec(value);
+  const micros = match
+    ? BigInt(match[1]!) * MICROS_PER_USD + BigInt((match[2] ?? '').padEnd(6, '0'))
+    : 0n;
+  if (micros <= 0n) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--max-usd requires a positive amount in USD, such as 0.50, with at most 6 decimal places.',
+      { reason: CLOUD_SESSION_API_REASONS.budgetFormat.reason },
+    );
+  }
+  return micros.toString();
 }
 
 // A bare major such as `26` becomes `iOS 26`; any other value reaches the server as given.
@@ -153,7 +178,8 @@ async function postCloudSession(
   request: CloudSessionRequest,
   attempt: CloudCreateAttempt,
 ): Promise<CreatedResponse> {
-  const url = new URL(SESSIONS_PATH, access.cloudBaseUrl);
+  const route = request.maxUsdMicros === undefined ? SESSIONS_PATH : BOUNDED_SESSIONS_PATH;
+  const url = new URL(route, access.cloudBaseUrl);
   const headers = {
     authorization: `Bearer ${access.accessToken}`,
     'content-type': 'application/json',
@@ -206,7 +232,7 @@ async function requestCreateResponse(
   brokerToken: string,
 ): Promise<CreateResponse | typeof RETRY_CREATION> {
   try {
-    return await readCreateResponse(await fetch(url, init), needs, url.origin);
+    return await readCreateResponse(await fetch(url, init), needs, url);
   } catch (error) {
     if (!(error instanceof AppError)) return RETRY_CREATION;
     if (containsCloudCredential([error.message, error.details], [brokerToken])) {
@@ -219,14 +245,19 @@ async function requestCreateResponse(
 async function readCreateResponse(
   response: Response,
   needs: string[] | undefined,
-  origin: string,
+  url: URL,
 ): Promise<CreateResponse | typeof RETRY_CREATION> {
   const { status } = response;
   if (status >= 500) {
     await response.body?.cancel();
     return RETRY_CREATION;
   }
-  if (isCreateRejectionStatus(status)) return readCreateRefusal(response, status, needs, origin);
+  if (url.pathname === BOUNDED_SESSIONS_PATH && (status === 404 || status === 405)) {
+    await response.body?.cancel();
+    throw budgetCapUnsupported(status);
+  }
+  if (isCreateRejectionStatus(status))
+    return readCreateRefusal(response, status, needs, url.origin);
   const body = asCloudRecord(await readCloudJsonResponse(response, CREATE_RESPONSE_MESSAGES));
   if (!body || !isSessionId(body.id)) throw invalidSession();
   return { kind: 'created', id: body.id, body };
@@ -257,6 +288,7 @@ export function isDefinitiveCloudCreateRejection(error: unknown): boolean {
     status === 402 ||
     status === 422 ||
     status === 429 ||
+    reason === 'budget_cap_unsupported' ||
     (status === 409 && reason === 'session_not_running')
   );
 }
@@ -330,6 +362,8 @@ function eligibilityRejection(
         'This cloud request key was used with different options.',
         { status, reason },
       );
+    case 'budget_exceeded':
+      return budgetExceeded(body);
     case 'cloud_transport_unsupported':
       return new AppError(
         'COMMAND_FAILED',
@@ -360,6 +394,36 @@ function accountLimitRejection(reason: unknown, status: 402 | 422): AppError | u
     reason,
     hint: LIMIT_HINT,
   });
+}
+
+function budgetCapUnsupported(status: 404 | 405): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'This cloud session API does not support --max-usd. Nothing was started. Run without --max-usd or use a server that supports it.',
+    { status, reason: CLOUD_SESSION_API_REASONS.budgetUnsupported.reason },
+  );
+}
+
+function budgetExceeded(body: Record<string, unknown> | undefined): AppError {
+  const maxUsdMicros = readAmount(body?.maxUsdMicros, AMOUNT_PATTERN);
+  const minimumUsdMicros = readAmount(body?.minimumUsdMicros, AMOUNT_PATTERN);
+  const needs = minimumUsdMicros
+    ? `needs at least ${formatUsdMicros(minimumUsdMicros)}`
+    : 'cannot run within the cap';
+  const cap = maxUsdMicros ? ` of ${formatUsdMicros(maxUsdMicros)}` : '';
+  return new AppError(
+    'INVALID_ARGS',
+    `The cheapest eligible cloud device ${needs}, above the --max-usd cap${cap}.`,
+    {
+      status: 422,
+      reason: CLOUD_SESSION_API_REASONS.budgetExceeded.reason,
+      hint: minimumUsdMicros
+        ? `Raise --max-usd to at least ${formatUsdMicros(minimumUsdMicros)} or choose a cheaper device.`
+        : 'Raise --max-usd or choose a cheaper device.',
+      ...(maxUsdMicros ? { maxUsdMicros } : {}),
+      ...(minimumUsdMicros ? { minimumUsdMicros } : {}),
+    },
+  );
 }
 
 function insufficientBalance(body: Record<string, unknown> | undefined, origin: string): AppError {

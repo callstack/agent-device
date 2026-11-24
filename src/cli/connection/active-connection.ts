@@ -112,8 +112,6 @@ async function usesCloudSessionAuth(
 ): Promise<boolean> {
   if (command === 'disconnect') return hasNamedCloudConnection(location);
   if (command !== 'connect') return false;
-  if (provider === 'cloud') return true;
-  if (provider !== undefined || flags.platform === undefined) return false;
-  const { usesCloudSessionApi } = await import('./connect-provider-adapters.ts');
-  return usesCloudSessionApi(undefined, flags);
+  const { selectCloudSessionPath } = await import('./connect-provider-adapters.ts');
+  return selectCloudSessionPath(provider, flags);
 }
