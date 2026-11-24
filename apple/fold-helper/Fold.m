@@ -5,12 +5,14 @@
 #import <math.h>
 #import <objc/message.h>
 
-// Private simulator HID entry points. `set` and `rotate` only dispatch; `hinge` and `panels` only
-// observe, so the host verifies a pose with a separate process that never sends HID.
+// Private simulator HID entry points. `set`, `rotate`, and `home` only dispatch; `hinge` and
+// `panels` only observe, so the host verifies a pose with a separate process that never sends HID.
 extern CFDataRef IOCFSerialize(CFTypeRef object, CFOptionFlags options);
 extern CFTypeRef IOHIDEventCreateVendorDefinedEvent(CFAllocatorRef allocator, uint64_t timestamp,
     uint32_t usagePage, uint32_t usage, uint32_t version, const uint8_t *data,
     CFIndex length, uint32_t options);
+extern CFTypeRef IOHIDEventCreateKeyboardEvent(CFAllocatorRef allocator, uint64_t timestamp,
+    uint32_t usagePage, uint32_t usage, Boolean down, uint32_t options);
 extern CFTypeRef IOHIDEventSystemClientCreate(CFAllocatorRef allocator);
 extern void IOHIDEventSystemClientDispatchEvent(CFTypeRef client, CFTypeRef event);
 
@@ -118,6 +120,35 @@ static int runRotate(NSString *orientation) {
   }
   return dispatchEvents(^BOOL(CFTypeRef client) {
     return sendControl(client, @"orientation-picker-control", @"enum", value);
+  });
+}
+
+static BOOL sendHomeKey(CFTypeRef client, Boolean down) {
+  // Consumer page Menu is the Home button. XCUIDevice's home press never reaches SpringBoard on
+  // a foldable simulator (measured on iPhone Duo), while this key does.
+  CFTypeRef event = IOHIDEventCreateKeyboardEvent(kCFAllocatorDefault, mach_absolute_time(),
+      0x0c, 0x40, down, 0);
+  if (!event) return NO;
+  IOHIDEventSystemClientDispatchEvent(client, event);
+  CFRelease(event);
+  return YES;
+}
+
+// One press goes home; two quick presses open the app switcher.
+static int runHome(NSString *argument) {
+  int presses = [argument isEqualToString:@"1"] ? 1 : [argument isEqualToString:@"2"] ? 2 : 0;
+  if (presses == 0) {
+    fprintf(stderr, "Expected 1 or 2 home presses\n");
+    return 2;
+  }
+  return dispatchEvents(^BOOL(CFTypeRef client) {
+    for (int press = 0; press < presses; press++) {
+      if (press > 0) usleep(150000);
+      if (!sendHomeKey(client, true)) return NO;
+      usleep(80000);
+      if (!sendHomeKey(client, false)) return NO;
+    }
+    return YES;
   });
 }
 
@@ -260,12 +291,13 @@ int main(int argc, const char *argv[]) {
     NSString *mode = argc >= 2 ? @(argv[1]) : nil;
     if ([mode isEqualToString:@"set"] && argc == 3) return runSet(@(argv[2]));
     if ([mode isEqualToString:@"rotate"] && argc == 3) return runRotate(@(argv[2]));
+    if ([mode isEqualToString:@"home"] && argc == 3) return runHome(@(argv[2]));
     if ([mode isEqualToString:@"hinge"] && (argc == 2 || argc == 3)) {
       return readHinge(argc == 3 ? @(argv[2]) : nil);
     }
     if ([mode isEqualToString:@"panels"] && argc == 2) return readPanels();
     fprintf(stderr,
-        "Usage: fold-helper set <pose|keyframes-json> | rotate <orientation> | hinge [window-ms] | panels\n");
+        "Usage: fold-helper set <pose|keyframes-json> | rotate <orientation> | home <1|2> | hinge [window-ms] | panels\n");
     return 2;
   }
 }

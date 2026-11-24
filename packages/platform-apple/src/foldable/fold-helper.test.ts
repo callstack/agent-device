@@ -132,6 +132,31 @@ test('rotate dispatches every picker value, upside-down included', async () => {
   ]);
 });
 
+test('pressHome spawns home mode with the press count', async () => {
+  const { calls } = await withHelper(scopedDuo, { stdout: '', exitCode: 0 }, async (helper) => {
+    await helper.pressHome(1);
+    await helper.pressHome(2);
+  });
+  expect(calls.map((call) => call.args.slice(-2))).toEqual([
+    ['home', '1'],
+    ['home', '2'],
+  ]);
+});
+
+test('pressHome maps a failed helper exit to its dispatch-failed reason', async () => {
+  const { value } = await withHelper(scopedDuo, { stdout: '', exitCode: 1 }, (helper) =>
+    caught(helper.pressHome(1)),
+  );
+  expect(value).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'home-hid-dispatch-failed',
+      deviceId: 'scoped-duo',
+      dispatched: 'unknown',
+    },
+  });
+});
+
 test('reads one guest hinge sample without sending HID', async () => {
   const { value, calls } = await withHelper(
     scopedDuo,
@@ -241,6 +266,12 @@ test.each([
     'rotate',
     (helper: FoldHelper) => helper.rotate('landscape-left'),
     'orientation-hid-dispatch-timed-out',
+    { dispatched: 'unknown' },
+  ],
+  [
+    'pressHome',
+    (helper: FoldHelper) => helper.pressHome(2),
+    'home-hid-dispatch-timed-out',
     { dispatched: 'unknown' },
   ],
 ] as const)('%s maps a helper timeout to its typed reason', async (_mode, use, reason, extra) => {

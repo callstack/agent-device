@@ -11,6 +11,7 @@ import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlertStatus } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { isAppleFoldableSimulator, setAppleFoldableOrientation } from './foldable/orientation.ts';
+import { createFoldHelper } from './foldable/fold-helper.ts';
 import { shakeIosSimulator } from './navigation/shake.ts';
 import {
   withAppleRunnerProvider,
@@ -164,6 +165,10 @@ export function createAppleInteractor(
         );
         return;
       }
+      // XCUIDevice's home press never reaches SpringBoard on a foldable simulator.
+      if (await isAppleFoldableSimulator(device, runnerOpts.signal)) {
+        return await createFoldHelper(device).pressHome(1, runnerOpts.signal);
+      }
       await runAppleRunnerCommand(
         device,
         { command: 'home', appBundleId: runnerContext.appBundleId },
@@ -179,6 +184,9 @@ export function createAppleInteractor(
       return await setRunnerOrientation(device, orientation, runnerContext, runnerOpts);
     },
     appSwitcher: async () => {
+      if (await isAppleFoldableSimulator(device, runnerOpts.signal)) {
+        return await createFoldHelper(device).pressHome(2, runnerOpts.signal);
+      }
       await runAppleRunnerCommand(
         device,
         { command: 'appSwitcher', appBundleId: runnerContext.appBundleId },

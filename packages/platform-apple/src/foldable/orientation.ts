@@ -52,9 +52,11 @@ function recordResolvedRead(device: DeviceInfo, read: number): void {
 }
 
 /**
- * Whether a rotation must go through guest HID: a simulator the `fold` fact admits that has more
- * than one integrated panel. XCUIDevice rotation has no effect there, and its readback repeats
- * the requested value.
+ * Whether rotation, Home, and the app switcher must go through guest HID: a simulator the `fold`
+ * fact admits that has more than one integrated panel. XCUIDevice rotation and Home presses have no
+ * effect there, and the rotation readback repeats the requested value. It ignores the surface
+ * back-off of {@link readFoldablePanelTable}: a missed read must not send a foldable's input to
+ * XCUIDevice, where it reports success and does nothing.
  */
 export async function isAppleFoldableSimulator(
   device: DeviceInfo,
