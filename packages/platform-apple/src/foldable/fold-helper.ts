@@ -234,7 +234,8 @@ const ROTATE_FAILURE: ModeFailure = {
 
 const HOME_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator Home button',
-  details: { reason: FOLD_HELPER_HOME_REASONS.hidDispatchFailed.reason },
+  // A failure on the second press or a key-up comes after a press already went out.
+  details: { reason: FOLD_HELPER_HOME_REASONS.hidDispatchFailed.reason, dispatched: 'unknown' },
   timedOut: {
     message: 'Timed out sending the simulator Home button; the press may have applied',
     details: {

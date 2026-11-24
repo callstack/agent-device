@@ -20,6 +20,6 @@ Changing the pose:
   If a task asserts behavior for more than one pose, fold to each pose and re-snapshot, and report which poses the run covered.
 
 Home and app switcher:
-  On a foldable iOS simulator, home and app-switcher press the Home button through the same helper's simulator HID, once for home and twice for the app switcher, because the XCUITest Home press does not reach the home screen there. They work in every pose.
+  On a foldable iOS simulator, home and app-switcher press the Home button through the same helper's simulator HID, once for home and twice for the app switcher, because the XCUITest Home press does not reach the home screen there. Verified closed, half-open, and open. The first press on a host or Xcode builds the helper and takes longer.
   Split View on the open device: run open com.apple.springboard, longpress an app icon, press "Open in Split View", then press the icon of the second app. Take the labels from snapshot -i.`,
 } as const;

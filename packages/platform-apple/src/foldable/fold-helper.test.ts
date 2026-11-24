@@ -149,7 +149,11 @@ test('pressHome maps a failed helper exit to its dispatch-failed reason', async 
   );
   expect(value).toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason: 'home-hid-dispatch-failed', deviceId: 'scoped-duo' },
+    details: {
+      reason: 'home-hid-dispatch-failed',
+      deviceId: 'scoped-duo',
+      dispatched: 'unknown',
+    },
   });
 });
 
