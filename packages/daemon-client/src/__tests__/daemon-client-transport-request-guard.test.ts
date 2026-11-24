@@ -60,9 +60,14 @@ test('a guard called with an already-aborted signal refuses before send with dis
   assert.equal(detailsOf(error).requestId, 'req-late');
 });
 
-test('guard settles an in-flight send with the typed canceled error whatever the abort reason', async () => {
+test('guard reports unknown dispatch on an in-flight abort even with an extra startup option', async () => {
   const controller = new AbortController();
-  const guard = createRequestGuard({ signal: controller.signal, requestId: 'req-flight' });
+  const options = {
+    signal: controller.signal,
+    requestId: 'req-flight',
+    dispatchedOnAbort: 'no',
+  } as const;
+  const guard = createRequestGuard(options);
   let settleSend: (() => void) | undefined;
   const pending = guard.guard(
     () => new Promise<string>((resolve) => (settleSend = () => resolve('late'))),

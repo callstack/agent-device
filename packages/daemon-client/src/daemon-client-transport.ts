@@ -66,9 +66,8 @@ type SendRequestOptions = {
  *
  * - a signal already aborted before anything is sent — nothing may leave the process, so the refusal
  *   carries `details.dispatched: 'no'`;
- * - an abort during a phase with no connection to close, or a custom transport that ignores the
- *   signal — the caller's promise still settles, with `details.dispatched: 'unknown'` because the
- *   request may already have been written.
+ * - an abort during a guarded phase uses the evidence the caller supplied. It defaults to
+ *   `details.dispatched: 'unknown'` when a request may already have been written.
  *
  * Both reject with the typed canceled-request error (`details.reason: 'request_canceled'`) whatever
  * reason the caller aborted with, so every layer dispatches on the same reason and never on the
@@ -112,23 +111,35 @@ const NO_REQUEST_GUARD: RequestGuard = {
   guard: async <T>(send: () => Promise<T>) => await send(),
 };
 
-export function createRequestGuard(params: {
+type RequestGuardOptions = {
   signal: AbortSignal | undefined;
   requestId?: string;
-}): RequestGuard {
-  const { signal, requestId } = params;
+};
+
+export function createRequestGuard(options: RequestGuardOptions): RequestGuard {
+  return createAbortGuard(options, 'unknown');
+}
+
+/** A shared startup wait sends no caller request. The launch continues after cancellation. */
+export function createStartupWaitGuard(options: RequestGuardOptions): RequestGuard {
+  return createAbortGuard(options, 'no');
+}
+
+function createAbortGuard(
+  { signal, requestId }: RequestGuardOptions,
+  dispatchedOnAbort: 'no' | 'unknown',
+): RequestGuard {
   if (!signal) return NO_REQUEST_GUARD;
   return {
     refuseIfAborted() {
       if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
     },
     guard: async <T>(send: () => Promise<T>): Promise<T> => {
-      // Checked before `send` runs, so nothing has been dispatched yet — the honest evidence is
-      // 'no'. An abort listener attached to an already-aborted signal never fires, so this check is
-      // what keeps a late `guard` call rejecting rather than pending forever.
+      // An already-aborted signal never fires a new listener. Refuse before calling send.
       if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
       return await new Promise<T>((resolve, reject) => {
-        const onAbort = (): void => reject(abortedRequestError(signal, 'unknown', requestId));
+        const onAbort = (): void =>
+          reject(abortedRequestError(signal, dispatchedOnAbort, requestId));
         signal.addEventListener('abort', onAbort, { once: true });
         void send().then(
           (value) => {

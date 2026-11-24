@@ -1,7 +1,7 @@
 import type { DaemonIdentity, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { captureHostEnvironment } from '@agent-device/host-kit/environment';
-import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import { createStartupWaitGuard } from './daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonTransport } from './daemon-client-request.ts';
 import { isDaemonNotRunningError } from './daemon-lifecycle-errors.ts';
@@ -48,6 +48,10 @@ export function withEnsuredDaemon(
     if (context?.signal?.aborted) {
       return await transport(req, context);
     }
+    const cancellation = createStartupWaitGuard({
+      signal: context?.signal,
+      requestId: req.meta?.requestId,
+    });
     // A finished ensure is kept for the rest of this transport's life. A rejected one is dropped so
     // the next request retries, and one whose daemon has since gone is dropped by the attach below.
     const ensure = async (): Promise<{ relied: Promise<unknown> }> => {
@@ -60,7 +64,7 @@ export function withEnsuredDaemon(
           if (ensured.get(stateDir) === started) ensured.delete(stateDir);
         });
       }
-      await settleUnlessAborted(pending, context?.signal, req.meta?.requestId);
+      await cancellation.guard(() => pending);
       return { relied: pending };
     };
     const { relied } = await ensure();
@@ -78,38 +82,6 @@ export function withEnsuredDaemon(
       return await attach();
     }
   };
-}
-
-/**
- * Waits for a shared ensure on behalf of one request. An abort settles only this request, with
- * nothing sent (`dispatched: 'no'`): the ensure keeps running, because concurrent requests share it
- * and stopping a daemon launch half way would leave its state directory undecided.
- */
-async function settleUnlessAborted(
-  pending: Promise<unknown>,
-  signal: AbortSignal | undefined,
-  requestId: string | undefined,
-): Promise<void> {
-  if (!signal) {
-    await pending;
-    return;
-  }
-  const canceled = () => createRequestCanceledError({ requestId, dispatched: 'no' }, signal.reason);
-  if (signal.aborted) throw canceled();
-  await new Promise<void>((resolve, reject) => {
-    const onAbort = (): void => reject(canceled());
-    signal.addEventListener('abort', onAbort, { once: true });
-    pending.then(
-      () => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      },
-      (error: unknown) => {
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      },
-    );
-  });
 }
 
 async function ensureLocalDaemon(
