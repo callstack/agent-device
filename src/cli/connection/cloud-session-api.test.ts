@@ -97,6 +97,67 @@ test('POSTs the requested limits with the cloud key and delivers the scoped atta
   expect(result.attachment).toEqual(response.attach);
 });
 
+test.each([
+  'http://archives.example/app.zip',
+  'https://user:secret@archives.example/app.zip',
+  'https://@archives.example/app.zip',
+  'https://archives.example/app.zip?signature=secret',
+  'https://archives.example/app.zip#secret',
+  'https:///archives.example/app.zip',
+])('rejects an invalid archive URL without echoing it (%s)', (appUrl) => {
+  expect(() => readCloudSessionRequest({ ...baseFlags, appUrl })).toThrow(
+    expect.objectContaining({
+      message: '--app-url requires an HTTPS URL without credentials, a query, or a fragment.',
+      details: { reason: 'cloud_invalid_app_url' },
+    }),
+  );
+});
+
+test('sends app and spend cap together to the preloaded route', async () => {
+  const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) =>
+    Response.json(response, { status: 201 }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const appUrl = 'https://archives.example/app.zip';
+  await createCloudSession(
+    access,
+    readCloudSessionRequest({ ...baseFlags, appUrl, maxUsd: '0.50' }),
+    attempt,
+  );
+
+  expect(fetchMock).toHaveBeenCalledOnce();
+  const [url, init] = fetchMock.mock.calls[0]!;
+  expect(url.pathname).toBe('/v1/sessions/preloaded');
+  expect(init.redirect).toBe('error');
+  expect(JSON.parse(String(init.body))).toMatchObject({
+    app: { url: appUrl },
+    maxUsdMicros: '500000',
+  });
+});
+
+test.each([
+  [404, 'not_found', 'app_source_unsupported'],
+  [405, 'method_not_allowed', 'app_source_unsupported'],
+  [400, 'app_source_unsupported', 'app_source_unsupported'],
+  [400, 'invalid_app_source', 'invalid_app_source'],
+  [502, 'app_preload_failed', 'app_preload_failed'],
+])('fails closed on HTTP %i with %s', async (status, error, reason) => {
+  const appUrl = 'https://archives.example/app.zip';
+  const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) =>
+    Response.json({ error, details: { archive: appUrl } }, { status }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(
+    createCloudSession(
+      access,
+      readCloudSessionRequest({ ...baseFlags, appUrl, maxUsd: '0.50' }),
+      attempt,
+    ),
+  ).rejects.toMatchObject({ details: { reason, status } });
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(fetchMock.mock.calls[0]?.[0].pathname).toBe('/v1/sessions/preloaded');
+});
+
 test('retries transport and allocation failures on a two-second interval with one request key', async () => {
   vi.useFakeTimers();
   vi.spyOn(process.stderr, 'write').mockReturnValue(true);

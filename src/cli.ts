@@ -166,6 +166,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         jsonRequested,
         debugEnabled,
       });
+      if (parsed.flags.appUrl) registerDiagnosticSensitiveValue(parsed.flags.appUrl);
       const debugOutputEnabled = isParsedDebugRequested(command, parsed.providedFlags);
       const ctx = await resolveRunContextOrExit(parsed, {
         host,

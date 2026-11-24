@@ -47,6 +47,7 @@ const CONNECT_ALLOWED_FLAGS = [
   'vendor',
   'maxMinutes',
   'maxUsd',
+  'appUrl',
   'needs',
   'showViewer',
 ] as const;
@@ -134,7 +135,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
         'List cloud offerings or start a hosted session with a CLI login or AGENT_DEVICE_CLOUD_API_KEY. For a custom cloud API, set AGENT_DEVICE_CLOUD_API_KEY_ORIGIN to the same origin as AGENT_DEVICE_CLOUD_BASE_URL. Use AGENT_DEVICE_DAEMON_AUTH_TOKEN for direct remote daemon connections. Direct providers validate credentials and resources before saving state and print any preparation needed before open.',
     },
     usageOverride:
-      'connect [cloud] list [--live] [--json] | connect cloud --platform ios|android [--vendor <id>] [--max-minutes <minutes>] [--max-usd <decimal>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer] | connect [provider] [--target <target>] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+      'connect [cloud] list [--live] [--json] | connect cloud --platform ios|android [--vendor <id>] [--max-minutes <minutes>] [--max-usd <decimal>] [--app-url <url>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer] | connect [provider] [--target <target>] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
     usageFlags: [],
     listUsageOverride: 'connect',
     positionalArgs: ['provider?|list'],

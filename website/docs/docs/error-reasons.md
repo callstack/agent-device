@@ -99,6 +99,10 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cloud_catalog_key_origin_mismatch` | The API key and selected cloud endpoint specify different origins. |
 | `connection_busy` | A connection operation is in progress for the session. |
+| `cloud_invalid_app_url` | The app URL is not a valid HTTPS archive reference. |
+| `app_source_unsupported` | The cloud API or offering cannot preload an app from a URL. |
+| `invalid_app_source` | The cloud refused the app URL for the selected offering. |
+| `app_preload_failed` | The cloud provider could not preload the app before the session started. |
 | `cloud_invalid_max_usd` | The spend cap is not a positive decimal in micro-USD precision. |
 | `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
 | `budget_cap_unsupported` | The cloud API has no route that can enforce a spend cap. |
@@ -655,6 +659,10 @@ These reasons can come from more than one command.
 | `cloud_session_id_changed` | The cloud returned a different session ID for the same request. |
 | `cloud_limrun_plugin_required` | No compatible Limrun plugin is installed or available for scoped hosted attachments. |
 | `cloud_attachment_daemon_stop_unconfirmed` | The client could not confirm its attachment daemon stopped. |
+| `cloud_invalid_app_url` | The app URL is not a valid HTTPS archive reference. |
+| `app_source_unsupported` | The cloud API or offering cannot preload an app from a URL. |
+| `invalid_app_source` | The cloud refused the app URL for the selected offering. |
+| `app_preload_failed` | The cloud provider could not preload the app before the session started. |
 | `cloud_invalid_max_usd` | The spend cap is not a positive decimal in micro-USD precision. |
 | `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
 | `budget_cap_unsupported` | The cloud API has no route that can enforce a spend cap. |

@@ -119,11 +119,13 @@ test('a second CLI invocation with the same state directory and session name reu
   );
 });
 
-test('a connect that lost its create response retries the same POST with the same idempotency key and gets the same session', async () => {
+test('a lost preload response binds retry to the same archive and idempotency key', async () => {
   const stateDir = freshStateDir();
   const broker = stubBroker();
+  const appUrl = 'https://archives.example/build.zip';
+  const args = [...connectArgs, '--app-url', appUrl, '--max-usd', '0.50'];
   broker.loseNextCreateResponse();
-  const crashed = await runCliCapture(connectArgs, { env: processEnv(stateDir) });
+  const crashed = await runCliCapture(args, { env: processEnv(stateDir) });
   expect(JSON.parse(crashed.stdout).error.details.reason).toBe('cloud_session_connect_timeout');
   vi.mocked(Date.now).mockRestore();
   // The broker holds funds for the key, and the CLI holds only a pending intent.
@@ -131,11 +133,25 @@ test('a connect that lost its create response retries the same POST with the sam
   expect(broker.holds.size).toBe(1);
   expect(fs.existsSync(cloudAttachmentPath(locationOf(stateDir)))).toBe(false);
 
-  const restarted = await runCliCapture(connectArgs, { env: processEnv(stateDir) });
+  const mismatch = await runCliCapture(
+    [...connectArgs, '--app-url=https://archives.example/another.zip', '--max-usd', '0.50'],
+    { env: processEnv(stateDir) },
+  );
+  expect(JSON.parse(mismatch.stdout).error.details.reason).toBe('cloud_connect_pending_conflict');
+  expect(broker.posts()).toHaveLength(1);
+
+  const restarted = await runCliCapture(args, { env: processEnv(stateDir) });
   expect(restarted.code, restarted.stderr || restarted.stdout).toBeNull();
 
-  const keys = broker.posts().map((call) => call.key);
-  expect(keys).toEqual([expect.any(String), keys[0]]);
+  expect(broker.posts()).toEqual(
+    Array(2).fill({
+      method: 'POST',
+      path: '/v1/sessions/preloaded',
+      key: expect.any(String),
+    }),
+  );
+  expect(broker.posts()[1]?.key).toBe(broker.posts()[0]?.key);
+  expect(restarted.stdout + restarted.stderr).not.toContain(appUrl);
   expect(broker.holds.size).toBe(1);
   expect(readCloudConnection(locationOf(stateDir))).toMatchObject({
     phase: 'committed',

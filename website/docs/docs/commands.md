@@ -2558,6 +2558,8 @@ Use `--vendor <id>` to select a vendor. Use `--max-minutes <minutes>` to request
 
 Use `--max-usd <decimal>` to cap what the session can charge, for example `--max-usd 0.50`. Pass a positive amount in USD with at most six decimal places. The flag is CLI-only: a project config file cannot set it. The capped request uses a separate endpoint, and a server without that endpoint fails with `budget_cap_unsupported` before it starts a device. The CLI never retries without the cap. A cap can shorten the session below `--max-minutes`.
 
+Use `--app-url <url>` to start a hosted session with your app already installed. Give the cloud service an HTTPS archive URL without credentials, a query, or a fragment. The service checks the archive and determines which offerings can preload it. You can combine `--app-url` with `--max-usd`; the request requires support for preloading and the cap together. If the service rejects the archive or lacks preload support, connect fails. If you retry a pending connect, pass the same URL and options, or run `disconnect` for that session before changing them.
+
 Connect reports a money failure with a typed reason in `error.details`. `insufficient_balance` (HTTP 402) carries `requiredUsdMicros`, `availableUsdMicros`, `shortfallUsdMicros` and, when the server offers a billing link on the cloud API origin, `topUpUrl`. Add credit at that link, or choose a cheaper eligible configuration. The CLI never opens it. `budget_exceeded` (HTTP 422) carries `maxUsdMicros` and `minimumUsdMicros`. Raise `--max-usd` or choose a cheaper eligible configuration. Amounts are integer micro-USD strings. A server that sends a bare 402 yields `insufficient_balance` with no amounts. If the API already returned a session ID, use `disconnect` to clear the pending connection.
 
 Use `--needs <capability,...>` to require every listed capability. For example, `agent-device connect cloud --platform android --needs adb,viewer` requires ADB and live view. If no vendor matches, check the platform and capabilities with `connect list`. If the cloud session API tries another vendor after an allocation fails, the connect output names the unavailable vendor.
@@ -2637,7 +2639,7 @@ The following option table describes `connect [provider]`.
 Configure remote or provider state.
 
 ```bash
-agent-device connect [cloud] list [--live] [--json] | connect cloud --platform ios|android [--vendor <id>] [--max-minutes <minutes>] [--max-usd <decimal>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer] | connect [provider] [--target <target>] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
+agent-device connect [cloud] list [--live] [--json] | connect cloud --platform ios|android [--vendor <id>] [--max-minutes <minutes>] [--max-usd <decimal>] [--app-url <url>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer] | connect [provider] [--target <target>] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
 ```
 
 | Option | What it does |
@@ -2675,6 +2677,7 @@ agent-device connect [cloud] list [--live] [--json] | connect cloud --platform i
 | `--vendor <id>` | Connect cloud: choose a device vendor |
 | `--max-minutes <minutes>` | Connect cloud: request a maximum session duration in minutes |
 | `--max-usd <decimal>` | Connect cloud: cap the charge for this session in USD, for example 0.50 |
+| `--app-url <url>` | Connect cloud: preload an app from an HTTPS archive |
 | `--needs <capability,...>` | Connect cloud: require each of these comma-separated capabilities |
 | `--show-viewer` | Connect cloud: open the live viewer in the browser |
 | `--target mobile\|tv\|desktop` | Device target class to match |

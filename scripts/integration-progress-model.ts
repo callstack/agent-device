@@ -270,6 +270,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'vendor',
         'maxMinutes',
         'maxUsd',
+        'appUrl',
         'needs',
         'showViewer',
         'live',
