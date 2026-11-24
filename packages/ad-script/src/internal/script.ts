@@ -287,9 +287,6 @@ function parseReplayScriptLine(line: string): SessionAction | null {
         action.flags.snapshotInteractiveOnly = true;
         continue;
       }
-      if (token === '-c') {
-        continue;
-      }
       if (token === '--raw') {
         action.flags.snapshotRaw = true;
         continue;
@@ -308,11 +305,6 @@ function parseReplayScriptLine(line: string): SessionAction | null {
       }
       if ((token === '-s' || token === '--scope') && index + 1 < args.length) {
         action.flags.snapshotScope = args[index + 1];
-        index += 1;
-        continue;
-      }
-      if (token === '--backend' && index + 1 < args.length) {
-        // Backward compatibility: ignore legacy snapshot backend token.
         index += 1;
         continue;
       }

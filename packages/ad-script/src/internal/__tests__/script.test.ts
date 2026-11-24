@@ -164,11 +164,8 @@ test('screenshot replay script round-trips a quoted --crop-on selector', () => {
 });
 
 test('snapshot replay script parses full refresh flags', () => {
-  const ignoredLegacyFlag = '-' + 'c';
   const parsed = parseReplayScriptDetailed(
-    ['snapshot', '-i', ignoredLegacyFlag, '--raw', '--force-full', '-d', '2', '-s', '"@e1"'].join(
-      ' ',
-    ) + '\n',
+    ['snapshot', '-i', '--raw', '--force-full', '-d', '2', '-s', '"@e1"'].join(' ') + '\n',
   ).actions;
 
   assert.deepEqual(parsed[0]?.positionals, []);
@@ -184,6 +181,14 @@ test('snapshot replay script parses full refresh flags', () => {
   assert.equal(parsed[0]?.flags.snapshotForceFull, true);
   assert.equal(parsed[0]?.flags.snapshotDepth, 2);
   assert.equal(parsed[0]?.flags.snapshotScope, '@e1');
+});
+
+test('snapshot unknown tokens do not consume subsequent flags', () => {
+  for (const token of ['--backend', '-c', '--unknown']) {
+    const [action] = parseReplayScriptDetailed(`snapshot ${token} --raw\n`).actions;
+    assert.deepEqual(action?.positionals, []);
+    assert.deepEqual(action?.flags, { snapshotRaw: true });
+  }
 });
 
 test('snapshot replay script writes interactive refresh flags', () => {
