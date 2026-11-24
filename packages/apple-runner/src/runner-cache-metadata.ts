@@ -31,17 +31,6 @@ const RUNNER_SIGNING_AUTH_REASONS = {
   signingAuthKeyInvalidPath: { reason: 'signing_auth_key_invalid_path' },
 } as const satisfies ReasonTable<'apple runner'>;
 
-/**
- * The build-time ASC API key environment family, in argv order. The build passes the trio as
- * `xcodebuild` arguments and omits the same names from the child environment, so the credentials
- * travel by argument only.
- */
-const RUNNER_SIGNING_AUTH_ENV_NAMES = [
-  'AGENT_DEVICE_IOS_AUTH_KEY_PATH',
-  'AGENT_DEVICE_IOS_AUTH_KEY_ID',
-  'AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID',
-] as const;
-
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 export const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
@@ -400,25 +389,6 @@ export function resolveRunnerProvisioningAuthArgs(
     '-authenticationKeyIssuerID',
     issuerId!,
   ];
-}
-
-/**
- * The exec options that keep the key path off the build's surfaces: when the trio rides the argv,
- * the same three names leave the child environment, and the path scrubs from the streams and from
- * every error argv — echoes in the child output and the argv in exit, timeout, and spawn errors
- * included — so the value never reaches runner.log, the trace log, stderr, or an error payload.
- * The flag names and the key ids stay, so the logs still name which args the build carried.
- * Without the trio, nothing changes.
- */
-export function runnerSigningAuthSpawnOptions(
-  env: NodeJS.ProcessEnv,
-  provisioningAuthArgs: readonly string[],
-): { envOmit?: readonly string[]; redactions?: readonly string[] } {
-  if (provisioningAuthArgs.length === 0) return {};
-  return {
-    envOmit: RUNNER_SIGNING_AUTH_ENV_NAMES,
-    redactions: [env.AGENT_DEVICE_IOS_AUTH_KEY_PATH?.trim() ?? ''],
-  };
 }
 
 export function resolveRunnerBundleBuildSettings(

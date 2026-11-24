@@ -1,4 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { constants } from 'node:fs';
+import { access, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -15,9 +18,7 @@ import type {
   ExecDetachedProcess,
 } from './exec-types.ts';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
-import { createArgRedactor, redactArgv } from './exec-redact.ts';
-import { normalizeExecutableCommand } from './exec-which.ts';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type {
   CommandExecutorOverride,
@@ -55,14 +56,6 @@ export type ExecOptions = {
    * `ps -o lstart` read renders in, so replacing the whole `env` would move the identity clock.
    */
   envOverrides?: NodeJS.ProcessEnv;
-  /**
-   * Child environment variables deleted from the resolved spawn environment. Unlike an
-   * `envOverrides` entry set to `undefined`-by-castling, an `envOmit` key is absent for the child.
-   * Credentials travel by argument, never by environment, so a caller that passes a secret as an
-   * argument omits it here. Deletion applies to the environment resolved from `env` or the bound
-   * host scope; a bare out-of-scope spawn that inherits the process environment cannot omit from it.
-   */
-  envOmit?: readonly string[];
   allowFailure?: boolean;
   binaryStdout?: boolean;
   stdin?: string | Buffer;
@@ -83,13 +76,6 @@ export type ExecOptions = {
 export type ExecStreamOptions = ExecOptions & {
   /** Set false when chunk callbacks own output and only the exit code is needed. */
   captureOutput?: boolean;
-  /**
-   * Exact argv values this command must not retain. The child still receives the raw argv; the
-   * chunk callbacks receive scrubbed text, the retained stdout/stderr are scrubbed, and every
-   * error this module builds carries the scrubbed argv. A match that a chunk boundary splits is
-   * still one match, so a quoted or echoed secret never reaches a log or an error payload.
-   */
-  redactions?: readonly string[];
   onStdoutChunk?: (chunk: string) => void;
   onStderrChunk?: (chunk: string) => void;
   onSpawn?: (child: ReturnType<typeof spawn>) => void;
@@ -122,6 +108,8 @@ export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
   stdio?: StdioOptions;
 };
 
+const BARE_COMMAND_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+const WINDOWS_PATH_EXTENSIONS = ['.com', '.exe', '.bat', '.cmd'];
 const commandExecutorOverrideScope = new AsyncLocalStorage<CommandExecutorOverride | undefined>();
 
 export async function withCommandExecutorOverride<T>(
@@ -181,20 +169,15 @@ export function commandDeveloperDir(): string | undefined {
 function resolveSpawnEnv(
   env: NodeJS.ProcessEnv | undefined,
   overrides: NodeJS.ProcessEnv | undefined,
-  omit: readonly string[] | undefined,
 ): NodeJS.ProcessEnv | undefined {
   const scope = commandHostScope.getStore();
   if (!scope) {
-    // A bare out-of-scope spawn inherits the process environment natively, so there is no captured
-    // object to delete the omitted names from; deletion needs an explicit `env` or a host scope.
+    // Outside a host scope there is no captured environment to merge into: an explicit `env` is
+    // still honored with the overrides on top, and with neither the child inherits natively.
     if (env === undefined) return overrides;
-    const merged = { ...env, ...overrides };
-    if (omit?.length) for (const name of omit) delete merged[name];
-    return merged;
+    return { ...env, ...overrides };
   }
-  const merged = { ...(env ?? scope.host.env), ...scope.requestEnv, ...overrides };
-  if (omit?.length) for (const name of omit) delete merged[name];
-  return merged;
+  return { ...(env ?? scope.host.env), ...scope.requestEnv, ...overrides };
 }
 
 export async function runCmd(
@@ -243,10 +226,6 @@ function runSpawnedCommand(
   options: ExecStreamOptions = {},
 ): Promise<ExecResult> {
   const executable = normalizeExecutableCommand(cmd);
-  // The child spawns with the raw argv; every retention and error surface past this point reads the
-  // sanitized copy (`safeArgs`) or scrubbed text, so no redacted value leaves the spawn boundary.
-  const redactor = createArgRedactor(args, options.redactions);
-  const safeArgs = redactor.argv;
   const execTrace = createExecTraceContext(
     cmd,
     normalizeTimeoutMs(options.timeoutMs),
@@ -255,7 +234,7 @@ function runSpawnedCommand(
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd: options.cwd,
-      env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
+      env: resolveSpawnEnv(options.env, options.envOverrides),
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: options.detached,
       windowsHide: true,
@@ -285,26 +264,24 @@ function runSpawnedCommand(
       if (finish(reason)) reject(error);
     }
     function settle(code: number | null): void {
-      const finalReason = commandSettlementReason(
-        abort.didAbort,
-        didTimeout,
-        code,
-        options.allowFailure,
-      );
+      const finalReason = abort.didAbort
+        ? 'abort'
+        : didTimeout
+          ? 'timeout'
+          : (code ?? 1) !== 0 && !options.allowFailure
+            ? 'exit_failure'
+            : 'success';
       if (!finish(finalReason)) return;
       const finalExitCode = code ?? 1;
-      ({ stdout, stderr } = appendRedactedTails(redactor, stdout, stderr, options));
       if (!abort.didAbort && didTimeout && timeoutMs) {
-        reject(
-          createTimeoutError(executable, cmd, safeArgs, timeoutMs, finalExitCode, stdout, stderr),
-        );
+        reject(createTimeoutError(executable, cmd, args, timeoutMs, finalExitCode, stdout, stderr));
         return;
       }
       const failure = commandCloseFailure(
         abort,
         executable,
         cmd,
-        safeArgs,
+        args,
         finalExitCode,
         options.allowFailure,
         stdout,
@@ -326,7 +303,14 @@ function runSpawnedCommand(
     // A deadline that fires after the child exited on its own still has to settle: the
     // group kill that would have ended the pipe holder can no longer run through a child
     // Node already reaped.
-    const { settlement, abort } = watchCommandAbortSettlement(child, options, execTrace, settle);
+    const settlement = createCommandKillSettlement({
+      killProcessTree: () => killProcessTree(child, options),
+      settle,
+    });
+    const abort = watchCommandAbort(options, () => {
+      execTrace.emit('abort');
+      settlement.requestKill();
+    });
     timeoutHandle = timeoutMs
       ? setTimeout(() => {
           execTrace.emit('deadline');
@@ -341,7 +325,7 @@ function runSpawnedCommand(
     void writeChildStdin(child, options.stdin).catch((error: unknown) => {
       if (abort.didAbort || didTimeout) return;
       if (isEpipeError(error)) return;
-      fail(createStdinError(executable, cmd, safeArgs, error), 'stdin_error');
+      fail(createStdinError(executable, cmd, args, error), 'stdin_error');
       killProcessTree(child, options);
     });
 
@@ -350,72 +334,92 @@ function runSpawnedCommand(
         stdoutChunks?.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         return;
       }
-      const text = redactor.scrubOut(String(chunk));
+      const text = String(chunk);
       if (options.captureOutput !== false) stdout += text;
       options.onStdoutChunk?.(text);
     });
 
     child.stderr.on('data', (chunk) => {
-      const text = redactor.scrubErr(String(chunk));
+      const text = String(chunk);
       if (options.captureOutput !== false) stderr += text;
       options.onStderrChunk?.(text);
     });
 
     child.on('error', (err) => {
       execTrace.emit('error');
-      fail(
-        spawnRejectionError(
-          abort,
-          executable,
-          cmd,
-          safeArgs,
-          sanitizeSpawnCause(err, options.redactions),
-        ),
-        'spawn_error',
-      );
+      fail(spawnRejectionError(abort, executable, cmd, args, err), 'spawn_error');
     });
 
-    recordCommandExitAndClose(child, execTrace, settlement, settle);
+    child.once('exit', (code, signal) => {
+      execTrace.emit('exit', { exitCode: code, signal });
+      settlement.recordExit(code);
+    });
+    child.once('close', (code, signal) => {
+      execTrace.emit('close', { exitCode: code, signal });
+      settle(code);
+    });
   });
-}
-
-/**
- * Releases each stream's held redaction tail once the child closed: every data event has landed
- * by `close`, so a tail holds at most a partial secret. The tail reaches the chunk callbacks
- * too, so a caller appending the callback stream ends with the same scrubbed bytes the result
- * retains.
- */
-function appendRedactedTails(
-  redactor: ReturnType<typeof createArgRedactor>,
-  stdout: string,
-  stderr: string,
-  onChunk: Pick<ExecStreamOptions, 'onStdoutChunk' | 'onStderrChunk'>,
-): { stdout: string; stderr: string } {
-  const flushedOut = redactor.flushOut();
-  const flushedErr = redactor.flushErr();
-  if (flushedOut) onChunk.onStdoutChunk?.(flushedOut);
-  if (flushedErr) onChunk.onStderrChunk?.(flushedErr);
-  return { stdout: stdout + flushedOut, stderr: stderr + flushedErr };
-}
-
-/**
- * The settlement phase a command closed with: a cancelled request or an armed deadline wins
- * over the exit code, and a non-zero exit settles as success only when the caller allows it.
- */
-function commandSettlementReason(
-  didAbort: boolean,
-  timedOut: boolean,
-  exitCode: number | null,
-  allowFailure: boolean | undefined,
-): ExecSettlementReason {
-  if (didAbort) return 'abort';
-  if (timedOut) return 'timeout';
-  return (exitCode ?? 1) !== 0 && !allowFailure ? 'exit_failure' : 'success';
 }
 
 /** Returns the result with `signal` added when a signal terminated the process. */
 function execResult(ended: { signalCode: string | null }, result: ExecResult): ExecResult {
   return ended.signalCode ? { ...result, signal: ended.signalCode } : result;
+}
+
+export async function whichCmd(cmd: string, env: EnvMap): Promise<boolean> {
+  const candidate = normalizeExecutableLookup(cmd);
+  if (!candidate) return false;
+
+  if (path.isAbsolute(candidate)) {
+    return isExecutablePath(candidate);
+  }
+
+  const pathValue = readPathVariable(env, 'PATH');
+  if (!pathValue) return false;
+  const pathExtensions = resolvePathExtensions(env);
+  for (const directory of pathValue.split(path.delimiter)) {
+    const trimmedDirectory = directory.trim();
+    if (!trimmedDirectory) continue;
+    for (const entry of resolveExecutableCandidates(candidate, pathExtensions)) {
+      if (await isExecutablePath(path.join(trimmedDirectory, entry))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export async function resolveExecutableOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+): Promise<string | undefined> {
+  return await resolveOverridePath(rawPath, envName, 'executable', isExecutablePath);
+}
+
+export async function resolveFileOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+): Promise<string | undefined> {
+  return await resolveOverridePath(rawPath, envName, 'file', isFilePath);
+}
+
+async function resolveOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+  kind: 'executable' | 'file',
+  isUsable: (candidate: string) => Promise<boolean>,
+): Promise<string | undefined> {
+  const candidate = normalizeOverridePath(rawPath, envName, kind);
+  if (!candidate) return undefined;
+  if (!(await isUsable(candidate))) {
+    throw new AppError(
+      'TOOL_MISSING',
+      `${envName} points to a missing or non-${kind} ${kind === 'file' ? 'path' : 'file'}: ${candidate}`,
+      { envName, path: candidate },
+    );
+  }
+  return candidate;
 }
 
 // fallow-ignore-next-line complexity
@@ -427,7 +431,7 @@ export function runCmdSync(
   const executable = normalizeExecutableCommand(cmd);
   const result = spawnSync(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
+    env: resolveSpawnEnv(options.env, options.envOverrides),
     stdio: ['pipe', 'pipe', 'pipe'],
     encoding: options.binaryStdout ? undefined : 'utf8',
     input: options.stdin,
@@ -494,7 +498,7 @@ export function runCmdDetachedMonitored(
   const executable = normalizeExecutableCommand(cmd);
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
+    env: resolveSpawnEnv(options.env, options.envOverrides),
     stdio: options.stdio ?? 'ignore',
     detached: true,
     windowsHide: true,
@@ -536,7 +540,7 @@ export function runCmdBackground(
   const execTrace = createExecTraceContext(cmd, undefined, commandHostScope.getStore()?.host.env);
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
+    env: resolveSpawnEnv(options.env, options.envOverrides),
     stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
     detached: options.detached,
     windowsHide: true,
@@ -571,7 +575,11 @@ export function runCmdBackground(
         reason:
           event === 'error'
             ? 'spawn_error'
-            : commandSettlementReason(abort.didAbort, false, child.exitCode, options.allowFailure),
+            : abort.didAbort
+              ? 'abort'
+              : (child.exitCode ?? 1) !== 0 && !options.allowFailure
+                ? 'exit_failure'
+                : 'success',
       });
       return true;
     }
@@ -594,28 +602,40 @@ export function runCmdBackground(
       }
       resolve({ stdout, stderr, exitCode: finalExitCode });
     }
-    const { settlement, abort } = watchCommandAbortSettlement(child, options, execTrace, settle);
+    const settlement = createCommandKillSettlement({
+      killProcessTree: () => killProcessTree(child, options),
+      settle,
+    });
+    const abort = watchCommandAbort(options, () => {
+      execTrace.emit('abort');
+      settlement.requestKill();
+    });
     child.on('error', (err) => {
       execTrace.emit('error');
       if (finish('error')) reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
-    recordCommandExitAndClose(child, execTrace, settlement, settle);
+    child.once('exit', (code, signal) => {
+      execTrace.emit('exit', { exitCode: code, signal });
+      settlement.recordExit(code);
+    });
+    child.once('close', (code, signal) => {
+      execTrace.emit('close', { exitCode: code, signal });
+      settle(code);
+    });
   });
 
   return { child, wait };
 }
 
-/**
- * A spawn cause carries the raw argv in its `spawnargs`, and the serialized cause reaches error
- * payloads. A redacted command rebuilds that field on the sanitized face, so the raw values die at
- * the spawn boundary with everything else this module retains.
- */
-function sanitizeSpawnCause(err: Error, redactions: readonly string[] | undefined): Error {
-  const spawnargs = (err as NodeJS.ErrnoException & { spawnargs?: readonly string[] }).spawnargs;
-  if (!redactions?.length || !Array.isArray(spawnargs)) return err;
-  const cause: Error = new Error(err.message);
-  Object.assign(cause, err, { spawnargs: redactArgv(spawnargs, redactions) });
-  return cause;
+function normalizeExecutableCommand(cmd: string): string {
+  const candidate = normalizeExecutableLookup(cmd);
+  if (!candidate) {
+    throw new AppError('INVALID_ARGS', `Invalid executable command: ${JSON.stringify(cmd)}`, {
+      cmd,
+      hint: 'Use a bare command name from PATH or an absolute executable path.',
+    });
+  }
+  return candidate;
 }
 
 function createSpawnError(
@@ -792,6 +812,79 @@ function commandCloseFailure(
   return null;
 }
 
+function normalizeOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+  kind: 'executable' | 'file',
+): string | undefined {
+  const candidate = rawPath?.trim();
+  if (!candidate) return undefined;
+  if (!path.isAbsolute(candidate) || candidate.includes('\0')) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${envName} must be an absolute ${kind} path, not ${JSON.stringify(rawPath)}`,
+      { envName, path: rawPath },
+    );
+  }
+  return candidate;
+}
+
+function normalizeExecutableLookup(cmd: string): string | null {
+  const candidate = cmd.trim();
+  if (!candidate || candidate.includes('\0')) return null;
+  if (path.isAbsolute(candidate)) return candidate;
+  if (candidate.includes('/') || candidate.includes('\\')) {
+    return null;
+  }
+  return BARE_COMMAND_RE.test(candidate) ? candidate : null;
+}
+
+/** Windows names an environment variable in any case; a captured copy no longer folds it. */
+function readPathVariable(env: EnvMap, name: 'PATH' | 'PATHEXT'): string | undefined {
+  if (process.platform !== 'win32') return env[name];
+  const key = Object.keys(env).find((candidate) => candidate.toUpperCase() === name);
+  return key === undefined ? undefined : env[key];
+}
+
+function resolvePathExtensions(env: EnvMap): string[] {
+  if (process.platform !== 'win32') return [''];
+  const rawPathExt = readPathVariable(env, 'PATHEXT');
+  if (!rawPathExt) return WINDOWS_PATH_EXTENSIONS;
+  const extensions = rawPathExt
+    .split(';')
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
+  return extensions.length > 0 ? extensions : WINDOWS_PATH_EXTENSIONS;
+}
+
+function resolveExecutableCandidates(cmd: string, pathExtensions: string[]): string[] {
+  if (process.platform !== 'win32') return [cmd];
+  const lowered = cmd.toLowerCase();
+  if (pathExtensions.some((extension) => lowered.endsWith(extension))) {
+    return [cmd];
+  }
+  return pathExtensions.map((extension) => `${cmd}${extension}`);
+}
+
+export async function isExecutablePath(filePath: string): Promise<boolean> {
+  try {
+    if (!(await isFilePath(filePath))) return false;
+    await access(filePath, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isFilePath(filePath: string): Promise<boolean> {
+  try {
+    const fileStat = await stat(filePath);
+    return fileStat.isFile();
+  } catch {
+    return false;
+  }
+}
+
 function normalizeTimeoutMs(value: number | undefined): number | undefined {
   if (!Number.isFinite(value)) return undefined;
   const timeout = Math.floor(value as number);
@@ -856,44 +949,6 @@ function watchCommandAbort(
       options.signal?.removeEventListener('abort', onAbort);
     },
   };
-}
-
-/**
- * The kill settlement and abort watch every spawned command shares: a deadline or a cancelled
- * request kills the process tree, and a settled command disposes the watch.
- */
-function watchCommandAbortSettlement(
-  child: ChildProcess,
-  options: Pick<ExecOptions, 'detached' | 'kill' | 'signal'>,
-  execTrace: ReturnType<typeof createExecTraceContext>,
-  settle: (exitCode: number | null) => void,
-): { settlement: CommandKillSettlement; abort: ReturnType<typeof watchCommandAbort> } {
-  const settlement = createCommandKillSettlement({
-    killProcessTree: () => killProcessTree(child, options),
-    settle,
-  });
-  const abort = watchCommandAbort(options, () => {
-    execTrace.emit('abort');
-    settlement.requestKill();
-  });
-  return { settlement, abort };
-}
-
-/** The child lifecycle every spawned command shares: record the exit for the settlement, settle on close. */
-function recordCommandExitAndClose(
-  child: ChildProcess,
-  execTrace: ReturnType<typeof createExecTraceContext>,
-  settlement: CommandKillSettlement,
-  settle: (exitCode: number | null) => void,
-): void {
-  child.once('exit', (code, signal) => {
-    execTrace.emit('exit', { exitCode: code, signal });
-    settlement.recordExit(code);
-  });
-  child.once('close', (code, signal) => {
-    execTrace.emit('close', { exitCode: code, signal });
-    settle(code);
-  });
 }
 
 /**

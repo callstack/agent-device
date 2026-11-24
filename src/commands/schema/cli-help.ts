@@ -417,7 +417,7 @@ App Store Connect API key for headless hosts (iOS):
     AGENT_DEVICE_IOS_AUTH_KEY_PATH=<absolute path to the .p8 key file>
     AGENT_DEVICE_IOS_AUTH_KEY_ID=<key id from App Store Connect>
     AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID=<issuer id from App Store Connect>
-  Set all three or none. A partial set fails the build before it starts with details.reason signing_auth_key_incomplete. The key path must name a readable regular file; otherwise the build fails before it starts with details.reason signing_auth_key_invalid_path, naming the variable instead of the path. The key path travels by argument only: it is stripped from the build's environment and scrubbed from the runner and trace logs, stderr, and error payloads, so it appears nowhere in runner.log.
+  Set all three or none. A partial set fails the build before it starts with details.reason signing_auth_key_incomplete. The key path must name a readable regular file; otherwise the build fails before it starts with details.reason signing_auth_key_invalid_path, naming the variable instead of the path.
 
 Runner and daemon lifecycle (applies to simulators too):
   open without --relaunch is idempotent-foreground for an already-running app, except native macOS app opens keep it in the background (help macos); neither restarts the process. open --relaunch restarts the app; on iOS simulators this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch.

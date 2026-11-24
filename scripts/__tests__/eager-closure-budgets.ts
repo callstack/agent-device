@@ -174,20 +174,6 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
       'The registry and identity stamp are the provenance contract every capture path already evaluates; this is the module boundary only (#4309, #4205). Measured: +1 module and +5 to +9 top-level statements per closure that reaches snapshot-model.',
     owner: 'thymikee',
   },
-  {
-    module: 'packages/host-kit/src/internal/exec-redact.ts',
-    issue: '#5042',
-    reason:
-      'The argv redaction and stream-scrubbing owner, split out of exec.ts so the spawn adapter fits the 1000-line cap again (#5042 review CI). exec.ts keeps every call site and its import surface; the module is pure and adds no edge exec.ts did not have. Measured: +1 module per closure that reaches exec.ts.',
-    owner: 'thymikee',
-  },
-  {
-    module: 'packages/host-kit/src/internal/exec-which.ts',
-    issue: '#5042',
-    reason:
-      'The executable-resolution owner (which/lookup/override paths), split out of exec.ts in the same pass; sync call sites keep it eager by necessity, and it is pure over fs/path. Measured: +1 module per closure that reaches exec.ts.',
-    owner: 'thymikee',
-  },
 ]);
 
 /** The category is a function of the path, never a hand-written column. */

@@ -47,7 +47,6 @@ import {
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerProvisioningAuthArgs,
   resolveRunnerSandboxBuildArgs,
-  runnerSigningAuthSpawnOptions,
   resolveRunnerSigningBuildSettings,
   requireCertifiedRunnerCacheArtifacts,
   writeRunnerCacheMetadataForArtifacts,
@@ -957,7 +956,6 @@ async function buildRunnerXctestrun(
         detached: true,
         timeoutMs: buildTimeoutMs,
         signal: options.budget?.signal,
-        ...runnerSigningAuthSpawnOptions(env, provisioningAuthArgs),
         onSpawn: (child) => {
           registerRunnerPrepProcess(device.id, child, options.startAdmission);
         },
