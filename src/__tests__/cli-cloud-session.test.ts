@@ -596,6 +596,7 @@ test('a command holding a revoked attachment cannot write another hosted RPC', a
   });
   expect(attachment.flags.daemonAuthToken).toBe(hostedDevice.attach.daemonAuthToken);
   const admit = (await activeConnection.resolveCloudAdmission({
+    host: createTestHostEnvironment(),
     ...location,
     command: 'open',
     usesSessions: true,
@@ -648,6 +649,7 @@ test('disconnect closes a cloud session while an admitted RPC is still in flight
   const fetchMock = stubCloudApi();
   expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
   const admit = (await activeConnection.resolveCloudAdmission({
+    host: createTestHostEnvironment(),
     ...location,
     command: 'open',
     usesSessions: true,

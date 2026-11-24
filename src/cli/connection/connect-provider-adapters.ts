@@ -21,6 +21,7 @@ import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile, requireConnectionTarget } from './generated-config.ts';
+import { cloudLimrunEnv } from './cloud-limrun.ts';
 import type { CreatedCloudSession } from './cloud-session-api.ts';
 
 type ConnectProfile = { flags: CliFlags; remoteConfigPath: string };
@@ -111,7 +112,7 @@ export async function resolveCloudSessionProfile(
   context: AdapterContext,
   session: CreatedCloudSession,
 ): Promise<ResolvedConnectProfile> {
-  const { binding } = session;
+  const { binding, attachment } = session;
   const clientId = buildConnectClientId('cloud', binding.baseUrl, binding.id);
   const flags = {
     ...context.flags,
@@ -124,13 +125,24 @@ export async function resolveCloudSessionProfile(
     runId: `cloud-${clientId}`,
     target: 'mobile' as const,
   };
-  const profile = {
-    tenant: flags.tenant,
-    runId: flags.runId,
-    session: flags.session,
-    platform: flags.platform,
-    target: flags.target,
-  };
+  const profile =
+    attachment.kind === 'limrun'
+      ? (
+          await (
+            await providerConnection('limrun', context)
+          ).resolve({
+            ...context,
+            flags: { ...flags, device: undefined },
+            env: { ...context.env, ...cloudLimrunEnv(attachment) },
+          })
+        ).profile
+      : {
+          tenant: flags.tenant,
+          runId: flags.runId,
+          session: flags.session,
+          platform: flags.platform,
+          target: flags.target,
+        };
   return {
     ...persistAndResolveGeneratedProfile({
       ...context,

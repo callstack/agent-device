@@ -18,6 +18,7 @@ function providerOf<P extends AgentDevicePlugin>(plugin: P) {
 }
 
 const sdk = vi.hoisted(() => ({
+  shutdown: vi.fn(async () => undefined),
   runtimeCalls: [] as { options: Record<string, unknown>; mode: unknown }[],
   clients: [] as Array<Record<string, unknown>>,
   androidList: vi.fn(async () => ({ getPaginatedItems: () => [] })),
@@ -33,7 +34,7 @@ vi.mock('./runtime.ts', () => ({
       runtime: {
         provider: 'limrun',
         prepareRentalRecovery: async () => {},
-        shutdown: async () => undefined,
+        shutdown: sdk.shutdown,
         leaseLifecycle: {},
         ownsDevice: () => false,
         getInteractor: () => undefined,
@@ -260,4 +261,27 @@ test('setup refuses a partial instance set naming the variable it still needs', 
     },
   );
   assert.equal(createDependencies.mock.calls.length, 0);
+});
+
+test('an isolated hosted attachment stops its runtime when the deadline passes', async () => {
+  vi.useFakeTimers();
+  const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
+  try {
+    sdk.shutdown.mockClear();
+    const hosted = await providerOf(plugin).setup(
+      pluginHost({
+        LIM_IOS_INSTANCE_URL: 'https://instance.example',
+        LIM_IOS_INSTANCE_TOKEN: 'fixture-token',
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 500).toISOString(),
+      }),
+    );
+    assert.ok(!hosted.dormant);
+    await vi.advanceTimersByTimeAsync(499);
+    assert.equal(sdk.shutdown.mock.calls.length, 0);
+    await vi.advanceTimersByTimeAsync(1);
+    assert.equal(sdk.shutdown.mock.calls.length, 1);
+    await hosted.dispose?.();
+  } finally {
+    vi.useRealTimers();
+  }
 });

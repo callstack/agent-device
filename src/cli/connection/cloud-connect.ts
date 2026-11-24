@@ -25,6 +25,7 @@ import {
   type CloudConnectionRecord,
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
+import { stopHostedLimrunDaemon } from './cloud-limrun.ts';
 import { resolveHostedCloudAccess, type HostedCloudAccess } from './cloud-access.ts';
 import { removeGeneratedRemoteConfigIfUnused } from './generated-config.ts';
 import { stopMetroCleanup } from '../commands/connection-metro-runtime.ts';
@@ -130,6 +131,7 @@ export async function releaseCloudConnection(options: {
     savedOrigin: record?.origin ?? binding?.baseUrl,
   });
   const id = await cloudSessionIdForRelease(access, record, binding?.id);
+  await stopHostedLimrunDaemon(location, binding, host);
   markCloudConnectionClosing(location, record);
   removeCloudAttachment(location);
   if (id) await deleteCloudSession(access, id);

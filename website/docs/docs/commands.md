@@ -2568,6 +2568,8 @@ If connect times out, retry with the same session name, API origin, and allocati
 
 Use `AGENT_DEVICE_CLOUD_BASE_URL` for a custom cloud session API endpoint. Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing. If you use an API key with a custom origin, set `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN` to that origin for both commands. If ending the cloud session fails, run `disconnect` again in the same session.
 
+A compatible [Limrun plugin](/docs/limrun) enables its scoped attachment transport. The CLI only offers that transport when the installed plugin supports hosted attachments. The attachment uses an isolated local daemon with the instance credentials for its platform. `disconnect` stops that daemon before releasing the hosted lease.
+
 Use the CLI with the session name to control the rental. MCP returns `cloud_connection_owns_session` for device commands that name a cloud-owned session.
 
 ## Remote Metro workflow

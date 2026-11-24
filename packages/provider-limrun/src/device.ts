@@ -23,6 +23,7 @@ export const LIMRUN_CONNECTION_CAPABILITIES: ConnectionProviderCapabilities = {
   usesCloudWebDriverLease: false,
   holdsCloudDevice: true,
   forgetsEndedConnectionLease: true,
+  acceptsHostedAttachment: true,
 };
 
 /**

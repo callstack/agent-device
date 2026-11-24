@@ -653,6 +653,8 @@ These reasons can come from more than one command.
 | `cloud_connection_expired` | The cloud session passed its deadline. |
 | `cloud_connect_rollback_failed` | The cloud did not confirm cleanup after attachment failed. |
 | `cloud_session_id_changed` | The cloud returned a different session ID for the same request. |
+| `cloud_limrun_plugin_required` | The installed Limrun plugin cannot consume scoped hosted attachments. |
+| `cloud_attachment_daemon_stop_unconfirmed` | The client could not confirm its attachment daemon stopped. |
 | `cloud_invalid_max_usd` | The spend cap is not a positive decimal in micro-USD precision. |
 | `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
 | `budget_cap_unsupported` | The cloud API has no route that can enforce a spend cap. |
@@ -922,6 +924,7 @@ These reasons can come from more than one command.
 | `limrun_instance_unreachable` | The instance stopped answering, so its app state cannot be read. |
 | `limrun_instance_delete_unconfirmed` | A release could not confirm Limrun deleted the instance, so it may still be billed. |
 | `limrun_lease_released_mid_allocation` | The lease was released while its instance was still being prepared for the allocation. |
+| `limrun_hosted_attachment_expired` | The hosted attachment deadline passed or could not be validated. |
 | `limrun_lease_not_live` | The lease holds no live session, so the command that addresses it has nothing to act on. |
 | `limrun_runtime_shut_down` | This runtime is shut down, so it refuses to allocate a lease into it. |
 | `limrun_app_sync_retired` | The app-sync session of this lease has ended, so no further sync runs on it. |

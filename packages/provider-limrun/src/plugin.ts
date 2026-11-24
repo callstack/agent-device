@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { PluginConnection, ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import type { DeviceProviderPluginHost } from 'agent-device/plugins/device-host';
 import {
@@ -18,6 +19,11 @@ export type LimrunPluginOptions = Readonly<{
     host: DeviceProviderPluginHost,
   ): LimrunRuntimeDependencies | Promise<LimrunRuntimeDependencies>;
 }>;
+
+const ATTACHMENT_REASONS = {
+  // The hosted attachment deadline passed or could not be validated.
+  expired: { reason: 'limrun_hosted_attachment_expired' },
+} as const satisfies ReasonTable<'limrun provider'>;
 
 const LIMRUN_CONNECTION: PluginConnection = {
   capabilities: LIMRUN_CONNECTION_CAPABILITIES,
@@ -50,6 +56,19 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
         setup: async (host: DeviceProviderPluginHost) => {
           const credentials = readLimrunCredentials(host.env);
           if (!credentials) return { dormant: LIMRUN_CREDENTIAL_DORMANCY };
+          const deadline = host.env.LIMRUN_HOSTED_ATTACHMENT_DEADLINE;
+          const expiresAt = deadline === undefined ? undefined : Date.parse(deadline);
+          if (
+            expiresAt !== undefined &&
+            (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || credentials.apiKey)
+          ) {
+            return {
+              dormant: {
+                reason: ATTACHMENT_REASONS.expired.reason,
+                message: 'The scoped Limrun attachment has no usable deadline.',
+              },
+            };
+          }
           const [register, dependencies] = await Promise.all([
             import('./runtime.ts'),
             options.createDependencies
@@ -72,9 +91,28 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
             { includePlatformModule: true },
           );
           await registration.runtime.prepareRentalRecovery();
-          return registration;
+          if (expiresAt === undefined) return registration;
+          const dispose = shutdownHostedRuntimeAt(expiresAt, () => registration.runtime.shutdown());
+          return { ...registration, dispose };
         },
       },
     ],
+  };
+}
+
+function shutdownHostedRuntimeAt(deadline: number, close: () => Promise<void>): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      void close().catch(() => {});
+      return;
+    }
+    timer = setTimeout(arm, Math.min(remaining, 2_147_483_647));
+    timer.unref();
+  };
+  arm();
+  return () => {
+    if (timer) clearTimeout(timer);
   };
 }

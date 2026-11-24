@@ -291,15 +291,16 @@ function assertCloudConnectionOwner(
   ) {
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
   }
-  assertCloudConnectionDeadline(location, record);
+  assertCloudConnectionDeadline(location, record, binding.transport);
 }
 
 function assertCloudConnectionDeadline(
   location: ConnectionLocation,
   record: CloudConnectionRecord,
+  transport: 'agent-device-daemon' | 'limrun',
 ): void {
   if (isExpired(record)) {
-    removeCloudAttachment(location);
+    if (transport === 'agent-device-daemon') removeCloudAttachment(location);
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.expired.reason);
   }
 }
@@ -308,7 +309,10 @@ function isExpired(record: CloudConnectionRecord): boolean {
   return record.deadlineAt !== undefined && Date.parse(record.deadlineAt) <= Date.now();
 }
 
-export async function cleanExpiredCloudAttachments(stateDir: string): Promise<void> {
+export async function cleanExpiredCloudAttachments(
+  stateDir: string,
+  retireExpiredDaemon: (location: ConnectionLocation, generation: string) => Promise<void>,
+): Promise<void> {
   const root = path.join(stateDir, 'cloud-connections');
   const status = lstatIfPresent(root);
   if (
@@ -322,9 +326,14 @@ export async function cleanExpiredCloudAttachments(stateDir: string): Promise<vo
     if (!entry.isDirectory()) continue;
     const location = readExpiredAttachmentLocation(stateDir, path.join(root, entry.name));
     if (!location) continue;
-    await tryWithConnectionLock(location, () => {
-      const current = readCloudConnection(location);
-      if (current && isExpired(current)) removeCloudAttachment(location);
+    await tryWithConnectionLock(location, async () => {
+    const current = readCloudConnection(location);
+    if (!current || !isExpired(current)) return;
+    const retired = await retireExpiredDaemon(location, current.generation).then(
+      () => true,
+      () => false,
+    );
+    if (retired) removeCloudAttachment(location);
     });
   }
 }

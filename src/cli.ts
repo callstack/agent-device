@@ -204,7 +204,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         });
         await applySavedCloudAttachment(ctx);
         let transport = resolveRunTransport(deps, ctx.host, ctx.admitConnection);
-        if (ctx.effectiveFlags.daemonAuthToken) {
+        if (ctx.cloudAttachmentToken || ctx.effectiveFlags.daemonAuthToken) {
           const { protectConnectionTransport } =
             await import('./cli/connection/cloud-attachment.ts');
           transport = await protectConnectionTransport(ctx, transport);
@@ -339,6 +339,8 @@ type CliRunContext = {
   claimedConnection?: RemoteConnectionState | null;
   commandConnection: CommandConnection | null;
   cloudSession?: CloudSessionBinding;
+  cloudAttachmentToken?: string;
+  cloudDaemonStateDir?: string;
   admitConnection?: Parameters<typeof resolveRunTransport>[2];
   explicitFlagKeys: Set<FlagKey>;
   // Mutated in place by resolveRemoteContext (auth, materialization) so the
@@ -405,6 +407,7 @@ async function resolveRunContextOrExit(
       command: base.command,
       usesSessions: runsOnRemoteConnection(base.command),
       stateDir: daemonPaths.baseDir,
+      host: base.host,
       session: effectiveFlags.session ?? flags.session,
       binding: cloudSession,
       remoteConfig: effectiveFlags.remoteConfig,
@@ -488,6 +491,8 @@ async function applySavedCloudAttachment(ctx: CliRunContext): Promise<void> {
     session,
   });
   ctx.host = attachment.host;
+  ctx.cloudAttachmentToken = attachment.token;
+  ctx.cloudDaemonStateDir = attachment.daemonStateDir;
   ctx.effectiveFlags = attachment.flags;
   if (session.transport === 'agent-device-daemon') {
     ctx.connectionMetadata = undefined;
@@ -577,7 +582,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
   return {
     session: currentFlags.session,
     requestId: ctx.requestId,
-    stateDir: currentFlags.stateDir,
+    stateDir: ctx.cloudDaemonStateDir ?? currentFlags.stateDir,
     daemonBaseUrl: currentFlags.daemonBaseUrl,
     daemonAuthToken: currentFlags.daemonAuthToken,
     daemonTransport: currentFlags.daemonTransport,

@@ -582,3 +582,42 @@ test('omits a scoped viewer link with an encoded attachment credential', async (
     viewerUrl: undefined,
   });
 });
+
+test.each([
+  { token: access.accessToken },
+  { token: `echo-${access.accessToken}-suffix` },
+  { apiUrl: `https://instance.example/${encodedBroker}` },
+  { apiUrl: `https://instance.example/${access.accessToken}` },
+  { adbWebSocketUrl: `wss://adb.example/?query=${encodedBroker}` },
+  { apiUrl: 'http://instance.example' },
+  { adbWebSocketUrl: 'ws://adb.example' },
+  { platform: 'ios' },
+])('refuses an invalid scoped plugin attachment %o', async (overrides) => {
+  const observeId = vi.fn();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        ...response,
+        vendor: 'limrun',
+        transport: 'limrun',
+        attach: {
+          kind: 'limrun',
+          platform: 'android',
+          apiUrl: 'https://instance.example',
+          token: 'test-scoped-token',
+          adbWebSocketUrl: 'wss://adb.example',
+          ...overrides,
+        },
+      }),
+    ),
+  );
+  await expect(
+    createCloudSession(
+      access,
+      { ...request, vendor: 'limrun', accepts: ['agent-device-daemon', 'limrun'] },
+      { ...attempt, observeId },
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'cloud_session_invalid' } });
+  expect(observeId).toHaveBeenCalledWith(response.id);
+});

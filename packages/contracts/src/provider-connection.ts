@@ -34,4 +34,6 @@ export type ConnectionProviderCapabilities = {
   holdsCloudDevice?: boolean;
   /** Clear a released connection lease so the next device command can allocate a replacement. */
   forgetsEndedConnectionLease?: boolean;
+  /** Can use the scoped instance credentials supplied by a hosted session. */
+  acceptsHostedAttachment?: true;
 };
