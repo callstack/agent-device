@@ -60,7 +60,7 @@ type NotificationPermissionRequest = {
 /**
  * What a change did: nothing when the file already held it, else a restart, which brings back the
  * app when it was running so a test that changes notifications mid-flow keeps its app in front. The
- * app can outlive the restart, but iOS ends it on a deny or reset, and then `simctl launch` starts it fresh.
+ * app can outlive the restart, but iOS sometimes ends it, and then `simctl launch` starts it fresh.
  */
 export type NotificationPermissionOutcome =
   | { restarted: false }
