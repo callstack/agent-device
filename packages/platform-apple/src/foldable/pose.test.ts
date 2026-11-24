@@ -4,6 +4,7 @@ const { FOLD_HELPER } = vi.hoisted(() => ({
   FOLD_HELPER: {
     setPose: vi.fn(),
     rotate: vi.fn(),
+    pressHome: vi.fn(),
     readHingeAngle: vi.fn(),
     readPanelPayload: vi.fn(),
   },

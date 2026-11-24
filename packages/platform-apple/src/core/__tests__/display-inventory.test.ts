@@ -843,6 +843,7 @@ describe('scoped simulator panel table', () => {
     const foldHelper = {
       setPose: vi.fn(),
       rotate: vi.fn(),
+      pressHome: vi.fn(),
       readHingeAngle: vi.fn(),
       readPanelPayload,
     };
@@ -864,6 +865,7 @@ describe('scoped simulator panel table', () => {
     const foldHelper = {
       setPose: vi.fn(),
       rotate: vi.fn(),
+      pressHome: vi.fn(),
       readHingeAngle: vi.fn(),
       readPanelPayload,
     };
