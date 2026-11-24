@@ -146,6 +146,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `GESTURE_TRAJECTORY_NON_FINITE` | A trajectory sample carries a non-finite coordinate. |
 | `GESTURE_TRAJECTORY_OUT_OF_BOUNDS` | A trajectory sample leaves the viewport, so the contact would press outside the screen, or a two-finger path cannot keep its contacts the minimum span apart inside it. |
 
+### `home`
+
+| Reason | Meaning |
+| --- | --- |
+| `home-hid-dispatch-failed` | The fold helper could not send the Home button to the iOS simulator. |
+| `home-hid-dispatch-timed-out` | The fold helper did not finish sending the Home button in time, so the press may have applied. |
+
 ### `install-from-source`
 
 | Reason | Meaning |
