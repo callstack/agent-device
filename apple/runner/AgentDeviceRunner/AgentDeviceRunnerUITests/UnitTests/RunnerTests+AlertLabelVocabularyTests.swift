@@ -64,7 +64,7 @@ extension RunnerTests {
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "dismiss", vocabulary: .device), 0)
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "accept", vocabulary: .device), 1)
 
-    let tracking = ["要求App不追踪", "允许"]
+    let tracking = ["要求App不跟踪", "允许"]
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "dismiss", vocabulary: .device), 0)
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "accept", vocabulary: .device), 1)
 
@@ -116,16 +116,26 @@ extension RunnerTests {
 extension RunnerTests {
   /// Every built-in device row is a pair the OS itself ships: the row equals one (english,
   /// localized) pair in `fromSystemStrings(languages: ["zh-Hans"])`, so a row can never drift from
-  /// the wording a zh-Hans device shows. The read must also succeed — a failed read would make
+  /// the wording a zh-Hans device shows — except a wording the table carries for another shipped
+  /// iOS version's zh_CN (`versionedRows`): the OS of the lane this test runs on words that
+  /// prompt one way, and the physical-device run that pinned the other row ran on an OS whose
+  /// string files this lane cannot read. The read must also succeed — a failed read would make
   /// this assertion vacuous — which the unwrapped table guarantees.
   func testDeviceVocabularyRowsArePairsTheOSShipsForZhHans() throws {
     let system = RunnerAlertLabelVocabulary.fromSystemStrings(languages: ["zh-Hans"])
     let osPairs = system.rows.map { ($0.english, $0.localized) }
     XCTAssertFalse(osPairs.isEmpty, "the OS string read answered nothing, so the rows are unverified")
-    for row in RunnerAlertLabelVocabulary.deviceTranslations {
+    let versionedRows: Set<String> = ["要求App不跟踪"]
+    for row in RunnerAlertLabelVocabulary.deviceTranslations where !versionedRows.contains(row.localized) {
       XCTAssertTrue(
         osPairs.contains { $0.0 == row.english && $0.1 == row.localized },
         "\(row.english) → \(row.localized) is not a pair the OS ships in zh-Hans"
+      )
+    }
+    for wording in versionedRows {
+      XCTAssertTrue(
+        RunnerAlertLabelVocabulary.deviceTranslations.contains { $0.localized == wording },
+        "the cross-version zh_CN wording \(wording) a physical device showed is missing from the table"
       )
     }
   }

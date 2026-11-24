@@ -50,8 +50,11 @@ extension RunnerAlertLabelVocabulary {
     // Notification and privacy prompts.
     ("Allow", "允许"),
     ("Don’t Allow", "不允许"),
-    // App Tracking Transparency.
+    // App Tracking Transparency. iOS words the decline button two ways: iOS 26–27's zh_CN
+    // ships 要求App不追踪 and iOS 18.1's zh_CN (a physical iPhone 12 Pro Max, 2026-11-24)
+    // ships 要求App不跟踪; the table carries both, so either device wording resolves.
     ("Ask App Not to Track", "要求App不追踪"),
+    ("Ask App Not to Track", "要求App不跟踪"),
     // Location.
     ("Allow While Using App", "使用App时允许"),
     ("Allow Once", "允许一次"),
