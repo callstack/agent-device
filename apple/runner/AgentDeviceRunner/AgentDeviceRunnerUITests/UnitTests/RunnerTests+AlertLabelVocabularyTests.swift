@@ -64,11 +64,11 @@ extension RunnerTests {
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "dismiss", vocabulary: .device), 0)
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "accept", vocabulary: .device), 1)
 
-    let tracking = ["要求 App 不跟踪", "允许"]
+    let tracking = ["要求App不追踪", "允许"]
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "dismiss", vocabulary: .device), 0)
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "accept", vocabulary: .device), 1)
 
-    let location = ["仅本次允许", "仅在使用期间允许", "不允许"]
+    let location = ["允许一次", "使用App时允许", "不允许"]
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: location, action: "dismiss", vocabulary: .device), 2)
     XCTAssertEqual(
       RunnerAlertButtonChoice.buttonIndex(for: location, action: "accept", vocabulary: .device),
@@ -114,6 +114,22 @@ extension RunnerTests {
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS) && targetEnvironment(simulator)
 extension RunnerTests {
+  /// Every built-in device row is a pair the OS itself ships: the row equals one (english,
+  /// localized) pair in `fromSystemStrings(languages: ["zh-Hans"])`, so a row can never drift from
+  /// the wording a zh-Hans device shows. The read must also succeed — a failed read would make
+  /// this assertion vacuous — which the unwrapped table guarantees.
+  func testDeviceVocabularyRowsArePairsTheOSShipsForZhHans() throws {
+    let system = RunnerAlertLabelVocabulary.fromSystemStrings(languages: ["zh-Hans"])
+    let osPairs = system.rows.map { ($0.english, $0.localized) }
+    XCTAssertFalse(osPairs.isEmpty, "the OS string read answered nothing, so the rows are unverified")
+    for row in RunnerAlertLabelVocabulary.deviceTranslations {
+      XCTAssertTrue(
+        osPairs.contains { $0.0 == row.english && $0.1 == row.localized },
+        "\(row.english) → \(row.localized) is not a pair the OS ships in zh-Hans"
+      )
+    }
+  }
+
   /// The OS's own strings supply the translations: a Japanese device words the notification,
   /// tracking, and location prompts in labels no English entry matches.
   func testJapaneseSystemVocabularyResolvesTheSystemPermissionPrompts() {

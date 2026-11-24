@@ -10,8 +10,12 @@ struct RunnerAlertLabelVocabulary {
   static let english = RunnerAlertLabelVocabulary(translations: [])
 
   private let sources: [String: [String]]
+  /// The rows as they were handed in, before the initializer's guards: what the table (or the OS
+  /// read) actually claims, for tests that compare the vocabulary against its own sources.
+  let rows: [(english: String, localized: String)]
 
   init(translations: [(english: String, localized: String)]) {
+    self.rows = translations
     var sources: [String: [String]] = [:]
     for translation in translations where RunnerAlertButtonChoice.action(of: translation.english, wholeLabel: true) != nil {
       sources[Self.normalized(translation.localized), default: []].append(translation.english)
@@ -47,10 +51,10 @@ extension RunnerAlertLabelVocabulary {
     ("Allow", "允许"),
     ("Don’t Allow", "不允许"),
     // App Tracking Transparency.
-    ("Ask App Not to Track", "要求 App 不跟踪"),
+    ("Ask App Not to Track", "要求App不追踪"),
     // Location.
-    ("Allow While Using App", "仅在使用期间允许"),
-    ("Allow Once", "仅本次允许"),
+    ("Allow While Using App", "使用App时允许"),
+    ("Allow Once", "允许一次"),
     // General-purpose prompt buttons.
     ("OK", "好"),
     ("Cancel", "取消"),
