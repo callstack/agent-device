@@ -117,6 +117,12 @@ export const SETTINGS = {
     appScope: { mobile: 'device-level' },
     help: 'Android only. Runs svc data and reports the stored mobileData state, or fails with mobile-data-not-applied or mobile-data-unreadable. Multi-SIM read-back is not covered yet, and --app is refused.',
   },
+  'keep-awake': {
+    forms: [{ kind: 'on-off' }],
+    app: 'input',
+    appScope: { mobile: 'device-level' },
+    help: 'Android holds its screen on while the device charges (svc power stayon true writes the charging mask, false clears it and does not restore a mask a user set), so a device on battery can still sleep; the write survives a reboot and outlives the session, so run off when the hold ends. --app is refused.',
+  },
   location: {
     forms: [
       { kind: 'on-off', appScope: { apple: 'app-scoped', mobile: 'device-level' } },
