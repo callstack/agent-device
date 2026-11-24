@@ -46,7 +46,7 @@ test.each([false, true])(
         const outcome = await finish();
         fs.writeFileSync(outcome.result.outPath, 'video-exported-during-close');
         const telemetryPath = deriveRecordingTelemetryPath(outcome.result.outPath);
-        fs.writeFileSync(telemetryPath, '{}');
+        if (!missingSidecar) fs.writeFileSync(telemetryPath, '{}');
         return { ...outcome, result: { ...outcome.result, telemetryPath } };
       });
     const tenantId = 'recording-suite';
@@ -57,12 +57,7 @@ test.each([false, true])(
         host: createTestHostEnvironment({ cwd: root, env: {} }),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
-        platformResourceCleanup: platformResourceCleanupFixture({
-          stopSnapshotHelper: async () => {
-            if (!missingSidecar) return;
-            fs.rmSync(deriveRecordingTelemetryPath(runtime.start.mock.calls[0]![0].outputPath));
-          },
-        }),
+        platformResourceCleanup: platformResourceCleanupFixture(),
         req: {
           token: 'fixture',
           session: 'suite',
@@ -120,14 +115,17 @@ test.each([false, true])(
       const inventory = await listDownloadableArtifacts({ tenantId }, {});
       try {
         const output = inventory.find((artifact) => artifact.artifactType === 'screen-recording');
-        expect(output?.id).toBeTypeOf('string');
         if (missingSidecar) {
+          expect(runtime.forceCleanup).toHaveBeenCalledOnce();
+          expect(output).toBeUndefined();
           expect(data.recordingArtifacts).toBeUndefined();
           expect(data.failures).toMatchObject([{ error: { details: { reason: 'timeout' } } }]);
           expect(
             (data.failures as Array<{ infrastructure?: true }>)[0]!.infrastructure,
           ).toBeUndefined();
         } else {
+          expect(runtime.forceCleanup).not.toHaveBeenCalled();
+          expect(output?.id).toBeTypeOf('string');
           expect(data.recordingArtifacts).toEqual(
             expect.arrayContaining([
               expect.objectContaining({

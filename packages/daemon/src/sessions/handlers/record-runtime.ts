@@ -504,7 +504,9 @@ async function stopRecording(
   const envelope = record.status === 'decoded' ? record.envelope : undefined;
   const artifacts =
     envelope?.metadata?.remoteCaptureOutput === true
-      ? await commitRecordingOutputs(envelope, completion)
+      ? await commitRecordingOutputs(envelope, completion, {
+          replay: !stopped.recordsSessionAction,
+        })
       : undefined;
   return buildRecordingStopResponse(completion, artifacts);
 }

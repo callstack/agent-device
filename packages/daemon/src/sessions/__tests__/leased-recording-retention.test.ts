@@ -28,7 +28,6 @@ import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import {
   cleanupDownloadableArtifact,
-  commitRecordingFileOutputs,
   trackDownloadableArtifact,
   leaseVerifier,
   listDownloadableArtifacts,
@@ -459,121 +458,199 @@ test('fresh runtime slots can restore an intact recording from its producer mani
   }
 });
 
-test('the producing lease downloads its recording after the suite archive is consumed', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
+async function startSuiteRecording() {
   const suite = mkdtempForTestSync('archive-recording-retention-');
   const video = path.join(suite, 'recording.mp4');
-  fs.writeFileSync(video, 'leased-suite-recording');
-  const recording = (
-    await commitRecordingFileOutputs(
-      [
-        {
-          field: 'outPath',
-          artifactType: 'screen-recording',
-          path: video,
-          stat: fs.statSync(video),
-        },
-      ],
-      {
-        lifetimeId: 'suite-attempt-lifetime',
-        tenantId: TENANT,
-        leaseVerifier: leaseVerifier(LEASE_ID),
-      },
-      'checkout-flow',
-      Date.now(),
-      false,
-    )
-  )[0]!;
-  settleCommittedFileOutputs([recording], true);
-  const archiveId = trackDownloadableArtifact({
-    artifactPath: suite,
-    artifactType: 'test-artifacts',
+  const harness = makeRecordRuntimeHarness('archive-recording-stop-', {
+    sessionName: ADDRESS,
+    suiteCapture: 'remote',
+    lease: { backend: 'android-instance', leaseId: LEASE_ID, tenantId: TENANT, runId: 'run-1' },
+  });
+  const meta = {
     tenantId: TENANT,
-    leaseVerifier: leaseVerifier(LEASE_ID),
+    leaseId: LEASE_ID,
+    clientArtifactPaths: { artifactsDir: '/client' },
+  };
+  const internal = {
+    publicNetworkOnly: true,
+    admittedLease: {
+      leaseId: LEASE_ID,
+      tenantId: TENANT,
+      runId: 'run-1',
+      backend: 'android-instance',
+      createdAt: 0,
+      heartbeatAt: 0,
+      expiresAt: 0,
+    },
+  } as const;
+  const stop = () => harness.run(['stop'], meta, undefined, internal);
+  expect(await harness.run(['start', video], meta, undefined, internal)).toMatchObject({
+    ok: true,
   });
-  const server = http.createServer((req, res) => {
-    tryHandleDownloadableArtifactHttpRoute({
-      req,
-      res,
-      authorize: async () => ({ tenantId: TENANT }),
-      hostEnv: process.env,
-    });
+  fs.writeFileSync(video, 'leased-suite-recording');
+  return { suite, video, stop };
+}
+
+test('suite recording staging can wait for an asynchronous copy before publishing', async () => {
+  const { stop } = await startSuiteRecording();
+  // Hold the asynchronous full-copy path open so other work can run before publication finishes.
+  const copy = fs.promises.copyFile;
+  let releaseCopy = () => {};
+  const gate = new Promise<void>((resolve) => {
+    releaseCopy = resolve;
   });
-  const port = await listenOnLoopback(server);
-  const get = (id: string, leaseId: string) =>
-    fetch(`http://127.0.0.1:${port}/artifacts/${id}`, {
-      headers: { [DAEMON_HTTP_LEASE_HEADER]: leaseId },
-    });
+  const staging = vi.spyOn(fs.promises, 'copyFile').mockImplementationOnce(async (...args) => {
+    await gate;
+    return await copy(...args);
+  });
+  const synchronousCopy = vi.spyOn(fs, 'copyFileSync');
+  const stopping = stop();
   try {
-    const archive = await get(archiveId, LEASE_ID);
-    expect(archive.status).toBe(200);
-    expect(
-      gunzipSync(Buffer.from(await archive.arrayBuffer())).includes(
-        Buffer.from('leased-suite-recording'),
-      ),
-    ).toBe(true);
-    await vi.waitFor(() => expect(fs.existsSync(suite)).toBe(false));
-    const refused = await get(recording.artifactId!, 'f'.repeat(32));
-    expect(refused.status).toBe(401);
-    const download = await get(recording.artifactId!, LEASE_ID);
-    expect(download.status).toBe(200);
-    expect(await download.text()).toBe('leased-suite-recording');
-    await vi.waitFor(async () =>
-      expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]),
-    );
+    await vi.waitFor(() => expect(staging).toHaveBeenCalledOnce());
+    expect(synchronousCopy).not.toHaveBeenCalled();
+    expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
   } finally {
-    cleanupDownloadableArtifact(archiveId);
-    cleanupDownloadableArtifact(recording.artifactId!);
-    await closeLoopbackServer(server);
+    releaseCopy();
+    staging.mockRestore();
+    synchronousCopy.mockRestore();
   }
+  const stopped = await stopping;
+  expect(stopped).toMatchObject({
+    ok: true,
+    data: { artifacts: [{ artifactId: expect.any(String) }] },
+  });
 });
 
-test('a transient stat failure leaves a completed export retriable', async () => {
-  const harness = makeRecordRuntimeHarness('recording-verification-retry-');
-  const runtime = createRuntimeStateHandle();
-  const start = harness.runtime.start.getMockImplementation()!;
-  harness.runtime.start.mockImplementation(async (input) => {
-    fs.writeFileSync(input.outputPath, 'original-export');
-    return await start(input);
-  });
-  const remote = { publicNetworkOnly: true } as const;
-  try {
-    await runtime.run(async () => {
-      const run = async (action: string) =>
-        await harness.run([action], { tenantId: TENANT }, undefined, remote);
-      expect(await run('start')).toMatchObject({ ok: true });
-      const source = harness.runtime.start.mock.calls[0]![0].outputPath;
-      const lstat = fs.lstatSync;
-      let failures = 0;
-      const stat = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
-        if (file === source && failures === 0) {
-          failures++;
-          throw Object.assign(new Error('transient stat failure'), { code: 'EIO' });
+for (const first of ['archive', 'recording']) {
+  test(`the producing lease retries after consuming the ${first} first`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const { suite, video, stop } = await startSuiteRecording();
+    const stopped = await stop();
+    if (!stopped.ok) throw new Error(stopped.error.message);
+    const recording = stopped.data!.artifacts![0]!;
+    const archiveId = trackDownloadableArtifact({
+      artifactPath: suite,
+      artifactType: 'test-artifacts',
+      tenantId: TENANT,
+      leaseVerifier: leaseVerifier(LEASE_ID),
+    });
+    const server = http.createServer((req, res) => {
+      tryHandleDownloadableArtifactHttpRoute({
+        req,
+        res,
+        authorize: async () => ({ tenantId: TENANT }),
+        hostEnv: process.env,
+      });
+    });
+    const port = await listenOnLoopback(server);
+    const get = (id: string, leaseId: string) =>
+      fetch(`http://127.0.0.1:${port}/artifacts/${id}`, {
+        headers: { [DAEMON_HTTP_LEASE_HEADER]: leaseId },
+      });
+    try {
+      const consumeArchive = async () => {
+        const archive = await get(archiveId, LEASE_ID);
+        expect(archive.status).toBe(200);
+        expect(
+          gunzipSync(Buffer.from(await archive.arrayBuffer())).includes(
+            Buffer.from('leased-suite-recording'),
+          ),
+        ).toBe(true);
+        await vi.waitFor(() => expect(fs.existsSync(suite)).toBe(false));
+      };
+      const consumeRecording = async () => {
+        const refused = await get(recording.artifactId!, 'f'.repeat(32));
+        expect(refused.status).toBe(401);
+        const download = await get(recording.artifactId!, LEASE_ID);
+        expect(download.status).toBe(200);
+        expect(await download.text()).toBe('leased-suite-recording');
+      };
+      if (first === 'archive') {
+        await consumeArchive();
+        expect(await stop()).toMatchObject({ ok: true, data: { artifacts: [recording] } });
+        await consumeRecording();
+      } else {
+        await consumeRecording();
+        await vi.waitFor(async () =>
+          expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([
+            expect.objectContaining({ id: archiveId }),
+          ]),
+        );
+        expect(fs.readFileSync(video, 'utf8')).toBe('leased-suite-recording');
+        const expired = { ok: false, error: { details: { reason: 'RESOURCE_EXPIRED' } } };
+        expect(await stop()).toMatchObject(expired);
+        const restarted = createRuntimeStateHandle();
+        try {
+          expect(await restarted.run(stop)).toMatchObject(expired);
+        } finally {
+          restarted.dispose();
         }
-        return lstat(file, options);
-      });
-      try {
-        expect(await run('stop')).toMatchObject({ ok: false });
-        expect(failures).toBe(1);
-        expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
-      } finally {
-        stat.mockRestore();
+        await consumeArchive();
       }
-      const result = await run('stop');
-      expect(result).toMatchObject({
-        ok: true,
-        data: { recording: 'stopped', artifacts: [{ artifactId: expect.any(String) }] },
-      });
-      expect(fs.readFileSync(source, 'utf8')).toBe('original-export');
-    });
-  } finally {
-    runtime.dispose();
-  }
-});
+      await vi.waitFor(async () =>
+        expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]),
+      );
+    } finally {
+      cleanupDownloadableArtifact(archiveId);
+      cleanupDownloadableArtifact(recording.artifactId!);
+      await closeLoopbackServer(server);
+    }
+  });
+}
 
-test.each([false, true])(
-  'failed teardown registration expires only the verified original (replaced: %s)',
-  async (replace) => {
+test.each([1, 2])(
+  'a transient stat failure on read %d leaves the export retriable',
+  async (failureRead) => {
+    const harness = makeRecordRuntimeHarness('recording-verification-retry-');
+    const runtime = createRuntimeStateHandle();
+    const start = harness.runtime.start.getMockImplementation()!;
+    harness.runtime.start.mockImplementation(async (input) => {
+      fs.writeFileSync(input.outputPath, 'original-export');
+      return await start(input);
+    });
+    const remote = { publicNetworkOnly: true } as const;
+    try {
+      await runtime.run(async () => {
+        const run = async (action: string) =>
+          await harness.run([action], { tenantId: TENANT }, undefined, remote);
+        expect(await run('start')).toMatchObject({ ok: true });
+        const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+        const lstat = fs.lstatSync;
+        let sourceReads = 0;
+        const stat = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+          if (file === source && ++sourceReads === failureRead) {
+            throw Object.assign(new Error('transient stat failure'), { code: 'EIO' });
+          }
+          return lstat(file, options);
+        });
+        try {
+          expect(await run('stop')).toMatchObject({ ok: false });
+          expect(sourceReads).toBe(failureRead);
+          expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+        } finally {
+          stat.mockRestore();
+        }
+        const result = await run('stop');
+        expect(result).toMatchObject({
+          ok: true,
+          data: { recording: 'stopped', artifacts: [{ artifactId: expect.any(String) }] },
+        });
+        expect(fs.readFileSync(source, 'utf8')).toBe('original-export');
+      });
+    } finally {
+      runtime.dispose();
+    }
+  },
+);
+
+test.each([
+  ['teardown', false],
+  ['teardown', true],
+  ['stop', false],
+  ['stop', true],
+] as const)(
+  'failed %s registration expires only the verified original (replaced: %s)',
+  async (action, replace) => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const harness = makeRecordRuntimeHarness('recording-cleanup-expiry-', { sessionName: ADDRESS });
     const start = harness.runtime.start.getMockImplementation()!;
@@ -593,6 +670,10 @@ test.each([false, true])(
       return lstat(file, options);
     });
     try {
+      if (action === 'stop')
+        expect(
+          await harness.run(['stop'], { tenantId: TENANT }, undefined, { publicNetworkOnly: true }),
+        ).toMatchObject({ ok: false });
       await teardown(harness.sessionStore);
       expect(sourceReads).toBe(2);
       expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
@@ -612,3 +693,80 @@ test.each([false, true])(
     else expect(fs.existsSync(source)).toBe(false);
   },
 );
+
+test('failed registration of a legacy export without recorded identity leaves its file alone', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const sessionStore = makeSessionStore('recording-legacy-cleanup-');
+  const recordingExport = remoteRecordingExport();
+  publishRecordingSession(sessionStore, recordingExport);
+
+  const lstat = fs.lstatSync;
+  let sourceReads = 0;
+  const stat = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+    if (file === recordingExport.outPath && ++sourceReads === 2) {
+      throw Object.assign(new Error('registry stat unavailable'), { code: 'EIO' });
+    }
+    return lstat(file, options);
+  });
+  try {
+    await teardown(sessionStore);
+    expect(sourceReads).toBe(2);
+    expect(
+      screenRecordingResourceStore.read(
+        screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(ADDRESS)),
+      ),
+    ).toMatchObject({ status: 'decoded', envelope: { lifecycle: 'completed' } });
+    expect(await listDownloadableArtifacts(OWNER, {})).toEqual([]);
+  } finally {
+    stat.mockRestore();
+  }
+  await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+  expect(fs.readFileSync(recordingExport.outPath, 'utf8')).toBe('video');
+  expect(fs.readFileSync(recordingExport.telemetryPath, 'utf8')).toBe('{"events":[]}');
+});
+
+test('explicit stop keeps its binding until the advertised sidecar can be verified', async () => {
+  const harness = makeRecordRuntimeHarness('recording-sidecar-retry-');
+  const finish = harness.runtime.finish.getMockImplementation()!;
+  harness.runtime.finish.mockImplementation(async () => {
+    const outcome = await finish();
+    return {
+      ...outcome,
+      result: {
+        ...outcome.result,
+        telemetryPath: deriveRecordingTelemetryPath(outcome.result.outPath),
+      },
+    };
+  });
+  const runtime = createRuntimeStateHandle();
+  const run = (action: string) =>
+    harness.run([action], { tenantId: TENANT }, undefined, { publicNetworkOnly: true });
+  try {
+    await runtime.run(async () => {
+      expect(await run('start')).toMatchObject({ ok: true });
+      const video = harness.runtime.start.mock.calls[0]![0].outputPath;
+      fs.writeFileSync(video, 'completed-video');
+      const active = harness.sessionStore.lookup(harness.sessionName)!.session.screenRecording;
+      expect(active).toBeDefined();
+      expect(await run('stop')).toMatchObject({
+        ok: false,
+        error: { code: 'COMMAND_FAILED' },
+      });
+      expect(harness.sessionStore.lookup(harness.sessionName)!.session.screenRecording).toBe(
+        active,
+      );
+      expect(harness.runtime.forceCleanup).not.toHaveBeenCalled();
+      expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+
+      fs.writeFileSync(deriveRecordingTelemetryPath(video), '{}');
+      expect(await run('stop')).toMatchObject({
+        ok: true,
+        data: {
+          artifacts: [{ artifactId: expect.any(String) }, { artifactId: expect.any(String) }],
+        },
+      });
+    });
+  } finally {
+    runtime.dispose();
+  }
+});

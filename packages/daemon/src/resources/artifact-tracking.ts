@@ -1,4 +1,8 @@
-import type { RecordingSource } from './artifact-file-storage.ts';
+import type {
+  RecordingFile,
+  RecordingPublication,
+  RecordingSourceKind,
+} from './artifact-file-storage.ts';
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -140,7 +144,7 @@ export function diagnosticsRecordOwner(recordId: string): string | undefined | n
 
 // --- Downloadable artifact tracking ---
 
-export const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
+const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
 const ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS = 15 * 60 * 1000;
 
 const DOWNLOADABLE_ARTIFACT_RESOURCE: TenantOwnedResourceKind = {
@@ -181,7 +185,7 @@ type ArtifactEntry = {
   reservation?: Readonly<{
     directory?: string;
     lifetimeId: string;
-    recording?: RecordingSource;
+    recording?: true;
   }>;
   /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
   output: string | undefined;
@@ -202,6 +206,7 @@ type ArtifactEntry = {
 type ArtifactTrackingState = {
   artifacts: Map<string, ArtifactEntry>;
   reservations: Set<() => void>;
+  recordingPublications: Map<string, RecordingPublication>;
   uploads: Map<string, UploadEntry>;
   retainedPerformanceSources: Map<
     string,
@@ -216,11 +221,14 @@ const artifactTracking = (): ArtifactTrackingState =>
     (): ArtifactTrackingState => ({
       artifacts: new Map(),
       reservations: new Set(),
+      recordingPublications: new Map(),
       uploads: new Map(),
       retainedPerformanceSources: new Map(),
     }),
     (state) => {
       for (const discard of state.reservations) discard();
+      for (const { timer } of state.recordingPublications.values()) clearTimeout(timer);
+      state.recordingPublications.clear();
       for (const [id, entry] of state.artifacts) {
         requestArtifactCleanup(state.artifacts, id, entry);
         for (const download of entry.activeDownloads) cancelArtifactDownload(id, entry, download);
@@ -335,62 +343,49 @@ function bindFileOutputDelivery(
 
 /** Commits verified recordings independently of the request that delivers their IDs. */
 export async function commitRecordingFileOutputs(
-  files: readonly (DaemonArtifact & { path: string; stat: fs.Stats })[],
+  files: readonly RecordingFile[],
   producer: FileOutputProducer,
   sessionName: string | undefined,
   completedAt: number,
-  sourceOutsideArchive: boolean,
+  sourceKind: RecordingSourceKind,
 ): Promise<DaemonArtifact[]> {
-  const { prepareRecordingDelivery, recordingOutputExpired } =
-    await import('./artifact-file-storage.ts');
-  if (completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS <= Date.now()) {
-    throw recordingOutputExpired();
-  }
-  const artifacts = pendingArtifacts();
-  const owner = producer.leaseVerifier ?? undefined;
-  const { directory, deliveries, registrations } = prepareRecordingDelivery(
+  const { publishRecordingFiles } = await import('./artifact-file-storage.ts');
+  const { artifacts, recordingPublications } = artifactTracking();
+  return publishRecordingFiles({
+    publications: recordingPublications,
+    producer,
     files,
-    (source) => findCommittedRecording(artifacts, producer, source),
-    sourceOutsideArchive,
-  );
-  for (const { artifactId, delivery, recording, artifactPath, output } of registrations) {
-    addArtifactEntry(
-      artifacts,
-      artifactId,
-      {
-        artifactPath,
-        artifactType: delivery.artifactType,
-        fileName: delivery.fileName,
-        tenantId: producer.tenantId,
-        leaseVerifier: owner,
-        sessionName,
-      },
-      output,
-      { remainingEntries: 1, deleteAfterDownload: true },
-      { directory, lifetimeId: producer.lifetimeId, recording },
-      completedAt,
-    );
-  }
-  return deliveries;
-}
-
-function findCommittedRecording(
-  artifacts: Map<string, ArtifactEntry>,
-  producer: FileOutputProducer,
-  source: RecordingSource,
-): string | undefined {
-  for (const [id, entry] of artifacts) {
-    if (
-      !entry.cleanupRequested &&
-      entry.reservation?.lifetimeId === producer.lifetimeId &&
-      entry.reservation.recording?.sourcePath === source.sourcePath &&
-      entry.reservation.recording.sourceIdentity === source.sourceIdentity &&
-      entry.tenantId === producer.tenantId &&
-      entry.leaseVerifier === (producer.leaseVerifier ?? undefined)
-    )
-      return id;
-  }
-  return undefined;
+    expiresAt: completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS,
+    sourceKind,
+    isAvailable: (id) => {
+      const entry = artifacts.get(id);
+      return (
+        entry !== undefined &&
+        !entry.cleanupRequested &&
+        statRegisteredOutput(id, entry) !== undefined
+      );
+    },
+    register: (registrations, directory) => {
+      for (const { delivery, artifactPath, output } of registrations) {
+        addArtifactEntry(
+          artifacts,
+          delivery.artifactId,
+          {
+            artifactPath,
+            artifactType: delivery.artifactType,
+            fileName: delivery.fileName,
+            tenantId: producer.tenantId,
+            leaseVerifier: producer.leaseVerifier ?? undefined,
+            sessionName,
+          },
+          output,
+          { remainingEntries: 1, deleteAfterDownload: true },
+          { directory, lifetimeId: producer.lifetimeId, recording: true },
+          completedAt,
+        );
+      }
+    },
+  });
 }
 
 export type DownloadableArtifactReader = { tenantId?: string; leaseId?: string };
@@ -506,7 +501,7 @@ function outputIdentity(stat: fs.Stats, recording = false): string {
 
 function readOutputIdentity(
   artifactPath: string,
-  reservation?: { recording?: RecordingSource },
+  reservation?: { recording?: true },
 ): string | undefined {
   try {
     return outputIdentity(

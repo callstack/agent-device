@@ -7,7 +7,7 @@ import {
   isLegacyRemoteRecordingOutput,
   recordingOutputLeaseVerifier,
 } from './handlers/record-runtime-response.ts';
-import { commitRecordingOutputs, expireFailedRecordingExport } from './recording-outputs.ts';
+import { commitRecordingOutputs } from './recording-outputs.ts';
 
 export async function retainLeasedSessionRecording(
   ref: SessionRef,
@@ -26,21 +26,16 @@ export async function retainLeasedSessionRecording(
   )
     return;
   try {
-    await commitRecordingOutputs(envelope, completion, lease?.tenantId);
+    await commitRecordingOutputs(envelope, completion, { legacyTenant: lease?.tenantId });
   } catch (error) {
-    try {
-      expireFailedRecordingExport(envelope, completion);
-    } catch (cleanupError) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'leased_recording_cleanup_unproven',
-        data: { session: ref.address, error: errorMessage(cleanupError) },
-      });
-    }
     emitDiagnostic({
       level: 'warn',
       phase: 'leased_session_recording_retention_failed',
-      data: { session: ref.address, error: errorMessage(error) },
+      data: {
+        session: ref.address,
+        error: errorMessage(error),
+        hasExportProof: metadata.remoteCaptureExport !== undefined,
+      },
     });
   }
 }

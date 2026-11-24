@@ -131,8 +131,29 @@ export async function finishDurableCaptureHandle<
         await respondToFailedFinish(definition, lease, params, finishError, params.intent);
         throw finishError;
       }
-      await transitionFinishOutcome(definition, lease, finishOutcome);
-      if (finishOutcome.status === 'completed') return finishOutcome.result;
+      if (finishOutcome.status === 'completed') {
+        await commitFinishedCapture(definition, lease, finishOutcome.result, async (proofError) => {
+          settleIfMissing(lease);
+          const settled = await respondToFailedFinish(
+            definition,
+            lease,
+            params,
+            proofError,
+            params.intent,
+          );
+          if (params.intent === 'disposal' && settled) {
+            emitDiagnostic({
+              level: 'warn',
+              phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_unverified_export_disposed`,
+              data: { resourcePath: params.resourcePath, error: errorMessage(proofError) },
+            });
+            throw completedDurableCaptureError(definition.store);
+          }
+          throw proofError;
+        });
+        return finishOutcome.result;
+      }
+      transitionCleanupOutcome(lease, finishOutcome);
       const finishError = cleanupPendingError(definition, finishOutcome);
       settleIfMissing(lease);
       await respondToFailedFinish(definition, lease, params, finishError, params.intent);
@@ -147,10 +168,10 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
   params: { handle: H; resourcePath: string },
   finishError: unknown,
   intent: DurableCaptureFinishIntent,
-): Promise<void> {
+): Promise<boolean> {
   if (intent === 'capture' && definition.failedFinishPolicy === 'preserve-retry-material') {
     emitFailedFinishPreservedDiagnostic(definition, params, finishError);
-    return;
+    return false;
   }
   let cleanup: CleanupOutcome;
   try {
@@ -164,7 +185,7 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
       cleanupError,
       transitionError,
     );
-    return;
+    return false;
   }
   try {
     transitionCleanupOutcome(lease, cleanup);
@@ -178,10 +199,11 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
         : `cleanup returned ${cleanup.status}`,
       transitionError,
     );
-    return;
+    return false;
   }
-  if (isConfirmedCleanup(cleanup)) return;
+  if (isConfirmedCleanup(cleanup)) return true;
   emitFailedFinishCleanupDiagnostic(definition, params, finishError, cleanup.message);
+  return false;
 }
 
 function persistCleanupPendingBestEffort<K extends string>(
@@ -349,16 +371,28 @@ export async function transitionFinishOutcome<K extends string, C>(
   outcome: FinishOutcome<C>,
 ): Promise<void> {
   if (outcome.status === 'completed') {
-    lease.transition('completed', {
-      metadata: {
-        ...(lease.envelope.metadata ?? {}),
-        ...(await definition.completionMetadata(outcome.result, lease.envelope.metadata)),
-        phase: 'completed',
-      },
-    });
+    await commitFinishedCapture(definition, lease, outcome.result);
     return;
   }
   transitionCleanupOutcome(lease, outcome);
+}
+
+async function commitFinishedCapture<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  lease: DurableCaptureOpenResourceFenceLease<K>,
+  result: C,
+  onProofFailure?: (error: unknown) => Promise<never>,
+): Promise<void> {
+  let completion;
+  try {
+    completion = await definition.completionMetadata(result, lease.envelope.metadata);
+  } catch (error) {
+    if (onProofFailure) await onProofFailure(error);
+    throw error;
+  }
+  lease.transition('completed', {
+    metadata: { ...(lease.envelope.metadata ?? {}), ...completion, phase: 'completed' },
+  });
 }
 
 /**

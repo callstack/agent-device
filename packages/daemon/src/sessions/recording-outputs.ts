@@ -1,25 +1,15 @@
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import {
-  expireUnregisteredRecordingFiles,
-  recordingOutputExpired,
-} from '../resources/artifact-file-storage.ts';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { readReplayableStoredCompletion } from '@agent-device/capture-kit/screen-recording-stop-recovery';
 import type { SessionRef } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
-import fs from 'node:fs';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
-import { recordingExportFileIdentity } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { tenantPublicSessionName } from '../core/session-tenant-scope.ts';
-import {
-  ARTIFACT_CLEANUP_TIMEOUT_MS,
-  commitRecordingFileOutputs,
-  leasedOutputRefusal,
-} from '../resources/artifact-tracking.ts';
+import { commitRecordingFileOutputs, leasedOutputRefusal } from '../resources/artifact-tracking.ts';
 import {
   isLegacyRemoteRecordingOutput,
   recordingOutputLeaseVerifier,
@@ -29,7 +19,7 @@ import {
 export async function commitRecordingOutputs(
   envelope: DurableResourceEnvelope<'screen-recording'>,
   completion: ScreenRecordingCompletion,
-  legacyTenant?: string,
+  options?: { legacyTenant?: string; replay?: boolean },
 ) {
   const { metadata } = envelope;
   const owner = recordingOutputLeaseVerifier(metadata);
@@ -42,18 +32,22 @@ export async function commitRecordingOutputs(
     throw new AppError('COMMAND_FAILED', 'Recording export could not be verified.');
   }
   const files = artifacts.map((artifact, index) => {
-    const artifactPath = artifact.path!;
-    const stat = fs.lstatSync(artifactPath, { throwIfNoEntry: false });
-    if (!stat) throw recordingOutputExpired();
-    if (
-      !stat.isFile() ||
-      (proof && proof.identities[index] !== recordingExportFileIdentity(stat))
-    ) {
-      throw new AppError('COMMAND_FAILED', 'Recording export is missing or has changed.');
+    const sourceIdentity = proof?.identities[index];
+    if (proof && typeof sourceIdentity !== 'string') {
+      throw new AppError('COMMAND_FAILED', 'Recording export could not be verified.');
     }
-    return { ...artifact, path: artifactPath, stat };
+    return {
+      ...artifact,
+      path: artifact.path!,
+      sourceIdentity: typeof sourceIdentity === 'string' ? sourceIdentity : undefined,
+    };
   });
-  const tenantId = recordingProducerTenant(envelope, owner, proof !== undefined, legacyTenant);
+  const tenantId = recordingProducerTenant(
+    envelope,
+    owner,
+    proof !== undefined,
+    options?.legacyTenant,
+  );
   return commitRecordingFileOutputs(
     files,
     {
@@ -63,7 +57,11 @@ export async function commitRecordingOutputs(
     },
     tenantId ? tenantPublicSessionName(tenantId, envelope.sessionId) : envelope.sessionId,
     proof?.completedAt ?? Date.now(),
-    metadata?.remoteCaptureArchive !== true,
+    metadata?.remoteCaptureArchive !== true
+      ? 'original'
+      : options?.replay
+        ? 'archive-replay'
+        : 'archive',
   );
 }
 
@@ -79,26 +77,6 @@ function recordingProducerTenant(
   if (stored === null && owner === null) return undefined;
   if (!tenant || tenant !== stored) throw leasedOutputRefusal('Recording');
   return tenant;
-}
-
-export function expireFailedRecordingExport(
-  envelope: DurableResourceEnvelope<'screen-recording'>,
-  completion: ScreenRecordingCompletion,
-): void {
-  if (envelope.metadata?.remoteCaptureArchive === true) return;
-  const proof = readRecordingExportProof(envelope);
-  if (!proof) return;
-  const artifacts = recordingStopArtifacts(completion);
-  if (artifacts.length !== proof.identities.length) return;
-  expireUnregisteredRecordingFiles(
-    artifacts.flatMap(({ path }, index) => {
-      const sourceIdentity = proof.identities[index];
-      return path && typeof sourceIdentity === 'string'
-        ? [{ sourcePath: path, sourceIdentity }]
-        : [];
-    }),
-    proof.completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS,
-  );
 }
 
 function readRecordingExportProof(envelope: DurableResourceEnvelope<'screen-recording'>) {
@@ -146,7 +124,7 @@ async function readSuiteRecordingOutputs(store: SessionStore, ref: SessionRef) {
   const artifacts = recordingStopArtifacts(completion);
   const committed =
     envelope.metadata.remoteCaptureOutput === true
-      ? await commitRecordingOutputs(envelope, completion)
+      ? await commitRecordingOutputs(envelope, completion, { replay: true })
       : [];
   return artifacts.map((artifact, index) => ({
     session: ref.address,

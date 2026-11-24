@@ -39,6 +39,7 @@ export function makeRecordRuntimeHarness(
     sessionName?: string;
     appBundleId?: string;
     recordOnlySession?: boolean;
+    suiteCapture?: 'local' | 'remote';
     platform?: 'android' | 'apple' | 'linux' | 'vega';
     device?: SessionState['device'];
     runtime?: RuntimeOptions;
@@ -101,6 +102,7 @@ export function makeRecordRuntimeHarness(
       handleRecordCommand({
         platformServices: daemonPlatformServicesFixture(),
         ...common,
+        suiteCapture: options.suiteCapture,
         sessionName: asSessionName,
         req: {
           token: 'token',
