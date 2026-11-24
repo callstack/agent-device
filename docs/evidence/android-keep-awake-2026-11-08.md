@@ -1,6 +1,6 @@
 # Android keep-awake end-to-end run and the svc-true no-op, 2026-11-08
 
-Evidence for #4290 (keep-awake on and off across Android and HarmonyOS): the
+Evidence for #4290 (keep-awake on and off on Android): the
 first backend draft lowered `on` to `svc power stayon true`, and a live run
 proved that a no-op on real hardware — the command answers and the stored
 value never moves when the mask already covers the plugged-in sources. The
