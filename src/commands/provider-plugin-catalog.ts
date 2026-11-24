@@ -2,7 +2,6 @@ import { readVersion } from '@agent-device/host-kit/version';
 import {
   pluginInstallCommand,
   pluginPackageSelector,
-  pluginRepairCommand,
 } from '@agent-device/contracts/plugin-installation';
 
 import {
@@ -15,13 +14,6 @@ export function providerPluginInstallCommand(
   coreVersion: string = readVersion(),
 ): string {
   return pluginInstallCommand(declaration, coreVersion);
-}
-
-export function providerPluginRepairCommand(
-  declaration: ProviderPluginDeclaration,
-  coreVersion: string = readVersion(),
-): string {
-  return pluginRepairCommand(declaration, coreVersion);
 }
 
 export function providerPluginHelp(coreVersion: string = readVersion()): string {

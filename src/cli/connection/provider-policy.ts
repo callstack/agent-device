@@ -14,7 +14,7 @@ import {
   providerPluginAdmission,
   providerPluginConnectionCapabilities,
 } from '@agent-device/contracts/provider-plugin-catalog';
-import { providerPluginRepairCommand } from '../../commands/provider-plugin-catalog.ts';
+import { providerPluginInstallCommand } from '../../commands/provider-plugin-catalog.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
 export type ConnectProvider = string;
@@ -164,7 +164,7 @@ export function unavailableConnectPluginError(
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run ${providerPluginRepairCommand(declaration)}, then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run ${providerPluginInstallCommand(declaration)}, then retry your original command.`,
     });
   }
   return new AppError(

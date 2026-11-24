@@ -148,9 +148,10 @@ test('a 0.22 nightly core prescribes the matching channel plugin release', async
     reason: 'plugin-not-installed',
     provider: 'browserstack',
     package: '@agent-device/browserstack',
-    installCommand: `agent-device plugins add @agent-device/browserstack@${NIGHTLY_0_22}`,
+    installCommand: 'agent-device plugins add @agent-device/browserstack',
+    requiredVersion: NIGHTLY_0_22,
   });
-  assert.match(error.hint, new RegExp(`plugins add @agent-device/browserstack@${NIGHTLY_0_22}`));
+  assert.match(error.hint, /plugins add @agent-device\/browserstack\n/);
   assert.match(error.hint, /If a local daemon is already running/);
   const help = await usageForCommand('remote');
   assert.ok(help?.includes(`${error.details.installCommand}\n`));
@@ -169,7 +170,7 @@ test('a main-channel 0.22 nightly repairs a failed BrowserStack selection with t
   assert.deepEqual(result.calls, []);
   const { error } = JSON.parse(result.stdout);
   assert.equal(error.details.reason, 'plugin-unavailable');
-  assert.ok(error.hint.includes(`plugins add @agent-device/browserstack@${version}`));
+  assert.ok(error.hint.includes('plugins add @agent-device/browserstack'));
 });
 
 test('a stable core prescribes the plain package for the same plugin', async () => {
@@ -182,6 +183,7 @@ test('a stable core prescribes the plain package for the same plugin', async () 
   assert.equal(result.code, 1);
   const { error } = JSON.parse(result.stdout);
   assert.equal(error.details.installCommand, 'agent-device plugins add @agent-device/browserstack');
+  assert.equal(error.details.requiredVersion, '0.22.0');
   const help = await usageForCommand('remote');
   assert.ok(help?.includes(`${error.details.installCommand}\n`));
 });
@@ -196,10 +198,7 @@ test('a 0.22 nightly core prescribes its exact TestMu plugin release', async () 
   assert.equal(result.code, 1);
   assert.deepEqual(result.calls, []);
   const { error } = JSON.parse(result.stdout);
-  assert.equal(
-    error.details.installCommand,
-    `agent-device plugins add @agent-device/testmu@${NIGHTLY_0_22}`,
-  );
+  assert.equal(error.details.installCommand, 'agent-device plugins add @agent-device/testmu');
 });
 
 test('connect reports an unreadable plugin selection instead of prescribing a new installation', async () => {

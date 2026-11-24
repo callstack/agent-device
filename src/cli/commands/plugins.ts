@@ -6,6 +6,7 @@ import {
   readDaemonStatus,
 } from '@agent-device/daemon-contracts/daemon-registration';
 import { AppError } from '@agent-device/kernel/errors';
+import { readVersion } from '@agent-device/host-kit/version';
 import { addPluginArtifact, changePlugin, listPlugins } from '@agent-device/plugins/store';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -27,7 +28,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
       ? await addPluginArtifact(name, host)
       : undefined;
   if (action !== 'list' && !artifact && name) {
-    await changePlugin(action as 'add' | 'update' | 'remove', name, host.env);
+    await changePlugin(action as 'add' | 'update' | 'remove', name, host.env, readVersion());
   }
   const plugins = artifact ? [] : await listPlugins(host.env, []);
   const daemon = readDaemonStatus(resolveDaemonPaths(flags.stateDir, host));

@@ -2,42 +2,29 @@ import { AppError, PLUGIN_INSTALLATION_REASONS } from '@agent-device/kernel/erro
 import type { Platform } from '@agent-device/kernel/device';
 import type { OptionalPlatform } from './platform-module.ts';
 
-/**
- * Which release of a plugin package the running core can install (#4694). The release workflow
- * stamps the core and its public plugins with the same nightly version, so an installation hint must
- * name that release: the bare package name on a nightly core resolves to the staged `latest`
- * placeholder rather than to the build that core works with. Every catalog that tells a user to
- * install a plugin — the provider catalog and the optional platform families ADR 0034 makes
- * installable — builds its selector here, so one channel rule cannot be fixed in one catalog and
- * missed in another. The caller supplies `coreVersion`: contracts owns vocabulary, and reading the
- * installed version is host mechanics.
- */
-export type PluginReleaseDeclaration = Readonly<{
-  package: string;
-  // A 0.22.x-dev version carries no source branch, so the 0.22 branch's nightly tag is the shared
-  // default for development builds, including main checkouts.
-  nightlyTag?: 'nightly-0.22';
-}>;
+import { providerPluginDeclarations } from './provider-plugin-catalog.ts';
 
-// The release workflow stamps the core and its public plugins with the same nightly version.
-const NIGHTLY_0_22_VERSION = /^0\.22\.\d+-nightly(?:-0-22)?\.\d{8}\.[1-9]\d*$/;
-const DEVELOPMENT_0_22_VERSION = /^0\.22\.\d+-dev$/;
+export type PluginReleaseDeclaration = Readonly<{ package: string }>;
 
-/** The package selector a core of `coreVersion` installs: its own release, else the branch tag. */
+const DEVELOPMENT_VERSION = /^\d+\.\d+\.\d+-dev$/;
+const RELEASE_VERSION =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-nightly(?:-0-22)?\.\d{8}\.[1-9]\d*)?$/;
+
+/** Published first-party plugins share the core's release version. */
+export function firstPartyPluginVersion(coreVersion: string): string | undefined {
+  return RELEASE_VERSION.test(coreVersion) && coreVersion !== '0.0.0' ? coreVersion : undefined;
+}
+
+/** Source builds suggest an explicit tag. Bare installs require a published core version. */
 export function pluginPackageSelector(
   declaration: PluginReleaseDeclaration,
   coreVersion: string,
 ): string {
-  if (declaration.nightlyTag === undefined) return declaration.package;
-  const version = coreVersion.trim();
-  if (NIGHTLY_0_22_VERSION.test(version)) return `${declaration.package}@${version}`;
-  if (DEVELOPMENT_0_22_VERSION.test(version)) {
-    return `${declaration.package}@${declaration.nightlyTag}`;
-  }
-  return declaration.package;
+  return DEVELOPMENT_VERSION.test(coreVersion)
+    ? `${declaration.package}@nightly-0.22`
+    : declaration.package;
 }
 
-/** The `plugins add` line that installs `declaration` for a core of `coreVersion`. */
 export function pluginInstallCommand(
   declaration: PluginReleaseDeclaration,
   coreVersion: string,
@@ -45,27 +32,16 @@ export function pluginInstallCommand(
   return `agent-device plugins add ${pluginPackageSelector(declaration, coreVersion)}`;
 }
 
-/**
- * The `plugins` line that repairs an installed `declaration`: `update` keeps a selector the user
- * chose, while a pinned nightly release must be added again.
- */
-export function pluginRepairCommand(
-  declaration: PluginReleaseDeclaration,
-  coreVersion: string,
-): string {
-  const selector = pluginPackageSelector(declaration, coreVersion);
-  const action = selector === declaration.package ? 'update' : 'add';
-  return `agent-device plugins ${action} ${selector}`;
-}
-
 /** Installs the selected release and applies it to the next daemon. */
 export function pluginInstallationHint(
   declaration: PluginReleaseDeclaration,
   coreVersion: string,
-): { installCommand: string; hint: string } {
+): { installCommand: string; requiredVersion?: string; hint: string } {
   const installCommand = pluginInstallCommand(declaration, coreVersion);
+  const requiredVersion = firstPartyPluginVersion(coreVersion);
   return {
     installCommand,
+    ...(requiredVersion ? { requiredVersion } : {}),
     hint: `Install:\n  ${installCommand}\nThen retry your original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
   };
 }
@@ -90,25 +66,21 @@ const OPTIONAL_PLATFORM_PLUGIN_CATALOG: Readonly<
     family: 'harmonyos',
     package: '@agent-device/harmonyos',
     label: 'HarmonyOS',
-    nightlyTag: 'nightly-0.22',
   }),
   vega: Object.freeze({
     family: 'vega',
     package: '@agent-device/vega',
     label: 'Vega',
-    nightlyTag: 'nightly-0.22',
   }),
   linux: Object.freeze({
     family: 'linux',
     package: '@agent-device/linux',
     label: 'Linux desktop',
-    nightlyTag: 'nightly-0.22',
   }),
   web: Object.freeze({
     family: 'web',
     package: '@agent-device/web',
     label: 'Web',
-    nightlyTag: 'nightly-0.22',
   }),
 } as const satisfies Record<OptionalPlatform, OptionalPlatformPluginDeclaration>);
 
@@ -131,10 +103,40 @@ export function getOptionalPlatformPluginDeclaration(
 export const MACOS_PLATFORM_PLUGIN_DECLARATION = Object.freeze({
   package: '@agent-device/macos',
   label: 'macOS desktop',
-  nightlyTag: 'nightly-0.22',
 } as const satisfies PluginReleaseDeclaration & Readonly<{ label: string }>);
 
-/** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
+export type ReplayFormat = 'ad' | 'maestro';
+
+const REPLAY_PLUGIN_INSTALLATIONS = {
+  ad: {
+    package: '@agent-device/replay',
+    summary: 'Native .ad replay and test suites',
+    installationHint:
+      'Install on the daemon host for native .ad replay and all test suites. Core clients can read and send native .ad sources without this plugin.',
+  },
+  maestro: {
+    package: '@agent-device/maestro',
+    summary: 'Supported Maestro YAML commands, grammar, and runtime boundaries',
+    installationHint:
+      'Install on the client for source collection/export and on the daemon host for Maestro execution.',
+  },
+} as const;
+
+/** Vetted installation facts for the replay format vocabulary, without loading an engine. */
+export function getReplayPluginInstallation(id: ReplayFormat) {
+  return { id, ...REPLAY_PLUGIN_INSTALLATIONS[id] };
+}
+
+/** Lists the same first-party packages named by command guidance and checked by releases. */
+export function firstPartyPluginPackages(): string[] {
+  return [
+    ...providerPluginDeclarations().map(({ package: name }) => name),
+    ...Object.values(OPTIONAL_PLATFORM_PLUGIN_CATALOG).map(({ package: name }) => name),
+    MACOS_PLATFORM_PLUGIN_DECLARATION.package,
+    ...Object.values(REPLAY_PLUGIN_INSTALLATIONS).map(({ package: name }) => name),
+  ];
+}
+
 /**
  * The typed outcome for a platform family a composition does not have (ADR 0034). An optional family
  * reports `plugin-not-installed` with the package that provides it and its installation command,

@@ -36,7 +36,7 @@ function installedPlugins(env: NodeJS.ProcessEnv) {
 }
 
 /** Stands in for `npm install`: writes a v2 plugin package into the staged project. */
-function installFixture(name = packageName, provider = 'example') {
+function installFixture(name = packageName, provider = 'example', version = '1.2.3') {
   vi.mocked(runCmd).mockImplementation(async (command, argv, options) => {
     assert.equal(command, 'npm');
     assert.equal(argv[argv.indexOf('--prefix') + 1], options!.cwd);
@@ -50,7 +50,7 @@ function installFixture(name = packageName, provider = 'example') {
       path.join(directory, 'package.json'),
       JSON.stringify({
         name,
-        version: '1.2.3',
+        version,
         type: 'module',
         engines: { node: '>=22.12' },
         'agent-device': { apiVersion: 3, provider },
@@ -86,6 +86,76 @@ test('add, pinned update and remove preserve flags, options and old installation
   assert.deepEqual(installedPlugins(env), []);
   assert.ok(fs.existsSync(first!.directory));
   assert.ok(fs.existsSync(second!.directory));
+});
+
+test.each([
+  ['@agent-device/limrun', '0.22.1'],
+  ['@agent-device/maestro', '0.22.0-nightly-0-22.20261118.187'],
+  ['@agent-device/replay', '0.22.0-nightly.20261118.186'],
+  ['@agent-device/web', '0.22.1'],
+])('bare add stages %s at the running core version %s', async (name, version) => {
+  const { env } = pluginHome();
+  installFixture(name, 'example', version);
+  await changePlugin('add', name, env, version);
+  const [installed] = installedPlugins(env);
+  const project = path.resolve(installed!.directory, '../../..');
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8')).dependencies,
+    { [name]: version },
+  );
+  assert.equal(readPluginConfig(env).plugins[name].version, undefined);
+});
+
+test('matching installs follow a CLI upgrade while explicit versions remain pinned', async () => {
+  const { env } = pluginHome();
+  const name = '@agent-device/limrun';
+  installFixture(name, 'limrun', '0.22.1');
+  await changePlugin('add', name, env, '0.22.1');
+  installFixture(name, 'limrun', '0.22.2');
+  await changePlugin('update', name, env, '0.22.2');
+  assert.equal((await listPlugins(env, []))[0]?.version, '0.22.2');
+
+  installFixture(name, 'limrun', '0.22.1');
+  await changePlugin('add', `${name}@0.22.1`, env, '0.22.2');
+  await changePlugin('update', name, env, '0.22.2');
+  assert.equal((await listPlugins(env, []))[0]?.version, '0.22.1');
+});
+
+test.each(['0.22.0-dev', '0.0.0'])(
+  'bare first-party add refuses core version %s before npm',
+  async (version) => {
+    const { env } = pluginHome();
+    await assert.rejects(
+      changePlugin('add', '@agent-device/limrun', env, version),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'plugin_version_unresolved');
+        return true;
+      },
+    );
+    assert.equal(vi.mocked(runCmd).mock.calls.length, 0);
+  },
+);
+
+test('a registry target failure names the required plugin version and preserves selection', async () => {
+  const { env } = pluginHome();
+  const name = '@agent-device/limrun';
+  installFixture(name, 'limrun', '0.22.1');
+  await changePlugin('add', name, env, '0.22.1');
+  const before = readPluginConfig(env);
+  vi.mocked(runCmd).mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'npm install failed', {
+      stdout: '{"error":{"code":"ETARGET"}}',
+    }),
+  );
+  await assert.rejects(changePlugin('update', name, env, '0.22.2'), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'plugin_version_resolution_failed');
+    assert.equal(error.details?.package, name);
+    assert.equal(error.details?.version, '0.22.2');
+    return true;
+  });
+  assert.deepEqual(readPluginConfig(env), before);
 });
 
 test('failed npm install and incompatible replacement preserve the active selection', async () => {

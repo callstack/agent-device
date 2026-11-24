@@ -25,6 +25,10 @@ const PLUGIN_STORE_REASONS = {
   cleanupFailed: { reason: 'plugin_cleanup_failed' },
   // The daemon retains a plugin selection that changed on disk.
   daemonPluginSetStale: { reason: 'daemon-plugin-set-stale' },
+  // A source build or an unknown core version requires an explicit selector.
+  versionUnresolved: { reason: 'plugin_version_unresolved' },
+  // npm could not resolve the matched release or one of its dependencies.
+  versionResolutionFailed: { reason: 'plugin_version_resolution_failed' },
 } as const satisfies ReasonTable<'plugins'>;
 export type PluginSelection = {
   installation: string;
@@ -321,7 +325,12 @@ function parsePluginRequest(action: PluginAction, input: string) {
   return { name: match[1], version: match[2] };
 }
 
-async function installInProject(project: string, env: NodeJS.ProcessEnv, artifact?: string) {
+async function installInProject(
+  project: string,
+  env: NodeJS.ProcessEnv,
+  artifact?: string,
+  reportJson = false,
+) {
   await runCmd(
     'npm',
     [
@@ -334,6 +343,7 @@ async function installInProject(project: string, env: NodeJS.ProcessEnv, artifac
       project,
       '--workspaces=false',
       '--package-lock=true',
+      ...(reportJson ? ['--json'] : []),
       ...(artifact ? ['--', artifact] : []),
     ],
     { cwd: project, env, timeoutMs: 120_000 },
@@ -409,19 +419,60 @@ async function stagePlugin(
   name: string,
   version: string | undefined,
   env: NodeJS.ProcessEnv,
+  reportJson: boolean,
 ) {
   fs.mkdirSync(stage.project, { recursive: true, mode: 0o700 });
   fs.writeFileSync(
     path.join(stage.project, 'package.json'),
     JSON.stringify({ private: true, dependencies: { [name]: version ?? 'latest' } }),
   );
-  await installInProject(stage.project, env);
+  await installInProject(stage.project, env, undefined, reportJson);
   const installation = await describeInstallation(
     name,
     installationDirectory(stage.home, name, stage.installation),
     { installation: stage.installation },
   );
+  if (isExactVersion(version) && installation.version !== version)
+    throw new AppError(
+      'INVALID_ARGS',
+      `Expected ${name}@${version}, installed ${installation.version}.`,
+    );
   installation.assertCompatibleHost();
+}
+
+function readNpmErrorCode(output: unknown): string | undefined {
+  if (typeof output !== 'string') return undefined;
+  try {
+    const code: unknown = JSON.parse(output)?.error?.code;
+    return typeof code === 'string' ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function managedPluginVersion(
+  name: string,
+  coreVersion: string,
+): Promise<string | undefined> {
+  const { firstPartyPluginPackages, firstPartyPluginVersion, pluginInstallCommand } =
+    await import('@agent-device/contracts/plugin-installation');
+  if (!firstPartyPluginPackages().includes(name)) return undefined;
+  const version = firstPartyPluginVersion(coreVersion);
+  if (version) return version;
+
+  const command = pluginInstallCommand({ package: name }, coreVersion);
+  throw new AppError(
+    'INVALID_ARGS',
+    `Choose a release for ${name} when using agent-device ${coreVersion}.`,
+    {
+      reason: PLUGIN_STORE_REASONS.versionUnresolved.reason,
+      package: name,
+      coreVersion,
+      hint: command.endsWith(` ${name}`)
+        ? 'Use an explicit package version, tag, or local .tgz.'
+        : `Run ${command}, or install a local .tgz.`,
+    },
+  );
 }
 
 /**
@@ -434,6 +485,7 @@ export async function changePlugin(
   action: PluginAction,
   input: string,
   env: NodeJS.ProcessEnv,
+  coreVersion = '0.0.0',
 ): Promise<void> {
   const { name, version } = parsePluginRequest(action, input);
   if (action === 'remove') {
@@ -461,7 +513,38 @@ export async function changePlugin(
         );
       const requested =
         action === 'update' && isVersionSelector(previous?.version) ? previous.version : version;
-      await stagePlugin(stage, name, requested, env);
+      const defaultVersion =
+        requested === undefined ? await managedPluginVersion(name, coreVersion) : undefined;
+      try {
+        await stagePlugin(
+          stage,
+          name,
+          requested ?? defaultVersion,
+          env,
+          defaultVersion !== undefined,
+        );
+      } catch (error) {
+        if (!defaultVersion) throw error;
+        const failure = normalizeError(error);
+        const npmCode = readNpmErrorCode(failure.details?.stdout);
+        const unavailable = npmCode === 'ETARGET' || npmCode === 'E404';
+        throw new AppError(
+          failure.code,
+          `Could not install ${name}@${defaultVersion}: ${failure.message}`,
+          {
+            ...failure.details,
+            ...(unavailable
+              ? {
+                  reason: PLUGIN_STORE_REASONS.versionResolutionFailed.reason,
+                  hint: 'Check whether this release and its dependencies are available in your npm registry. Use an explicit selector to choose another release.',
+                }
+              : {}),
+            package: name,
+            version: defaultVersion,
+          },
+          error,
+        );
+      }
       selections[name] = {
         installation: stage.installation,
         version: requested,

@@ -3,7 +3,10 @@ import {
   BROWSERSTACK,
   LIMRUN,
 } from '@agent-device/contracts/provider-plugin-catalog';
-import { getReplayPluginInstallation } from '@agent-device/ad-script';
+import {
+  getReplayPluginInstallation,
+  pluginInstallCommand,
+} from '@agent-device/contracts/plugin-installation';
 import { gestureHelpTopic } from './cli-help-gestures.ts';
 import { selectorsHelpTopic } from './cli-help-selectors.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
@@ -79,10 +82,15 @@ const HELP_TOPICS = {
     body: 'agent-device help commands',
   },
   ...manualQaHelpTopics,
-  maestro: getReplayBackendDeclaration(
-    getReplayPluginInstallation('maestro'),
-    getReplayPluginInstallation('ad'),
-  ).help,
+  maestro: {
+    summary: getReplayPluginInstallation('maestro').summary,
+    body: (coreVersion: string) =>
+      getReplayBackendDeclaration(
+        getReplayPluginInstallation('maestro'),
+        getReplayPluginInstallation('ad'),
+        (installation) => pluginInstallCommand(installation, coreVersion),
+      ).help.body,
+  },
   workflow: {
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',
     body: `agent-device help workflow
@@ -884,14 +892,13 @@ export function buildCommandUsageText(commandName: string): string | null {
   const commandFlags = commandHelpFlags(schema);
   const sections: string[] = [];
   if (commandName === 'replay' || commandName === 'test') {
-    sections.push(replayPluginInstallHelp(getReplayPluginInstallation('ad')));
-    sections.push(
-      getReplayBackendDeclaration(
-        getReplayPluginInstallation('ad'),
-        getReplayPluginInstallation('ad'),
-      ).help.body,
-    );
-    sections.push(replayPluginInstallHelp(getReplayPluginInstallation('maestro')));
+    const coreVersion = readVersion();
+    const installCommand = (installation: ReturnType<typeof getReplayPluginInstallation>) =>
+      pluginInstallCommand(installation, coreVersion);
+    const native = getReplayPluginInstallation('ad');
+    sections.push(replayPluginInstallHelp(native, installCommand));
+    sections.push(getReplayBackendDeclaration(native, native, installCommand).help.body);
+    sections.push(replayPluginInstallHelp(getReplayPluginInstallation('maestro'), installCommand));
   }
   if (commandName === 'connect') {
     sections.push(`Optional provider plugins:\n${providerPluginHelp()}`);
