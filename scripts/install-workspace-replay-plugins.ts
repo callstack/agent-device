@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { publishFileSync, resolveUserConfigPath } from '@agent-device/host-kit/file';
+import { publishFileSync } from '@agent-device/host-kit/file';
+import { resolveUserConfigPath } from '@agent-device/host-kit/path-resolution';
 
 /** Installs the explicitly selected workspace build into an isolated validation plugin store. */
 export function installWorkspaceReplayPlugins(env: NodeJS.ProcessEnv, source: boolean): void {

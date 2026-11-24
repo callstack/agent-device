@@ -35,7 +35,8 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon as attach, createEnsuredDaemonTransport } from '../index.ts';
 import { ensureStartedDaemon, resolveClientSettings } from '../daemon-client-lifecycle.ts';
-import { captureHostEnvironment, readProcessStartTime } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
+import { readProcessStartTime } from '@agent-device/host-kit/process';
 
 const ensuredTransport = createEnsuredDaemonTransport();
 async function ensureAndSend(req: Parameters<typeof attach>[0]) {

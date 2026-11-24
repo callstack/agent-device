@@ -19,7 +19,8 @@ import {
   startHttpDaemonFixture,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { captureHostEnvironment, isProcessAlive } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   spawnRegisteredDaemonFixture,

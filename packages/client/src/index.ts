@@ -72,7 +72,7 @@ import {
   readSnapshotKeyboardBandFact,
 } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './screenshot-result.ts';

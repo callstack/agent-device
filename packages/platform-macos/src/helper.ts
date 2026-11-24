@@ -22,7 +22,7 @@ import type {
   MacOsDeliveryMechanism,
   MacOsPermissionTarget,
 } from '@agent-device/contracts/macos-platform-leaf';
-import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/path-resolution';
 import type { MacOsToolbox } from './toolbox.ts';
 
 // Keep this shape aligned with macOS helper SnapshotNodeResponse in

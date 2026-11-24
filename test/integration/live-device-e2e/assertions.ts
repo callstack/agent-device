@@ -3,7 +3,7 @@ import fs from 'node:fs';
 
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import type { CliJsonResult } from '../cli-json.ts';
 import type { LiveDeviceContext, RunStepOptions } from './runtime.ts';
 

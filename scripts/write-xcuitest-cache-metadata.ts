@@ -2,7 +2,7 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {

@@ -22,12 +22,6 @@ export {
   openVerifiedFileForTruncate,
 } from './internal/verified-file.ts';
 export {
-  expandUserHomePath,
-  resolveUserConfigPath,
-  resolveDeviceClaimRoot,
-  resolveUserPath,
-} from './internal/path-resolution.ts';
-export {
   acquireProcessLock,
   acquireProcessLockAcquisition,
   tryAcquireProcessLock,

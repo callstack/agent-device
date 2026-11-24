@@ -901,7 +901,7 @@ test('a host-kit scope is judged name by name, not per subpath', () => {
   assert.match(refused, /host-kit\/file' scope at runtime \(acquireProcessLock\)/);
   const allowed = hostKitFindings(
     'web',
-    "import { expandUserHomePath } from '@agent-device/host-kit/file';\nvoid expandUserHomePath;",
+    "import { resolveScriptDestination } from '@agent-device/host-kit/file';\nvoid resolveScriptDestination;",
   );
   assert.equal(allowed, '');
 });

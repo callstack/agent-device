@@ -8,7 +8,7 @@ import {
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { ArchiveBudget } from '@agent-device/host-kit/archive';
-import { expandUserHomePath } from '@agent-device/host-kit/file';
+import { expandUserHomePath } from '@agent-device/host-kit/path-resolution';
 
 import { resolveInstallableCandidate } from './install-source-archive.ts';
 import {

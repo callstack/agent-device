@@ -7,7 +7,7 @@ import { isRecord } from '@agent-device/kernel/record';
 import { mergeDefinedFlags } from './merge-flags.ts';
 import { type FlagKey } from '@agent-device/command-registry/flag-types';
 import { projectConfigFlagKeys } from '@agent-device/command-registry/flag-registry';
-import { resolveUserConfigPath, resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserConfigPath, resolveUserPath } from '@agent-device/host-kit/path-resolution';
 import {
   getConfigurableOptionSpecs,
   getOptionSpec,

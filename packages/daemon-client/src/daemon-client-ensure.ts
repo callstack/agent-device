@@ -4,7 +4,7 @@ import type {
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import {
   DAEMON_TEARDOWN_GRACE_MS,
   waitForDaemonExit,

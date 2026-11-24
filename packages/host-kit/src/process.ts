@@ -1,7 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 export {
-  captureHostEnvironment,
   type HostEnvironmentSource,
   type ConfirmedProcessStop,
   confirmedProcessStopDetails,
