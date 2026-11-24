@@ -26,6 +26,11 @@ test('failed command is re-annotated with the escape surface it hit', async () =
   const observation = {
     readAppFocus: vi.fn(async () => false),
     readAppState: vi.fn(async () => ({ package: 'com.android.settings' })),
+    readBlockingDialog: vi.fn(async () => ({ status: 'unknown' as const })),
+    readSnapshotNodes: vi.fn(async () => []),
+    tap: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    openApp: vi.fn(async () => undefined),
+    readScreenSize: vi.fn(async () => ({ width: 100, height: 100 })),
     isPermissionPackage: vi.fn(async () => false),
   } satisfies AndroidObservationAdapter;
   const sessionStore = new SessionStore('/tmp/annotate-escape', createLiveTestHostEnvironment());
@@ -61,7 +66,13 @@ test('failed command passes through untouched when the session app owns focus', 
   const observation = {
     readAppFocus: vi.fn(async () => true),
     readAppState: vi.fn(async () => ({ package: 'com.example.app' })),
-  } satisfies Partial<AndroidObservationAdapter> as AndroidObservationAdapter;
+    readBlockingDialog: vi.fn(async () => ({ status: 'unknown' as const })),
+    readSnapshotNodes: vi.fn(async () => []),
+    tap: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    openApp: vi.fn(async () => undefined),
+    readScreenSize: vi.fn(async () => ({ width: 100, height: 100 })),
+    isPermissionPackage: vi.fn(async () => false),
+  } satisfies AndroidObservationAdapter;
   const sessionStore = new SessionStore('/tmp/annotate-in-focus', createLiveTestHostEnvironment());
   sessionStore.publish(session.name, session);
   const failed: DaemonResponse = errorResponse('COMMAND_FAILED', 'press e10 tap dispatch failed');

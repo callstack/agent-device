@@ -9,9 +9,11 @@ import type { SessionState } from '../../../core/session-state.ts';
 /**
  * How long the guard waits after a press before it reads the foreground. A tap that opens another
  * app flips the focused window only once the app transition lands — measured at ~150 ms on the
- * reporter's Pixel 9 AVD (#5034) — so the immediate read this guard used before named the old
- * package and passed on stale state. Every guarded press pays this wait once; paths that do not
- * run the guard pay nothing.
+ * reporter's Pixel 9 AVD (#5034) and +223 ms on the Redmi MIUI 14 unit (plain press wall time
+ * 599 ms base → 822 ms head, 2026-11-23 run) — so the immediate read this guard used before named
+ * the old package and passed on stale state. The constant targets warm transitions: a first read
+ * naming the app looks the same with or without a pending transition, so polling cannot replace
+ * the wait. Every guarded press pays this wait once; paths that do not run the guard pay nothing.
  */
 export const ESCAPE_GUARD_SETTLE_MS = 200;
 
