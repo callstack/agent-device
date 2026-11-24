@@ -1,5 +1,5 @@
 import type Limrun from '@limrun/api';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderRentalIdentity } from '@agent-device/contracts/device';
 import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
 import { CAPTURE_OPEN_BUDGET_MS } from './capture-lifecycle.ts';
@@ -62,13 +62,15 @@ const LOCAL_TEARDOWN_BUDGET_MS = 45_000;
 const CAPTURE_RECORD_BUDGET_MS = CAPTURE_OPEN_BUDGET_MS + 10_000;
 
 /**
- * What a disposal may ask of the runtime that owns the lease, and nothing else: the delete of one instance, and
- * the end of one lease's capture. Keeping the disposal to these two is what lets it end an owner without
- * reaching back into the routes that allocate and read one, and without deciding when a lease is free again.
+ * Provider lookup, instance deletion and capture cleanup for a lease disposal.
  */
 export type LimrunDisposalHost = Readonly<{
   /** One instance delete: whether Limrun has the instance gone, and what refused it otherwise. */
   deleteInstance(platform: LimrunPlatform, instanceId: string): Promise<LimrunDeleteResult>;
+  findRentalInstance(
+    platform: LimrunPlatform,
+    reconciliationKey: string,
+  ): Promise<string | undefined>;
   /** Ends one lease's capture and answers with its record, for a runtime that has captured something. */
   endCapture(owner: LimrunLeaseOwner): Promise<SettledNetworkCapture | undefined>;
 }>;
@@ -96,7 +98,8 @@ export async function disposeLimrunLeaseOwner(
   // moment it was built — so a create that failed or refused its caller is disposed from those, exactly like
   // one that answered.
   const session = owner.session;
-  const instanceId = session?.instanceId ?? owner.rentedInstanceId;
+  const instanceId =
+    session?.instanceId ?? owner.rentedInstanceId ?? (await reconcileRental(host, owner));
   if (instanceId === undefined) return await disposeUnrented(host, owner);
   // The capture's record is optional reporting, and local teardown can outlive its own steps: neither is
   // allowed to stand between this disposal and the delete that stops the instance from being billed, so both
@@ -120,6 +123,19 @@ export async function disposeLimrunLeaseOwner(
     cause: instance.cause,
     capture: joined.ok ? joined.value : undefined,
   };
+}
+
+async function reconcileRental(
+  host: LimrunDisposalHost,
+  owner: LimrunLeaseOwner,
+): Promise<string | undefined> {
+  if (!owner.createSubmitted || !owner.rental) return undefined;
+  const { reconciliationKey, recordInstance } = owner.rental;
+  const instanceId = await host.findRentalInstance(owner.platform, reconciliationKey);
+  if (instanceId === undefined) return undefined;
+  recordInstance(instanceId);
+  owner.rentedInstanceId = instanceId;
+  return instanceId;
 }
 
 /**
@@ -187,17 +203,18 @@ async function disposeUnansweredCreate(
 }
 
 /**
- * Ends what a disposal holds when its create answered and no instance is named for the lease: nothing this
- * runtime rented is running, so the lease can be given back.
+ * Ends the capture when no instance is known. A submitted journaled create stays unresolved until its
+ * rental can be identified.
  */
 async function disposeUnrented(
   host: LimrunDisposalHost,
   owner: LimrunLeaseOwner,
 ): Promise<LimrunDisposalOutcome> {
+  const unresolvedRental = owner.createSubmitted && owner.rental;
   return {
-    cleanup: 'none',
+    cleanup: unresolvedRental ? 'uncertain' : 'none',
     instanceId: undefined,
-    failure: undefined,
+    failure: unresolvedRental ? 'Rental lookup did not identify one instance' : undefined,
     cause: undefined,
     capture: await awaitEndedCapture(host, owner),
   };
@@ -412,12 +429,22 @@ export async function releaseLimrunLease(
   };
 }
 
+export async function recoverLimrunRental(
+  limrun: Limrun | undefined,
+  lease: DeviceLease,
+  identity: ProviderRentalIdentity,
+  recordInstance: (instanceId: string) => void,
+): Promise<boolean> {
+  if (!identity.instanceId && !identity.reconciliationKey) return false;
+  return (await releaseLabeledInstances(limrun, lease, { identity, recordInstance })) !== undefined;
+}
+
 type LabeledRecovery = {
-  instanceIds: string[];
+  lookup?: Promise<string[]>;
   deletes: Map<string, Promise<LimrunDeleteResult>>;
 };
 
-const labeledRecoveries = new WeakMap<Limrun, Map<string, Promise<LabeledRecovery>>>();
+const labeledRecoveries = new WeakMap<Limrun, Map<string, LabeledRecovery>>();
 
 /**
  * Ends every instance a lease's own labels name, for a lease this runtime no longer holds an owner for.
@@ -429,24 +456,66 @@ const labeledRecoveries = new WeakMap<Limrun, Map<string, Promise<LabeledRecover
 async function releaseLabeledInstances(
   limrun: Limrun | undefined,
   lease: DeviceLease,
+  rental?: { identity: ProviderRentalIdentity; recordInstance: (instanceId: string) => void },
 ): Promise<LimrunReleaseRecord | undefined> {
   const platform = platformForLimrunLeaseBackend(lease.backend);
   if (!platform || !limrun) return undefined;
-  const byLease = labeledRecoveries.get(limrun) ?? new Map<string, Promise<LabeledRecovery>>();
-  labeledRecoveries.set(limrun, byLease);
-  const lookup =
-    byLease.get(lease.leaseId) ?? findLabeledInstances(limrun, platform, lease.leaseId);
-  byLease.set(lease.leaseId, lookup);
-  const { instanceIds, deletes } = await lookup.catch((error: unknown) => {
-    if (byLease.get(lease.leaseId) === lookup) byLease.delete(lease.leaseId);
-    throw error;
-  });
+  const { instanceId: exactId, reconciliationKey } = rental?.identity ?? {};
+  const key = labeledRecoveryKey(platform, lease.leaseId, rental?.identity);
+  const byIdentity = labeledRecoveries.get(limrun) ?? new Map<string, LabeledRecovery>();
+  labeledRecoveries.set(limrun, byIdentity);
+  const recovery: LabeledRecovery = byIdentity.get(key) ?? { deletes: new Map() };
+  byIdentity.set(key, recovery);
+  let instanceIds: string[];
+  if (exactId) {
+    instanceIds = [exactId];
+  } else {
+    const lookup = (recovery.lookup ??= findReleaseInstances(
+      limrun,
+      platform,
+      lease,
+      reconciliationKey,
+    ));
+    instanceIds = await lookup.catch((error: unknown) => {
+      if (byIdentity.get(key) === recovery && recovery.deletes.size === 0) byIdentity.delete(key);
+      throw error;
+    });
+    if (rental && instanceIds[0] !== undefined) rental.recordInstance(instanceIds[0]);
+  }
+  await deleteLabeledInstances(recovery.deletes, limrun, platform, lease.leaseId, instanceIds);
+  if (byIdentity.get(key) === recovery && (instanceIds.length > 0 || recovery.deletes.size === 0))
+    byIdentity.delete(key);
+  if (instanceIds.length === 0) return undefined;
+  return {
+    limrunInstanceId: instanceIds[0],
+    limrunInstanceIds: instanceIds,
+    limrunInstanceCount: instanceIds.length,
+  };
+}
+
+function labeledRecoveryKey(
+  platform: LimrunPlatform,
+  leaseId: string,
+  identity?: ProviderRentalIdentity,
+): string {
+  if (identity?.reconciliationKey) return `${platform}:rental:${identity.reconciliationKey}`;
+  if (identity?.instanceId) return `${platform}:instance:${identity.instanceId}`;
+  return `${platform}:lease:${leaseId}`;
+}
+
+async function deleteLabeledInstances(
+  deletes: LabeledRecovery['deletes'],
+  limrun: Limrun,
+  platform: LimrunPlatform,
+  leaseId: string,
+  instanceIds: string[],
+): Promise<void> {
   const confirmed: string[] = [];
   for (const instanceId of instanceIds) {
     const deleted = await awaitLabeledDelete(deletes, limrun, platform, instanceId);
     if (deleted.failure !== undefined) {
       throwUnconfirmedDelete(
-        `Recovery could not confirm instance '${instanceId}' of lease '${lease.leaseId}' deleted`,
+        `Recovery could not confirm instance '${instanceId}' of lease '${leaseId}' deleted`,
         { limrunInstanceId: instanceId, limrunInstanceIds: instanceIds },
         deleted.failure,
         recoveryHint(instanceIds, confirmed),
@@ -455,13 +524,33 @@ async function releaseLabeledInstances(
     }
     confirmed.push(instanceId);
   }
-  if (byLease.get(lease.leaseId) === lookup) byLease.delete(lease.leaseId);
-  if (instanceIds.length === 0) return undefined;
-  return {
-    limrunInstanceId: instanceIds[0],
-    limrunInstanceIds: instanceIds,
-    limrunInstanceCount: instanceIds.length,
-  };
+}
+
+async function findReleaseInstances(
+  limrun: Limrun,
+  platform: LimrunPlatform,
+  lease: DeviceLease,
+  reconciliationKey: string | undefined,
+): Promise<string[]> {
+  if (!reconciliationKey)
+    return await findLabeledInstances(limrun, platform, `leaseId=${lease.leaseId}`);
+  const instanceId = await findLimrunRentalInstance(limrun, platform, reconciliationKey);
+  return instanceId === undefined ? [] : [instanceId];
+}
+
+export async function findLimrunRentalInstance(
+  limrun: Limrun | undefined,
+  platform: LimrunPlatform,
+  reconciliationKey: string,
+): Promise<string | undefined> {
+  if (!limrun) return undefined;
+  const instanceIds = await findLabeledInstances(
+    limrun,
+    platform,
+    `rentalKey=${reconciliationKey}`,
+  );
+  // A one-attempt create can account for one instance. An empty list can race create.
+  return instanceIds.length === 1 ? instanceIds[0] : undefined;
 }
 
 async function awaitLabeledDelete(
@@ -490,18 +579,15 @@ async function awaitLabeledDelete(
 async function findLabeledInstances(
   limrun: Limrun,
   platform: LimrunPlatform,
-  leaseId: string,
-): Promise<LabeledRecovery> {
-  const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${leaseId}`;
+  label: string,
+): Promise<string[]> {
+  const labelSelector = `provider=${LIMRUN_PROVIDER},${label}`;
   const instances = await fromLimrunOrgApi(
     platform === 'ios'
       ? limrun.iosInstances.list({ labelSelector })
       : limrun.androidInstances.list({ labelSelector }),
   );
-  return {
-    instanceIds: instances.getPaginatedItems().map((instance) => instance.metadata.id),
-    deletes: new Map(),
-  };
+  return instances.getPaginatedItems().map((instance) => instance.metadata.id);
 }
 
 /** What the recovery refusal tells the operator to name to Limrun: the instance left, and those gone. */

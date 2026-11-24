@@ -1,5 +1,9 @@
 import crypto from 'node:crypto';
-import { providerInstanceUnallocatedError, type DeviceLease } from '@agent-device/contracts/device';
+import {
+  providerInstanceUnallocatedError,
+  type DeviceLease,
+  type LeaseLifecycleContext,
+} from '@agent-device/contracts/device';
 import {
   LEASE_REASONS,
   MIN_LEASE_WINDOW_MS,
@@ -22,9 +26,18 @@ export const DEVICE_LEASE_REASONS = {
   busy: { reason: 'DEVICE_LEASE_BUSY' },
   // The lease is ending and its local session cleanup is still pending.
   sessionCleanupPending: { reason: 'session-cleanup-pending' },
+  // The provider confirmed release. Retry allocation after the daemon records that result.
+  rentalRetirementPending: { reason: 'provider-rental-retirement-pending' },
 } as const satisfies ReasonTable<'leases'>;
 
 export type LeaseRegistryOptions = {
+  providerRentals?: {
+    assertLeaseIdAvailable: (leaseId: string) => void;
+    reserve: (lease: DeviceLease) => void;
+    context: (lease: DeviceLease) => LeaseLifecycleContext['rental'];
+    persistPendingInstance: (lease: DeviceLease) => void;
+    confirmReleased: (lease: DeviceLease) => boolean;
+  };
   maxActiveSimulatorLeases?: number;
   defaultLeaseTtlMs?: number;
   minLeaseTtlMs?: number;
@@ -35,6 +48,7 @@ export type LeaseRegistryOptions = {
     lease: DeviceLease,
     reason?: 'PROVIDER_INSTANCE_ENDED' | 'LEASE_RELEASED',
   ) => void;
+  onProviderReleaseConfirmed?: (lease: DeviceLease) => void;
   /**
    * Called with every live provider lease after a provider lease is issued or leaves the registry, so
    * the daemon can journal what a crash would otherwise forget. An expired lease leaves only after

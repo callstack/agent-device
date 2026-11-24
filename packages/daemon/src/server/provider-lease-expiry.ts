@@ -7,6 +7,7 @@ import type {
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
 import { publishFileSync } from '@agent-device/host-kit/file';
+import type { ProviderRentalJournal } from '../resources/provider-rental-journal.ts';
 import type { ReleaseUnknownReason } from '../resources/lease-registry-scope.ts';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -35,10 +36,8 @@ type Timer = ReturnType<typeof setTimeout>;
 
 /**
  * The lifecycle of one releaser. `running` admits releases and re-arms retries. `draining` is the
- * bounded shutdown window in which the final release attempts run. `closed` starts no provider attempt
- * and arms no timer: its providers may already be disposed, and a timer could fire after this daemon
- * released its registration and rewrite records the next daemon owns. It still writes lease records
- * synchronously, because they are how the next daemon learns what to recover.
+ * bounded shutdown window in which the final release attempts run. `closed` prevents new attempts,
+ * release callbacks, and journal writes so the next daemon can take ownership of the records.
  */
 type ReleaserPhase = 'running' | 'draining' | 'closed';
 
@@ -51,10 +50,8 @@ type ReleaseRefusalReason = 'closed' | 'provider-runtime-unavailable';
  * What one `release` call did with the lease it was given.
  *
  * `released` means this daemon ended the lease with its provider. `retrying` means this daemon still
- * owns the lease and will attempt it again. `not-required` means no provider ever held it. `refused`
- * means this daemon will not end this lease: `reason` says why, and `durable` says whether a lease
- * record now names it for the next daemon. A refused lease whose `durable` is false is a device no
- * daemon will end, so every caller reports it.
+ * owns the lease and will retry release or journal retirement. `not-required` means no provider ever
+ * held it. `refused` gives the reason and whether a durable record preserves the scope for restart.
  */
 export type ProviderLeaseReleaseOutcome =
   | { status: 'released' }
@@ -73,13 +70,14 @@ export type ExpiredProviderLeaseReleaser = {
   /**
    * Ends one lease. Admits it while this releaser runs or is draining, and answers with what it did.
    * Once closed it refuses: no provider attempt starts and no pending work is admitted, because the
-   * providers may already be disposed. A recoverable lease is still made durable for the next daemon,
-   * which is what the outcome's `durable` answers.
+   * providers may already be disposed. The outcome's `durable` reports whether a record already exists.
    */
   release: (
     lease: DeviceLease,
     afterSessionCleanup?: Promise<void>,
   ) => Promise<ProviderLeaseReleaseOutcome>;
+  /** Records a request-owned stop and retries journal retirement while registration is held. */
+  confirmRelease: (lease: DeviceLease) => void;
   /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
   recordLiveLeases: (leases: readonly DeviceLease[]) => void;
   /**
@@ -108,19 +106,25 @@ export function createExpiredProviderLeaseReleaser(options: {
   providerRuntimeIds?: readonly string[];
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
   stateDir?: string;
+  providerRentals?: ProviderRentalJournal;
   recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
   onRecovered?: (lease: DeviceLease) => void;
   needsProviderRelease?: (lease: DeviceLease) => boolean;
-  /** The provider half is confirmed, including leases that had no provider to release. */
-  onReleased?: (lease: DeviceLease) => void;
+  /** Returns false if the confirmed release still needs journal retirement. */
+  onReleased?: (lease: DeviceLease) => boolean | void;
   onReleaseUnknown?: (lease: DeviceLease, reason: ReleaseUnknownReason) => void;
   /** Gives a timer-driven retry, which runs outside any request, a diagnostics scope. */
   withinDiagnosticsScope?: (run: () => Promise<void>) => Promise<void>;
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
   const pendingRecoveryLeases = new Map<string, DeviceLease>();
+  const pendingRetirements = new Map<string, DeviceLease>();
+  const inheritedRentalIds = new Set<string>();
   const persistedRecoveryLeaseIds = new Set<string>();
+  let persistedLiveLeaseIds = new Set<string>();
+  const hasRentalRecord = (lease: DeviceLease) =>
+    options.providerRentals?.identity(lease) !== undefined;
   let inherited = false;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
@@ -129,6 +133,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   const releaseContext = new AsyncResource('ProviderLeaseExpiry');
   const sessionCleanup = new Map<string, Promise<void>>();
   let phase: ReleaserPhase = 'running';
+  const isClosed = () => phase === 'closed';
   /** The releases this drain window observed; replaced at each window so one window's set is never another's. */
   let drainReleasedLeases = new Map<string, DeviceLease>();
   const runScoped = (run: () => Promise<void>): void => {
@@ -158,16 +163,18 @@ export function createExpiredProviderLeaseReleaser(options: {
   const confirmProviderRelease = (
     lease: DeviceLease,
     status: 'released' | 'not-required' = 'released',
-  ): void => {
-    options.onReleased?.(lease);
-    if (status === 'not-required') return;
+  ): boolean => {
+    if (options.onReleased?.(lease) === false) return false;
+    if (status === 'not-required') return true;
     // The drain window is the only period that reports releases, so the phase is the tracker and the
     // set cannot grow outside it.
     nextRetryDelayMs = retryDelayMs;
     if (phase === 'draining') drainReleasedLeases.set(lease.leaseId, lease);
+    return true;
   };
 
   const persistPendingLeases = (): boolean => {
+    if (isClosed()) return false;
     if (!options.stateDir) {
       emitPersistenceFailure(
         pendingRecoveryLeases.size,
@@ -176,9 +183,11 @@ export function createExpiredProviderLeaseReleaser(options: {
       return false;
     }
     try {
-      writeLeaseRecord(options.stateDir, PENDING_RELEASES_FILE, [
-        ...pendingRecoveryLeases.values(),
-      ]);
+      writeLeaseRecord(
+        options.stateDir,
+        PENDING_RELEASES_FILE,
+        [...pendingRecoveryLeases.values()].filter((lease) => !hasRentalRecord(lease)),
+      );
       persistedRecoveryLeaseIds.clear();
       for (const leaseId of pendingRecoveryLeases.keys()) {
         persistedRecoveryLeaseIds.add(leaseId);
@@ -197,7 +206,8 @@ export function createExpiredProviderLeaseReleaser(options: {
     const orphaned = loadLeaseRecord(options.stateDir, LIVE_LEASES_FILE, onDiagnostic);
     if (orphaned.size === 0) return;
     for (const [leaseId, lease] of orphaned) {
-      if (!pendingRecoveryLeases.has(leaseId)) pendingRecoveryLeases.set(leaseId, lease);
+      if (!pendingRecoveryLeases.has(leaseId) && !hasRentalRecord(lease))
+        pendingRecoveryLeases.set(leaseId, lease);
     }
     // The journal is dropped only once its leases are in the pending record, so a crash in between
     // leaves them in one file or the other.
@@ -225,7 +235,7 @@ export function createExpiredProviderLeaseReleaser(options: {
    * that fails is retried with the latest leases until one lands.
    */
   const writeJournal = (): void => {
-    if (!options.stateDir) return;
+    if (isClosed() || !options.stateDir) return;
     const unpersisted = [...pendingRecoveryLeases.values()].filter(
       (lease) => !persistedRecoveryLeaseIds.has(lease.leaseId),
     );
@@ -239,13 +249,11 @@ export function createExpiredProviderLeaseReleaser(options: {
     );
     try {
       writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, [...journal.values()]);
+      persistedLiveLeaseIds = new Set(journal.keys());
       if (journalRetryTimer) clearTimeout(journalRetryTimer);
       journalRetryTimer = undefined;
     } catch (error) {
       emitJournalFailure('provider_lease_journal_write_failed', journal.size, error);
-      // The retry timer is not armed once closed: it could fire after this daemon released its
-      // registration, and writes made then belong to the daemon that holds it.
-      if (phase === 'closed') return;
       journalRetryTimer ??= setTimeout(() => {
         journalRetryTimer = undefined;
         runScoped(async () => writeJournal());
@@ -253,10 +261,63 @@ export function createExpiredProviderLeaseReleaser(options: {
       journalRetryTimer.unref?.();
     }
   };
+  const inheritedRental = (lease: DeviceLease) =>
+    inheritedRentalIds.has(lease.leaseId) ? options.providerRentals : undefined;
+
+  const canRecover = (lease: DeviceLease): boolean => {
+    if (options.needsProviderRelease?.(lease) === false) return true;
+    const rental = inheritedRental(lease);
+    if (!rental) return isRecoverableProviderAvailable(lease, options.recoverableProviderIds);
+    if (
+      !rental.hasMatchingRecoveryPrincipal(lease) ||
+      !isProviderRuntimeAvailable(lease, options.providerRuntimeIds)
+    )
+      return false;
+    if (rental.legacyLeaseId(lease))
+      return (
+        !!options.recoverExpiredLease &&
+        isRecoverableProviderAvailable(lease, options.recoverableProviderIds)
+      );
+    const identity = rental.identity(lease);
+    return (
+      !!(identity?.instanceId || identity?.reconciliationKey) &&
+      !!options.leaseLifecycleProvider?.recoverRental
+    );
+  };
+
+  const reportUnavailableRecovery = (
+    lease: DeviceLease,
+    onDiagnostic: ((diagnostic: ResourceDiagnostic) => void) | undefined,
+  ): void => {
+    const rental = inheritedRental(lease);
+    const reason =
+      rental && isProviderRuntimeAvailable(lease, options.providerRuntimeIds)
+        ? 'provider-release-unconfirmed'
+        : 'provider-runtime-unavailable';
+    options.onReleaseUnknown?.(lease, reason);
+    onDiagnostic?.({
+      phase: 'provider_lease_release_refused',
+      resourcePath:
+        rental?.path ??
+        (options.stateDir
+          ? leaseRecordPath(options.stateDir, PENDING_RELEASES_FILE)
+          : PENDING_RELEASES_FILE),
+      data: {
+        leaseId: lease.leaseId,
+        provider: lease.leaseProvider,
+        releaseStatus: 'unknown',
+        reason,
+        ...(rental?.hasMatchingRecoveryPrincipal(lease) === false
+          ? { recoveryPrincipalUnverified: true }
+          : {}),
+      },
+    });
+  };
+
   const recoverInherited = async (
     onDiagnostic?: (diagnostic: ResourceDiagnostic) => void,
   ): Promise<void> => {
-    if (inherited) return;
+    if (isClosed() || inherited) return;
     inherited = true;
     // Everything in the expired record is durable by definition, which is what the persisted ids track.
     for (const [leaseId, lease] of loadLeaseRecord(
@@ -264,36 +325,29 @@ export function createExpiredProviderLeaseReleaser(options: {
       PENDING_RELEASES_FILE,
       onDiagnostic,
     )) {
-      pendingRecoveryLeases.set(leaseId, lease);
+      if (!hasRentalRecord(lease)) pendingRecoveryLeases.set(leaseId, lease);
+    }
+    for (const lease of options.providerRentals?.inheritedLeases() ?? []) {
+      pendingRecoveryLeases.set(lease.leaseId, lease);
+      inheritedRentalIds.add(lease.leaseId);
     }
     for (const leaseId of pendingRecoveryLeases.keys()) persistedRecoveryLeaseIds.add(leaseId);
     adoptOrphanedLeases(onDiagnostic);
     for (const lease of pendingRecoveryLeases.values()) {
       options.onRecovered?.(lease);
       if (
-        !isRecoverableProviderAvailable(lease, options.recoverableProviderIds) ||
-        !options.recoverExpiredLease
+        !canRecover(lease) ||
+        (!inheritedRentalIds.has(lease.leaseId) && !options.recoverExpiredLease)
       ) {
-        const reason = 'provider-runtime-unavailable';
-        options.onReleaseUnknown?.(lease, reason);
-        onDiagnostic?.({
-          phase: 'provider_lease_release_refused',
-          resourcePath: options.stateDir
-            ? leaseRecordPath(options.stateDir, PENDING_RELEASES_FILE)
-            : PENDING_RELEASES_FILE,
-          data: {
-            leaseId: lease.leaseId,
-            provider: lease.leaseProvider,
-            releaseStatus: 'unknown',
-            reason,
-          },
-        });
+        reportUnavailableRecovery(lease, onDiagnostic);
       }
     }
     await retryPending();
   };
   const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
-    liveLeases = leases.filter((lease) => leaseProviderRequiringRuntime(lease) !== undefined);
+    liveLeases = leases.filter(
+      (lease) => leaseProviderRequiringRuntime(lease) !== undefined && !hasRentalRecord(lease),
+    );
     writeJournal();
   };
 
@@ -303,8 +357,9 @@ export function createExpiredProviderLeaseReleaser(options: {
       // inherits whatever these lease records still hold.
       phase === 'closed' ||
       retryTimer ||
-      (!hasRetryableLiveLease(pendingLiveLeases, options.providerRuntimeIds) &&
-        !hasRetryableRecoveryLease(pendingRecoveryLeases, options.recoverableProviderIds))
+      (pendingRetirements.size === 0 &&
+        ![...pendingLiveLeases.values()].some(canAttemptLiveRelease) &&
+        ![...pendingRecoveryLeases.values()].some(canRecover))
     ) {
       return;
     }
@@ -318,6 +373,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       level: 'warn',
       phase: 'provider_lease_expiry_retry_scheduled',
       data: {
+        pendingRetirementCount: pendingRetirements.size,
         pendingLiveLeaseCount: pendingLiveLeases.size,
         pendingRecoveryLeaseCount: pendingRecoveryLeases.size,
         retryDelayMs: nextRetryDelayMs,
@@ -325,11 +381,31 @@ export function createExpiredProviderLeaseReleaser(options: {
     });
   };
 
+  const retireConfirmedRelease = (lease: DeviceLease): void => {
+    if (isClosed()) return;
+    if (!confirmProviderRelease(lease)) {
+      pendingRetirements.set(lease.leaseId, lease);
+      scheduleRetry();
+      return;
+    }
+    pendingRetirements.delete(lease.leaseId);
+    pendingLiveLeases.delete(lease.leaseId);
+    if (pendingRecoveryLeases.delete(lease.leaseId)) {
+      inheritedRentalIds.delete(lease.leaseId);
+      persistPendingLeases();
+    }
+  };
+
   const trackReleaseAttempt = (key: string, attempt: Promise<void>): Promise<void> => {
     activeReleaseAttempts.set(key, attempt);
     const finish = (): void => {
       if (activeReleaseAttempts.get(key) === attempt) activeReleaseAttempts.delete(key);
-      if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
+      if (
+        pendingRetirements.size === 0 &&
+        pendingLiveLeases.size === 0 &&
+        pendingRecoveryLeases.size === 0 &&
+        retryTimer
+      ) {
         clearTimeout(retryTimer);
         retryTimer = undefined;
       } else {
@@ -342,52 +418,88 @@ export function createExpiredProviderLeaseReleaser(options: {
 
   const startReleaseAttempt = (leaseId: string, key: string, run: () => Promise<void>) => {
     const after = sessionCleanup.get(leaseId);
+    const runIfOpen = async () => {
+      if (!isClosed()) await run();
+    };
     const attempt = after
       ? releaseContext.runInAsyncScope(async () => {
           await after;
-          if (phase !== 'closed') await (options.withinDiagnosticsScope?.(run) ?? run());
+          if (!isClosed()) await (options.withinDiagnosticsScope?.(runIfOpen) ?? runIfOpen());
         })
-      : run();
+      : runIfOpen();
     return trackReleaseAttempt(key, attempt);
   };
 
+  const canAttemptLiveRelease = (lease: DeviceLease): boolean =>
+    options.needsProviderRelease?.(lease) === false ||
+    (!!options.leaseLifecycleProvider?.release &&
+      isProviderRuntimeAvailable(lease, options.providerRuntimeIds));
+
+  const usesLegacyRelease = (lease: DeviceLease): boolean =>
+    isRecoverableProviderAvailable(lease, options.recoverableProviderIds) &&
+    (!hasRentalRecord(lease) || options.providerRentals?.legacyLeaseId(lease) !== undefined);
+
   const ensureLiveReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
-    if (phase === 'closed') return undefined;
-    if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) return undefined;
+    if (isClosed() || pendingRetirements.has(lease.leaseId) || !canAttemptLiveRelease(lease))
+      return undefined;
     const key = `live:${lease.leaseId}`;
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
     return startReleaseAttempt(lease.leaseId, key, async () => {
-      if (
-        options.needsProviderRelease?.(lease) === false ||
-        (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease))
-      ) {
-        pendingLiveLeases.delete(lease.leaseId);
-        confirmProviderRelease(lease);
-      } else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
+      let released = options.needsProviderRelease?.(lease) === false;
+      if (!released) {
+        options.providerRentals?.retryPendingInstance(lease);
+        released = await releaseLiveProviderLease(options.leaseLifecycleProvider, lease);
+      }
+      if (isClosed()) return;
+      if (released) retireConfirmedRelease(lease);
+      else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
     });
   };
 
   const ensureRecoveryReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
-    if (phase === 'closed') return undefined;
-    if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) return undefined;
+    if (isClosed() || pendingRetirements.has(lease.leaseId) || !canRecover(lease)) return undefined;
     if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) return undefined;
     const key = `recovery:${lease.leaseId}`;
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
+    const recoverRental = options.leaseLifecycleProvider?.recoverRental;
+    const rental = inheritedRental(lease);
+    const identity = rental?.identity(lease);
+    const legacyLeaseId = rental?.legacyLeaseId(lease);
+    const recoverLegacy = options.recoverExpiredLease;
+    const recordInstance = (instanceId: string) => rental?.recordInstance(lease, instanceId);
+    const recover =
+      rental && !legacyLeaseId
+        ? identity && recoverRental && (() => recoverRental(lease, identity, recordInstance))
+        : recoverLegacy &&
+          (() => recoverLegacy(legacyLeaseId ? { ...lease, leaseId: legacyLeaseId } : lease));
     return startReleaseAttempt(lease.leaseId, key, async () => {
-      if (
+      options.providerRentals?.retryPendingInstance(lease);
+      const released =
         options.needsProviderRelease?.(lease) === false ||
-        (await releaseExpiredProviderLease(options.recoverExpiredLease, lease))
-      ) {
-        pendingRecoveryLeases.delete(lease.leaseId);
-        confirmProviderRelease(lease);
-        persistPendingLeases();
-      } else options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
+        (await releaseExpiredProviderLease(recover, lease));
+      if (isClosed()) return;
+      if (released) {
+        retireConfirmedRelease(lease);
+      } else {
+        options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
+        if (identity)
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'provider_rental_release_unknown',
+            data: { rentalId: lease.leaseId, provider: lease.leaseProvider, ...identity },
+          });
+      }
     });
   };
 
+  const retryRetirements = (): void => {
+    for (const lease of pendingRetirements.values()) retireConfirmedRelease(lease);
+  };
+
   const retryPending = async (): Promise<void> => {
+    retryRetirements();
     const attempts = [
       ...[...pendingLiveLeases.values()].map(ensureLiveReleaseAttempt),
       ...[...pendingRecoveryLeases.values()].map(ensureRecoveryReleaseAttempt),
@@ -399,34 +511,23 @@ export function createExpiredProviderLeaseReleaser(options: {
     await Promise.all(attempts);
   };
 
-  /**
-   * Refuses a lease that arrives once this releaser is closed. Nothing is awaited and no attempt is
-   * tracked, because that work belongs to the daemon that now owns the state directory. A recoverable
-   * lease is still written out: `pendingRecoveryLeases` is the content of its lease record, so writing
-   * through the map is what makes the handoff durable, and the outcome says so.
-   */
-  const refuseClosedRelease = (lease: DeviceLease): ProviderLeaseReleaseOutcome => {
-    if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
-      return { status: 'refused', reason: 'closed', durable: false };
-    }
-    pendingRecoveryLeases.set(lease.leaseId, lease);
-    return { status: 'refused', reason: 'closed', durable: persistPendingLeases() };
-  };
+  const refuseClosedRelease = (lease: DeviceLease): ProviderLeaseReleaseOutcome => ({
+    status: 'refused',
+    reason: 'closed',
+    durable:
+      hasRentalRecord(lease) ||
+      persistedLiveLeaseIds.has(lease.leaseId) ||
+      persistedRecoveryLeaseIds.has(lease.leaseId),
+  });
 
-  /** What the attempt this release started came to. The pending entry is the provider's answer: it is removed only when the provider confirmed the end. */
+  /** A lease stays pending until provider release and rental retirement are complete. */
   const releaseOutcomeFor = (
     lease: DeviceLease,
     pendingLeases: ReadonlyMap<string, DeviceLease>,
   ): ProviderLeaseReleaseOutcome => {
     if (!pendingLeases.has(lease.leaseId)) return { status: 'released' };
     // The releaser closed while the provider call was in flight, so nothing here will attempt it again.
-    if (phase === 'closed') {
-      return {
-        status: 'refused',
-        reason: 'closed',
-        durable: persistedRecoveryLeaseIds.has(lease.leaseId),
-      };
-    }
+    if (isClosed()) return refuseClosedRelease(lease);
     return { status: 'retrying' };
   };
 
@@ -437,13 +538,11 @@ export function createExpiredProviderLeaseReleaser(options: {
     },
     release: async (lease, afterSessionCleanup) => {
       if (!leaseProviderRequiringRuntime(lease)) {
-        confirmProviderRelease(lease, 'not-required');
+        if (!isClosed()) confirmProviderRelease(lease, 'not-required');
         return { status: 'not-required' };
       }
-      if (phase === 'closed') {
-        options.onReleaseUnknown?.(lease, 'provider-release-unconfirmed');
-        return refuseClosedRelease(lease);
-      }
+      if (isClosed()) return refuseClosedRelease(lease);
+      if (pendingRetirements.has(lease.leaseId)) return { status: 'retrying' };
       if (afterSessionCleanup) {
         sessionCleanup.set(lease.leaseId, afterSessionCleanup);
         const forget = () => {
@@ -451,23 +550,23 @@ export function createExpiredProviderLeaseReleaser(options: {
         };
         void afterSessionCleanup.then(forget, forget);
       }
-      if (isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
+      if (usesLegacyRelease(lease)) {
         // Set before the first await: the registry journals right after `onLeaseExpired` returns, and the
         // journal keeps this lease only while it is pending here and not yet durable.
         pendingRecoveryLeases.set(lease.leaseId, lease);
-        if (persistPendingLeases()) {
-          await ensureRecoveryReleaseAttempt(lease);
-        } else {
-          scheduleRetry();
-        }
+        if (hasRentalRecord(lease)) persistedRecoveryLeaseIds.add(lease.leaseId);
+        const attempt = ensureRecoveryReleaseAttempt(lease);
+        if (attempt) await attempt;
+        else scheduleRetry();
         return releaseOutcomeFor(lease, pendingRecoveryLeases);
       }
-      if (
-        !isProviderRuntimeAvailable(lease, options.providerRuntimeIds) ||
-        !options.leaseLifecycleProvider?.release
-      ) {
+      if (!canAttemptLiveRelease(lease)) {
         options.onReleaseUnknown?.(lease, 'provider-runtime-unavailable');
-        return { status: 'refused', reason: 'provider-runtime-unavailable', durable: false };
+        return {
+          status: 'refused',
+          reason: 'provider-runtime-unavailable',
+          durable: hasRentalRecord(lease),
+        };
       }
       pendingLiveLeases.set(lease.leaseId, lease);
       await ensureLiveReleaseAttempt(lease);
@@ -475,6 +574,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (outcome.status === 'retrying') scheduleRetry();
       return outcome;
     },
+    confirmRelease: retireConfirmedRelease,
     recordLiveLeases,
     recoverInherited,
     retryPending,
@@ -484,8 +584,15 @@ export function createExpiredProviderLeaseReleaser(options: {
       // A release that fails inside the budget is still a pending release: the
       // drain reports it, it never throws past the bounded window.
       await settleWithin(() => retryPending(), Math.max(0, timeoutMs)).catch(() => undefined);
+      retryRetirements();
       const result = {
-        pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
+        pending: [
+          ...new Map([
+            ...pendingLiveLeases,
+            ...pendingRecoveryLeases,
+            ...pendingRetirements,
+          ]).values(),
+        ],
         unknown: [
           ...[...pendingLiveLeases.values()].filter((lease) =>
             activeReleaseAttempts.has(`live:${lease.leaseId}`),
@@ -493,23 +600,21 @@ export function createExpiredProviderLeaseReleaser(options: {
           ...[...pendingRecoveryLeases.values()].filter((lease) =>
             activeReleaseAttempts.has(`recovery:${lease.leaseId}`),
           ),
-        ],
+        ].filter((lease) => !pendingRetirements.has(lease.leaseId)),
         released: [...drainReleasedLeases.values()],
       };
       drainReleasedLeases = new Map();
       return result;
     },
     shutdown: () => {
+      if (isClosed()) return;
+      if (journalRetryTimer) writeJournal();
       advancePhase('closed');
+      options.providerRentals?.close();
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = undefined;
-      if (journalRetryTimer) {
-        // One last attempt, so a journal that a retry was still owed does not outlive this daemon stale.
-        // The closed phase keeps this the last lease record write that is owed a retry.
-        clearTimeout(journalRetryTimer);
-        journalRetryTimer = undefined;
-        writeJournal();
-      }
+      if (journalRetryTimer) clearTimeout(journalRetryTimer);
+      journalRetryTimer = undefined;
     },
   };
 }
@@ -558,24 +663,6 @@ async function releaseLiveProviderLease(
         }
       : undefined,
     lease,
-  );
-}
-
-function hasRetryableLiveLease(
-  pendingLeases: ReadonlyMap<string, DeviceLease>,
-  providerRuntimeIds: readonly string[] | undefined,
-): boolean {
-  return [...pendingLeases.values()].some((lease) =>
-    isProviderRuntimeAvailable(lease, providerRuntimeIds),
-  );
-}
-
-function hasRetryableRecoveryLease(
-  pendingLeases: ReadonlyMap<string, DeviceLease>,
-  recoverableProviderIds: readonly string[] | undefined,
-): boolean {
-  return [...pendingLeases.values()].some((lease) =>
-    isRecoverableProviderAvailable(lease, recoverableProviderIds),
   );
 }
 

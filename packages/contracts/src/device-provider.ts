@@ -23,7 +23,17 @@ export type DeviceLease = {
   expiresAt: number;
 };
 
+export type ProviderRentalIdentity = Readonly<{
+  reconciliationKey?: string;
+  instanceId?: string;
+}>;
+
 export type LeaseLifecycleContext = {
+  /** Record non-secret provider identifiers before create and when an instance is named. */
+  rental?: {
+    beforeCreate: (reconciliationKey: string) => void;
+    rented: (instanceId: string) => void;
+  };
   flags?: Readonly<Record<string, unknown>>;
   initialApp?: string;
   cwd?: string;
@@ -45,6 +55,12 @@ export type ProviderLeaseRelease = {
 };
 
 export type LeaseLifecycleProvider = {
+  /** Return true only when release or absence of this inherited rental is confirmed. */
+  recoverRental?: (
+    lease: DeviceLease,
+    identity: ProviderRentalIdentity,
+    recordInstance: (instanceId: string) => void,
+  ) => Promise<boolean>;
   allocate?: (
     lease: DeviceLease,
     context?: LeaseLifecycleContext,

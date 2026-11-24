@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   DeviceInventoryProvider,
   DeviceLease,
@@ -55,7 +56,10 @@ const REVYL_RUNTIME_REASONS = {
 } as const satisfies ReasonTable<'revyl provider'>;
 
 /** What one lease's start asks Revyl for, with the platform the lease was admitted for. */
-type RevylLeaseRequest = RevylStartRequest & Readonly<{ platform: RevylPlatform }>;
+type RevylLeaseRequest = Readonly<{
+  selection: RevylStartRequest & { platform: RevylPlatform };
+  rental?: LeaseLifecycleContext['rental'];
+}>;
 
 export type RevylRuntimeOptions = Readonly<{
   apiKey: string;
@@ -89,13 +93,7 @@ export type RevylRuntime = ProviderDeviceRuntime & {
  */
 export function createRevylRuntime(options: RevylRuntimeOptions): RevylRuntimeRegistration {
   const runtime = new RevylRuntimeImplementation(options);
-  const owner = providerRuntimeOwner(
-    REVYL_PROVIDER,
-    resolveRevylRuntimeInstance({
-      apiKey: options.apiKey,
-      ...(options.backendUrl === undefined ? {} : { backendUrl: options.backendUrl }),
-    }),
-  );
+  const owner = providerRuntimeOwner(REVYL_PROVIDER, runtime.rentalRecoveryPrincipal);
   if (owner.kind !== 'provider-runtime') throw new TypeError('Invalid Revyl runtime owner');
   return Object.freeze({
     runtime,
@@ -109,12 +107,27 @@ export function createRevylRuntime(options: RevylRuntimeOptions): RevylRuntimeRe
 
 class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly options: RevylRuntimeOptions;
+  private readonly client: RevylClient;
   /** Every lease this runtime rents a device for, until Revyl confirms that device's `/stop`. */
   private readonly leases: ProviderLeaseTable<RevylSession, RevylRentedSession, RevylLeaseRequest>;
   readonly provider = REVYL_PROVIDER;
+  readonly rentalRecoveryPrincipal: string;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: (lease, context) => this.allocate(lease, context),
+    recoverRental: async (lease, { reconciliationKey, instanceId }) => {
+      requireRevylLease(lease, 'recover');
+      const sessionId = instanceId ?? reconciliationKey;
+      if (!sessionId) return false;
+      try {
+        await stopRevylSession(this.client, sessionId);
+        return true;
+      } catch (error) {
+        if (!isRevylSessionGone(error)) throw error;
+        // A missing preassigned session may still be starting.
+        return instanceId !== undefined;
+      }
+    },
     release: async (lease) => {
       if (lease.leaseProvider !== this.provider) return undefined;
       try {
@@ -144,12 +157,13 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       throw new TypeError('Revyl runtime requires an apiKey');
     }
     this.options = options;
-    const client = createRevylClient({
+    this.client = createRevylClient({
       apiKey: options.apiKey,
       ...(options.backendUrl === undefined ? {} : { backendUrl: options.backendUrl }),
       clientVersion: options.clientVersion,
     });
-    this.leases = createProviderLeaseTable(createRevylLeaseDriver(client));
+    this.rentalRecoveryPrincipal = resolveRevylRuntimeInstance(options);
+    this.leases = createProviderLeaseTable(createRevylLeaseDriver(this.client));
   }
 
   ownsDevice(device: DeviceInfo): boolean {
@@ -200,7 +214,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     // Before the join below: an allocation that reuses a live lease still carries flags of its own,
     // and Revyl reads none of them — whether it starts a device or joins one that is starting.
     rejectRefusedRevylProfileFields(context);
-    const request: RevylLeaseRequest = {
+    const selection = {
       ...resolveRevylStartRequest(context, {
         ...(this.options.deviceModel === undefined
           ? {}
@@ -209,10 +223,15 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       }),
       platform,
     };
-    const session = await this.leases.allocate(lease, request, {
-      ...revylCallerBudget(context),
-      requireJoinable: (started) => requireSameRevylStartRequest(lease.leaseId, started, request),
-    });
+    const session = await this.leases.allocate(
+      lease,
+      { selection, rental: context?.rental },
+      {
+        ...revylCallerBudget(context),
+        requireJoinable: (started) =>
+          requireSameRevylStartRequest(lease.leaseId, started.selection, selection),
+      },
+    );
     return allocationResult(session);
   }
 
@@ -248,25 +267,40 @@ function createRevylLeaseDriver(
 ): ProviderLeaseDriver<RevylSession, RevylRentedSession, RevylLeaseRequest> {
   /** The idle-clock refresh of each ready session, by session id, ended before its `/stop`. */
   const keepAlives = new Map<string, () => void>();
+  const submittedKeys = new WeakMap<DeviceLease, string>();
   return {
     startTimeoutMs: REVYL_ALLOCATION_TIMEOUT_MS,
-    // A session is created when `start_device` answers, not when it is sent, so the issued id is never
-    // published before that answer: a stop sent earlier reads as "already gone" and leaves the device.
-    start: async (lease, request, control) => {
+    // Wait for `start_device` to name its session before attempting live release. An earlier stop can
+    // report "already gone" while the start is still in progress.
+    start: async (lease, { selection, rental }, control) => {
       const started = await startRevylSession(client, lease, {
-        platform: request.platform,
-        appUrl: request.appUrl,
-        deviceModel: request.deviceModel,
-        osVersion: request.osVersion,
+        sessionId: rental ? randomUUID() : revylSessionIdForLease(lease.leaseId),
+        platform: selection.platform,
+        appUrl: selection.appUrl,
+        deviceModel: selection.deviceModel,
+        osVersion: selection.osVersion,
         // The table aborts this once no caller waits or the lease is ending; Revyl bounds `start_device`
         // and readiness with its own budgets, which `REVYL_ALLOCATION_TIMEOUT_MS` covers.
         signal: control.signal,
-        onRented: control.rented,
+        beforeCreate:
+          rental &&
+          ((sessionId) => {
+            rental.beforeCreate(sessionId);
+            submittedKeys.set(lease, sessionId);
+          }),
+        onRented: (rented) => {
+          control.rented(rented);
+          rental?.rented(rented.sessionId);
+        },
       });
       if (started.status === 'failed') return started;
       const { runId, sessionId } = started.session;
       keepAlives.set(sessionId, keepRevylSessionAlive(client, runId));
-      return { status: 'ready', session: started.session, handle: { runId, sessionId } };
+      return {
+        status: 'ready',
+        session: started.session,
+        handle: { runId, sessionId, state: 'confirmed' },
+      };
     },
     stop: async (handle) => {
       keepAlives.get(handle.sessionId)?.();
@@ -274,12 +308,14 @@ function createRevylLeaseDriver(
       try {
         await stopRevylSession(client, handle.sessionId);
       } catch (error) {
-        // Revyl answers a session it no longer has as gone: that device is not rented.
-        if (!isRevylSessionGone(error)) throw error;
+        if (handle.state === 'submitted' || !isRevylSessionGone(error)) throw error;
       }
     },
     handleKey: (handle) => handle.sessionId,
-    findByLease: async (lease) => ({ sessionId: revylSessionIdForLease(lease.leaseId) }),
+    findByLease: async (lease) => ({
+      sessionId: revylSessionIdForLease(lease.leaseId),
+      state: 'legacy',
+    }),
     shuttingDown: (lease) => shuttingDownDuring(lease.leaseId, 'allocate'),
     releasing: (lease) =>
       new AppError('COMMAND_FAILED', `Revyl lease ${lease.leaseId} is being released.`, {
@@ -292,7 +328,7 @@ function createRevylLeaseDriver(
         revylLeasePlatform(lease),
         caller,
         budgetMs,
-        rented?.sessionId ?? revylSessionIdForLease(lease.leaseId),
+        rented?.sessionId ?? submittedKeys.get(lease) ?? revylSessionIdForLease(lease.leaseId),
       ),
     cleanupPending: (unconfirmed, scope, cause) =>
       revylCleanupPending(

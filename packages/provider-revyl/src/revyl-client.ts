@@ -672,9 +672,7 @@ export function revylFailureRefusedTheRequest(error: unknown): boolean {
 }
 
 /**
- * Whether a failure is Revyl's "no such session" (a session route's 404 or 410). A stop that meets
- * it has already been answered: the session is gone, which is released. Every cleanup path reads it
- * the same way.
+ * Whether Revyl reported that a session is absent (a session route's 404 or 410).
  */
 export function isRevylSessionGone(error: unknown): boolean {
   return (

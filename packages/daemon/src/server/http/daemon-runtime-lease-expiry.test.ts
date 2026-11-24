@@ -130,7 +130,8 @@ async function startProviderDaemon(deps: Partial<DaemonRuntimeDeps>, inheritedLe
     composeDeps: daemonRuntimeDepsFixture({ providerRuntimeIds: ['limrun'], ...deps }),
     host: createTestHostEnvironment({
       env: {
-        ...process.env,
+        PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
         AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_CLAIMS_DIR: `${stateDir}/claims`,
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
@@ -299,6 +300,71 @@ test('same-ID allocation cannot renew while an explicit release is awaiting its 
   }
 });
 
+test.each(['timer', 'shutdown'] as const)(
+  'retries rental retirement during %s after close overlaps lease_release',
+  async (retry) => {
+    const entered = barrier();
+    const answer = barrier();
+    const release = vi.fn(async () => {
+      entered.open();
+      await answer.reached;
+      return { release: 'confirmed' as const };
+    });
+    const { runtime, store, stateDir } = await startProviderDaemon({
+      leaseLifecycleProvider: {
+        allocate: async (_lease, context) => {
+          context?.rental?.beforeCreate('fixture-key');
+          context?.rental?.rented('fixture-instance');
+          return {};
+        },
+        release,
+      },
+    });
+    const allocated = await leaseRpc(runtime, 'allocate', { ttlMs: 60_000 });
+    const lease = allocated.result?.data?.lease as DeviceLease;
+    assert.ok(lease);
+    store.publish('leased', makeIosSession('leased', { lease }));
+    const journal = `${stateDir}/provider-rentals.json`;
+    const rentals = () => JSON.parse(fs.readFileSync(journal, 'utf8')).rentals;
+    const rename = fs.renameSync;
+    const failRetirement = vi.spyOn(fs, 'renameSync').mockImplementation((source, target) => {
+      if (target === journal) throw new Error('Rental retirement write failed');
+      rename(source, target);
+    });
+    const close = leaseRpc(runtime, 'close', { leaseId: lease.leaseId });
+    let concurrentRelease: ReturnType<typeof leaseRpc> | undefined;
+    try {
+      await entered.reached;
+      concurrentRelease = leaseRpc(runtime, 'release', { leaseId: lease.leaseId });
+      await vi.waitFor(() => {
+        expect(leaseProbe.ended).toContainEqual([lease.leaseId, 'LEASE_RELEASED']);
+      });
+      answer.open();
+      expect(await close).toMatchObject({ result: { ok: true } });
+      expect(await concurrentRelease).toMatchObject({ result: { data: { released: false } } });
+      expect(rentals()).toHaveLength(1);
+      expect(await leaseRpc(runtime, 'allocate', { runId: 'successor' })).toMatchObject({
+        error: { data: { code: 'DEVICE_IN_USE' } },
+      });
+
+      failRetirement.mockRestore();
+      if (retry === 'timer') await vi.advanceTimersByTimeAsync(1_000);
+      else await closeProviderDaemon(runtime);
+      expect(rentals()).toHaveLength(0);
+      expect(release).toHaveBeenCalledOnce();
+      if (retry === 'timer')
+        expect(await leaseRpc(runtime, 'allocate', { runId: 'successor' })).toMatchObject({
+          result: { ok: true },
+        });
+    } finally {
+      failRetirement.mockRestore();
+      answer.open();
+      await Promise.allSettled([close, concurrentRelease]);
+      await closeProviderDaemon(runtime);
+    }
+  },
+);
+
 test('a close retry admits the ending lease owner through the device mutation pass', async () => {
   const dispatched = barrier();
   const answer = barrier();
@@ -383,10 +449,15 @@ test('an inherited scope is refused as release unknown when its runtime is missi
 test.each(['confirmed', 'unknown'] as const)(
   'explicit release reports an unattributable claim with provider release %s',
   async (providerRelease) => {
-    const { runtime, registry, store, stateDir } = await startProviderDaemon({
-      leaseLifecycleProvider: { release: async () => ({ release: providerRelease }) },
+    const { runtime, store, stateDir } = await startProviderDaemon({
+      leaseLifecycleProvider: {
+        allocate: async () => ({}),
+        release: async () => ({ release: providerRelease }),
+      },
     });
-    const lease = registry.allocateLease(providerLease);
+    const allocated = await leaseRpc(runtime, 'allocate', { ttlMs: 60_000 });
+    const lease = allocated.result?.data?.lease as DeviceLease;
+    assert.ok(lease);
     const session = makeIosSession('leased', { lease });
     const env = { ...process.env, AGENT_DEVICE_CLAIMS_DIR: `${stateDir}/claims` };
     vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', env.AGENT_DEVICE_CLAIMS_DIR);
@@ -410,6 +481,8 @@ test.each(['confirmed', 'unknown'] as const)(
         releaseStatus: 'unknown',
         releaseReason: 'device-claim-release-unconfirmed',
       });
+      const journal = JSON.parse(fs.readFileSync(`${stateDir}/provider-rentals.json`, 'utf8'));
+      expect(journal.rentals).toHaveLength(providerRelease === 'confirmed' ? 0 : 1);
       expect((await leaseRpc(runtime, 'allocate')).error?.data?.details).toMatchObject({
         releaseStatus: 'unknown',
         releaseReason: 'device-claim-release-unconfirmed',

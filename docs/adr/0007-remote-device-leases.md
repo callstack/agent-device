@@ -52,7 +52,7 @@ The daemon keeps the lease end reservation when provider creation fails or the c
 If creation succeeds after cancellation, the provider adapter releases the exact instance.
 The daemon owns the reservation. The provider adapter owns instance creation, lookup, and release.
 
-At startup, reserve the leases from the live and pending provider journals.
+At startup, restore the ending reservations from the rental journal and from the legacy live and pending provider journals. [ADR 0040](0040-daemon-ownership-state-machines.md) defines the rental journal.
 Wait for this recovery before you admit an allocation or a session command.
 Examine durable device claims under the host-global lock.
 Recover only rentals that the provider can attribute to the recorded lease.
@@ -128,7 +128,6 @@ If `doctor` has no visible session, use detached checks.
 - Holds and ordinary proxy leases are in memory, so controllers reconnect after daemon restart.
 - Local human-control takeover remains deferred. A future host-global fence must coexist with local session claims.
 - Limrun has not moved its lease ownership onto the shared provider lease table ([#4102](https://github.com/callstack/agent-device/issues/4102)).
-- The existing journals record provider lease scopes. A crash can occur before there is durable evidence of the rental. [#4972](https://github.com/callstack/agent-device/issues/4972) tracks the durable rental journal.
 - An older client or a direct RPC caller that sent no lease id on a leased session is refused. It must send the lease id that its allocation returned.
 - `session_list` still shows session names to every holder of the proxy token ([#4908](https://github.com/callstack/agent-device/issues/4908)).
 - A web open can be admitted under a non-`macos-app` lease for another backend; admission does not compare the request platform with the lease backend.

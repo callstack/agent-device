@@ -25,7 +25,7 @@ export async function releaseLease(
       .catch((error: unknown): ProviderLeaseRelease => ({ release: 'unknown', error }));
     if (outcome?.release === 'confirmed' || (!outcome && !leaseProviderRequiringRuntime(lease))) {
       recordProviderSession(registry, lease, outcome?.provider);
-      registry.confirmLeaseEnd(lease.leaseId, 'providerReleased');
+      registry.confirmRequestProviderRelease(lease);
       return outcome ?? { release: 'confirmed' };
     }
     registry.markLeaseReleaseUnknown(lease.leaseId, 'provider-release-unconfirmed');

@@ -659,6 +659,11 @@ export function assertProviderRuntime(
   ) {
     throw invalidPlugin(`Plugin runtime owner does not match its provider: ${provider}`);
   }
+  const principal = runtime.rentalRecoveryPrincipal;
+  if (principal !== undefined && (typeof principal !== 'string' || principal.trim().length === 0))
+    throw invalidPlugin(
+      `Provider rental recovery principal must be a nonempty string: ${provider}`,
+    );
 }
 
 function hasProviderFacets(runtime: ProviderDeviceRuntime): boolean {

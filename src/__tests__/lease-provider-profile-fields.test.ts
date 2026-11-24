@@ -26,7 +26,13 @@ const limrunInstances = vi.hoisted(() => ({
 
 vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
+    readonly baseURL = 'https://limrun.example.test';
+    readonly _options = {};
     readonly iosInstances = { create: limrunInstances.iosCreate };
+
+    async buildRequest() {
+      return { req: { headers: new Headers({ authorization: 'Bearer fixture-account' }) } };
+    }
   },
 }));
 

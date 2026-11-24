@@ -18,7 +18,11 @@ const state = vi.hoisted(() => ({
   /** Instance deletes this runtime asked Limrun for; each waits for its case to answer it. */
   deletes: [] as Array<{ instanceId: string; report: () => void }>,
   creates: 0,
+  createLabels: undefined as Readonly<Record<string, string>> | undefined,
+  createError: undefined as Error | undefined,
   listedInstance: undefined as string | undefined,
+  listInstances: undefined as ((labelSelector: string) => string[]) | undefined,
+  deleteInstance: vi.fn<(instanceId: string) => void>(),
   deleteDispatched: undefined as (() => void) | undefined,
   clientStarts: 0,
   clientGate: undefined as Promise<void> | undefined,
@@ -36,9 +40,11 @@ vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
     readonly iosInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
     readonly androidInstances = {
-      create: async () => {
+      create: async ({ metadata }: { metadata: { labels: Readonly<Record<string, string>> } }) => {
         state.creates += 1;
+        state.createLabels = metadata.labels;
         await state.createGate;
+        if (state.createError) throw state.createError;
         return {
           metadata: { id: 'android-instance-1' },
           status: {
@@ -48,13 +54,16 @@ vi.mock('@limrun/api', () => ({
           },
         };
       },
-      list: vi.fn(async () => ({
-        getPaginatedItems: () =>
-          state.listedInstance ? [{ metadata: { id: state.listedInstance } }] : [],
-      })),
+      list: vi.fn(async ({ labelSelector }: { labelSelector: string }) => {
+        const ids =
+          state.listInstances?.(labelSelector) ??
+          (state.listedInstance ? [state.listedInstance] : []);
+        return { getPaginatedItems: () => ids.map((id) => ({ metadata: { id } })) };
+      }),
       // Every delete waits for its case to answer it, so a release can be held at its delete while the
       // local teardown it started beside has long since refused.
       delete: vi.fn(async (instanceId: string) => {
+        state.deleteInstance(instanceId);
         if (state.autoDelete) return;
         let report!: () => void;
         const answered = new Promise<void>((answeredNow) => {
@@ -406,5 +415,120 @@ test('Limrun recovery carries a late labeled delete into the release result', as
     state.deleteDispatched = undefined;
     await runtime.shutdown();
     vi.useRealTimers();
+  }
+});
+
+test('Limrun rental recovery records a matched instance before deleting it', async () => {
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('rental-inherited');
+  const recover = runtime.leaseLifecycle.recoverRental!;
+  const journaled = vi.fn();
+  try {
+    const identity = { reconciliationKey: 'request-key' };
+    await expect(recover(lease, identity, journaled)).resolves.toBe(false);
+    expect(state.deletes).toHaveLength(0);
+    state.listedInstance = 'exact-instance';
+    const release = recover(lease, identity, journaled);
+    await vi.waitFor(() => expect(state.deletes).toHaveLength(1));
+    expect(journaled).toHaveBeenCalledExactlyOnceWith('exact-instance');
+    expect(state.deletes[0]?.instanceId).toBe('exact-instance');
+    state.deletes[0]?.report();
+    await expect(release).resolves.toBe(true);
+
+    state.deletes.length = 0;
+    state.listedInstance = 'different-instance';
+    const exact = recover(lease, { ...identity, instanceId: 'exact-instance' }, journaled);
+    await vi.waitFor(() => expect(state.deletes).toHaveLength(1));
+    expect(state.deletes[0]?.instanceId).toBe('exact-instance');
+    state.deletes[0]?.report();
+    await expect(exact).resolves.toBe(true);
+  } finally {
+    state.deletes.forEach(({ report }) => report());
+    state.deletes.length = 0;
+    state.listedInstance = undefined;
+    await runtime.shutdown();
+  }
+});
+
+test.each([
+  { result: 'empty', ids: [] },
+  { result: 'ambiguous', ids: ['candidate-a', 'candidate-b'] },
+])('a journaled lost create stays unknown on $result keyed lookup', async ({ ids }) => {
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('shared-lease-label');
+  const beforeCreate = vi.fn();
+  const rented = vi.fn();
+  const list = vi.fn((selector: string) =>
+    selector === 'provider=limrun,leaseId=shared-lease-label' ? ['older-rental'] : ids,
+  );
+  state.autoDelete = true;
+  state.createError = new Error('create response lost');
+  state.listInstances = list;
+  state.deleteInstance.mockClear();
+  try {
+    const failed = await runtime.leaseLifecycle.allocate!(lease, {
+      rental: { beforeCreate, rented },
+    }).catch((error: unknown) => error);
+    const key = state.createLabels?.rentalKey;
+    expect(key).toEqual(expect.any(String));
+    expect(beforeCreate).toHaveBeenCalledExactlyOnceWith(key);
+    expect(list).toHaveBeenCalledExactlyOnceWith(`provider=limrun,rentalKey=${key}`);
+    expect(failed).toMatchObject({
+      details: { reason: 'limrun_instance_delete_unconfirmed' },
+    });
+    expect(rented).not.toHaveBeenCalled();
+    expect(state.deleteInstance).not.toHaveBeenCalled();
+
+    list.mockReturnValueOnce(['current-rental']);
+    await expect(runtime.leaseLifecycle.release!(lease)).resolves.toMatchObject({
+      release: 'confirmed',
+      provider: { limrunInstanceId: 'current-rental' },
+    });
+    expect(list).toHaveBeenLastCalledWith(`provider=limrun,rentalKey=${key}`);
+    expect(rented).toHaveBeenCalledExactlyOnceWith('current-rental');
+    expect(rented).toHaveBeenCalledBefore(state.deleteInstance);
+    expect(state.deleteInstance).toHaveBeenCalledExactlyOnceWith('current-rental');
+  } finally {
+    state.listInstances = () => ['current-rental'];
+    try {
+      await runtime.shutdown();
+    } finally {
+      state.listInstances = undefined;
+      state.createError = undefined;
+      state.autoDelete = false;
+    }
+  }
+});
+
+test('Limrun recovery tracks concurrent rentals sharing one public lease label separately', async () => {
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('shared-lease-label');
+  const recover = runtime.leaseLifecycle.recoverRental!;
+  const journaledA = vi.fn();
+  const journaledB = vi.fn();
+  const instancesBySelector = new Map([
+    ['provider=limrun,rentalKey=key-a', ['instance-a']],
+    ['provider=limrun,rentalKey=key-b', ['instance-b']],
+  ]);
+  state.listInstances = (selector) => instancesBySelector.get(selector) ?? [];
+  state.autoDelete = true;
+  state.deleteInstance.mockClear();
+  try {
+    await expect(
+      Promise.all([
+        recover(lease, { reconciliationKey: 'key-a' }, journaledA),
+        recover(lease, { reconciliationKey: 'key-b' }, journaledB),
+      ]),
+    ).resolves.toEqual([true, true]);
+    expect(journaledA).toHaveBeenCalledExactlyOnceWith('instance-a');
+    expect(journaledB).toHaveBeenCalledExactlyOnceWith('instance-b');
+    expect(state.deleteInstance.mock.calls.map(([id]) => id).sort()).toEqual([
+      'instance-a',
+      'instance-b',
+    ]);
+  } finally {
+    state.listInstances = undefined;
+    state.autoDelete = false;
+    await runtime.shutdown();
   }
 });

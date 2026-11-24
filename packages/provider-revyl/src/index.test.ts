@@ -130,6 +130,7 @@ test('setup builds the runtime and owner from the credential options, not the en
     resolveRevylRuntimeInstance({ apiKey: 'option-key', backendUrl: fixture.backendUrl }),
   );
   assert.equal(setup.runtime.provider, 'revyl');
+  assert.equal(setup.runtime.rentalRecoveryPrincipal, setup.platformModule.owner.instance);
   await setup.runtime.shutdown();
 });
 

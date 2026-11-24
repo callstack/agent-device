@@ -59,6 +59,7 @@ export type RevylFixtureBackend = Readonly<{
   requests: RevylFixtureRequest[];
   /** Paths in arrival order, each spelled `METHOD /path`, which is what the assertions read. */
   paths(): string[];
+  hasOpenSession(id: string): boolean;
   /**
    * Paths whose answer has been written back, in completion order. Receipt is the wrong moment for a
    * caller-side assertion: the client has not seen the action succeed yet, so a cancellation that lands
@@ -267,6 +268,7 @@ export async function startRevylFixtureBackend(
     backendUrl,
     requests,
     paths: () => requests.map((request) => `${request.method} ${request.path}`),
+    hasOpenSession: (id) => openSessions.has(id),
     answeredPaths: () => [...answered],
     bodyFor: (action) => {
       const found = [...requests]
