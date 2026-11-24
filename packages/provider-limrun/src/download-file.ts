@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isLoopbackUrlHostname } from '@agent-device/host-kit/transport';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
@@ -37,7 +36,7 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
     const { instance } = options;
-    const url = instance ? instanceDownloadUrl(instance.apiUrl, options.url) : options.url;
+    const url = instance ? await instanceDownloadUrl(instance.apiUrl, options.url) : options.url;
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
     const response = await fetch(url, {
       method: 'GET',
@@ -63,12 +62,14 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
   }
 }
 
-function instanceDownloadUrl(apiUrl: string, value: string): URL {
+async function instanceDownloadUrl(apiUrl: string, value: string): Promise<URL> {
   const url = URL.parse(value);
   const instance = URL.parse(apiUrl);
   if (!url || !instance) throw new TypeError('Invalid Limrun download endpoint.');
   const secure =
-    url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackUrlHostname(url.hostname));
+    url.protocol === 'https:' ||
+    (url.protocol === 'http:' &&
+      (await import('@agent-device/host-kit/transport')).isLoopbackUrlHostname(url.hostname));
   if (url.origin !== instance.origin || url.username || url.password || !secure) {
     throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download endpoint.', {
       reason: LIMRUN_DOWNLOAD_REASONS.endpointBlocked.reason,
