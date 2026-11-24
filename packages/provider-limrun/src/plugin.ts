@@ -90,10 +90,31 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
             dependencies,
             { includePlatformModule: true },
           );
-          await registration.runtime.prepareRentalRecovery();
-          if (expiresAt === undefined) return registration;
-          const dispose = shutdownHostedRuntimeAt(expiresAt, () => registration.runtime.shutdown());
-          return { ...registration, dispose };
+          if (expiresAt === undefined) {
+            await registration.runtime.prepareRentalRecovery();
+            return registration;
+          }
+          const { refuseHostedInstanceRedirects } = await import('./hosted-instance-http.ts');
+          const tokens = [credentials.instances?.ios?.token, credentials.instances?.android?.token];
+          const restoreFetch = refuseHostedInstanceRedirects(
+            tokens.filter((token): token is string => token !== undefined),
+          );
+          try {
+            await registration.runtime.prepareRentalRecovery();
+          } catch (error) {
+            restoreFetch();
+            throw error;
+          }
+          const cancelShutdown = shutdownHostedRuntimeAt(expiresAt, () =>
+            registration.runtime.shutdown(),
+          );
+          return {
+            ...registration,
+            dispose: () => {
+              cancelShutdown();
+              restoreFetch();
+            },
+          };
         },
       },
     ],

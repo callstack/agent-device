@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type {
@@ -10,6 +11,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { limrunPlugin } from './plugin.ts';
+import { syncFolder } from '@limrun/api/folder-sync';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   const [contribution] = plugin.contributes;
@@ -283,5 +285,50 @@ test('an isolated hosted attachment stops its runtime when the deadline passes',
     await hosted.dispose?.();
   } finally {
     vi.useRealTimers();
+  }
+});
+
+test('the hosted plugin refuses an SDK folder-sync redirect and leaves unrelated requests alone', async () => {
+  const token = 'fixture-instance-bearer';
+  const apiUrl = 'https://instance.example';
+  const app = mkdtempForTestSync('limrun-redirect-app-');
+  fs.writeFileSync(path.join(app, 'fixture.apk'), 'fixture');
+  const next = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.redirect === 'error') throw new TypeError('redirect refused');
+    return Response.json({});
+  });
+  vi.stubGlobal('fetch', next);
+  const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
+  const hosted = await providerOf(plugin).setup(
+    pluginHost({
+      LIM_IOS_INSTANCE_URL: apiUrl,
+      LIM_IOS_INSTANCE_TOKEN: token,
+      LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 60_000).toISOString(),
+    }),
+  );
+  try {
+    await assert.rejects(
+      syncFolder(app, {
+        apiUrl,
+        token,
+        udid: 'fixture',
+        basisCacheDir: mkdtempForTestSync('limrun-sync-cache-'),
+        install: true,
+        watch: false,
+        launchMode: 'None',
+        compression: 'identity',
+        log: () => {},
+        ignoreFn: () => false,
+      }),
+    );
+    assert.equal(next.mock.calls.length, 1);
+    const [, init] = next.mock.calls[0]!;
+    assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${token}`);
+    assert.equal(init?.redirect, 'error');
+    await fetch(apiUrl, { headers: { authorization: 'Bearer unrelated-bearer' } });
+    assert.equal(next.mock.calls[1]?.[1]?.redirect, undefined);
+  } finally {
+    if ('dispose' in hosted) await hosted.dispose?.();
+    vi.unstubAllGlobals();
   }
 });
