@@ -6,6 +6,7 @@ import {
   gestureDirectionDelta,
   isScreenEdgeSwipePreset,
   isSplitViewSwipePreset,
+  splitViewUnavailableError,
   type SplitViewSwipePreset,
   type SwipePreset,
 } from '@agent-device/contracts/scroll-gesture';
@@ -50,23 +51,6 @@ const GESTURE_PLAN_REFUSAL_REASONS = {
   trajectoryOutOfBounds: { reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS' },
 } as const satisfies ReasonTable<'gesture'>;
 
-/** Why a Split View swipe preset was refused before any touch went down. */
-const SPLIT_VIEW_GESTURE_REASONS = {
-  // Split View presets need an iOS simulator with more than one panel and its inner panel lit.
-  unavailable: { reason: 'split_view_unavailable' },
-} as const satisfies ReasonTable<'gesture'>;
-/** The refusal for a Split View preset on a device or backend without Split View. */
-export function splitViewUnavailableError(
-  message: string,
-  details?: Record<string, unknown>,
-): AppError {
-  return new AppError('UNSUPPORTED_OPERATION', message, {
-    ...details,
-    reason: SPLIT_VIEW_GESTURE_REASONS.unavailable.reason,
-    dispatched: 'no',
-    hint: 'Use an iPhone Duo simulator: run fold open, open the app full screen, then swipe again.',
-  });
-}
 const GESTURE_FLING_DEFAULT_DISTANCE = 180;
 
 const GESTURE_INITIAL_SPAN_RATIO = 0.25;

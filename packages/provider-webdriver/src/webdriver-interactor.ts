@@ -10,10 +10,10 @@ import type {
   KeyboardStatusResult,
 } from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import { splitViewUnavailableError } from '@agent-device/gestures/gesture-plan';
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
+  splitViewUnavailableError,
 } from '@agent-device/contracts/scroll-gesture';
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';

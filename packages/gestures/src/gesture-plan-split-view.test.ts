@@ -16,6 +16,10 @@ test.each([
   expect(inHalf(end.x)).toBe(true);
   // The runner derives the edge touch's swipe direction from start to end; it must stay upward.
   expect(Math.abs(end.x - start.x)).toBeLessThan(Math.abs(end.y - start.y));
+  // The pause at the middle is what lifts the app window before the sideways move.
+  const middle = { x: viewport.width / 2, y: viewport.height / 2 };
+  expect(samples.map((sample) => sample.offsetMs)).toEqual([0, 600, 1400, 1900, 2100]);
+  expect([samples[1]!.point, samples[2]!.point]).toEqual([middle, middle]);
 });
 
 test('a Split View preset off iOS is refused before planning a touch', () => {
@@ -24,7 +28,7 @@ test('a Split View preset off iOS is refused before planning a touch', () => {
   ).toThrow(
     expect.objectContaining({
       code: 'UNSUPPORTED_OPERATION',
-      details: expect.objectContaining({ reason: 'split_view_unavailable' }),
+      details: expect.objectContaining({ reason: 'split_view_unavailable', dispatched: 'no' }),
     }),
   );
 });

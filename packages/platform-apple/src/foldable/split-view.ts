@@ -1,6 +1,6 @@
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { splitViewUnavailableError } from '@agent-device/gestures/gesture-plan';
+import { splitViewUnavailableError } from '@agent-device/contracts/scroll-gesture';
 import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS } from '../core/config.ts';
 import { readFoldablePanelTable } from './orientation.ts';
 
@@ -22,6 +22,7 @@ export async function appleSplitViewRunnerPlan(
           timeoutMs: IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
         })
       : ({ kind: 'single-panel' } as const);
+  signal?.throwIfAborted();
   const lit = table.kind === 'multi-panel' ? table.inventory : undefined;
   if (!lit?.activeDisplay || lit.ambiguous || lit.activeDisplay.primary) {
     throw splitViewUnavailableError(

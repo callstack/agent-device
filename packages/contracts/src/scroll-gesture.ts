@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { SCROLL_REASONS } from './scroll-reasons.ts';
 import { defineStringEnum } from './string-enum.ts';
 import { isViewportRootNode } from './snapshot-visibility.ts';
@@ -34,6 +34,23 @@ export type SwipePreset = (typeof SWIPE_PRESETS)[number];
 export type SplitViewSwipePreset = Extract<SwipePreset, `split-view-${string}`>;
 export function isSplitViewSwipePreset(preset: SwipePreset): preset is SplitViewSwipePreset {
   return preset === 'split-view-left' || preset === 'split-view-right';
+}
+/** Why a Split View swipe preset was refused before any touch went down. */
+const SPLIT_VIEW_GESTURE_REASONS = {
+  // Split View presets need an iOS simulator with more than one panel and its inner panel lit.
+  unavailable: { reason: 'split_view_unavailable' },
+} as const satisfies ReasonTable<'gesture'>;
+/** The refusal for a Split View preset on a device or backend without Split View. */
+export function splitViewUnavailableError(
+  message: string,
+  details?: Record<string, unknown>,
+): AppError {
+  return new AppError('UNSUPPORTED_OPERATION', message, {
+    ...details,
+    reason: SPLIT_VIEW_GESTURE_REASONS.unavailable.reason,
+    dispatched: 'no',
+    hint: 'Use an iPhone Duo simulator with its inner panel lit (not closed), open the app full screen, then swipe again.',
+  });
 }
 const SCREEN_EDGE_SWIPE_PRESETS: ReadonlySet<SwipePreset> = new Set(['left-edge', 'right-edge']);
 /** Edge presets drive screen-edge gestures, such as a back swipe. */

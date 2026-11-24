@@ -142,13 +142,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `split_view_unavailable` | Split View presets need an iOS simulator with more than one panel and its inner panel lit. |
 | `drag_endpoint_is_coordinates` | A gesture drag endpoint is a number or an "x y" point; drag takes a ref or a selector. |
 | `GESTURE_TAP_DUPLICATE_POINT` | Two tap contacts share coordinates, so one contact would press where another already rests. |
 | `GESTURE_PATH_TOO_SHORT` | The gesture path has fewer usable samples than any recognizable motion needs. |
 | `GESTURE_PATH_INVALID_TIMELINE` | The path's sample timeline is not ordered and finite, so no clock can play it back. |
 | `GESTURE_TRAJECTORY_NON_FINITE` | A trajectory sample carries a non-finite coordinate. |
 | `GESTURE_TRAJECTORY_OUT_OF_BOUNDS` | A trajectory sample leaves the viewport, so the contact would press outside the screen, or a two-finger path cannot keep its contacts the minimum span apart inside it. |
-| `split_view_unavailable` | Split View presets need an iOS simulator with more than one panel and its inner panel lit. |
 
 ### `home`
 
