@@ -53,21 +53,63 @@ cannot hold the dispatch past the request budget. No 15-s read outlived the
 request; the dispatch was not delayed by the hung reads beyond the bounded
 budgets.
 
-## The 2–3 s deadline variant is not expressible on the shipped CLI
+## The 2–3 s deadline variant through the replay route
 
 The review's second scenario asks for the same open under a 2–3 s client or
-transport deadline, with the read ending near that deadline instead of at 15 s.
-On the shipped surface, `open`'s request deadline is fixed by the descriptor
-registry: envelope 90 s floor, daemon result budget 60 s
-(`resolveCommandDaemonBudgetMs` → 60 000, computed mechanically with
-`node --experimental-strip-types` against the worktree at this head), and
-`--timeout` only widens the envelope (`widenToUserBudget = max(envelope,
-timeout + 30 s)`), it never lowers it. The pre-probe route spends at most ~10 s
-(the two inventory `param get` reads run in parallel under a 10 s cap), so the
-probe's `Math.min(15 s, remaining)` always has ≥ 50 s of room and the clamp
-reduces to its 15 s default — exactly what the run above shows. Reaching a
-remaining budget below 15 s would need ≥ 45 s of pre-probe spend, which no
-shipped `open` route performs. The clamp below 15 s is pinned deterministically
+transport deadline, with the read ending near that deadline instead of 15 s.
+That variant is expressible through the replay route: `replay <script.ad>
+--timeout 3000` gives the request a 3 s execution deadline
+(`resolveCommandDaemonTimeoutMs` adopts the user flag budget verbatim when the
+command declares `flag` as its budget source,
+`packages/command-registry/src/timeout-policy.ts`), and each replay plan step
+re-enters the daemon with the same request id
+(`packages/replay-port/src/daemon-port/session-replay-action-runtime.ts`), so
+an `open` step reaches `readForegroundBundle` with about 3 s left. (The
+direct `open` surface keeps its descriptor deadline — envelope 90 s floor,
+daemon result budget 60 s — and its `--timeout` only widens the envelope; the
+earlier analysis below still describes that surface.)
+
+### Live run at the PR's code SHA
+
+The run was executed from the worktree at f42463d26 (= 1d6fc063d + docs);
+the post-run evidence commit 66e129b90a touches docs/evidence only, so the
+PR's code SHA stays 1d6fc063d.
+
+After `pnpm build` and `pnpm clean:daemon`, with the app already in the
+foreground (`aa dump -l` showed `app name [com.sankuai.dianping]` before the
+run) and the same timestamped `hdc` wrapper on PATH via
+`HDC_SDK_PATH=/tmp/ad-5055-partb` (sleeps 25 s on every `aa dump -l`):
+
+```
+$ printf 'open com.sankuai.dianping --platform harmonyos\n' > /tmp/ad-5055-partb/one-line.ad
+$ PATH=/tmp/ad-5055-partb:$PATH AGENT_DEVICE_STATE_DIR=/tmp/ad-5055-partb/state \
+  node bin/agent-device.mjs replay /tmp/ad-5055-partb/one-line.ad --timeout 3000 --json
+… "success": false, "code": "REPLAY_DIVERGENCE",
+  "details": { "reason": "daemon_request_timeout", "timeoutMs": 3000,
+               "action": "open \"com.sankuai.dianping\"" }
+```
+
+Timeline, request start (events/request ndjson) and wrapper epochs aligned
+(the wrapper log is `/tmp/ad-5055-partb/hdc-wrapper.log`):
+
+```
++0.000s  request started
++0.091s  wrapper: hdc -t 77TYD26826028730 shell aa dump -l   (probe read)
++0.093s  wrapper: sleeping 25 s                              (read would hang)
++3.094s  wrapper: next read begins — bm dump -n com.sankuai.dianping
+         (the probe's read was cut at +3.0 s by the clamp, not 15 s)
++3.291s  wrapper: aa start … (dispatch never waited on the hung read)
++3.425s  request canceled → settles daemon_request_timeout, timeoutMs 3000
+```
+
+The probe's `aa dump -l` read ended about 3 s after the request started
+(not ~15 s), no `alreadyForeground` warning was emitted (a hung read claims
+nothing), and the whole request settled at the 3 s deadline. A second run of
+the same shape with a two-line script (`context platform=harmonyos` + the
+same open) reproduced the timeline: probe read starts +0.01 s after request
+start, is abandoned at +3.0 s, request canceled at +3.389 s with
+`daemon_request_timeout` / `timeoutMs: 3000` and no `alreadyForeground`
+claim. The clamp below 15 s is pinned deterministically
 by the unit suite (`app-state.test.ts`: deadline +2 s → read timeout ≤ 2000 ms;
 spent deadline → no read; deadline-canceled mid-read → no hang), and the
 deadline threading into `requestDeadlineAtMs` by
