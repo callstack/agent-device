@@ -26,19 +26,26 @@ const mockPress = vi.mocked(pressAndroidHardwareButton);
 const mockCurrentUser = vi.mocked(readAndroidCurrentUserId);
 
 /** `dumpsys lock_settings` as Android 16 prints it, one block per user. */
-function lockSettingsDump(users: Record<number, string>): string {
+function lockSettingsDump(users: Record<number, string>, lockScreenDisabled = false): string {
   const blocks = Object.entries(users).map(
     ([id, type]) =>
-      `  User ${id}\n    LSKF-based SP protector ID: 0000000000000000\n    Quality: 0\n    CredentialType: ${type}\n    SeparateChallenge: false\n`,
+      `  User ${id}\n    LSKF-based SP protector ID: 0000000000000000\n    Quality: 0\n    CredentialType: ${type}\n` +
+      (type === 'NONE' ? `    IsLockScreenDisabled: ${lockScreenDisabled}\n` : '') +
+      '    SeparateChallenge: false\n',
   );
-  return `Current lock settings service state:\n\nUser State:\n${blocks.join('')}\nStorage:\n`;
+  return `Current lock settings service state:\n\nUser State:\n${blocks.join('')}\nStorage:\n  User 0 [/data/system_de/0/spblob]:\n`;
 }
 
 /**
  * One device answered by command: `keyguardReads` are the successive `isKeyguardShowing` values
  * (the last repeats), `credentials` the lock_settings blocks per user.
  */
-function stubDevice(options: { keyguardReads: boolean[]; credentials?: Record<number, string> }) {
+function stubDevice(options: {
+  keyguardReads: boolean[];
+  credentials?: Record<number, string>;
+  lockScreenDisabled?: boolean;
+  lockAfterTimeout?: string;
+}) {
   const reads = [...options.keyguardReads];
   mockShell.mockImplementation(async (_device, words) => {
     const command = words.join(' ');
@@ -48,7 +55,12 @@ function stubDevice(options: { keyguardReads: boolean[]; credentials?: Record<nu
       return answer(`    isKeyguardShowing=${showing}\n`);
     }
     if (command === 'dumpsys lock_settings') {
-      return answer(lockSettingsDump(options.credentials ?? { 0: 'NONE' }));
+      return answer(
+        lockSettingsDump(options.credentials ?? { 0: 'NONE' }, options.lockScreenDisabled),
+      );
+    }
+    if (command === 'settings get secure lock_screen_lock_after_timeout') {
+      return answer(`${options.lockAfterTimeout ?? 'null'}\n`);
     }
     if (command === 'wm dismiss-keyguard') return answer('');
     throw new Error(`unexpected shell command: ${command}`);
@@ -87,6 +99,42 @@ test('lock sends KEYCODE_SLEEP and returns once the keyguard shows', async () =>
   await lockAndroidScreen(ANDROID_EMULATOR, undefined);
   expect(mockPress.mock.calls.map(([, button]) => button)).toEqual(['sleep']);
   expect(keyguardReads()).toBe(3);
+  // A swipe lock has no credential, so its keyguard is never deferred.
+  expect(shellCommands()).not.toContain('settings get secure lock_screen_lock_after_timeout');
+});
+
+test('lock refuses a screen lock set to None before sending anything', async () => {
+  stubDevice({ keyguardReads: [false], lockScreenDisabled: true });
+  await expect(lockAndroidScreen(ANDROID_EMULATOR, undefined)).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'lock-screen-disabled', dispatched: 'no' },
+  });
+  expect(mockPress).not.toHaveBeenCalled();
+});
+
+// With "Power button instantly locks" off, a secure keyguard waits for "Lock after screen
+// timeout", so the window grows by that delay, Android's 5 s when unset, and never past 60 s.
+test.each([
+  ['an unset delay as 5 s', 'null', 10_000],
+  ['a 30 s delay', '30000', 35_000],
+  ['a delay past one minute as 60 s', '1800000', 65_000],
+])('lock on a secure device waits for %s', async (_name, lockAfterTimeout, windowMs) => {
+  stubDevice({ keyguardReads: [false], credentials: { 0: 'PIN' }, lockAfterTimeout });
+  await expect(lockAndroidScreen(ANDROID_EMULATOR, undefined)).rejects.toMatchObject({
+    details: { reason: 'lock-screen-unverified', dispatched: 'unknown' },
+  });
+  // One read before the key event, then one right after it and one after each 250 ms poll.
+  expect(keyguardReads()).toBe(2 + windowMs / 250);
+});
+
+test('lock on a secure device returns once the deferred keyguard shows', async () => {
+  stubDevice({
+    keyguardReads: [false, ...Array<boolean>(24).fill(false), true],
+    credentials: { 0: 'PIN' },
+    lockAfterTimeout: '5000',
+  });
+  await lockAndroidScreen(ANDROID_EMULATOR, undefined);
+  expect(keyguardReads()).toBe(26);
 });
 
 test('lock reads the keyguard once more after the last poll before it reports unverified', async () => {

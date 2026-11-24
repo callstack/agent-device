@@ -16,7 +16,7 @@ const KEYCODE_WAKEUP = '224';
  * lock does: KEYCODE_SLEEP raises it and `wm dismiss-keyguard` clears it. `credential` is the
  * foreground user's lock type in `dumpsys lock_settings`.
  */
-function keyguardDevice(credential = 'NONE') {
+function keyguardDevice(credential = 'NONE', lockScreenDisabled = false) {
   let showing = false;
   const answer = (stdout: string) => ({ stdout, stderr: '', exitCode: 0 });
   return (args: readonly string[]) => {
@@ -33,8 +33,12 @@ function keyguardDevice(credential = 'NONE') {
       return answer('');
     }
     if (command === 'shell dumpsys lock_settings') {
-      return answer(`User State:\n  User 0\n    CredentialType: ${credential}\n`);
+      return answer(
+        `User State:\n  User 0\n    CredentialType: ${credential}\n    IsLockScreenDisabled: ${lockScreenDisabled}\n`,
+      );
     }
+    if (command === 'shell settings get secure lock_screen_lock_after_timeout')
+      return answer('null\n');
     return undefined;
   };
 }
@@ -69,6 +73,7 @@ test('Provider-backed integration Android lock-screen locks and unlocks a swipe 
       message: 'Unlocked the screen',
     });
     assert.deepEqual(lockScreenShellCalls(world.adbCalls), [
+      'shell dumpsys lock_settings',
       `shell input keyevent ${KEYCODE_SLEEP}`,
       'shell dumpsys lock_settings',
       `shell input keyevent ${KEYCODE_WAKEUP}`,
@@ -145,6 +150,27 @@ test('Provider-backed integration Android lock-screen refuses an Android TV targ
     );
     assert.equal((data.details as Record<string, unknown>).reason, 'unsupported-platform-leaf');
     assert.deepEqual(lockScreenShellCalls(world.adbCalls), []);
+  } finally {
+    await world.close();
+  }
+});
+
+test('Provider-backed integration Android lock-screen lock refuses a screen lock set to None before sending anything', async () => {
+  const world = await createAndroidSettingsWorld({ onAdbExec: keyguardDevice('NONE', true) });
+
+  try {
+    await world.daemon.client().apps.open({ app: 'settings', ...world.selection });
+    world.adbCalls.splice(0);
+    const data = assertRpcError(
+      await world.daemon.callCommand('lock-screen', ['lock'], world.selection),
+      500,
+      'UNSUPPORTED_OPERATION',
+      /set to None/,
+    );
+    const details = data.details as Record<string, unknown>;
+    assert.equal(details.reason, 'lock-screen-disabled');
+    assert.equal(details.dispatched, 'no');
+    assert.deepEqual(lockScreenShellCalls(world.adbCalls), ['shell dumpsys lock_settings']);
   } finally {
     await world.close();
   }
