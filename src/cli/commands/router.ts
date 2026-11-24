@@ -30,6 +30,7 @@ export async function tryRunClientBackedCommand(params: {
   command: string;
   positionals: string[];
   flags: CliFlags;
+  explicitDaemonAuthToken?: string;
   client: AgentDeviceClient;
   debug?: boolean;
   replayTestReporterRuntime?: ClientCommandParams['replayTestReporterRuntime'];

@@ -478,6 +478,8 @@ Rules:
     summary: 'Direct proxy, cloud profiles, and remote config',
     body: (coreVersion: string) => `agent-device help remote
 
+Use agent-device connect list to see cloud vendor prices, capabilities, and configured availability after signing in or setting a cloud API key. Add --live to request a fresh availability signal and --json for the vendor rows. Live availability is advisory.
+
 Remote connection providers use the same lifecycle:
   connect -> install/open -> commands -> close -> disconnect
 

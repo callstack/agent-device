@@ -375,7 +375,8 @@ async function resolveRunContextOrExit(
             configuredPlatform: parsed.flags.platform,
             configuredSession: parsed.flags.session,
           });
-    if (base.command === 'connect' && flags.remoteConfig) {
+    const catalog = isCloudCatalogCommand(base);
+    if (base.command === 'connect' && flags.remoteConfig && !catalog) {
       const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
       await admitConnectProfileWithDiagnostics(
         parsed.remoteConfigLeaseProvider,
@@ -386,8 +387,8 @@ async function resolveRunContextOrExit(
     // A leased remote config, or a connect without one (it always leases through a provider), needs
     // an explicit session before anything is resolved or leased (#3931).
     const leasedRemoteConfig =
-      parsed.remoteConfigLeaseProvider && runsOnRemoteConnection(base.command);
-    const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
+      parsed.remoteConfigLeaseProvider && runsOnRemoteConnection(base.command) && !catalog;
+    const leasedConnect = base.command === 'connect' && !flags.remoteConfig && !catalog;
     if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
       throw remoteSessionRequiredError(parsed.remoteConfigLeaseProvider);
     }
@@ -472,7 +473,7 @@ async function resolveRemoteContext(
     ctx.connectionMetadata = buildRemoteConnectionRequestMetadata(selection.state);
   }
 
-  if (shouldResolveRemoteAuth(ctx.command)) {
+  if (shouldResolveRemoteAuth(ctx.command) && !isCloudCatalogCommand(ctx)) {
     const authResolution = await resolveRemoteAuthForCli({
       command: ctx.command,
       flags: ctx.effectiveFlags,
@@ -571,6 +572,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
 }
 
 function maybeStartDaemonLogTail(ctx: CliRunContext): (() => void) | null {
+  if (isCloudCatalogCommand(ctx)) return null;
   const remoteDaemonBaseUrl = ctx.effectiveFlags.daemonBaseUrl;
   return ctx.debugOutputEnabled && !ctx.effectiveFlags.json && !remoteDaemonBaseUrl
     ? startDaemonLogTail(ctx.daemonPaths.logPath)
@@ -648,6 +650,9 @@ async function dispatchCliCommand(
       commandProgress,
       leaseDevice: ctx.leaseDevice,
       claimedConnection: ctx.claimedConnection,
+      explicitDaemonAuthToken: ctx.explicitFlagKeys.has('daemonAuthToken')
+        ? ctx.flags.daemonAuthToken
+        : undefined,
     })
   ) {
     return;
@@ -772,6 +777,10 @@ function shouldMaterializeRemoteConnection(command: string): boolean {
 function shouldResolveRemoteAuth(command: string): boolean {
   // `connection status` reports the stored record and sends no daemon request.
   return runsOnRemoteConnection(command) && command !== 'connection';
+}
+
+function isCloudCatalogCommand(ctx: { command: string; positionals: string[] }): boolean {
+  return ctx.command === 'connect' && ctx.positionals[0] === 'list';
 }
 
 function shouldWarnOpenMayMissRemoteRuntime(options: {

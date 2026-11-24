@@ -2596,13 +2596,17 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 Configure remote or provider state.
 
 ```bash
-agent-device connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
+agent-device connect list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
 ```
+
+**`connect cloud`**
 
 | Option | What it does |
 | --- | --- |
 | `--remote-config <path>` | Load remote host + Metro workflow settings from a specific profile file |
+| `--state-dir <path>` | Daemon state directory (defaults to ~/.agent-device for packages, or a worktree-scoped dev dir from source) |
 | `--daemon-base-url <url>` | Explicit remote HTTP daemon base URL (skip local daemon discovery/startup) |
+| `--daemon-auth-token <token>` | Remote HTTP daemon or proxy auth token (sent as request token and bearer header) |
 | `--tenant <id>` | Tenant scope identifier for isolated daemon sessions |
 | `--run-id <id>` | Run identifier used for tenant lease admission checks |
 | `--lease-id <id>` | Lease identifier bound to tenant/run admission scope |
@@ -2631,11 +2635,37 @@ agent-device connect [provider] [--remote-config <path>] [--daemon-base-url <url
 | `--aws-interaction-mode INTERACTIVE\|NO_VIDEO\|VIDEO_ONLY` | AWS Device Farm remote access interaction mode |
 | `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
 | `--no-login` | Connect: fail instead of starting implicit cloud login |
+| `--platform apple\|android\|harmonyos\|vega\|linux\|web\|ios\|macos` | Platform to target (`apple` aliases the Apple automation backend) |
+| `--device <name>` | Device name to target (a UDID belongs in --udid, a serial in --serial) |
 | `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
 | `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
 | `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |
 | `--device-baseline <name>` | Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend |
 | `--physical` | Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend |
+| `--project-root <path>` | metro prepare: React Native project root (default: cwd) |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--metro-kind auto\|react-native\|expo\|repack` | connect: detect or force the React Native dev-server launcher kind for deferred Metro preparation. `metro prepare` reads --kind instead |
+| `--public-base-url <url>` | metro prepare: public base URL used for direct dev-server bundle hints |
+| `--proxy-base-url <url>` | metro prepare: optional bridge origin for remote dev-server access |
+| `--bearer-token <token>` | metro prepare: host bridge bearer token (or AGENT_DEVICE_METRO_BEARER_TOKEN; falls back to AGENT_DEVICE_DAEMON_AUTH_TOKEN) |
+| `--port <port>` | metro prepare: local dev-server port (default: 8081) |
+| `--listen-host <host>` | metro prepare: host dev server listens on (default: 0.0.0.0) |
+| `--status-host <host>` | metro prepare: host used for local dev-server /status polling (default: 127.0.0.1) |
+| `--startup-timeout-ms <ms>` | metro prepare: timeout while waiting for the dev server to become ready |
+| `--probe-timeout-ms <ms>` | metro prepare: timeout for /status and proxy bridge calls; metro reload: timeout for the reload request |
+| `--runtime-file <path>` | metro prepare: optional file path to persist the JSON result |
+| `--no-reuse-existing` | metro prepare: always start a fresh Metro process |
+| `--no-install-deps` | metro prepare: skip package-manager install when node_modules is missing |
+| `--launch-url <url>` | Session-scoped deep link / launch URL hint |
+| `--session <name>` | Named session (implicit default is scoped to this workspace + platform) |
+
+**`connect list`**
+
+| Option | What it does |
+| --- | --- |
+| `--state-dir <path>` | Daemon state directory (defaults to ~/.agent-device for packages, or a worktree-scoped dev dir from source) |
+| `--daemon-auth-token <token>` | Remote HTTP daemon or proxy auth token (sent as request token and bearer header) |
+| `--live` | Connect list: request fresh vendor availability from the cloud session API |
 
 Exact behavior: `agent-device help connect`.
 

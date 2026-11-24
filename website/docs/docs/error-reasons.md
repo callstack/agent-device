@@ -41,6 +41,8 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 
 | Reason | Meaning |
 | --- | --- |
+| `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
+| `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
@@ -87,6 +89,8 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | --- | --- |
 | `plugin-not-installed` | A command requires a plugin that is absent. |
 | `plugin-unavailable` | The selected plugin cannot supply the requested provider. |
+| `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
+| `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |

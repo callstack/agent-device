@@ -12,6 +12,7 @@ export type ClientCommandParams = {
   host: HostEnvironment;
   positionals: string[];
   flags: CliFlags;
+  explicitDaemonAuthToken?: string;
   client: AgentDeviceClient;
   debug?: boolean;
   replayTestReporterRuntime?: ReplayTestReporterRuntime;

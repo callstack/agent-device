@@ -438,6 +438,15 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'live',
+    names: ['--live'],
+    type: 'boolean',
+    usageLabel: '--live',
+    usageDescription: 'Connect list: request fresh vendor availability from the cloud session API',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'sessionLock',
     names: ['--session-lock'],
     type: 'enum',
