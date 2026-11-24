@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   observedDaemonIdentityOfRegistration,

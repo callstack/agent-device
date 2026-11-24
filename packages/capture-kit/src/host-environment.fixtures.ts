@@ -1,4 +1,4 @@
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 /**

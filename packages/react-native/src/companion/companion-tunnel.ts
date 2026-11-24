@@ -1,4 +1,4 @@
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import { MissingCompanionEnvError } from './client-companion-tunnel-contract.ts';
 import { runCompanionTunnelProcessFromEnv } from './client-companion-tunnel-worker.ts';
 

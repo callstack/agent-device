@@ -1,6 +1,6 @@
 import { createAgentDeviceClient } from '@agent-device/client';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureHostEnvironment } from '@agent-device/host-kit/environment';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';

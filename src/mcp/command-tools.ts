@@ -235,7 +235,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
           input.session,
         );
       }
-      const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
+      const { captureHostEnvironment } = await import('@agent-device/host-kit/environment');
       const host = captureHostEnvironment(process);
       const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties;
       const {

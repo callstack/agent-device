@@ -7,7 +7,6 @@ import type {
   HostProcessInfo,
   ListHostProcessesOptions,
 } from './host-process-types.ts';
-import { sleep } from './retry.ts';
 import type { ReasonTable } from '@agent-device/kernel/errors';
 
 export type {
@@ -49,8 +48,6 @@ const HOST_PS_COMMANDS = ['/bin/ps', '/run/current-system/sw/bin/ps'] as const;
 // Windows process-table read gets at least this budget instead of the `ps` one.
 const WINDOWS_PS_TIMEOUT_MS = 2_000;
 const WINDOWS_PROCESS_TOOL = 'powershell.exe';
-
-export { captureHostEnvironment } from '../environment.ts';
 
 export function writeHostStderr(value: string): void {
   process.stderr.write(value);
@@ -638,7 +635,7 @@ export async function waitForProcessExit(pid: number, timeoutMs: number): Promis
   if (!isProcessAlive(pid)) return true;
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    await sleep(50);
+    await (await import('./retry.ts')).sleep(50);
     if (!isProcessAlive(pid)) return true;
   }
   return !isProcessAlive(pid);
@@ -904,7 +901,9 @@ async function waitForStopPidRelease(pid: number, timeoutMs: number): Promise<bo
   for (;;) {
     if (!isStopPidLive(pid)) return true;
     if (Date.now() >= deadline) return false;
-    await sleep(Math.min(STOP_LIVENESS_POLL_MS, Math.max(0, deadline - Date.now())));
+    await (
+      await import('./retry.ts')
+    ).sleep(Math.min(STOP_LIVENESS_POLL_MS, Math.max(0, deadline - Date.now())));
   }
 }
 
