@@ -305,7 +305,16 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
   // Startup rollback runs its steps in reverse, so the step that stops the watch must be REGISTERED
   // after the one that removes the record for it to run first.
-  const rollbackRemoval = source.indexOf('await finishDaemonRegistration({');
+  const registration = fs.readFileSync(
+    new URL('./daemon-startup-registration.ts', import.meta.url),
+    'utf8',
+  );
+  expect(registration).toMatch(
+    /rollback\.onRollback\(async \(\) => \{\s+await finishDaemonRegistration\(/,
+  );
+  const rollbackRemoval = source.indexOf(
+    'const registration = attachmentRegistration ?? (await acquireRegistration());',
+  );
   // The close path: the watch is down before the release, which is the only step that removes the
   // record on that exit, can run.
   const closeStart = source.indexOf('const closeSteps = async');

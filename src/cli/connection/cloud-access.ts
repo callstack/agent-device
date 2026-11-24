@@ -29,7 +29,12 @@ export async function resolveHostedCloudAccess(options: {
   if (key) return { accessToken: key, cloudBaseUrl };
   const flags = { json: false, help: false, version: false };
   const access = await readHostedLogin({ env: authEnv, stateDir, flags });
-  if (access) return { ...access, cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl) };
+  const accessToken = access?.accessToken.trim();
+  if (access && accessToken)
+    return {
+      accessToken,
+      cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl),
+    };
   if (!options.interactive || options.noLogin || detectAuthMode(authEnv) === 'non-interactive')
     throw cloudApiKeyRequired();
   const login = await loginWithDeviceAuth({
@@ -40,7 +45,7 @@ export async function resolveHostedCloudAccess(options: {
   });
   return {
     cloudBaseUrl: parseCloudOrigin(login.session.cloudBaseUrl),
-    accessToken: login.accessToken,
+    accessToken: login.accessToken.trim(),
   };
 }
 

@@ -1,10 +1,12 @@
-import { afterEach, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { normalizeError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
+import { writeCliSession } from '../cli/auth-session.ts';
 import { runCliCapture } from './cli-capture.ts';
+import { cloudEnv, connectArgs, hostedDevice, stubCloudApi } from './cli-cloud-session.fixtures.ts';
 import { resolveHostedCloudAccess } from '../cli/connection/cloud-access.ts';
 import { readActiveConnectionState } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
@@ -94,6 +96,32 @@ test('cloud access with no-login reports auth requirement after reuse options ar
       interactive: true,
     }),
     (error) => normalizeError(error).details?.reason === 'cloud_api_key_required',
+  );
+});
+
+test('uses the normalized login bearer for authentication and viewer echo checks', async () => {
+  const token = 'fixture-login-access';
+  const env = { ...cloudEnv(), AGENT_DEVICE_CLOUD_API_KEY: undefined };
+  writeCliSession({
+    stateDir: env.AGENT_DEVICE_STATE_DIR,
+    session: {
+      version: 2,
+      id: 'fixture-session',
+      cloudBaseUrl: env.AGENT_DEVICE_CLOUD_BASE_URL,
+      refreshCredential: 'fixture-refresh-token',
+      createdAt: new Date().toISOString(),
+    },
+  });
+  const fetchMock = stubCloudApi({
+    ...hostedDevice,
+    viewerUrl: `https://viewer.example/watch#token=${token}`,
+  });
+  fetchMock.mockResolvedValueOnce(Response.json({ accessToken: ` ${token} ` }));
+  const result = await runCliCapture(connectArgs, { env });
+  expect(JSON.parse(result.stdout).error?.details?.reason).toBe('cloud_session_invalid');
+  expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'POST', 'DELETE']);
+  expect((fetchMock.mock.calls[1]![1].headers as Record<string, string>).authorization).toBe(
+    `Bearer ${token}`,
   );
 });
 

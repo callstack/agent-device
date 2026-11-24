@@ -13,6 +13,7 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   readRemoteConnectionState,
+  type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import type { CloudSessionRequest } from './cloud-session-api.ts';
@@ -48,8 +49,10 @@ export type CloudConnectionRecord = {
   phase: 'pending' | 'committed' | 'closing';
   origin: string;
   fingerprint: string;
+  accepts?: CloudSessionRequest['accepts'];
   id?: string;
   deadlineAt?: string;
+  hostedLeaseId?: string;
   brokerReleased?: true;
 };
 
@@ -200,6 +203,10 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
       typeof record?.generation === 'string' &&
       typeof record.origin === 'string' &&
       typeof record.fingerprint === 'string' &&
+      (record.accepts === undefined ||
+        (Array.isArray(record.accepts) &&
+          record.accepts.length > 0 &&
+          record.accepts.every((kind) => kind === 'agent-device-daemon' || kind === 'limrun'))) &&
       ['pending', 'committed', 'closing'].includes(record.phase)
     ) {
       assertCloudRecordSession(location, record);
@@ -269,6 +276,7 @@ export function prepareCloudConnection(
     phase: 'pending',
     origin,
     fingerprint,
+    accepts: request.accepts,
   };
 }
 
@@ -276,16 +284,30 @@ function assertCloudConnectionOwner(
   location: ConnectionLocation,
   generation: string | undefined,
 ): void {
-  const record = readCloudConnection(location);
   if (!generation) {
-    if (record) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.ownsSession.reason);
+    if (readCloudConnection(location))
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.ownsSession.reason);
     return;
   }
-  const binding = readRemoteConnectionState(location)?.cloudSession;
+  readCurrentCloudConnection(location, generation);
+}
+
+export function readCurrentCloudConnection(
+  location: ConnectionLocation,
+  generation: string,
+): {
+  record: CloudConnectionRecord;
+  state: RemoteConnectionState;
+  binding: CloudSessionBinding;
+} {
+  const record = readCloudConnection(location);
+  const state = readRemoteConnectionState(location);
+  const binding = state?.cloudSession;
   if (
     !record ||
     record.phase !== 'committed' ||
     record.generation !== generation ||
+    state?.session !== location.session ||
     !binding ||
     binding.generation !== generation ||
     binding.id !== record.id
@@ -293,6 +315,7 @@ function assertCloudConnectionOwner(
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
   }
   assertCloudConnectionDeadline(location, record, binding.transport);
+  return { record, state, binding };
 }
 
 function assertCloudConnectionDeadline(

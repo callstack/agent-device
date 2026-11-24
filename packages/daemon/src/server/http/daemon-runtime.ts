@@ -8,12 +8,7 @@ import {
   createRecoveryPlatformScope,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
-import {
-  asAppError,
-  AppError,
-  normalizeError,
-  type ReasonTable,
-} from '@agent-device/kernel/errors';
+import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
@@ -91,21 +86,12 @@ import {
   resolveDaemonCodeOrigin,
   resolveDaemonCodeSignature,
 } from './server-lifecycle.ts';
-import {
-  tryAcquireDaemonRegistration,
-  DAEMON_STARTUP_EXIT_CODES,
-  type DaemonRegistrationOwner,
-} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import type { DaemonRegistrationOwner } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import type { DaemonStartupProgress } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
-
-const DAEMON_REGISTRATION_REASONS = {
-  // Another daemon holds this state directory, or its registration could not be proven free, so
-  // this daemon did not start; `details.status` says which.
-  refused: { reason: 'daemon_registration_refused' },
-} as const satisfies ReasonTable<'daemon lifecycle'>;
+import type { HostedAttachmentScope } from '../hosted-attachment-admission.ts';
 
 const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const LEASE_EXPIRY_SWEEP_INTERVAL_MS = 1_000;
@@ -139,6 +125,8 @@ export type DaemonRuntimeOptions = {
   codeIdentity?: { origin: DaemonCodeOrigin; codeSignature?: string };
   /** Receives each startup phase; the detached daemon entry passes its launch channel here. */
   startupProgress?: DaemonStartupProgress;
+  /** A detached attachment reads its scoped credential only after acquiring daemon ownership. */
+  bindAttachment?: (stateDir: string) => Promise<HostedAttachmentScope & { host: HostEnvironment }>;
 };
 
 export type DaemonRuntimeController = {
@@ -227,8 +215,7 @@ async function startDaemonRuntimeOnHost(
   runtimeState: RuntimeStateHandle,
   startupRecovered: Promise<void>,
 ): Promise<DaemonRuntimeController> {
-  const { host } = options;
-  const { env } = host;
+  const initialHost = options.host;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   // Function-scoped import: these helpers stay out of the daemon entry's eager closure (ADR 0019).
@@ -239,10 +226,24 @@ async function startDaemonRuntimeOnHost(
     flushDaemonStartupDiagnostics,
     reportPluginStartupFailures,
   } = await import('./daemon-startup-diagnostics.ts');
-  const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
+  const daemonPaths = resolveDaemonPaths(initialHost.env.AGENT_DEVICE_STATE_DIR, initialHost);
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   // A daemon from another build, or embedded, reaches the root without the launcher's admission.
   admitDaemonStateRoot({ paths: daemonPaths, mode: 'establish' });
+  const acquireRegistration = async () =>
+    (await import('./daemon-startup-registration.ts')).acquireDaemonStartupRegistration({
+      paths: daemonPaths,
+      rollback,
+      progress: options.startupProgress,
+      requireProcessIdentity: options.bindAttachment !== undefined,
+    });
+  const attachmentRegistration = options.bindAttachment ? await acquireRegistration() : undefined;
+  const attachment = await options.bindAttachment?.(baseDir);
+  const host = attachment?.host ?? initialHost;
+  const { env } = host;
+  const admitAttachment = attachment
+    ? (await import('../hosted-attachment-admission.ts')).hostedAttachmentAdmission(attachment)
+    : undefined;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
@@ -415,6 +416,7 @@ async function startDaemonRuntimeOnHost(
     providerRuntimeIds: deps.providerRuntimeIds,
     pluginInventory: deps.pluginInventory,
     ...deps.requestRouter,
+    admitAttachment,
   });
 
   let stopMetadataLossWatch: () => void = () => {};
@@ -606,6 +608,7 @@ async function startDaemonRuntimeOnHost(
   });
 
   const publishDaemonInfo = (socketPort: number | undefined, httpPort: number | undefined) => {
+    attachment?.assertCurrent();
     registration.publish({
       socketPort,
       httpPort,
@@ -622,27 +625,10 @@ async function startDaemonRuntimeOnHost(
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
   };
 
-  const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
-  if (acquisition.status !== 'acquired') {
-    throw new AppError('COMMAND_FAILED', `Daemon registration ${acquisition.status}.`, {
-      reason: DAEMON_REGISTRATION_REASONS.refused.reason,
-      status: acquisition.status,
-      exitCode: DAEMON_STARTUP_EXIT_CODES[acquisition.status],
-    });
-  }
-  const registration = acquisition.owner;
   rollback.onRollback(async () => {
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
   });
-  rollback.onRollback(async () => {
-    await finishDaemonRegistration({
-      registration,
-      infoPath,
-      logPath,
-      close: { retainRegistration: false },
-    });
-  });
-  options.startupProgress?.report('lock-acquired');
+  const registration = attachmentRegistration ?? (await acquireRegistration());
 
   rollback.onRollback(() => {
     stopMetadataLossWatch();

@@ -86,6 +86,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   batchSteps?: BatchStep[];
   forceRuntimePrepare?: boolean;
   cloudGeneration?: string;
+  hostedLeaseId?: string;
 }): Promise<{
   flags: CliFlags;
   runtime?: SessionRuntimeHints;
@@ -111,6 +112,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       positionals: options.positionals,
       leaseLedger,
       env: host.env,
+      hostedLeaseId: options.hostedLeaseId,
     });
     nextState = acquired.state;
     changed = changed || acquired.changed;

@@ -520,7 +520,8 @@ function parseCloudSession(
   access: CloudAccess,
   request: ReturnType<typeof readCloudSessionRequest>,
 ): CreatedCloudSession {
-  const { vendor, transport, platform, deadlineAt, viewerUrl, fallbackFrom } = record;
+  const { vendor, transport, platform, viewerUrl, fallbackFrom } = record;
+  const deadlineAt = canonicalDeadline(record.deadlineAt);
   if (!request.accepts.some((kind) => kind === transport)) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -537,8 +538,7 @@ function parseCloudSession(
     (attachment.kind === 'limrun' && attachment.platform !== platform) ||
     !isPublicCatalogId(vendor) ||
     (request.vendor && vendor !== request.vendor) ||
-    typeof deadlineAt !== 'string' ||
-    !Number.isFinite(Date.parse(deadlineAt)) ||
+    !deadlineAt ||
     (viewerUrl !== undefined && !isCredentialEndpoint(viewerUrl))
   ) {
     throw invalidSession();
@@ -547,6 +547,8 @@ function parseCloudSession(
     vendor,
     fallbackFrom,
     viewerUrl,
+    deadlineAt,
+    receivedDeadline: record.deadlineAt,
   });
   return {
     binding: {
@@ -563,6 +565,16 @@ function parseCloudSession(
   };
 }
 
+function canonicalDeadline(value: unknown): string | undefined {
+  if (typeof value !== 'string') return;
+  const parts = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
+  if (!parts) return;
+  const canonical = `${parts[1]}.${(parts[2] ?? '').padEnd(3, '0')}Z`;
+  const milliseconds = Date.parse(canonical);
+  if (Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === canonical)
+    return canonical;
+}
+
 function readFallbackFrom(value: unknown): string[] | undefined {
   if (isCloudTextArray(value) && value.length && value.every(isPublicCatalogId)) return value;
 }
@@ -570,14 +582,20 @@ function readFallbackFrom(value: unknown): string[] | undefined {
 function readSafeCloudViewer(
   attachment: CloudAttachment,
   brokerToken: string,
-  display: { vendor: string; fallbackFrom: unknown; viewerUrl?: string },
+  display: {
+    vendor: string;
+    fallbackFrom: unknown;
+    viewerUrl?: string;
+    deadlineAt: string;
+    receivedDeadline: unknown;
+  },
 ): string | undefined {
   const scopedToken = attachment.kind === 'limrun' ? attachment.token : attachment.daemonAuthToken;
   const credentials = [brokerToken, scopedToken];
   if (
     exposesBrokerCredential(attachment, brokerToken) ||
     containsCloudCredential(
-      { vendor: display.vendor, fallbackFrom: display.fallbackFrom },
+      [display.vendor, display.fallbackFrom, display.deadlineAt, display.receivedDeadline],
       credentials,
     ) ||
     (display.viewerUrl && cloudUrlContainsCredential(display.viewerUrl, [brokerToken]))
@@ -605,7 +623,7 @@ function exposesBrokerCredential(attachment: CloudAttachment, brokerToken: strin
 function readScopedToken(value: unknown, limrun: boolean): string | undefined {
   const attachment = asCloudRecord(value);
   const token = limrun ? attachment?.token : attachment?.daemonAuthToken;
-  return isCloudText(token) ? token : undefined;
+  return isCloudText(token) ? token.trim() : undefined;
 }
 
 function isPublicCatalogId(value: unknown): value is string {
@@ -620,20 +638,29 @@ export function parseCloudAttachment(
   const kind = transport ?? entry?.kind;
   if (kind === 'agent-device-daemon') return parseDaemonAttachment(entry);
   if (kind !== 'limrun' || !entry) return;
-  const { apiUrl, token, platform, adbWebSocketUrl } = entry;
-  if (!isCredentialEndpoint(apiUrl) || !isCloudText(token)) return;
+  const { apiUrl, platform, adbWebSocketUrl } = entry;
+  const token = readScopedToken(entry, true);
+  if (!isCredentialEndpoint(apiUrl) || !token) return;
   if (platform === 'ios') return { kind, apiUrl, token, platform };
   if (
     platform === 'android' &&
     typeof adbWebSocketUrl === 'string' &&
-    parseCloudEndpoint(adbWebSocketUrl, 'wss:', 'ws:')
+    matchesAdbAudience(apiUrl, adbWebSocketUrl)
   )
     return { kind, apiUrl, token, platform, adbWebSocketUrl };
 }
 
+function matchesAdbAudience(apiUrl: string, adbWebSocketUrl: string): boolean {
+  const adb = parseCloudEndpoint(adbWebSocketUrl, 'wss:', 'ws:');
+  if (!adb) return false;
+  adb.protocol = adb.protocol === 'wss:' ? 'https:' : 'http:';
+  return adb.origin === new URL(apiUrl).origin;
+}
+
 function parseDaemonAttachment(entry: Record<string, unknown> | undefined) {
-  const { daemonBaseUrl, daemonAuthToken } = entry ?? {};
-  if (isCredentialEndpoint(daemonBaseUrl) && isCloudText(daemonAuthToken)) {
+  const { daemonBaseUrl } = entry ?? {};
+  const daemonAuthToken = readScopedToken(entry, false);
+  if (isCredentialEndpoint(daemonBaseUrl) && daemonAuthToken) {
     return { kind: 'agent-device-daemon' as const, daemonBaseUrl, daemonAuthToken };
   }
   return undefined;

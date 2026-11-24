@@ -1,9 +1,14 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
+import { startDaemonRuntime } from '@agent-device/daemon';
+import { readRegisteredDaemon, sendDaemonRequest } from '@agent-device/daemon-client';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import * as browserLaunch from '../cli/browser-launch.ts';
-import { bindCloudAttachment } from '../cli/connection/cloud-attachment.ts';
+import { bindCloudAttachment, bindHostedDaemon } from '../cli/connection/cloud-attachment.ts';
 import {
   cloudAttachmentPath,
   readCloudConnection,
@@ -12,6 +17,7 @@ import { materializeRemoteConnectionForCommand } from '../cli/commands/connectio
 import { createTestClient, grantedLease } from './remote-connection.fixtures.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { cloudEnv, hostedDevice, locationOf, stubCloudApi } from './cli-cloud-session.fixtures.ts';
+import { createDaemonRuntimeDeps } from '../daemon-composition.ts';
 
 const { stop } = vi.hoisted(() => ({ stop: vi.fn(async () => undefined) }));
 
@@ -59,7 +65,7 @@ afterEach(() => {
 
 const instance = 'https://instance.example';
 const scopedToken = 'fixture-instance-credential';
-const adb = 'wss://adb.example';
+const adb = 'wss://instance.example/adb';
 
 function limrunLease(platform: 'ios' | 'android') {
   return {
@@ -110,6 +116,203 @@ test.each([undefined, 'old', 'alias'] as const)(
   },
 );
 
+test.each([undefined, 'current'] as const)(
+  'keeps the transport offer of a pending allocation after plugin inventory changes (%s)',
+  async (firstVersion) => {
+    const env = limrunEnv(firstVersion);
+    const mock = stubCloudApi();
+    mock.mockResolvedValueOnce(Response.json({ ...hostedDevice, id: 'bad id' }));
+    expect((await runCliCapture(args('ios'), { env })).code).toBe(1);
+    const pending = readCloudConnection(locationOf(env));
+    expect(pending?.phase).toBe('pending');
+    const changedEnv = {
+      ...env,
+      AGENT_DEVICE_HOME: mkdtempForTestSync('changed-hosted-limrun-home-'),
+      TEST_HOSTED_LIMRUN: firstVersion ? undefined : 'current',
+    };
+    const retried = await runCliCapture(args('ios'), { env: changedEnv });
+    expect(retried.code, retried.stdout).toBeNull();
+    expect(mock.mock.calls).toHaveLength(2);
+    expect(mock.mock.calls[1]?.[1].body).toBe(mock.mock.calls[0]?.[1].body);
+    expect(new Headers(mock.mock.calls[1]?.[1].headers).get('idempotency-key')).toBe(
+      pending?.generation,
+    );
+  },
+);
+
+test('fences and retires the attachment before a missing broker credential prevents release', async () => {
+  const env = limrunEnv('current');
+  const location = locationOf(env);
+  const mock = stubCloudApi();
+  mock.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+  expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  const result = await runCliCapture(['disconnect', '--json'], {
+    env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
+  });
+  expect(JSON.parse(result.stdout).error.details.reason).toBe('cloud_api_key_required');
+  expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', id: hostedDevice.id });
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+  expect(stop).toHaveBeenCalledOnce();
+  expect(mock.mock.calls).toHaveLength(1);
+  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+  expect(mock.mock.calls[1]?.[1].method).toBe('DELETE');
+});
+
+test('disconnect preserves recovery when a startup owns the lock before publishing a registration', async () => {
+  const env = limrunEnv('current');
+  const location = locationOf(env);
+  const mock = stubCloudApi();
+  mock.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+  expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  const state = readRemoteConnectionState(location)!;
+  const attached = await bindCloudAttachment({
+    location,
+    session: state.cloudSession!,
+    host: createTestHostEnvironment({ env }),
+    flags: { help: false, json: true, version: false },
+  });
+  const paths = resolveDaemonPaths(attached.daemonStateDir);
+  fs.mkdirSync(paths.baseDir, { mode: 0o700 });
+  const startup = await tryAcquireDaemonRegistration(paths);
+  if (startup.status !== 'acquired') throw new Error('Could not hold the fixture startup lock.');
+  try {
+    expect(fs.existsSync(paths.infoPath)).toBe(false);
+    const disconnect = await runCliCapture(['disconnect', '--json'], { env });
+    expect(JSON.parse(disconnect.stdout).error?.details.reason).toBe(
+      'cloud_attachment_daemon_stop_unconfirmed',
+    );
+    expect(readCloudConnection(location)).toMatchObject({
+      phase: 'closing',
+      brokerReleased: true,
+      id: hostedDevice.id,
+    });
+    expect(stop).not.toHaveBeenCalled();
+  } finally {
+    await startup.owner.finish();
+  }
+  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+  expect(mock.mock.calls.filter(([, init]) => init.method === 'DELETE')).toHaveLength(1);
+});
+
+test('hosted daemon ownership precedes credential read and bounds allocation over HTTP and socket', async () => {
+  const env = limrunEnv('current');
+  const location = locationOf(env);
+  const mock = stubCloudApi();
+  mock.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+  expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  vi.unstubAllGlobals();
+  const state = readRemoteConnectionState(location)!;
+  const attached = await bindCloudAttachment({
+    location,
+    session: state.cloudSession!,
+    host: createTestHostEnvironment({ env }),
+    flags: { help: false, json: true, version: false },
+  });
+  const paths = resolveDaemonPaths(attached.daemonStateDir);
+  const host = createTestHostEnvironment({
+    env: {
+      ...attached.host.env,
+      AGENT_DEVICE_STATE_DIR: paths.baseDir,
+      AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
+    },
+  });
+  const captureAllocate = vi.fn(async () => undefined);
+  const bindAttachment = vi.fn(async (stateDir: string) => {
+    expect(fs.existsSync(paths.lockPath)).toBe(true);
+    expect(fs.existsSync(paths.infoPath)).toBe(false);
+    expect(host.env.LIM_IOS_INSTANCE_TOKEN).toBeUndefined();
+    return bindHostedDaemon(host, stateDir);
+  });
+  const runtime = await startDaemonRuntime({
+    host,
+    bindAttachment,
+    ownership: 'embedded',
+    composeDeps: async (params) => {
+      const deps = await createDaemonRuntimeDeps(params);
+      return {
+        ...deps,
+        providerRuntimeIds: ['limrun'],
+        leaseLifecycleProvider: {
+          allocate: captureAllocate,
+          release: async () => ({ release: 'confirmed' }),
+        },
+      };
+    },
+    stdout: { write: () => {} },
+    stderr: { write: () => {} },
+  });
+  try {
+    const info = await readRegisteredDaemon(paths, { required: true });
+    const request: DaemonWireRequest = {
+      session: location.session,
+      token: runtime.token,
+      command: 'lease_allocate',
+      positionals: [],
+      meta: {
+        sessionExplicit: true,
+        tenantId: state.tenant,
+        runId: state.runId,
+        leaseProvider: 'limrun',
+        leaseBackend: state.leaseBackend,
+        clientId: state.clientId,
+        leaseId: attached.hostedLeaseId ?? '0'.repeat(32),
+      },
+    };
+    const scopeError = { details: { reason: 'LEASE_SESSION_MISMATCH' } };
+    for (const transport of ['http', 'socket'] as const) {
+      const send = (req: DaemonWireRequest) =>
+        sendDaemonRequest(info, req, transport, paths, 3_000, {
+          host: createTestHostEnvironment(),
+        });
+      for (const refused of [
+        { ...request, session: 'unrelated-session' },
+        { ...request, meta: { ...request.meta, tenantId: 'unrelated-tenant' } },
+        { ...request, meta: { ...request.meta, runId: 'unrelated-run' } },
+        { ...request, meta: { ...request.meta, leaseId: undefined } },
+        { ...request, command: 'snapshot', meta: { ...request.meta, leaseId: 'unrelated-lease' } },
+      ]) {
+        const result = await send(refused).catch((error: unknown) => ({ ok: false, error }));
+        expect(result).toMatchObject({ ok: false, error: scopeError });
+      }
+      expect(captureAllocate).toHaveBeenCalledTimes(transport === 'http' ? 0 : 1);
+      expect(await send(request)).toMatchObject({
+        ok: true,
+        data: { lease: { leaseId: attached.hostedLeaseId } },
+      });
+    }
+    expect(bindAttachment).toHaveBeenCalledOnce();
+    const devices = await runCliCapture(['devices', '--json'], {
+      env,
+      sendToDaemon: async (req) =>
+        req.command === 'lease_allocate'
+          ? await sendDaemonRequest(
+              info,
+              { ...req, token: runtime.token },
+              'socket',
+              paths,
+              3_000,
+              { host },
+            )
+          : { ok: true, data: { devices: [] } },
+    });
+    expect(devices.code, devices.stdout).toBeNull();
+    expect(readRemoteConnectionState(location)?.leaseId).toBe(attached.hostedLeaseId);
+    const releaseMock = stubCloudApi();
+    const localOnly = await runCliCapture(['disconnect', '--json'], {
+      env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
+    });
+    expect(localOnly.code).toBe(1);
+    expect(releaseMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+    expect(await sendDaemonRequest(info, request, 'socket', paths, 3_000, { host })).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'cloud_connection_changed' } },
+    });
+  } finally {
+    await runtime.close();
+  }
+});
+
 test.each(['ios', 'android'] as const)(
   'binds only the scoped %s credential and tears down the generation before DELETE',
   async (platform) => {
@@ -141,6 +344,14 @@ test.each(['ios', 'android'] as const)(
     const role = platform === 'ios' ? 'IOS' : 'ANDROID';
     const other = platform === 'ios' ? 'ANDROID' : 'IOS';
     expect(attached.host.env).toMatchObject({
+      [`LIM_${role}_INSTANCE_TOKEN`]: undefined,
+      [`LIM_${other}_INSTANCE_TOKEN`]: undefined,
+      LIM_ANDROID_INSTANCE_ADB_URL: undefined,
+      LIMRUN_HOSTED_ATTACHMENT_DEADLINE: undefined,
+    });
+    expect(attached.host.env.AGENT_DEVICE_HOSTED_ATTACHMENT).not.toContain(scopedToken);
+    const daemon = bindHostedDaemon(attached.host, attached.daemonStateDir!);
+    expect(daemon.host.env).toMatchObject({
       [`LIM_${role}_INSTANCE_URL`]: instance,
       [`LIM_${role}_INSTANCE_TOKEN`]: scopedToken,
       [`LIM_${other}_INSTANCE_TOKEN`]: undefined,
@@ -166,6 +377,11 @@ test.each(['ios', 'android'] as const)(
     await expect(bind()).rejects.toMatchObject({
       details: { reason: 'cloud_connection_changed' },
     });
+    expect(() => bindHostedDaemon(attached.host, attached.daemonStateDir!)).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({ reason: 'cloud_connection_changed' }),
+      }),
+    );
     expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
     expect(readCloudConnection(location)).toBeNull();
     expect(mock.mock.calls.filter(([, init]) => init.method === 'DELETE')).toHaveLength(2);

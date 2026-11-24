@@ -895,7 +895,7 @@ test('retains an unknown attempt when lookup only returns a bare 404', async () 
   expect((await runCliCapture(connectArgs, { env })).code).toBe(1);
   fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBe(1);
-  expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'pending' });
+  expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'closing' });
   expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
 });
 

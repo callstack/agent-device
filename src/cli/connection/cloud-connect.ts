@@ -124,6 +124,12 @@ export async function releaseCloudConnection(options: {
 }): Promise<string | undefined> {
   const { location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
+  markCloudConnectionClosing(location, record);
+  removeCloudAttachment(location);
+  const retirementFailure = await stopHostedLimrunDaemon(location, binding, host).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
   const access = record?.brokerReleased
     ? undefined
     : await resolveHostedCloudAccess({
@@ -132,13 +138,9 @@ export async function releaseCloudConnection(options: {
         interactive: false,
         savedOrigin: record?.origin ?? binding?.baseUrl,
       });
-  const id = access ? await cloudSessionIdForRelease(access, record, binding?.id) : record?.id;
-  markCloudConnectionClosing(location, record);
-  removeCloudAttachment(location);
-  const retirementFailure = await stopHostedLimrunDaemon(location, binding, host).then(
-    () => undefined,
-    (error: unknown) => error,
-  );
+  const id = access
+    ? await cloudSessionIdForRelease(access, location, record, binding?.id)
+    : record?.id;
   if (access && id) {
     await deleteCloudSession(access, id);
     if (retirementFailure && record) {
@@ -170,6 +172,7 @@ function cloudBindingForTeardown(
 
 async function cloudSessionIdForRelease(
   access: HostedCloudAccess,
+  location: ConnectionLocation,
   record: CloudConnectionRecord | null,
   bindingId: string | undefined,
 ): Promise<string | undefined> {
@@ -178,6 +181,7 @@ async function cloudSessionIdForRelease(
   const found = await lookupCloudSession(access, record.generation);
   if (!found?.active) return undefined;
   record.id = found.id;
+  writeCloudConnection(location, record);
   return found.id;
 }
 

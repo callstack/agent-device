@@ -121,8 +121,9 @@ export async function acquireConnectionLease(options: {
   positionals?: string[];
   leaseLedger: LeaseLedger;
   env: NodeJS.ProcessEnv;
+  hostedLeaseId?: string;
 }): Promise<{ state: RemoteConnectionState; changed: boolean }> {
-  const { command, client, state, nextFlags, leaseLedger } = options;
+  const { command, client, state, nextFlags, leaseLedger, hostedLeaseId } = options;
   const deferredAppSelection = connectionProviderCapabilities(
     state.leaseProvider,
     options.env,
@@ -130,7 +131,8 @@ export async function acquireConnectionLease(options: {
   const initialApp =
     deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
   if (deferredAppSelection) delete nextFlags.providerApp;
-  const leasePolicy = connectionLeasePolicyForState(state, options.env);
+  const policy = connectionLeasePolicyForState(state, options.env);
+  const leasePolicy = hostedLeaseId ? { ...policy, newLeaseId: () => hostedLeaseId } : policy;
   let nextState = state;
   let changed = false;
   if (leasePolicy.shouldAllocate(command)) {

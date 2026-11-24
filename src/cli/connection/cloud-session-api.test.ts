@@ -91,7 +91,7 @@ test('POSTs the requested limits with the cloud key and delivers the scoped atta
     baseUrl: 'https://cloud.example',
     vendor: 'provider-a',
     transport: 'agent-device-daemon',
-    deadlineAt: '2026-11-19T15:00:00Z',
+    deadlineAt: '2026-11-19T15:00:00.000Z',
     viewerAvailable: true,
   });
   expect(result.attachment).toEqual(response.attach);
@@ -583,12 +583,80 @@ test('omits a scoped viewer link with an encoded attachment credential', async (
   });
 });
 
+test('uses the normalized attachment bearer for both viewer filtering and storage', async () => {
+  const token = 'fixture-scoped-bearer';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        ...response,
+        transport: 'limrun',
+        attach: {
+          platform: 'android',
+          apiUrl: 'https://instance.example',
+          token: ` ${token} `,
+          adbWebSocketUrl: 'wss://instance.example/adb',
+        },
+        viewerUrl: `https://viewer.example/watch#token=${token}`,
+      }),
+    ),
+  );
+  await expect(
+    createCloudSession(access, { ...request, accepts: ['limrun'] }, attempt),
+  ).resolves.toMatchObject({
+    attachment: { token },
+    binding: { viewerAvailable: false },
+    viewerUrl: undefined,
+  });
+});
+
+test.each([
+  'Thu, 19 Nov 2026 15:00:00 GMT (instance-token)',
+  'Thu, 19 Nov 2026 15:00:00 GMT (test-cloud-key)',
+  '2026-02-30T15:00:00Z',
+])('refuses invalid public deadlines (%s)', async (deadlineAt) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ ...response, deadlineAt })),
+  );
+  await expect(createCloudSession(access, request, attempt)).rejects.toMatchObject({
+    details: { reason: 'cloud_session_invalid' },
+  });
+});
+
+test.each([access.accessToken, response.attach.daemonAuthToken])(
+  'refuses a canonical deadline that also serves as a bearer',
+  async (token) => {
+    const deadlineAt = '2026-11-19T15:00:00.000Z';
+    const brokerEcho = token === access.accessToken;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          ...response,
+          deadlineAt,
+          attach: { ...response.attach, daemonAuthToken: brokerEcho ? token : deadlineAt },
+        }),
+      ),
+    );
+    await expect(
+      createCloudSession(
+        { ...access, accessToken: brokerEcho ? deadlineAt : access.accessToken },
+        request,
+        attempt,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'cloud_session_invalid' } });
+  },
+);
+
 test.each([
   { token: access.accessToken },
   { token: `echo-${access.accessToken}-suffix` },
   { apiUrl: `https://instance.example/${encodedBroker}` },
   { apiUrl: `https://instance.example/${access.accessToken}` },
-  { adbWebSocketUrl: `wss://adb.example/?query=${encodedBroker}` },
+  { adbWebSocketUrl: `wss://instance.example/?query=${encodedBroker}` },
+  { adbWebSocketUrl: 'wss://adb.example' },
+  { adbWebSocketUrl: 'wss://instance.example:8443' },
   { apiUrl: 'http://instance.example' },
   { adbWebSocketUrl: 'ws://adb.example' },
   { platform: 'ios' },
@@ -606,7 +674,7 @@ test.each([
           platform: 'android',
           apiUrl: 'https://instance.example',
           token: 'test-scoped-token',
-          adbWebSocketUrl: 'wss://adb.example',
+          adbWebSocketUrl: 'wss://instance.example',
           ...overrides,
         },
       }),

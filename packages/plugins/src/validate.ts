@@ -615,10 +615,7 @@ function assertConnection(connection: unknown): void {
   assertLocalConnectionCapabilities(connection.capabilities as ConnectionProviderCapabilities);
 }
 
-function assertLocalConnectionCapabilities(
-  policy: ConnectionProviderCapabilities | undefined,
-): void {
-  if (policy === undefined) return;
+function assertLocalConnectionCapabilities(policy: ConnectionProviderCapabilities): void {
   if (
     !policy ||
     typeof policy !== 'object' ||

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { claimKeyOf, readableClaimsOfValue } from './validate.ts';
+import { claimKeyOf, readableClaimsOfValue, validateAgentDevicePlugin } from './validate.ts';
 
 // The readable claims of a value that failed before its claims were validated. The registry
 // reserves these, so a leaf the id cannot narrow must refuse the read rather than widen the claim.
@@ -21,6 +21,63 @@ function appError(run: () => unknown): AppError {
   }
   throw new Error('expected the readable claim read to refuse');
 }
+
+const localConnection = {
+  leaseKind: 'direct-device-provider',
+  requiresAppAttachment: false,
+  requiresRemoteDaemon: false,
+  supportsArtifacts: false,
+  supportsDeferredAppSelection: true,
+  supportsDirectPortReverse: false,
+  usesCloudWebDriverLease: false,
+};
+
+function providerWithCapabilities(capabilities: unknown) {
+  return {
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: 'fixture-provider',
+        credentials: { variables: [] },
+        connection: { capabilities, resolve() {}, verify() {} },
+        setup() {},
+      },
+    ],
+  };
+}
+
+test.each([undefined, true])(
+  'loads a local provider with hosted capability %s',
+  (acceptsHostedAttachment) => {
+    expect(
+      validateAgentDevicePlugin(
+        providerWithCapabilities({
+          ...localConnection,
+          acceptsHostedAttachment,
+          holdsCloudDevice: true,
+          forgetsEndedConnectionLease: true,
+        }),
+      ),
+    ).toHaveLength(1);
+  },
+);
+
+test.each([
+  null,
+  1,
+  {},
+  { ...localConnection, requiresRemoteDaemon: true },
+  { ...localConnection, supportsDirectPortReverse: 'true' },
+  { ...localConnection, holdsCloudDevice: 'true' },
+  { ...localConnection, forgetsEndedConnectionLease: 'true' },
+  { ...localConnection, acceptsHostedAttachment: false },
+])('refuses invalid local provider capabilities %j', (capabilities) => {
+  expect(
+    appError(() => validateAgentDevicePlugin(providerWithCapabilities(capabilities))).details
+      ?.reason,
+  ).toBe('invalid_plugin');
+});
 
 describe('readableClaimsOfValue reads one platform leaf spelling', () => {
   test.each([

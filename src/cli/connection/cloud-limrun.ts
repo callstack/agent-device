@@ -38,14 +38,14 @@ export async function requireHostedLimrunPlugin(env: EnvMap): Promise<void> {
 
 export function cloudLimrunDaemonDir(
   location: ConnectionLocation,
-  binding: CloudSessionBinding,
+  binding: Pick<CloudSessionBinding, 'generation'>,
 ): string {
   const key = createHash('sha256').update(binding.generation).digest('hex');
   return path.join(cloudConnectionDir(location), 'daemon-' + key.slice(0, 20));
 }
 
 export function cloudLimrunEnv(
-  attachment: Extract<CloudAttachment, { kind: 'limrun' }>,
+  attachment?: Extract<CloudAttachment, { kind: 'limrun' }>,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     LIMRUN_API_KEY: undefined,
@@ -58,10 +58,10 @@ export function cloudLimrunEnv(
     LIM_ANDROID_INSTANCE_TOKEN: undefined,
     LIM_ANDROID_INSTANCE_ADB_URL: undefined,
   };
-  if (attachment.platform === 'ios') {
+  if (attachment?.platform === 'ios') {
     env.LIM_IOS_INSTANCE_URL = attachment.apiUrl;
     env.LIM_IOS_INSTANCE_TOKEN = attachment.token;
-  } else {
+  } else if (attachment?.platform === 'android') {
     env.LIM_ANDROID_INSTANCE_URL = attachment.apiUrl;
     env.LIM_ANDROID_INSTANCE_TOKEN = attachment.token;
     env.LIM_ANDROID_INSTANCE_ADB_URL = attachment.adbWebSocketUrl;
@@ -80,7 +80,19 @@ export async function stopHostedLimrunDaemon(
     const { stopRecordedDaemon } = await import('@agent-device/daemon-client');
     const { readDaemonStopIdentity } =
       await import('@agent-device/daemon-contracts/daemon-registration');
-    await stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), { paths, host });
+    let identity = readDaemonStopIdentity(paths.infoPath);
+    if (
+      identity.ownership === 'absent' &&
+      (await import('@agent-device/host-kit/file')).lstatIfPresent(paths.lockPath)
+    ) {
+      const { recoverAbandonedDaemonRegistration } =
+        await import('@agent-device/daemon-contracts/daemon-registration-owner');
+      const retirement = await recoverAbandonedDaemonRegistration({ paths, observed: null });
+      identity = readDaemonStopIdentity(paths.infoPath);
+      if (identity.ownership === 'absent' && retirement.status !== 'absent')
+        throw new Error('Hosted daemon startup ownership is unresolved.');
+    }
+    await stopRecordedDaemon(identity, { paths, host });
   } catch {
     throw new AppError(
       'COMMAND_FAILED',

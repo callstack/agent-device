@@ -21,7 +21,7 @@ import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile, requireConnectionTarget } from './generated-config.ts';
-import { cloudLimrunEnv } from './cloud-limrun.ts';
+import { cloudLimrunEnv, requireHostedLimrunPlugin } from './cloud-limrun.ts';
 import type { CreatedCloudSession } from './cloud-session-api.ts';
 
 type ConnectProfile = { flags: CliFlags; remoteConfigPath: string };
@@ -113,6 +113,7 @@ export async function resolveCloudSessionProfile(
   session: CreatedCloudSession,
 ): Promise<ResolvedConnectProfile> {
   const { binding, attachment } = session;
+  if (attachment.kind === 'limrun') await requireHostedLimrunPlugin(context.env);
   const clientId = buildConnectClientId('cloud', binding.baseUrl, binding.id);
   const flags = {
     ...context.flags,

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import type { DaemonTransport } from '@agent-device/daemon-client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
@@ -16,6 +17,9 @@ import {
   CLOUD_CONNECTION_REASONS,
   cloudAttachmentPath,
   readCloudCredentialJson,
+  cloudConnectionUnavailable,
+  readCurrentCloudConnection,
+  writeCloudConnection,
   withCloudConnectionOwner,
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
@@ -94,6 +98,7 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
   flags: CliFlags;
   token: string;
   daemonStateDir?: string;
+  hostedLeaseId?: string;
 } {
   const attachment = resolveCloudAttachment(options.location, options.session);
   const env = { ...options.host.env };
@@ -104,13 +109,26 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
   if (attachment.kind === 'limrun') {
     delete env.AGENT_DEVICE_CLOUD_API_KEY;
     delete env.AGENT_DEVICE_CLOUD_API_KEY_ORIGIN;
+    const { location, session } = options;
+    const { record, state } = readCurrentCloudConnection(location, session.generation);
+    const hostedLeaseId =
+      record.hostedLeaseId ??
+      state.leaseId ??
+      state.endedLeaseId ??
+      randomBytes(16).toString('hex');
+    if (record.hostedLeaseId === undefined)
+      writeCloudConnection(location, { ...record, hostedLeaseId });
     return {
       host: {
         ...options.host,
         env: {
           ...env,
-          ...cloudLimrunEnv(attachment),
-          LIMRUN_HOSTED_ATTACHMENT_DEADLINE: options.session.deadlineAt,
+          ...cloudLimrunEnv(),
+          LIMRUN_HOSTED_ATTACHMENT_DEADLINE: undefined,
+          AGENT_DEVICE_HOSTED_ATTACHMENT: JSON.stringify({
+            ...location,
+            generation: session.generation,
+          }),
         },
       },
       flags: {
@@ -121,7 +139,8 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
         daemonServerMode: undefined,
       },
       token: attachment.token,
-      daemonStateDir: cloudLimrunDaemonDir(options.location, options.session),
+      daemonStateDir: cloudLimrunDaemonDir(location, session),
+      hostedLeaseId,
     };
   }
   return {
@@ -138,6 +157,56 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
       sessionIsolation: undefined,
       leaseId: undefined,
       leaseBackend: undefined,
+    },
+  };
+}
+
+export function bindHostedDaemon(host: HostEnvironment, daemonStateDir: string) {
+  const refuse = () => cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
+  let launch: Partial<ConnectionLocation & { generation: string }> | null;
+  try {
+    launch = JSON.parse(host.env.AGENT_DEVICE_HOSTED_ATTACHMENT ?? 'null');
+  } catch {
+    throw refuse();
+  }
+  const { stateDir, session, generation } = launch ?? {};
+  if (
+    typeof stateDir !== 'string' ||
+    typeof session !== 'string' ||
+    typeof generation !== 'string' ||
+    cloudLimrunDaemonDir({ stateDir, session }, { generation }) !== daemonStateDir
+  )
+    throw refuse();
+  const location = { stateDir, session };
+  const { record, state, binding } = readCurrentCloudConnection(location, generation);
+  if (!record.hostedLeaseId || !state.leaseBackend || binding.transport !== 'limrun')
+    throw refuse();
+  const attachment = resolveCloudAttachment(location, binding);
+  if (attachment.kind !== 'limrun') throw refuse();
+  const assertCurrent = () => {
+    readCurrentCloudConnection(location, generation);
+  };
+  assertCurrent();
+  return {
+    host: {
+      ...host,
+      env: {
+        ...host.env,
+        ...cloudLimrunEnv(attachment),
+        AGENT_DEVICE_HOSTED_ATTACHMENT: undefined,
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: binding.deadlineAt,
+      },
+    },
+    assertCurrent,
+    session,
+    lease: {
+      leaseId: record.hostedLeaseId,
+      tenantId: state.tenant,
+      runId: state.runId,
+      backend: state.leaseBackend,
+      leaseProvider: state.leaseProvider,
+      deviceKey: state.deviceKey,
+      clientId: state.clientId,
     },
   };
 }
