@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isLoopbackUrlHostname } from '@agent-device/host-kit/transport';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
@@ -27,18 +28,19 @@ const LIMRUN_DOWNLOAD_REASONS = {
  * failed or timed-out attempt leaves no file at the destination, so the caller can retry from the
  * same URL and never mistakes an earlier attempt's file for this one's.
  *
- * A destination is a file this process chose, so a caller reads back what it asked for. The URL is not
- * published: an attached instance answers with a download URL that carries its bearer token as the
- * whole value, so the URL is a credential, not a location.
+ * The destination is chosen by the caller. Download URLs and transport messages stay private.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
+    const { instance } = options;
+    const url = instance ? instanceDownloadUrl(instance.apiUrl, options.url) : options.url;
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    const response = await fetch(options.url, {
+    const response = await fetch(url, {
       method: 'GET',
-      headers: options.headers,
+      headers: instance ? { Authorization: `Bearer ${instance.token}` } : undefined,
+      redirect: instance ? 'error' : 'follow',
       signal,
     });
     if (!response.ok) throw httpFailure(response);
@@ -57,6 +59,21 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout, signal);
   }
+}
+
+function instanceDownloadUrl(apiUrl: string, value: string): URL {
+  const url = URL.parse(value);
+  const instance = URL.parse(apiUrl);
+  if (!url || !instance || url.origin !== instance.origin || url.username || url.password) {
+    throw new TypeError('Invalid Limrun download endpoint.');
+  }
+  if (
+    url.protocol !== 'https:' &&
+    !(url.protocol === 'http:' && isLoopbackUrlHostname(url.hostname))
+  ) {
+    throw new TypeError('Invalid Limrun download endpoint.');
+  }
+  return url;
 }
 
 /**

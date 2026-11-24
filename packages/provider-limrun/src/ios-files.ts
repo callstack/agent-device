@@ -109,7 +109,7 @@ export function createLimrunSimulatorFiles(
     copyToHost: async (input) => {
       await downloadLimrunFile({
         url: urlFor('files', input.sourcePath, input).href,
-        headers: { Authorization: `Bearer ${session.token}` },
+        instance: { apiUrl: session.apiUrl, token: session.token },
         destinationPath: input.destinationPath,
         timeoutMs: input.timeoutMs,
         signal: signalFor(input.signal),
@@ -217,7 +217,7 @@ export async function readLimrunAppInfo(
     }).toString();
     await downloadLimrunFile({
       url: url.href,
-      headers: { Authorization: `Bearer ${access.token}` },
+      instance: access,
       destinationPath,
       timeoutMs,
       signal,

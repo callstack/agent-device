@@ -158,7 +158,7 @@ export type LimrunAndroidRuntimeAdapter = {
 /** One authenticated HTTP download the host performs on the provider's behalf, bounded by `timeoutMs`. */
 export type LimrunFileDownload = Readonly<{
   url: string;
-  headers: Readonly<Record<string, string>>;
+  instance?: { apiUrl: string; token: string };
   destinationPath: string;
   timeoutMs: number;
   signal?: AbortSignal;

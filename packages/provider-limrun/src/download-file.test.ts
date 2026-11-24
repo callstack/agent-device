@@ -40,7 +40,7 @@ test('streams the served file to disk with the bearer token the caller supplied'
 
   await downloadLimrunFile({
     url,
-    headers: { Authorization: 'Bearer instance-token' },
+    instance: { apiUrl: url, token: 'instance-token' },
     destinationPath,
     timeoutMs: 5_000,
   });
@@ -57,7 +57,7 @@ test('a non-2xx answer is a typed failure carrying the status and no file is lef
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
 
   await expect(
-    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
+    downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: { statusCode: 404, reason: 'limrun_download_http_error' },
@@ -73,7 +73,7 @@ test('a stalled transfer ends at the deadline as a typed timeout and removes the
   });
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
 
-  const failure = downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 150 });
+  const failure = downloadLimrunFile({ url, destinationPath, timeoutMs: 150 });
 
   await expect(failure).rejects.toBeInstanceOf(AppError);
   await expect(failure).rejects.toMatchObject({
@@ -93,7 +93,7 @@ test('a non-2xx answer whose body stalls is answered by its status without waiti
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
 
   await expect(
-    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
+    downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: { statusCode: 503, reason: 'limrun_download_http_error' },
@@ -114,7 +114,7 @@ test('an HTTP failure publishes its status and reason, and no peer body text at 
   let failure: unknown;
   await downloadLimrunFile({
     url,
-    headers: { Authorization: `Bearer ${token}` },
+    instance: { apiUrl: url, token },
     destinationPath,
     timeoutMs: 5_000,
   }).catch((error: AppError) => {
@@ -138,7 +138,7 @@ test('a malformed download URL publishes neither the URL nor the transport messa
   let failure: unknown;
   await downloadLimrunFile({
     url: token,
-    headers: { Authorization: `Bearer ${token}` },
+    instance: { apiUrl: 'https://instance.example', token },
     destinationPath,
     timeoutMs: 5_000,
   }).catch((error: AppError) => {
@@ -161,7 +161,7 @@ test('a failed retry removes the file an earlier attempt left at the destination
   fs.writeFileSync(destinationPath, 'earlier attempt');
 
   await expect(
-    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
+    downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 }),
   ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { statusCode: 500 } });
   expect(fs.existsSync(destinationPath)).toBe(false);
 });
@@ -177,7 +177,7 @@ test('a destination directory that cannot be created ends typed without fetching
   fs.writeFileSync(blocker, 'not a directory');
   const destinationPath = path.join(blocker, 'clip.mp4');
 
-  const failure = downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 });
+  const failure = downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 });
 
   await expect(failure).rejects.toBeInstanceOf(AppError);
   await expect(failure).rejects.toMatchObject({
@@ -210,7 +210,6 @@ test.each(['default', 'typed', 'deadline'] as const)(
           : undefined;
     const pending = downloadLimrunFile({
       url,
-      headers: {},
       destinationPath,
       timeoutMs: 5000,
       signal: controller.signal,
@@ -235,3 +234,60 @@ test.each(['default', 'typed', 'deadline'] as const)(
     expect(fs.existsSync(destinationPath)).toBe(false);
   },
 );
+
+test('rejects a recording URL on a different origin before making a request', async () => {
+  const traffic = vi.fn();
+  const url = await serve((request, response) => {
+    traffic(request);
+    response.end();
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  await expect(
+    downloadLimrunFile({
+      url,
+      instance: { apiUrl: 'https://instance.example', token: 'test-token' },
+      destinationPath,
+      timeoutMs: 5_000,
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
+  expect(traffic).not.toHaveBeenCalled();
+});
+
+test('refuses the first redirect of an authenticated download', async () => {
+  const traffic = vi.fn();
+  const redirect = await serve((request, response) => {
+    traffic(request);
+    response.end();
+  });
+  const url = await serve((_request, response) => {
+    response.writeHead(307, { location: redirect }).end();
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  await expect(
+    downloadLimrunFile({
+      url,
+      instance: { apiUrl: url, token: 'test-token' },
+      destinationPath,
+      timeoutMs: 5_000,
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
+  expect(traffic).not.toHaveBeenCalled();
+});
+
+test('rejects an authenticated plaintext download to a non-loopback instance', async () => {
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  const request = vi.spyOn(globalThis, 'fetch');
+  try {
+    await expect(
+      downloadLimrunFile({
+        url: 'http://instance.example/recording',
+        instance: { apiUrl: 'http://instance.example', token: 'test-token' },
+        destinationPath,
+        timeoutMs: 5_000,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
+    expect(request).not.toHaveBeenCalled();
+  } finally {
+    request.mockRestore();
+  }
+});

@@ -1,6 +1,7 @@
 export {
   consumeTextLines,
   createTransferPhaseWatchdog,
+  isLoopbackUrlHostname,
   isTransferPhaseTimeoutError,
   loadNodeHttpRequester,
   observeClientRequestPhases,

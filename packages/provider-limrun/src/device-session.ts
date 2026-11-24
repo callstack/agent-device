@@ -136,7 +136,7 @@ function createAndroidDeviceSession(session: LimrunAndroidSession): LimrunAndroi
     dismissKeyboard: async () => await session.dependencies.android.dismissKeyboard(adb),
     readLogs: async (lineLimit) =>
       await readLimrunAndroidLogs(session.dependencies, session.token, adb, lineLimit),
-    ...createRecordingOperations(session.client, session.token, session.dependencies.host),
+    ...createRecordingOperations(session),
     installRemoteApp: async (url) => {
       await session.client.sendAsset(url);
     },
@@ -165,18 +165,25 @@ function createIosDeviceSession(session: LimrunIosSession): LimrunIosDeviceSessi
       await session.client.pressKey(key, modifiers);
     },
     readLogs: async (appId, lineLimit) => await session.client.appLogTail(appId, lineLimit),
-    ...createRecordingOperations(session.client, session.token, session.dependencies.host),
+    ...createRecordingOperations(session),
     installRemoteApp: async (url, options) =>
       await installLimrunIosRemoteApp(session, url, options),
     runSimctl: (args): LimrunIosCommandExecution => session.client.simctl(args),
   };
 }
 
-function createRecordingOperations(
-  client: LimrunRecordingClient,
-  token: string,
-  host: Pick<LimrunHostAdapter, 'downloadFile'>,
-) {
+function createRecordingOperations(session: {
+  client: LimrunRecordingClient;
+  apiUrl: string;
+  token: string;
+  dependencies: { host: Pick<LimrunHostAdapter, 'downloadFile'> };
+}) {
+  const {
+    client,
+    apiUrl,
+    token,
+    dependencies: { host },
+  } = session;
   return {
     startRecording: async (options: { recordingId: string; quality?: LimrunRecordingQuality }) => {
       await client.startRecordingSession(options);
@@ -188,7 +195,7 @@ function createRecordingOperations(
     downloadRecording: async (input: { downloadUrl: string; outPath: string }) => {
       await host.downloadFile({
         url: input.downloadUrl,
-        headers: { Authorization: `Bearer ${token}` },
+        instance: { apiUrl, token },
         destinationPath: input.outPath,
         timeoutMs: LIMRUN_RECORDING_DOWNLOAD_TIMEOUT_MS,
       });

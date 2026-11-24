@@ -103,7 +103,6 @@ async function downloadReleaseRunner(
   const manifestPath = path.join(input.directory, 'manifest.json');
   await downloadLimrunFile({
     url: `${release}/${name}.manifest.json`,
-    headers: {},
     destinationPath: manifestPath,
     timeoutMs: 120_000,
     signal: input.signal,
@@ -120,7 +119,6 @@ async function downloadReleaseRunner(
   const archivePath = path.join(input.directory, 'runner.tar.gz');
   await downloadLimrunFile({
     url: `${release}/${name}.app.tar.gz`,
-    headers: {},
     destinationPath: archivePath,
     timeoutMs: 120_000,
     signal: input.signal,
