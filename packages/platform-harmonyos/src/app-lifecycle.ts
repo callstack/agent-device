@@ -414,7 +414,10 @@ export async function verifyHarmonyOpenForeground(
     HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
     requestDeadlineAtMs,
   );
-  const verification = await pollHarmonyOpenForeground(hdc, device, bundleId, { signal, pollBudgetMs });
+  const verification = await pollHarmonyOpenForeground(hdc, device, bundleId, {
+    signal,
+    pollBudgetMs,
+  });
   if (verification === undefined) return outcome;
   if (input.execution.foreground !== true) {
     return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };

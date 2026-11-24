@@ -82,7 +82,6 @@ test('parseArgs floors an in-range fractional value of an integer flag', () => {
   assert.equal(parsed.flags.timeoutMs, 1);
 });
 
-
 test('parseArgs refuses the --metro-kind alias on metro prepare and keeps it on connect', () => {
   // `metro prepare` reads --kind only. --metro-kind stays a connect hint: it names the
   // launcher kind deferred Metro preparation runs with, so connect still parses it.

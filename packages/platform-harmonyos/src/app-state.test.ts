@@ -69,9 +69,9 @@ test('the open-time probe names the foreground bundle', async () => {
     stderr: '',
   });
 
-  await expect(probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal)).resolves.toBe(
-    'com.example.application',
-  );
+  await expect(
+    probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal),
+  ).resolves.toBe('com.example.application');
 });
 
 test('the open-time probe claims nothing when no mission is foreground', async () => {
