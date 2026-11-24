@@ -16,6 +16,7 @@ export type OptionSpec = {
 };
 
 const CONFIG_EXCLUDED_FLAG_KEYS = new Set<FlagKey>([
+  'live',
   'config',
   'remoteConfig',
   'help',
@@ -26,6 +27,7 @@ const CONFIG_EXCLUDED_FLAG_KEYS = new Set<FlagKey>([
 ]);
 
 const ENV_EXCLUDED_FLAG_KEYS = new Set<FlagKey>([
+  'live',
   'appsFilter',
   'iosSimulatorDeviceSet',
   'textStdin',

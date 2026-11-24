@@ -1,36 +1,51 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { AppError } from '@agent-device/kernel/errors';
 import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import { parseRawArgs } from '../parser/args.ts';
 import {
   admitProviderForRoute,
+  isConnectProviderName,
   primeProviderConnection,
   providerRouteForConnection,
   requiresOwnProviderAdmission,
 } from './provider-policy.ts';
 
-/** Admits a provider named as a connect positional before credential handling. */
-export async function admitConnectProviderNamedInArguments(
+/** Resolves the catalog before normal connection options or daemon credentials are read. */
+export async function preflightConnect(
   argv: readonly string[],
   host: HostEnvironment,
-): Promise<void> {
-  const provider = connectProviderNamedInArguments(argv);
-  if (!requiresOwnProviderAdmission(provider)) return;
-  await primeProviderConnection(provider, host.env);
+): Promise<ReturnType<typeof parseRawArgs> | undefined> {
+  const parsed = rawConnectArgs(argv);
+  if (!parsed) return;
+  const [first, second] = parsed.positionals;
+  const provider = canonicalLeaseProvider(first);
+  if (provider === 'cloud' && second === 'list') return parsed;
+  if (provider === 'list') {
+    await primeProviderConnection(provider, host.env);
+    if (!isConnectProviderName(provider, host.env)) return parsed;
+  }
+  if (parsed.providedFlags.some(({ key }) => key === 'live')) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--live requires a catalog listing. Use connect cloud list.',
+    );
+  }
+  if (
+    !parsed.flags.remoteConfig &&
+    parsed.positionals.length <= 1 &&
+    requiresOwnProviderAdmission(provider)
+  ) {
+    await primeProviderConnection(provider, host.env);
+  }
 }
 
-function connectProviderNamedInArguments(argv: readonly string[]): string | undefined {
-  let parsed: ReturnType<typeof parseRawArgs>;
+function rawConnectArgs(argv: readonly string[]): ReturnType<typeof parseRawArgs> | undefined {
   try {
-    parsed = parseRawArgs([...argv]);
+    const parsed = parseRawArgs([...argv]);
+    if (parsed.command === 'connect' && !parsed.flags.help && !parsed.flags.version) return parsed;
   } catch {
-    // A command line the parser refuses is answered by the ordinary parse, with its own diagnostic.
-    return undefined;
+    // The ordinary parser reports its own diagnostic.
   }
-  if (parsed.command !== 'connect') return undefined;
-  // Help and version answer from the command line alone and load no plugin.
-  if (parsed.flags.help || parsed.flags.version) return undefined;
-  if (parsed.flags.remoteConfig || parsed.positionals.length > 1) return undefined;
-  return canonicalLeaseProvider(parsed.positionals[0]);
 }
 
 export async function admitConnectProfileProvider(

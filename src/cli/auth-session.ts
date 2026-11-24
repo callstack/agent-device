@@ -22,9 +22,7 @@ const API_KEYS_PATH = '/api-keys';
 const DEVICE_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 const MIN_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
-// A holder keeps the session lock for one file operation, or for one token exchange, which spends
-// at most two request timeouts; an approved login holds it across its save and that exchange. A
-// dead holder is reclaimed, so only a stuck live process makes a contender wait this long.
+// The lock covers rotation and storage, including the two bounded refresh attempts.
 const CLI_SESSION_LOCK_TIMEOUT_MS = 60_000;
 // A response whose access token is already expired is asked again, and no further: a cloud that
 // keeps answering with an expired token must not keep a command refreshing.
@@ -434,11 +432,6 @@ async function withCliSessionLock<Result>(
   return result;
 }
 
-/**
- * Takes the session file lock, waiting as `keepWaiting` asks. The lock state is written beside the
- * session file, so the auth directory must be writable: a refusal to write there is reported as a
- * storage problem that names the directory, not as a filesystem error.
- */
 async function acquireCliSessionLock(
   sessionPath: string,
   options: { io?: AuthIo; keepWaiting?: boolean },
@@ -475,11 +468,6 @@ function isProcessLockTimeout(error: unknown): boolean {
   return error instanceof AppError && error.details?.reason === 'process_lock_timeout';
 }
 
-/**
- * The typed refusal for a filesystem fault that stops the store from writing, or `undefined` for
- * every other error. The hint names the directory to repair, because that is the one step that ends
- * it.
- */
 function unwritableSessionStore(error: unknown, authDir: string): AppError | undefined {
   const code =
     typeof error === 'object' && error !== null && 'code' in error
@@ -537,8 +525,14 @@ export async function resolveCliSessionAccess(options: {
   flags: CliFlags;
   env: EnvMap;
   io?: AuthIo;
+  catalog?: true;
   validateIssuer?: (origin: string) => void;
-}): Promise<{ accessToken: string; expiresAt?: string; cloudBaseUrl: string } | null> {
+}): Promise<{
+  accessToken: string;
+  expiresAt?: string;
+  cloudBaseUrl: string;
+  catalogCredentials?: ReadonlySet<string>;
+} | null> {
   const { env, flags, io, stateDir } = options;
   // This read only asks whether there is a session to exchange, so a command that has none takes no
   // lock and writes nothing. The credential is read again once the lock is held.
@@ -546,6 +540,7 @@ export async function resolveCliSessionAccess(options: {
   if (!stored || isExpired(stored.expiresAt, io?.now)) return null;
   // A refresh read is not a change the cloud will not repeat: a wait that times out fails with its
   // typed reason, and the next command asks again.
+  const catalogCredentials = options.catalog ? new Set<string>() : undefined;
   const exchanged = await withCliSessionLock(
     stateDir,
     async () => {
@@ -553,13 +548,14 @@ export async function resolveCliSessionAccess(options: {
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
       options.validateIssuer?.(session.cloudBaseUrl);
       assertStoredSessionOrigin(session, env);
-      return await exchangeCliSessionAccess({ stateDir, session, flags, io });
+      return await exchangeCliSessionAccess({ stateDir, session, flags, io, catalogCredentials });
     },
     { io },
   );
   if (!exchanged) return null;
   return {
     accessToken: exchanged.accessToken,
+    catalogCredentials,
     ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
     // The refresh went to the stored URL. A same-origin override still names the connection.
     cloudBaseUrl: resolveCloudBaseUrl(env, exchanged.session.cloudBaseUrl),
@@ -595,34 +591,33 @@ async function exchangeCliSessionAccess(options: {
   session: CliSessionRecord;
   flags: CliFlags;
   io?: AuthIo;
+  catalogCredentials?: Set<string>;
 }): Promise<{ accessToken: string; expiresAt?: string; session: CliSessionRecord }> {
-  const { flags, io, stateDir } = options;
-  // The file is what a store compares against: the last record this command saw there, and
-  // `null` once a write would land on a session it did not write. `asked` is what the cloud
-  // accepts for this session now, which stays ahead of the file when a save failed. `saved` is
-  // the last record known saved, which is what the caller reports: a token the cloud accepted
-  // outranks a record the disk never took.
+  const { flags, io, stateDir, catalogCredentials } = options;
+  // `asked` follows cloud rotation. `saved` follows the file, which may be behind after a write fails.
   const file = { holds: options.session as CliSessionRecord | null };
   let asked = options.session;
-  // The last record known saved, which is what the caller reports: the record written before this
-  // exchange ran, or a newer one a rotation stored. A record a write only changed in memory is not
-  // it, so a login never prints an expiry the file does not hold.
   let saved = options.session;
   let received: { accessToken: string; expiresAt?: string } | undefined;
   for (let exchange = 1; ; exchange += 1) {
+    catalogCredentials?.add(asked.refreshCredential);
     let refreshed;
     try {
-      refreshed = await refreshAgentToken({ session: asked, flags, io });
+      refreshed = await refreshAgentToken({
+        session: asked,
+        flags,
+        io,
+        refuseRedirects: catalogCredentials !== undefined,
+      });
     } catch (error) {
-      // Only the first exchange is required. A token already read from the cloud stays usable by
-      // the daemon that accepted it, so a transient failure of the optional exchange that asks
-      // again keeps it, paired with the record as last stored. A confirmed revocation is never
-      // transient and always propagates.
-      if (!received || isCliSessionRevoked(error)) throw error;
+      // A failed optional refresh keeps the earlier token unless its session was refused.
+      if (!received || refreshRejected(error, catalogCredentials !== undefined)) throw error;
       return { ...received, session: saved };
     }
+    catalogCredentials?.add(refreshed.accessToken);
     const rotation = readCredentialRotation(refreshed, asked.refreshCredential);
     if (rotation) {
+      catalogCredentials?.add(rotation.refreshCredential);
       ({ asked, saved } = storeRotatedCredential({
         stateDir,
         asked,
@@ -712,10 +707,20 @@ function storeRotatedCredential(options: {
   return { asked: { ...asked, ...rotation }, saved };
 }
 
+function refreshRejected(error: unknown, refuseRedirects: boolean): boolean {
+  if (isCliSessionRevoked(error)) return true;
+  return (
+    refuseRedirects &&
+    error instanceof AppError &&
+    error.details?.reason === 'cloud_auth_redirect_refused'
+  );
+}
+
 async function refreshAgentToken(options: {
   session: CliSessionRecord;
   flags: CliFlags;
   io?: AuthIo;
+  refuseRedirects: boolean;
 }): Promise<{
   accessToken: string;
   expiresAt?: string;
@@ -728,11 +733,7 @@ async function refreshAgentToken(options: {
     pathName: CLI_SESSION_REFRESH_PATH,
     body: {
       refreshCredential: options.session.refreshCredential,
-      // This CLI stores a replacement credential from the response, so the cloud may rotate it.
-      // Commands run in parallel and each refreshes, so a cloud that rotates must: issue at most
-      // one replacement for a credential; answer a request that still presents the replaced
-      // credential with an access token and no further replacement; and keep the replaced
-      // credential valid for a grace period that covers commands already in flight.
+      // Rotation is idempotent while concurrent commands still hold the original credential.
       acceptsRotatedRefreshCredential: true,
       tenant: options.flags.tenant,
       runId: options.flags.runId,
@@ -740,6 +741,7 @@ async function refreshAgentToken(options: {
       session: options.flags.session,
     },
     fetchImpl: options.io?.fetch,
+    refuseRedirects: options.refuseRedirects,
     classifyRejectedBody: (parsed) => readCliSessionRevocation(parsed),
   });
   // Revocation is answered before the tokens: a response that reports it is refused even when it
@@ -759,9 +761,6 @@ async function refreshAgentToken(options: {
         : {}),
     };
   }
-  // The cloud refused to answer without reporting the session revoked, so this CLI has no token to
-  // send and no proof the session is gone: `auth login` keeps the session it saved, and a caller
-  // that spends a token itself reports this one reason.
   throw new AppError('UNAUTHORIZED', 'Failed to refresh CLI session.', {
     hint: 'Run agent-device auth login again, or set AGENT_DEVICE_DAEMON_AUTH_TOKEN.',
     reason: CLI_SESSION_REASONS.tokenless.reason,

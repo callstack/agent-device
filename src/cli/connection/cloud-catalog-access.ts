@@ -8,6 +8,8 @@ const CLOUD_CATALOG_REASONS = {
   apiOriginFormat: { reason: 'cloud_invalid_origin', commands: ['connect'] },
   // The configured cloud origin needs its own API key or CLI login.
   apiKeyRequired: { reason: 'cloud_api_key_required', commands: ['connect'] },
+  // The catalog key and selected cloud API specify different origins.
+  keyOriginMismatch: { reason: 'cloud_catalog_key_origin_mismatch', commands: ['connect'] },
 } as const satisfies ReasonTable<'cloud catalog'>;
 
 const LOOPBACK = new net.BlockList();
@@ -18,49 +20,45 @@ LOOPBACK.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 export async function resolveCloudCatalogAccess(options: {
   stateDir: string;
   env: EnvMap;
-  explicitToken?: string;
-}): Promise<{ accessToken: string; cloudBaseUrl: string }> {
-  const { env, stateDir, explicitToken } = options;
-  const configuredOrigin =
-    env.AGENT_DEVICE_CLOUD_BASE_URL === undefined
-      ? undefined
-      : parseCloudApiOrigin(env.AGENT_DEVICE_CLOUD_BASE_URL);
-  const cloudBaseUrl = configuredOrigin ?? DEFAULT_CLOUD_BASE_URL;
-  const explicitKey = explicitToken?.trim();
-  if (explicitKey) return catalogAccess(cloudBaseUrl, explicitKey);
-  const ambientToken = env.AGENT_DEVICE_DAEMON_AUTH_TOKEN?.trim();
-  if (ambientToken && (cloudBaseUrl !== DEFAULT_CLOUD_BASE_URL || isCloudApiKey(ambientToken))) {
-    return { accessToken: ambientToken, cloudBaseUrl };
+}): Promise<{
+  accessToken: string;
+  cloudBaseUrl: string;
+  catalogCredentials?: ReadonlySet<string>;
+}> {
+  const { env, stateDir } = options;
+  const cloudBaseUrl = parseCloudApiOrigin(
+    env.AGENT_DEVICE_CLOUD_BASE_URL ?? DEFAULT_CLOUD_BASE_URL,
+  );
+  const accessToken = env.AGENT_DEVICE_CLOUD_API_KEY?.trim();
+  if (accessToken) {
+    const issuer = parseCloudApiOrigin(
+      env.AGENT_DEVICE_CLOUD_API_KEY_ORIGIN ?? DEFAULT_CLOUD_BASE_URL,
+    );
+    if (issuer !== cloudBaseUrl) {
+      throw new AppError(
+        'UNAUTHORIZED',
+        'The catalog API key belongs to another cloud API origin.',
+        {
+          reason: CLOUD_CATALOG_REASONS.keyOriginMismatch.reason,
+        },
+      );
+    }
+    return { accessToken, cloudBaseUrl };
   }
   const access = await resolveCliSessionAccess({
     env,
     stateDir,
     flags: { json: false, help: false, version: false },
+    catalog: true,
     validateIssuer: parseCloudApiOrigin,
   });
-  if (!access) throw cloudApiKeyRequired();
-  return {
-    cloudBaseUrl: parseCloudApiOrigin(access.cloudBaseUrl),
-    accessToken: access.accessToken,
-  };
-}
-
-function catalogAccess(cloudBaseUrl: string, accessToken: string) {
-  if (cloudBaseUrl === DEFAULT_CLOUD_BASE_URL && !isCloudApiKey(accessToken)) {
-    throw cloudApiKeyRequired();
+  if (!access) {
+    throw new AppError('UNAUTHORIZED', 'A catalog API key or CLI login is required.', {
+      reason: CLOUD_CATALOG_REASONS.apiKeyRequired.reason,
+      hint: 'Run agent-device auth login or set AGENT_DEVICE_CLOUD_API_KEY for this catalog.',
+    });
   }
-  return { accessToken, cloudBaseUrl };
-}
-
-function isCloudApiKey(token: string): boolean {
-  return /^adc_(?:live|cli)_[A-Za-z0-9_-]{43}$/i.test(token);
-}
-
-function cloudApiKeyRequired(): AppError {
-  return new AppError('UNAUTHORIZED', 'A cloud API key or CLI login is required.', {
-    reason: CLOUD_CATALOG_REASONS.apiKeyRequired.reason,
-    hint: 'Run agent-device auth login or set AGENT_DEVICE_DAEMON_AUTH_TOKEN to your cloud API key.',
-  });
+  return { ...access, cloudBaseUrl: parseCloudApiOrigin(access.cloudBaseUrl) };
 }
 
 function parseCloudApiOrigin(value: string): string {

@@ -1,5 +1,13 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { readCloudJsonResponse } from '../cloud-response.ts';
+import {
+  admitDaemonStateRoot,
+  resolveDaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { parseRawArgs } from '../parser/args.ts';
+import { writeCommandOutput } from '../commands/shared.ts';
+import { resolveCloudCatalogAccess } from './cloud-catalog-access.ts';
 
 const AVAILABILITY_STATES = ['available', 'unavailable', 'unknown'] as const;
 const AVAILABILITY_REASONS = [
@@ -33,6 +41,38 @@ export type CloudVendorRow = {
   availability?: CloudVendorAvailability;
 };
 
+export async function runCloudCatalog(
+  input: ReturnType<typeof parseRawArgs>,
+  host: HostEnvironment,
+): Promise<void> {
+  const { positionals, flags, providedFlags } = input;
+  const positionalCount = positionals[1] === 'list' ? 2 : 1;
+  if (positionals.length !== positionalCount) {
+    throw new AppError('INVALID_ARGS', 'A catalog listing accepts no additional arguments.');
+  }
+  const invalid = providedFlags.find(
+    ({ key }) => key !== 'live' && key !== 'json' && key !== 'stateDir',
+  );
+  if (invalid) {
+    throw new AppError('INVALID_ARGS', `${invalid.token} is unavailable for a catalog listing.`);
+  }
+  const paths = resolveDaemonPaths(flags.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, host);
+  admitDaemonStateRoot({ paths, mode: 'repair' });
+  const { accessToken, cloudBaseUrl, catalogCredentials } = await resolveCloudCatalogAccess({
+    stateDir: paths.baseDir,
+    env: host.env,
+  });
+  const vendors = await listCloudVendors(cloudBaseUrl, accessToken, {
+    live: flags.live,
+    catalogCredentials,
+  });
+  await writeCommandOutput(flags, vendors, () =>
+    vendors.length === 0
+      ? 'No cloud vendors listed.'
+      : vendors.map(formatCloudVendorRow).join('\n'),
+  );
+}
+
 /**
  * The authenticated vendor catalog. A static listing returns the server's rows as sent.
  * A live listing guarantees every row carries
@@ -41,7 +81,7 @@ export type CloudVendorRow = {
 export async function listCloudVendors(
   baseUrl: string,
   accessToken: string,
-  options: { live?: boolean } = {},
+  options: { live?: boolean; catalogCredentials?: ReadonlySet<string> } = {},
 ): Promise<CloudVendorRow[]> {
   const url = new URL('/v1/vendors', baseUrl);
   if (options.live) url.searchParams.set('availability', 'live');
@@ -57,7 +97,11 @@ export async function listCloudVendors(
     invalidJsonMessage: 'Cloud session API returned invalid JSON.',
     rejectedMessage: 'Cloud session API could not list vendors.',
   });
-  if (!Array.isArray(rows) || !rows.every(isCloudVendorRow)) {
+  if (
+    !Array.isArray(rows) ||
+    !rows.every(isCloudVendorRow) ||
+    containsCredential(rows, [accessToken, ...(options.catalogCredentials ?? [])])
+  ) {
     throw new AppError('COMMAND_FAILED', 'Cloud session API returned an invalid vendor list.');
   }
   if (!options.live) return rows;
@@ -65,6 +109,11 @@ export async function listCloudVendors(
   return rows.map((row) =>
     row.availability ? row : { ...row, availability: unsupportedAvailability(checkedAt) },
   );
+}
+
+function containsCredential(rows: CloudVendorRow[], credentials: string[]): boolean {
+  const json = JSON.stringify(rows);
+  return credentials.some((credential) => json.includes(JSON.stringify(credential).slice(1, -1)));
 }
 
 function unsupportedAvailability(checkedAt: string): CloudVendorAvailability {

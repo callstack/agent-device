@@ -54,7 +54,6 @@ const CONNECT_SUPPORTED_FLAGS = [
   ...CONNECT_METRO_HINT_FLAGS,
   'launchUrl',
 ] as const;
-const CONNECT_LIST_FLAGS = ['live', 'stateDir', 'daemonAuthToken'] as const;
 
 const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   plugins: {
@@ -128,16 +127,12 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
         'List cloud vendors or configure remote access without allocating a device. Direct providers validate credentials/resources before saving state and print the exact device/app preparation needed before open. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
     },
     usageOverride:
-      'connect list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+      'connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
     usageFlags: [],
     listUsageOverride: 'connect',
-    positionalArgs: ['list|provider?'],
-    allowedFlags: [...CONNECT_ALLOWED_FLAGS, 'live'],
-    supportedFlags: CONNECT_SUPPORTED_FLAGS,
-    flagsByAction: {
-      cloud: [...CONNECT_ALLOWED_FLAGS, ...CONNECT_SUPPORTED_FLAGS],
-      list: CONNECT_LIST_FLAGS,
-    },
+    positionalArgs: ['provider?|list'],
+    allowedFlags: CONNECT_ALLOWED_FLAGS,
+    supportedFlags: [...CONNECT_SUPPORTED_FLAGS, 'live'],
   },
   connection: {
     text: {

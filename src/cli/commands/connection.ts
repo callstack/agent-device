@@ -64,34 +64,7 @@ export const connectCommand: ClientCommandHandler = async ({
   flags,
   client,
   host,
-  explicitDaemonAuthToken,
 }) => {
-  if (flags.live && positionals[0] !== 'list') {
-    throw new AppError('INVALID_ARGS', '--live requires connect list.');
-  }
-  if (positionals[0] === 'list') {
-    if (positionals.length !== 1) {
-      throw new AppError('INVALID_ARGS', 'connect list accepts no additional arguments.');
-    }
-    const { resolveCloudCatalogAccess } = await import('../connection/cloud-catalog-access.ts');
-    const { formatCloudVendorRow, listCloudVendors } =
-      await import('../connection/cloud-catalog.ts');
-    const auth = await resolveCloudCatalogAccess({
-      env: host.env,
-      stateDir: resolveDaemonPaths(flags.stateDir, host).baseDir,
-      explicitToken: explicitDaemonAuthToken,
-    });
-    const vendors = await listCloudVendors(auth.cloudBaseUrl, auth.accessToken, {
-      live: flags.live,
-    });
-    await writeCommandOutput(flags, vendors, () =>
-      vendors.length === 0
-        ? 'No cloud vendors listed.'
-        : vendors.map(formatCloudVendorRow).join('\n'),
-    );
-    return true;
-  }
-
   const stateDir = resolveDaemonPaths(flags.stateDir, {
     cwd: host.cwd,
     env: host.env,

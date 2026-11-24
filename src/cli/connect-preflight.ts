@@ -6,17 +6,25 @@ import { exitBeforeCommand } from './pre-command-failure.ts';
 const PLUGIN_REFUSAL_PHASE = 'cli_plugin_refused';
 
 /** Refuses a provider `connect` names before this run reads a credential, or goes on to its parse. */
-export async function admitConnectProviderOrExit(
+export async function runConnectPreflight(
   argv: readonly string[],
   host: HostEnvironment,
   options: { jsonRequested: boolean; debugEnabled: boolean },
-): Promise<void> {
-  const { admitConnectProviderNamedInArguments } =
-    await import('./connection/provider-admission.ts');
+): Promise<boolean> {
+  const { preflightConnect } = await import('./connection/provider-admission.ts');
+  let catalog;
   try {
-    await admitConnectProviderNamedInArguments(argv, host);
+    catalog = await preflightConnect(argv, host);
   } catch (error) {
-    await exitBeforeCommand(error, [...argv], options, PLUGIN_REFUSAL_PHASE);
+    return await exitBeforeCommand(error, [...argv], options, PLUGIN_REFUSAL_PHASE);
+  }
+  if (!catalog) return false;
+  try {
+    const { runCloudCatalog } = await import('./connection/cloud-catalog.ts');
+    await runCloudCatalog(catalog, host);
+    return true;
+  } catch (error) {
+    return await exitBeforeCommand(error, [...argv], options, 'cli_cloud_catalog_failed');
   }
 }
 

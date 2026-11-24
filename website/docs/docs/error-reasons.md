@@ -95,6 +95,7 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `cloud_auth_redirect_refused` | A cloud auth request got a redirect it does not follow: to another origin, past the third hop, or to a missing Location or one with a username or password. Nothing was sent to the target. |
 | `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
+| `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
 
 ### `events`
 
@@ -606,6 +607,7 @@ These reasons can come from more than one command.
 | --- | --- |
 | `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
+| `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
 
 ### Command flags
 

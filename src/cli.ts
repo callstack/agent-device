@@ -146,9 +146,6 @@ export async function runCli(
 }
 
 async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment): Promise<void> {
-  // One transport per run: its ensure-once state is shared by the materialization client and the
-  // command client, so a run ensures the daemon once.
-  const transport = resolveRunTransport(deps, host);
   const requestId = createRequestId();
   const version = readVersion();
   const debugEnabled = isDebugRequested(argv);
@@ -167,14 +164,17 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
     async () => {
       // A provider this route cannot supply is refused here: before this run resolves an option that
       // can carry a credential, and before any credential value is registered for redaction.
-      const { admitConnectProviderOrExit } = await import('./cli/connect-preflight.ts');
-      await admitConnectProviderOrExit(argv, host, { jsonRequested, debugEnabled });
+      const { runConnectPreflight } = await import('./cli/connect-preflight.ts');
+      if (await runConnectPreflight(argv, host, { jsonRequested, debugEnabled })) return;
       const { parsed, command, positionals } = await parseCliInputOrExit(argv, {
         host,
         version,
         jsonRequested,
         debugEnabled,
       });
+      // One transport per run: its ensure-once state is shared by the materialization client and the
+      // command client, so a run ensures the daemon once.
+      const transport = resolveRunTransport(deps, host);
       const debugOutputEnabled = isParsedDebugRequested(command, parsed.providedFlags);
       const ctx = await resolveRunContextOrExit(parsed, {
         host,
@@ -427,7 +427,6 @@ async function preflightCommandConnection(
   flags: CliFlags,
   remoteConfigLeaseProvider: string | undefined,
 ): Promise<void> {
-  if (isCloudCatalogCommand(base)) return;
   if (base.command === 'connect' && flags.remoteConfig) {
     const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
     await admitConnectProfileWithDiagnostics(
@@ -479,7 +478,7 @@ async function resolveRemoteContext(
     ctx.connectionMetadata = buildRemoteConnectionRequestMetadata(selection.state);
   }
 
-  if (shouldResolveRemoteAuth(ctx.command) && !isCloudCatalogCommand(ctx)) {
+  if (shouldResolveRemoteAuth(ctx.command)) {
     const authResolution = await resolveRemoteAuthForCli({
       command: ctx.command,
       flags: ctx.effectiveFlags,
@@ -578,7 +577,6 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
 }
 
 function maybeStartDaemonLogTail(ctx: CliRunContext): (() => void) | null {
-  if (isCloudCatalogCommand(ctx)) return null;
   const remoteDaemonBaseUrl = ctx.effectiveFlags.daemonBaseUrl;
   return ctx.debugOutputEnabled && !ctx.effectiveFlags.json && !remoteDaemonBaseUrl
     ? startDaemonLogTail(ctx.daemonPaths.logPath)
@@ -656,9 +654,6 @@ async function dispatchCliCommand(
       commandProgress,
       leaseDevice: ctx.leaseDevice,
       claimedConnection: ctx.claimedConnection,
-      explicitDaemonAuthToken: ctx.explicitFlagKeys.has('daemonAuthToken')
-        ? ctx.flags.daemonAuthToken
-        : undefined,
     })
   ) {
     return;
@@ -783,10 +778,6 @@ function shouldMaterializeRemoteConnection(command: string): boolean {
 function shouldResolveRemoteAuth(command: string): boolean {
   // `connection status` reports the stored record and sends no daemon request.
   return runsOnRemoteConnection(command) && command !== 'connection';
-}
-
-function isCloudCatalogCommand(ctx: { command: string; positionals: string[] }): boolean {
-  return ctx.command === 'connect' && ctx.positionals[0] === 'list';
 }
 
 function shouldWarnOpenMayMissRemoteRuntime(options: {

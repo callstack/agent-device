@@ -26,6 +26,7 @@ export async function postCloudAuthJson<T>(options: {
   // di-seam-approved: injects the fetch global, which has no module boundary vi.mock can
   // intercept. The auth-session tests inject it for exact per-call assertions.
   fetchImpl?: typeof fetch;
+  refuseRedirects?: boolean;
   // Passed to the response reader, which calls it on a status it would otherwise reject generically.
   classifyRejectedBody?: (parsed: unknown) => AppError | undefined;
 }): Promise<T> {
@@ -50,6 +51,9 @@ export async function postCloudAuthJson<T>(options: {
       });
     }
     await response.body?.cancel().catch(() => undefined);
+    if (options.refuseRedirects) {
+      throw cloudAuthRedirectRefused('a redirect', response.status, requestUrl.origin);
+    }
     url = readRedirectTarget(response, url, requestUrl, redirects);
     if (GET_REDIRECT_STATUSES.has(response.status)) init = { method: 'GET' };
   }
@@ -65,10 +69,18 @@ function readRedirectTarget(
   const target = location === null ? null : URL.parse(location, current);
   const refusal = describeRefusedRedirect(target, requestUrl, redirects);
   if (target && !refusal) return target;
-  throw new AppError('COMMAND_FAILED', `Cloud auth endpoint answered with ${refusal}.`, {
+  throw cloudAuthRedirectRefused(refusal, response.status, requestUrl.origin);
+}
+
+function cloudAuthRedirectRefused(
+  refusal: string | undefined,
+  status: number,
+  origin: string,
+): AppError {
+  return new AppError('COMMAND_FAILED', `Cloud auth endpoint answered with ${refusal}.`, {
     reason: CLOUD_AUTH_REQUEST_REASONS.redirectRefused.reason,
-    status: response.status,
-    hint: `Cloud auth requests stay on ${requestUrl.origin}. Check that it is the cloud API origin.`,
+    status,
+    hint: `Cloud auth requests stay on ${origin}. Check that it is the cloud API origin.`,
   });
 }
 
