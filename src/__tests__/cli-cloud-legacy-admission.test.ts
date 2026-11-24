@@ -4,8 +4,64 @@ import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { writeCliSession } from '../cli/auth-session.ts';
+import {
+  prepareCloudConnection,
+  readCloudConnection,
+  withConnectionLock,
+  writeCloudConnection,
+} from '../cli/connection/cloud-connection-record.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { seedConnectionState } from './remote-connection.fixtures.ts';
+
+test('disconnect refuses a contended allocation and recovers it after the lock is free', async () => {
+  const location = { stateDir: mkdtempForTestSync('cloud-disconnect-contention-'), session: 'qa' };
+  const origin = 'https://cloud.example';
+  const id = '00000000-0000-4000-8000-000000000001';
+  const pending = {
+    ...prepareCloudConnection(
+      location.session,
+      {
+        platform: 'ios',
+        vendor: undefined,
+        maxMinutes: undefined,
+        accepts: ['agent-device-daemon'],
+      },
+      origin,
+      null,
+    ),
+    id,
+  };
+  const env = {
+    AGENT_DEVICE_STATE_DIR: location.stateDir,
+    AGENT_DEVICE_CLOUD_BASE_URL: origin,
+    AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: origin,
+    AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-api-key',
+  };
+  const disconnect = () =>
+    runCliCapture(['disconnect', '--session', location.session, '--json'], { env });
+  const fetchMock = vi.fn(
+    async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    await withConnectionLock(location.stateDir, location.session, async () => {
+      writeCloudConnection(location, pending);
+      const blocked = await disconnect();
+      expect(JSON.parse(blocked.stdout).error).toMatchObject({
+        code: 'COMMAND_FAILED',
+        retriable: true,
+        details: { reason: 'cloud_connection_owns_session' },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(readCloudConnection(location)).toEqual(pending);
+    });
+    expect((await disconnect()).code).toBeNull();
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['DELETE']);
+    expect(readCloudConnection(location)).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 test('legacy hosted profiles do not refresh credentials or dispatch device commands', async () => {
   const stateDir = mkdtempForTestSync('cloud-legacy-admission-');

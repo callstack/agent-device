@@ -59,11 +59,25 @@ export async function withConnectionLock<T>(
   stateDir: string,
   session: string,
   task: () => Promise<T>,
+  onContention?: () => void,
 ): Promise<T> {
   return await withProcessLock({
     acquire: () =>
-      acquireProcessLock({ ...connectionLockOptions({ stateDir, session }), timeoutMs: 180_000 }),
+      acquireProcessLock({
+        ...connectionLockOptions({ stateDir, session }),
+        timeoutMs: 180_000,
+        onContention,
+      }),
     task,
+  });
+}
+
+export function refuseContendedCloudAllocation(location: ConnectionLocation): void {
+  if (readCloudConnection(location)?.phase !== 'pending') return;
+  throw new AppError('COMMAND_FAILED', 'The cloud session is still allocating.', {
+    reason: CLOUD_CONNECTION_REASONS.ownsSession.reason,
+    retriable: true,
+    hint: 'Retry disconnect when connect cloud finishes.',
   });
 }
 

@@ -9,6 +9,7 @@ import {
   cloudConnectionUnavailable,
   CLOUD_CONNECTION_REASONS,
   readCloudConnection,
+  refuseContendedCloudAllocation,
   removeCloudConnection,
   withConnectionLock,
 } from '../connection/cloud-connection-record.ts';
@@ -539,23 +540,28 @@ export const disconnectCommand: ClientCommandHandler = async ({
 }) => {
   const stateDir = resolveConnectionStateDir(flags, host);
   const location = { stateDir, session: flags.session ?? 'default' };
-  return await withConnectionLock(stateDir, location.session, async () => {
-    const record = readCloudConnection(location);
-    const current = readRemoteConnectionState(location);
-    const state =
-      record || current?.cloudSession || claimedConnection?.cloudSession
-        ? current
-        : claimDisconnectTarget(claimedConnection, stateDir, flags.session);
-    if (record || state?.cloudSession) {
-      return await disconnectCloud({ location, state, record, host }, flags);
-    }
-    if (!state) {
-      await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
-      return true;
-    }
-    requireLeasedConnectionSession(state, flags.session);
-    return await disconnectProvider(flags, client, stateDir, state);
-  });
+  return await withConnectionLock(
+    stateDir,
+    location.session,
+    async () => {
+      const record = readCloudConnection(location);
+      const current = readRemoteConnectionState(location);
+      const state =
+        record || current?.cloudSession || claimedConnection?.cloudSession
+          ? current
+          : claimDisconnectTarget(claimedConnection, stateDir, flags.session);
+      if (record || state?.cloudSession) {
+        return await disconnectCloud({ location, state, record, host }, flags);
+      }
+      if (!state) {
+        await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
+        return true;
+      }
+      requireLeasedConnectionSession(state, flags.session);
+      return await disconnectProvider(flags, client, stateDir, state);
+    },
+    () => refuseContendedCloudAllocation(location),
+  );
 };
 
 async function disconnectCloud(connection: CloudConnection, flags: CliFlags): Promise<boolean> {
