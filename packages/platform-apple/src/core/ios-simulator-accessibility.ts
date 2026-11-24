@@ -1,9 +1,10 @@
 import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { buildSimctlArgsForDevice } from './simctl.ts';
-import { readHostSimulatorPreferences } from './simulator-host-preferences.ts';
-import { runXcrun } from './tool-provider.ts';
+import {
+  enableSimulatorBoolPreference,
+  readHostSimulatorPreferences,
+} from './simulator-preferences.ts';
 
 const ACCESSIBILITY_PREPARE_TIMEOUT_MS = 2_000;
 
@@ -13,19 +14,11 @@ const ACCESSIBILITY_PREPARE_TIMEOUT_MS = 2_000;
  */
 export async function enableIosSimulatorAppAccessibility(device: DeviceInfo): Promise<void> {
   if (!isHandheldAppleSimulator(device)) return;
-  await runXcrun(
-    buildSimctlArgsForDevice(device, [
-      'spawn',
-      device.id,
-      'defaults',
-      'write',
-      'com.apple.Accessibility',
-      'ApplicationAccessibilityEnabled',
-      '-bool',
-      'YES',
-    ]),
-    { timeoutMs: ACCESSIBILITY_PREPARE_TIMEOUT_MS },
-  );
+  await enableSimulatorBoolPreference(device, {
+    domain: 'com.apple.Accessibility',
+    key: 'ApplicationAccessibilityEnabled',
+    timeoutMs: ACCESSIBILITY_PREPARE_TIMEOUT_MS,
+  });
 }
 
 /**

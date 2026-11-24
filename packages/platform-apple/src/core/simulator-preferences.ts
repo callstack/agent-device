@@ -2,8 +2,8 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { hostHomeDirectory, readHostBinaryFile } from '@agent-device/host-kit/host-file';
 import { parseApplePlist } from './plist.ts';
-import { simulatorAddressFor } from './simctl.ts';
-import { hasScopedAppleToolProvider } from './tool-provider.ts';
+import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
+import { hasScopedAppleToolProvider, runXcrun } from './tool-provider.ts';
 
 /**
  * Reads one preferences domain of a simulator from this host, without a guest call. `null` means
@@ -23,4 +23,27 @@ export async function readHostSimulatorPreferences(
   } catch {
     return null;
   }
+}
+
+/**
+ * Sets a boolean preference to YES inside the simulator through `defaults`. Rejects when the write
+ * fails, times out, or exits non-zero, on a local or a scoped (remote) tool provider.
+ */
+export async function enableSimulatorBoolPreference(
+  device: DeviceInfo,
+  preference: { domain: string; key: string; timeoutMs: number },
+): Promise<void> {
+  await runXcrun(
+    buildSimctlArgsForDevice(device, [
+      'spawn',
+      device.id,
+      'defaults',
+      'write',
+      preference.domain,
+      preference.key,
+      '-bool',
+      'YES',
+    ]),
+    { timeoutMs: preference.timeoutMs },
+  );
 }

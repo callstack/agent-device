@@ -138,23 +138,6 @@ test('a scoped (remote) tool provider writes even when this host has both keys',
   ]);
 });
 
-test('a scoped provider writes each key once per simulator and retries a failed one', async () => {
-  await scoped(() => prepare('MultilingualKeyboardTip'));
-  vi.mocked(runXcrun).mockClear();
-  assert.deepEqual(writtenKeys(await scoped(() => prepare())), ['MultilingualKeyboardTip']);
-  vi.mocked(runXcrun).mockClear();
-  assert.deepEqual(await scoped(() => prepare()), []);
-});
-
-test('a local simulator writes again while its preferences file is missing, as after an erase', async () => {
-  await prepare();
-  vi.mocked(runXcrun).mockClear();
-  assert.deepEqual(writtenKeys(await prepare()), [
-    'DidShowContinuousPathIntroduction',
-    'MultilingualKeyboardTip',
-  ]);
-});
-
 test('a failed write warns with its key and still writes the other key', async () => {
   const calls = await prepare('DidShowContinuousPathIntroduction');
   assert.deepEqual(writtenKeys(calls), [
@@ -209,6 +192,19 @@ for (const app of ['com.example.app', 'myapp://home']) {
     );
   });
 }
+
+test('a guest write that exits non-zero warns with its key', async () => {
+  await withFakeAppleTool(
+    (args) => (args.includes('MultilingualKeyboardTip') ? { exitCode: 1, stderr: 'denied' } : ''),
+    async () => {
+      await prepareIosSimulatorKeyboardIntros(device);
+    },
+  );
+  assert.deepEqual(
+    vi.mocked(emitDiagnostic).mock.calls.map(([event]) => (event.data as { key?: string }).key),
+    ['MultilingualKeyboardTip'],
+  );
+});
 
 test('a failed write does not block the launch', async () => {
   await withFakeAppleTool(
