@@ -153,8 +153,8 @@ extension RunnerTests {
     let suppressXCTestPenalty = snapshotXCTestPenaltyWarmupExemption.consume()
     var xCTestTierRan = false
 
-    // Reorder is iOS-only: physical devices have no independent semantic backend, so a penalized
-    // channel there uses the bounded probe instead of deferral.
+    // Only iOS runners penalize the channel. Every iOS runner, Simulator or physical device, has
+    // the private-AX backend, so a penalized plan defers to it.
     var xCTestChannelPenalized = false
     var breakerPenalized = false
     var xCTestRecoveryProbeDue = false

@@ -166,7 +166,7 @@ extension RunnerTests {
     hint: CaptureHint,
     deadline: Date = .distantFuture
   ) -> SnapshotAcquisition? {
-    #if os(iOS) && targetEnvironment(simulator)
+    #if os(iOS)
       let app = target.app
       let requestedDepth = hint.rawTraversalDepth ?? 64
       // An explicit --depth request is honored as asked: no accepted-depth

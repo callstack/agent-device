@@ -246,8 +246,8 @@ the tree to work out whether a sheet or alert was up.
   screen served by a backend that publishes none answers `"unknown"` even when nothing is presented.
   That is the private accessibility backend (`snapshotQuality.backend: "private-ax"`, which `--actions`
   asks for) and an Appium tree. Never treat `"unknown"` as `"absent"`.
-- A physical iOS device has one capture backend, and it publishes no class names, so there the answer
-  is `"presented"` or `"unknown"` and never `"absent"`.
+- No capture backend on a physical iOS device publishes class names, so there the answer is
+  `"presented"` or `"unknown"` and never `"absent"`.
 - The field is absent entirely when the platform publishes no reading at all: Android, web, Linux,
   and macOS captures.
 
@@ -281,8 +281,8 @@ iOS snapshots use XCTest on simulators and physical devices. You can't pick the 
 decides which backends it tries.
 
 - Regular (non-`--raw`) capture starts with the XCTest tree. When that comes back **sparse** for a
-  screen XCTest cannot read, it retries with a query sweep and then, on simulators, a private
-  accessibility backend.
+  screen XCTest cannot read, it retries with a query sweep and then a private accessibility
+  backend. That backend also reads trees too deep for XCTest.
 - Retries stop when the capture budget runs out, and you get the best result captured so far.
 - A failed or partial capture is reported as such instead of looking like an empty UI. A
   **recovered** capture warns that it fell back to another backend; you can keep working from it. A
@@ -302,8 +302,8 @@ decides which backends it tries.
   recovered raw capture shows the same hierarchy as a healthy one.
 - `-d` still applies with `--raw`, where it counts traversal depth. `-i` narrows only the default
   view, so `--raw -i` returns the same tree as `--raw`.
-- Private-accessibility recovery and `--actions` work on simulators only. Physical iOS devices have
-  no second backend to fall back to.
+- Private-accessibility recovery works on iOS simulators and physical iOS devices. `--actions`
+  works on simulators only.
 
 ## Android capture behavior
 

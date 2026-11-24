@@ -602,16 +602,16 @@ extension RunnerTests {
   }
 
   func testEffectiveSnapshotCapturePlanUsesBoundedXCTestProbeWhenNoIndependentBackendRuns() {
-    let physicalDevicePlan = Self.effectiveSnapshotCapturePlan(
+    let noIndependentBackendPlan = Self.effectiveSnapshotCapturePlan(
       Self.regularVisiblePlan,
       xCTestChannelPenalized: true,
       availableBackends: [.recursiveTree, .querySweep]
     )
 
-    XCTAssertEqual(physicalDevicePlan.steps.map(\.backend), [.recursiveTree, .querySweep])
-    XCTAssertEqual(physicalDevicePlan.xCTestChannelState, .boundedXCTestProbe)
+    XCTAssertEqual(noIndependentBackendPlan.steps.map(\.backend), [.recursiveTree, .querySweep])
+    XCTAssertEqual(noIndependentBackendPlan.xCTestChannelState, .boundedXCTestProbe)
     XCTAssertEqual(
-      physicalDevicePlan.steps.map(\.treeCaptureSliceBudgetOverride),
+      noIndependentBackendPlan.steps.map(\.treeCaptureSliceBudgetOverride),
       [SnapshotCaptureStep.boundedTreeSliceBudget, nil]
     )
   }
@@ -743,7 +743,7 @@ extension RunnerTests {
 
   /// The probe's claim authority belongs to the step that starts it, not to a plan position:
   /// only the leading tree step of the due deferred Simulator plan claims the periodic probe.
-  /// The physical-device bounded plan probes on every capture without a claim, and pins and the
+  /// A bounded plan without an independent backend probes on every capture without a claim, and pins and the
   /// raw plan never gain the sweep or a claim.
   func testDueRecoveryProbeLeadsOnlyTheDeferredRegularPlanAndNeverAddsTheSweep() {
     let due = Self.effectiveSnapshotCapturePlan(
@@ -761,13 +761,13 @@ extension RunnerTests {
     XCTAssertEqual(notDue.steps.map(\.backend), [.privateAX, .recursiveTree])
     XCTAssertEqual(notDue.steps.map(\.claimsPeriodicRecoveryProbe), [false, false])
 
-    let physicalDevice = Self.effectiveSnapshotCapturePlan(
+    let noIndependentBackend = Self.effectiveSnapshotCapturePlan(
       Self.regularVisiblePlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true,
       availableBackends: [.recursiveTree, .querySweep]
     )
-    XCTAssertEqual(physicalDevice.steps.map(\.backend), [.recursiveTree, .querySweep])
+    XCTAssertEqual(noIndependentBackend.steps.map(\.backend), [.recursiveTree, .querySweep])
     XCTAssertEqual(
-      physicalDevice.steps.map(\.claimsPeriodicRecoveryProbe), [false, false],
+      noIndependentBackend.steps.map(\.claimsPeriodicRecoveryProbe), [false, false],
       "the bounded plan probes on every capture"
     )
     for pinned in ["private-ax", "tree"] {

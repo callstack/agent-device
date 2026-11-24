@@ -76,5 +76,14 @@ extension RunnerTests {
       )
     }
   }
+
+  /// The private-AX bridge matches an iOS AX application, so the tvOS, visionOS, watchOS, and
+  /// macOS runners keep only the XCTest backends that the iOS fixture does not classify.
+  func testOtherApplePlatformsKeepOnlyXCTestBackends() {
+    XCTAssertEqual(
+      SnapshotBackendKind.allCases.filter { $0.isAvailable(on: .otherApplePlatform) },
+      [.recursiveTree, .querySweep]
+    )
+  }
 }
 #endif

@@ -46,7 +46,7 @@ Internal family ownership must not leak into that compatibility projection.
 ## Consequences and open gaps
 
 Adding a first-class Apple OS is cheap: it needs a leaf module and a runner-profile row.
-Snapshot fidelity is uneven, and the deep-RN AX-server fallback is iOS-simulator-only.
+Snapshot fidelity is uneven, and the deep-RN AX-server fallback serves iOS only: Simulators and physical devices, not tvOS, visionOS, watchOS, or macOS.
 
 visionOS discovery and simulator deployment are supported.
 App deployment is also admitted for CoreDevice-backed physical devices; XCTest-backed physical deployment is unsupported.

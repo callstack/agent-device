@@ -3,6 +3,8 @@ import XCTest
 enum SnapshotBackendEnvironment {
   case simulator
   case physicalDevice
+  /// tvOS, visionOS, watchOS, and macOS builds of the runner.
+  case otherApplePlatform
 }
 
 /// How a backend's acquisition relates to a regular `--depth` request. Every backend serves the
@@ -72,8 +74,10 @@ enum SnapshotBackendKind: String, CaseIterable {
   var isAvailableOnCurrentPlatform: Bool {
     #if os(iOS) && targetEnvironment(simulator)
       return isAvailable(on: .simulator)
-    #else
+    #elseif os(iOS)
       return isAvailable(on: .physicalDevice)
+    #else
+      return isAvailable(on: .otherApplePlatform)
     #endif
   }
 
@@ -82,7 +86,7 @@ enum SnapshotBackendKind: String, CaseIterable {
     case .recursiveTree, .querySweep:
       return true
     case .privateAX:
-      return environment == .simulator
+      return environment != .otherApplePlatform
     }
   }
 }

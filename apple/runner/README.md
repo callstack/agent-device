@@ -89,9 +89,10 @@ iOS snapshots have two explicit public capture modes:
 
 Some iOS apps expose accessibility trees that lower-level AX services can inspect but XCTest cannot
 serialize reliably. In those cases interactive snapshots may return a sparse root quickly, while
-full snapshots preserve the XCTest error. A penalized simulator can recover through private AX;
-physical devices use a short XCTest probe because no non-XCTest semantic backend is available
-there. See
+full snapshots preserve the XCTest error. A penalized iOS Simulator or iOS physical device can
+recover through private AX, which also reads past the AX server's per-request depth limit that
+makes a deep tree fail with `kAXErrorIllegalArgument`. tvOS, visionOS, watchOS, and macOS have no
+non-XCTest semantic backend and do not penalize the channel. See
 [`../../docs/adr/0004-ios-snapshot-backend-strategy.md`](../../docs/adr/0004-ios-snapshot-backend-strategy.md)
 for the backend boundary and future simulator AX-service direction.
 Presentation and geometry contracts are in
@@ -116,12 +117,13 @@ These events penalize the XCTest accessibility channel for that bundle for a bou
 
 Under a penalty, regular plans derive the next step from backend traits (`effectiveSnapshotCapturePlan`).
 If a runnable non-XCTest backend exists, they defer to it.
-If none exists, as on physical iOS devices, they run a short XCTest probe instead of the full tree slice.
+If none exists, they run a short XCTest probe instead of the full tree slice.
+No current runner reaches that state: only iOS runners penalize the channel, and every iOS runner has private AX.
 A recovery probe is due thirty seconds after the penalty starts, and thirty seconds after each probe starts.
 A regular plan with a due probe runs the bounded tree before the independent backend, in the same capture.
 A failed recovery probe does not change the penalty deadline, because its short slice gives no new evidence about the channel.
 A completed tree probe clears the penalty early only when its acquisition fits the probe slice and its quality is accepted.
-Physical-device plans probe on every capture.
+Plans without an independent backend probe on every capture.
 Explicit backend pins and the raw plan keep their order.
 The plan deadline and the abandoned-main-thread-work gate apply to every attempt (#1105, #1156, #2621, #3844).
 
