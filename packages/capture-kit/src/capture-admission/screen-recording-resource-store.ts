@@ -1,3 +1,4 @@
+import type fs from 'node:fs';
 import { SCREEN_RECORDING_RESOURCE_KIND } from '@agent-device/contracts/screen-recording-runtime';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
@@ -35,3 +36,9 @@ export const screenRecordingResourceStore = createDurableCaptureResourceStore({
  * `screen-recording-stop-recovery.ts`; both name this key so a replay cannot miss what was written.
  */
 export const SCREEN_RECORDING_COMPLETION_METADATA_KEY = 'completion';
+
+export function recordingExportFileIdentity(stat: fs.Stats | undefined): string | null {
+  return stat?.isFile()
+    ? `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
+    : null;
+}

@@ -5,6 +5,10 @@ import { expect, test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
+import {
+  createStopProgress,
+  withDurableCaptureResourceFence,
+} from '../../durable-capture/fence.ts';
 import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
 import { createScreenRecordingLiveHandle } from '../../screen-recording-live-handle.ts';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
@@ -13,6 +17,8 @@ import { createScreenRecordingAdmissionLedger } from '../screen-recording-admiss
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
+  finishRecoveredScreenRecording,
+  screenRecordingDurableResource,
 } from '../screen-recording-session-resource.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -275,6 +281,102 @@ test('a record stop that fails after collecting resumes through the fence withou
   expect(exports).toHaveBeenCalledTimes(2);
   expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
+
+test.each(['startup recovery', 'recovered stop', 'recovered stop with replacement'] as const)(
+  '%s uses the recording producer checkpoint after the native recorder finished',
+  async (route) => {
+    const sessionsDir = mkdtempForTestSync('screen-recording-completed-recovery-');
+    const sessionDir = path.join(sessionsDir, 'recording');
+    const resourcePath = screenRecordingResourceStore.resolvePath(sessionDir);
+    const outPath = path.join(sessionDir, 'recording.mp4');
+    const fence = { token: 'recording-fence', generation: 1 };
+    const envelope = createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: 'recording',
+      device: { id: device.id, family: 'android', kind: 'emulator' },
+      owner: localRuntimeOwner('android'),
+      fence,
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { recordingId: 'recording-id' } },
+      metadata: { remoteCapturePath: outPath, remoteCaptureReservation: fence.token },
+    });
+    screenRecordingResourceStore.write(resourcePath, envelope);
+    // Android publishes native completion only after this sequence returns. Leave the host
+    // manifest open to model a daemon that exits before its durable finish transition.
+    const nativeCompletion = await withDurableCaptureResourceFence({
+      store: screenRecordingResourceStore,
+      resourcePath,
+      expected: fence,
+      onCompleted: () => {
+        throw new Error('Expected an open manifest');
+      },
+      run: (lease) =>
+        stopAndExportScreenRecording({
+          snapshot: {
+            backend: 'android',
+            outPath,
+            startedAt: 1,
+            scope: 'app',
+            showTouches: false,
+            recordOnlySession: false,
+            gestureEvents: [],
+          },
+          progress: createStopProgress(lease),
+          steps: {
+            stop: async () => ({ observation: { recorder: 'confirmed' } }),
+            collect: async () => {},
+            finalize: async () => {
+              fs.writeFileSync(outPath, 'producer export');
+              return { nativePathDisposition: 'retirable' };
+            },
+            discard: async () => {},
+          },
+        }),
+    });
+    const scope = {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    };
+    const acquireControl = async () => ({
+      reattach: async () => nativeCompletion,
+      cleanup: async () => ({ status: 'cleaned' as const }),
+      [Symbol.asyncDispose]: async () => {},
+    });
+    const stop = () => finishRecoveredScreenRecording({ resourcePath, scope, acquireControl });
+
+    if (route === 'recovered stop with replacement') {
+      fs.writeFileSync(outPath, 'different bytes at the reserved path');
+      await expect(stop()).rejects.toThrow('Recording export does not match its stored proof.');
+      expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+        envelope: { lifecycle: 'open' },
+      });
+      return;
+    }
+    if (route === 'startup recovery') {
+      await expect(
+        screenRecordingDurableResource.recoverOne(
+          { sessionsDir, scope, acquireControl },
+          resourcePath,
+        ),
+      ).resolves.toBe('recovered');
+    } else {
+      await expect(stop()).resolves.toEqual(nativeCompletion.result);
+    }
+    expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+      envelope: {
+        lifecycle: 'completed',
+        metadata: {
+          completion: { outPath },
+          remoteCaptureExport: {
+            completedAt: expect.any(Number),
+            identities: [expect.any(String)],
+          },
+        },
+      },
+    });
+  },
+);
 
 /**
  * What session teardown does with a recording `record stop` already committed: the queued disposal had

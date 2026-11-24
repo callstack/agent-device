@@ -1,8 +1,4 @@
-import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
 import type { JsonObject } from '@agent-device/contracts/client';
-import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
-import { isRecord } from '@agent-device/kernel/record';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -29,9 +25,10 @@ import type { ScreenRecordingAdmissionLedger } from './screen-recording-admissio
 import {
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
   RecordingProofIoError,
-  recordingCheckpointError,
   screenRecordingResourceStore,
 } from './screen-recording-resource-store.ts';
+
+export { recordingExportFileIdentity } from './screen-recording-resource-store.ts';
 
 export const screenRecordingDurableResource = createDurableCaptureResource<
   'screen-recording',
@@ -46,7 +43,7 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
     ...(typeof metadata?.remoteCapturePath === 'string' &&
     typeof metadata.remoteCaptureReservation === 'string'
       ? {
-          remoteCaptureExport: await verifyRecordingExport(
+          remoteCaptureExport: (await import('../recording/export-proof.ts')).verifyRecordingExport(
             metadata.remoteCapturePath,
             result,
             metadata,
@@ -104,97 +101,6 @@ export function finishLiveScreenRecording(params: {
   return screenRecordingDurableResource.finishLive(params);
 }
 
-async function verifyRecordingExport(
-  reservedPath: string,
-  completion: ScreenRecordingCompletion,
-  metadata: JsonObject,
-  progress?: DurableCaptureProgress,
-) {
-  const [{ chunkPathAt }, { deriveRecordingTelemetryPath }] = await Promise.all([
-    import('../recording/output-path.ts'),
-    import('../recording/telemetry.ts'),
-  ]);
-  const files = [
-    completion.outPath,
-    ...(completion.chunks?.slice(1).map((chunk) => chunk.path) ?? []),
-    ...(completion.telemetryPath ? [completion.telemetryPath] : []),
-  ];
-  const matchesReservation =
-    completion.outPath === reservedPath &&
-    (completion.chunks?.every(
-      (chunk, offset) =>
-        chunk.index === offset + 1 && chunk.path === chunkPathAt(reservedPath, chunk.index),
-    ) ??
-      true) &&
-    (completion.telemetryPath === undefined ||
-      completion.telemetryPath === deriveRecordingTelemetryPath(reservedPath));
-  if (!matchesReservation) {
-    throw new AppError('COMMAND_FAILED', 'Recording export does not match its reservation.');
-  }
-  const stored = metadata.remoteCaptureExport;
-  if (stored !== undefined) {
-    const { completedAt, identities } = readRecordingExportProgress(stored, files.length);
-    if (
-      identities.some(
-        (identity, index) =>
-          identity !== null && readRecordingExportIdentity(files[index]!) !== identity,
-      )
-    ) {
-      throw new AppError('COMMAND_FAILED', 'Recording export does not match its stored proof.');
-    }
-    if (identities.includes(null)) throw missingProducerProof();
-    return { completedAt, identities };
-  }
-  if (!progress) throw missingProducerProof();
-  return checkpointRecordingExport(files, progress);
-}
-
-function checkpointRecordingExport(files: readonly string[], progress: DurableCaptureProgress) {
-  const completedAt = Date.now();
-  const identities: (string | null)[] = files.map(() => null);
-  const proof = { completedAt, identities };
-  const evidence = { remoteCaptureExport: proof };
-  try {
-    for (const [index, file] of files.entries())
-      identities[index] = readRecordingExportIdentity(file);
-    progress.record(evidence);
-  } catch (error) {
-    if (error instanceof RecordingProofIoError) throw new RecordingProofIoError(evidence);
-    throw error;
-  }
-  return proof;
-}
-
-function readRecordingExportProgress(previous: unknown, fileCount: number) {
-  const { completedAt, identities } = isRecord(previous) ? previous : {};
-  if (
-    typeof completedAt !== 'number' ||
-    !Number.isFinite(completedAt) ||
-    !Array.isArray(identities) ||
-    identities.length !== fileCount ||
-    !identities.every(
-      (identity): identity is string | null => identity === null || typeof identity === 'string',
-    )
-  ) {
-    throw new AppError('COMMAND_FAILED', 'Recording export does not match its stored proof.');
-  }
-  return { completedAt, identities };
-}
-
-function readRecordingExportIdentity(file: string): string {
-  try {
-    const identity = recordingExportFileIdentity(fs.lstatSync(file, { throwIfNoEntry: false }));
-    if (identity !== null) return identity;
-  } catch (error) {
-    throw recordingCheckpointError(error);
-  }
-  throw new RecordingProofIoError();
-}
-
-function missingProducerProof(): AppError {
-  return new AppError('COMMAND_FAILED', 'Recording export is missing producer proof.');
-}
-
 export async function finishPendingScreenRecordingProof(
   resourcePath: string,
   expected: DurableResourceEnvelope<'screen-recording'>,
@@ -217,7 +123,8 @@ export async function finishPendingScreenRecordingProof(
         metadata.remoteCaptureReservation !== expected.fence.token
       )
         throw unreadableRecordingProof();
-      const proof = await verifyRecordingExport(metadata.remoteCapturePath, completion, metadata);
+      const { verifyRecordingExport } = await import('../recording/export-proof.ts');
+      const proof = verifyRecordingExport(metadata.remoteCapturePath, completion, metadata);
       return lease.transition('completed', {
         metadata: {
           ...lease.envelope.metadata,
@@ -227,12 +134,6 @@ export async function finishPendingScreenRecordingProof(
       });
     },
   });
-}
-
-export function recordingExportFileIdentity(stat: fs.Stats | undefined): string | null {
-  return stat?.isFile()
-    ? `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
-    : null;
 }
 
 export function encodeScreenRecordingCompletionMetadata(

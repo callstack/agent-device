@@ -99,17 +99,13 @@ export async function stopAndExportScreenRecording(
       exportPath: snapshot.outPath,
       stoppedAtMs: stoppedAtMs ?? now(),
     }));
-  progress?.record(writeStopCheckpoint({ exportPath: snapshot.outPath, finalization }));
-  // The copy is what a retry re-finalizes from, so it goes only after the finalization it produced is
-  // journaled: from here a retry replays that finalization and never reads the copy again.
-  await steps.discard(collectedPath);
   const { nativePathDisposition, warning, ...exportFacts } = finalization;
   const warnings = [warning, recorderWarning].filter(
     (entry): entry is string => entry !== undefined && entry.length > 0,
   );
   // The recorder's disclosure is folded into the warning the caller reads; every other field the
   // finalizer returned is served as it was journaled, so a replay serves what the first stop would have.
-  return createScreenRecordingCompletion(
+  const completion = createScreenRecordingCompletion(
     snapshot,
     { ...exportFacts, ...(warnings.length === 0 ? {} : { warning: warnings.join(' ') }) },
     {
@@ -117,4 +113,21 @@ export async function stopAndExportScreenRecording(
       ...(nativePathDisposition === undefined ? {} : { nativePathDisposition }),
     },
   );
+  const reservedPath = progress?.learned?.remoteCapturePath;
+  const proof =
+    learned.finalization === undefined &&
+    typeof reservedPath === 'string' &&
+    typeof progress?.learned?.remoteCaptureReservation === 'string'
+      ? (await import('./export-proof.ts')).captureRecordingExportEvidence(
+          reservedPath,
+          completion.result,
+        )
+      : undefined;
+  progress?.record({
+    ...writeStopCheckpoint({ exportPath: snapshot.outPath, finalization }),
+    ...proof,
+  });
+  // Keep the collected copy until the finalization and its producer proof are durable together.
+  await steps.discard(collectedPath);
+  return completion;
 }
