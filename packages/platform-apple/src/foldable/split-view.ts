@@ -26,8 +26,10 @@ export async function appleSplitViewRunnerPlan(
   const lit = table.kind === 'multi-panel' ? table.inventory : undefined;
   if (!lit?.activeDisplay || lit.ambiguous || lit.activeDisplay.primary) {
     throw splitViewUnavailableError(
-      'Split View needs an iOS simulator with more than one panel and its inner panel lit',
-      { deviceId: device.id },
+      table.kind === 'unreadable'
+        ? 'The panel table did not answer, so the lit panel is unknown and nothing was sent'
+        : 'Split View needs an iOS simulator with more than one panel and its inner panel lit',
+      { deviceId: device.id, panelTable: table.kind },
     );
   }
   return { ...plan, contactOrigin: 'screen-edge' };
