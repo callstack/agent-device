@@ -2295,7 +2295,7 @@ agent-device doctor --remote --json
 ```
 
 * `doctor` is read-only: it never boots, installs, or changes the device. Without `--platform`, it checks every discoverable target.
-* `--app` adds install state and Metro and React Native wiring checks for that app.
+* `--app` checks whether the app is installed and enables app-specific diagnostics. To check Metro reachability, run `doctor` locally on the Metro host from your project directory.
 * `--remote` runs only the checks that don’t need a booted device; use it in CI bootstrap.
 
 ## Prepare Apple runner
