@@ -5,6 +5,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { test } from 'vitest';
 import { createSocketServer, listenHttpServer, listenNetServer } from './transport.ts';
+import { daemonStartupExitCode } from './daemon-runtime.ts';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
 import {
   clearRequestAbortRegistration,
@@ -511,7 +512,7 @@ test.for(['EPERM', 'EACCES'])(
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, 'daemon_listen_denied');
       assert.equal(error.details?.code, code);
-      assert.equal(error.details?.exitCode, DAEMON_STARTUP_EXIT_CODES.listenDenied);
+      assert.equal(daemonStartupExitCode(error), DAEMON_STARTUP_EXIT_CODES.listenDenied);
       return true;
     });
   },

@@ -45,7 +45,8 @@ export const DAEMON_UNAVAILABLE_REASONS = {
   bindingMismatch: { reason: 'daemon-binding-mismatch' },
   // The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names.
   policyMismatch: { reason: 'DAEMON_POLICY_MISMATCH' },
-  // The daemon process ended before it registered a reachable endpoint.
+  // The daemon process ended before it registered a reachable endpoint, for a cause other than a
+  // denied loopback listen.
   startupExited: { reason: 'startup-exited' },
   // The daemon process ended because the host refused its loopback listen, as a sandbox around the
   // launching command does.
