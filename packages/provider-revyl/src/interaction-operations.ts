@@ -4,7 +4,10 @@ import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import {
+  bindProviderGestureInteractor,
+  gestureRuntimeOperationFacts,
+} from '@agent-device/contracts/gesture-runtime';
 import {
   bindProviderScrollInteractor,
   scrollRuntimeOperationFacts,
@@ -52,10 +55,13 @@ const typeTextUnavailable = unavailableFact(
   PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl enters text at a point; run fill <field> "text" instead of type.',
 );
-/** The worker executes actions, not gesture plans; a plan has no action to send it to. */
+/**
+ * The worker's one gesture action is a single-finger `/drag`, so a plan with a second contact or a
+ * held contact has no action to send it to.
+ */
 const gestureUnavailable = unavailableFact(
   PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
-  'Revyl does not expose portable gesture execution.',
+  'Revyl performs a one-finger fling or pan as one timed drag; it has no multi-touch or held-drag action.',
 );
 /**
  * Revyl's `/key` action accepts ENTER and BACKSPACE: one key rather than a keyboard surface. It
@@ -156,8 +162,12 @@ export function revylInteractionOperationFacts(liveSession?: RuntimeOperationUna
       longPress: cell,
       fill: cell,
     }),
+    // A one-finger fling or pan is one timed drag of the plan's path. Whether this worker can time a
+    // drag is a property of its session, so the interactor refuses a worker that cannot.
     ...gestureRuntimeOperationFacts({
       unsupported: liveSession ?? gestureUnavailable,
+      plan: cell,
+      directionalFling: cell,
     }),
     // A scroll is one drag of the planned finger path, so it needs no gesture execution.
     ...scrollRuntimeOperationFacts({ scroll: cell }),
@@ -243,7 +253,7 @@ export function revylSettingsOperationFacts(device: Pick<DeviceInfo, 'platform'>
 
 /**
  * Binds the operations that reach the device through the session's interactor: the two captures,
- * focus, touch and scroll. Refused cells stay absent from the binding, so a refusal is the facts'
+ * focus, touch, one-finger gestures and scroll. Refused cells stay absent from the binding, so a refusal is the facts'
  * answer and never a call that reaches a throwing interactor.
  */
 export function bindRevylInteractionOperations(
@@ -277,6 +287,12 @@ export function bindRevylInteractionOperations(
       resolveInteractor,
       facts: revylInteractionOperationFacts(),
       pause: async (milliseconds: number) => await sleep(milliseconds, undefined, { signal }),
+    }),
+    ...bindProviderGestureInteractor({
+      device,
+      signal,
+      resolveInteractor,
+      facts: revylInteractionOperationFacts(),
     }),
     ...bindProviderScrollInteractor({ device, signal, resolveInteractor }),
   });

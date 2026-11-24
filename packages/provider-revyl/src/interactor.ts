@@ -16,6 +16,7 @@ import type {
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
   parseAppearanceAction,
   parsePermissionAction,
@@ -326,6 +327,52 @@ class RevylInteractor implements Interactor {
       ...(durationMs === undefined ? {} : { durationMs }),
       backend: 'revyl-device-proxy',
     };
+  }
+
+  /**
+   * A one-finger fling or pan as one `/drag` from the plan's first sample to its last, over the
+   * plan's duration. The fling's speed is its distance over that duration, so the drag must carry
+   * `duration_ms`: a worker whose `health` does not report `supports_explicit_drag_duration` picks
+   * its own speed, and the gesture is refused there rather than run as a slow swipe that reports a
+   * fling. The planner has already held every sample inside the viewport.
+   */
+  async performGesture(plan: GesturePlan): Promise<Record<string, unknown>> {
+    if (plan.topology !== 'single') {
+      throw unsupported(
+        'gesture',
+        'Revyl performs a one-finger fling or pan as one timed drag; it has no multi-touch action.',
+      );
+    }
+    if (!this.session.dragDuration) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'This Revyl worker cannot be told how fast a drag travels, so it cannot perform a timed gesture.',
+        {
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
+          command: 'gesture',
+          gesture: plan.intent,
+          runId: this.session.runId,
+          hint: 'Use scroll, which runs the drag at the speed Revyl gives it.',
+        },
+      );
+    }
+    const samples = plan.pointers[0].samples;
+    const start = samples[0].point;
+    const end = samples.at(-1)!.point;
+    const drag = {
+      x1: Math.round(start.x),
+      y1: Math.round(start.y),
+      x2: Math.round(end.x),
+      y2: Math.round(end.y),
+    };
+    await this.workerAction('drag', {
+      start_x: drag.x1,
+      start_y: drag.y1,
+      end_x: drag.x2,
+      end_y: drag.y2,
+      duration_ms: plan.durationMs,
+    });
+    return { backend: 'revyl-device-proxy', ...drag, durationMs: plan.durationMs };
   }
 
   /** Refuses a drag duration this worker cannot honor; Revyl's `duration_ms` starts at 1. */

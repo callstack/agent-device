@@ -15,6 +15,7 @@ import {
   type RevylFixtureBackend,
 } from './revyl-backend.fixtures.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import { REVYL_IOS_HIERARCHY } from './revyl-ios-hierarchy.fixtures.ts';
 
 const ANDROID_HIERARCHY =
@@ -356,6 +357,53 @@ test('a scroll that names a duration is refused rather than run at another speed
     fixture.paths().some((request) => request.endsWith('/drag')),
     false,
     'the refused scroll sends no gesture',
+  );
+});
+
+const FLING_LEFT: GesturePlan = {
+  topology: 'single',
+  intent: 'fling',
+  executionProfile: 'endpoint-hold',
+  durationMs: 100,
+  viewport: { x: 0, y: 0, width: 390, height: 844 },
+  pointers: [
+    {
+      pointerId: 0,
+      samples: [
+        { offsetMs: 0, point: { x: 300.4, y: 400.6 } },
+        { offsetMs: 100, point: { x: 120, y: 400.6 } },
+      ],
+    },
+  ],
+};
+
+test('a fling is one drag of its path over its duration on a worker that times drags', async () => {
+  const { fixture, interactor } = await liveInteractor('android', { dragDuration: true });
+  const report = await interactor.performGesture?.(FLING_LEFT);
+
+  assert.deepEqual(fixture.bodyFor('drag'), {
+    start_x: 300,
+    start_y: 401,
+    end_x: 120,
+    end_y: 401,
+    duration_ms: 100,
+  });
+  assert.equal((report as Record<string, unknown>).durationMs, 100);
+});
+
+test('a fling is refused rather than run at the speed a worker that cannot time drags picks', async () => {
+  const { fixture, interactor } = await liveInteractor('android');
+
+  await assert.rejects(
+    () => interactor.performGesture!(FLING_LEFT),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.reason === 'unsupported-provider-mode',
+  );
+  assert.equal(
+    fixture.paths().some((request) => request.endsWith('/drag')),
+    false,
   );
 });
 
