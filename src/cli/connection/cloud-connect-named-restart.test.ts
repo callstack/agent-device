@@ -91,6 +91,7 @@ function stubBroker() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -249,4 +250,80 @@ test('connect on a named session that is already bound conflicts, and --force en
     phase: 'committed',
     id: '00000000-0000-4000-8000-000000000002',
   });
+});
+
+test('slow hosted allocation reports bounded stderr progress and aborts the final status read', async () => {
+  vi.useFakeTimers();
+  const stateDir = freshStateDir();
+  const deadline = new Date(Date.now() + 3600_000).toISOString();
+  const posted = Promise.withResolvers<void>();
+  const created = Promise.withResolvers<Response>();
+  const pendingPoll = Promise.withResolvers<Response>();
+  const polls: Array<{ url: URL; init: RequestInit }> = [];
+  let requestKey: string | null = null;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: URL, init: RequestInit) => {
+      if (init.method === 'POST') {
+        requestKey = new Headers(init.headers).get('Idempotency-Key');
+        posted.resolve();
+        return created.promise;
+      }
+      polls.push({ url, init });
+      if (polls.length === 1) {
+        return Response.json({ error: 'private-upstream-detail' }, { status: 401 });
+      }
+      if (polls.length === 2) return Response.json({ state: 'running', deadlineAt: deadline });
+      if (polls.length === 3) {
+        return Response.json({
+          state: 'allocating',
+          deadlineAt: deadline,
+          attach,
+          viewerUrl: 'https://viewer.example/session?token=private',
+          account: 'private-account-detail',
+        });
+      }
+      return pendingPoll.promise;
+    }),
+  );
+
+  const connecting = runCliCapture(connectArgs, { env: processEnv(stateDir) });
+  await posted.promise;
+  await vi.advanceTimersByTimeAsync(4_999);
+  expect(polls).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(15_001);
+  expect(polls).toHaveLength(4);
+  expect(requestKey).toEqual(expect.any(String));
+  for (const { url, init } of polls) {
+    expect(url.origin).toBe('https://cloud.example');
+    expect(url.pathname).toBe('/v1/sessions');
+    expect([...url.searchParams]).toEqual([['idempotencyKey', requestKey]]);
+    expect(init).toMatchObject({ method: 'GET', redirect: 'error' });
+  }
+
+  created.resolve(
+    Response.json(
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        vendor: 'provider-a',
+        transport: 'agent-device-daemon',
+        platform: 'ios',
+        deadlineAt: deadline,
+        attach,
+      },
+      { status: 201 },
+    ),
+  );
+  const result = await connecting;
+  expect(result.code).toBeNull();
+  expect(JSON.parse(result.stdout)).toMatchObject({ success: true });
+  expect(result.stderr).toBe(
+    'connect cloud: allocating, 5s elapsed\n' +
+      'connect cloud: allocating, 10s elapsed\n' +
+      `connect cloud: allocating, 15s elapsed (session deadline ${deadline})\n`,
+  );
+  expect(polls[3]?.init.signal?.aborted).toBe(true);
+  pendingPoll.resolve(Response.json({ state: 'allocating', deadlineAt: deadline }));
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(polls).toHaveLength(4);
 });
