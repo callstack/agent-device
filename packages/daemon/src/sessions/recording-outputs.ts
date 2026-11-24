@@ -25,6 +25,7 @@ import {
   ARTIFACT_CLEANUP_TIMEOUT_MS,
   commitRecordingFileOutputs,
   leasedOutputRefusal,
+  settleRecordingArchiveCopy,
   recordingRegistrySignal,
 } from '../resources/artifact-tracking.ts';
 import {
@@ -88,7 +89,7 @@ function recordingProducer(metadata: RecordingEnvelope['metadata']) {
 function publishVerifiedRecording(
   envelope: RecordingEnvelope,
   recording: ReturnType<typeof readVerifiedRecording>,
-  retainOnly = false,
+  delivery?: 'publish' | 'retain' | 'await-archive',
 ) {
   const { producer, files, completedAt } = recording;
   return commitRecordingFileOutputs(
@@ -99,12 +100,21 @@ function publishVerifiedRecording(
       : envelope.sessionId,
     completedAt,
     envelope.fence.token,
-    retainOnly,
+    delivery,
   );
 }
 
-export async function commitRecordingOutputs(envelope: RecordingEnvelope, retainOnly = false) {
-  return publishVerifiedRecording(envelope, readVerifiedRecording(envelope), retainOnly);
+export async function commitRecordingOutputs(
+  envelope: RecordingEnvelope,
+  context: 'live' | 'replay' | 'retain',
+) {
+  const delivery =
+    context === 'live' && typeof envelope.metadata?.suiteRecordingArchivePath === 'string'
+      ? 'await-archive'
+      : context === 'retain'
+        ? 'retain'
+        : 'publish';
+  return publishVerifiedRecording(envelope, readVerifiedRecording(envelope), delivery);
 }
 
 export async function collectSuiteRecordingOutputs(store: SessionStore, ref: SessionRef) {
@@ -143,10 +153,16 @@ async function readSuiteRecordingOutputs(
   }
 
   const recording = readVerifiedRecording(envelope);
-  const committed = await publishVerifiedRecording(envelope, recording);
   const archivePath = envelope.metadata.suiteRecordingArchivePath;
+  const hasArchive = typeof archivePath === 'string';
+  const committed = await publishVerifiedRecording(
+    envelope,
+    recording,
+    hasArchive ? 'await-archive' : 'publish',
+  );
   let paths: readonly string[] = [];
-  if (typeof archivePath === 'string') {
+  if (hasArchive) {
+    const signal = recordingRegistrySignal();
     try {
       paths = await copySuiteRecording(archivePath, recording);
     } catch (error) {
@@ -155,6 +171,8 @@ async function readSuiteRecordingOutputs(
         phase: 'suite_recording_archive_copy_failed',
         data: { session: ref.address, error: errorMessage(error) },
       });
+    } finally {
+      if (!signal.aborted) settleRecordingArchiveCopy(recording.files);
     }
   }
   return committed.map(({ artifactId, fileName }, index) => ({

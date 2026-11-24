@@ -104,3 +104,34 @@ const unavailable = Object.freeze({
   available: false as const,
   reason: 'owner-capability-missing' as const,
 });
+
+test('recovery preserves a pending recording proof after native cleanup', async () => {
+  const sessionsDir = mkdtempForTestSync('screen-recording-proof-recovery-');
+  const session = { name: 'session', device };
+  const resource = makeTestScreenRecordingResource(session);
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    path.join(sessionsDir, session.name),
+  );
+  const envelope = {
+    ...resource.envelope,
+    metadata: { phase: 'export-proof-pending', cleanupStatus: 'already-missing' },
+  };
+  screenRecordingResourceStore.write(resourcePath, envelope);
+  const bind = vi.fn();
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+    bind,
+    inspectFacts: vi.fn(),
+    shutdown: vi.fn(),
+  };
+
+  await expect(
+    recoverScreenRecordingResourceAfterDaemonLock({
+      sessionsDir,
+      resourcePath,
+      gateway,
+      scope,
+    }),
+  ).resolves.toBe('ignored');
+  expect(bind).not.toHaveBeenCalled();
+  expect(screenRecordingResourceStore.read(resourcePath)).toEqual({ status: 'decoded', envelope });
+});

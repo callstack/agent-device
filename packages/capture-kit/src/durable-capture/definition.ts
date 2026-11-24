@@ -1,4 +1,5 @@
 import type { JsonObject } from '@agent-device/contracts/client';
+import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type {
@@ -59,6 +60,7 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   completionMetadata(
     result: C,
     metadata: DurableResourceEnvelope<K>['metadata'],
+    progress: DurableCaptureProgress,
   ): JsonObject | Promise<JsonObject>;
   /**
    * The completion this kind stored in a record that is already committed, or nothing it can serve.
@@ -73,6 +75,7 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
    * replay; its callers then get the terminal refusal.
    */
   pendingCompletionMetadata?(result: C, error: unknown): JsonObject | undefined;
+  nativeCleanupSettled?(metadata: JsonObject | undefined): boolean;
   completionFromMetadata?(metadata: JsonObject | undefined): C | undefined | Promise<C | undefined>;
   failedFinishPolicy: DurableCaptureFailedFinishPolicy;
   messages: Readonly<{

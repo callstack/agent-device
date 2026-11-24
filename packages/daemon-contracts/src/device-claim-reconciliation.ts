@@ -1,4 +1,5 @@
 import { appLogDurableResource } from '@agent-device/capture-kit/app-log-durable-resource';
+import type { JsonObject } from '@agent-device/contracts/client';
 import { recoverAppLogResourceAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -14,7 +15,10 @@ import { type DurableSessionResourceKind } from '@agent-device/capture-kit/durab
 import { recoverPerfCaptureResourceAfterDaemonLock } from '@agent-device/capture-kit/perf-capture-recovery';
 import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
-import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import {
+  screenRecordingDurableResource,
+  screenRecordingNativeCleanupSettled,
+} from '@agent-device/capture-kit/screen-recording-session-resource';
 import { resolveSessionDir } from './session-artifact-paths.ts';
 
 export function createDeviceClaimReconciler(params: {
@@ -34,7 +38,7 @@ export function createDeviceClaimReconciler(params: {
         const resource = DEVICE_CLAIM_DURABLE_RESOURCES[resourceKind];
         const currentOwnership = inspectResourceOwnership(resource, claim, sessionDir);
         if (currentOwnership.status === 'retained') return currentOwnership;
-        if (currentOwnership.status === 'missing') continue;
+        if (currentOwnership.status === 'missing' || !currentOwnership.requiresRecovery) continue;
         // Recovery is intentionally sequential: resources can bind the same exact
         // device/runtime owner, so one must release its binding before the next starts.
         const outcome = await resource.recover(params, sessionsDir, resourcePath);
@@ -134,6 +138,7 @@ export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryIns
 
 type ClaimDurableResource = Readonly<{
   resourceKind: DurableSessionResourceKind;
+  nativeCleanupSettled?(metadata: JsonObject | undefined): boolean;
   store:
     | typeof appLogDurableResource.store
     | typeof screenRecordingDurableResource.store
@@ -160,6 +165,7 @@ const DEVICE_CLAIM_DURABLE_RESOURCES = {
   },
   'screen-recording': {
     resourceKind: 'screen-recording',
+    nativeCleanupSettled: screenRecordingNativeCleanupSettled,
     store: screenRecordingDurableResource.store,
     recover: async (params, sessionsDir, resourcePath) =>
       await recoverScreenRecordingResourceAfterDaemonLock({
@@ -216,7 +222,13 @@ function inspectResourceOwnership(
   ) {
     return { status: 'retained', reason: `${resource.resourceKind}-owner-mismatch` };
   }
-  return { status: 'owned', resourcePath, requiresRecovery: record.envelope.lifecycle === 'open' };
+  return {
+    status: 'owned',
+    resourcePath,
+    requiresRecovery:
+      record.envelope.lifecycle === 'open' &&
+      !resource.nativeCleanupSettled?.(record.envelope.metadata),
+  };
 }
 
 /** A failure's code or class, without its message: the message can name a session path. */

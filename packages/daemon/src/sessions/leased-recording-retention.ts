@@ -24,7 +24,7 @@ export async function retainLeasedSessionRecording(
   try {
     const hostGlobal =
       recordingOutputLeaseVerifier(metadata) === null && metadata.remoteCaptureTenantId === null;
-    await commitRecordingOutputs(envelope, hostGlobal);
+    await commitRecordingOutputs(envelope, hostGlobal ? 'retain' : 'live');
   } catch (error) {
     emitDiagnostic({
       level: 'warn',

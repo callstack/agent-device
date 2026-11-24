@@ -1,4 +1,6 @@
 import { AppError, type ReasonTable, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
+import type { JsonObject } from '@agent-device/contracts/client';
+import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
 import type {
   DurableResourceEnvelope,
   DurableResourceLifecycleState,
@@ -57,13 +59,21 @@ export async function withDurableCaptureResourceFence<K extends string, Result>(
     store: DurableCaptureResourceStore<K>;
     resourcePath: string;
     expected: ResourceOwnershipFence;
+    unreadableRecordError?: () => Error;
     /** Answers a run whose record this fence found committed, before any of the run's work. */
     onCompleted(lease: DurableCaptureCompletedResourceFenceLease<K>): Result | Promise<Result>;
     run(lease: DurableCaptureOpenResourceFenceLease<K>): Promise<Result>;
   }>,
 ): Promise<Result> {
   return await serializeResource(params.resourcePath, async () => {
-    const admitted = requireAdmissibleRecord(params.store, params.resourcePath, params.expected);
+    const read = () =>
+      requireAdmissibleRecord(
+        params.store,
+        params.resourcePath,
+        params.expected,
+        params.unreadableRecordError,
+      );
+    const admitted = read();
     if (admitted.envelope.lifecycle === 'completed') {
       return await params.onCompleted({ envelope: admitted.envelope });
     }
@@ -77,11 +87,7 @@ export async function withDurableCaptureResourceFence<K extends string, Result>(
         },
         transition(lifecycle, update = {}) {
           // The persisted record decides, so a lease cannot publish from a view its own run cached.
-          const persisted = requireAdmissibleRecord(
-            params.store,
-            params.resourcePath,
-            params.expected,
-          );
+          const persisted = read();
           if (persisted.envelope.lifecycle === 'completed') {
             throw completedDurableCaptureError(params.store);
           }
@@ -107,9 +113,13 @@ function requireAdmissibleRecord<K extends string>(
   store: DurableCaptureResourceStore<K>,
   resourcePath: string,
   expected: ResourceOwnershipFence,
+  unreadableRecordError?: () => Error,
 ): Extract<DurableCaptureResourceRecord<K>, { status: 'decoded' }> {
   const record = store.read(resourcePath);
   if (record.status !== 'decoded') {
+    if (record.status === 'unreattachable' && unreadableRecordError) {
+      throw unreadableRecordError();
+    }
     throw fenceError(
       store,
       record.status === 'missing'
@@ -121,6 +131,18 @@ function requireAdmissibleRecord<K extends string>(
     throw fenceError(store, `${store.displayName} resource ownership fence was lost`);
   }
   return record;
+}
+
+/** Stores stop progress under the current fence so a retry can use the facts already recorded. */
+export function createStopProgress<K extends string>(
+  lease: DurableCaptureOpenResourceFenceLease<K>,
+): DurableCaptureProgress {
+  return Object.freeze({
+    learned: lease.envelope.metadata,
+    record: (fact: JsonObject) => {
+      lease.transition('open', { metadata: { ...lease.envelope.metadata, ...fact } });
+    },
+  });
 }
 
 function sameFence(left: ResourceOwnershipFence, right: ResourceOwnershipFence): boolean {

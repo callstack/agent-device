@@ -31,9 +31,6 @@ import type { SessionRef } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import { resolveLeaseScope } from '../core/lease-context.ts';
 
-// --- Leased output ownership ---
-
-/** The `error.details.reason` values a leased-output refusal publishes. */
 const LEASED_OUTPUT_REASONS = {
   // The request does not send the id of the lease that produced the artifact or diagnostics record.
   leaseMismatch: { reason: 'LEASE_OUTPUT_MISMATCH' },
@@ -138,8 +135,6 @@ export function diagnosticsRecordOwner(recordId: string): string | undefined | n
   return owner === UNLEASED_RECORD ? undefined : owner;
 }
 
-// --- Downloadable artifact tracking ---
-
 export const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
 const ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS = 15 * 60 * 1000;
 
@@ -182,6 +177,7 @@ type ArtifactEntry = {
     directory?: string;
     lifetimeId: string;
     recording?: true;
+    awaitingArchive?: boolean;
     consume?: () => void;
   }>;
   /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
@@ -344,14 +340,13 @@ function bindFileOutputDelivery(
 
 export const recordingRegistrySignal = () => artifactTracking().recordingScope.signal;
 
-/** Commits verified recordings independently of the request that delivers their IDs. */
 export async function commitRecordingFileOutputs(
   files: readonly RecordingFile[],
   producer: FileOutputProducer,
   sessionName: string,
   completedAt: number,
   reservationId: string,
-  retainOnly = false,
+  publication: 'publish' | 'retain' | 'await-archive' = 'publish',
 ): Promise<DaemonArtifact[]> {
   const { verifyRecordingFiles, recordConsumption, retainUnregisteredRecording } =
     await import('./artifact-file-storage.ts');
@@ -359,7 +354,7 @@ export async function commitRecordingFileOutputs(
   const expiresAt = completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS;
   const unregistered = files.filter(({ artifactId }) => !artifacts.has(artifactId));
   retainUnregisteredRecording(unregisteredRecordings, reservationId, unregistered, expiresAt);
-  if (retainOnly) return [];
+  if (publication === 'retain') return [];
   verifyRecordingFiles(files, expiresAt);
   const results = files.map(({ path: artifactPath, sourceIdentity, artifactId, ...delivery }) => {
     if (!artifacts.has(artifactId)) {
@@ -379,6 +374,7 @@ export async function commitRecordingFileOutputs(
         {
           lifetimeId: producer.lifetimeId,
           recording: true,
+          awaitingArchive: publication === 'await-archive',
           consume: () => recordConsumption(artifactPath, expiresAt),
         },
         completedAt,
@@ -389,6 +385,14 @@ export async function commitRecordingFileOutputs(
   clearTimeout(unregisteredRecordings.get(reservationId));
   unregisteredRecordings.delete(reservationId);
   return results;
+}
+
+export function settleRecordingArchiveCopy(files: readonly RecordingFile[]): void {
+  const artifacts = pendingArtifacts();
+  for (const { artifactId } of files) {
+    const entry = artifacts.get(artifactId);
+    if (entry?.reservation?.awaitingArchive) entry.awaitingDelivery = false;
+  }
 }
 
 export type DownloadableArtifactReader = { tenantId?: string; leaseId?: string };
@@ -407,12 +411,7 @@ export type OpenedDownloadableArtifact = PreparedDownloadableArtifact & {
   release: () => void;
 };
 
-/**
- * Registers one output for download and returns its id. The same output registered again for the
- * same tenant and lease returns its existing entry unchanged: two ids for one file would each
- * delete it after their own download. An id serves only the output that it registered: another
- * output written to the same path gets its own id, and the earlier id expires.
- */
+/** Reuses the ID for the same output, tenant, and lease. A replacement file gets its own ID. */
 export function trackDownloadableArtifact(params: DownloadableArtifactRegistration): string {
   const output = readOutputIdentity(params.artifactPath);
   const existingId = findTrackedArtifactId(params, output);
@@ -458,7 +457,8 @@ function addArtifactEntry(
     sourceCleanup,
     activeDownloads: new Set(),
     cleanupRequested: false,
-    awaitingDelivery: reservation !== undefined && reservation.recording === undefined,
+    awaitingDelivery:
+      reservation !== undefined && (!reservation.recording || reservation.awaitingArchive === true),
     createdAt,
     timer,
   });

@@ -1,6 +1,5 @@
 import {
   type CleanupOutcome,
-  type DurableCaptureProgress,
   type FinishOutcome,
   type LiveResourceHandle,
   isConfirmedCleanup,
@@ -12,6 +11,7 @@ import { AppError, errorMessage, DURABLE_RESOURCE_REASONS } from '@agent-device/
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   completedDurableCaptureError,
+  createStopProgress,
   withDurableCaptureResourceFence,
   type DurableCaptureOpenResourceFenceLease,
 } from './fence.ts';
@@ -58,7 +58,7 @@ export async function finishLiveDurableCapture<
       record.status === 'decoded' &&
       (record.envelope.lifecycle === 'completed' ||
         (record.envelope.fence.token === active.envelope.fence.token &&
-          record.envelope.metadata?.phase === 'export-proof-pending'))
+          definition.nativeCleanupSettled?.(record.envelope.metadata)))
     ) {
       params.binding.clear(active);
     }
@@ -400,30 +400,17 @@ async function commitFinishedCapture<K extends string, C>(
 ): Promise<void> {
   let completion;
   try {
-    completion = await definition.completionMetadata(result, lease.envelope.metadata);
+    completion = await definition.completionMetadata(
+      result,
+      lease.envelope.metadata,
+      createStopProgress(lease),
+    );
   } catch (error) {
     if (onProofFailure) await onProofFailure(error);
     throw error;
   }
   lease.transition('completed', {
     metadata: { ...(lease.envelope.metadata ?? {}), ...completion, phase: 'completed' },
-  });
-}
-
-/**
- * The manifest the stop is allowed to write into while it holds this fence (ADR 0024 2.3). What a
- * kind records is its own vocabulary; the mechanics only merge each fact into the metadata and hand
- * back what is already there, so a stop that dies mid-way leaves its own facts beside the open
- * record and the next attempt reads them instead of redoing durable work.
- */
-function createStopProgress<K extends string>(
-  lease: DurableCaptureOpenResourceFenceLease<K>,
-): DurableCaptureProgress {
-  return Object.freeze({
-    learned: lease.envelope.metadata,
-    record: (fact: JsonObject) => {
-      lease.transition('open', { metadata: { ...(lease.envelope.metadata ?? {}), ...fact } });
-    },
   });
 }
 

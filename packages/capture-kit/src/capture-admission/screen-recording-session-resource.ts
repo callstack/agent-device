@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import type { JsonObject } from '@agent-device/contracts/client';
+import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
+import { isRecord } from '@agent-device/kernel/record';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -20,7 +22,7 @@ import type {
   DurableCaptureRecoveryControl,
   DurableCaptureSessionBinding,
 } from '../durable-capture/index.ts';
-import { withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
+import { createStopProgress, withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
@@ -37,7 +39,7 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   resourceKind: 'screen-recording',
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
-  completionMetadata: async (result, metadata) => ({
+  completionMetadata: async (result, metadata, progress) => ({
     ...encodeScreenRecordingCompletionMetadata(result),
     ...(typeof metadata?.remoteCapturePath === 'string' &&
     typeof metadata.remoteCaptureReservation === 'string'
@@ -46,17 +48,16 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
             metadata.remoteCapturePath,
             result,
             metadata.remoteCaptureReservation,
-            typeof metadata.remoteCaptureCompletedAt === 'number'
-              ? metadata.remoteCaptureCompletedAt
-              : Date.now(),
+            progress,
           ),
         }
       : {}),
   }),
   pendingCompletionMetadata: (result, error) =>
     error instanceof RecordingProofIoError
-      ? { ...encodeScreenRecordingCompletionMetadata(result), remoteCaptureCompletedAt: Date.now() }
+      ? encodeScreenRecordingCompletionMetadata(result)
       : undefined,
+  nativeCleanupSettled: screenRecordingNativeCleanupSettled,
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
   // record is served the same export the first stop was answered with. That answer is a cold path: the
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
@@ -72,6 +73,13 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
       'Keep screen-recording.resource.json and retry stop through its exact runtime owner.',
   },
 });
+
+export function screenRecordingNativeCleanupSettled(metadata: JsonObject | undefined): boolean {
+  return (
+    metadata?.phase === 'export-proof-pending' &&
+    (metadata.cleanupStatus === 'cleaned' || metadata.cleanupStatus === 'already-missing')
+  );
+}
 
 export function adoptStartedScreenRecording(params: {
   admissionLedger: ScreenRecordingAdmissionLedger;
@@ -98,7 +106,7 @@ async function verifyRecordingExport(
   reservedPath: string,
   completion: ScreenRecordingCompletion,
   reservation: string,
-  completedAt: number,
+  progress: DurableCaptureProgress,
 ) {
   const [{ chunkPathAt }, { deriveRecordingTelemetryPath }] = await Promise.all([
     import('../recording/output-path.ts'),
@@ -121,12 +129,49 @@ async function verifyRecordingExport(
   if (!matchesReservation) {
     throw new AppError('COMMAND_FAILED', 'Recording export does not match its reservation.');
   }
-  const identities = files.map(readRecordingExportIdentity);
-  return {
-    completedAt,
-    identities,
-    outputIds: files.map((_, index) => `${reservation}-${index + 1}`),
-  };
+  const outputIds = files.map((_, index) => `${reservation}-${index + 1}`);
+  const { completedAt, known } = readRecordingExportProgress(progress.learned, outputIds);
+  const identities: string[] = [];
+  const save = () =>
+    progress.record({
+      remoteCaptureExport: { completedAt, identities: [...identities], outputIds },
+    });
+  if (!progress.learned?.remoteCaptureExport) save();
+  for (const [index, file] of files.entries()) {
+    const identity = readRecordingExportIdentity(file);
+    if (index < known.length && identity !== known[index]) {
+      throw new AppError('COMMAND_FAILED', 'Recording export does not match its stored proof.');
+    }
+    identities.push(identity);
+    if (index >= known.length) save();
+  }
+  return { completedAt, identities, outputIds };
+}
+
+function readRecordingExportProgress(metadata: JsonObject | undefined, outputIds: string[]) {
+  const previous = metadata?.remoteCaptureExport;
+  if (previous === undefined) {
+    return {
+      completedAt:
+        typeof metadata?.remoteCaptureCompletedAt === 'number'
+          ? metadata.remoteCaptureCompletedAt
+          : Date.now(),
+      known: [],
+    };
+  }
+  const { completedAt, identities, outputIds: storedIds } = isRecord(previous) ? previous : {};
+  if (
+    typeof completedAt !== 'number' ||
+    !Number.isFinite(completedAt) ||
+    !Array.isArray(identities) ||
+    identities.length > outputIds.length ||
+    !Array.isArray(storedIds) ||
+    storedIds.length !== outputIds.length ||
+    !outputIds.every((id, index) => id === storedIds[index])
+  ) {
+    throw new AppError('COMMAND_FAILED', 'Recording export does not match its stored proof.');
+  }
+  return { completedAt, known: identities };
 }
 
 function readRecordingExportIdentity(file: string): string {
@@ -147,38 +192,40 @@ class RecordingProofIoError extends AppError {
   }
 }
 
-export function finishPendingScreenRecordingProof(
+export async function finishPendingScreenRecordingProof(
   resourcePath: string,
   expected: DurableResourceEnvelope<'screen-recording'>,
 ): Promise<DurableResourceEnvelope<'screen-recording'>> {
+  const { readStoredCompletion, unreadableRecordingProof } =
+    await import('./screen-recording-stop-recovery.ts');
   return withDurableCaptureResourceFence({
     store: screenRecordingResourceStore,
     resourcePath,
     expected: expected.fence,
+    unreadableRecordError: unreadableRecordingProof,
     onCompleted: ({ envelope }) => envelope,
     run: async (lease) => {
-      const { readStoredCompletion, unreadableRecordingProof } =
-        await import('./screen-recording-stop-recovery.ts');
       const { metadata } = lease.envelope;
       const completion = readStoredCompletion(metadata);
       if (
-        metadata?.phase !== 'export-proof-pending' ||
+        !metadata ||
+        !screenRecordingNativeCleanupSettled(metadata) ||
         !completion ||
         typeof metadata.remoteCapturePath !== 'string' ||
-        typeof metadata.remoteCaptureReservation !== 'string' ||
-        typeof metadata.remoteCaptureCompletedAt !== 'number'
+        typeof metadata.remoteCaptureReservation !== 'string'
       )
         throw unreadableRecordingProof();
+      const proof = await verifyRecordingExport(
+        metadata.remoteCapturePath,
+        completion,
+        metadata.remoteCaptureReservation,
+        createStopProgress(lease),
+      );
       return lease.transition('completed', {
         metadata: {
-          ...metadata,
+          ...lease.envelope.metadata,
           phase: 'completed',
-          remoteCaptureExport: await verifyRecordingExport(
-            metadata.remoteCapturePath,
-            completion,
-            metadata.remoteCaptureReservation,
-            metadata.remoteCaptureCompletedAt,
-          ),
+          remoteCaptureExport: proof,
         },
       });
     },

@@ -1,3 +1,8 @@
+import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
+import { listDownloadableArtifacts } from '../../../resources/artifact-tracking.ts';
+import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { teardownSessionResources } from '../../session-teardown.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { handleRecordCommand } from '../record-runtime.ts';
@@ -763,3 +768,91 @@ test.each([false, true])(
     }
   },
 );
+
+const TENANT = 'tenant-a';
+
+test('close preserves completion for an exact-owner retry when export inspection fails', async () => {
+  const harness = makeRecordRuntimeHarness('recording-close-proof-io-', {
+    sessionName: 'tenant-a:checkout-flow',
+  });
+  const remote = { publicNetworkOnly: true } as const;
+  const run = (action: string, tenantId = TENANT) =>
+    harness.run([action], { tenantId }, undefined, remote);
+  expect(await run('start')).toMatchObject({ ok: true });
+  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+  fs.writeFileSync(source, 'verified-after-close');
+  const lstat = fs.lstatSync;
+  const inspect = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+    if (file === source)
+      throw Object.assign(new Error('verification unavailable'), { code: 'EIO' });
+    return lstat(file, options);
+  });
+  try {
+    await teardownSessionResources({
+      appLog: 'already-settled',
+      ref: harness.sessionStore.lookup(harness.sessionName)!,
+      sessionStore: harness.sessionStore,
+      platformCleanup: platformResourceCleanupFixture(),
+    });
+  } finally {
+    inspect.mockRestore();
+  }
+  expect(harness.runtime.forceCleanup).toHaveBeenCalledOnce();
+  expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+  expect(await run('stop', 'other-tenant')).toMatchObject({
+    ok: false,
+    error: { code: 'UNAUTHORIZED' },
+  });
+  expect(await run('stop')).toMatchObject({
+    ok: true,
+    data: { artifacts: [{ artifactId: expect.any(String) }] },
+  });
+  expect(harness.runtime.finish).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(source, 'utf8')).toBe('verified-after-close');
+});
+
+test('explicit stop keeps its binding until the advertised sidecar can be verified', async () => {
+  const harness = makeRecordRuntimeHarness('recording-sidecar-retry-');
+  const finish = harness.runtime.finish.getMockImplementation()!;
+  harness.runtime.finish.mockImplementation(async () => {
+    const outcome = await finish();
+    return {
+      ...outcome,
+      result: {
+        ...outcome.result,
+        telemetryPath: deriveRecordingTelemetryPath(outcome.result.outPath),
+      },
+    };
+  });
+  const runtime = createRuntimeStateHandle();
+  const run = (action: string) =>
+    harness.run([action], { tenantId: TENANT }, undefined, { publicNetworkOnly: true });
+  try {
+    await runtime.run(async () => {
+      expect(await run('start')).toMatchObject({ ok: true });
+      const video = harness.runtime.start.mock.calls[0]![0].outputPath;
+      fs.writeFileSync(video, 'completed-video');
+      const active = harness.sessionStore.lookup(harness.sessionName)!.session.screenRecording;
+      expect(active).toBeDefined();
+      expect(await run('stop')).toMatchObject({
+        ok: false,
+        error: { code: 'COMMAND_FAILED' },
+      });
+      expect(harness.sessionStore.lookup(harness.sessionName)!.session.screenRecording).toBe(
+        active,
+      );
+      expect(harness.runtime.forceCleanup).not.toHaveBeenCalled();
+      expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+
+      fs.writeFileSync(deriveRecordingTelemetryPath(video), '{}');
+      expect(await run('stop')).toMatchObject({
+        ok: true,
+        data: {
+          artifacts: [{ artifactId: expect.any(String) }, { artifactId: expect.any(String) }],
+        },
+      });
+    });
+  } finally {
+    runtime.dispose();
+  }
+});

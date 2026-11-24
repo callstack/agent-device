@@ -241,6 +241,33 @@ const unavailable = Object.freeze({
   reason: 'owner-capability-missing' as const,
 });
 
+test('a recording awaiting export proof only blocks a claim if native cleanup is unconfirmed', async () => {
+  const claim = makeClaim(mkdtempForTestSync('device-claim-recording-proof-'));
+  const store = screenRecordingDurableResource.store;
+  const resourcePath = store.resolvePath(path.join(claim.stateDir, 'sessions', claim.session));
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'screen-recording',
+    sessionId: claim.session,
+    device: claim.device,
+    owner: localRuntimeOwner('android'),
+    fence: { token: 'fence', generation: 1 },
+    lifecycle: 'open',
+    descriptor: { version: 1, body: {} },
+  });
+  const pending = (cleanupStatus: string) => ({
+    ...envelope,
+    metadata: { phase: 'export-proof-pending', cleanupStatus },
+  });
+  store.write(resourcePath, pending('cleanup-pending'));
+  expect(inspectDeviceClaimRecovery(claim)).toMatchObject({ recoveryKinds: ['screen-recording'] });
+  store.write(resourcePath, pending('cleaned'));
+  expect(inspectDeviceClaimRecovery(claim)).toEqual({
+    status: 'inspectable',
+    recoveryKinds: [],
+    ownedResources: [{ resourceKind: 'screen-recording', resourcePath }],
+  });
+});
+
 test.each([
   { caseName: 'appearing', initiallyOwned: false, mode: 'direct' },
   { caseName: 'changing owner', initiallyOwned: true, mode: 'direct' },

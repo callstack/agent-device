@@ -21,6 +21,7 @@ import {
   cleanupDurableCaptureDescriptor,
   markCompletingDurableCapture,
   transitionCleanupOutcome,
+  transitionFinishOutcome,
 } from './transitions.ts';
 
 const DEFAULT_ACQUISITION_DEADLINE_MS = 5_000;
@@ -127,7 +128,11 @@ function readRecoveryCandidate<K extends string, H extends LiveResourceHandle<C>
     });
     return { status: 'retained' };
   }
-  if (record.status === 'missing' || record.envelope.lifecycle === 'completed') {
+  if (
+    record.status === 'missing' ||
+    record.envelope.lifecycle === 'completed' ||
+    params.definition.nativeCleanupSettled?.(record.envelope.metadata)
+  ) {
     return { status: 'ignored' };
   }
   const canonicalPath = params.definition.store.resolvePath(
@@ -192,17 +197,8 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
         return isConfirmedCleanup(cleanup);
       }
       case 'completed':
-        await transitionTerminal(params, resourcePath, envelope, {
-          ...(await params.definition.completionMetadata(
-            authority.reattached.result,
-            envelope.metadata,
-          )),
-        });
-        return true;
       case 'missing':
-        await transitionTerminal(params, resourcePath, envelope, {
-          recoveryStatus: 'already-missing',
-        });
+        await transitionTerminal(params, resourcePath, envelope, authority.reattached);
         return true;
       case 'unreattachable': {
         if (!allowsDurableCaptureDescriptorCleanup(authority.reattached.reason)) {
@@ -229,7 +225,7 @@ async function transitionTerminal<K extends string, H extends LiveResourceHandle
   params: DurableCaptureRecoveryParams<K, H, C>,
   resourcePath: string,
   envelope: DurableResourceEnvelope<K>,
-  metadata: Record<string, unknown>,
+  outcome: { status: 'completed'; result: C } | { status: 'missing' },
 ): Promise<void> {
   await withDurableCaptureResourceFence({
     store: params.definition.store,
@@ -239,9 +235,18 @@ async function transitionTerminal<K extends string, H extends LiveResourceHandle
     // served. Recovery does not overwrite a committed manifest with its own observation.
     onCompleted: () => undefined,
     run: async (lease) => {
-      lease.transition('completed', {
-        metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completed', ...metadata },
-      });
+      if (params.definition.nativeCleanupSettled?.(lease.envelope.metadata)) return;
+      if (outcome.status === 'completed') {
+        await transitionFinishOutcome(params.definition, lease, outcome);
+      } else {
+        lease.transition('completed', {
+          metadata: {
+            ...lease.envelope.metadata,
+            phase: 'completed',
+            recoveryStatus: 'already-missing',
+          },
+        });
+      }
     },
   });
 }

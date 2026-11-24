@@ -480,7 +480,7 @@ async function stopRecording(
   const artifacts =
     envelope.metadata?.remoteCaptureOutput === true &&
     (remote || envelope.metadata.remoteCaptureExport !== undefined)
-      ? await commitRecordingOutputs(envelope)
+      ? await commitRecordingOutputs(envelope, ref ? 'live' : 'replay')
       : undefined;
   if (remote && !artifacts) throw leasedOutputRefusal('Recording');
   return buildRecordingStopResponse(completion, artifacts, !params.suiteCapture && remote);

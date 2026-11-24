@@ -70,6 +70,11 @@ export function listDurableCaptureStartConflicts<K extends string, C>(
       );
     }
     if (existing.status !== 'decoded' || existing.envelope.lifecycle === 'completed') continue;
+    if (
+      existingPath !== resourcePath &&
+      definition.nativeCleanupSettled?.(existing.envelope.metadata)
+    )
+      continue;
     const onStartDevice = sameDeviceIdentity(existing.envelope.device, startDevice);
     if (onStartDevice || existingPath === resourcePath) {
       records.push({ resourcePath: existingPath, envelope: existing.envelope, onStartDevice });
