@@ -478,8 +478,6 @@ Rules:
     summary: 'Direct proxy, cloud profiles, and remote config',
     body: (coreVersion: string) => `agent-device help remote
 
-Use agent-device connect list to see cloud vendor prices, capabilities, and configured availability after signing in or setting a cloud API key. Add --live to request a fresh availability signal and --json for the vendor rows. Live availability is advisory.
-
 Remote connection providers use the same lifecycle:
   connect -> install/open -> commands -> close -> disconnect
 
@@ -508,6 +506,8 @@ Device cloud interfaces:
   CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm/testmu/revyl, then use normal open/snapshot/click/close/disconnect commands; artifacts are provider-dependent.
   JavaScript can skip persisted connect state by passing leaseProvider plus provider fields to createAgentDeviceClient or per-command options.
   MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect; run CLI connect first in the same state dir before relying on MCP tools.
+
+Use agent-device connect list to see cloud vendor prices, capabilities, and configured availability after signing in or setting a cloud API key. Add --live to request a fresh availability signal and --json for the vendor rows. Live availability is advisory.
 
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
