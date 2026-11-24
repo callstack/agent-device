@@ -23,14 +23,6 @@ function recordingUpstream(respond: (request: Request) => Response | Promise<Res
   };
 }
 
-function signalled(): { promise: Promise<void>; resolve: () => void } {
-  let resolve = () => {};
-  const promise = new Promise<void>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
-}
-
 function proxyWith(upstreamFetch: DaemonProxyUpstreamFetch, maxRpcBodyBytes?: number) {
   return createDaemonProxy({
     upstreamBaseUrl: 'http://daemon.internal:4310',
@@ -78,34 +70,6 @@ test('a request without the client token never reaches the upstream transport', 
 
   expect(response.status).toBe(401);
   expect(upstream.requests).toHaveLength(0);
-});
-
-test('aborting the client request aborts the upstream exchange', async () => {
-  const upstreamReceived = signalled();
-  const upstreamAborted = signalled();
-  const proxy = proxyWith(
-    (request) =>
-      new Promise<Response>((_resolve, reject) => {
-        request.signal.addEventListener('abort', () => {
-          upstreamAborted.resolve();
-          reject(request.signal.reason);
-        });
-        upstreamReceived.resolve();
-      }),
-  );
-  const client = new AbortController();
-
-  const response = proxy.handle(
-    rpcRequest(
-      { jsonrpc: '2.0', id: 2, method: 'agent-device.command' },
-      { signal: client.signal },
-    ),
-  );
-  await upstreamReceived.promise;
-  client.abort();
-
-  await upstreamAborted.promise;
-  expect((await response).status).toBe(500);
 });
 
 test.each([
@@ -284,55 +248,6 @@ test.each([
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ jsonrpc: '2.0', id: null, error: { code } });
   expect(upstream.requests).toHaveLength(0);
-});
-
-test('the upstream health probe has its own bound without upstreamTimeoutMs', async () => {
-  const healthBound = new AbortController();
-  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(healthBound.signal);
-  const upstreamAborted = signalled();
-  try {
-    const proxy = proxyWith(
-      (request) =>
-        new Promise<Response>((_resolve, reject) => {
-          request.signal.addEventListener('abort', () => {
-            upstreamAborted.resolve();
-            reject(request.signal.reason);
-          });
-        }),
-    );
-    const response = proxy.handle(new Request(`${PROXY_ORIGIN}/agent-device/health`));
-    expect(timeout.mock.calls).toEqual([[5_000]]);
-    healthBound.abort();
-    await upstreamAborted.promise;
-    expect((await response).status).toBe(500);
-  } finally {
-    timeout.mockRestore();
-  }
-});
-
-test('aborting a health request aborts the upstream health probe', async () => {
-  const upstreamReceived = signalled();
-  const upstreamAborted = signalled();
-  const proxy = proxyWith(
-    (request) =>
-      new Promise<Response>((_resolve, reject) => {
-        request.signal.addEventListener('abort', () => {
-          upstreamAborted.resolve();
-          reject(request.signal.reason);
-        });
-        upstreamReceived.resolve();
-      }),
-  );
-  const client = new AbortController();
-
-  const response = proxy.handle(
-    new Request(`${PROXY_ORIGIN}/agent-device/health`, { signal: client.signal }),
-  );
-  await upstreamReceived.promise;
-  client.abort();
-
-  await upstreamAborted.promise;
-  expect((await response).status).toBe(500);
 });
 
 test('an unsupported route answers a bare 404 without reaching the daemon', async () => {

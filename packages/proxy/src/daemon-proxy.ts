@@ -96,6 +96,7 @@ export type DaemonProxy = {
    * Answers one client request. Without `publicOrigin`, the embedder must construct
    * `request.url` with the canonical client-facing origin. Forwarding headers do not select it.
    * Abort `request.signal` when the client goes away so in-flight daemon work is cancelled.
+   * Keep `request` reachable until the response body ends, or its abort may not reach the daemon.
    * Resolves with an error response rather than rejecting.
    */
   handle(request: Request): Promise<Response>;
@@ -163,8 +164,12 @@ export function createDaemonProxyServer(options: DaemonProxyOptions): http.Serve
 /** Serves a proxy from any `node:http` or `node:https` server. */
 export function createDaemonProxyRequestListener(proxy: DaemonProxy): http.RequestListener {
   return (req, res) => {
+    const proxyForResponse: DaemonProxy = {
+      instanceId: proxy.instanceId,
+      handle: (request) => proxy.handle(keepAliveWith(res, request)),
+    };
     void import('./node-http.ts')
-      .then(({ serveProxyRequest }) => serveProxyRequest(proxy, req, res))
+      .then(({ serveProxyRequest }) => serveProxyRequest(proxyForResponse, req, res))
       .catch((error: unknown) => {
         if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
       });
@@ -253,12 +258,15 @@ async function authenticateCaller(
       : null;
   }
   const result = await options.authenticate(
-    new Request(request.url, {
-      method: request.method,
-      headers: request.headers,
-      signal: request.signal,
-      ...(rpcBody !== undefined ? { body: rpcBody } : {}),
-    }),
+    keepAliveWith(
+      request,
+      new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        signal: request.signal,
+        ...(rpcBody !== undefined ? { body: rpcBody } : {}),
+      }),
+    ),
   );
   if (!result) return null;
   const tenantId = normalizeTenantId(
@@ -335,11 +343,14 @@ async function readUpstreamHealth(
   options: NormalizedProxyOptions,
 ): Promise<unknown> {
   const response = await options.upstreamFetch(
-    new Request(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
-      method: 'GET',
-      headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]),
-    }),
+    keepAliveWith(
+      request,
+      new Request(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
+        method: 'GET',
+        headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]),
+      }),
+    ),
   );
   const text = await response.text();
   try {
@@ -360,12 +371,20 @@ async function forwardProxyRequest(params: {
   const body = resolveUpstreamBody(request, route, rpcBody, options.upstreamToken, caller.tenantId);
   const upstreamResponse = await options.upstreamTransport(
     route,
-    new Request(buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
-      method: request.method,
-      headers: buildUpstreamHeaders(request.headers, options.upstreamToken, route, caller.tenantId),
-      signal: upstreamSignal(request, options),
-      ...(body ? { body, duplex: 'half' as const } : {}),
-    }),
+    keepAliveWith(
+      request,
+      new Request(buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
+        method: request.method,
+        headers: buildUpstreamHeaders(
+          request.headers,
+          options.upstreamToken,
+          route,
+          caller.tenantId,
+        ),
+        signal: upstreamSignal(request, options),
+        ...(body ? { body, duplex: 'half' as const } : {}),
+      }),
+    ),
   );
 
   const headers = copyProxyResponseHeaders(upstreamResponse, request, route);
@@ -379,6 +398,21 @@ async function forwardProxyRequest(params: {
     });
   }
   return new Response(upstreamResponse.body, { status: upstreamResponse.status, headers });
+}
+
+const keptRequests = new WeakMap<object, Request[]>();
+
+/**
+ * Keeps `request` reachable for as long as `owner` is. Undici's `Request` follows its init signal
+ * only while the request itself is reachable, so one handed on and dropped stops seeing aborts after
+ * a garbage collection. Holding it from that signal would keep it forever: Undici keeps the signal
+ * reachable for as long as the request is.
+ */
+function keepAliveWith(owner: object, request: Request): Request {
+  const kept = keptRequests.get(owner);
+  if (kept) kept.push(request);
+  else keptRequests.set(owner, [request]);
+  return request;
 }
 
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
@@ -541,7 +575,10 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
       const { createNodeTransferFetch, settleUpstreamFetch } =
         await import('./transfer-transport.ts');
       return customUpstreamFetch
-        ? settleUpstreamFetch(customUpstreamFetch, request)
+        ? settleUpstreamFetch(
+            (forwarded) => customUpstreamFetch(keepAliveWith(request, forwarded)),
+            request,
+          )
         : createNodeTransferFetch()(request);
     },
   };
