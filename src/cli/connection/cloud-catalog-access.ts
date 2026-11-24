@@ -25,9 +25,13 @@ export async function resolveCloudCatalogAccess(options: {
     env.AGENT_DEVICE_CLOUD_BASE_URL === undefined
       ? undefined
       : parseCloudApiOrigin(env.AGENT_DEVICE_CLOUD_BASE_URL);
-  const accessToken = explicitToken?.trim() || env.AGENT_DEVICE_DAEMON_AUTH_TOKEN?.trim();
   const cloudBaseUrl = configuredOrigin ?? DEFAULT_CLOUD_BASE_URL;
-  if (accessToken) return catalogAccess(cloudBaseUrl, accessToken);
+  const explicitKey = explicitToken?.trim();
+  if (explicitKey) return catalogAccess(cloudBaseUrl, explicitKey);
+  const ambientToken = env.AGENT_DEVICE_DAEMON_AUTH_TOKEN?.trim();
+  if (ambientToken && (cloudBaseUrl !== DEFAULT_CLOUD_BASE_URL || isCloudApiKey(ambientToken))) {
+    return { accessToken: ambientToken, cloudBaseUrl };
+  }
   const access = await resolveCliSessionAccess({
     env,
     stateDir,
@@ -42,13 +46,14 @@ export async function resolveCloudCatalogAccess(options: {
 }
 
 function catalogAccess(cloudBaseUrl: string, accessToken: string) {
-  if (
-    cloudBaseUrl === DEFAULT_CLOUD_BASE_URL &&
-    !/^adc_(?:live|cli)_[A-Za-z0-9_-]{43}$/i.test(accessToken)
-  ) {
+  if (cloudBaseUrl === DEFAULT_CLOUD_BASE_URL && !isCloudApiKey(accessToken)) {
     throw cloudApiKeyRequired();
   }
   return { accessToken, cloudBaseUrl };
+}
+
+function isCloudApiKey(token: string): boolean {
+  return /^adc_(?:live|cli)_[A-Za-z0-9_-]{43}$/i.test(token);
 }
 
 function cloudApiKeyRequired(): AppError {

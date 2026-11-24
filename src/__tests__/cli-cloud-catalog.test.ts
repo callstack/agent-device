@@ -208,3 +208,27 @@ test('connect list --live asks for fresh availability and renders it with an API
   expect(refused.code).toBe(1);
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
+
+test('an ambient self-hosted token does not hide a stored default-cloud login', async () => {
+  const stateDir = storeSession(DEFAULT_CLOUD_BASE_URL);
+  const fetchMock = vi.fn(async (url: URL, _init: RequestInit) =>
+    url.pathname.endsWith('/refresh')
+      ? Response.json({ accessToken: 'fixture-account-token' })
+      : Response.json([]),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const result = await runCliCapture(['connect', 'list', '--json'], {
+    env: {
+      AGENT_DEVICE_STATE_DIR: stateDir,
+      AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'self-hosted-daemon-token',
+    },
+  });
+  expect(result.code).toBeNull();
+  expect(fetchMock.mock.calls.map(([url]) => url.pathname)).toEqual([
+    '/api/control-plane/cli-session/refresh',
+    '/v1/vendors',
+  ]);
+  expect(new Headers(fetchMock.mock.calls[1]?.[1].headers).get('authorization')).toBe(
+    'Bearer fixture-account-token',
+  );
+});
