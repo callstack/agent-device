@@ -115,8 +115,9 @@ const NO_REQUEST_GUARD: RequestGuard = {
 export function createRequestGuard(params: {
   signal: AbortSignal | undefined;
   requestId?: string;
+  dispatchedOnAbort?: 'no' | 'unknown';
 }): RequestGuard {
-  const { signal, requestId } = params;
+  const { signal, requestId, dispatchedOnAbort = 'unknown' } = params;
   if (!signal) return NO_REQUEST_GUARD;
   return {
     refuseIfAborted() {
@@ -128,7 +129,8 @@ export function createRequestGuard(params: {
       // what keeps a late `guard` call rejecting rather than pending forever.
       if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
       return await new Promise<T>((resolve, reject) => {
-        const onAbort = (): void => reject(abortedRequestError(signal, 'unknown', requestId));
+        const onAbort = (): void =>
+          reject(abortedRequestError(signal, dispatchedOnAbort, requestId));
         signal.addEventListener('abort', onAbort, { once: true });
         void send().then(
           (value) => {
