@@ -36,6 +36,9 @@ private final class LitPanelBookingProbe: NSObject {
   static let query = NSObject()
   static var windowListReads = 0
   static var maxWindowListReads: Int?
+  /// Set, every window list read records this issue on the test, as XCTest does when it rejects
+  /// the application's tree.
+  static var windowListIssue: (test: XCTestCase, description: String)?
   static var window: XCUIElement?
   static var darkWindow: XCUIElement?
   static var target: XCUIElement?
@@ -77,6 +80,9 @@ private final class LitPanelBookingProbe: NSObject {
       case "windows": return Self.query
       case "allElementsBoundByIndex":
         Self.windowListReads += 1
+        if let issue = Self.windowListIssue {
+          issue.test.record(XCTIssue(type: .assertionFailure, compactDescription: issue.description))
+        }
         if let max = Self.maxWindowListReads, Self.windowListReads > max { return [] }
         if let dark = Self.composedDarkWindow { return [dark, Self.window!] as [NSObject] }
         return [Self.window!, Self.darkWindow].compactMap { $0 }
@@ -589,6 +595,56 @@ extension RunnerTests {
     }
   }
 
+  /// #5023: a lit-panel walk that records an issue and finds no window refuses with its own message
+  /// and dispatches nothing, whether XCTest rejected the app's tree or a window went away during the
+  /// read. The issue is still recorded. A walk with no issue and no window stays an app without
+  /// windows, and a walk that books a window despite an issue keeps the booking.
+  @MainActor
+  func testLitPanelBookingRefusesAWindowWalkThatRecordedAnIssue() throws {
+    try withLitPanelBookingProbe(composed: true) { _ in
+      LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 0, width: 669, height: 951)
+      let command = try runnerCommandFixture(
+        #"{"command":"tap","x":20,"y":30,"synthesized":true,"litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      )
+      let requestID = setRequestLitPanel(from: command)
+      defer { endRequestLitPanel(requestID) }
+      // `record(_:)` mutes a failure message that quotes the rejection, so no assertion below prints it.
+      let rejection = "Failed to resolve query: Error kAXErrorIllegalArgument getting snapshot for element"
+      let vanished = "Failed to get matching snapshot: No matches found for Window from input"
+      LitPanelBookingProbe.maxWindowListReads = 0
+      var refusal: RunnerAppScreenCaptureFailure?
+      for issue in [rejection, vanished] {
+        LitPanelBookingProbe.windowListIssue = (self, issue)
+        let held = holdingRecordedIssues { refusal = bookRequestLitPanelSurface(app: app) }
+        XCTAssertEqual(refusal, .unreadableWindows)
+        XCTAssertEqual(held.issues.count, 1)
+        XCTAssertTrue(held.issues.first?.compactDescription == issue)
+      }
+
+      LitPanelBookingProbe.windowListIssue = (self, rejection)
+      LitPanelBookingProbe.tappedPoint = nil
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertEqual(response.error?.code, "APP_SCREEN_UNRESOLVED")
+      XCTAssertEqual(response.error?.message, RunnerAppScreenCaptureFailure.unreadableWindows.message)
+      XCTAssertEqual(response.error?.hint, RunnerAppScreenCaptureFailure.unreadableWindows.hint)
+      XCTAssertNotEqual(response.error?.message, RunnerAppScreenCaptureFailure.unresolvedScreen.message)
+      XCTAssertNotEqual(response.error?.hint, RunnerAppScreenCaptureFailure.unresolvedScreen.hint)
+      XCTAssertTrue(LitPanelBookingProbe.dispatches.isEmpty)
+      XCTAssertNil(LitPanelBookingProbe.tappedPoint)
+
+      LitPanelBookingProbe.windowListIssue = nil
+      XCTAssertEqual(bookRequestLitPanelSurface(app: app), .unresolvedWindow)
+
+      LitPanelBookingProbe.windowListIssue = (self, rejection)
+      LitPanelBookingProbe.maxWindowListReads = nil
+      let booked = holdingRecordedIssues { refusal = bookRequestLitPanelSurface(app: app) }
+      XCTAssertNil(refusal)
+      XCTAssertNotNil(litPanelState.surface)
+      XCTAssertEqual(booked.issues.count, 1)
+      XCTAssertTrue(booked.issues.first?.compactDescription == rejection)
+    }
+  }
+
   @MainActor
   private func withPreparedSurfaceCommand(_ command: Command, _ assertions: (Response) throws -> Void) throws {
     let requestID = setRequestLitPanel(from: command)
@@ -746,6 +802,7 @@ extension RunnerTests {
       LitPanelBookingProbe.anchor = nil
       LitPanelBookingProbe.originalValueForKey = nil
       LitPanelBookingProbe.maxWindowListReads = nil
+      LitPanelBookingProbe.windowListIssue = nil
       litPanelState.panel = nil
       litPanelState.surface = nil
     }

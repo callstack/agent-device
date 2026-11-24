@@ -340,7 +340,8 @@ export const RUNNER_ERROR_CODES = {
   // unknown. Only the `screenshot` route reads the family for its own simctl-to-runner decision.
   // No window resolved, so no display could be named.
   APP_SCREEN_WINDOW_UNRESOLVED: { dispatched: 'no', diagnosticOnly: {} },
-  // The resolved window named no display.
+  // The resolved window named no display, the window list could not be read or placed, or the
+  // lit-panel walk found no window and recorded an XCTest issue.
   APP_SCREEN_UNRESOLVED: { dispatched: 'no', diagnosticOnly: {} },
   // The resolved display handed back an image it could not encode upright.
   APP_SCREEN_CAPTURE_UNRENDERABLE: { dispatched: 'no', diagnosticOnly: {} },
