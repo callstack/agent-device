@@ -63,13 +63,15 @@ export default { fetch: proxy.handle };
 ```
 
 For a WebSocket or other message transport, turn each incoming message into a `Request` and send
-the `Response` back. Three things the proxy relies on:
+the `Response` back. Four things the proxy relies on:
 
 - Without `publicOrigin`, construct `request.url` with the canonical client-facing URL for each
   request. The embedder is responsible for that URL. `Forwarded` and `X-Forwarded-*` headers do
   not select the upload ticket origin.
 - `request.signal` aborts when the client goes away. The proxy then cancels the daemon request, so
   work the client stopped waiting for does not keep running.
+- The host keeps the `Request` reachable until the `Response` body ends. Undici's `Request` stops
+  following its signal once it is collected, and the abort would then not reach the daemon.
 - Response bodies stream. Artifact downloads can be large, so forward the body as it arrives.
 
 `handle` never rejects. Errors come back as JSON responses with a 4xx or 5xx status, except a route
