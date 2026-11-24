@@ -203,10 +203,7 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
       typeof record?.generation === 'string' &&
       typeof record.origin === 'string' &&
       typeof record.fingerprint === 'string' &&
-      (record.accepts === undefined ||
-        (Array.isArray(record.accepts) &&
-          record.accepts.length > 0 &&
-          record.accepts.every((kind) => kind === 'agent-device-daemon' || kind === 'limrun'))) &&
+      hasValidStoredAccepts(record.accepts) &&
       ['pending', 'committed', 'closing'].includes(record.phase)
     ) {
       assertCloudRecordSession(location, record);
@@ -223,6 +220,15 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason, ioCode);
   }
   throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason);
+}
+
+function hasValidStoredAccepts(accepts: unknown): boolean {
+  return (
+    accepts === undefined ||
+    (Array.isArray(accepts) &&
+      accepts.length > 0 &&
+      accepts.every((kind) => kind === 'agent-device-daemon' || kind === 'limrun'))
+  );
 }
 
 export function assertCloudRecordSession(
