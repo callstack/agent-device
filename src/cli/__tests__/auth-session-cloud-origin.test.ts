@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +8,7 @@ import {
   loginWithDeviceAuth,
   readCliSession,
   resolveCliSessionPath,
+  resolveCloudAccessForConnect,
   resolveRemoteAuth,
   writeCliSession,
 } from '../auth-session.ts';
@@ -33,7 +34,7 @@ function jsonResponse(body: unknown): Response {
 }
 
 /** A refresh of the stored session that records each request URL and answers with a token. */
-function refreshWith(stateDir: string, env: Record<string, string>, requests: string[]) {
+function refreshWith(stateDir: string, env: NodeJS.ProcessEnv, requests: string[]) {
   return resolveRemoteAuth({
     command: 'snapshot',
     flags: baseFlags,
@@ -68,11 +69,15 @@ const deviceAuthCloud = async (url: URL | RequestInfo): Promise<Response> => {
   return new Response('{}', { status: 404 });
 };
 
-function loginAt(stateDir: string, fetch: typeof globalThis.fetch) {
+function loginAt(
+  stateDir: string,
+  fetch: typeof globalThis.fetch,
+  issuer = 'https://cloud.example/',
+) {
   return loginWithDeviceAuth({
     stateDir,
     flags: baseFlags,
-    env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example/' },
+    env: { AGENT_DEVICE_CLOUD_BASE_URL: issuer },
     io: {
       stdinIsTTY: true,
       stdoutIsTTY: true,
@@ -106,7 +111,7 @@ test('a stored CLI session is sent only to the cloud that issued it', async () =
       session: {
         version: 2,
         id: 'session-origin',
-        cloudBaseUrl: 'https://cloud.example',
+        cloudBaseUrl: 'https://cloud.example/console',
         refreshCredential: 'adc_refresh_secret',
         createdAt: '2026-01-01T00:00:00.000Z',
       },
@@ -238,3 +243,149 @@ test.each([START, POLL, REFRESH])(
     }
   },
 );
+
+test.each(['http://issuer.example', 'https://user:secret@issuer.example'])(
+  'refuses unsafe stored and configured origins before sending credentials (%s)',
+  async (issuer) => {
+    const stateDir = mkdtempForTestSync('agent-device-auth-unsafe-origin-');
+    writeCliSession({
+      stateDir,
+      session: {
+        version: 2,
+        id: 'unsafe-origin',
+        cloudBaseUrl: issuer,
+        refreshCredential: 'refresh-secret',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+    const requests: string[] = [];
+    for (const env of [{}, { AGENT_DEVICE_CLOUD_BASE_URL: issuer }]) {
+      await assert.rejects(
+        () => refreshWith(stateDir, env, requests),
+        (error) => {
+          const failure = normalizeError(error);
+          return (
+            failure.details?.reason === 'cloud_invalid_origin' &&
+            failure.message ===
+              (env.AGENT_DEVICE_CLOUD_BASE_URL
+                ? 'Invalid AGENT_DEVICE_CLOUD_BASE_URL.'
+                : 'Invalid saved cloud API origin.') &&
+            !JSON.stringify(failure).includes(issuer)
+          );
+        },
+      );
+    }
+    await assert.rejects(
+      () =>
+        loginAt(
+          stateDir,
+          async (url) => {
+            requests.push(String(url));
+            return jsonResponse({});
+          },
+          issuer,
+        ),
+      (error) => normalizeError(error).details?.reason === 'cloud_invalid_origin',
+    );
+    assert.deepEqual(requests, []);
+  },
+);
+
+const suppliedCredentials = {
+  accessToken: 'fixture-access-token',
+  cliSession: { id: 'fixture-session', refreshCredential: 'fixture-refresh-token' },
+};
+
+test.each([
+  { status: 'denied' },
+  { status: 'denied', error: '' },
+  { status: 'approved', error: 'response-secret' },
+])(
+  'authorization denial beats supplied credentials and omits response details (%j)',
+  async (denial) => {
+    const stateDir = mkdtempForTestSync('agent-device-auth-denial-');
+    await assert.rejects(
+      () =>
+        loginAt(stateDir, async (url) =>
+          String(url) === POLL
+            ? jsonResponse({ ...suppliedCredentials, ...denial })
+            : deviceAuthCloud(url),
+        ),
+      (error) => {
+        const reported = normalizeError(error);
+        return reported.code === 'UNAUTHORIZED' && reported.details === undefined;
+      },
+    );
+    assert.equal(readCliSession({ stateDir }), null);
+  },
+);
+
+test.each([{}, { status: 'approved', error: null }, { status: 'approved', error: '' }])(
+  'authorization succeeds with credentials and no error (%j)',
+  async (outcome) => {
+    const stateDir = mkdtempForTestSync('agent-device-auth-approval-');
+    const login = await loginAt(stateDir, async (url) =>
+      String(url) === POLL
+        ? jsonResponse({ ...suppliedCredentials, ...outcome })
+        : deviceAuthCloud(url),
+    );
+    assert.equal(login.accessToken, suppliedCredentials.accessToken);
+    assert.equal(readCliSession({ stateDir })?.id, suppliedCredentials.cliSession.id);
+  },
+);
+
+test('authorization keeps polling when a pending response carries an empty error', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-auth-pending-');
+  let polls = 0;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    const result = loginAt(stateDir, async (url) => {
+      if (String(url) === POLL && ++polls === 1) {
+        return jsonResponse({ status: 'authorization_pending', error: '' });
+      }
+      return deviceAuthCloud(url);
+    });
+    const [login] = await Promise.all([result, vi.runAllTimersAsync()]);
+    assert.equal(polls, 2);
+    assert.equal(readCliSession({ stateDir })?.id, login.session.id);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('legacy cloud connection identity keeps the validated URL path', async () => {
+  const result = await resolveCloudAccessForConnect({
+    stateDir: mkdtempForTestSync('agent-device-auth-path-'),
+    flags: { ...baseFlags, daemonAuthToken: 'fixture-token' },
+    env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example/console/' },
+  });
+  assert.equal(result.cloudBaseUrl, 'https://cloud.example/console');
+});
+
+test('legacy cloud connection identity keeps the saved issuer URL path', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-auth-saved-path-');
+  writeCliSession({
+    stateDir,
+    session: {
+      version: 2,
+      id: 'legacy-session',
+      cloudBaseUrl: 'https://cloud.example/console',
+      refreshCredential: 'fixture-refresh-token',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  });
+  const requests: string[] = [];
+  const result = await resolveCloudAccessForConnect({
+    stateDir,
+    flags: baseFlags,
+    env: {},
+    io: {
+      fetch: async (url) => {
+        requests.push(String(url));
+        return jsonResponse({ accessToken: 'fixture-access-token' });
+      },
+    },
+  });
+  assert.equal(result.cloudBaseUrl, 'https://cloud.example/console');
+  assert.deepEqual(requests, [REFRESH]);
+});
