@@ -4,6 +4,7 @@ import {
   HARDWARE_BUTTON_NAMES,
   ORIENTATION_REQUESTS,
   TELEPHONY_ACTIONS,
+  LOCK_SCREEN_STATES,
 } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { isTvRemoteButton } from '@agent-device/contracts/tv-remote';
@@ -23,7 +24,6 @@ import type { DaemonRequest } from '@agent-device/kernel/contracts';
 
 const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 const SCROLL_EDGES = ['top', 'bottom'] as const;
-const LOCK_SCREEN_STATES = ['locked', 'unlocked'] as const;
 
 export function buildInstallActionSummary(action: SessionAction): string {
   const verb = action.command === PUBLIC_COMMANDS.reinstall ? 'Reinstalled' : 'Installed';

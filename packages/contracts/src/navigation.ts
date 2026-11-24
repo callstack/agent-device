@@ -1,5 +1,10 @@
 import type { BackMode } from './back-mode.ts';
-import type { DeviceRotation, FoldPose, HardwareButtonName } from './device-rotation.ts';
+import type {
+  DeviceRotation,
+  FoldPose,
+  HardwareButtonName,
+  LockScreenState,
+} from './device-rotation.ts';
 import type { FoldScreenReport } from './fold-runtime.ts';
 import type { SettleObservation } from './interaction.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
@@ -121,6 +126,6 @@ export type HardwareButtonCommandResult = {
  */
 export type LockScreenCommandResult = {
   action: 'lock-screen';
-  state: 'locked' | 'unlocked';
+  state: LockScreenState;
   message: string;
 };

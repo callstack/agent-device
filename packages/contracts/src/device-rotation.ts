@@ -226,6 +226,10 @@ export function parseHardwareButtonPositionals(positionals: readonly string[]): 
 export const LOCK_SCREEN_ACTIONS = ['lock', 'unlock'] as const;
 export type LockScreenAction = (typeof LOCK_SCREEN_ACTIONS)[number];
 
+/** The lock states a `lock-screen` result reports, each read back from the device. */
+export const LOCK_SCREEN_STATES = ['locked', 'unlocked'] as const;
+export type LockScreenState = (typeof LOCK_SCREEN_STATES)[number];
+
 /** The CLI synopsis tail naming the accepted actions. */
 export const LOCK_SCREEN_USAGE = `<${LOCK_SCREEN_ACTIONS.join('|')}>`;
 

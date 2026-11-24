@@ -28,6 +28,7 @@ import {
   parseLockScreenPositionals,
   type HardwareButton,
   type LockScreenAction,
+  type LockScreenState,
 } from '@agent-device/contracts/device';
 import type { LockScreenCommandResult } from '@agent-device/contracts/navigation';
 import type {
@@ -132,7 +133,7 @@ const LOCK_SCREEN_COMMAND_ROWS = {
   unlock: { use: unlockScreenRuntimeUse, state: 'unlocked', message: 'Unlocked the screen' },
 } as const satisfies Record<
   LockScreenAction,
-  Readonly<{ use: SystemButtonUse; state: LockScreenCommandResult['state']; message: string }>
+  Readonly<{ use: SystemButtonUse; state: LockScreenState; message: string }>
 >;
 
 /** The neutral intent one press carries, projected from a resolved command context. */

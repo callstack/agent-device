@@ -56,10 +56,16 @@ export {
   parseHardwareButtonPositionals,
   LOCK_SCREEN_ACTIONS,
   LOCK_SCREEN_REASONS,
+  LOCK_SCREEN_STATES,
   LOCK_SCREEN_USAGE,
   parseLockScreenPositionals,
 } from '../device-rotation.ts';
-export type { HardwareButton, HardwareButtonName, LockScreenAction } from '../device-rotation.ts';
+export type {
+  HardwareButton,
+  HardwareButtonName,
+  LockScreenAction,
+  LockScreenState,
+} from '../device-rotation.ts';
 export {
   TELEPHONY_ACTIONS,
   TELEPHONY_CALL_ACTIONS,

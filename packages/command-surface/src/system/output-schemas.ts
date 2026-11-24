@@ -4,6 +4,7 @@ import {
   FOLD_SCREEN_COORDINATE_SPACE,
   FOLD_POSES,
   HARDWARE_BUTTON_NAMES,
+  LOCK_SCREEN_STATES,
   ORIENTATION_REQUESTS,
   TELEPHONY_CALL_ACTIONS,
 } from '@agent-device/contracts/device';
@@ -105,7 +106,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   'lock-screen': objectSchema(
     {
       action: constSchema('lock-screen'),
-      state: enumSchema(['locked', 'unlocked']),
+      state: enumSchema(LOCK_SCREEN_STATES),
       message: stringSchema(),
     },
     ['action', 'state', 'message'],
