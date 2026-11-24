@@ -98,6 +98,7 @@ for (const [label, preferences, expected] of [
     [],
   ],
   ['one key is on', { DidShowContinuousPathIntroduction: true }, ['MultilingualKeyboardTip']],
+  ['a key is 1', { DidShowContinuousPathIntroduction: 1, MultilingualKeyboardTip: true }, []],
   [
     'a key is off',
     { DidShowContinuousPathIntroduction: false, MultilingualKeyboardTip: true },
@@ -110,7 +111,7 @@ for (const [label, preferences, expected] of [
   });
 }
 
-test('reads a binary preferences file as the simulator writes it', async () => {
+test('reads a binary preferences file', async () => {
   fs.copyFileSync(
     new URL('./fixtures/keyboard-intros-shown.plist', import.meta.url),
     path.join(preferencesDir(), 'com.apple.keyboard.preferences.plist'),
@@ -118,26 +119,57 @@ test('reads a binary preferences file as the simulator writes it', async () => {
   assert.deepEqual(await prepare(), []);
 });
 
+test('each write is bounded by the keyboard timeout, not the accessibility one', async () => {
+  await prepare();
+  assert.deepEqual(
+    vi.mocked(runXcrun).mock.calls.map(([, options]) => options),
+    [{ timeoutMs: 15_000 }, { timeoutMs: 15_000 }],
+  );
+});
+
+const scoped = <T>(task: () => Promise<T>) =>
+  withAppleToolProvider({} as Parameters<typeof withAppleToolProvider>[0], task);
+
 test('a scoped (remote) tool provider writes even when this host has both keys', async () => {
   writePreferences({ DidShowContinuousPathIntroduction: true, MultilingualKeyboardTip: true });
-  const calls = await withAppleToolProvider({} as Parameters<typeof withAppleToolProvider>[0], () =>
-    prepare(),
-  );
-  assert.deepEqual(writtenKeys(calls), [
+  assert.deepEqual(writtenKeys(await scoped(() => prepare())), [
     'DidShowContinuousPathIntroduction',
     'MultilingualKeyboardTip',
   ]);
 });
 
-test('a failed write warns and still writes the other key', async () => {
-  const calls = await prepare('MultilingualKeyboardTip');
+test('a scoped provider writes each key once per simulator and retries a failed one', async () => {
+  await scoped(() => prepare('MultilingualKeyboardTip'));
+  vi.mocked(runXcrun).mockClear();
+  assert.deepEqual(writtenKeys(await scoped(() => prepare())), ['MultilingualKeyboardTip']);
+  vi.mocked(runXcrun).mockClear();
+  assert.deepEqual(await scoped(() => prepare()), []);
+});
+
+test('a local simulator writes again while its preferences file is missing, as after an erase', async () => {
+  await prepare();
+  vi.mocked(runXcrun).mockClear();
+  assert.deepEqual(writtenKeys(await prepare()), [
+    'DidShowContinuousPathIntroduction',
+    'MultilingualKeyboardTip',
+  ]);
+});
+
+test('a failed write warns with its key and still writes the other key', async () => {
+  const calls = await prepare('DidShowContinuousPathIntroduction');
   assert.deepEqual(writtenKeys(calls), [
     'DidShowContinuousPathIntroduction',
     'MultilingualKeyboardTip',
   ]);
   assert.deepEqual(
-    vi.mocked(emitDiagnostic).mock.calls.map(([event]) => event.phase),
-    ['ios_simulator_keyboard_intro_prepare_failed'],
+    vi
+      .mocked(emitDiagnostic)
+      .mock.calls.map(([event]) => [
+        event.level,
+        event.phase,
+        (event.data as { key?: string }).key,
+      ]),
+    [['warn', 'ios_simulator_keyboard_intro_prepare_failed', 'DidShowContinuousPathIntroduction']],
   );
 });
 
@@ -185,5 +217,18 @@ test('a failed write does not block the launch', async () => {
       await openIosApp(device, 'com.example.app', { appBundleId: 'com.example.app' });
       assert.equal(calls.at(-1)?.[3], 'launch');
     },
+  );
+});
+
+test('open <app> <url> that launches the app first marks the intros once', async () => {
+  vi.mocked(runXcrun).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  await openIosApp(device, 'MyApp', {
+    appBundleId: 'com.example.app',
+    url: 'https://example.com/item',
+    launchArgs: ['-Flag', 'YES'],
+  });
+  assert.deepEqual(
+    vi.mocked(runXcrun).mock.calls.map(([args]) => args[3]),
+    ['spawn', 'spawn', 'launch', 'openurl'],
   );
 });

@@ -104,7 +104,10 @@ export async function openIosApp(
           await terminateIosSimulatorApp(device, bundleId);
         }
       }
-      await openIosSimulatorUrl(device, explicitUrl, undefined, options?.runnerOptions);
+      // An app launched first has already marked the keyboard intros for this open.
+      await openIosSimulatorUrl(device, explicitUrl, undefined, options?.runnerOptions, {
+        keyboardPrepared: shouldLaunchAppBeforeUrl,
+      });
       return;
     }
     const appBundleId = options?.appBundleId ?? (await resolveIosApp(device, app));
@@ -168,12 +171,13 @@ async function openIosSimulatorUrl(
   url: string,
   launchArgs: string[] | undefined,
   runnerOptions?: AppleRunnerCommandOptions,
+  { keyboardPrepared = false } = {},
 ): Promise<void> {
   if (launchArgs && launchArgs.length > 0) {
     throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE);
   }
   await ensureBootedSimulator(device);
-  await prepareIosSimulatorForLaunch(device);
+  await prepareIosSimulatorForLaunch(device, { keyboard: !keyboardPrepared });
   const args = buildSimctlArgsForDevice(device, ['openurl', device.id, url]);
   try {
     await runXcrun(args, {
@@ -197,12 +201,17 @@ async function openIosSimulatorUrl(
   }
 }
 
-/** Runs after boot and before an app or URL launch on a simulator. */
-async function prepareIosSimulatorForLaunch(device: DeviceInfo): Promise<void> {
-  const { prepareIosSimulatorKeyboardIntros } = await import('./ios-simulator-keyboard.ts');
-  await prepareIosSimulatorKeyboardIntros(device);
+async function prepareIosSimulatorForLaunch(
+  device: DeviceInfo,
+  options: { keyboard: boolean },
+): Promise<void> {
+  const keyboard = options.keyboard
+    ? import('./ios-simulator-keyboard.ts').then((module) =>
+        module.prepareIosSimulatorKeyboardIntros(device),
+      )
+    : undefined;
   const { prepareIosSimulatorAccessibility } = await import('./ios-simulator-accessibility.ts');
-  await prepareIosSimulatorAccessibility(device);
+  await Promise.all([keyboard, prepareIosSimulatorAccessibility(device)]);
 }
 
 export async function openIosDevice(device: DeviceInfo): Promise<void> {
@@ -280,7 +289,7 @@ async function launchIosSimulatorApp(
 ): Promise<void> {
   await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
-  await prepareIosSimulatorForLaunch(device);
+  await prepareIosSimulatorForLaunch(device, { keyboard: true });
 
   let consecutiveFBSFailures = 0;
   const MAX_CONSECUTIVE_FBS_FAILURES = 3;

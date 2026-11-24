@@ -246,27 +246,17 @@ test('Limrun iOS uses shared deep-link classification', async () => {
     ]);
     assert.deepEqual(limrunMockState.iosLaunchApp.mock.calls, []);
     assert.deepEqual(limrunMockState.iosOpenUrl.mock.calls, []);
-    const simctlCalls = limrunMockState.iosSimctl.mock.calls;
-    assert.deepEqual(
-      simctlCalls.filter(([args]) => !args.includes('com.apple.keyboard.preferences')),
-      [
-        [['list', 'devices', '-j'], undefined],
-        [
-          [
-            'spawn',
-            'booted',
-            'defaults',
-            'write',
-            'com.apple.Accessibility',
-            'ApplicationAccessibilityEnabled',
-            '-bool',
-            'YES',
-          ],
-          undefined,
-        ],
-        [['openurl', 'booted', 'example://screen'], undefined],
-      ],
-    );
+    const write = (domain: string, key: string) => [
+      ['spawn', 'booted', 'defaults', 'write', domain, key, '-bool', 'YES'],
+      undefined,
+    ];
+    assert.deepEqual(limrunMockState.iosSimctl.mock.calls, [
+      [['list', 'devices', '-j'], undefined],
+      write('com.apple.keyboard.preferences', 'DidShowContinuousPathIntroduction'),
+      write('com.apple.keyboard.preferences', 'MultilingualKeyboardTip'),
+      write('com.apple.Accessibility', 'ApplicationAccessibilityEnabled'),
+      [['openurl', 'booted', 'example://screen'], undefined],
+    ]);
   } finally {
     try {
       await runtime.shutdown();

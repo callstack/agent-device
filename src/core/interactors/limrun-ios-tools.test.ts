@@ -72,25 +72,14 @@ test('normal launch prepares app accessibility through the instance-scoped simct
   expect(calls[launch]).toEqual(['launch', 'booted', 'com.example.app']);
 });
 
-test('normal launch marks the keyboard intros through the instance-scoped simctl adapter', async () => {
+test('a second open on the same lease does not write the keyboard intros again', async () => {
   const { interactor, simctl } = await sessionWithClient();
   await interactor.open('com.example.app');
+  simctl.mockClear();
+  await interactor.open('com.example.app');
   const calls = simctl.mock.calls.map(([args]) => args);
-  const launch = calls.findIndex((args) => args[0] === 'launch');
-  expect(
-    calls.slice(0, launch).filter((args) => args.includes('com.apple.keyboard.preferences')),
-  ).toEqual(
-    ['DidShowContinuousPathIntroduction', 'MultilingualKeyboardTip'].map((key) => [
-      'spawn',
-      'booted',
-      'defaults',
-      'write',
-      'com.apple.keyboard.preferences',
-      key,
-      '-bool',
-      'YES',
-    ]),
-  );
+  expect(calls.filter((args) => args.includes('com.apple.keyboard.preferences'))).toEqual([]);
+  expect(calls).toContainEqual(['launch', 'booted', 'com.example.app']);
 });
 
 test('a url open launches with arguments before opening the url', async () => {
