@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { gunzipSync } from 'node:zlib';
 import path from 'node:path';
@@ -34,7 +35,7 @@ import {
   settleCommittedFileOutputs,
 } from '../../resources/artifact-tracking.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../../server/downloadable-artifact-http.ts';
-import { commitRecordingOutputs } from '../recording-outputs.ts';
+import { collectSuiteRecordingOutputs, commitRecordingOutputs } from '../recording-outputs.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
 import { makeRecordRuntimeHarness } from '../handlers/__tests__/record-runtime.fixtures.ts';
 
@@ -84,6 +85,7 @@ function publishRecordingSession(
     unleasedProducer?: boolean;
     producerTenant?: string;
     omitTelemetry?: boolean;
+    legacy?: boolean;
   } = {},
 ) {
   const session: SessionState = makeIosSession(ADDRESS, {
@@ -129,20 +131,35 @@ function publishRecordingSession(
     forceCleanup,
     [Symbol.asyncDispose]: async () => {},
   };
+  const lifetimeId = randomUUID();
   const envelope = createDurableResourceEnvelope({
     resourceKind: 'screen-recording',
     sessionId: ADDRESS,
     device: { id: session.device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
     owner: localRuntimeOwner('apple'),
-    fence: { token: 'recording-fence', generation: 1 },
+    fence: { token: path.basename(path.dirname(recordingExport.outPath)), generation: 1 },
     lifecycle: 'open',
     descriptor: { version: 1, body: { recordingId: 'checkout-flow' } },
     metadata: {
       phase: 'active',
-      ...(recordingExport.daemonOwned ? { remoteCaptureOutput: true } : {}),
+      ...(recordingExport.daemonOwned
+        ? {
+            remoteCaptureOutput: true,
+            ...(!options.legacy
+              ? {
+                  remoteCapturePath: recordingExport.outPath,
+                  remoteCaptureLifetime: lifetimeId,
+                  remoteCaptureReservation: path.basename(path.dirname(recordingExport.outPath)),
+                }
+              : {}),
+          }
+        : {}),
       ...(options.unleasedProducer && !options.producerTenant
         ? {}
-        : { remoteCaptureTenantId: options.producerTenant ?? TENANT }),
+        : {
+            remoteCaptureTenantId:
+              options.leased === false ? null : (options.producerTenant ?? TENANT),
+          }),
       remoteCaptureLease:
         options.leased === false || options.unleasedProducer ? 'unleased' : leaseVerifier(LEASE_ID),
     },
@@ -152,7 +169,7 @@ function publishRecordingSession(
     screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(ADDRESS)),
     envelope,
   );
-  return { ref: sessionStore.publish(ADDRESS, session), finish, forceCleanup };
+  return { ref: sessionStore.publish(ADDRESS, session, lifetimeId), finish, forceCleanup };
 }
 
 async function teardown(sessionStore: SessionStore) {
@@ -284,7 +301,7 @@ test('a record stop replay after a leased teardown serves the artifacts teardown
     screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(ADDRESS)),
   );
   if (record.status !== 'decoded') throw new Error('Expected completed recording manifest');
-  const artifacts = await commitRecordingOutputs(record.envelope, recovery.completion);
+  const artifacts = await commitRecordingOutputs(record.envelope);
 
   expect(artifacts.map((artifact) => artifact.artifactId)).toEqual(retained.map((a) => a.id));
   expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([
@@ -384,26 +401,27 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
   },
 );
 
-test.each([undefined, 'former-tenant'])(
-  'teardown assigns an unleased recording with producer tenant %s to the session lease tenant',
-  async (producerTenant) => {
+test.each([
+  [undefined, true],
+  ['former-tenant', true],
+  [TENANT, false],
+] as const)(
+  'teardown preserves proof-less files for legacy producer %s (unleased: %s)',
+  async (producerTenant, unleasedProducer) => {
     const sessionStore = makeSessionStore('agent-device-unleased-recording-');
-    publishRecordingSession(sessionStore, remoteRecordingExport(), {
-      unleasedProducer: true,
+    const output = remoteRecordingExport();
+    publishRecordingSession(sessionStore, output, {
+      legacy: true,
+      unleasedProducer,
       producerTenant,
     });
 
     await teardown(sessionStore);
 
-    expect(
-      await listDownloadableArtifacts({ tenantId: producerTenant ?? 'tenant-b' }, process.env),
-    ).toEqual([]);
-    const artifacts = await listDownloadableArtifacts({ tenantId: TENANT }, process.env);
-    expect(artifacts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ artifactType: 'screen-recording', filename: 'checkout.mp4' }),
-      ]),
-    );
+    expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+    expect(await listDownloadableArtifacts({ tenantId: producerTenant }, {})).toEqual([]);
+    expect(await listDownloadableArtifacts(OWNER, {})).toEqual([]);
+    expect(fs.readFileSync(output.outPath, 'utf8')).toBe('video');
   },
 );
 
@@ -418,19 +436,27 @@ test('fresh runtime slots can restore an intact recording from its producer mani
   const successor = createRuntimeStateHandle();
   const missingScope = createRuntimeStateHandle();
   const remote = { publicNetworkOnly: true } as const;
+  let originalId: string | undefined;
   try {
     await producer.run(async () => {
       expect(await harness.run(['start'], { tenantId: TENANT }, undefined, remote)).toMatchObject({
         ok: true,
       });
-      expect(await harness.run(['stop'], { tenantId: TENANT }, undefined, remote)).toMatchObject({
-        ok: true,
-      });
+      const stopped = await harness.run(['stop'], { tenantId: TENANT }, undefined, remote);
+      if (!stopped.ok) throw new Error(stopped.error.message);
+      originalId = stopped.data?.artifacts?.[0]?.artifactId;
+      expect(originalId).toBeTypeOf('string');
     });
+    producer.dispose();
     await successor.run(async () => {
       expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
-      const stopped = await harness.run(['stop'], { tenantId: 'other' }, undefined, remote);
+      expect(await harness.run(['stop'], { tenantId: 'other' }, undefined, remote)).toMatchObject({
+        ok: false,
+        error: { code: 'UNAUTHORIZED' },
+      });
+      const stopped = await harness.run(['stop'], { tenantId: TENANT }, undefined, remote);
       if (!stopped.ok) throw new Error(stopped.error.message);
+      expect(stopped.data?.artifacts?.[0]?.artifactId).toBe(originalId);
       settleCommittedFileOutputs(stopped.data?.artifacts, true);
       expect(await listDownloadableArtifacts({ tenantId: 'other' }, {})).toEqual([]);
       expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([
@@ -456,6 +482,75 @@ test('fresh runtime slots can restore an intact recording from its producer mani
     successor.dispose();
     producer.dispose();
   }
+});
+
+test('close preserves completion for an exact-owner retry when export inspection fails', async () => {
+  const harness = makeRecordRuntimeHarness('recording-close-proof-io-', { sessionName: ADDRESS });
+  const remote = { publicNetworkOnly: true } as const;
+  const run = (action: string, tenantId = TENANT) =>
+    harness.run([action], { tenantId }, undefined, remote);
+  expect(await run('start')).toMatchObject({ ok: true });
+  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+  fs.writeFileSync(source, 'verified-after-close');
+  const lstat = fs.lstatSync;
+  const inspect = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+    if (file === source)
+      throw Object.assign(new Error('verification unavailable'), { code: 'EIO' });
+    return lstat(file, options);
+  });
+  try {
+    await teardown(harness.sessionStore);
+  } finally {
+    inspect.mockRestore();
+  }
+  expect(harness.runtime.forceCleanup).toHaveBeenCalledOnce();
+  expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+  expect(await run('stop', 'other-tenant')).toMatchObject({
+    ok: false,
+    error: { code: 'UNAUTHORIZED' },
+  });
+  expect(await run('stop')).toMatchObject({
+    ok: true,
+    data: { artifacts: [{ artifactId: expect.any(String) }] },
+  });
+  expect(harness.runtime.finish).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(source, 'utf8')).toBe('verified-after-close');
+});
+
+test('a failed completion manifest read never returns uncommitted remote paths', async () => {
+  const harness = makeRecordRuntimeHarness('recording-completion-proof-io-');
+  const run = (action: string) =>
+    harness.run([action], { tenantId: TENANT }, undefined, { publicNetworkOnly: true });
+  expect(await run('start')).toMatchObject({ ok: true });
+  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+  fs.writeFileSync(source, 'completed-video');
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    harness.sessionStore.resolveSessionDir(harness.sessionName),
+  );
+  const lstat = fs.lstatSync;
+  let failed = false;
+  const inspect = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+    if (
+      file === resourcePath &&
+      !failed &&
+      fs.readFileSync(resourcePath, 'utf8').includes('"lifecycle":"completed"')
+    ) {
+      failed = true;
+      throw Object.assign(new Error('manifest unavailable'), { code: 'EIO' });
+    }
+    return lstat(file, options);
+  });
+  try {
+    expect(await run('stop')).toMatchObject({ ok: false, error: { code: 'COMMAND_FAILED' } });
+    expect(failed).toBe(true);
+    expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+  } finally {
+    inspect.mockRestore();
+  }
+  expect(await run('stop')).toMatchObject({
+    ok: true,
+    data: { artifacts: [{ artifactId: expect.any(String) }] },
+  });
 });
 
 test('a transient inspection error preserves the recording and other inventory entries', async () => {
@@ -493,7 +588,10 @@ test('a transient inspection error preserves the recording and other inventory e
       });
       try {
         const result = await run('stop');
-        expect(result).toMatchObject({ ok: false, error: { message: 'inspection I/O failed' } });
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: 'COMMAND_FAILED', message: 'Recording output could not be inspected.' },
+        });
         expect(fs.readFileSync(video, 'utf8')).toBe('published-video');
         expect(await run('stop')).toEqual(published);
 
@@ -544,9 +642,11 @@ async function startSuiteRecording(withSidecar = false) {
   expect(await harness.run(['start', video], meta, undefined, internal)).toMatchObject({
     ok: true,
   });
-  fs.writeFileSync(video, 'leased-suite-recording');
+  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+  expect(source.startsWith(suite + path.sep)).toBe(false);
+  fs.writeFileSync(source, 'leased-suite-recording');
   if (withSidecar) {
-    const telemetryPath = deriveRecordingTelemetryPath(video);
+    const telemetryPath = deriveRecordingTelemetryPath(source);
     fs.writeFileSync(telemetryPath, '{}');
     const finish = harness.runtime.finish.getMockImplementation()!;
     harness.runtime.finish.mockImplementation(async () => {
@@ -554,37 +654,37 @@ async function startSuiteRecording(withSidecar = false) {
       return { ...outcome, result: { ...outcome.result, telemetryPath } };
     });
   }
-  return { suite, video, stop };
+  const collect = () =>
+    collectSuiteRecordingOutputs(harness.sessionStore, harness.sessionStore.lookup(ADDRESS)!);
+  return { suite, video, source, stop, collect, harness };
 }
 
-test('suite recording staging can wait for an asynchronous copy before publishing', async () => {
-  const { stop } = await startSuiteRecording();
-  // Hold the asynchronous full-copy path open so other work can run before publication finishes.
-  const copy = fs.promises.copyFile;
-  let releaseCopy = () => {};
-  const gate = new Promise<void>((resolve) => {
-    releaseCopy = resolve;
+test('transient manifest I/O cannot bypass a completed recording lease', async () => {
+  const { stop, harness, source } = await startSuiteRecording();
+  expect(await stop()).toMatchObject({ ok: true });
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    harness.sessionStore.resolveSessionDir(ADDRESS),
+  );
+  const lstat = fs.lstatSync;
+  let fail = true;
+  const inspect = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+    if (file === resourcePath && fail) {
+      fail = false;
+      throw Object.assign(new Error('manifest unavailable'), { code: 'EIO' });
+    }
+    return lstat(file, options);
   });
-  const staging = vi.spyOn(fs.promises, 'copyFile').mockImplementationOnce(async (...args) => {
-    await gate;
-    return await copy(...args);
-  });
-  const synchronousCopy = vi.spyOn(fs, 'copyFileSync');
-  const stopping = stop();
+  const unleasedStop = () =>
+    harness.run(['stop'], { tenantId: TENANT }, undefined, { publicNetworkOnly: true });
   try {
-    await vi.waitFor(() => expect(staging).toHaveBeenCalledOnce());
-    expect(synchronousCopy).not.toHaveBeenCalled();
-    expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
+    expect(await unleasedStop()).toMatchObject({ ok: false, error: { code: 'COMMAND_FAILED' } });
+    expect(fail).toBe(false);
+    expect(await unleasedStop()).toMatchObject({ ok: false, error: { code: 'UNAUTHORIZED' } });
+    expect(fs.readFileSync(source, 'utf8')).toBe('leased-suite-recording');
+    expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
   } finally {
-    releaseCopy();
-    staging.mockRestore();
-    synchronousCopy.mockRestore();
+    inspect.mockRestore();
   }
-  const stopped = await stopping;
-  expect(stopped).toMatchObject({
-    ok: true,
-    data: { artifacts: [{ artifactId: expect.any(String) }] },
-  });
 });
 
 test.each(['expiry', 'disposal'])(
@@ -592,7 +692,8 @@ test.each(['expiry', 'disposal'])(
   async (end) => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const runtime = createRuntimeStateHandle();
-    const { video, stop } = await runtime.run(() => startSuiteRecording(true));
+    const { video, stop, collect } = await runtime.run(() => startSuiteRecording(true));
+    expect(await runtime.run(stop)).toMatchObject({ ok: true });
     let enter!: (target: string) => void;
     const entered = new Promise<string>((resolve) => {
       enter = resolve;
@@ -607,24 +708,24 @@ test.each(['expiry', 'disposal'])(
       await gate;
       await copy(...args);
     });
-    let outcome: Awaited<ReturnType<typeof stop>> | undefined;
-    const stopping = runtime.run(stop).then((result) => {
+    let outcome: Awaited<ReturnType<typeof collect>> | undefined;
+    const stopping = runtime.run(collect).then((result) => {
       outcome = result;
     });
     try {
       const target = await entered;
       if (end === 'disposal') runtime.dispose();
       await vi.advanceTimersByTimeAsync(end === 'expiry' ? 15 * 60 * 1000 : 0);
-      expect(outcome).toMatchObject({
-        ok: false,
-        error: { details: { reason: 'RESOURCE_EXPIRED' } },
-      });
+      expect(outcome).toMatchObject([
+        { artifactId: expect.any(String) },
+        { artifactId: expect.any(String) },
+      ]);
       expect(fs.existsSync(path.dirname(target))).toBe(true);
       expect(staging).toHaveBeenCalledTimes(1);
       release();
       await vi.waitFor(() => expect(fs.existsSync(path.dirname(target))).toBe(false));
       expect(staging).toHaveBeenCalledTimes(1);
-      expect(fs.readFileSync(video, 'utf8')).toBe('leased-suite-recording');
+      expect(fs.existsSync(video)).toBe(false);
       expect(await runtime.run(() => listDownloadableArtifacts(OWNER, {}))).toEqual([]);
     } finally {
       release();
@@ -638,10 +739,11 @@ test.each(['expiry', 'disposal'])(
 for (const first of ['archive', 'recording']) {
   test(`the producing lease retries after consuming the ${first} first`, async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
-    const { suite, video, stop } = await startSuiteRecording();
+    const { suite, video, source, stop, collect } = await startSuiteRecording();
     const stopped = await stop();
     if (!stopped.ok) throw new Error(stopped.error.message);
     const recording = stopped.data!.artifacts![0]!;
+    expect(await collect()).toMatchObject([{ path: video, artifactId: recording.artifactId }]);
     const archiveId = trackDownloadableArtifact({
       artifactPath: suite,
       artifactType: 'test-artifacts',
@@ -684,7 +786,22 @@ for (const first of ['archive', 'recording']) {
         expect(await stop()).toMatchObject({ ok: true, data: { artifacts: [recording] } });
         await consumeRecording();
       } else {
-        await consumeRecording();
+        const rm = fs.rmSync;
+        const retain = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+          if (target !== source) return rm(target, options);
+          throw Object.assign(new Error('unlink interrupted'), { code: 'EIO' });
+        });
+        try {
+          await consumeRecording();
+          await vi.waitFor(async () =>
+            expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([
+              expect.objectContaining({ id: archiveId }),
+            ]),
+          );
+        } finally {
+          retain.mockRestore();
+        }
+        expect(fs.readFileSync(source, 'utf8')).toBe('leased-suite-recording');
         await vi.waitFor(async () =>
           expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([
             expect.objectContaining({ id: archiveId }),
@@ -830,37 +947,6 @@ test.each([
     else expect(fs.existsSync(source)).toBe(false);
   },
 );
-
-test('failed registration of a legacy export without recorded identity leaves its file alone', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-  const sessionStore = makeSessionStore('recording-legacy-cleanup-');
-  const recordingExport = remoteRecordingExport();
-  publishRecordingSession(sessionStore, recordingExport);
-
-  const lstat = fs.lstatSync;
-  let sourceReads = 0;
-  const stat = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
-    if (file === recordingExport.outPath && ++sourceReads === 2) {
-      throw Object.assign(new Error('registry stat unavailable'), { code: 'EIO' });
-    }
-    return lstat(file, options);
-  });
-  try {
-    await teardown(sessionStore);
-    expect(sourceReads).toBe(2);
-    expect(
-      screenRecordingResourceStore.read(
-        screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(ADDRESS)),
-      ),
-    ).toMatchObject({ status: 'decoded', envelope: { lifecycle: 'completed' } });
-    expect(await listDownloadableArtifacts(OWNER, {})).toEqual([]);
-  } finally {
-    stat.mockRestore();
-  }
-  await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
-  expect(fs.readFileSync(recordingExport.outPath, 'utf8')).toBe('video');
-  expect(fs.readFileSync(recordingExport.telemetryPath, 'utf8')).toBe('{"events":[]}');
-});
 
 test('explicit stop keeps its binding until the advertised sidecar can be verified', async () => {
   const harness = makeRecordRuntimeHarness('recording-sidecar-retry-');

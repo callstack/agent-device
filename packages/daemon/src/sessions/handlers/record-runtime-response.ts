@@ -33,13 +33,15 @@ export function buildRecordingStartResponse(
   snapshot: ScreenRecordingLiveSnapshot,
   sessionStateDir: string,
   requestedOutPath: string,
+  remote = false,
 ): DaemonResponse {
   return {
     ok: true,
     data: {
       recording: 'started',
-      outPath: snapshot.clientOutPath ?? requestedOutPath,
-      sessionStateDir,
+      outPath:
+        snapshot.clientOutPath ?? (remote ? path.basename(requestedOutPath) : requestedOutPath),
+      ...(!remote ? { sessionStateDir } : {}),
       recordingBackend: snapshot.backend,
       recordingScope: snapshot.scope,
       recordOnlySession: snapshot.recordOnlySession,
@@ -76,13 +78,19 @@ export function buildRecordingUnsupportedResponse(
 export function buildRecordingStopResponse(
   completion: ScreenRecordingCompletion,
   artifacts = recordingStopArtifacts(completion),
+  remote = false,
 ): DaemonResponse {
   return {
     ok: true,
     data: {
       recording: 'stopped',
-      outPath: completion.outPath,
-      telemetryPath: completion.telemetryPath,
+      outPath: remote
+        ? (artifacts[0]?.localPath ?? path.basename(completion.outPath))
+        : completion.outPath,
+      telemetryPath: remote
+        ? (artifacts.find(({ field }) => field === 'telemetryPath')?.localPath ??
+          (completion.telemetryPath ? path.basename(completion.telemetryPath) : undefined))
+        : completion.telemetryPath,
       artifacts,
       recordingBackend: completion.backend,
       recordingScope: completion.scope,
@@ -105,7 +113,7 @@ export function buildRecordingStopResponse(
       overlayWarning: completion.overlayWarning,
       chunks: completion.chunks?.map((chunk) => ({
         index: chunk.index,
-        path: chunk.clientOutPath ?? chunk.path,
+        path: chunk.clientOutPath ?? (remote ? path.basename(chunk.path) : chunk.path),
       })),
     } satisfies RecordingCommandResult,
   };

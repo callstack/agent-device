@@ -115,7 +115,10 @@ function recordRequest(request: ReplayRecordVideoRequest, suite?: DaemonRequest)
     command: 'record',
     positionals: request.phase === 'start' ? ['start', request.outputPath] : ['stop'],
     flags: {},
-    meta: request.request.meta,
+    meta: {
+      ...request.request.meta,
+      tenantId: suite?.meta?.tenantId ?? request.request.meta?.tenantId,
+    },
     internal: { admittedLease: suite?.internal?.admittedLease },
   };
 }

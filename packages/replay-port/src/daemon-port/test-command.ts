@@ -303,7 +303,12 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
   return outcome.status === 'completed'
     ? {
         ok: true,
-        data: attachRemoteReplayTestArtifacts(outcome.data, req, command.recordingOutputs?.()),
+        data: attachRemoteReplayTestArtifacts(
+          outcome.data,
+          req,
+          command.recordingOutputs?.(),
+          command.publicNetworkOnly,
+        ),
       }
     : errorResponse(outcome.error.code, outcome.error.message);
 }
@@ -382,50 +387,64 @@ export function attachRemoteReplayTestArtifacts(
   data: ReplaySuiteResult,
   req: DaemonWireRequest,
   recordings: readonly ReplaySuiteRecordingArtifact[] = [],
+  publicNetworkOnly = false,
 ): DaemonResponseData {
   const clientRoot = req.meta?.clientArtifactPaths?.artifactsDir;
   const daemonRoot = data.artifactsDir;
-  if (!clientRoot || !daemonRoot) {
+  if (!clientRoot && !publicNetworkOnly) {
     return recordings.length > 0 ? { ...data, recordingArtifacts: recordings } : data;
   }
-
-  // The directory the client will actually extract the download into, on ITS filesystem —
-  // `clientRoot` plus the same invocation-id segment `daemonRoot` ends in (see doc comment).
-  const clientSuiteRoot = path.join(clientRoot, path.basename(daemonRoot));
-  const remapArtifactsDir = (candidate: string): string =>
-    candidate === daemonRoot || candidate.startsWith(daemonRoot + path.sep)
+  const clientSuiteRoot = daemonRoot
+    ? path.join(clientRoot ?? '', path.basename(daemonRoot))
+    : undefined;
+  const project = (candidate: string) =>
+    daemonRoot &&
+    clientSuiteRoot &&
+    (candidate === daemonRoot || candidate.startsWith(daemonRoot + path.sep))
       ? clientSuiteRoot + candidate.slice(daemonRoot.length)
-      : candidate;
-  // `tests` and `failures` both come from the scheduler's own `results` array
-  // (`summarizeReplayTestResults`) and share object references for every failed entry — each
-  // array is rewritten independently so both, not just whichever a caller happens to read, carry
-  // the caller-local path.
+      : path.basename(candidate);
+
+  const projectResult = <T extends ReplaySuiteResult['tests'][number]>(test: T): T => {
+    const artifactPaths = test.status === 'failed' && test.error.details?.artifactPaths;
+    return {
+      ...test,
+      ...('artifactsDir' in test && test.artifactsDir
+        ? { artifactsDir: project(test.artifactsDir) }
+        : {}),
+      ...(test.status === 'failed' && Array.isArray(artifactPaths)
+        ? {
+            error: {
+              ...test.error,
+              details: {
+                ...test.error.details,
+                artifactPaths: artifactPaths
+                  .filter((value): value is string => typeof value === 'string')
+                  .map(project),
+              },
+            },
+          }
+        : {}),
+    };
+  };
   const rewritten: DaemonResponseData = {
     ...data,
     artifactsDir: clientSuiteRoot,
     ...(recordings.length > 0
       ? {
-          recordingArtifacts: recordings
-            .filter((recording) => recording.path.startsWith(daemonRoot + path.sep))
-            .map((recording) => ({ ...recording, path: remapArtifactsDir(recording.path) })),
+          recordingArtifacts: recordings.map(({ path: recordingPath, ...recording }) => ({
+            ...recording,
+            ...(clientRoot && recordingPath ? { path: project(recordingPath) } : {}),
+          })),
         }
       : {}),
-    tests: data.tests.map((test) =>
-      'artifactsDir' in test && test.artifactsDir
-        ? { ...test, artifactsDir: remapArtifactsDir(test.artifactsDir) }
-        : test,
-    ),
-    failures: data.failures.map((failure) =>
-      failure.artifactsDir
-        ? { ...failure, artifactsDir: remapArtifactsDir(failure.artifactsDir) }
-        : failure,
-    ),
+    tests: data.tests.map(projectResult),
+    failures: data.failures.map(projectResult),
   };
 
   // No attempt ever ran (e.g. every source was filtered out), so the directory the client would
   // try to download was never created — the rewritten paths above are still correct (they name
   // where the suite WOULD have put its output), just nothing to register a download for.
-  if (!fs.existsSync(daemonRoot)) return rewritten;
+  if (!clientRoot || !daemonRoot || !fs.existsSync(daemonRoot)) return rewritten;
 
   return {
     ...rewritten,

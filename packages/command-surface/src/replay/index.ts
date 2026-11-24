@@ -153,8 +153,13 @@ export const REPLAY_COMMAND_OUTPUT_SCHEMAS = {
       recordingArtifacts: {
         type: 'array',
         items: objectSchema(
-          { session: stringSchema(), path: stringSchema(), artifactId: stringSchema() },
-          ['session', 'path'],
+          {
+            session: stringSchema(),
+            path: stringSchema(),
+            fileName: stringSchema(),
+            artifactId: stringSchema(),
+          },
+          ['session'],
         ),
       },
       snapshotDiagnostics: looseObjectSchema(),

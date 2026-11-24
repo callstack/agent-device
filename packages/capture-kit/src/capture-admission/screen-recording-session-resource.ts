@@ -20,6 +20,7 @@ import type {
   DurableCaptureRecoveryControl,
   DurableCaptureSessionBinding,
 } from '../durable-capture/index.ts';
+import { withDurableCaptureResourceFence } from '../durable-capture/fence.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
@@ -38,10 +39,24 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   store: screenRecordingResourceStore,
   completionMetadata: async (result, metadata) => ({
     ...encodeScreenRecordingCompletionMetadata(result),
-    ...(typeof metadata?.remoteCapturePath === 'string'
-      ? { remoteCaptureExport: await verifyRecordingExport(metadata.remoteCapturePath, result) }
+    ...(typeof metadata?.remoteCapturePath === 'string' &&
+    typeof metadata.remoteCaptureReservation === 'string'
+      ? {
+          remoteCaptureExport: await verifyRecordingExport(
+            metadata.remoteCapturePath,
+            result,
+            metadata.remoteCaptureReservation,
+            typeof metadata.remoteCaptureCompletedAt === 'number'
+              ? metadata.remoteCaptureCompletedAt
+              : Date.now(),
+          ),
+        }
       : {}),
   }),
+  pendingCompletionMetadata: (result, error) =>
+    error instanceof RecordingProofIoError
+      ? { ...encodeScreenRecordingCompletionMetadata(result), remoteCaptureCompletedAt: Date.now() }
+      : undefined,
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
   // record is served the same export the first stop was answered with. That answer is a cold path: the
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
@@ -79,7 +94,12 @@ export function finishLiveScreenRecording(params: {
   return screenRecordingDurableResource.finishLive(params);
 }
 
-async function verifyRecordingExport(reservedPath: string, completion: ScreenRecordingCompletion) {
+async function verifyRecordingExport(
+  reservedPath: string,
+  completion: ScreenRecordingCompletion,
+  reservation: string,
+  completedAt: number,
+) {
   const [{ chunkPathAt }, { deriveRecordingTelemetryPath }] = await Promise.all([
     import('../recording/output-path.ts'),
     import('../recording/telemetry.ts'),
@@ -102,7 +122,11 @@ async function verifyRecordingExport(reservedPath: string, completion: ScreenRec
     throw new AppError('COMMAND_FAILED', 'Recording export does not match its reservation.');
   }
   const identities = files.map(readRecordingExportIdentity);
-  return { completedAt: Date.now(), identities };
+  return {
+    completedAt,
+    identities,
+    outputIds: files.map((_, index) => `${reservation}-${index + 1}`),
+  };
 }
 
 function readRecordingExportIdentity(file: string): string {
@@ -110,17 +134,54 @@ function readRecordingExportIdentity(file: string): string {
     const identity = recordingExportFileIdentity(fs.lstatSync(file, { throwIfNoEntry: false }));
     if (identity !== null) return identity;
   } catch (error) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Recording export could not be verified.',
-      {
-        retriable: true,
-      },
-      error,
-    );
+    throw new RecordingProofIoError(error);
   }
   throw new AppError('COMMAND_FAILED', 'Recording export is missing or is not a regular file.', {
     retriable: true,
+  });
+}
+
+class RecordingProofIoError extends AppError {
+  constructor(error: unknown) {
+    super('COMMAND_FAILED', 'Recording export could not be verified.', { retriable: true }, error);
+  }
+}
+
+export function finishPendingScreenRecordingProof(
+  resourcePath: string,
+  expected: DurableResourceEnvelope<'screen-recording'>,
+): Promise<DurableResourceEnvelope<'screen-recording'>> {
+  return withDurableCaptureResourceFence({
+    store: screenRecordingResourceStore,
+    resourcePath,
+    expected: expected.fence,
+    onCompleted: ({ envelope }) => envelope,
+    run: async (lease) => {
+      const { readStoredCompletion, unreadableRecordingProof } =
+        await import('./screen-recording-stop-recovery.ts');
+      const { metadata } = lease.envelope;
+      const completion = readStoredCompletion(metadata);
+      if (
+        metadata?.phase !== 'export-proof-pending' ||
+        !completion ||
+        typeof metadata.remoteCapturePath !== 'string' ||
+        typeof metadata.remoteCaptureReservation !== 'string' ||
+        typeof metadata.remoteCaptureCompletedAt !== 'number'
+      )
+        throw unreadableRecordingProof();
+      return lease.transition('completed', {
+        metadata: {
+          ...metadata,
+          phase: 'completed',
+          remoteCaptureExport: await verifyRecordingExport(
+            metadata.remoteCapturePath,
+            completion,
+            metadata.remoteCaptureReservation,
+            metadata.remoteCaptureCompletedAt,
+          ),
+        },
+      });
+    },
   });
 }
 

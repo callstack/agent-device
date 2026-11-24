@@ -291,14 +291,16 @@ test('remote recording without client metadata stays in its session and download
         meta: { cwd: root },
       });
       expect(started.result?.ok).toBe(true);
-      const output = started.result?.data?.outPath as string;
-      expect(path.dirname(output)).toBe(
+      const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+      expect(path.dirname(source)).toBe(
         harness.sessionStore.resolveSessionDir(harness.sessionName),
       );
-      expect(output).toMatch(/recording-[0-9a-f-]+\.mp4$/);
+      expect(started.result?.data?.outPath).toBe(path.basename(source));
+      expect(started.result?.data?.sessionStateDir).toBeUndefined();
       expect(fs.readFileSync(victim, 'utf8')).toBe('protected-content');
       const stopped = await post({ command: 'record', positionals: ['stop'] });
       expect(stopped.result?.ok).toBe(true);
+      expect(stopped.result?.data?.outPath).toBe(path.basename(source));
       const artifact = stopped.result?.data?.artifacts?.[0];
       expect(artifact?.artifactId).toBeTypeOf('string');
       const download = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {
@@ -335,10 +337,11 @@ test.each(['local', 'local-client-destination', 'remote'] as const)(
           origin === 'remote',
         );
         expect(started.result?.ok, JSON.stringify(started)).toBe(true);
-        const stopped = await post(
-          { command: 'record', positionals: ['stop'] },
-          origin !== 'remote',
-        );
+        if (origin !== 'remote') {
+          const refused = await post({ command: 'record', positionals: ['stop'] }, true);
+          expect(refused.error?.data?.details).toMatchObject({ reason: 'LEASE_OUTPUT_MISMATCH' });
+        }
+        const stopped = await post({ command: 'record', positionals: ['stop'] }, false);
         expect(stopped.result?.ok, JSON.stringify(stopped)).toBe(true);
         const artifactId = stopped.result?.data?.artifacts?.[0]?.artifactId;
         if (origin === 'remote') {
@@ -691,12 +694,11 @@ test('batch recording keeps remote origin and generates a session-owned destinat
     async (request) =>
       await harness.run(request.positionals, request.meta, request.flags, request.internal),
   );
-  expect(response.ok).toBe(true);
-  if (!response.ok) return;
+  if (!response.ok) throw new Error(response.error.message);
   const results = response.data?.results as Array<{ data: { outPath: string } }>;
-  expect(path.dirname(results[0]!.data.outPath)).toBe(
-    harness.sessionStore.resolveSessionDir(harness.sessionName),
-  );
+  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+  expect(path.dirname(source)).toBe(harness.sessionStore.resolveSessionDir(harness.sessionName));
+  expect(results[0]!.data.outPath).toBe(path.basename(source));
   await harness.run(['stop']);
 });
 

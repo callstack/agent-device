@@ -72,6 +72,7 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
    * Optional because a kind whose stored metadata cannot carry its whole outcome has nothing honest to
    * replay; its callers then get the terminal refusal.
    */
+  pendingCompletionMetadata?(result: C, error: unknown): JsonObject | undefined;
   completionFromMetadata?(metadata: JsonObject | undefined): C | undefined | Promise<C | undefined>;
   failedFinishPolicy: DurableCaptureFailedFinishPolicy;
   messages: Readonly<{

@@ -147,7 +147,8 @@ export type ReplaySuiteTestResult =
 
 export type ReplaySuiteRecordingArtifact = Readonly<{
   session: string;
-  path: string;
+  path?: string;
+  fileName?: string;
   artifactId?: string;
 }>;
 

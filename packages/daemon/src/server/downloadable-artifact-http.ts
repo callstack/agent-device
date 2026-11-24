@@ -130,7 +130,12 @@ async function handleArtifactDownload(
         transform(chunk: Buffer, _encoding, callback) {
           bytesRead += chunk.length;
           if (bytesRead >= artifact.sizeBytes && options.retainArtifacts !== true) {
-            cleanupDownloadableArtifact(artifactId);
+            try {
+              cleanupDownloadableArtifact(artifactId, true);
+            } catch (error) {
+              callback(error as Error);
+              return;
+            }
           }
           callback(null, chunk);
         },
@@ -145,8 +150,12 @@ async function handleArtifactDownload(
             );
             return;
           }
-          if (options.retainArtifacts !== true) cleanupDownloadableArtifact(artifactId);
-          callback();
+          try {
+            if (options.retainArtifacts !== true) cleanupDownloadableArtifact(artifactId, true);
+            callback();
+          } catch (error) {
+            callback(error as Error);
+          }
         },
       });
       await pipeline(stream, checked, res, { signal: artifact.signal });

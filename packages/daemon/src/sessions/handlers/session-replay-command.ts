@@ -250,8 +250,9 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
             } finally {
               if (video && req.flags?.recordVideo) {
                 for (const output of await collectSuiteRecordingOutputs(sessionStore, ref)) {
-                  artifactPaths?.add(output.path);
-                  if (artifactPaths) recordingOutputs.set(output.path, output);
+                  if (output.path) artifactPaths?.add(output.path);
+                  if (artifactPaths)
+                    recordingOutputs.set(output.artifactId ?? output.path!, output);
                 }
               }
             }

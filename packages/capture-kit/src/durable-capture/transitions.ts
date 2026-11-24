@@ -56,7 +56,9 @@ export async function finishLiveDurableCapture<
     if (
       !cleanupPending &&
       record.status === 'decoded' &&
-      record.envelope.lifecycle === 'completed'
+      (record.envelope.lifecycle === 'completed' ||
+        (record.envelope.fence.token === active.envelope.fence.token &&
+          record.envelope.metadata?.phase === 'export-proof-pending'))
     ) {
       params.binding.clear(active);
     }
@@ -140,6 +142,7 @@ export async function finishDurableCaptureHandle<
             params,
             proofError,
             params.intent,
+            definition.pendingCompletionMetadata?.(finishOutcome.result, proofError),
           );
           if (params.intent === 'disposal' && settled) {
             emitDiagnostic({
@@ -168,6 +171,7 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
   params: { handle: H; resourcePath: string },
   finishError: unknown,
   intent: DurableCaptureFinishIntent,
+  pendingCompletion?: JsonObject,
 ): Promise<boolean> {
   if (intent === 'capture' && definition.failedFinishPolicy === 'preserve-retry-material') {
     emitFailedFinishPreservedDiagnostic(definition, params, finishError);
@@ -188,7 +192,18 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
     return false;
   }
   try {
-    transitionCleanupOutcome(lease, cleanup);
+    if (intent === 'disposal' && pendingCompletion && isConfirmedCleanup(cleanup)) {
+      lease.transition('open', {
+        metadata: {
+          ...lease.envelope.metadata,
+          ...pendingCompletion,
+          phase: 'export-proof-pending',
+          cleanupStatus: cleanup.status,
+        },
+      });
+    } else {
+      transitionCleanupOutcome(lease, cleanup);
+    }
   } catch (transitionError) {
     emitFailedFinishCleanupDiagnostic(
       definition,

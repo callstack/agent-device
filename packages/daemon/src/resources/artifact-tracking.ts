@@ -1,8 +1,4 @@
-import type {
-  RecordingFile,
-  RecordingPublication,
-  RecordingSourceKind,
-} from './artifact-file-storage.ts';
+import type { RecordingFile } from './artifact-file-storage.ts';
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -144,7 +140,7 @@ export function diagnosticsRecordOwner(recordId: string): string | undefined | n
 
 // --- Downloadable artifact tracking ---
 
-const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
+export const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
 const ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS = 15 * 60 * 1000;
 
 const DOWNLOADABLE_ARTIFACT_RESOURCE: TenantOwnedResourceKind = {
@@ -186,6 +182,7 @@ type ArtifactEntry = {
     directory?: string;
     lifetimeId: string;
     recording?: true;
+    consume?: () => void;
   }>;
   /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
   output: string | undefined;
@@ -206,7 +203,8 @@ type ArtifactEntry = {
 type ArtifactTrackingState = {
   artifacts: Map<string, ArtifactEntry>;
   reservations: Set<() => void>;
-  recordingPublications: Map<string, RecordingPublication>;
+  recordingScope: AbortController;
+  unregisteredRecordings: Map<string, ReturnType<typeof setTimeout>>;
   uploads: Map<string, UploadEntry>;
   retainedPerformanceSources: Map<
     string,
@@ -221,16 +219,19 @@ const artifactTracking = (): ArtifactTrackingState =>
     (): ArtifactTrackingState => ({
       artifacts: new Map(),
       reservations: new Set(),
-      recordingPublications: new Map(),
+      recordingScope: new AbortController(),
+      unregisteredRecordings: new Map(),
       uploads: new Map(),
       retainedPerformanceSources: new Map(),
     }),
     (state) => {
+      state.recordingScope.abort(
+        expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, 'recording'),
+      );
       for (const discard of state.reservations) discard();
-      for (const publication of state.recordingPublications.values()) publication.dispose();
-      state.recordingPublications.clear();
       for (const [id, entry] of state.artifacts) {
-        requestArtifactCleanup(state.artifacts, id, entry);
+        if (!entry.reservation?.recording || entry.cleanupRequested)
+          requestArtifactCleanup(state.artifacts, id, entry);
         for (const download of entry.activeDownloads) cancelArtifactDownload(id, entry, download);
       }
       for (const entry of state.uploads.values()) {
@@ -341,51 +342,53 @@ function bindFileOutputDelivery(
   return artifact;
 }
 
+export const recordingRegistrySignal = () => artifactTracking().recordingScope.signal;
+
 /** Commits verified recordings independently of the request that delivers their IDs. */
 export async function commitRecordingFileOutputs(
   files: readonly RecordingFile[],
   producer: FileOutputProducer,
-  sessionName: string | undefined,
+  sessionName: string,
   completedAt: number,
-  sourceKind: RecordingSourceKind,
+  reservationId: string,
+  retainOnly = false,
 ): Promise<DaemonArtifact[]> {
-  const { publishRecordingFiles } = await import('./artifact-file-storage.ts');
-  const { artifacts, recordingPublications } = artifactTracking();
-  return publishRecordingFiles({
-    publications: recordingPublications,
-    producer,
-    files,
-    expiresAt: completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS,
-    sourceKind,
-    isAvailable: (id) => {
-      const entry = artifacts.get(id);
-      return (
-        entry !== undefined &&
-        !entry.cleanupRequested &&
-        statRegisteredOutput(id, entry) !== undefined
+  const { verifyRecordingFiles, recordConsumption, retainUnregisteredRecording } =
+    await import('./artifact-file-storage.ts');
+  const { artifacts, unregisteredRecordings } = artifactTracking();
+  const expiresAt = completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS;
+  const unregistered = files.filter(({ artifactId }) => !artifacts.has(artifactId));
+  retainUnregisteredRecording(unregisteredRecordings, reservationId, unregistered, expiresAt);
+  if (retainOnly) return [];
+  verifyRecordingFiles(files, expiresAt);
+  const results = files.map(({ path: artifactPath, sourceIdentity, artifactId, ...delivery }) => {
+    if (!artifacts.has(artifactId)) {
+      addArtifactEntry(
+        artifacts,
+        artifactId,
+        {
+          artifactPath,
+          artifactType: delivery.artifactType,
+          fileName: delivery.fileName,
+          tenantId: producer.tenantId,
+          leaseVerifier: producer.leaseVerifier ?? undefined,
+          sessionName,
+        },
+        sourceIdentity,
+        { remainingEntries: 1, deleteAfterDownload: true },
+        {
+          lifetimeId: producer.lifetimeId,
+          recording: true,
+          consume: () => recordConsumption(artifactPath, expiresAt),
+        },
+        completedAt,
       );
-    },
-    register: (registrations, directory) => {
-      for (const { delivery, artifactPath, output } of registrations) {
-        addArtifactEntry(
-          artifacts,
-          delivery.artifactId,
-          {
-            artifactPath,
-            artifactType: delivery.artifactType,
-            fileName: delivery.fileName,
-            tenantId: producer.tenantId,
-            leaseVerifier: producer.leaseVerifier ?? undefined,
-            sessionName,
-          },
-          output,
-          { remainingEntries: 1, deleteAfterDownload: true },
-          { directory, lifetimeId: producer.lifetimeId, recording: true },
-          completedAt,
-        );
-      }
-    },
+    }
+    return { ...delivery, artifactId };
   });
+  clearTimeout(unregisteredRecordings.get(reservationId));
+  unregisteredRecordings.delete(reservationId);
+  return results;
 }
 
 export type DownloadableArtifactReader = { tenantId?: string; leaseId?: string };
@@ -883,10 +886,11 @@ function hasUnsafeFilenameCharacter(fileName: string): boolean {
   );
 }
 
-export function cleanupDownloadableArtifact(artifactId: string): void {
+export function cleanupDownloadableArtifact(artifactId: string, consumed = false): void {
   const artifacts = pendingArtifacts();
   const entry = artifacts.get(artifactId);
   if (!entry) return;
+  if (consumed && !entry.cleanupRequested) entry.reservation?.consume?.();
   requestArtifactCleanup(artifacts, artifactId, entry);
 }
 

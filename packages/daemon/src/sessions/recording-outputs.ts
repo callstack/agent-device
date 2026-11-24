@@ -1,102 +1,110 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
+import {
+  finishPendingScreenRecordingProof,
+  recordingExportFileIdentity,
+} from '@agent-device/capture-kit/screen-recording-session-resource';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
-import { readReplayableStoredCompletion } from '@agent-device/capture-kit/screen-recording-stop-recovery';
+import {
+  readReplayableStoredCompletion,
+  readStoredCompletion,
+} from '@agent-device/capture-kit/screen-recording-stop-recovery';
+import type { ReplaySuiteRecordingArtifact } from '@agent-device/contracts/replay';
 import type { SessionRef } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
+import { chunkPathAt } from '@agent-device/capture-kit/recording-output-path';
 import { tenantPublicSessionName } from '../core/session-tenant-scope.ts';
-import { commitRecordingFileOutputs, leasedOutputRefusal } from '../resources/artifact-tracking.ts';
+import {
+  ARTIFACT_CLEANUP_TIMEOUT_MS,
+  commitRecordingFileOutputs,
+  leasedOutputRefusal,
+  recordingRegistrySignal,
+} from '../resources/artifact-tracking.ts';
 import {
   isLegacyRemoteRecordingOutput,
   recordingOutputLeaseVerifier,
   recordingStopArtifacts,
 } from './handlers/record-runtime-response.ts';
 
-export async function commitRecordingOutputs(
-  envelope: DurableResourceEnvelope<'screen-recording'>,
-  completion: ScreenRecordingCompletion,
-  options?: { legacyTenant?: string; replay?: boolean },
-) {
-  const { metadata } = envelope;
-  const owner = recordingOutputLeaseVerifier(metadata);
-  if (owner === undefined || isLegacyRemoteRecordingOutput(completion)) {
-    throw leasedOutputRefusal('Recording');
-  }
-  const proof = readRecordingExportProof(envelope);
-  const artifacts = recordingStopArtifacts(completion);
-  if (proof && proof.identities.length !== artifacts.length) {
-    throw new AppError('COMMAND_FAILED', 'Recording export could not be verified.');
-  }
-  const files = artifacts.map((artifact, index) => {
-    const sourceIdentity = proof?.identities[index];
-    if (proof && typeof sourceIdentity !== 'string') {
-      throw new AppError('COMMAND_FAILED', 'Recording export could not be verified.');
-    }
-    return {
-      ...artifact,
-      path: artifact.path!,
-      sourceIdentity: typeof sourceIdentity === 'string' ? sourceIdentity : undefined,
-    };
-  });
-  const tenantId = recordingProducerTenant(
-    envelope,
-    owner,
-    proof !== undefined,
-    options?.legacyTenant,
-  );
-  return commitRecordingFileOutputs(
-    files,
-    {
-      lifetimeId: proof?.lifetimeId ?? envelope.fence.token,
-      tenantId,
-      leaseVerifier: owner,
-    },
-    tenantId ? tenantPublicSessionName(tenantId, envelope.sessionId) : envelope.sessionId,
-    proof?.completedAt ?? Date.now(),
-    metadata?.remoteCaptureArchive !== true
-      ? 'original'
-      : options?.replay
-        ? 'archive-replay'
-        : 'archive',
-  );
-}
+type RecordingEnvelope = DurableResourceEnvelope<'screen-recording'>;
 
-function recordingProducerTenant(
-  envelope: DurableResourceEnvelope<'screen-recording'>,
-  owner: string | null,
-  verified: boolean,
-  legacyTenant?: string,
-): string | undefined {
-  const stored = envelope.metadata?.remoteCaptureTenantId;
-  const tenant = normalizeTenantId(stored);
-  if (!verified) return owner === null && legacyTenant ? legacyTenant : (tenant ?? legacyTenant);
-  if (stored === null && owner === null) return undefined;
-  if (!tenant || tenant !== stored) throw leasedOutputRefusal('Recording');
-  return tenant;
-}
-
-function readRecordingExportProof(envelope: DurableResourceEnvelope<'screen-recording'>) {
-  if (envelope.lifecycle !== 'completed') {
-    throw new AppError('COMMAND_FAILED', 'Recording export could not be verified.');
-  }
+function readVerifiedRecording(envelope: RecordingEnvelope) {
   const { metadata } = envelope;
-  const lifetimeId = metadata?.remoteCaptureLifetime;
-  if (lifetimeId === undefined && metadata?.remoteCapturePath === undefined) return undefined;
+  const completion = readStoredCompletion(metadata);
   const verified = metadata?.remoteCaptureExport;
   if (
-    typeof lifetimeId !== 'string' ||
+    envelope.lifecycle !== 'completed' ||
+    !completion ||
+    isLegacyRemoteRecordingOutput(completion) ||
+    completion.outPath !== metadata?.remoteCapturePath ||
+    metadata.remoteCaptureArchive === true ||
     !isRecord(verified) ||
     !Array.isArray(verified.identities) ||
+    !Array.isArray(verified.outputIds) ||
     typeof verified.completedAt !== 'number' ||
     !Number.isFinite(verified.completedAt)
+  )
+    throw leasedOutputRefusal('Recording');
+  const { identities, outputIds } = verified;
+  const artifacts = recordingStopArtifacts(completion);
+  if (artifacts.length !== identities.length) throw leasedOutputRefusal('Recording');
+  const files = artifacts.map((artifact, index) => {
+    const sourceIdentity = identities[index];
+    const artifactId = outputIds[index];
+    if (typeof sourceIdentity !== 'string' || artifactId !== `${envelope.fence.token}-${index + 1}`)
+      throw leasedOutputRefusal('Recording');
+    return { ...artifact, path: artifact.path!, sourceIdentity, artifactId };
+  });
+  return {
+    completion,
+    files,
+    completedAt: verified.completedAt,
+    producer: recordingProducer(metadata),
+  };
+}
+
+function recordingProducer(metadata: RecordingEnvelope['metadata']) {
+  const leaseVerifier = recordingOutputLeaseVerifier(metadata);
+  const lifetimeId = metadata?.remoteCaptureLifetime;
+  const stored = metadata?.remoteCaptureTenantId;
+  const tenantId = normalizeTenantId(stored);
+  if (
+    leaseVerifier === undefined ||
+    typeof lifetimeId !== 'string' ||
+    (stored === null ? leaseVerifier !== null : !tenantId || tenantId !== stored)
   ) {
-    throw new AppError('COMMAND_FAILED', 'Recording export could not be verified.');
+    throw leasedOutputRefusal('Recording');
   }
-  return { lifetimeId, identities: verified.identities, completedAt: verified.completedAt };
+  return { lifetimeId, tenantId, leaseVerifier };
+}
+
+function publishVerifiedRecording(
+  envelope: RecordingEnvelope,
+  recording: ReturnType<typeof readVerifiedRecording>,
+  retainOnly = false,
+) {
+  const { producer, files, completedAt } = recording;
+  return commitRecordingFileOutputs(
+    files,
+    producer,
+    producer.tenantId
+      ? tenantPublicSessionName(producer.tenantId, envelope.sessionId)
+      : envelope.sessionId,
+    completedAt,
+    envelope.fence.token,
+    retainOnly,
+  );
+}
+
+export async function commitRecordingOutputs(envelope: RecordingEnvelope, retainOnly = false) {
+  return publishVerifiedRecording(envelope, readVerifiedRecording(envelope), retainOnly);
 }
 
 export async function collectSuiteRecordingOutputs(store: SessionStore, ref: SessionRef) {
@@ -112,23 +120,122 @@ export async function collectSuiteRecordingOutputs(store: SessionStore, ref: Ses
   }
 }
 
-async function readSuiteRecordingOutputs(store: SessionStore, ref: SessionRef) {
-  const record = screenRecordingResourceStore.read(
-    screenRecordingResourceStore.resolvePath(store.resolveSessionDir(ref.address)),
+async function readSuiteRecordingOutputs(
+  store: SessionStore,
+  ref: SessionRef,
+): Promise<ReplaySuiteRecordingArtifact[]> {
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    store.resolveSessionDir(ref.address),
   );
-  if (record.status !== 'decoded' || record.envelope.lifecycle !== 'completed') return [];
-  const { envelope } = record;
+  const record = screenRecordingResourceStore.read(resourcePath);
+  if (record.status !== 'decoded') return [];
+  let { envelope } = record;
   if (envelope.metadata?.suiteRecordingLifetime !== ref.lifetime.journalId) return [];
-  const completion = readReplayableStoredCompletion(envelope.metadata);
-  if (!completion) return [];
-  const artifacts = recordingStopArtifacts(completion);
-  const committed =
-    envelope.metadata.remoteCaptureOutput === true
-      ? await commitRecordingOutputs(envelope, completion, { replay: true })
+  if (envelope.metadata.phase === 'export-proof-pending') {
+    envelope = await finishPendingScreenRecordingProof(resourcePath, envelope);
+  }
+  if (envelope.lifecycle !== 'completed') return [];
+  if (envelope.metadata?.remoteCaptureOutput !== true) {
+    const completion = readReplayableStoredCompletion(envelope.metadata);
+    return completion
+      ? recordingStopArtifacts(completion).map(({ path }) => ({ session: ref.address, path }))
       : [];
-  return artifacts.map((artifact, index) => ({
+  }
+
+  const recording = readVerifiedRecording(envelope);
+  const committed = await publishVerifiedRecording(envelope, recording);
+  const archivePath = envelope.metadata.suiteRecordingArchivePath;
+  let paths: readonly string[] = [];
+  if (typeof archivePath === 'string') {
+    try {
+      paths = await copySuiteRecording(archivePath, recording);
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'suite_recording_archive_copy_failed',
+        data: { session: ref.address, error: errorMessage(error) },
+      });
+    }
+  }
+  return committed.map(({ artifactId, fileName }, index) => ({
     session: ref.address,
-    path: artifact.path!,
-    artifactId: committed[index]?.artifactId,
+    artifactId,
+    fileName,
+    path: paths[index],
   }));
+}
+
+async function copySuiteRecording(
+  archivePath: string,
+  { files, completedAt, completion }: ReturnType<typeof readVerifiedRecording>,
+): Promise<string[]> {
+  const expiresAt = completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS;
+  const paths = [
+    archivePath,
+    ...(completion.chunks?.slice(1).map(({ index }) => chunkPathAt(archivePath, index)) ?? []),
+    ...(completion.telemetryPath ? [deriveRecordingTelemetryPath(archivePath)] : []),
+  ];
+  const signal = recordingRegistrySignal();
+  const copy = async () => {
+    const scratch = await fs.promises.mkdtemp(
+      path.join(path.dirname(completion.outPath), '.recording-archive-'),
+    );
+    try {
+      const staged = [];
+      for (const [index, file] of files.entries()) {
+        signal.throwIfAborted();
+        if (Date.now() >= expiresAt)
+          throw new AppError('COMMAND_FAILED', 'Recording archive copy expired.');
+        const target = path.join(scratch, String(index));
+        await verifyArchiveSource(file);
+        await fs.promises.copyFile(
+          file.path,
+          target,
+          fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE,
+        );
+        await verifyArchiveSource(file);
+        staged.push(target);
+      }
+      signal.throwIfAborted();
+      if (Date.now() >= expiresAt)
+        throw new AppError('COMMAND_FAILED', 'Recording archive copy expired.');
+      fs.mkdirSync(path.dirname(archivePath), { recursive: true });
+      const linked: string[] = [];
+      try {
+        for (const [index, destination] of paths.entries()) {
+          fs.linkSync(staged[index]!, destination);
+          linked.push(destination);
+        }
+      } catch (error) {
+        for (const destination of linked) fs.unlinkSync(destination);
+        throw error;
+      }
+      return paths;
+    } finally {
+      await fs.promises.rm(scratch, { recursive: true, force: true }).catch(() => {});
+    }
+  };
+  let abort!: () => void;
+  const pending = new Promise<string[]>((resolve, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    else void copy().then(resolve, reject);
+  });
+  try {
+    const outcome = await settleWithin(() => pending, expiresAt - Date.now(), { keepAlive: false });
+    if (outcome.kind === 'deadline')
+      throw new AppError('COMMAND_FAILED', 'Recording archive copy expired.');
+    return outcome.value;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
+async function verifyArchiveSource(file: { path: string; sourceIdentity: string }) {
+  if (recordingExportFileIdentity(await fs.promises.lstat(file.path)) !== file.sourceIdentity)
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Recording export changed during archive materialization.',
+    );
 }

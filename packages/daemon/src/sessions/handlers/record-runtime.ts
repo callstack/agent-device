@@ -3,10 +3,7 @@ import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import path from 'node:path';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import type {
-  ScreenRecordingCompletion,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/screen-recording-runtime';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import {
   bindSessionScreenRecording,
   bindRecordOnlyScreenRecording,
@@ -34,12 +31,14 @@ import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
+  finishPendingScreenRecordingProof,
   finishRecoveredScreenRecording,
   screenRecordingDurableResource,
 } from '@agent-device/capture-kit/screen-recording-session-resource';
 import {
   resolveScreenRecordingStopRecovery,
-  screenRecordingManifestDevice,
+  readStoredCompletion,
+  unreadableRecordingProof,
   screenRecordingManifestIsTerminal,
 } from '@agent-device/capture-kit/screen-recording-stop-recovery';
 import { resolveSessionScope } from '../session-routing.ts';
@@ -77,7 +76,6 @@ import {
   buildRecordingStartedAction,
   buildRecordingStopResponse,
   buildRecordingUnsupportedResponse,
-  isLegacyRemoteRecordingOutput,
   recordingOutputLeaseVerifier,
   UNLEASED_CAPTURE,
 } from './record-runtime-response.ts';
@@ -89,7 +87,7 @@ import { resolveRequestTargetDevice } from '../../core/request-device-resolution
  * first owes a session action: the request that terminalized the recording already recorded it.
  */
 type ScreenRecordingStop = Readonly<{
-  completion: ScreenRecordingCompletion;
+  envelope: DurableResourceEnvelope<'screen-recording'>;
   recordsSessionAction: boolean;
 }>;
 
@@ -137,8 +135,9 @@ async function handleRecordCommandUnsafe(
   ) {
     return missingAppSessionResponse(req);
   }
-  if (plan.kind !== 'start') assertRequestMayStopRecording(params);
-  const resolvedSession = await resolveRecordingSession(params, existingRef, plan);
+  const authorized = plan.kind === 'start' ? undefined : readStopEnvelope(params);
+  if (authorized) assertRequestMayStopRecording(params, authorized);
+  const resolvedSession = await resolveRecordingSession(params, existingRef, authorized?.device);
   const { session } = resolvedSession;
   if (plan.kind === 'start') {
     return await startRecording(
@@ -156,6 +155,7 @@ async function handleRecordCommandUnsafe(
     resolvedSession.ref,
     plan.kind,
     resolvedSession.needsReadiness,
+    authorized,
   );
 }
 
@@ -174,51 +174,27 @@ function resolveRecordPlan(req: DaemonRequest, session: SessionState | undefined
 async function resolveRecordingSession(
   params: RecordRuntimeHandlerParams,
   ref: SessionRef | undefined,
-  plan: ReturnType<typeof resolveRecordPlan>['plan'],
+  recorded: DeviceIdentity | undefined,
 ): Promise<Readonly<{ session: SessionState; ref?: SessionRef; needsReadiness: boolean }>> {
   if (ref) return { session: params.sessionStore.requireCurrent(ref), ref, needsReadiness: false };
-  const device = await resolveUnheldRecordingDevice(params, plan);
+  const device = await resolveUnheldRecordingDevice(params, recorded);
   await params.retainDeviceExecutionLock(device.id);
   return { session: createRecordOnlySession(params, device), needsReadiness: true };
 }
 
-/**
- * The device an unheld record request is answered on, and the single place the record handler
- * applies the named-session rule (#3674) at its only device selection.
- *
- * A request that names a session this daemon does not hold and states no device is answered from
- * the durable manifest the session address finds, never from a sweep of every device on the host:
- * a decodable manifest is re-resolved with the request's scope and lease keys under the manifest's
- * family (admission proved the request states no device), and a start or a stop with no decodable
- * manifest to recover from refuses with the named-session error.
- * `assertManifestBelongsToRequest` owns the proof that the resolved device
- * and session address match the manifest.
- *
- * The two shapes that keep their chosen target are unchanged: a request that never named a
- * session resolves sessionlessly from its flags, and one that states a device selector resolves
- * from it.
- */
 async function resolveUnheldRecordingDevice(
   params: RecordRuntimeHandlerParams,
-  plan: ReturnType<typeof resolveRecordPlan>['plan'],
+  recorded: DeviceIdentity | undefined,
 ): Promise<DeviceInfo> {
   const { req, sessionName } = params;
   if (!namesSessionWithoutTarget(req))
     return await resolveRequestTargetDevice(req, { env: params.sessionStore.host.env });
-  if (plan.kind === 'stop-recovery') {
-    const recorded = screenRecordingManifestDevice({
-      sessionName,
-      sessionStore: params.sessionStore,
-    });
-    if (recorded) {
-      return await resolveManifestDevice(params, recorded);
-    }
-  }
+  // A named unheld session only selects the device from its authorized manifest (#3674).
+  if (recorded) return await resolveManifestDevice(params, recorded);
   const { namedSessionNotFoundError } = await import('../../core/explicit-session-resolution.ts');
   throw namedSessionNotFoundError(sessionName);
 }
 
-/** Whether this request is addressed to a session and leaves its device to the session. */
 function namesSessionWithoutTarget(req: DaemonRequest): boolean {
   return namesSessionExplicitly(req) && !hasDeviceSelectionInput(req.flags);
 }
@@ -316,6 +292,7 @@ async function startRecording(
     snapshot,
     params.sessionStore.ensureSessionDir(params.sessionName),
     outputPaths.requestedPath,
+    !params.suiteCapture && outputPaths.daemonOwned === true,
   );
 }
 
@@ -340,10 +317,13 @@ function withCaptureOwner(
         ? {
             remoteCaptureOutput: true,
             remoteCapturePath: output.outputPath,
+            remoteCaptureReservation: envelope.fence.token,
             remoteCaptureLifetime: lifetimeId,
             remoteCaptureTenantId: tenantId ?? null,
-            ...(suiteCapture && req.meta?.clientArtifactPaths?.artifactsDir
-              ? { remoteCaptureArchive: true }
+            ...(suiteCapture === 'remote' &&
+            req.meta?.clientArtifactPaths?.artifactsDir &&
+            req.positionals?.[1]
+              ? { suiteRecordingArchivePath: req.positionals[1] }
               : {}),
           }
         : {}),
@@ -365,21 +345,23 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
       resourcePath,
       device: session.device,
     }),
-    outputPaths: params.suiteCapture
-      ? {
-          ...resolveRecordingOutputPaths({
-            requestedPath: params.req.positionals?.[1],
-            platform: session.device.platform,
-            cwd: params.sessionStore.host.cwd,
-          }),
-          ...(params.suiteCapture === 'remote' ? { daemonOwned: true as const } : {}),
-        }
-      : resolveRecordingStartPaths(
-          params.req,
-          session.device.platform,
-          params.sessionStore.host.cwd,
-          params.sessionStore.ensureSessionDir(params.sessionName),
-        ),
+    outputPaths:
+      params.suiteCapture === 'local'
+        ? {
+            ...resolveRecordingOutputPaths({
+              requestedPath: params.req.positionals?.[1],
+              platform: session.device.platform,
+              cwd: params.sessionStore.host.cwd,
+            }),
+          }
+        : resolveRecordingStartPaths(
+            params.suiteCapture === 'remote'
+              ? { ...params.req, internal: { ...params.req.internal, publicNetworkOnly: true } }
+              : params.req,
+            session.device.platform,
+            params.sessionStore.host.cwd,
+            params.sessionStore.ensureSessionDir(params.sessionName),
+          ),
   };
 }
 
@@ -465,27 +447,21 @@ async function stopRecording(
   ref: SessionRef | undefined,
   kind: 'stop-live' | 'stop-recovery',
   needsReadiness: boolean,
+  authorized: DurableResourceEnvelope<'screen-recording'> | undefined,
 ): Promise<DaemonResponse> {
   let stopped: ScreenRecordingStop;
   try {
     stopped =
       kind === 'stop-live'
-        ? {
-            completion: await finishLiveScreenRecording({
-              intent: 'capture',
-              binding: bindSessionScreenRecording(params.sessionStore, ref!),
-            }),
-            recordsSessionAction: true,
-          }
-        : await finishRecovered(params, session, needsReadiness);
+        ? await finishAuthorizedLiveRecording(params, ref!, authorized)
+        : await finishRecovered(params, session, needsReadiness, authorized);
   } catch (error) {
     deleteTerminalRecordOnlySession(params, ref);
     throw error;
   }
-  const completion = stopped.completion;
-  const record = screenRecordingDurableResource.store.read(
-    screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
-  );
+  const { envelope } = stopped;
+  const completion = readStoredCompletion(envelope.metadata);
+  if (!completion) throw unreadableRecordingProof();
   if (stopped.recordsSessionAction) {
     recordSessionAction(params.sessionStore, ref, params.req, params.req.command, {
       action: 'stop',
@@ -500,35 +476,99 @@ async function stopRecording(
   // session has to be re-read here, because the record this stop started with may have gained an
   // app, a capture, a claim, or a lease while the recording was being finished.
   if (ref) retireRecordOnlySession(params.sessionStore, ref);
-  if (isLegacyRemoteRecordingOutput(completion)) throw leasedOutputRefusal('Recording');
-  const envelope = record.status === 'decoded' ? record.envelope : undefined;
+  const remote = isRemoteRecordingRequest(params);
   const artifacts =
-    envelope?.metadata?.remoteCaptureOutput === true
-      ? await commitRecordingOutputs(envelope, completion, {
-          replay: !stopped.recordsSessionAction,
-        })
+    envelope.metadata?.remoteCaptureOutput === true &&
+    (remote || envelope.metadata.remoteCaptureExport !== undefined)
+      ? await commitRecordingOutputs(envelope)
       : undefined;
-  return buildRecordingStopResponse(completion, artifacts);
+  if (remote && !artifacts) throw leasedOutputRefusal('Recording');
+  return buildRecordingStopResponse(completion, artifacts, !params.suiteCapture && remote);
 }
 
-/**
- * A completed export needs only the lease id of its owner, also after
- * that lease ended. A recording that still runs needs the admitted lease.
- */
-function assertRequestMayStopRecording(params: RecordRuntimeHandlerParams): void {
+async function finishAuthorizedLiveRecording(
+  params: RecordRuntimeHandlerParams,
+  ref: SessionRef,
+  authorized: DurableResourceEnvelope<'screen-recording'> | undefined,
+): Promise<ScreenRecordingStop> {
+  const binding = bindSessionScreenRecording(params.sessionStore, ref);
+  const active = binding.read();
+  if (!authorized || !active || !sameRecordingFence(active.envelope, authorized))
+    throw unreadableRecordingProof();
+  await finishLiveScreenRecording({ intent: 'capture', binding });
+  return { envelope: requireFinishedEnvelope(params, authorized), recordsSessionAction: true };
+}
+
+function isRemoteRecordingRequest(params: RecordRuntimeHandlerParams): boolean {
+  return (
+    params.suiteCapture === 'remote' ||
+    params.req.internal?.publicNetworkOnly === true ||
+    params.req.meta?.clientArtifactPaths?.outPath !== undefined
+  );
+}
+
+function readStopEnvelope(params: RecordRuntimeHandlerParams) {
   const record = screenRecordingDurableResource.store.read(
     screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
   );
-  if (record.status !== 'decoded') return;
-  const { metadata, lifecycle } = record.envelope;
+  if (record.status === 'unreattachable') throw unreadableRecordingProof();
+  return record.status === 'decoded' ? record.envelope : undefined;
+}
+
+function sameRecordingFence(
+  left: DurableResourceEnvelope<'screen-recording'>,
+  right: DurableResourceEnvelope<'screen-recording'>,
+): boolean {
+  return (
+    left.sessionId === right.sessionId &&
+    left.fence.token === right.fence.token &&
+    left.fence.generation === right.fence.generation
+  );
+}
+
+function requireFinishedEnvelope(
+  params: RecordRuntimeHandlerParams,
+  expected: DurableResourceEnvelope<'screen-recording'>,
+) {
+  const envelope = readStopEnvelope(params);
+  if (
+    !envelope ||
+    envelope.lifecycle !== 'completed' ||
+    !sameRecordingFence(envelope, expected) ||
+    envelope.metadata?.remoteCapturePath !== expected.metadata?.remoteCapturePath
+  )
+    throw unreadableRecordingProof();
+  assertRequestMayStopRecording(params, envelope);
+  return envelope;
+}
+
+/**
+ * A stopped export needs only the lease id of its owner, also after
+ * that lease ended. A recording that still runs needs the admitted lease.
+ */
+function assertRequestMayStopRecording(
+  params: RecordRuntimeHandlerParams,
+  envelope: DurableResourceEnvelope<'screen-recording'>,
+): void {
+  const { metadata, lifecycle } = envelope;
   const owner = recordingOutputLeaseVerifier(metadata);
-  if (owner === undefined && metadata?.remoteCaptureOutput === true) {
+  if (
+    isRemoteRecordingRequest(params) &&
+    (owner === undefined || metadata?.remoteCaptureOutput !== true)
+  ) {
     throw leasedOutputRefusal('Recording');
   }
+  if (
+    metadata?.remoteCaptureOutput === true &&
+    typeof metadata.remoteCaptureTenantId === 'string' &&
+    metadata.remoteCaptureTenantId !==
+      normalizeTenantId(params.req.internal?.admittedLease?.tenantId ?? params.req.meta?.tenantId)
+  )
+    throw leasedOutputRefusal('Recording');
   if (typeof owner !== 'string') return;
   const presented =
-    lifecycle === 'completed'
-      ? resolveLeaseScope(params.req).leaseId
+    lifecycle === 'completed' || metadata?.phase === 'export-proof-pending'
+      ? (resolveLeaseScope(params.req).leaseId ?? params.req.internal?.admittedLease?.leaseId)
       : params.req.internal?.admittedLease?.leaseId;
   if (!requestHoldsOutputLease(owner, presented)) throw leasedOutputRefusal('Recording');
 }
@@ -562,24 +602,37 @@ async function finishRecovered(
   params: RecordRuntimeHandlerParams,
   session: SessionState,
   needsReadiness: boolean,
+  authorized: DurableResourceEnvelope<'screen-recording'> | undefined,
 ): Promise<ScreenRecordingStop> {
+  if (!authorized) throw new AppError('INVALID_ARGS', 'no active recording');
   const recovery = resolveScreenRecordingStopRecovery({
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,
     device: session.device,
+    admittedEnvelope: authorized,
   });
-  if (recovery.kind === 'completed') {
-    return { completion: recovery.completion, recordsSessionAction: false };
+  if (recovery.kind === 'none') throw new AppError('INVALID_ARGS', 'no active recording');
+  if (recovery.kind === 'completed')
+    return { envelope: recovery.envelope, recordsSessionAction: false };
+  if (authorized.metadata?.phase === 'export-proof-pending') {
+    const envelope = await finishPendingScreenRecordingProof(recovery.resourcePath, authorized);
+    assertRequestMayStopRecording(params, envelope);
+    return { envelope, recordsSessionAction: false };
   }
-  if (recovery.kind === 'none') {
-    throw new AppError('INVALID_ARGS', 'no active recording');
-  }
-  const completion = await finishRecoveredScreenRecording({
+  const acquire = exactRecoveryControl(params, session.device, needsReadiness);
+  await finishRecoveredScreenRecording({
     resourcePath: recovery.resourcePath,
     scope: params.requestScope,
-    acquireControl: exactRecoveryControl(params, session.device, needsReadiness),
+    acquireControl: (envelope, scope) => {
+      if (!sameRecordingFence(envelope, recovery.envelope)) throw unreadableRecordingProof();
+      assertRequestMayStopRecording(params, envelope);
+      return acquire(envelope, scope);
+    },
   });
-  return { completion, recordsSessionAction: true };
+  return {
+    envelope: requireFinishedEnvelope(params, authorized),
+    recordsSessionAction: true,
+  };
 }
 
 /**

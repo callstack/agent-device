@@ -112,6 +112,11 @@ test.each([false, true])(
       const outputPath = runtime.start.mock.calls[0]![0].outputPath;
       expect(fs.readFileSync(outputPath, 'utf8')).toBe('video-exported-during-close');
       expect(data.artifacts).toEqual([expect.objectContaining({ artifactType: 'test-artifacts' })]);
+      const archiveRoot = data.artifacts?.[0]?.path;
+      expect(archiveRoot).toBeTypeOf('string');
+      expect(outputPath.startsWith(archiveRoot + path.sep)).toBe(false);
+      const archiveFiles = fs.readdirSync(archiveRoot!, { recursive: true }).map(String);
+      const archiveRecording = archiveFiles.find((file) => path.basename(file) === 'recording.mp4');
       const inventory = await listDownloadableArtifacts({ tenantId }, {});
       try {
         const output = inventory.find((artifact) => artifact.artifactType === 'screen-recording');
@@ -119,6 +124,7 @@ test.each([false, true])(
           expect(runtime.forceCleanup).toHaveBeenCalledOnce();
           expect(output).toBeUndefined();
           expect(data.recordingArtifacts).toBeUndefined();
+          expect(archiveRecording).toBeUndefined();
           expect(data.failures).toMatchObject([{ error: { details: { reason: 'timeout' } } }]);
           expect(
             (data.failures as Array<{ infrastructure?: true }>)[0]!.infrastructure,
@@ -126,6 +132,23 @@ test.each([false, true])(
         } else {
           expect(runtime.forceCleanup).not.toHaveBeenCalled();
           expect(output?.id).toBeTypeOf('string');
+          expect(archiveRecording).toBeTypeOf('string');
+          expect(fs.readFileSync(path.join(archiveRoot!, archiveRecording!), 'utf8')).toBe(
+            'video-exported-during-close',
+          );
+          for (const result of [data.tests, data.failures]) {
+            expect(result).toMatchObject([
+              {
+                error: {
+                  details: {
+                    artifactPaths: expect.arrayContaining([expect.stringContaining(clientRoot)]),
+                  },
+                },
+              },
+            ]);
+            expect(JSON.stringify(result)).not.toContain(archiveRoot);
+            expect(JSON.stringify(result)).not.toContain(outputPath);
+          }
           expect(data.recordingArtifacts).toEqual(
             expect.arrayContaining([
               expect.objectContaining({
@@ -138,7 +161,7 @@ test.each([false, true])(
       } finally {
         for (const artifact of inventory) cleanupDownloadableArtifact(artifact.id);
       }
-      expect(fs.existsSync(outputPath)).toBe(true);
+      expect(fs.existsSync(outputPath)).toBe(missingSidecar);
     } finally {
       vi.useRealTimers();
     }

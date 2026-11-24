@@ -108,7 +108,9 @@ export async function finalizeReplayTestVideoRecording(
   const stopResponse = await params.video.record(
     replayVideoRecordRequest({ req, sessionName, phase: 'stop' }),
   );
-  collectReplayActionArtifactPaths(stopResponse).forEach((entry) => artifactPaths.add(entry));
+  if (!stopResponse.ok || !stopResponse.data?.artifacts?.some(({ artifactId }) => artifactId)) {
+    collectReplayActionArtifactPaths(stopResponse).forEach((entry) => artifactPaths.add(entry));
+  }
   appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_recording_stop',
     session: sessionName,

@@ -14,19 +14,17 @@ export async function retainLeasedSessionRecording(
   completion: ScreenRecordingCompletion,
   envelope: DurableResourceEnvelope<'screen-recording'>,
 ): Promise<void> {
-  const lease = ref.session.lease;
   const { metadata } = envelope;
   if (
     metadata?.remoteCaptureOutput !== true ||
     isLegacyRemoteRecordingOutput(completion) ||
-    recordingOutputLeaseVerifier(metadata) === undefined ||
-    (metadata.remoteCaptureLifetime === undefined
-      ? !lease
-      : metadata.remoteCaptureLifetime !== ref.lifetime.journalId)
+    metadata.remoteCaptureLifetime !== ref.lifetime.journalId
   )
     return;
   try {
-    await commitRecordingOutputs(envelope, completion, { legacyTenant: lease?.tenantId });
+    const hostGlobal =
+      recordingOutputLeaseVerifier(metadata) === null && metadata.remoteCaptureTenantId === null;
+    await commitRecordingOutputs(envelope, hostGlobal);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',

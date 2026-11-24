@@ -290,20 +290,21 @@ They do this only after the manifest records that no recoverable export is lost.
 A remote recording reserves a daemon-chosen destination at start.
 The manifest records the producing lifetime, a tenant or explicit global marker, and a lease verifier or unleased marker.
 The completed manifest records the verified file identities of the video, later chunks, and telemetry.
-If verification fails, keep the manifest open for an exact-owner retry.
+If verification cannot read a finished export, keep its completion and reservation for an exact-owner retry.
 Explicit stop and teardown commit the verified files under that producer's authority.
 The producer can discover committed recordings after a canceled or failed response.
 The inventory names the session, and the usual delete-after-download and 15-minute expiry apply.
 If registry delivery fails during teardown, expire the verified standalone export at the same deadline.
 Only remove files that still match the original proof.
 A retry for consumed or expired bytes returns `RESOURCE_EXPIRED`.
-A retry can serve the same artifact IDs while the entries remain available.
+A retry uses the artifact IDs derived from the persisted reservation and the original deadline.
+The download records consumption before releasing its file.
 Only the original lease credential can list or download leased exports (ADR 0007).
-A manifest from an earlier release must carry its explicit owner before it can serve a remote export.
+A manifest must carry explicit producer scope, completion time, and file identities before it can serve a remote export.
 A failed teardown finish still runs forced cleanup (disposal intent) and publishes no recording.
 A suite includes recordings committed by cleanup in its result and archive.
 Each remote suite gets a fresh daemon directory.
-A suite recording keeps its own retained copy so downloading the archive cannot consume its recording ID.
+The recording stays in its reservation. The suite copies verified bytes into the archive so each download has its own lifetime.
 
 ### 2.6 Native markers
 
