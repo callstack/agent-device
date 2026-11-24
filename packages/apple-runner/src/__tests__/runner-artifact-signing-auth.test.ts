@@ -67,10 +67,23 @@ afterEach(() => {
   savedEnv.clear();
 });
 
-function setAuthKeyTrio(): void {
-  process.env.AGENT_DEVICE_IOS_AUTH_KEY_PATH = '/keys/AuthKey_ABCDEF1234.p8';
+function setAuthKeyTrio(): string {
+  const keyFile = path.join(projectRoot, 'AuthKey_ABCDEF1234.p8');
+  fs.writeFileSync(keyFile, '-----BEGIN PRIVATE KEY-----\n');
+  process.env.AGENT_DEVICE_IOS_AUTH_KEY_PATH = keyFile;
   process.env.AGENT_DEVICE_IOS_AUTH_KEY_ID = 'KID12345';
   process.env.AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID = 'ISSUER67890';
+  return keyFile;
+}
+
+function capturedOptions(): Record<string, unknown> {
+  assert.equal(runCmdStreaming.mock.calls.length, 1, 'the build was spawned once');
+  const [, , options] = runCmdStreaming.mock.calls[0] as unknown as [
+    string,
+    string[],
+    Record<string, unknown>,
+  ];
+  return options;
 }
 
 function capturedArgs(): string[] {
@@ -81,7 +94,7 @@ function capturedArgs(): string[] {
 }
 
 test('a device build with the whole auth key trio passes the three authentication key args', async () => {
-  setAuthKeyTrio();
+  const keyFile = setAuthKeyTrio();
   runCmdStreaming.mockImplementation(async (_command: string, args: string[]) => {
     await seedBuiltRunner(args);
     return { exitCode: 0, stdout: '', stderr: '' };
@@ -95,12 +108,34 @@ test('a device build with the whole auth key trio passes the three authenticatio
   assert.deepEqual(args.slice(provisioningIndex, provisioningIndex + 7), [
     '-allowProvisioningUpdates',
     '-authenticationKeyPath',
-    '/keys/AuthKey_ABCDEF1234.p8',
+    keyFile,
     '-authenticationKeyID',
     'KID12345',
     '-authenticationKeyIssuerID',
     'ISSUER67890',
   ]);
+  // Credentials travel by argument only: the build drops the trio from the child environment, and
+  // the exec layer scrubs the key path from the streams and from every error argv.
+  const options = capturedOptions();
+  assert.deepEqual(options.envOmit, [
+    'AGENT_DEVICE_IOS_AUTH_KEY_PATH',
+    'AGENT_DEVICE_IOS_AUTH_KEY_ID',
+    'AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID',
+  ]);
+  assert.deepEqual(options.redactions, [keyFile]);
+});
+
+test('a device build without the auth key trio sets no env omission and no redactions', async () => {
+  runCmdStreaming.mockImplementation(async (_command: string, args: string[]) => {
+    await seedBuiltRunner(args);
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+
+  await ensureXctestrunArtifact(IOS_DEVICE, {});
+
+  const options = capturedOptions();
+  assert.equal(options.envOmit, undefined);
+  assert.equal(options.redactions, undefined);
 });
 
 test('a device build with a partial auth key trio refuses before xcodebuild runs', async () => {

@@ -491,6 +491,7 @@ These reasons can come from more than one command.
 | --- | --- |
 | `runner_build_settings_mismatch` | The runner build used settings other than those its cache identity records. |
 | `signing_auth_key_incomplete` | The App Store Connect API key variables are set only in part; xcodebuild takes all three or none. |
+| `signing_auth_key_invalid_path` | The App Store Connect API key path names no readable regular file; the build refuses before it starts. |
 | `runner_cache_uncertifiable` | The runner build products cannot be certified for cache reuse; `details.refusalReason` says why. |
 | `runner_busy` | The runner was still busy with an earlier command and refused this one; retry it. |
 | `runner_main_thread_timeout` | The command's work on the app's main thread did not finish in time, so it may have run. |

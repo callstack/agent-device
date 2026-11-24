@@ -56,6 +56,14 @@ export type ExecOptions = {
    * `ps -o lstart` read renders in, so replacing the whole `env` would move the identity clock.
    */
   envOverrides?: NodeJS.ProcessEnv;
+  /**
+   * Child environment variables deleted from the resolved spawn environment. Unlike an
+   * `envOverrides` entry set to `undefined`-by-castling, an `envOmit` key is absent for the child.
+   * Credentials travel by argument, never by environment, so a caller that passes a secret as an
+   * argument omits it here. Deletion applies to the environment resolved from `env` or the bound
+   * host scope; a bare out-of-scope spawn that inherits the process environment cannot omit from it.
+   */
+  envOmit?: readonly string[];
   allowFailure?: boolean;
   binaryStdout?: boolean;
   stdin?: string | Buffer;
@@ -76,6 +84,13 @@ export type ExecOptions = {
 export type ExecStreamOptions = ExecOptions & {
   /** Set false when chunk callbacks own output and only the exit code is needed. */
   captureOutput?: boolean;
+  /**
+   * Exact argv values this command must not retain. The child still receives the raw argv; the
+   * chunk callbacks receive scrubbed text, the retained stdout/stderr are scrubbed, and every
+   * error this module builds carries the scrubbed argv. A match that a chunk boundary splits is
+   * still one match, so a quoted or echoed secret never reaches a log or an error payload.
+   */
+  redactions?: readonly string[];
   onStdoutChunk?: (chunk: string) => void;
   onStderrChunk?: (chunk: string) => void;
   onSpawn?: (child: ReturnType<typeof spawn>) => void;
@@ -169,15 +184,27 @@ export function commandDeveloperDir(): string | undefined {
 function resolveSpawnEnv(
   env: NodeJS.ProcessEnv | undefined,
   overrides: NodeJS.ProcessEnv | undefined,
+  omit: readonly string[] | undefined,
 ): NodeJS.ProcessEnv | undefined {
   const scope = commandHostScope.getStore();
   if (!scope) {
-    // Outside a host scope there is no captured environment to merge into: an explicit `env` is
-    // still honored with the overrides on top, and with neither the child inherits natively.
-    if (env === undefined) return overrides;
-    return { ...env, ...overrides };
+    if (env === undefined) {
+      if (omit?.length) {
+        // Snapshot the live environment explicitly so the omitted names are truly absent for the
+        // child; a native inherit offers no object to delete from.
+        const inherited = { ...process.env, ...overrides };
+        for (const name of omit) delete inherited[name];
+        return inherited;
+      }
+      return overrides;
+    }
+    const merged = { ...env, ...overrides };
+    if (omit?.length) for (const name of omit) delete merged[name];
+    return merged;
   }
-  return { ...(env ?? scope.host.env), ...scope.requestEnv, ...overrides };
+  const merged = { ...(env ?? scope.host.env), ...scope.requestEnv, ...overrides };
+  if (omit?.length) for (const name of omit) delete merged[name];
+  return merged;
 }
 
 export async function runCmd(
@@ -198,6 +225,101 @@ export async function runCmdStreaming(
   const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
   if (overrideResult) return coerceExecResult(await overrideResult);
   return await runSpawnedCommand(cmd, args, options);
+}
+
+/** The placeholder that replaces every redacted value in retained output and error argv. */
+const REDACTED_ARG = '[redacted]';
+
+function redactArgv(args: readonly string[], redactions: readonly string[] | undefined): string[] {
+  if (!redactions?.length) return [...args];
+  return args.map((arg) => (redactions.includes(arg) ? REDACTED_ARG : arg));
+}
+
+/**
+ * One streaming scrubber over the caller's redactions. Every chunk joins the pending tail and the
+ * whole buffer is scrubbed BEFORE the emit/hold split, so any secret already complete in the buffer
+ * is replaced before its surrounding text can reach a callback; the hold (longest secret minus one)
+ * keeps a still-incomplete tail occurrence pending. A secret a chunk boundary splits is still one
+ * match. The close flush releases the held tail and masks a trailing fragment a cut-off stream
+ * leaves — a fragment long enough to recognize never survives. Only the values the caller redacts
+ * are scrubbed: the rest of the output, flag names and non-secret argv echoes included, reaches the
+ * logs unchanged. `binaryStdout` capture is byte-exact by contract and is not scrubbed; do not pair
+ * it with `redactions`.
+ */
+function streamScrubber(redactions: readonly string[]): (chunk: string, flush?: boolean) => string {
+  const secrets = [...new Set(redactions)].filter((value) => value.length > 0);
+  const hold = secrets.reduce((max, value) => Math.max(max, value.length - 1), 0);
+  const FRAGMENT_MIN = 4;
+  let pending = '';
+  const scrubText = (text: string): string => {
+    for (const secret of secrets) {
+      if (text.includes(secret)) text = text.split(secret).join(REDACTED_ARG);
+    }
+    return text;
+  };
+  /** Masks a trailing proper prefix of a secret — the tail of an echo the stream cut mid-value. */
+  const maskPartialTail = (text: string): string => {
+    for (const secret of secrets) {
+      if (secret.length < 2 * FRAGMENT_MIN) continue;
+      const max = Math.min(text.length, secret.length - 1);
+      for (let length = max; length >= FRAGMENT_MIN; length--) {
+        if (text.endsWith(secret.slice(0, length))) {
+          return `${text.slice(0, text.length - length)}${REDACTED_ARG}`;
+        }
+      }
+    }
+    return text;
+  };
+  return (chunk, flush = false) => {
+    const text = scrubText(pending + chunk);
+    pending = '';
+    if (!flush) {
+      if (text.length > hold) {
+        pending = text.slice(-hold);
+        return text.slice(0, -hold);
+      }
+      pending = text;
+      return '';
+    }
+    return maskPartialTail(text);
+  };
+}
+
+/**
+ * The redaction face one redacted command uses: the raw argv stays at the spawn boundary, the
+ * chunk callbacks and the retained stdout/stderr receive scrubbed text, and `argv` is the sanitized
+ * copy every error this module builds carries. Split matches stay single matches, and a value the
+ * caller redacts beyond the argv — an echoed flag name — scrubs from the streams too.
+ */
+function createArgRedactor(
+  args: readonly string[],
+  redactions: readonly string[] | undefined,
+): {
+  argv: readonly string[];
+  scrubOut(chunk: string): string;
+  scrubErr(chunk: string): string;
+  flushOut(): string;
+  flushErr(): string;
+} {
+  if (!redactions?.length) {
+    const pass = (chunk: string) => chunk;
+    return {
+      argv: [...args],
+      scrubOut: pass,
+      scrubErr: pass,
+      flushOut: () => '',
+      flushErr: () => '',
+    };
+  }
+  const scrubOut = streamScrubber(redactions);
+  const scrubErr = streamScrubber(redactions);
+  return {
+    argv: redactArgv(args, redactions),
+    scrubOut: (chunk) => scrubOut(chunk),
+    scrubErr: (chunk) => scrubErr(chunk),
+    flushOut: () => scrubOut('', true),
+    flushErr: () => scrubErr('', true),
+  };
 }
 
 /**
@@ -226,6 +348,10 @@ function runSpawnedCommand(
   options: ExecStreamOptions = {},
 ): Promise<ExecResult> {
   const executable = normalizeExecutableCommand(cmd);
+  // The child spawns with the raw argv; every retention and error surface past this point reads the
+  // sanitized copy (`safeArgs`) or scrubbed text, so no redacted value leaves the spawn boundary.
+  const redactor = createArgRedactor(args, options.redactions);
+  const safeArgs = redactor.argv;
   const execTrace = createExecTraceContext(
     cmd,
     normalizeTimeoutMs(options.timeoutMs),
@@ -234,7 +360,7 @@ function runSpawnedCommand(
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd: options.cwd,
-      env: resolveSpawnEnv(options.env, options.envOverrides),
+      env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: options.detached,
       windowsHide: true,
@@ -273,15 +399,27 @@ function runSpawnedCommand(
             : 'success';
       if (!finish(finalReason)) return;
       const finalExitCode = code ?? 1;
+      // Release each stream's held tail before anything reads the retained output: every data
+      // event has landed by `close`, so the tail holds at most a partial secret. The tail reaches
+      // the chunk callbacks too, so a caller appending the callback stream ends with the same
+      // scrubbed bytes the result retains.
+      const flushedOut = redactor.flushOut();
+      const flushedErr = redactor.flushErr();
+      stdout += flushedOut;
+      stderr += flushedErr;
+      if (flushedOut) options.onStdoutChunk?.(flushedOut);
+      if (flushedErr) options.onStderrChunk?.(flushedErr);
       if (!abort.didAbort && didTimeout && timeoutMs) {
-        reject(createTimeoutError(executable, cmd, args, timeoutMs, finalExitCode, stdout, stderr));
+        reject(
+          createTimeoutError(executable, cmd, safeArgs, timeoutMs, finalExitCode, stdout, stderr),
+        );
         return;
       }
       const failure = commandCloseFailure(
         abort,
         executable,
         cmd,
-        args,
+        safeArgs,
         finalExitCode,
         options.allowFailure,
         stdout,
@@ -325,7 +463,7 @@ function runSpawnedCommand(
     void writeChildStdin(child, options.stdin).catch((error: unknown) => {
       if (abort.didAbort || didTimeout) return;
       if (isEpipeError(error)) return;
-      fail(createStdinError(executable, cmd, args, error), 'stdin_error');
+      fail(createStdinError(executable, cmd, safeArgs, error), 'stdin_error');
       killProcessTree(child, options);
     });
 
@@ -334,20 +472,29 @@ function runSpawnedCommand(
         stdoutChunks?.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         return;
       }
-      const text = String(chunk);
+      const text = redactor.scrubOut(String(chunk));
       if (options.captureOutput !== false) stdout += text;
       options.onStdoutChunk?.(text);
     });
 
     child.stderr.on('data', (chunk) => {
-      const text = String(chunk);
+      const text = redactor.scrubErr(String(chunk));
       if (options.captureOutput !== false) stderr += text;
       options.onStderrChunk?.(text);
     });
 
     child.on('error', (err) => {
       execTrace.emit('error');
-      fail(spawnRejectionError(abort, executable, cmd, args, err), 'spawn_error');
+      fail(
+        spawnRejectionError(
+          abort,
+          executable,
+          cmd,
+          safeArgs,
+          sanitizeSpawnCause(err, options.redactions),
+        ),
+        'spawn_error',
+      );
     });
 
     child.once('exit', (code, signal) => {
@@ -431,7 +578,7 @@ export function runCmdSync(
   const executable = normalizeExecutableCommand(cmd);
   const result = spawnSync(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env, options.envOverrides),
+    env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
     stdio: ['pipe', 'pipe', 'pipe'],
     encoding: options.binaryStdout ? undefined : 'utf8',
     input: options.stdin,
@@ -498,7 +645,7 @@ export function runCmdDetachedMonitored(
   const executable = normalizeExecutableCommand(cmd);
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env, options.envOverrides),
+    env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
     stdio: options.stdio ?? 'ignore',
     detached: true,
     windowsHide: true,
@@ -540,7 +687,7 @@ export function runCmdBackground(
   const execTrace = createExecTraceContext(cmd, undefined, commandHostScope.getStore()?.host.env);
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env, options.envOverrides),
+    env: resolveSpawnEnv(options.env, options.envOverrides, options.envOmit),
     stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
     detached: options.detached,
     windowsHide: true,
@@ -636,6 +783,19 @@ function normalizeExecutableCommand(cmd: string): string {
     });
   }
   return candidate;
+}
+
+/**
+ * A spawn cause carries the raw argv in its `spawnargs`, and the serialized cause reaches error
+ * payloads. A redacted command rebuilds that field on the sanitized face, so the raw values die at
+ * the spawn boundary with everything else this module retains.
+ */
+function sanitizeSpawnCause(err: Error, redactions: readonly string[] | undefined): Error {
+  const spawnargs = (err as NodeJS.ErrnoException & { spawnargs?: readonly string[] }).spawnargs;
+  if (!redactions?.length || !Array.isArray(spawnargs)) return err;
+  const cause: Error = new Error(err.message);
+  Object.assign(cause, err, { spawnargs: redactArgv(spawnargs, redactions) });
+  return cause;
 }
 
 function createSpawnError(

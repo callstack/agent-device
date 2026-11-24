@@ -114,10 +114,12 @@ test('resolveRunnerProvisioningAuthArgs passes no args without auth key env', ()
 });
 
 test('resolveRunnerProvisioningAuthArgs passes the xcodebuild authentication key args when the whole trio is set', () => {
+  const keyFile = path.join(mkdtempForTestSync('agent-device-auth-key-'), 'AuthKey_ABCDEF1234.p8');
+  fs.writeFileSync(keyFile, '-----BEGIN PRIVATE KEY-----\n');
   assert.deepEqual(
     resolveRunnerProvisioningAuthArgs(
       {
-        AGENT_DEVICE_IOS_AUTH_KEY_PATH: '/keys/AuthKey_ABCDEF1234.p8',
+        AGENT_DEVICE_IOS_AUTH_KEY_PATH: keyFile,
         AGENT_DEVICE_IOS_AUTH_KEY_ID: 'KID12345',
         AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID: 'ISSUER67890',
       },
@@ -125,12 +127,69 @@ test('resolveRunnerProvisioningAuthArgs passes the xcodebuild authentication key
     ),
     [
       '-authenticationKeyPath',
-      '/keys/AuthKey_ABCDEF1234.p8',
+      keyFile,
       '-authenticationKeyID',
       'KID12345',
       '-authenticationKeyIssuerID',
       'ISSUER67890',
     ],
+  );
+});
+
+test('resolveRunnerProvisioningAuthArgs refuses a key path that names no readable regular file', () => {
+  const dir = mkdtempForTestSync('agent-device-auth-key-');
+  const cases = [
+    ['a missing file', path.join(dir, 'AuthKey_MISSING.p8')],
+    ['a directory', dir],
+  ] as const;
+  for (const [label, keyPath] of cases) {
+    assert.throws(
+      () =>
+        resolveRunnerProvisioningAuthArgs(
+          {
+            AGENT_DEVICE_IOS_AUTH_KEY_PATH: keyPath,
+            AGENT_DEVICE_IOS_AUTH_KEY_ID: 'KID12345',
+            AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID: 'ISSUER67890',
+          },
+          true,
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError, `${label}: the refusal is an AppError`);
+        assert.equal(error.details?.reason, 'signing_auth_key_invalid_path');
+        assert.equal(error.details?.envName, 'AGENT_DEVICE_IOS_AUTH_KEY_PATH');
+        const rendered = JSON.stringify(error);
+        assert.equal(
+          rendered.includes(keyPath),
+          false,
+          `${label}: the value never reaches the error`,
+        );
+        assert.equal(
+          /ENOENT|EACCES|EISDIR|no such file or directory/.test(rendered),
+          false,
+          `${label}: the raw filesystem error never reaches the error`,
+        );
+        return true;
+      },
+      `${label} must refuse before the build`,
+    );
+  }
+});
+
+test('resolveRunnerProvisioningAuthArgs refuses a NUL-bearing key path without a filesystem error', () => {
+  assert.throws(
+    () =>
+      resolveRunnerProvisioningAuthArgs(
+        {
+          AGENT_DEVICE_IOS_AUTH_KEY_PATH: '/keys/AuthKey\0.p8',
+          AGENT_DEVICE_IOS_AUTH_KEY_ID: 'KID12345',
+          AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID: 'ISSUER67890',
+        },
+        true,
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'signing_auth_key_invalid_path' &&
+      error.details?.envName === 'AGENT_DEVICE_IOS_AUTH_KEY_PATH',
   );
 });
 

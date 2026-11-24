@@ -29,6 +29,7 @@ import {
   xcodebuildDestinationArgs,
 } from './runner-device-set.ts';
 import {
+  RUNNER_SIGNING_AUTH_ENV_NAMES,
   acquireRunnerXctestrunCacheLock,
   assertSafeDerivedCleanup,
   cleanRunnerDerivedArtifacts,
@@ -954,6 +955,17 @@ async function buildRunnerXctestrun(
         detached: true,
         timeoutMs: buildTimeoutMs,
         signal: options.budget?.signal,
+        // Credentials travel by argument only: when the trio rides the argv, the build strips the
+        // same names from the child environment, and the exec layer scrubs the key path from the
+        // streams and from every error argv — echoes in the child output and the argv in exit,
+        // timeout, and spawn errors included — so the path never reaches runner.log, the trace
+        // log, stderr, or an error payload. The flag names and the key ids stay, so the logs
+        // still name which args the build carried. Without the trio, nothing changes.
+        envOmit: provisioningAuthArgs.length > 0 ? RUNNER_SIGNING_AUTH_ENV_NAMES : undefined,
+        redactions:
+          provisioningAuthArgs.length > 0
+            ? [env.AGENT_DEVICE_IOS_AUTH_KEY_PATH?.trim() ?? '']
+            : undefined,
         onSpawn: (child) => {
           registerRunnerPrepProcess(device.id, child, options.startAdmission);
         },

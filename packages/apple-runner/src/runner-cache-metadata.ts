@@ -27,7 +27,20 @@ const RUNNER_BUILD_SETTINGS_REASONS = {
 const RUNNER_SIGNING_AUTH_REASONS = {
   // The App Store Connect API key variables are set only in part; xcodebuild takes all three or none.
   signingAuthKeyIncomplete: { reason: 'signing_auth_key_incomplete' },
+  // The App Store Connect API key path names no readable regular file; the build refuses before it starts.
+  signingAuthKeyInvalidPath: { reason: 'signing_auth_key_invalid_path' },
 } as const satisfies ReasonTable<'apple runner'>;
+
+/**
+ * The build-time ASC API key environment family, in argv order. The build passes the trio as
+ * `xcodebuild` arguments and omits the same names from the child environment, so the credentials
+ * travel by argument only.
+ */
+export const RUNNER_SIGNING_AUTH_ENV_NAMES = [
+  'AGENT_DEVICE_IOS_AUTH_KEY_PATH',
+  'AGENT_DEVICE_IOS_AUTH_KEY_ID',
+  'AGENT_DEVICE_IOS_AUTH_KEY_ISSUER_ID',
+] as const;
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
@@ -304,6 +317,32 @@ export function resolveRunnerSigningBuildSettings(
 }
 
 /**
+ * One typed configuration refusal for the key path: the error names the variable, never the value
+ * and never the raw filesystem error, so neither reaches a log or an error payload.
+ */
+function invalidAuthKeyPathError(envName: string): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'The App Store Connect API key path is not a readable key file',
+    {
+      reason: RUNNER_SIGNING_AUTH_REASONS.signingAuthKeyInvalidPath.reason,
+      envName,
+      hint: `Set ${envName} to the absolute path of a readable App Store Connect API key .p8 file.`,
+    },
+  );
+}
+
+/** True only for a readable regular file; NUL bytes and every other stat failure answer false. */
+function isReadableRegularFilePath(candidate: string): boolean {
+  if (candidate.length === 0 || candidate.includes('\0')) return false;
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The App Store Connect API key that lets `-allowProvisioningUpdates` resolve automatic signing on
  * a host with no interactive Xcode sign-in, read beside the signing settings it complements. The
  * whole trio rides the command, a partial trio refuses the build here — before `xcodebuild` runs,
@@ -345,6 +384,12 @@ export function resolveRunnerProvisioningAuthArgs(
     );
   }
   const [keyPath, keyId, issuerId] = values.map((entry) => entry.value);
+  // The path is validated before the argv is built: a missing file, a directory, or a NUL-bearing
+  // value refuses here with the typed config error instead of reaching xcodebuild, whose spawn
+  // failure would carry the value into the error details.
+  if (!isReadableRegularFilePath(keyPath!)) {
+    throw invalidAuthKeyPathError('AGENT_DEVICE_IOS_AUTH_KEY_PATH');
+  }
   return [
     '-authenticationKeyPath',
     keyPath!,

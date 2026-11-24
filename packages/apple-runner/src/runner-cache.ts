@@ -30,6 +30,7 @@ const RUNNER_CACHE_REASONS = {
   cacheUncertifiable: { reason: 'runner_cache_uncertifiable' },
 } as const satisfies ReasonTable<'apple runner'>;
 export {
+  RUNNER_SIGNING_AUTH_ENV_NAMES,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerArchBuildSettings,
   resolveRunnerBuildLocationSettings,
