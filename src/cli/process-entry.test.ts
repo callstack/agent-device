@@ -21,7 +21,9 @@ beforeEach(() => {
 
 test.each([
   [['mcp', '--version'], `${readVersion()}\n`],
+  [['mcp', '-V'], `${readVersion()}\n`],
   [['--help', '--json'], `${buildUsageText()}\n`],
+  [['--json', '-h'], `${buildUsageText()}\n`],
 ])('%j emits parsed output before loading CLI execution', async (argv, expected) => {
   const loadCli = vi.fn();
   await expect(runCliProcess(argv, host, loadCli)).rejects.toBe(exit);
@@ -34,6 +36,8 @@ test.each([
   ['mcp', '--version', '--unknown'],
   ['connect', '--help', '--json'],
   ['mcp', '--structured', '--json'],
+  ['open', '--help', '--json'],
+  ['--', '--help', '--json'],
 ])('%j retains the full CLI path', async (...argv) => {
   const runCli = vi.fn();
   const loadCli = vi.fn(async () => ({ runCli }));

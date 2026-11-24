@@ -39,10 +39,11 @@ export async function runCliProcess(
 }
 
 function isInformationCandidate(argv: string[]): boolean {
-  if (argv.includes('connect')) return false;
+  if (argv.length !== 2) return false;
+  const [first, second] = argv;
   return (
-    (argv[0] === 'mcp' && (argv.includes('--version') || argv.includes('-V'))) ||
-    (argv.includes('--json') &&
-      (argv.includes('--help') || argv.includes('-h') || argv.includes('help')))
+    (first === 'mcp' && (second === '--version' || second === '-V')) ||
+    (first === '--json' && (second === '--help' || second === '-h')) ||
+    (second === '--json' && (first === '--help' || first === '-h'))
   );
 }
