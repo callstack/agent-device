@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { LIMRUN } from '@agent-device/contracts/provider-plugin-catalog';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
@@ -15,10 +16,16 @@ const CLOUD_LIMRUN_REASONS = {
 } as const satisfies ReasonTable<'cloud sessions'>;
 
 export async function hasHostedLimrunPlugin(env: EnvMap): Promise<boolean> {
-  const { primePluginConnections, pluginConnectionCapabilities } =
+  const { primePluginConnections, pluginConnectionCapabilities, pluginConnectionInventory } =
     await import('@agent-device/plugins/connection');
   await primePluginConnections(env);
-  return pluginConnectionCapabilities('limrun', env)?.acceptsHostedAttachment === true;
+  return (
+    pluginConnectionCapabilities(LIMRUN.provider, env)?.acceptsHostedAttachment === true &&
+    pluginConnectionInventory(env).some(
+      ({ state, provider, package: name }) =>
+        state === 'active' && provider === LIMRUN.provider && name === LIMRUN.package,
+    )
+  );
 }
 
 export async function requireHostedLimrunPlugin(env: EnvMap): Promise<void> {

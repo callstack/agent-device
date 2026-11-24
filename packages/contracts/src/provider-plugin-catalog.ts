@@ -52,6 +52,7 @@ export const LIMRUN: ProviderPluginDeclaration = {
     usesCloudWebDriverLease: false,
     holdsCloudDevice: true,
     forgetsEndedConnectionLease: true,
+    acceptsHostedAttachment: true,
   },
 };
 

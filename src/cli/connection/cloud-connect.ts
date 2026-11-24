@@ -124,17 +124,29 @@ export async function releaseCloudConnection(options: {
 }): Promise<string | undefined> {
   const { location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
-  const access = await resolveHostedCloudAccess({
-    env: host.env,
-    stateDir: location.stateDir,
-    interactive: false,
-    savedOrigin: record?.origin ?? binding?.baseUrl,
-  });
-  const id = await cloudSessionIdForRelease(access, record, binding?.id);
-  await stopHostedLimrunDaemon(location, binding, host);
+  const access = record?.brokerReleased
+    ? undefined
+    : await resolveHostedCloudAccess({
+        env: host.env,
+        stateDir: location.stateDir,
+        interactive: false,
+        savedOrigin: record?.origin ?? binding?.baseUrl,
+      });
+  const id = access ? await cloudSessionIdForRelease(access, record, binding?.id) : record?.id;
   markCloudConnectionClosing(location, record);
   removeCloudAttachment(location);
-  if (id) await deleteCloudSession(access, id);
+  const retirementFailure = await stopHostedLimrunDaemon(location, binding, host).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  if (access && id) {
+    await deleteCloudSession(access, id);
+    if (retirementFailure && record) {
+      record.brokerReleased = true;
+      writeCloudConnection(location, record);
+    }
+  }
+  if (retirementFailure) throw retirementFailure;
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudState(location, state, record);
   return id;

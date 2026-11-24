@@ -50,6 +50,7 @@ export type CloudConnectionRecord = {
   fingerprint: string;
   id?: string;
   deadlineAt?: string;
+  brokerReleased?: true;
 };
 
 function hash(value: string): string {

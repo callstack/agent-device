@@ -1,3 +1,5 @@
+import { LIMRUN } from '@agent-device/contracts/provider-plugin-catalog';
+import { AppError, PLUGIN_INSTALLATION_REASONS } from '@agent-device/kernel/errors';
 import type { PlatformHost } from '@agent-device/plugins/contract';
 import type {
   PluginCandidate,
@@ -36,11 +38,20 @@ export async function createDaemonProviderRuntimeComposition(
 ): Promise<ProviderRuntimeComposition> {
   const { storePluginCandidates, createPluginSelectionGuard } =
     await import('@agent-device/plugins/store');
-  const candidates = await storePluginCandidates(host.env);
-  return await composeProviderRuntime(host, candidates, {
-    platformHost,
-    assertSelectionCurrent: createPluginSelectionGuard(candidates, host.env),
-  });
+  const stored = await storePluginCandidates(host.env);
+  const hostedLimrun = host.env.LIMRUN_HOSTED_ATTACHMENT_DEADLINE !== undefined;
+  const candidates = hostedLimrun
+    ? stored.filter(({ package: name }) => name === LIMRUN.package)
+    : stored;
+  return await composeProviderRuntime(
+    host,
+    candidates,
+    {
+      platformHost,
+      assertSelectionCurrent: createPluginSelectionGuard(candidates, host.env),
+    },
+    hostedLimrun,
+  );
 }
 
 /** Composes the built-in platforms followed by supplied candidates without reading the plugin store. */
@@ -58,11 +69,24 @@ async function composeProviderRuntime(
   host: HostEnvironment,
   candidates: readonly PluginCandidate[],
   policy: PluginRegistryPolicy & { platformHost: PlatformHost },
+  hostedLimrun = false,
 ): Promise<ProviderRuntimeComposition> {
   const { resolveProviderPlugins, startProviderRegistry } =
     await import('@agent-device/plugins/registry');
   const { builtinPlatformCandidates } = await import('./platform-runtime/platform-plugins.ts');
   const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
+  if (
+    hostedLimrun &&
+    resolved.connections.get(LIMRUN.provider)?.capabilities.acceptsHostedAttachment !== true
+  ) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'A compatible Limrun plugin is required for this session.',
+      {
+        reason: PLUGIN_INSTALLATION_REASONS.unavailable.reason,
+      },
+    );
+  }
   const registry = await startProviderRegistry(resolved, host, {
     ...policy,
     hostCapabilities: async (environment) =>
