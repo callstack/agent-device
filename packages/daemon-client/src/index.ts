@@ -61,11 +61,24 @@ export function createDaemonTransport(host: HostEnvironment) {
 export function resolveRunTransport(
   deps: {
     sendToDaemon: typeof sendToDaemon;
-    transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
+    transportForHost?: (
+      host: HostEnvironment,
+      admit?: EnsuringTransportOptions['admit'],
+    ) => typeof sendToDaemon;
   },
   host: HostEnvironment,
+  admit?: EnsuringTransportOptions['admit'],
 ): typeof sendToDaemon {
-  return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+  if (!admit) return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+  if (deps.transportForHost) return deps.transportForHost(host, admit);
+  return async (req, context) => {
+    await admit(async () => {}, 'startup', req);
+    const { dispatchDaemonRequest } = await import('./daemon-client-request.ts');
+    return await dispatchDaemonRequest(
+      (send) => admit(send, 'dispatch', req),
+      () => deps.sendToDaemon(req, context),
+    );
+  };
 }
 
 async function sendToDaemonOnHost(
@@ -121,15 +134,21 @@ async function sendToDaemonOnHost(
     );
   });
   const info = daemon.info;
-  const preparedRemoteRequest = await cancellation.guard(
-    async () =>
-      await protectArtifactUploadWithLeaseBeats(
-        info,
-        settings,
-        requestWithoutAuthFlag,
-        options.signal,
-        options.onProgress,
-      ),
+  const prepare = () =>
+    protectArtifactUploadWithLeaseBeats(
+      info,
+      settings,
+      requestWithoutAuthFlag,
+      options.signal,
+      options.onProgress,
+    );
+  const preparedRemoteRequest = await cancellation.guard(() =>
+    options.dispatch && info.baseUrl && isInstallLikeCommand(req.command)
+      ? options.dispatch(async () => {
+          cancellation.refuseIfAborted();
+          return await prepare();
+        })
+      : prepare(),
   );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
 
@@ -171,6 +190,7 @@ async function sendToDaemonOnHost(
                 onProgress: options.onProgress,
                 signal: options.signal,
                 timeoutRecovery: resolveTimeoutRecovery(settings),
+                dispatch: options.dispatch,
               },
             );
           if (!info.baseUrl || !request.meta?.clientArtifactPaths?.savedScript)

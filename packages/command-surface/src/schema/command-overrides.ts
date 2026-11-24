@@ -43,7 +43,12 @@ const CONNECT_ALLOWED_FLAGS = [
   ...LEASE_DEVICE_SPEC_FLAGS,
   'force',
   'noLogin',
+  'vendor',
+  'maxMinutes',
+  'needs',
+  'showViewer',
 ] as const;
+
 const CONNECT_SUPPORTED_FLAGS = [
   'stateDir',
   'daemonAuthToken',
@@ -127,7 +132,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
         'List cloud offerings with a CLI login or AGENT_DEVICE_CLOUD_API_KEY. For a custom catalog, set AGENT_DEVICE_CLOUD_API_KEY_ORIGIN to the same origin as AGENT_DEVICE_CLOUD_BASE_URL. Use AGENT_DEVICE_DAEMON_AUTH_TOKEN for remote connection setup. Direct providers validate credentials and resources before saving state and print any preparation needed before open.',
     },
     usageOverride:
-      'connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+      'connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login] [--vendor <id>] [--max-minutes <minutes>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer]',
     usageFlags: [],
     listUsageOverride: 'connect',
     positionalArgs: ['provider?|list'],
@@ -151,7 +156,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     },
     listUsageOverride: 'disconnect',
     allowedFlags: ['shutdown'],
-    supportedFlags: ['remoteConfig', 'stateDir', 'session'],
+    supportedFlags: ['remoteConfig', 'stateDir', 'session', 'daemonAuthToken'],
   },
   mcp: {
     text: {

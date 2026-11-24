@@ -1,4 +1,18 @@
 import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
+import { resolveHostedCloudAccess } from '../connection/cloud-access.ts';
+import {
+  readCloudSessionRequest,
+  type CreatedCloudSession,
+} from '../connection/cloud-session-api.ts';
+import { writeCloudAttachment } from '../connection/cloud-attachment.ts';
+import {
+  cloudConnectionUnavailable,
+  CLOUD_CONNECTION_REASONS,
+  readCloudConnection,
+  removeCloudConnection,
+  withConnectionLock,
+} from '../connection/cloud-connection-record.ts';
+import { connectCloudSession, releaseCloudConnection } from '../connection/cloud-connect.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -17,10 +31,14 @@ import {
   narrowConnectionPlatform,
   writeRemoteConnectionState,
   type RemoteConnectionState,
+  type CloudSessionBinding,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
-import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
+import {
+  isInactiveLeaseError,
+  remoteSessionRequiredError,
+} from '@agent-device/contracts/lease-scope';
 import {
   admitProviderForRoute,
   connectProviderNamesForError,
@@ -32,6 +50,9 @@ import {
 } from '../connection/provider-policy.ts';
 import {
   resolveConnectProviderProfile,
+  resolveCloudSessionProfile,
+  usesCloudSessionApi,
+  type ResolvedConnectProfile,
   verifyResolvedConnectProvider,
 } from '../connection/connect-provider-adapters.ts';
 import {
@@ -59,46 +80,173 @@ import {
   type RuntimePreparationNotice,
 } from './connection-presentation.ts';
 
-export const connectCommand: ClientCommandHandler = async ({
-  positionals,
-  flags,
-  client,
-  host,
-}) => {
-  const stateDir = resolveDaemonPaths(flags.stateDir, {
-    cwd: host.cwd,
-    env: host.env,
-  }).baseDir;
+export const connectCommand: ClientCommandHandler = async (params) => {
+  const { positionals, flags, host } = params;
+  const stateDir = resolveDaemonPaths(flags.stateDir, host).baseDir;
   const provider = await readConnectProvider(positionals, host.env);
   assertConnectProviderUsage(provider, flags);
+  const cloud = usesCloudSessionApi(provider, flags);
+  if (
+    !cloud &&
+    (flags.vendor !== undefined ||
+      flags.maxMinutes !== undefined ||
+      flags.needs !== undefined ||
+      flags.showViewer)
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--vendor, --max-minutes, --needs and --show-viewer require connect cloud.',
+    );
+  }
+
+  const location = { stateDir, session: flags.session ?? 'default' };
+  return await withConnectionLock(stateDir, location.session, async () => {
+    const previous = readRemoteConnectionState(location);
+    const record = readCloudConnection(location);
+    if (flags.session === undefined && (cloud || record || previous?.cloudSession)) {
+      throw remoteSessionRequiredError(undefined);
+    }
+    const pending = record?.phase === 'pending' ? record : null;
+    if (pending && !cloud)
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.pendingConflict.reason);
+    if (previous && (previous.cloudSession || cloud) && !pending && !flags.force) {
+      throw activeConnectionConflict(previous);
+    }
+    if (record && !pending && !flags.force) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.pendingConflict.reason);
+    }
+    const connection = {
+      location,
+      record,
+      state: previous,
+      host,
+    };
+    if (cloud) {
+      return await connectCloudProfile(params, connection, pending);
+    }
+    return await connectDirectProfile(params, stateDir, provider, connection);
+  });
+};
+
+type CloudConnection = Parameters<typeof releaseCloudConnection>[0];
+type ConnectionCommandParams = Parameters<ClientCommandHandler>[0];
+
+async function connectDirectProfile(
+  params: ConnectionCommandParams,
+  stateDir: string,
+  provider: ConnectProvider | undefined,
+  connection: CloudConnection,
+): Promise<boolean> {
+  const { flags, host } = params;
+  const replacingCloud = connection.record || connection.state?.cloudSession;
   const resolved = await resolveConnectProviderProfile({
-    provider,
     flags,
     stateDir,
     cwd: host.cwd,
     env: host.env,
+    provider,
   });
+  if (!replacingCloud) return await saveConnectProfile(params, stateDir, resolved);
+  return await saveConnectProfile(params, stateDir, resolved, {
+    beforeCommit: async () => {
+      await releaseCloudConnection(connection);
+    },
+    onCommitted: () => removeCloudConnection(connection.location),
+  });
+}
+
+async function connectCloudProfile(
+  params: ConnectionCommandParams,
+  connection: CloudConnection,
+  pending: CloudConnection['record'],
+): Promise<boolean> {
+  const { location, record, state, host } = connection;
+  const request = readCloudSessionRequest(params.flags);
+  const access = await resolveHostedCloudAccess({
+    env: host.env,
+    flags: params.flags,
+    stateDir: location.stateDir,
+    interactive: true,
+    savedOrigin: pending?.origin,
+  });
+  if (!pending && (record || state?.cloudSession)) await releaseCloudConnection(connection);
+  const replacingDirect = pending && state && !state.cloudSession;
+  const connectParams = replacingDirect
+    ? { ...params, flags: { ...params.flags, force: true } }
+    : params;
+  return await connectCloudSession({
+    location,
+    pending,
+    request,
+    access,
+    attach: async (session, commit) => {
+      const { stateDir } = location;
+      const resolved = await resolveCloudSessionProfile(
+        {
+          flags: connectParams.flags,
+          stateDir,
+          cwd: host.cwd,
+          env: host.env,
+        },
+        session,
+      );
+      try {
+        return await saveConnectProfile(connectParams, stateDir, resolved, {
+          cloud: session,
+          beforeCommit: () => writeCloudAttachment(location, session.attachment),
+          onCommitted: commit,
+        });
+      } finally {
+        removeGeneratedRemoteConfigIfUnused({
+          stateDir,
+          remoteConfigPath: resolved.remoteConfigPath,
+        });
+      }
+    },
+  });
+}
+
+async function saveConnectProfile(
+  { flags, client, host }: Parameters<ClientCommandHandler>[0],
+  stateDir: string,
+  resolved: ResolvedConnectProfile,
+  publication?: {
+    cloud?: CreatedCloudSession & { binding: CloudSessionBinding };
+    beforeCommit: () => void | Promise<void>;
+    onCommitted: () => void;
+  },
+): Promise<boolean> {
+  const cloud = publication?.cloud;
   const { flags: connectFlags, connection: connectionMetadata } = scopeConnectProfile(
     flags,
     resolved,
     host,
   );
-  const scope = readRequiredConnectScope(connectFlags, connectionMetadata, host.env);
+  const scope = readRequiredConnectScope(connectFlags, connectionMetadata, host.env, cloud);
   const context = resolveConnectContext({
     stateDir,
     flags: connectFlags,
     remoteConfigPath: resolved.remoteConfigPath,
   });
-  assertCompatibleConnectionOrForce(context.previous, {
-    flags: connectFlags,
-    session: context.session,
-    remoteConfigPath: resolved.remoteConfigPath,
-    remoteConfigHash: context.remoteConfigHash,
-    desiredLeaseBackend: resolveRequestedLeaseBackend(connectFlags),
-    connection: connectionMetadata,
-    daemon: context.daemon,
-  });
-  const verification = await verifyResolvedConnectProvider(resolved, host);
+  assertCompatibleConnectionOrForce(
+    cloud && context.previous?.cloudSession ? null : context.previous,
+    {
+      flags: connectFlags,
+      session: context.session,
+      remoteConfigPath: resolved.remoteConfigPath,
+      remoteConfigHash: context.remoteConfigHash,
+      desiredLeaseBackend: resolveRequestedLeaseBackend(connectFlags),
+      connection: connectionMetadata,
+      daemon: context.daemon,
+    },
+  );
+  const verification = cloud
+    ? {
+        service: 'the cloud session API',
+        status: 'verified' as const,
+        verificationMessage: 'Cloud session created.',
+      }
+    : await verifyResolvedConnectProvider(resolved, host);
   const state = buildConnectedState({
     flags: connectFlags,
     scope,
@@ -106,7 +254,13 @@ export const connectCommand: ClientCommandHandler = async ({
     context,
     remoteConfigPath: resolved.remoteConfigPath,
   });
-  writeRemoteConnectionState({ stateDir, state });
+  if (cloud) state.cloudSession = cloud.binding;
+  await publication?.beforeCommit();
+  writeRemoteConnectionState({
+    stateDir,
+    state,
+    onSessionRecordCommitted: publication?.onCommitted,
+  });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
     client,
     connectFlags,
@@ -117,6 +271,10 @@ export const connectCommand: ClientCommandHandler = async ({
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state, host);
   const readiness = presentConnectReadiness(state, verification, host.env, connectFlags);
 
+  if (flags.showViewer && cloud?.viewerUrl) {
+    const { openUrlInBrowser } = await import('../browser-launch.ts');
+    await openUrlInBrowser(cloud.viewerUrl);
+  }
   await writeCommandOutput(
     connectFlags,
     serializeConnectionState({
@@ -125,6 +283,7 @@ export const connectCommand: ClientCommandHandler = async ({
       readiness,
       previousLeaseNotice,
       env: host.env,
+      fallbackFrom: cloud?.fallbackFrom,
     }),
     () =>
       renderConnectSuccess({
@@ -133,10 +292,11 @@ export const connectCommand: ClientCommandHandler = async ({
         readiness,
         previousLeaseNotice,
         env: host.env,
+        fallbackFrom: cloud?.fallbackFrom,
       }),
   );
   return true;
-};
+}
 
 function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
   if (!provider || !flags.remoteConfig) return;
@@ -150,6 +310,7 @@ function readRequiredConnectScope(
   flags: CliFlags,
   connectionMetadata: RemoteConnectionRequestMetadata | undefined,
   env: NodeJS.ProcessEnv,
+  cloud?: CreatedCloudSession,
 ): { tenant: string; runId: string } {
   if (!flags.tenant) {
     throw new AppError(
@@ -164,6 +325,7 @@ function readRequiredConnectScope(
     );
   }
   if (
+    !cloud &&
     !flags.daemonBaseUrl &&
     connectionProviderCapabilities(connectionMetadata?.leaseProvider, env).requiresRemoteDaemon
   ) {
@@ -181,10 +343,14 @@ function assertCompatibleConnectionOrForce(
 ): void {
   if (!previous || isCompatibleConnection(previous, options)) return;
   if (options.flags.force) return;
-  throw new AppError(
+  throw activeConnectionConflict(previous);
+}
+
+function activeConnectionConflict(previous: RemoteConnectionState): AppError {
+  return new AppError(
     'INVALID_ARGS',
     'A different remote connection is already active for this session. Re-run connect with --force to replace it.',
-    { session: options.session, remoteConfig: previous.remoteConfigPath },
+    { session: previous.session, remoteConfig: previous.remoteConfigPath },
   );
 }
 
@@ -309,7 +475,7 @@ async function cleanupForcedPreviousConnection(
   next: RemoteConnectionState,
   host: HostEnvironment,
 ): Promise<PreviousLeaseReleaseNotice | undefined> {
-  if (!previous || !flags.force) return undefined;
+  if (!previous || !flags.force || previous.cloudSession) return undefined;
   await stopMetroCleanup(previous.metro);
   if (previous.leaseId && previous.leaseId === next.leaseId) return undefined;
   return await releasePreviousLease(client, previous, {
@@ -372,14 +538,46 @@ export const disconnectCommand: ClientCommandHandler = async ({
   claimedConnection,
 }) => {
   const stateDir = resolveConnectionStateDir(flags, host);
-  const state = claimDisconnectTarget(claimedConnection, stateDir, flags.session);
-  if (!state) {
-    await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
-    return true;
-  }
-  requireLeasedConnectionSession(state, flags.session);
-  const connectedSession = state.session;
+  const location = { stateDir, session: flags.session ?? 'default' };
+  return await withConnectionLock(stateDir, location.session, async () => {
+    const record = readCloudConnection(location);
+    const current = readRemoteConnectionState(location);
+    const state =
+      record || current?.cloudSession || claimedConnection?.cloudSession
+        ? current
+        : claimDisconnectTarget(claimedConnection, stateDir, flags.session);
+    if (record || state?.cloudSession) {
+      return await disconnectCloud({ location, state, record, host }, flags);
+    }
+    if (!state) {
+      await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
+      return true;
+    }
+    requireLeasedConnectionSession(state, flags.session);
+    return await disconnectProvider(flags, client, stateDir, state);
+  });
+};
 
+async function disconnectCloud(connection: CloudConnection, flags: CliFlags): Promise<boolean> {
+  if (flags.session === undefined) throw remoteSessionRequiredError(undefined);
+  const id = await releaseCloudConnection(connection);
+  removeCloudConnection(connection.location);
+  const { session } = connection.location;
+  await writeCommandOutput(
+    flags,
+    { connected: false, session, cloudSessionId: id, released: true },
+    () => `Ended cloud session "${session}".`,
+  );
+  return true;
+}
+
+async function disconnectProvider(
+  flags: CliFlags,
+  client: ConnectionCommandParams['client'],
+  stateDir: string,
+  state: RemoteConnectionState,
+): Promise<boolean> {
+  const connectedSession = state.session;
   let providerData: CloudProviderSessionResult | undefined;
   if (state.leaseId || state.runtime || state.metro) {
     try {
@@ -421,7 +619,7 @@ export const disconnectCommand: ClientCommandHandler = async ({
     () => renderDisconnectOutput(state, providerData, releaseError),
   );
   return true;
-};
+}
 
 export const connectionCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   if (positionals[0] !== 'status') {

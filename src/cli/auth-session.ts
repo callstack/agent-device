@@ -169,60 +169,6 @@ export async function resolveRemoteAuth(options: {
   };
 }
 
-export async function resolveCloudAccessForConnect(options: {
-  stateDir: string;
-  flags: CliFlags;
-  env: EnvMap;
-  io?: AuthIo;
-}): Promise<{
-  accessToken: string;
-  cloudBaseUrl: string;
-}> {
-  const { env } = options;
-  if (hasToken(options.flags.daemonAuthToken)) {
-    return {
-      accessToken: options.flags.daemonAuthToken,
-      cloudBaseUrl: await resolveCloudBaseUrl(env),
-    };
-  }
-  if (hasToken(env.AGENT_DEVICE_DAEMON_AUTH_TOKEN)) {
-    return {
-      accessToken: env.AGENT_DEVICE_DAEMON_AUTH_TOKEN,
-      cloudBaseUrl: await resolveCloudBaseUrl(env),
-    };
-  }
-  const sessionAccess = await resolveCliSessionAccess({
-    stateDir: options.stateDir,
-    flags: options.flags,
-    env,
-    io: options.io,
-  });
-  if (sessionAccess) {
-    return {
-      accessToken: sessionAccess.accessToken,
-      cloudBaseUrl: sessionAccess.cloudBaseUrl,
-    };
-  }
-  if (options.flags.noLogin) {
-    throw new AppError('UNAUTHORIZED', 'Cloud connection profile authentication is required.', {
-      hint: 'Run agent-device auth login, unset --no-login, or set AGENT_DEVICE_DAEMON_AUTH_TOKEN.',
-    });
-  }
-  const login = await loginWithDeviceAuth({
-    stateDir: options.stateDir,
-    flags: options.flags,
-    env,
-    io: options.io,
-    commandLabel: 'agent-device connect',
-    // `connect` sends this token itself, so a failed exchange is the command's failure.
-    requiresLiveToken: true,
-  });
-  return {
-    accessToken: login.accessToken,
-    cloudBaseUrl: login.session.cloudBaseUrl,
-  };
-}
-
 export async function loginWithDeviceAuth(options: {
   stateDir: string;
   flags: CliFlags;
@@ -536,7 +482,9 @@ export async function resolveCliSessionAccess(options: {
   // This read only asks whether there is a session to exchange, so a command that has none takes no
   // lock and writes nothing. The credential is read again once the lock is held.
   const stored = readExchangeableCliSession(stateDir);
-  if (!stored || isExpired(stored.expiresAt, io?.now)) return null;
+  if (!stored) return null;
+  await assertStoredSessionOrigin(stored, env);
+  if (isExpired(stored.expiresAt, io?.now)) return null;
   // A refresh read is not a change the cloud will not repeat: a wait that times out fails with its
   // typed reason, and the next command asks again.
   const catalogCredentials = options.catalog ? new Set<string>() : undefined;
@@ -544,8 +492,9 @@ export async function resolveCliSessionAccess(options: {
     stateDir,
     async () => {
       const session = readExchangeableCliSession(stateDir);
-      if (!session || isExpired(session.expiresAt, io?.now)) return null;
+      if (!session) return null;
       await assertStoredSessionOrigin(session, env);
+      if (isExpired(session.expiresAt, io?.now)) return null;
       return await exchangeCliSessionAccess({ stateDir, session, flags, io, catalogCredentials });
     },
     { io },

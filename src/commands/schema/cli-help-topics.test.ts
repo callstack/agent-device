@@ -399,7 +399,7 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /agent-device connect/);
   assert.match(help, /Remote connection providers use the same lifecycle/);
   assert.match(help, /connect -> install\/open -> commands -> close -> disconnect/);
-  assert.match(help, /agent-device connect cloud discovers the agent-device cloud profile/);
+  assert.match(help, /agent-device connect cloud --platform ios\|android starts a hosted session/);
   assert.match(help, /Direct proxy: agent-device connect proxy/);
   assert.match(help, /stores the shared proxy profile and client identity/);
   assert.match(

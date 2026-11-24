@@ -2538,17 +2538,35 @@ Exact behavior: `agent-device help proxy`.
 
 Run `proxy` on the machine that can reach the simulator, emulator, or device, and drive it from another machine through an HTTP tunnel. It prints a daemon auth token: anyone who has it can control the daemon behind the proxy. Pass `--public-origin` when the tunnel terminates TLS, so app uploads use HTTPS. See [Remote proxy](/docs/remote-proxy) for the tunnel setup and `connect proxy`.
 
-## Remote Metro workflow
+## Rent a cloud device
 
-When the cloud control plane owns the connection profile, `connect` discovers it. Name the session once, because every command on a cloud connection must name it:
+Run `agent-device connect list` to compare prices per minute, capabilities, live view support, and availability by vendor and platform. Add `--json` to get the vendor array in `data`. Sign in with `agent-device auth login` or set your cloud API key first. Rows from a newer server also carry `usdMicrosPerMinute` (integer micro-USD per minute) and `minMinutes` (the shortest session). `available` means the vendor is configured and enabled. It does not check capacity.
+
+Add `--live` to ask for fresh availability, for example `agent-device connect list --live --json`. Each row then has `availability: {state, reason?, checkedAt, scope}`. `state` is `available`, `unavailable` or `unknown`. `reason` is one of `sessions_paused`, `vendor_disabled`, `vendor_unconfigured`, `broker_capacity`, `capacity_unknown` or `live_availability_unsupported`. `scope` is always `broker_vendor`. The signal is advisory: it does not promise stock for a device model, and a session request can still fail. If the server does not support the signal, every row reports `unknown` with `live_availability_unsupported` and a `checkedAt` from the local clock. `--live` works only with `connect list`.
+
+Set `AGENT_DEVICE_CLOUD_API_KEY` for the API origin or run `agent-device auth login`. Use the same session name on every command.
 
 ```bash
 export AGENT_DEVICE_SESSION=checkout-ios
-agent-device connect
-agent-device open com.example.myapp --relaunch
+agent-device connect cloud --platform ios
+agent-device open com.apple.Preferences
 agent-device snapshot -i
 agent-device disconnect
 ```
+
+Use `--vendor <id>` to select a vendor. Use `--max-minutes <minutes>` to request a duration. The connect output shows the actual deadline. Pass `--show-viewer` to open the live viewer in your browser.
+
+Use `--needs <capability,...>` to require every listed capability. For example, `agent-device connect cloud --platform android --needs adb,viewer` requires ADB and live view. If no vendor matches, check the platform and capabilities with `connect list`. If the cloud session API tries another vendor after an allocation fails, the connect output names the unavailable vendor.
+
+Use `--device <model>` to pick a catalog device model, such as `iphone`, `ipad`, or `pixel-9`. Use `--os <version>` to pick an OS version, such as `"iOS 26"` or `26`. A bare major version takes the platform name from `--platform`. If no provider offers that device and OS pair, connect reports that the device is unavailable.
+
+If connect times out, retry with the same session name, API origin, and allocation options. The CLI resumes the original request. Run `disconnect` in that session before changing allocation options. It checks whether the original request rented a device and ends the rental if it is still active. Disconnect can interrupt device commands still running in that session. If a direct replacement fails provider verification, the existing rental remains available. If ending the rental fails, the CLI blocks device commands until `disconnect` succeeds.
+
+Use `AGENT_DEVICE_CLOUD_BASE_URL` for a custom cloud session API endpoint. Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing. If you use an API key with a custom origin, set `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN` to that origin for both commands. If ending the cloud session fails, run `disconnect` again in the same session.
+
+Use the CLI with the session name to control the rental. MCP returns `cloud_connection_owns_session` for device commands that name a cloud-owned session.
+
+## Remote Metro workflow
 
 For local profile files, create an `agent-device.remote.json`:
 
@@ -2583,9 +2601,9 @@ agent-device snapshot --remote-config ./agent-device.remote.json -i
 agent-device disconnect --remote-config ./agent-device.remote.json
 ```
 
-- `connect` fetches the cloud connection profile; `connect --remote-config <path>` uses a local profile with the host, tenant/run, and optional session, platform, lease backend, and Metro settings. Both save connection state and defer the device lease and Metro preparation until a command needs them (including a `batch` step that opens an app). Supply provider credentials when `connect` drives the provider from the client. A configured remote daemon uses its own provider credentials. Cloud profiles must be a JSON object at `connection.remoteConfigProfile`; the older `connection.remoteConfig` string is rejected.
+- `connect --remote-config <path>` uses a local profile with the host, tenant/run, and optional session, platform, lease backend, and Metro settings. Both save connection state and defer the device lease and Metro preparation until a command needs them (including a `batch` step that opens an app). Supply provider credentials when `connect` drives the provider from the client. A configured remote daemon uses its own provider credentials.
 - Cloud auth: `connect` uses your stored CLI session, and starts login in an interactive shell. In CI, use an `adc_live_...` service token. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`. Interactive login prints the code that the browser page must show; approve only when they match. When the cloud rotates the session credential during a refresh, the CLI stores the replacement and any session expiry. One command refreshes a stored session at a time; a command that waits too long fails with a session-file lock timeout, so retry it. A revoked session fails with `cli_session_revoked`, a refresh without a token fails with `cli_session_refresh_unanswered`, and a session directory that cannot be written fails with `cli_session_store_unwritable`. A refresh goes only to the cloud origin stored with the session: an `AGENT_DEVICE_CLOUD_BASE_URL` with another origin fails with `cloud_login_origin_mismatch` until you log in again or unset it. A session saved by an older CLI fails with `cli_session_issuer_unverified`; run `agent-device auth login`. Cloud auth requests follow at most three redirects on the same origin. A 307 or 308 resends the POST; a 301, 302 or 303 continues as a GET without the body. A redirect to another origin, a fourth redirect, or a target with no readable Location or with a username or password fails with `cloud_auth_redirect_refused` before anything is sent to it.
-- `AGENT_DEVICE_CLOUD_BASE_URL` selects the cloud API origin. Cloud requests use HTTPS or loopback HTTP for local testing.
+- `AGENT_DEVICE_CLOUD_BASE_URL` overrides the cloud API origin.
 - On a connection with a lease provider, such as the cloud or `connect proxy`, every command must name the session with `--session`, `AGENT_DEVICE_SESSION`, or config, or it fails with `REMOTE_SESSION_REQUIRED`. On other profiles, commands without a session use the most recent connection, which is safe only for one sequential workflow. To replace a connection, pass `--session <name> --force`.
 - After `connect`, normal commands reuse the connection. `connection status` shows `leaseId=pending` until the first command that needs a device.
 - End with `disconnect` to release the lease and stop the Metro companion. It does not stop your Metro server. If it cannot release the lease, it prints the lease id so you can release it manually.
@@ -2593,9 +2611,9 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 
 ### Cloud catalog
 
-Run `agent-device connect list` to browse offerings. If an installed provider uses the name `list`, use `agent-device connect cloud list` for the catalog. A listing does not open a device session.
+Use `connect cloud list` for the catalog when a provider owns the name `list`.
 
-Use the CLI login for the selected cloud API, or set `AGENT_DEVICE_CLOUD_API_KEY`. A key without `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN` is bound to the default cloud. For a custom API, set the key's origin and select the same origin with `AGENT_DEVICE_CLOUD_BASE_URL`. The catalog does not use daemon or proxy tokens. Catalog requests and their login refreshes refuse redirects.
+Authenticate with the selected cloud's CLI login or `AGENT_DEVICE_CLOUD_API_KEY`. A custom origin also requires the key's origin in `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN`.
 
 | Catalog option | What it does |
 | --- | --- |
@@ -2611,7 +2629,7 @@ The following option table describes `connect [provider]`.
 Configure remote or provider state.
 
 ```bash
-agent-device connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
+agent-device connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login] [--vendor <id>] [--max-minutes <minutes>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer]
 ```
 
 | Option | What it does |
@@ -2646,6 +2664,10 @@ agent-device connect [cloud] list [--live] [--json] | connect [provider] [--remo
 | `--aws-interaction-mode INTERACTIVE\|NO_VIDEO\|VIDEO_ONLY` | AWS Device Farm remote access interaction mode |
 | `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
 | `--no-login` | Connect: fail instead of starting implicit cloud login |
+| `--vendor <id>` | Connect cloud: choose a device vendor |
+| `--max-minutes <minutes>` | Connect cloud: request a maximum session duration in minutes |
+| `--needs <capability,...>` | Connect cloud: require each of these comma-separated capabilities |
+| `--show-viewer` | Connect cloud: open the live viewer in the browser |
 | `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
 | `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
 | `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |

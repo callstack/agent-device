@@ -8,7 +8,6 @@ import {
   loginWithDeviceAuth,
   readCliSession,
   resolveCliSessionPath,
-  resolveCloudAccessForConnect,
   resolveRemoteAuth,
   writeCliSession,
 } from '../auth-session.ts';
@@ -351,41 +350,4 @@ test('authorization keeps polling when a pending response carries an empty error
   } finally {
     vi.useRealTimers();
   }
-});
-
-test('legacy cloud connection identity keeps the validated URL path', async () => {
-  const result = await resolveCloudAccessForConnect({
-    stateDir: mkdtempForTestSync('agent-device-auth-path-'),
-    flags: { ...baseFlags, daemonAuthToken: 'fixture-token' },
-    env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example/console/' },
-  });
-  assert.equal(result.cloudBaseUrl, 'https://cloud.example/console');
-});
-
-test('legacy cloud connection identity keeps the saved issuer URL path', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-auth-saved-path-');
-  writeCliSession({
-    stateDir,
-    session: {
-      version: 2,
-      id: 'legacy-session',
-      cloudBaseUrl: 'https://cloud.example/console',
-      refreshCredential: 'fixture-refresh-token',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-  });
-  const requests: string[] = [];
-  const result = await resolveCloudAccessForConnect({
-    stateDir,
-    flags: baseFlags,
-    env: {},
-    io: {
-      fetch: async (url) => {
-        requests.push(String(url));
-        return jsonResponse({ accessToken: 'fixture-access-token' });
-      },
-    },
-  });
-  assert.equal(result.cloudBaseUrl, 'https://cloud.example/console');
-  assert.deepEqual(requests, [REFRESH]);
 });

@@ -56,6 +56,10 @@ export type CliFlags = CloudProviderProfileFields &
     force?: boolean;
     clean?: boolean;
     noLogin?: boolean;
+    vendor?: string;
+    maxMinutes?: number;
+    needs?: string;
+    showViewer?: boolean;
     live?: boolean;
     kind?: string;
     perfTemplate?: string;

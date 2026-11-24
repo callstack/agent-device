@@ -13,6 +13,10 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import * as daemonClient from '@agent-device/daemon-client';
 import * as hostProcess from '@agent-device/host-kit/environment';
+import {
+  prepareCloudConnection,
+  writeCloudConnection,
+} from '../../cli/connection/cloud-connection-record.ts';
 import { createCommandToolExecutor } from '../command-tools.ts';
 
 // An MCP tool call builds its own client, so each call has to ensure the daemon it is about to use
@@ -58,4 +62,27 @@ test('each MCP tool call ensures the daemon, then attaches to it', async (t) => 
   for (let i = 0; i < 2; i++) {
     assert.equal(factory.mock.calls[i]?.[0]?.host, capture.mock.results[i]?.value);
   }
+});
+
+test('MCP refuses to open a cloud-owned session on the local daemon', async () => {
+  const { stateDir } = stateDirAndPaths();
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
+  const session = 'cloud-qa';
+  const record = prepareCloudConnection(
+    session,
+    { platform: 'ios', vendor: undefined, accepts: ['agent-device-daemon'], maxMinutes: undefined },
+    'https://cloud.example',
+    null,
+  );
+  writeCloudConnection({ stateDir, session }, { ...record, phase: 'committed' });
+
+  const result = await createCommandToolExecutor({ structuredContent: 'always' }).execute('open', {
+    app: 'com.apple.Preferences',
+    session,
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent?.code, 'COMMAND_FAILED');
+  assert.deepEqual(result.structuredContent?.details, { reason: 'cloud_connection_owns_session' });
+  assert.equal(spawn.mock.calls.length, 0);
 });

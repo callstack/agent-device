@@ -59,7 +59,7 @@ const ENVIRONMENT_LINES = [
   },
   {
     label: 'AGENT_DEVICE_CLOUD_BASE_URL',
-    description: 'Bridge/control-plane API origin for cloud auth and /api-keys',
+    description: 'Cloud API origin for CLI sign-in and sessions',
   },
 ] as const;
 
@@ -482,7 +482,7 @@ Remote connection providers use the same lifecycle:
   connect -> install/open -> commands -> close -> disconnect
 
 Providers:
-  Cloud: agent-device connect or agent-device connect cloud discovers the agent-device cloud profile.
+  Cloud: agent-device connect cloud --platform ios|android starts a hosted session. Use --needs to require capabilities, --vendor to select a vendor, --device and --os to select a configuration, and --max-minutes to request a duration. Use connect cloud list for the catalog.
   Remote config: agent-device connect --remote-config ./remote-config.json uses a local profile.
   Direct proxy: agent-device connect proxy --daemon-base-url <proxy-agent-device-url> stores the shared proxy profile and client identity.
   BrowserStack (plugin, install separately): agent-device connect browserstack verifies credentials, the exact device, and a bs:// app reference, then stores a local provider profile. It does not create an App Automate session.
@@ -505,9 +505,12 @@ After direct-provider connect:
 Device cloud interfaces:
   CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm/testmu/revyl, then use normal open/snapshot/click/close/disconnect commands; artifacts are provider-dependent.
   JavaScript can skip persisted connect state by passing leaseProvider plus provider fields to createAgentDeviceClient or per-command options.
-  MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect; run CLI connect first in the same state dir before relying on MCP tools.
+  MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect. For direct-provider sessions, run CLI connect first in the same state dir. Use the CLI for sessions started by connect cloud.
 
-Use agent-device connect list to see cloud offerings. Use connect cloud list if a provider owns the name list. The catalog uses an issuer-bound login or AGENT_DEVICE_CLOUD_API_KEY. Set AGENT_DEVICE_CLOUD_API_KEY_ORIGIN to use a key with a custom catalog. Add --live for advisory availability and --json for structured output.
+Cloud session security and recovery:
+  Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing.
+  Set AGENT_DEVICE_DAEMON_AUTH_TOKEN or pass --daemon-auth-token to connect and disconnect.
+  After a connect timeout, retry with the same session and allocation options, or run disconnect to end the pending session.
 
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
@@ -545,7 +548,7 @@ Human takeover of a leased remote device:
 
 Cloud profile flow:
   export AGENT_DEVICE_SESSION=checkout-ios
-  agent-device connect
+  agent-device connect cloud --platform ios
   agent-device open com.example.app
   agent-device snapshot
   agent-device disconnect
@@ -625,7 +628,9 @@ Script flow, per-command config:
 
 Rules:
   connect and disconnect are top-level commands. Do not write agent-device remote connect or agent-device remote disconnect.
-  Use connect without --remote-config when the cloud control plane owns the connection profile.
+  Name your cloud session with --session or AGENT_DEVICE_SESSION on every command. Run disconnect to end it. Use the cloud API key from connect for disconnect as well.
+  Disconnect checks for pending rentals without starting a new one. Disconnect can interrupt commands still running on that session.
+  Set AGENT_DEVICE_CLOUD_BASE_URL to the cloud session API URL when using a custom endpoint.
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
   Use agent-device proxy for direct tunnel access to a Mac you control. Expose the proxy through cloudflared/ngrok, configure --public-origin with the public tunnel origin, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
   Use Limrun, BrowserStack, AWS Device Farm, TestMu AI, and Revyl through local provider profiles; they do not accept a remote agent-device daemon URL.

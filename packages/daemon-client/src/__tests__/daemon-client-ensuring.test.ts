@@ -318,6 +318,42 @@ test('concurrent first requests share one ensure through the CLI and MCP transpo
   }
 });
 
+test('a failed attach checks admission again before restarting the daemon', async () => {
+  const { stateDir } = stateDirAndPaths();
+  let admitted = false;
+  let closing = false;
+  const ensure = vi.spyOn(ensureModule, 'ensureDaemon').mockImplementation(async () => {
+    assert.equal(admitted, true);
+    return undefined as never;
+  });
+  const send = vi.fn(async () => {
+    assert.equal(admitted, false);
+    closing = true;
+    throw daemonNotRunningError(stateDir);
+  });
+  const ensuring = withEnsuredDaemon(send, {
+    admit: async (start) => {
+      if (closing) {
+        throw new AppError('COMMAND_FAILED', 'Connection closed.', { reason: 'connection_closed' });
+      }
+      admitted = true;
+      try {
+        return await start();
+      } finally {
+        admitted = false;
+      }
+    },
+  });
+
+  await assert.rejects(ensuring(request('open', { stateDir })), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'connection_closed');
+    return true;
+  });
+  assert.equal(ensure.mock.calls.length, 1);
+  assert.equal(send.mock.calls.length, 1);
+});
+
 test('a request canceled before it starts does not start a daemon', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { stateDir, paths } = stateDirAndPaths();

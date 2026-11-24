@@ -7,6 +7,7 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
+import { withConnectionLock } from './cloud-connection-record.ts';
 import { declaredConnectionCapabilities } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 
@@ -16,11 +17,12 @@ import { isHostAllocatedLease } from '../commands/connection-lease-transaction.t
  * the id as `endedLeaseId`: the daemon lists the output that it kept for an ended lease only to a
  * request that sends that lease's id.
  */
-export function forgetEndedConnectionLease(
+export async function forgetEndedConnectionLease(
   flags: CliFlags,
   response: DaemonResponse,
   host: HostEnvironment,
-): void {
+  cloudGeneration?: string,
+): Promise<void> {
   if (!flags.remoteConfig) return;
   const endedLeaseIds = readEndedLeases(response).map((lease) => lease.leaseId);
   if (endedLeaseIds.length === 0) return;
@@ -28,20 +30,24 @@ export function forgetEndedConnectionLease(
     cwd: host.cwd,
     env: host.env,
   }).baseDir;
-  const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
-  if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
-  if (isHostAllocatedLease(state)) return;
-  // `close` and `session` load no plugin store, so this reads what answers without one: the
-  // provider's loaded declaration, then the plugin catalog.
-  const capabilities = declaredConnectionCapabilities(state.leaseProvider, host.env);
-  if (!capabilities?.forgetsEndedConnectionLease) return;
-  writeRemoteConnectionState({
-    stateDir,
-    state: {
-      ...state,
-      leaseId: undefined,
-      ...(capabilities.leaseKind === 'proxy' ? { endedLeaseId: state.leaseId } : {}),
-      updatedAt: new Date().toISOString(),
-    },
+  const session = flags.session ?? 'default';
+  await withConnectionLock(stateDir, session, async () => {
+    const state = readRemoteConnectionState({ stateDir, session });
+    if (state?.cloudSession?.generation !== cloudGeneration) return;
+    if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
+    if (isHostAllocatedLease(state)) return;
+    // `close` and `session` load no plugin store, so this reads what answers without one: the
+    // provider's loaded declaration, then the plugin catalog.
+    const capabilities = declaredConnectionCapabilities(state.leaseProvider, host.env);
+    if (!capabilities?.forgetsEndedConnectionLease) return;
+    writeRemoteConnectionState({
+      stateDir,
+      state: {
+        ...state,
+        leaseId: undefined,
+        ...(capabilities.leaseKind === 'proxy' ? { endedLeaseId: state.leaseId } : {}),
+        updatedAt: new Date().toISOString(),
+      },
+    });
   });
 }

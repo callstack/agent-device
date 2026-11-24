@@ -14,9 +14,11 @@ Hosted devices can continue to incur charges after their daemon stops.
 
 A remote device lease gives one client logical ownership of a selected device for a connection provider.
 The daemon is authoritative for admission, ownership, and session lifetime.
-`connect` establishes client identity and a connection profile. Allocation is lazy, when the device, backend, and provider are known.
+`connect` establishes client identity and a connection profile for direct providers. Allocation is lazy, when the device, backend, and provider are known.
 `open` is the natural acquisition point.
 Runner and process locks remain separate backend guards.
+
+For `connect cloud`, the hosted session API owns the device rental. The CLI asks it to allocate during connect so it can enforce the session deadline and return a scoped attachment. The CLI records the allocation identity before attaching. It can recover an interrupted allocation or end the rental without a live daemon. The daemon retains authority over the requests it receives.
 
 The proxy token authenticates the host, not the client: every client of one proxy can hold the same token.
 The lease id is the credential that proves ownership of a leased session.

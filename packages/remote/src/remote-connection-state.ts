@@ -35,11 +35,21 @@ import {
   remoteSessionRequiredError,
 } from '@agent-device/contracts/lease-scope';
 
+export type CloudSessionBinding = {
+  id: string;
+  baseUrl: string;
+  vendor: string;
+  transport: 'agent-device-daemon';
+  deadlineAt: string;
+  generation: string;
+};
+
 export type RemoteConnectionState = {
   version: 1;
   session: string;
   remoteConfigPath: string;
   remoteConfigHash: string;
+  cloudSession?: CloudSessionBinding;
   daemon?: {
     baseUrl?: string;
     transport?: CliFlags['daemonTransport'];
@@ -227,6 +237,7 @@ type RemoteConnectionDefaults = {
   connection?: RemoteConnectionRequestMetadata;
   /** Set only by {@link claimRemoteConnectionDefaults}: the record it claimed, or `null` for none. */
   claimed?: RemoteConnectionState | null;
+  cloudSession?: CloudSessionBinding;
 };
 
 const REMOTE_CONNECTION_STATE_REASONS = {
@@ -568,6 +579,7 @@ export function buildRemoteConnectionDefaults(
   const leaseScope = leaseScopeFromOptions(state);
   return {
     runtime: state.runtime,
+    cloudSession: state.cloudSession,
     connection: leaseScopeToConnectionMetadata(leaseScope),
     flags: {
       ...profile,
@@ -640,15 +652,17 @@ export function sessionLeaseScope(
  * last, which may be another agent's.
  */
 export function requireLeasedConnectionSession(
-  connection: Pick<RemoteConnectionState, 'leaseProvider'>,
+  connection: Pick<RemoteConnectionState, 'leaseProvider' | 'cloudSession'>,
   session: string | undefined,
 ): void {
   if (session !== undefined || !isLeasedConnection(connection)) return;
   throw remoteSessionRequiredError(connection.leaseProvider);
 }
 
-function isLeasedConnection(connection: Pick<RemoteConnectionState, 'leaseProvider'>): boolean {
-  return connection.leaseProvider !== undefined;
+function isLeasedConnection(
+  connection: Pick<RemoteConnectionState, 'leaseProvider' | 'cloudSession'>,
+): boolean {
+  return connection.leaseProvider !== undefined || connection.cloudSession !== undefined;
 }
 
 export function buildRemoteConnectionRequestMetadata(
@@ -939,7 +953,19 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
       'clientId',
     ]) &&
     isOptionalRemoteConnectionDaemonState(record.daemon) &&
+    isOptionalCloudSessionBinding(record.cloudSession) &&
     isOptionalRecord(record.leaseDeviceSpec)
+  );
+}
+
+function isOptionalCloudSessionBinding(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    hasStringFields(record, ['id', 'baseUrl', 'deadlineAt', 'generation']) &&
+    typeof record.vendor === 'string' &&
+    record.transport === 'agent-device-daemon'
   );
 }
 
