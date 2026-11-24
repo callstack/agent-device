@@ -40,7 +40,7 @@ const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';
 
 const replayPluginMcpDetail =
-  'Install the native replay plugin on the daemon host for .ad replay and test suites. Install the Maestro plugin on the client for YAML source collection or export, and on the daemon host for Maestro execution.';
+  'Native .ad replay and test suites (plugin, install separately). Install on the daemon host. Maestro YAML (plugin, install separately). Install on the client for source collection or export, and on the daemon host for Maestro execution.';
 
 const REPLAY_SHELL_ENV_PREFIX = 'AD_VAR_';
 

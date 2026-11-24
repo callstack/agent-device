@@ -671,8 +671,7 @@ Rules:
     summary: 'macOS desktop, frontmost-app, and menu bar surfaces',
     body: (coreVersion: string) => `agent-device help macos
 
-Use macOS only when the task targets desktop apps, desktop surfaces, or menu bar extras. Install the macOS plugin before use.
-  ${pluginInstallCommand(MACOS_PLATFORM_PLUGIN_DECLARATION, coreVersion)}
+Use macOS only when the task targets desktop apps, desktop surfaces, or menu bar extras. Install the macOS plugin with ${pluginInstallCommand(MACOS_PLATFORM_PLUGIN_DECLARATION, coreVersion)}.
 
 Open and inspect:
   agent-device open TextEdit --platform macos
