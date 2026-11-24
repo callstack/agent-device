@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync, withoutCommandExecutorOverride } from './exec.ts';
 import type {
-  HostEnvironmentSource,
   HostProcessIdentityFacts,
   HostProcessIdentityObservation,
   HostProcessInfo,
@@ -10,7 +9,6 @@ import type {
 } from './host-process-types.ts';
 import { sleep } from './retry.ts';
 import type { ReasonTable } from '@agent-device/kernel/errors';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type {
   HostEnvironmentSource,
@@ -52,10 +50,7 @@ const HOST_PS_COMMANDS = ['/bin/ps', '/run/current-system/sw/bin/ps'] as const;
 const WINDOWS_PS_TIMEOUT_MS = 2_000;
 const WINDOWS_PROCESS_TOOL = 'powershell.exe';
 
-/** Copies `source` (an entry point passes `process`) so later changes never reach the capture. */
-export function captureHostEnvironment(source: HostEnvironmentSource): HostEnvironment {
-  return { env: { ...source.env }, cwd: source.cwd() };
-}
+export { captureHostEnvironment } from '../environment.ts';
 
 export function writeHostStderr(value: string): void {
   process.stderr.write(value);

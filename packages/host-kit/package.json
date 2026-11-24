@@ -44,6 +44,10 @@
       "types": "./src/diagnostics.ts",
       "default": "./src/diagnostics.ts"
     },
+    "./environment": {
+      "types": "./src/environment.ts",
+      "default": "./src/environment.ts"
+    },
     "./doctor-lines": {
       "types": "./src/doctor-lines.ts",
       "default": "./src/doctor-lines.ts"

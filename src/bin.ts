@@ -3,7 +3,7 @@ import { runEntry } from './cli/entry.ts';
 declare const __AGENT_DEVICE_VERSION__: string;
 
 async function captureCliHost() {
-  const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
+  const { captureHostEnvironment } = await import('@agent-device/host-kit/environment');
   return captureHostEnvironment(process);
 }
 
