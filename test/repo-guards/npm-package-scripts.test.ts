@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { test } from 'vitest';
 import { getCheckSpec } from '../../scripts/check-affected/checks.ts';
 
@@ -146,11 +146,11 @@ test('MCP registry publishing verifies an immutable publisher before OIDC login'
 });
 
 test('npm package includes only the root README and retains bridge sources', () => {
-  const output = execFileSync('npm', ['pack', '--dry-run', '--ignore-scripts', '--json'], {
+  const { stdout } = runCmdSync('npm', ['pack', '--dry-run', '--ignore-scripts', '--json'], {
     cwd: repoRoot,
-    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
   });
-  const [packed] = JSON.parse(output) as [{ files: { path: string }[] }];
+  const [packed] = JSON.parse(stdout) as [{ files: { path: string }[] }];
   const paths = packed.files.map((file) => file.path);
   assert.deepEqual(
     paths.filter((file) => /(^|\/)readme\.md$/i.test(file)),
