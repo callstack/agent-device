@@ -80,6 +80,7 @@ import type {
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
   SettingsUpdateOptions,
+  ModeFreePermissionUpdateOptions,
   ShakeCommandOptions,
   SwipeGestureOptions,
   SwipeOptions,
@@ -253,6 +254,7 @@ export type AgentDeviceClient = {
     trace: (options: TraceOptions) => Promise<CommandResult<'trace'>>;
   };
   settings: {
-    update: (options: SettingsUpdateOptions) => Promise<CommandRequestResult>;
+    update(options: ModeFreePermissionUpdateOptions): Promise<CommandRequestResult>;
+    update(options: SettingsUpdateOptions): Promise<CommandRequestResult>;
   };
 };

@@ -96,8 +96,13 @@ export type SettingsUpdateOptions =
       app?: string;
     })
   | (PermissionUpdateOptions & { permission: ModedPermissionTarget; mode?: PermissionMode })
-  /** Every other target refuses a mode at runtime, so the type refuses it too. */
   | (PermissionUpdateOptions & {
       permission: Exclude<PermissionTarget, ModedPermissionTarget>;
       mode?: never;
     });
+
+/** Call input for a permission that has not been narrowed to one target. */
+export type ModeFreePermissionUpdateOptions = PermissionUpdateOptions & {
+  permission: PermissionTarget;
+  mode?: never;
+};

@@ -50,6 +50,14 @@ describe('public client permission vocabulary', () => {
     expectTypeOf<Grant<'camera'> & { mode: 'limited' }>().not.toExtend<SettingsUpdateOptions>();
     expectTypeOf<Grant<'accessibility'> & { mode: 'full' }>().not.toExtend<SettingsUpdateOptions>();
   });
+
+  test('narrows permission options to the photos arm', () => {
+    expectTypeOf((options: Permission) => {
+      if (options.permission === 'photos') {
+        expectTypeOf(options).toEqualTypeOf<Extract<Permission, { permission: 'photos' }>>();
+      }
+    }).toBeFunction();
+  });
 });
 
 describe('public client settings cover the catalog', () => {

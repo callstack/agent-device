@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { SETTING_NAMES, TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings-catalog';
+import type { AgentDeviceClient } from '../client-port.ts';
 import { settingsCliReader, settingsCommandFacet, settingsDaemonWriter } from './settings.ts';
 
 function flags(): CliFlags {
@@ -35,6 +36,16 @@ describe('settings CLI', () => {
       | undefined;
     expect(setting?.enum).toEqual(SETTING_NAMES);
   });
+});
+
+test('the public settings method accepts a target union only without a mode', () => {
+  type Update = AgentDeviceClient['settings']['update'];
+  type Grant = { setting: 'permission'; permission: 'camera' | 'photos'; state: 'grant' };
+  expectTypeOf((update: Update, grant: Grant) => {
+    void update(grant);
+    // @ts-expect-error A union can name a target that does not accept a mode.
+    void update({ ...grant, mode: 'limited' });
+  }).toBeFunction();
 });
 
 describe('settings CLI permission', () => {
