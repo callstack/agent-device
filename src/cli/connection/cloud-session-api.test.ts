@@ -400,3 +400,21 @@ test.each([
     details: { reason: 'cloud_session_invalid' },
   });
 });
+
+test('omits a scoped viewer link with an encoded attachment credential', async () => {
+  const token = response.attach.daemonAuthToken;
+  const encodedToken = Array.from(token, (char) => '%' + char.charCodeAt(0).toString(16)).join('');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        ...response,
+        viewerUrl: `https://viewer.example/session?mode=live#token=${encodedToken}`,
+      }),
+    ),
+  );
+  await expect(createCloudSession(access, request, attempt)).resolves.toMatchObject({
+    binding: { id: response.id, viewerAvailable: false },
+    viewerUrl: undefined,
+  });
+});

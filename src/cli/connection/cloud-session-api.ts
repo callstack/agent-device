@@ -473,7 +473,11 @@ function parseCloudSession(
   ) {
     throw invalidSession();
   }
-  assertSafeCloudResponse(attachment, access.accessToken, { vendor, fallbackFrom, viewerUrl });
+  const safeViewerUrl = readSafeCloudViewer(attachment, access.accessToken, {
+    vendor,
+    fallbackFrom,
+    viewerUrl,
+  });
   return {
     binding: {
       id,
@@ -481,10 +485,10 @@ function parseCloudSession(
       vendor,
       transport: attachment.kind,
       deadlineAt,
-      viewerAvailable: viewerUrl !== undefined,
+      viewerAvailable: safeViewerUrl !== undefined,
     },
     attachment,
-    viewerUrl,
+    viewerUrl: safeViewerUrl,
     ...(isCloudTextArray(fallbackFrom) &&
     fallbackFrom.length &&
     fallbackFrom.every(isPublicCatalogId)
@@ -493,11 +497,11 @@ function parseCloudSession(
   };
 }
 
-function assertSafeCloudResponse(
+function readSafeCloudViewer(
   attachment: CloudAttachment,
   brokerToken: string,
   display: { vendor: string; fallbackFrom: unknown; viewerUrl?: string },
-): void {
+): string | undefined {
   const credentials = [brokerToken, attachment.daemonAuthToken];
   if (
     containsCloudCredential(attachment, [brokerToken]) ||
@@ -506,9 +510,13 @@ function assertSafeCloudResponse(
       { vendor: display.vendor, fallbackFrom: display.fallbackFrom },
       credentials,
     ) ||
-    (display.viewerUrl && cloudUrlContainsCredential(display.viewerUrl, credentials))
+    (display.viewerUrl && cloudUrlContainsCredential(display.viewerUrl, [brokerToken]))
   )
     throw invalidSession();
+  return display.viewerUrl &&
+    !cloudUrlContainsCredential(display.viewerUrl, [attachment.daemonAuthToken])
+    ? display.viewerUrl
+    : undefined;
 }
 
 function readScopedToken(value: unknown): string | undefined {
