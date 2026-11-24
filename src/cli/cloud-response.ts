@@ -68,3 +68,17 @@ export function containsCloudCredential(value: unknown, credentials: readonly st
     credentials.some((credential) => json.includes(JSON.stringify(credential).slice(1, -1)))
   );
 }
+
+export function cloudUrlContainsCredential(value: string, credentials: readonly string[]): boolean {
+  let url = value;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (containsCloudCredential(url, credentials)) return true;
+    if (!/%[0-9a-f]{2}/i.test(url)) return false;
+    try {
+      url = decodeURIComponent(url);
+    } catch {
+      return true;
+    }
+  }
+  return true;
+}

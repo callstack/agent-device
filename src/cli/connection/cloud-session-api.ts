@@ -6,6 +6,7 @@ import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
   asCloudRecord,
   containsCloudCredential,
+  cloudUrlContainsCredential,
   fetchCloudApi,
   isCloudText,
   isCloudTextArray,
@@ -472,11 +473,7 @@ function parseCloudSession(
   ) {
     throw invalidSession();
   }
-  const scopedToken = readScopedToken(attachment);
-  if (scopedToken === access.accessToken) throw invalidSession();
-  const credentials = scopedToken ? [access.accessToken, scopedToken] : [access.accessToken];
-  if (containsCloudCredential({ vendor, fallbackFrom, viewerUrl }, credentials))
-    throw invalidSession();
+  assertSafeCloudResponse(attachment, access.accessToken, { vendor, fallbackFrom, viewerUrl });
   return {
     binding: {
       id,
@@ -494,6 +491,24 @@ function parseCloudSession(
       ? { fallbackFrom }
       : {}),
   };
+}
+
+function assertSafeCloudResponse(
+  attachment: CloudAttachment,
+  brokerToken: string,
+  display: { vendor: string; fallbackFrom: unknown; viewerUrl?: string },
+): void {
+  const credentials = [brokerToken, attachment.daemonAuthToken];
+  if (
+    containsCloudCredential(attachment, [brokerToken]) ||
+    cloudUrlContainsCredential(attachment.daemonBaseUrl, [brokerToken]) ||
+    containsCloudCredential(
+      { vendor: display.vendor, fallbackFrom: display.fallbackFrom },
+      credentials,
+    ) ||
+    (display.viewerUrl && cloudUrlContainsCredential(display.viewerUrl, credentials))
+  )
+    throw invalidSession();
 }
 
 function readScopedToken(value: unknown): string | undefined {

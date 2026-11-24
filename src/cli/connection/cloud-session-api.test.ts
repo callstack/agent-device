@@ -377,3 +377,26 @@ test('keeps self-hosted daemon credentials off the default cloud origin', async 
     }),
   ).resolves.toMatchObject({ accessToken: key });
 });
+
+const encodedBroker = Array.from(
+  access.accessToken,
+  (char) => '%' + char.charCodeAt(0).toString(16),
+).join('');
+
+test.each([
+  { daemonBaseUrl: `https://instance.example/${encodedBroker}` },
+  { daemonAuthToken: `echo-${access.accessToken}-suffix` },
+])('refuses a broker credential echoed in a daemon attachment', async (overrides) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        ...response,
+        attach: { ...response.attach, ...overrides },
+      }),
+    ),
+  );
+  await expect(createCloudSession(access, request, attempt)).rejects.toMatchObject({
+    details: { reason: 'cloud_session_invalid' },
+  });
+});
