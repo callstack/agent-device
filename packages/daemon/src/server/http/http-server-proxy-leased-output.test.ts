@@ -213,7 +213,9 @@ test('the owner downloads a leased screenshot after its session and lease ended'
   endLeasedSession(world);
 
   expect(await listedIds(await world.get('/artifacts'))).toEqual([]);
+  expect(await listedIds(await world.get('/artifacts', OTHER_LEASE_ID))).toEqual([]);
   await expectLeasedOutputRefusal(await world.get(`/artifacts/${artifactId}`));
+  await expectLeasedOutputRefusal(await world.get(`/artifacts/${artifactId}`, OTHER_LEASE_ID));
   expect(await rpcListedIds(await world.send('artifacts', SESSION, {}))).toEqual([]);
 
   expect(await listedIds(await world.get('/artifacts', world.leaseId.toUpperCase()))).toEqual([

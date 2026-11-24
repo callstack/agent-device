@@ -38,6 +38,7 @@ export async function resolveGenericRuntimeExecution(
   params: Readonly<{
     req: DaemonRequest;
     session: SessionState;
+    lifetimeId: string;
     context: DaemonCommandContext;
     createCommandSurface: CreateDaemonCommandSurface;
     /** The runtime host's working directory: the fallback base for a client-typed output path. */

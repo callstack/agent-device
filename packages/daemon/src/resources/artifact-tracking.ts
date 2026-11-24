@@ -1,6 +1,7 @@
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
 import {
@@ -8,7 +9,7 @@ import {
   createRequestCanceledError,
   type ReasonTable,
 } from '@agent-device/kernel/errors';
-import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { DaemonArtifact, DaemonArtifactType } from '@agent-device/kernel/contracts';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeLeaseId } from '@agent-device/contracts/lease-scope';
 import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/observability';
@@ -176,6 +177,7 @@ type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
   leaseVerifier?: string;
+  reservation?: Readonly<{ directory: string; lifetimeId: string }>;
   /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
   output: string | undefined;
   artifactType: DaemonArtifactType | undefined;
@@ -188,11 +190,13 @@ type ArtifactEntry = {
   directoryArchiveBuild?: DirectoryArchiveBuild;
   activeDownloads: Set<ArtifactDownload>;
   cleanupRequested: boolean;
+  awaitingDelivery: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
 
 type ArtifactTrackingState = {
   artifacts: Map<string, ArtifactEntry>;
+  reservations: Set<() => void>;
   uploads: Map<string, UploadEntry>;
   retainedPerformanceSources: Map<
     string,
@@ -206,10 +210,12 @@ const artifactTracking = (): ArtifactTrackingState =>
     ARTIFACT_TRACKING_SLOT,
     (): ArtifactTrackingState => ({
       artifacts: new Map(),
+      reservations: new Set(),
       uploads: new Map(),
       retainedPerformanceSources: new Map(),
     }),
     (state) => {
+      for (const discard of state.reservations) discard();
       for (const [id, entry] of state.artifacts) {
         requestArtifactCleanup(state.artifacts, id, entry);
         for (const download of entry.activeDownloads) cancelArtifactDownload(id, entry, download);
@@ -222,6 +228,19 @@ const artifactTracking = (): ArtifactTrackingState =>
   );
 const pendingArtifacts = () => artifactTracking().artifacts;
 const pendingUploads = () => artifactTracking().uploads;
+const committedFileOutputDeliveries = new WeakMap<DaemonArtifact, (delivered: boolean) => void>();
+
+/** Publish or discard the producer's entries when request cleanup settles. */
+export function settleCommittedFileOutputs(
+  artifacts: readonly DaemonArtifact[] | undefined,
+  delivered: boolean,
+): void {
+  for (const artifact of artifacts ?? []) {
+    const settle = committedFileOutputDeliveries.get(artifact);
+    committedFileOutputDeliveries.delete(artifact);
+    settle?.(delivered);
+  }
+}
 
 /** What a finished request registers for each artifact it hands back to the client. */
 export type DownloadableArtifactRegistration = {
@@ -238,6 +257,71 @@ export type DownloadableArtifactRegistration = {
 };
 
 export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
+
+type FileOutputProducer = Readonly<{
+  lifetimeId: string;
+  tenantId: string | undefined;
+  leaseVerifier: string | null;
+}>;
+
+type FileOutputDelivery = Pick<DaemonArtifact, 'field' | 'fileName' | 'localPath'> & {
+  displayRotation?: DeviceRotation;
+};
+
+/** Reserves private storage and pins the admitted producer before invoking the writer. */
+export function reserveFileOutput(
+  artifactType: DaemonArtifactType,
+  filename: string,
+  producer: FileOutputProducer,
+) {
+  const { artifacts, reservations } = artifactTracking();
+  const id = crypto.randomUUID();
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-output-'));
+  const artifactPath = path.join(directory, path.basename(filename));
+  const { lifetimeId, tenantId, leaseVerifier } = producer;
+  const discard = () => {
+    if (reservations.delete(discard)) removeBestEffort(directory);
+  };
+  reservations.add(discard);
+  return {
+    path: artifactPath,
+    discard,
+    commit({ displayRotation, ...delivery }: FileOutputDelivery): DaemonArtifact & {
+      artifactId: string;
+    } {
+      const stat = reservations.has(discard)
+        ? fs.lstatSync(artifactPath, { throwIfNoEntry: false })
+        : undefined;
+      if (!stat?.isFile()) {
+        throw new AppError('COMMAND_FAILED', 'Reserved output did not produce a regular file.');
+      }
+      addArtifactEntry(
+        artifacts,
+        id,
+        {
+          artifactPath,
+          artifactType,
+          tenantId,
+          leaseVerifier: leaseVerifier ?? undefined,
+          fileName: delivery.fileName,
+          displayRotation,
+        },
+        outputIdentity(stat),
+        { remainingEntries: 1, deleteAfterDownload: true },
+        { directory, lifetimeId },
+      );
+      reservations.delete(discard);
+      const artifact = { ...delivery, artifactType, artifactId: id };
+      committedFileOutputDeliveries.set(artifact, (delivered) => {
+        const entry = artifacts.get(id);
+        if (!entry) return;
+        if (delivered) entry.awaitingDelivery = false;
+        else requestArtifactCleanup(artifacts, id, entry);
+      });
+      return artifact;
+    },
+  };
+}
 
 /** What a request presents to list or download artifacts. */
 export type DownloadableArtifactReader = { tenantId?: string; leaseId?: string };
@@ -267,22 +351,36 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
   const existingId = findTrackedArtifactId(params, output);
   if (existingId) return existingId;
   const artifactId = crypto.randomUUID();
-  const createdAt = Date.now();
-  const timer = setTimeout(() => {
-    cleanupDownloadableArtifact(artifactId);
-  }, ARTIFACT_CLEANUP_TIMEOUT_MS);
-  timer.unref();
   const sourceCleanup = findArtifactSourceCleanup(params.artifactPath, output) ?? {
     remainingEntries: 0,
     deleteAfterDownload: true,
   };
   sourceCleanup.remainingEntries += 1;
   sourceCleanup.deleteAfterDownload &&= params.deleteAfterDownload !== false;
-  pendingArtifacts().set(artifactId, {
+  addArtifactEntry(pendingArtifacts(), artifactId, params, output, sourceCleanup);
+  return artifactId;
+}
+
+function addArtifactEntry(
+  artifacts: Map<string, ArtifactEntry>,
+  artifactId: string,
+  params: DownloadableArtifactRegistration,
+  output: string | undefined,
+  sourceCleanup: ArtifactSourceCleanup,
+  reservation?: ArtifactEntry['reservation'],
+): void {
+  const createdAt = Date.now();
+  const timer = setTimeout(() => {
+    const entry = artifacts.get(artifactId);
+    if (entry) requestArtifactCleanup(artifacts, artifactId, entry);
+  }, ARTIFACT_CLEANUP_TIMEOUT_MS);
+  timer.unref();
+  artifacts.set(artifactId, {
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
     ...(params.leaseVerifier !== undefined ? { leaseVerifier: params.leaseVerifier } : {}),
     output,
+    reservation,
     artifactType: params.artifactType,
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
@@ -290,10 +388,10 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     sourceCleanup,
     activeDownloads: new Set(),
     cleanupRequested: false,
+    awaitingDelivery: reservation !== undefined,
     createdAt,
     timer,
   });
-  return artifactId;
 }
 
 function findTrackedArtifactId(
@@ -303,6 +401,7 @@ function findTrackedArtifactId(
   for (const [artifactId, entry] of pendingArtifacts()) {
     if (
       !entry.cleanupRequested &&
+      !entry.reservation &&
       entry.artifactPath === owner.artifactPath &&
       entry.output === output &&
       entry.tenantId === owner.tenantId &&
@@ -318,7 +417,9 @@ function findArtifactSourceCleanup(
   output: string | undefined,
 ): ArtifactSourceCleanup | undefined {
   for (const entry of pendingArtifacts().values()) {
-    if (entry.artifactPath === artifactPath && entry.output === output) return entry.sourceCleanup;
+    if (!entry.reservation && entry.artifactPath === artifactPath && entry.output === output) {
+      return entry.sourceCleanup;
+    }
   }
   return undefined;
 }
@@ -329,9 +430,9 @@ function outputIdentity(stat: fs.Stats): string {
   return stat.isDirectory() ? inode : `${inode}:${stat.size}:${stat.mtimeMs}`;
 }
 
-function readOutputIdentity(artifactPath: string): string | undefined {
+function readOutputIdentity(artifactPath: string, noFollow = false): string | undefined {
   try {
-    return outputIdentity(fs.statSync(artifactPath));
+    return outputIdentity(noFollow ? fs.lstatSync(artifactPath) : fs.statSync(artifactPath));
   } catch {
     return undefined;
   }
@@ -433,7 +534,12 @@ export async function openDownloadableArtifact(
 }
 
 function openRegisteredFile(artifactId: string, entry: ArtifactEntry): fs.ReadStream {
-  const fd = fs.openSync(entry.artifactPath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+  const fd = fs.openSync(
+    entry.artifactPath,
+    fs.constants.O_RDONLY |
+      fs.constants.O_NONBLOCK |
+      (entry.reservation ? fs.constants.O_NOFOLLOW : 0),
+  );
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile() || outputIdentity(stat) !== entry.output) {
@@ -490,7 +596,7 @@ export async function listDownloadableArtifacts(
 /** The output that `entry` registered. Cleans the entry up when the output is gone or replaced. */
 function statRegisteredOutput(artifactId: string, entry: ArtifactEntry): fs.Stats | undefined {
   try {
-    const stat = fs.statSync(entry.artifactPath);
+    const stat = statArtifactPath(entry);
     if (outputIdentity(stat) === entry.output) return stat;
   } catch {
     // A missing output is cleaned up like a replaced one.
@@ -517,8 +623,12 @@ function readDownloadableArtifactEntry(
   artifactId: string,
   reader: DownloadableArtifactReader,
 ): { entry: ArtifactEntry; stat: fs.Stats } {
+  const artifacts = pendingArtifacts();
+  if (artifacts.get(artifactId)?.awaitingDelivery) {
+    throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+  }
   const entry = requireTenantOwnedEntry(
-    pendingArtifacts(),
+    artifacts,
     artifactId,
     reader.tenantId,
     DOWNLOADABLE_ARTIFACT_RESOURCE,
@@ -531,7 +641,7 @@ function readDownloadableArtifactEntry(
   }
   let stat: fs.Stats;
   try {
-    stat = fs.statSync(entry.artifactPath);
+    stat = statArtifactPath(entry);
   } catch {
     cleanupDownloadableArtifact(artifactId);
     throw new AppError('COMMAND_FAILED', `Artifact file is missing: ${entry.artifactPath}`);
@@ -541,6 +651,10 @@ function readDownloadableArtifactEntry(
     throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   }
   return { entry, stat };
+}
+
+function statArtifactPath(entry: ArtifactEntry): fs.Stats {
+  return entry.reservation ? fs.lstatSync(entry.artifactPath) : fs.statSync(entry.artifactPath);
 }
 
 async function prepareArtifactPayload(
@@ -671,6 +785,7 @@ function archiveFilename(fileName: string): string {
 function canReadArtifact(entry: ArtifactEntry, reader: DownloadableArtifactReader): boolean {
   return (
     !entry.cleanupRequested &&
+    !entry.awaitingDelivery &&
     (!entry.tenantId || entry.tenantId === reader.tenantId) &&
     requestHoldsOutputLease(entry.leaseVerifier, reader.leaseId)
   );
@@ -719,9 +834,16 @@ function requestArtifactCleanup(
     entry.sourceCleanup.remainingEntries === 0 &&
     entry.sourceCleanup.deleteAfterDownload &&
     entry.output !== undefined &&
-    readOutputIdentity(entry.artifactPath) === entry.output
+    readOutputIdentity(entry.artifactPath, entry.reservation !== undefined) === entry.output
   ) {
     removeBestEffort(entry.artifactPath);
+  }
+  if (entry.reservation) {
+    try {
+      fs.rmdirSync(entry.reservation.directory);
+    } catch {
+      // Leave a replaced output alone.
+    }
   }
 }
 

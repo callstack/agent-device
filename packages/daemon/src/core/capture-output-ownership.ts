@@ -65,3 +65,26 @@ export function daemonDeliveredArtifact(
   const delivered: DeliveredArtifact | undefined = artifact;
   return delivered?.[DAEMON_DELIVERED_ARTIFACT];
 }
+
+const screenshotDeliveryPaths = new WeakMap<DaemonArtifact, string>();
+
+/** Keep delivery metadata on the artifact that response views carry to the HTTP reply. */
+export function rememberScreenshotDeliveryPath(
+  artifact: DaemonArtifact,
+  deliveryPath: string,
+): void {
+  screenshotDeliveryPaths.set(artifact, deliveryPath);
+}
+
+export function screenshotWireData(data: DaemonResponseData): DaemonResponseData {
+  for (const artifact of Array.isArray(data.artifacts) ? data.artifacts : []) {
+    const deliveryPath = screenshotDeliveryPaths.get(artifact);
+    if (deliveryPath === undefined) continue;
+    return {
+      ...data,
+      path: deliveryPath,
+      ...(data.message === undefined ? {} : { message: `Saved screenshot: ${deliveryPath}` }),
+    };
+  }
+  return data;
+}
