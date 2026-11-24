@@ -56,6 +56,7 @@ import { probeHarmonyForegroundBundle, readHarmonyAppState } from './app-state.t
 import { verifyHarmonyOpenForeground } from './app-lifecycle.ts';
 import {
   bindLocalDirectApplicationLifecycle,
+  type DirectApplicationLifecycleParams,
   type LocalApplicationLifecycleInteractorResolver,
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import {
@@ -140,10 +141,7 @@ function harmonyOpenVerifiedLifecycle(params: {
   host: { resolve: LocalApplicationLifecycleInteractorResolver };
   device: DeviceInfo;
   signal: AbortSignal;
-  readForegroundBundle?: (
-    signal: AbortSignal,
-    requestDeadlineAtMs: number | undefined,
-  ) => Promise<string | undefined>;
+  readForegroundBundle?: DirectApplicationLifecycleParams['readForegroundBundle'];
 }): ApplicationLifecycleRuntimeOperations {
   const direct = bindLocalDirectApplicationLifecycle({
     owner: 'HarmonyOS',

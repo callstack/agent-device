@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { remainingReadBudgetMs } from './read-budget.ts';
 
 export async function readHarmonyAppState(
   device: DeviceInfo,
@@ -62,20 +63,20 @@ const HARMONY_OPEN_PROBE_READ_TIMEOUT_MS = 15_000;
 /**
  * Reads which bundle holds the foreground at open time, or `undefined` when no read answers. The
  * open-time probe is advisory: an unreadable read claims nothing and never fails the open it
- * informs. The read never outlives the request's remaining deadline (`requestDeadlineAtMs`): with
- * less room left than the 15s default, the read gets the remainder, a spent deadline skips the
- * device entirely, and the probe still claims nothing (#4860 follow-up — the same clamp the
- * post-open foreground poll runs under).
+ * informs. The read never outlives the request's remaining budget (`requestDeadlineAtMs`) — the
+ * clamp bounds the read, not the dispatch: with less room left than the 15s default, the read gets
+ * the remainder, a spent budget skips the device entirely, and the probe still claims nothing
+ * (#4860 follow-up — the same clamp the post-open foreground poll runs under).
  */
 export async function probeHarmonyForegroundBundle(
   device: DeviceInfo,
   signal: AbortSignal,
   options: Readonly<{ deadlineAtMs?: number }> = {},
 ): Promise<string | undefined> {
-  const readTimeoutMs =
-    options.deadlineAtMs === undefined
-      ? HARMONY_OPEN_PROBE_READ_TIMEOUT_MS
-      : Math.min(HARMONY_OPEN_PROBE_READ_TIMEOUT_MS, options.deadlineAtMs - Date.now());
+  const readTimeoutMs = remainingReadBudgetMs(
+    HARMONY_OPEN_PROBE_READ_TIMEOUT_MS,
+    options.deadlineAtMs,
+  );
   // A spent deadline leaves no room for one read: the probe answers without
   // touching the device instead of arming no timer at all.
   if (readTimeoutMs <= 0) return undefined;
