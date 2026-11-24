@@ -41,7 +41,8 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   completionMetadata: async (result, metadata, progress) => ({
     ...encodeScreenRecordingCompletionMetadata(result),
     ...(typeof metadata?.remoteCapturePath === 'string' &&
-    typeof metadata.remoteCaptureReservation === 'string'
+    typeof metadata.remoteCaptureReservation === 'string' &&
+    (progress !== undefined || metadata.remoteCaptureExport !== undefined)
       ? {
           remoteCaptureExport: (await import('../recording/export-proof.ts')).verifyRecordingExport(
             metadata.remoteCapturePath,

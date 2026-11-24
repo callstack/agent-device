@@ -282,9 +282,15 @@ test('a record stop that fails after collecting resumes through the fence withou
   expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
 
-test.each(['startup recovery', 'recovered stop', 'recovered stop with replacement'] as const)(
-  '%s uses the recording producer checkpoint after the native recorder finished',
-  async (route) => {
+test.each([
+  { route: 'startup recovery', proof: 'present' },
+  { route: 'recovered stop', proof: 'present' },
+  { route: 'recovered stop', proof: 'replaced' },
+  { route: 'startup recovery', proof: 'absent' },
+  { route: 'recovered stop', proof: 'absent' },
+])(
+  '$route checks the manifest and export after native completion with $proof producer proof',
+  async ({ route, proof }) => {
     const sessionsDir = mkdtempForTestSync('screen-recording-completed-recovery-');
     const sessionDir = path.join(sessionsDir, 'recording');
     const resourcePath = screenRecordingResourceStore.resolvePath(sessionDir);
@@ -321,7 +327,7 @@ test.each(['startup recovery', 'recovered stop', 'recovered stop with replacemen
             recordOnlySession: false,
             gestureEvents: [],
           },
-          progress: createStopProgress(lease),
+          progress: proof === 'absent' ? undefined : createStopProgress(lease),
           steps: {
             stop: async () => ({ observation: { recorder: 'confirmed' } }),
             collect: async () => {},
@@ -345,7 +351,7 @@ test.each(['startup recovery', 'recovered stop', 'recovered stop with replacemen
     });
     const stop = () => finishRecoveredScreenRecording({ resourcePath, scope, acquireControl });
 
-    if (route === 'recovered stop with replacement') {
+    if (proof === 'replaced') {
       fs.writeFileSync(outPath, 'different bytes at the reserved path');
       await expect(stop()).rejects.toThrow('Recording export does not match its stored proof.');
       expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
@@ -363,18 +369,25 @@ test.each(['startup recovery', 'recovered stop', 'recovered stop with replacemen
     } else {
       await expect(stop()).resolves.toEqual(nativeCompletion.result);
     }
-    expect(screenRecordingResourceStore.read(resourcePath)).toMatchObject({
+    const settled = screenRecordingResourceStore.read(resourcePath);
+    expect(settled).toMatchObject({
       envelope: {
         lifecycle: 'completed',
         metadata: {
           completion: { outPath },
-          remoteCaptureExport: {
-            completedAt: expect.any(Number),
-            identities: [expect.any(String)],
-          },
         },
       },
     });
+    if (settled.status !== 'decoded') throw new Error('Expected the settled recording manifest');
+    if (proof === 'absent') {
+      expect(settled.envelope.metadata).not.toHaveProperty('remoteCaptureExport');
+      expect(fs.readFileSync(outPath, 'utf8')).toBe('producer export');
+    } else {
+      expect(settled.envelope.metadata?.remoteCaptureExport).toEqual({
+        completedAt: expect.any(Number),
+        identities: [expect.any(String)],
+      });
+    }
   },
 );
 
