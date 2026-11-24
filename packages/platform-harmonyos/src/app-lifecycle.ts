@@ -186,12 +186,29 @@ function requireHarmonyAbilityName(ability: string): void {
   });
 }
 
-/** Launches a bundle's ability; each `launchArgs` entry lands as one quoted `aa start` argument. */
+/**
+ * A launch-arg word that survives `hdc shell` without device-shell parsing: per character the same
+ * set the kernel's safe shell word trusts. Local copy — the platform layer cannot consume kernel
+ * internals.
+ */
+const HARMONY_PLAIN_WORD = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+function requireHarmonyPlainLaunchWord(word: string): void {
+  if (HARMONY_PLAIN_WORD.test(word)) return;
+  throw new AppError('INVALID_ARGS', `Invalid HarmonyOS launch argument: ${word}`, {
+    reason: 'launch-arg-not-a-plain-word',
+    launchArg: word,
+    hint: 'Each HarmonyOS --launch-args entry must be a plain word of letters, digits, and _@%+=:,./-, because hdc does not guarantee to quote every argument element.',
+  });
+}
+
+/** Launches a bundle's ability; each `launchArgs` entry must be a plain word and lands as one literal `aa start` argument. */
 export async function openHarmonyApp(
   device: DeviceInfo,
   bundleId: string,
   options?: { activity?: string; launchArgs?: string[]; signal?: AbortSignal },
 ): Promise<void> {
+  for (const word of options?.launchArgs ?? []) requireHarmonyPlainLaunchWord(word);
   if (options?.activity !== undefined) requireHarmonyAbilityName(options.activity);
   const launchTarget = options?.activity
     ? { ability: options.activity }

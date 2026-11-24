@@ -408,3 +408,79 @@ test('HarmonyOS launch resolves module metadata and reports missing launch data'
   mockRunCmd.mockResolvedValueOnce({ exitCode: 0, stdout: 'not installed', stderr: '' });
   await assert.rejects(() => openHarmonyApp(DEVICE, 'com.example.missing'), /launchable ability/);
 });
+
+test('openHarmonyApp refuses a non-plain-word launch arg before any hdc call when an activity is explicit', async () => {
+  await assert.rejects(
+    () =>
+      openHarmonyApp(DEVICE, 'com.example.application', {
+        activity: 'EntryAbility',
+        launchArgs: [String.raw`$(id)"q"\c`],
+      }),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.reason, 'launch-arg-not-a-plain-word');
+      assert.equal(error.details?.launchArg, String.raw`$(id)"q"\c`);
+      assert.equal(typeof error.details?.hint, 'string');
+      assert.ok(error.details?.hint);
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('openHarmonyApp refuses a launch arg with a space before any hdc call on the bm dump route', async () => {
+  await assert.rejects(
+    () =>
+      openHarmonyApp(DEVICE, 'com.example.application', {
+        launchArgs: ['hello world'],
+      }),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.reason, 'launch-arg-not-a-plain-word');
+      assert.equal(error.details?.launchArg, 'hello world');
+      assert.equal(typeof error.details?.hint, 'string');
+      assert.ok(error.details?.hint);
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('openHarmonyApp refuses an empty launch arg before any hdc call on the bm dump route', async () => {
+  await assert.rejects(
+    () =>
+      openHarmonyApp(DEVICE, 'com.example.application', {
+        launchArgs: [''],
+      }),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.reason, 'launch-arg-not-a-plain-word');
+      assert.equal(error.details?.launchArg, '');
+      assert.equal(typeof error.details?.hint, 'string');
+      assert.ok(error.details?.hint);
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('openHarmonyApp refuses the offending entry when valid and invalid launch args are mixed', async () => {
+  await assert.rejects(
+    () =>
+      openHarmonyApp(DEVICE, 'com.example.application', {
+        activity: 'EntryAbility',
+        launchArgs: ['--ps', 'a;b'],
+      }),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.reason, 'launch-arg-not-a-plain-word');
+      assert.equal(error.details?.launchArg, 'a;b');
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});

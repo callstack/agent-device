@@ -193,7 +193,7 @@ Aliases: `launch`, `relaunch`.
 | `--no-test-ime` | open/test/replay: keep the real Android keyboard even on emulators (opt out of the headless test IME; on test/replay it applies to the sessions the flow opens) |
 | `--activity <component>` | Android launch activity (package/Class, .Class, or Class) or HarmonyOS ability name; not for URL opens |
 | `--launch-console <path>` | open: capture the initial local or Limrun iOS simulator launch console window to a file |
-| `--launch-args <arg>` | open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args; HarmonyOS aa start args). Linux and macOS reject the flag. |
+| `--launch-args <arg>` | open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args; HarmonyOS aa start args restricted to plain words of letters, digits, and _@%+=:,./-; other entries are refused with INVALID_ARGS before any hdc call). Linux and macOS reject the flag. |
 | `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
 | `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
 | `--relaunch` | open: terminate app process before launching it |

@@ -2,10 +2,10 @@
 
 Live evidence for #4287 (the review's five cases at
 `07bce0897726eaad21823f4349cad1627d86cc30`). Device: JDY-AL50 (华为畅享 90
-Plus), HarmonyOS 7.0.0.111 (SP10C00E111R4P3), USB serial `77TYD26826028730`.
+Plus), HarmonyOS 7.0.0.111 (SP10C00E111R4P3), USB serial `<serial>`.
 Runs through `node bin/agent-device.mjs` after `pnpm build` +
 `pnpm clean:daemon`, state dir `/tmp/ad4287-state`. Target app:
-`com.sankuai.dianping` (ability `EntryAbility`, module `nova`). Every run
+`<bundle>` (ability `EntryAbility`, module `nova`). Every run
 below forced the app stopped first (`aa force-stop`), so the foreground state
 ties to that launch; each case closes with `aa force-stop` again.
 
@@ -22,8 +22,8 @@ probes in the (c) section.
 ## (a) `--activity` with `--launch-args --ps k v`
 
 ```
-$ aa force-stop com.sankuai.dianping         → "force stop process successfully."
-$ node bin/agent-device.mjs open com.sankuai.dianping --platform harmonyos \
+$ aa force-stop <bundle>         → "force stop process successfully."
+$ node bin/agent-device.mjs open <bundle> --platform harmonyos \
     --activity EntryAbility --launch-args --ps --launch-args k \
     --launch-args v --json
 success: true
@@ -33,8 +33,8 @@ $ aa dump -a → Mission ID #50 … main name [EntryAbility] … state #FOREGROU
 ## (b) The same without `--activity` (the `bm dump` + `-m` route)
 
 ```
-$ aa force-stop com.sankuai.dianping
-$ node bin/agent-device.mjs open com.sankuai.dianping --platform harmonyos \
+$ aa force-stop <bundle>
+$ node bin/agent-device.mjs open <bundle> --platform harmonyos \
     --launch-args --ps --launch-args k --launch-args v --json
 success: true   (the bm dump resolved EntryAbility/nova; the launch succeeded)
 ```
@@ -42,8 +42,8 @@ success: true   (the bm dump resolved EntryAbility/nova; the launch succeeded)
 ## (c) The word with `$(id)`, a double quote and a backslash — reproduced, root-caused
 
 ```
-$ aa force-stop com.sankuai.dianping
-$ node bin/agent-device.mjs open com.sankuai.dianping --platform harmonyos \
+$ aa force-stop <bundle>
+$ node bin/agent-device.mjs open <bundle> --platform harmonyos \
     --activity EntryAbility --launch-args --ps --launch-args k \
     --launch-args '$(id)"q"\c' --json
 ERROR: COMMAND_FAILED  details.output: `/bin/sh: syntax error: unexpected '('`
@@ -86,9 +86,9 @@ Typed before any hdc call, as the help claims.
 ## (e) A lone `--launch-args --ps`
 
 ```
-$ node bin/agent-device.mjs open com.sankuai.dianping --platform harmonyos \
+$ node bin/agent-device.mjs open <bundle> --platform harmonyos \
     --activity EntryAbility --launch-args --ps --json
-ERROR: COMMAND_FAILED: Failed to start com.sankuai.dianping
+ERROR: COMMAND_FAILED: Failed to start <bundle>
   (aa rejected `--ps` with a missing value: "invalid number of parameters
    for option --ps" — the CLI carried the flag word through and the launch
    failed device-side.)
@@ -99,5 +99,15 @@ ERROR: COMMAND_FAILED: Failed to start com.sankuai.dianping
 - host: macOS 27.2, agent-device worktree at head `07bce08` (PR #4287),
   `pnpm build` + `pnpm clean:daemon` before the runs
 - device: JDY-AL50, HarmonyOS 7.0.0.111, hdc 3.2.0f
-- every case: `aa force-stop com.sankuai.dianping` before and a `close`
+- every case: `aa force-stop <bundle>` before and a `close`
   (`aa force-stop`) after
+
+## Plain-word gate, live-verified on-device at the new head (this commit)
+
+The plain-word gate now refuses such words typed before any hdc call,
+live-verified on-device at the new head: `$(id)"q"\c` (with `--activity`),
+`hello world` (no `--activity`, the `bm dump` route) and `a;b` each got a
+typed `INVALID_ARGS` (`details.reason: launch-arg-not-a-plain-word`) in
+sub-second time; `aa force-stop <bundle>` ran before and after each group
+and `aa dump -l` showed no mission, so the device executed nothing.
+Raw outputs: `/tmp/ad4287-live/group{1,2,3}.log` (outside git).
