@@ -458,7 +458,7 @@ test('fresh runtime slots can restore an intact recording from its producer mani
   }
 });
 
-test('a fail-once inspection preserves the published recording and its ID', async () => {
+test('a transient inspection error preserves the recording and other inventory entries', async () => {
   const harness = makeRecordRuntimeHarness('recording-inspection-retry-');
   const runtime = createRuntimeStateHandle();
   const run = (action: string) =>
@@ -472,6 +472,15 @@ test('a fail-once inspection preserves the published recording and its ID', asyn
       expect(published).toMatchObject({
         ok: true,
         data: { artifacts: [{ artifactId: expect.any(String) }] },
+      });
+      if (!published.ok) throw new Error('Recording was not published');
+      const recordingId = published.data?.artifacts?.[0]?.artifactId;
+      const healthy = path.join(mkdtempForTestSync('healthy-recording-inventory-'), 'frame.png');
+      fs.writeFileSync(healthy, 'healthy artifact');
+      const healthyId = trackDownloadableArtifact({
+        artifactPath: healthy,
+        artifactType: 'screenshot',
+        tenantId: TENANT,
       });
       const lstat = fs.lstatSync;
       let failed = false;
@@ -487,6 +496,16 @@ test('a fail-once inspection preserves the published recording and its ID', asyn
         expect(result).toMatchObject({ ok: false, error: { message: 'inspection I/O failed' } });
         expect(fs.readFileSync(video, 'utf8')).toBe('published-video');
         expect(await run('stop')).toEqual(published);
+
+        const reader = { tenantId: TENANT };
+        failed = false;
+        expect((await listDownloadableArtifacts(reader, {})).map(({ id }) => id)).toEqual([
+          healthyId,
+        ]);
+        expect((await listDownloadableArtifacts(reader, {})).map(({ id }) => id)).toEqual(
+          expect.arrayContaining([recordingId, healthyId]),
+        );
+        expect(fs.readFileSync(video, 'utf8')).toBe('published-video');
       } finally {
         stat.mockRestore();
       }

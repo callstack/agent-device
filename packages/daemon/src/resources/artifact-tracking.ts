@@ -652,9 +652,7 @@ export async function listDownloadableArtifacts(
   const artifacts: DaemonArtifactInventoryEntry[] = [];
   for (const [id, entry] of pendingArtifacts()) {
     if (!canReadArtifact(entry, reader)) continue;
-    const stat = statRegisteredOutput(id, entry);
-    if (!stat) continue;
-    const payload = await prepareArtifactPayloadForInventory(id, entry, stat, hostEnv);
+    const payload = await prepareArtifactPayloadForInventory(id, entry, hostEnv);
     if (!payload || entry.cleanupRequested) continue;
     artifacts.push({
       id,
@@ -696,11 +694,11 @@ function statRegisteredOutput(
 async function prepareArtifactPayloadForInventory(
   artifactId: string,
   entry: ArtifactEntry,
-  stat: fs.Stats,
   hostEnv: NodeJS.ProcessEnv,
 ): Promise<PreparedDownloadableArtifact | null> {
   try {
-    return await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
+    const stat = statRegisteredOutput(artifactId, entry);
+    return stat ? await prepareArtifactPayload(artifactId, entry, stat, hostEnv) : null;
   } catch {
     // Inventory is best-effort; direct downloads still surface artifact-specific errors.
     return null;
