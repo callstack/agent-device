@@ -111,22 +111,31 @@ const NO_REQUEST_GUARD: RequestGuard = {
   guard: async <T>(send: () => Promise<T>) => await send(),
 };
 
-export function createRequestGuard(params: {
+type RequestGuardOptions = {
   signal: AbortSignal | undefined;
   requestId?: string;
-  /** Use 'no' during a shared startup wait that sends no caller request. The launch continues. */
-  dispatchedOnAbort?: 'no' | 'unknown';
-}): RequestGuard {
-  const { signal, requestId, dispatchedOnAbort = 'unknown' } = params;
+};
+
+export function createRequestGuard(options: RequestGuardOptions): RequestGuard {
+  return createAbortGuard(options, 'unknown');
+}
+
+/** A shared startup wait sends no caller request. The launch continues after cancellation. */
+export function createStartupWaitGuard(options: RequestGuardOptions): RequestGuard {
+  return createAbortGuard(options, 'no');
+}
+
+function createAbortGuard(
+  { signal, requestId }: RequestGuardOptions,
+  dispatchedOnAbort: 'no' | 'unknown',
+): RequestGuard {
   if (!signal) return NO_REQUEST_GUARD;
   return {
     refuseIfAborted() {
       if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
     },
     guard: async <T>(send: () => Promise<T>): Promise<T> => {
-      // Checked before `send` runs, so nothing has been dispatched yet — the honest evidence is
-      // 'no'. An abort listener attached to an already-aborted signal never fires, so this check is
-      // what keeps a late `guard` call rejecting rather than pending forever.
+      // An already-aborted signal never fires a new listener. Refuse before calling send.
       if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
       return await new Promise<T>((resolve, reject) => {
         const onAbort = (): void =>

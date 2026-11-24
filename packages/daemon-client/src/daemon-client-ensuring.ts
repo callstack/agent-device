@@ -1,7 +1,7 @@
 import type { DaemonIdentity, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { captureHostEnvironment } from '@agent-device/host-kit/environment';
-import { createRequestGuard } from './daemon-client-transport.ts';
+import { createStartupWaitGuard } from './daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonTransport } from './daemon-client-request.ts';
 import { isDaemonNotRunningError } from './daemon-lifecycle-errors.ts';
@@ -48,10 +48,9 @@ export function withEnsuredDaemon(
     if (context?.signal?.aborted) {
       return await transport(req, context);
     }
-    const cancellation = createRequestGuard({
+    const cancellation = createStartupWaitGuard({
       signal: context?.signal,
       requestId: req.meta?.requestId,
-      dispatchedOnAbort: 'no',
     });
     // A finished ensure is kept for the rest of this transport's life. A rejected one is dropped so
     // the next request retries, and one whose daemon has since gone is dropped by the attach below.
