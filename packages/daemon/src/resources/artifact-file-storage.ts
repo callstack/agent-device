@@ -5,6 +5,7 @@ import { recordingExportFileIdentity } from '@agent-device/capture-kit/screen-re
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { TENANT_RESOURCE_REASONS } from '../core/tenant-owned-entry.ts';
 
 export type RecordingSourceKind = 'original' | 'archive' | 'archive-replay';
@@ -13,7 +14,8 @@ type VerifiedFile = RecordingFile & { sourceIdentity: string };
 type Delivery = DaemonArtifact & { artifactId: string };
 
 export type RecordingPublication = {
-  timer: ReturnType<typeof setTimeout>;
+  signal: AbortSignal;
+  dispose(): void;
   deliveries?: Delivery[];
   pending?: Promise<Delivery[]>;
 };
@@ -57,7 +59,10 @@ export async function publishRecordingFiles(params: {
     files.map((file) => [file.path, file.sourceIdentity]),
   ]);
   let publication = publications.get(key);
-  if (expiresAt <= Date.now()) throw recordingOutputExpired();
+  if (expiresAt <= Date.now()) {
+    if (!publication && sourceOutsideArchive) expireUnregisteredSources(provenSources);
+    throw recordingOutputExpired();
+  }
   if (publication?.deliveries) {
     if (publication.deliveries.every(({ artifactId }) => params.isAvailable(artifactId))) {
       return publication.deliveries;
@@ -68,24 +73,72 @@ export async function publishRecordingFiles(params: {
     // Archive staging is runtime-owned. A replay may use an existing publication, including a
     // retriable attempt, but surviving archive sources alone cannot restore consumed delivery.
     if (sourceKind === 'archive-replay') throw recordingOutputExpired();
-    const timer = setTimeout(() => {
-      const current = publications.get(key);
-      publications.delete(key);
-      if (!current?.deliveries && sourceOutsideArchive) expireUnregisteredSources(provenSources);
-    }, expiresAt - Date.now()).unref();
-    publication = { timer };
+    publication = createRecordingPublication(
+      expiresAt,
+      () => publications.delete(key),
+      sourceOutsideArchive ? provenSources : [],
+    );
     publications.set(key, publication);
   }
-  publication.pending ??= stageAndRegister(files, sourceOutsideArchive, (stored, directory) => {
-    if (publications.get(key) !== publication || expiresAt <= Date.now()) {
-      throw recordingOutputExpired();
-    }
-    params.register(stored, directory);
-    return (publication.deliveries = stored.map(({ delivery }) => delivery));
-  }).finally(() => {
+  const assertActive = () => {
+    publication.signal.throwIfAborted();
+    if (expiresAt <= Date.now()) throw recordingOutputExpired();
+  };
+  publication.pending ??= waitForRecordingPublication(
+    publication.signal,
+    expiresAt,
+    stageAndRegister(files, sourceOutsideArchive, assertActive, (stored, directory) => {
+      params.register(stored, directory);
+      return (publication.deliveries = stored.map(({ delivery }) => delivery));
+    }),
+  ).finally(() => {
     delete publication.pending;
   });
   return publication.pending;
+}
+
+function createRecordingPublication(
+  expiresAt: number,
+  forget: () => void,
+  provenSources: readonly VerifiedFile[],
+): RecordingPublication {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    forget();
+    controller.abort(recordingOutputExpired());
+    if (!publication.deliveries) expireUnregisteredSources(provenSources);
+  }, expiresAt - Date.now()).unref();
+  const publication: RecordingPublication = {
+    signal: controller.signal,
+    dispose() {
+      controller.abort(recordingOutputExpired());
+      // Verified standalone bytes remain eligible through their manifest deadline.
+      if (publication.deliveries || provenSources.length === 0) clearTimeout(timer);
+    },
+  };
+  return publication;
+}
+
+async function waitForRecordingPublication(
+  signal: AbortSignal,
+  expiresAt: number,
+  writer: Promise<Delivery[]>,
+): Promise<Delivery[]> {
+  let abort!: () => void;
+  const pending = new Promise<Delivery[]>((resolve, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    void writer.then(resolve, reject);
+  });
+  try {
+    // The response has a deadline even when the filesystem writer cannot be interrupted.
+    const outcome = await settleWithin(() => pending, expiresAt - Date.now(), { keepAlive: false });
+    if (outcome.kind === 'deadline') throw recordingOutputExpired();
+    return outcome.value;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
 }
 
 function readSourceIdentity(sourcePath: string): string {
@@ -107,8 +160,10 @@ function changedRecordingOutput(): AppError {
 async function stageAndRegister(
   files: readonly VerifiedFile[],
   sourceOutsideArchive: boolean,
+  assertActive: () => void,
   register: (files: Registration[], directory: string | undefined) => Delivery[],
 ): Promise<Delivery[]> {
+  assertActive();
   for (const file of files) {
     if (readSourceIdentity(file.path) !== file.sourceIdentity) throw changedRecordingOutput();
   }
@@ -119,6 +174,7 @@ async function stageAndRegister(
   const staged: Registration[] = [];
   try {
     for (const { path: sourcePath, sourceIdentity, ...artifact } of files) {
+      assertActive();
       const delivery = { ...artifact, artifactId: crypto.randomUUID() };
       if (!directory) {
         staged.push({ delivery, artifactPath: sourcePath, output: sourceIdentity });
@@ -130,6 +186,7 @@ async function stageAndRegister(
         artifactPath,
         fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE,
       );
+      assertActive();
       if (recordingExportFileIdentity(await fs.promises.lstat(sourcePath)) !== sourceIdentity) {
         throw changedRecordingOutput();
       }
@@ -139,6 +196,7 @@ async function stageAndRegister(
         output: requireFileIdentity(await fs.promises.lstat(artifactPath)),
       });
     }
+    assertActive();
     return register(staged, directory);
   } catch (error) {
     if (directory)

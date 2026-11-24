@@ -227,7 +227,7 @@ const artifactTracking = (): ArtifactTrackingState =>
     }),
     (state) => {
       for (const discard of state.reservations) discard();
-      for (const { timer } of state.recordingPublications.values()) clearTimeout(timer);
+      for (const publication of state.recordingPublications.values()) publication.dispose();
       state.recordingPublications.clear();
       for (const [id, entry] of state.artifacts) {
         requestArtifactCleanup(state.artifacts, id, entry);
@@ -672,13 +672,22 @@ export async function listDownloadableArtifacts(
 }
 
 /** The output that `entry` registered. Cleans the entry up when the output is gone or replaced. */
-function statRegisteredOutput(artifactId: string, entry: ArtifactEntry): fs.Stats | undefined {
+function statRegisteredOutput(
+  artifactId: string,
+  entry: ArtifactEntry,
+  downloading = false,
+): fs.Stats | undefined {
   try {
     const stat = statArtifactPath(entry);
     if (outputIdentity(stat, entry.reservation?.recording !== undefined) === entry.output)
       return stat;
-  } catch {
-    // A missing output is cleaned up like a replaced one.
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (entry.reservation?.recording && code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
+    if (downloading && !entry.reservation?.recording) {
+      cleanupDownloadableArtifact(artifactId);
+      throw new AppError('COMMAND_FAILED', `Artifact file is missing: ${entry.artifactPath}`);
+    }
   }
   cleanupDownloadableArtifact(artifactId);
   return undefined;
@@ -718,17 +727,8 @@ function readDownloadableArtifactEntry(
   if (entry.cleanupRequested) {
     throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   }
-  let stat: fs.Stats;
-  try {
-    stat = statArtifactPath(entry);
-  } catch {
-    cleanupDownloadableArtifact(artifactId);
-    throw new AppError('COMMAND_FAILED', `Artifact file is missing: ${entry.artifactPath}`);
-  }
-  if (outputIdentity(stat, entry.reservation?.recording !== undefined) !== entry.output) {
-    cleanupDownloadableArtifact(artifactId);
-    throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
-  }
+  const stat = statRegisteredOutput(artifactId, entry, true);
+  if (!stat) throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   return { entry, stat };
 }
 

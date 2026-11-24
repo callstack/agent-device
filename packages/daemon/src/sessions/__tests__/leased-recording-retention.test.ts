@@ -458,7 +458,45 @@ test('fresh runtime slots can restore an intact recording from its producer mani
   }
 });
 
-async function startSuiteRecording() {
+test('a fail-once inspection preserves the published recording and its ID', async () => {
+  const harness = makeRecordRuntimeHarness('recording-inspection-retry-');
+  const runtime = createRuntimeStateHandle();
+  const run = (action: string) =>
+    harness.run([action], { tenantId: TENANT }, undefined, { publicNetworkOnly: true });
+  try {
+    await runtime.run(async () => {
+      expect(await run('start')).toMatchObject({ ok: true });
+      const video = harness.runtime.start.mock.calls[0]![0].outputPath;
+      fs.writeFileSync(video, 'published-video');
+      const published = await run('stop');
+      expect(published).toMatchObject({
+        ok: true,
+        data: { artifacts: [{ artifactId: expect.any(String) }] },
+      });
+      const lstat = fs.lstatSync;
+      let failed = false;
+      const stat = vi.spyOn(fs, 'lstatSync').mockImplementation((file, options) => {
+        if (file === video && !failed) {
+          failed = true;
+          throw Object.assign(new Error('inspection I/O failed'), { code: 'EIO' });
+        }
+        return lstat(file, options);
+      });
+      try {
+        const result = await run('stop');
+        expect(result).toMatchObject({ ok: false, error: { message: 'inspection I/O failed' } });
+        expect(fs.readFileSync(video, 'utf8')).toBe('published-video');
+        expect(await run('stop')).toEqual(published);
+      } finally {
+        stat.mockRestore();
+      }
+    });
+  } finally {
+    runtime.dispose();
+  }
+});
+
+async function startSuiteRecording(withSidecar = false) {
   const suite = mkdtempForTestSync('archive-recording-retention-');
   const video = path.join(suite, 'recording.mp4');
   const harness = makeRecordRuntimeHarness('archive-recording-stop-', {
@@ -488,6 +526,15 @@ async function startSuiteRecording() {
     ok: true,
   });
   fs.writeFileSync(video, 'leased-suite-recording');
+  if (withSidecar) {
+    const telemetryPath = deriveRecordingTelemetryPath(video);
+    fs.writeFileSync(telemetryPath, '{}');
+    const finish = harness.runtime.finish.getMockImplementation()!;
+    harness.runtime.finish.mockImplementation(async () => {
+      const outcome = await finish();
+      return { ...outcome, result: { ...outcome.result, telemetryPath } };
+    });
+  }
   return { suite, video, stop };
 }
 
@@ -520,6 +567,54 @@ test('suite recording staging can wait for an asynchronous copy before publishin
     data: { artifacts: [{ artifactId: expect.any(String) }] },
   });
 });
+
+test.each(['expiry', 'disposal'])(
+  'stalled recording staging settles on %s before the writer',
+  async (end) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const runtime = createRuntimeStateHandle();
+    const { video, stop } = await runtime.run(() => startSuiteRecording(true));
+    let enter!: (target: string) => void;
+    const entered = new Promise<string>((resolve) => {
+      enter = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const copy = fs.promises.copyFile;
+    const staging = vi.spyOn(fs.promises, 'copyFile').mockImplementationOnce(async (...args) => {
+      enter(String(args[1]));
+      await gate;
+      await copy(...args);
+    });
+    let outcome: Awaited<ReturnType<typeof stop>> | undefined;
+    const stopping = runtime.run(stop).then((result) => {
+      outcome = result;
+    });
+    try {
+      const target = await entered;
+      if (end === 'disposal') runtime.dispose();
+      await vi.advanceTimersByTimeAsync(end === 'expiry' ? 15 * 60 * 1000 : 0);
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: { details: { reason: 'RESOURCE_EXPIRED' } },
+      });
+      expect(fs.existsSync(path.dirname(target))).toBe(true);
+      expect(staging).toHaveBeenCalledTimes(1);
+      release();
+      await vi.waitFor(() => expect(fs.existsSync(path.dirname(target))).toBe(false));
+      expect(staging).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync(video, 'utf8')).toBe('leased-suite-recording');
+      expect(await runtime.run(() => listDownloadableArtifacts(OWNER, {}))).toEqual([]);
+    } finally {
+      release();
+      await stopping;
+      staging.mockRestore();
+      runtime.dispose();
+    }
+  },
+);
 
 for (const first of ['archive', 'recording']) {
   test(`the producing lease retries after consuming the ${first} first`, async (t) => {
@@ -644,13 +739,15 @@ test.each([1, 2])(
 );
 
 test.each([
-  ['teardown', false],
-  ['teardown', true],
-  ['stop', false],
-  ['stop', true],
+  ['teardown', false, 'timer'],
+  ['teardown', true, 'timer'],
+  ['stop', false, 'timer'],
+  ['stop', true, 'timer'],
+  ['stop', false, 'replay'],
+  ['stop', true, 'replay'],
 ] as const)(
-  'failed %s registration expires only the verified original (replaced: %s)',
-  async (action, replace) => {
+  'failed %s registration expires only the verified original (replaced: %s) on %s',
+  async (action, replace, expiry) => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const harness = makeRecordRuntimeHarness('recording-cleanup-expiry-', { sessionName: ADDRESS });
     const start = harness.runtime.start.getMockImplementation()!;
@@ -669,16 +766,22 @@ test.each([
         throw Object.assign(new Error('registry stat unavailable'), { code: 'EIO' });
       return lstat(file, options);
     });
+    const runtime = createRuntimeStateHandle();
     try {
-      if (action === 'stop')
-        expect(
-          await harness.run(['stop'], { tenantId: TENANT }, undefined, { publicNetworkOnly: true }),
-        ).toMatchObject({ ok: false });
-      await teardown(harness.sessionStore);
-      expect(sourceReads).toBe(2);
-      expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+      await runtime.run(async () => {
+        if (action === 'stop')
+          expect(
+            await harness.run(['stop'], { tenantId: TENANT }, undefined, {
+              publicNetworkOnly: true,
+            }),
+          ).toMatchObject({ ok: false });
+        await teardown(harness.sessionStore);
+        expect(sourceReads).toBe(2);
+        expect(await listDownloadableArtifacts({ tenantId: TENANT }, {})).toEqual([]);
+      });
     } finally {
       stat.mockRestore();
+      runtime.dispose();
     }
 
     await vi.advanceTimersByTimeAsync(14 * 60 * 1000);
@@ -688,7 +791,22 @@ test.each([
       fs.writeFileSync(unrelated, 'unrelated-recording');
       fs.renameSync(unrelated, source);
     }
-    await vi.advanceTimersByTimeAsync(60 * 1000);
+    if (expiry === 'timer') {
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+    } else {
+      // Move the clock without dispatching the old runtime's timer. The manifest has the deadline.
+      vi.setSystemTime(Date.now() + 60 * 1000);
+      const successor = createRuntimeStateHandle();
+      try {
+        expect(
+          await successor.run(() =>
+            harness.run(['stop'], { tenantId: TENANT }, undefined, { publicNetworkOnly: true }),
+          ),
+        ).toMatchObject({ ok: false, error: { details: { reason: 'RESOURCE_EXPIRED' } } });
+      } finally {
+        successor.dispose();
+      }
+    }
     if (replace) expect(fs.readFileSync(source, 'utf8')).toBe('unrelated-recording');
     else expect(fs.existsSync(source)).toBe(false);
   },
