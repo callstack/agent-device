@@ -12,6 +12,8 @@ import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/syste
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { bindFindSessionForTest } from '../../__tests__/support/find-session-authority-fixture.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { makeAndroidSession, makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 const platformResourceCleanup = platformResourceCleanupFixture();
@@ -105,18 +107,20 @@ test('mutating find on a system-surface capture discloses the occlusion on the f
   const session = makeAndroidSession('default');
   sessionStore.publish('default', session);
 
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'find',
+    positionals: ['Internet', 'click'],
+    flags: {},
+  };
   const response = await handleFindCommands({
     createCommandSurface: testCreateCommandSurface,
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'find',
-      positionals: ['Internet', 'click'],
-      flags: {},
-    },
+    req,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    findSession: bindFindSessionForTest({ sessionStore, sessionName: 'default', req })!,
     invoke: async () => ({ ok: true, data: {} }) as DaemonResponse,
     ...getRuntimeBindings(),
   });
@@ -340,18 +344,20 @@ test('mutating find on an in-place system surface discloses it on the found outc
   const sessionStore = makeSessionStore();
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
 
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'find',
+    positionals: ['LOGIN', 'click'],
+    flags: {},
+  };
   const response = await handleFindCommands({
     createCommandSurface: testCreateCommandSurface,
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'find',
-      positionals: ['LOGIN', 'click'],
-      flags: {},
-    },
+    req,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    findSession: bindFindSessionForTest({ sessionStore, sessionName: 'default', req })!,
     invoke: async () => ({ ok: true, data: {} }) as DaemonResponse,
     ...getRuntimeBindings(),
   });
@@ -368,18 +374,20 @@ test('mutating find that misses on an in-place system surface still discloses it
   const sessionStore = makeSessionStore();
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
 
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'find',
+    positionals: ['Bakery list', 'click'],
+    flags: {},
+  };
   const response = await handleFindCommands({
     createCommandSurface: testCreateCommandSurface,
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'find',
-      positionals: ['Bakery list', 'click'],
-      flags: {},
-    },
+    req,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
+    findSession: bindFindSessionForTest({ sessionStore, sessionName: 'default', req })!,
     invoke: async () => ({ ok: true, data: {} }) as DaemonResponse,
     ...getRuntimeBindings(),
   });

@@ -477,6 +477,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       screenRecordingAdmissionLedger,
       hostDiagnostics,
       doctorSession: lockedScope.doctorSession,
+      findSession: lockedScope.findSession,
       withSessionExecutionLock,
       resolveSessionRef: lockedScope.resolveSessionRef,
       requestScope,

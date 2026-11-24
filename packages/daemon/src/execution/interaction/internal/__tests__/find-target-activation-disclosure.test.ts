@@ -4,6 +4,8 @@ import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
 import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
+import { bindFindSessionForTest } from '../../../../__tests__/support/find-session-authority-fixture.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { makeIosSession } from '../../../../__tests__/support/session-factories.ts';
 import { legacyDispatchCapture } from '../../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
@@ -91,18 +93,20 @@ async function findClick(captures: Record<string, unknown>[] | CaptureScript, af
         : captures[Math.min(call++, captures.length - 1)],
   );
 
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'find',
+    positionals: ['General', 'click'],
+    flags: {},
+  };
   const response = await handleFindCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'find',
-      positionals: ['General', 'click'],
-      flags: {},
-    },
+    req,
     sessionName: 'default',
     logPath: '/tmp/find-target-activation.log',
     sessionStore,
+    findSession: bindFindSessionForTest({ sessionStore, sessionName: 'default', req })!,
     invoke: async () => ({ ok: true, data: {} }) as DaemonResponse,
     ...getRuntimeBindings(),
   });

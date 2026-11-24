@@ -102,6 +102,7 @@ import type { Admission, LeaseSessionEnd, LockedAttempt } from './lease-session-
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
+import type { FindSessionAuthority } from '../core/interaction/internal/types.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -163,6 +164,7 @@ export type RequestExecutionScope = AsyncDisposable & {
   ): {
     req: DaemonRequest;
     doctorSession?: AuthorizedSession;
+    findSession?: FindSessionAuthority;
   };
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
@@ -184,6 +186,8 @@ export type LockedRequestScope = {
   existingRef: SessionRef | undefined;
   resolveSessionRef: ResolveRequestSessionRef;
   doctorSession?: AuthorizedSession;
+  /** The admitted session's authority, for the one converted mutating route (ADR 0040). */
+  findSession?: FindSessionAuthority;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
@@ -574,8 +578,8 @@ export async function createRequestExecutionScope(params: {
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       bindSession(req, ref) {
-        const session = ref && coordinator.authorize(req, ref, () => true);
-        if (!session) return { req };
+        if (!ref) return { req };
+        const session = coordinator.authorize(req, ref, () => true);
         const { journal } = session;
         if (command === 'events') {
           return {
@@ -583,6 +587,13 @@ export async function createRequestExecutionScope(params: {
           };
         }
         startJournal(journal);
+        // ADR 0040 step 7, find slice: `find` gets its session effects as operations pinned to this
+        // admitted lifetime, so its action branches hold no store and never resolve the address
+        // again. Every other command still reaches the store the old way.
+        if (command === 'find') {
+          const mutations = coordinator.mutate(req, ref, () => true);
+          return { req, findSession: { mutations, captureRef: ref } };
+        }
         return command === 'doctor' ? { req, doctorSession: session } : { req };
       },
       recordFinished,
@@ -875,7 +886,8 @@ export async function prepareLockedRequestScope(params: {
     req: scope.req,
     existingRef: preparedSessionRef(ref, scope, sessionStore, canDetach),
   });
-  const { req: lockedReq, doctorSession } = scope.bindSession(binding.req, binding.existingRef);
+  const bound = scope.bindSession(binding.req, binding.existingRef);
+  const { req: lockedReq, doctorSession, findSession } = bound;
   // `scope.sessionName` is the resolved store key, so `existingRef` carries the address every
   // recovery producer below must name — `existingRef.session.name` is only the public name.
   const existingRef = binding.existingRef;
@@ -923,6 +935,7 @@ export async function prepareLockedRequestScope(params: {
       existingSession,
       existingRef,
       doctorSession,
+      findSession,
       resolveSessionRef: (req, ref) => {
         const resolved = resolveRequestSessionRef(req, ref);
         return resolved?.lifetime === existingRef?.lifetime ? resolved : undefined;

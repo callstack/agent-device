@@ -31,7 +31,7 @@ import { markDeferredInteractionOutcome } from '../../../core/deferred-interacti
 import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';
 import { recordTouchVisualizationEvent } from '../../../core/recording-gestures.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { SessionRef } from '../../../core/session-state.ts';
+import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import type { BoundTouchExecutor } from '../../../core/touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../../core/gesture-runtime.ts';
 import type { BoundSnapshotCapture } from '../../../core/snapshot-runtime-binding.ts';
@@ -125,7 +125,7 @@ function readOffscreenTargetRescue(
     touchExecutor?: BoundTouchExecutor;
     gestures?: BoundGestureExecutor;
   },
-  session: Parameters<typeof confirmIosOffscreenTargetVisible>[0]['session'],
+  session: SessionState,
 ): InteractionRuntimeInput['confirmOffscreenTargetVisible'] {
   const querySelector = params.touchExecutor?.querySelector ?? params.gestures?.querySelector;
   if (!querySelector) return undefined;
