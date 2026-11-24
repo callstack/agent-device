@@ -1,0 +1,54 @@
+{
+  "success": false,
+  "error": {
+    "code": "REPLAY_DIVERGENCE",
+    "message": "Daemon request deadline exceeded",
+    "hint": "Check completed steps and the current device state before retrying the timed-out operation.",
+    "diagnosticId": "mwu8qema-6d287442",
+    "logPath": "/tmp/ad5055-lega-r2-130926/state/sessions/cwd_1dd430edfb664982_default/requests/97d848997a368c7f.ndjson",
+    "diagnosticsRecord": {
+      "session": "cwd:1dd430edfb664982:default",
+      "requestId": "97d848997a368c7f"
+    },
+    "details": {
+      "reason": "daemon_request_timeout",
+      "replayPath": "/tmp/ad5055-lega-r2-130926/one-line.ad",
+      "step": 1,
+      "action": "open",
+      "positionals": ["<arg>"],
+      "artifactPaths": [],
+      "divergence": {
+        "version": 1,
+        "kind": "action-failure",
+        "step": {
+          "index": 1,
+          "source": {
+            "path": "/tmp/ad5055-lega-r2-130926/one-line.ad",
+            "line": 1
+          }
+        },
+        "action": "open \"com.sankuai.dianping\"",
+        "cause": {
+          "code": "COMMAND_FAILED",
+          "message": "request canceled",
+          "hint": "The request was canceled intentionally (explicit cancel or client disconnect) \u2014 no retry is needed unless the cancellation was unintended."
+        },
+        "screen": {
+          "state": "unavailable",
+          "reason": "no-session",
+          "hint": "The session closed before a post-failure screen could be captured."
+        },
+        "suggestions": [],
+        "suggestionCount": 0,
+        "resume": {
+          "allowed": true,
+          "from": 1,
+          "planDigest": "2777bba07a19f1bcec3952098a94d9748a792d6b4d6b986703a7295929933ccc"
+        },
+        "repairHint": "manual"
+      },
+      "causeReason": "request_canceled",
+      "timeoutMs": 3000
+    }
+  }
+}

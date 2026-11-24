@@ -116,3 +116,41 @@ deadline threading into `requestDeadlineAtMs` by
 `application-lifecycle-interaction.test.ts`. The scenario-b run above is the
 live half of that wiring: the deadline the daemon admitted bounded both reads,
 and the probe claimed nothing.
+
+## Re-run of the replay route at the polish head 9e23b8a13
+
+After the review polish (`9e23b8a13`: contract-typed `readForegroundBundle`, one
+remaining-read-budget helper beside hdc.ts, the clamp-bounds-the-read comment), the same
+replay route re-ran on the same device. The screen was PIN-locked at this run (the 01:58 UTC
+scenario-a run rode an unlocked screen); the measured claims do not depend on the screen
+state. One mechanism note: a plain `PATH` prefix does not reach the daemon's hdc —
+`resolveHdc` (`packages/platform-harmonyos/src/inventory.ts`) prefers the toolchain roots
+and resolves an absolute binary — so the wrapper rides the daemon's own `HDC_SDK_PATH`,
+the first root checked.
+
+```
+$ printf 'open com.sankuai.dianping --platform harmonyos\n' > /tmp/ad5055-lega/one-line.ad
+$ PATH=/tmp/ad5055-lega:$PATH HDC_SDK_PATH=/tmp/ad5055-lega \
+  AGENT_DEVICE_STATE_DIR=/tmp/ad5055-lega/state \
+  node bin/agent-device.mjs replay /tmp/ad5055-lega/one-line.ad --timeout 3000 --json
+… "success": false, "code": "REPLAY_DIVERGENCE",
+  "details": { "reason": "daemon_request_timeout", "timeoutMs": 3000,
+               "action": "open \"com.sankuai.dianping\"" }
+```
+
+Timeline, client request start against wrapper epochs (the wrapper sleeps 25 s only on
+`aa dump -l`; everything else passes through):
+
+```
++1.062s  wrapper: hdc -t 77TYD26826028730 shell aa dump -l   (probe read; sleeps 25 s)
++3.292s  wrapper: next read begins — bm dump -n com.sankuai.dianping
+         (the probe's read lived 2.23 s — cut at the deadline, not 25 s, not 15 s)
++3.454s  wrapper: aa start … (the dispatch never waited on the hung read)
+```
+
+The request settled `daemon_request_timeout` / `timeoutMs: 3000` with **no
+`alreadyForeground` claim**, CLI wall 3.68 s — the clamp outcome reproduced at the polish
+head. Artifacts: `ad-5055-lega/` (wrapper log, replay JSON, request ndjson). A fresh
+already-foreground open under a normal deadline on an unlocked screen remains available
+to re-record when the device is next unlocked; the scenario-a run at the top of this doc
+is the recorded evidence for that leg.
