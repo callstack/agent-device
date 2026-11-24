@@ -84,6 +84,10 @@
       "types": "./src/async-lifecycle.ts",
       "default": "./src/async-lifecycle.ts"
     },
+    "./audit-result-refs": {
+      "types": "./src/audit-result-refs.ts",
+      "default": "./src/audit-result-refs.ts"
+    },
     "./audio-probe-result": {
       "types": "./src/audio-probe-result.ts",
       "default": "./src/audio-probe-result.ts"

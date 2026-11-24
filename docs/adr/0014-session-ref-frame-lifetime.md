@@ -158,7 +158,7 @@ These outputs are partial external publications:
 - Snapshot diffs.
 - Digests that omit the namespace.
 - `find`.
-- `audit` finding refs.
+- `audit` finding and screen-reader order refs.
 - Settled diffs/tails.
 - Replay divergence screens.
 

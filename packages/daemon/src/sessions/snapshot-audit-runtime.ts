@@ -1,13 +1,14 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { auditResultRefs } from '@agent-device/contracts/audit-result-refs';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import type { SnapshotRuntimeRouteParams } from '../core/snapshot-runtime-binding.ts';
 import { markSessionPartialRefsIssued } from '../execution/session-snapshot.ts';
 
 /**
  * Canonical `audit` route: one fresh capture over the request-bound capture runtime. The response
- * returns only its finding refs, so it is a partial publication (ADR 0014): the refs are issued
- * through the partial-frame primitive and ride with the frame epoch. A response without findings
- * issues nothing and leaves the frame as it was.
+ * returns only its finding and screen-reader order refs, so it is a partial publication (ADR 0014):
+ * the refs are issued through the partial-frame primitive and ride with the frame epoch. A response
+ * without refs issues nothing and leaves the frame as it was.
  */
 export async function dispatchSnapshotAuditViaRuntime(
   params: SnapshotRuntimeRouteParams,
@@ -21,7 +22,7 @@ export async function dispatchSnapshotAuditViaRuntime(
         target: device.target,
       });
       const session = getSession();
-      const refs = result.findings.flatMap((finding) => (finding.ref ? [finding.ref] : []));
+      const refs = auditResultRefs(result);
       if (!session || refs.length === 0) return { data: result };
       markSessionPartialRefsIssued(session, refs);
       const refsGeneration = session.snapshotGeneration;

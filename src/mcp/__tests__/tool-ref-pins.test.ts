@@ -466,7 +466,7 @@ test('ref-pin store leaves existing pins untouched for a mutating find without r
   assert.deepEqual(pinned, { session: 'demo', ref: '@e2~s7' });
 });
 
-test('ref-pin store pins audit finding refs to the audit generation and keeps other pins', () => {
+test('ref-pin store pins audit finding and screen-reader order refs to the audit generation and keeps other pins', () => {
   const pins = makeStore();
   const checks = { snapshot: 'complete' } as const;
 
@@ -499,6 +499,7 @@ test('ref-pin store pins audit finding refs to the audit generation and keeps ot
       },
       checks,
       limitations: [],
+      screenReaderOrder: { estimatedFrom: 'talkback-16.2', windows: [{ refs: ['@e5'] }] },
       refsGeneration: 9,
     } satisfies AuditSnapshotCommandResult,
     undefined,
@@ -512,6 +513,10 @@ test('ref-pin store pins audit finding refs to the audit generation and keeps ot
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e3' }, undefined), {
     session: 'demo',
     ref: '@e3~s9',
+  });
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined), {
+    session: 'demo',
+    ref: '@e5~s9',
   });
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined), {
     session: 'demo',

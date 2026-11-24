@@ -28,6 +28,72 @@ const AUDIT_SCREEN_XML = [
   '</hierarchy>',
 ].join('\n');
 
+// A helper capture with the screen-reader facts: two named texts and no control, so no finding.
+const ORDER_SCREEN_XML = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<hierarchy rotation="0">',
+  '  <node index="0" ax-id="0" window-type="1" window-index="0" window-bounds="[0,0][1080,1920]" text="" class="android.widget.FrameLayout" package="com.android.settings" content-desc="" bounds="[0,0][1080,1920]" enabled="true" important="true">',
+  '    <node index="0" ax-id="1" text="Storage" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[100,200][980,300]" enabled="true" important="true" />',
+  '    <node index="1" ax-id="2" text="42 GB used" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[100,400][980,500]" enabled="true" important="true" />',
+  '  </node>',
+  '</hierarchy>',
+].join('\n');
+
+function settingsAdbProvider(xml: string): AndroidAdbProvider {
+  const ime = createAndroidProviderShellState();
+  return {
+    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    imeHelperArtifact: ANDROID_IME_HELPER_FIXTURE_ARTIFACT,
+    exec: async (args) => {
+      const key = args.join(' ');
+      const imeResult = androidImeLifecycleAdbResult(key, [...args], ime);
+      if (imeResult) return imeResult;
+      if (key === 'shell getprop sys.boot_completed') {
+        return { stdout: '1\n', stderr: '', exitCode: 0 };
+      }
+      if (key === 'shell dumpsys window windows') {
+        return {
+          stdout: 'mCurrentFocus=Window{42 u0 com.android.settings/.Settings}\n',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (key.startsWith('shell am instrument ')) {
+        return {
+          stdout: androidSnapshotHelperOutput(xml, { pixelDensity: PIXEL_DENSITY }),
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+  };
+}
+
+test('Provider-backed integration Android audit issues the estimated TalkBack order refs without findings', async () => {
+  const adbProvider = settingsAdbProvider(ORDER_SCREEN_XML);
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () => adbProvider,
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+  });
+  try {
+    const selection = { platform: 'android' as const, serial: PROVIDER_SCENARIO_ANDROID.id };
+    assertRpcOk(await daemon.callCommand('open', ['settings'], selection));
+
+    const audit = assertRpcOk(await daemon.callCommand('audit', [], selection));
+    assert.deepEqual(audit.findings, []);
+    const order = audit.screenReaderOrder as { windows: Array<{ refs: string[] }> };
+    assert.equal(order.windows.length, 1);
+    assert.equal(order.windows[0]!.refs.length, 2);
+    assert.equal(typeof audit.refsGeneration, 'number');
+    const ref = `${order.windows[0]!.refs[1]}~s${audit.refsGeneration}`;
+    const read = assertRpcOk(await daemon.callCommand('get', ['text', ref], selection));
+    assert.equal(read.text, '42 GB used');
+  } finally {
+    await daemon.close();
+  }
+});
+
 test('Provider-backed integration Android audit converts captured pixels to dp before judging target size', async () => {
   const ime = createAndroidProviderShellState();
   const adbProvider: AndroidAdbProvider = {

@@ -6,7 +6,9 @@ import android.os.Build;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityWindowInfo;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Serializes accessibility nodes using the helper's host-consumed XML contract. */
 final class AccessibilityTreeXml {
@@ -31,6 +33,7 @@ final class AccessibilityTreeXml {
     node.getBoundsInScreen(bounds);
     xml.append("<node");
     appendAttribute(xml, "index", Integer.toString(nodeIndex));
+    appendAttribute(xml, "ax-id", Integer.toString(stats.axIdOf(node)));
     if (windowMetadata != null) {
       appendWindowMetadata(xml, windowMetadata);
     }
@@ -92,6 +95,7 @@ final class AccessibilityTreeXml {
     }
     appendAttribute(xml, "password", Boolean.toString(node.isPassword()));
     appendBoundsAttribute(xml, "bounds", bounds.left, bounds.top, bounds.right, bounds.bottom);
+    appendScreenReaderFacts(xml, node, stats);
 
     int childCount = depth >= maxDepth ? 0 : node.getChildCount();
     if (depth >= maxDepth && node.getChildCount() > 0) {
@@ -222,6 +226,36 @@ final class AccessibilityTreeXml {
     appendAttribute(xml, "long-clickable", Boolean.toString(longClickable));
   }
 
+  // Inputs of the host's TalkBack order estimate: traversal links as capture ids, and the facts
+  // its focus rules read. `checked` above already marks a checkable node.
+  @SuppressWarnings("deprecation")
+  private static void appendScreenReaderFacts(
+      StringBuilder xml, AccessibilityNodeInfo node, Stats stats) {
+    appendTraversalLink(xml, "traversal-before", node.getTraversalBefore(), stats);
+    appendTraversalLink(xml, "traversal-after", node.getTraversalAfter(), stats);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      appendTrueAttribute(xml, "screen-reader-focusable", node.isScreenReaderFocusable());
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      appendAttribute(xml, "important", Boolean.toString(node.isImportantForAccessibility()));
+    }
+    appendTrueAttribute(
+        xml, "focus-action", hasAccessibilityAction(node, AccessibilityAction.ACTION_FOCUS));
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      appendNonEmptyAttribute(xml, "state-description", node.getStateDescription());
+    }
+    appendTrueAttribute(xml, "collection", node.getCollectionInfo() != null);
+    appendTrueAttribute(xml, "range", node.getRangeInfo() != null);
+  }
+
+  @SuppressWarnings("deprecation")
+  private static void appendTraversalLink(
+      StringBuilder xml, String name, AccessibilityNodeInfo target, Stats stats) {
+    if (target == null) return;
+    appendAttribute(xml, name, Integer.toString(stats.axIdOf(target)));
+    target.recycle();
+  }
+
   static void appendBoundsAttribute(
       StringBuilder xml, String name, int left, int top, int right, int bottom) {
     xml.append(' ').append(name).append("=\"[")
@@ -271,14 +305,26 @@ final class AccessibilityTreeXml {
   }
 
   static final class Stats {
+    /** Capture-wide node ids; AccessibilityNodeInfo equality covers window and virtual identity. */
+    private Map<AccessibilityNodeInfo, Integer> axIds = new HashMap<>();
     int nodeCount;
     boolean truncated;
     boolean activeWindowRootMissing;
     boolean focusedNonActiveWindowRootMissing;
     WindowMetadata activeWindowMetadata;
 
+    @SuppressWarnings("deprecation")
+    int axIdOf(AccessibilityNodeInfo node) {
+      Integer id = axIds.get(node);
+      if (id != null) return id;
+      int next = axIds.size();
+      axIds.put(AccessibilityNodeInfo.obtain(node), next);
+      return next;
+    }
+
     Stats copy() {
       Stats next = new Stats();
+      next.axIds = axIds;
       next.nodeCount = nodeCount;
       next.truncated = truncated;
       next.activeWindowRootMissing = activeWindowRootMissing;

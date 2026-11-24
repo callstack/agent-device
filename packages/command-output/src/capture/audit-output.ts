@@ -23,6 +23,7 @@ function formatAuditText(result: AuditSnapshotCommandResult): string {
       .filter((finding) => finding.kind === 'native')
       .map((finding) => nativeFindingLine(finding, result.refsGeneration)),
   ];
+  lines.push(...screenReaderOrderLines(result));
   const guidance = Object.entries(result.guidance);
   if (guidance.length > 0)
     lines.push('', ...guidance.map(([kind, sentence]) => `${kind}: ${sentence}`));
@@ -30,6 +31,20 @@ function formatAuditText(result: AuditSnapshotCommandResult): string {
     lines.push('', ...result.limitations.map((limitation) => `Limitation: ${limitation}`));
   }
   return `${lines.join('\n')}\n`;
+}
+
+function screenReaderOrderLines(result: AuditSnapshotCommandResult): string[] {
+  const windows = result.screenReaderOrder?.windows ?? [];
+  if (windows.length === 0) return [];
+  const lines = windows.map((window, index) => {
+    const label = windows.length > 1 ? `, window ${index + 1}` : '';
+    const refs = window.refs.map((ref) => pinnedRefText(ref, result.refsGeneration) ?? ref);
+    const omitted = window.omittedStops
+      ? ` (${plural(window.omittedStops, 'stop')} not in the snapshot)`
+      : '';
+    return `Estimated TalkBack order${label}: ${refs.join(' ')}${omitted}`;
+  });
+  return ['', ...lines];
 }
 
 function summaryLine(findings: AuditSnapshotCommandResult['findings']): string {

@@ -1,6 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   copySnapshotClickabilityEvidence,
+  copySnapshotScreenReaderOrderEvidence,
   recordSnapshotTiming,
   snapshotCaptureAnnotationsFrom,
   type SnapshotCaptureAnnotations,
@@ -146,9 +147,12 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
     platform: publicPlatformString(params.device),
   });
   const annotations = snapshotCaptureAnnotationsFrom(data);
-  const snapshot = copySnapshotClickabilityEvidence(
+  const snapshot = copySnapshotScreenReaderOrderEvidence(
     data,
-    buildSnapshotState(data, resolveSnapshotStateFlags(params)),
+    copySnapshotClickabilityEvidence(
+      data,
+      buildSnapshotState(data, resolveSnapshotStateFlags(params)),
+    ),
   );
   // The one seam where snapshot state and capture annotations meet: consumers that only keep the
   // SnapshotState (selector-backed find/wait, session-stored snapshots) must still learn that the

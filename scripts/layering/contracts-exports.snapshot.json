@@ -23,6 +23,7 @@
   "@agent-device/contracts/audio-probe-runtime-host",
   "@agent-device/contracts/audio-probe-support",
   "@agent-device/contracts/audio-runtime-plan",
+  "@agent-device/contracts/audit-result-refs",
   "@agent-device/contracts/back-mode",
   "@agent-device/contracts/back-runtime",
   "@agent-device/contracts/backend",

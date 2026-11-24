@@ -1,5 +1,6 @@
 import {
   copySnapshotClickabilityEvidence,
+  copySnapshotScreenReaderOrderEvidence,
   publicSnapshotCaptureAnnotations,
   snapshotCaptureAnnotationsFrom,
   type AuditSnapshotCommandResult,
@@ -197,7 +198,7 @@ export const auditSnapshotCommand: RuntimeCommand<
   const { auditSnapshotState, matchNativeAuditFindings } =
     await import('@agent-device/capture-kit/snapshot-audit');
   const capture = await captureRuntimeSnapshot(runtime, options);
-  const audit = auditSnapshotState(capture.snapshot, {
+  const audit = await auditSnapshotState(capture.snapshot, {
     platform: runtime.backend.platform,
     producer: capture.snapshot.producer,
     target: options.target,
@@ -250,9 +251,12 @@ async function captureRuntimeSnapshot(
       ...(options.observeOnly === undefined ? {} : { observeOnly: options.observeOnly }),
     },
   );
-  const snapshot = copySnapshotClickabilityEvidence(
+  const snapshot = copySnapshotScreenReaderOrderEvidence(
     result.snapshot,
-    ensureSnapshotPresentationKey(result.snapshot, options),
+    copySnapshotClickabilityEvidence(
+      result.snapshot,
+      ensureSnapshotPresentationKey(result.snapshot, options),
+    ),
   );
   const annotations = snapshotCaptureAnnotationsFrom(result);
   const warningTime = now(runtime);

@@ -183,6 +183,28 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
           ],
         },
       },
+      screenReaderOrder: objectSchema(
+        {
+          estimatedFrom: enumSchema(
+            ['talkback-16.2'],
+            "Estimated from a port of TalkBack 16.2's rules, not observed.",
+          ),
+          windows: {
+            type: 'array',
+            items: objectSchema(
+              {
+                refs: {
+                  type: 'array',
+                  items: stringSchema('Plain ref, usable in the frame this audit published.'),
+                },
+                omittedStops: numberSchema('Stops with no node in the snapshot.'),
+              },
+              ['refs'],
+            ),
+          },
+        },
+        ['estimatedFrom', 'windows'],
+      ),
       guidance: objectSchema(
         {
           'small-target': stringSchema(),
@@ -203,7 +225,7 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
       ),
       limitations: stringArraySchema(),
       refsGeneration: numberSchema(
-        'Present only with findings: pair each ref with it (@eN~sG) before a mutation.',
+        'Present only with refs: pair each ref with it (@eN~sG) before a mutation.',
       ),
       warnings: stringArraySchema(),
     },
@@ -212,7 +234,7 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
 } satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'audit'>;
 
 const auditCommandDescription =
-  'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, controls of one role that share one accessible name, and covered controls. Each finding shows its role. On Android, a node the capture reports as clickable or long-clickable with no control role is evaluated as a control too. Missing-name findings omit rejected labels and can show the captured identifier. Other findings include the captured label when available. Guidance follows once per finding kind. Covered controls remain findings inside scroll containers, except a control or row a persistent bar covers when scrolling can reveal it. UIKit sheet grabbers are exempt from size and name checks. Direct items of recognized native iOS bars skip size checks and keep name checks. Custom bar children and nested app content remain subject to size checks. Findings are review prompts, not failures, and the audit changes nothing on the device.';
+  'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, controls of one role that share one accessible name, and covered controls. On Android, it also estimates the TalkBack swipe order of each app window. Each finding shows its role. On Android, a node the capture reports as clickable or long-clickable with no control role is evaluated as a control too. Missing-name findings omit rejected labels and can show the captured identifier. Other findings include the captured label when available. Guidance follows once per finding kind. Covered controls remain findings inside scroll containers, except a control or row a persistent bar covers when scrolling can reveal it. UIKit sheet grabbers are exempt from size and name checks. Direct items of recognized native iOS bars skip size checks and keep name checks. Custom bar children and nested app content remain subject to size checks. Findings are review prompts, not failures, and the audit changes nothing on the device.';
 
 export const auditCommandFacet = defineParameterlessCommandFacet({
   name: AUDIT_COMMAND_NAME,
@@ -220,9 +242,9 @@ export const auditCommandFacet = defineParameterlessCommandFacet({
   description: auditCommandDescription,
   text: {
     summary: 'Report advisory accessibility findings',
-    searchHint: 'a11y lint voiceover talkback',
+    searchHint: 'a11y lint voiceover',
     cliDetail:
-      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role; a clickable Android container whose only actionable descendant is already a control reports that control once, for each finding kind the container reports itself. An Android role-less touchable reports under role `clickable`, a role the snapshot itself never shows, and joins the shared-name check only with a name of its own: one named only by its descendants is excluded, because TalkBack announces it by joining their text. A name two or more controls of one role share is reported once per control, ignoring case and surrounding whitespace; controls of different roles may share a name. On iOS 17+ targets served by XCTest, the audit adds Apple contrast, element detection, hit region, description, and trait checks; it leaves out a hit region that small-target already reports. A unique frame match includes a ref, role, and name. Report findings without a rect without acting on an element.',
+      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit that returns no ref changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role; a clickable Android container whose only actionable descendant is already a control reports that control once, for each finding kind the container reports itself. An Android role-less touchable reports under role `clickable`, a role the snapshot itself never shows, and joins the shared-name check only with a name of its own: one named only by its descendants is excluded, because TalkBack announces it by joining their text. A name two or more controls of one role share is reported once per control, ignoring case and surrounding whitespace; controls of different roles may share a name. On iOS 17+ targets served by XCTest, the audit adds Apple contrast, element detection, hit region, description, and trait checks; it leaves out a hit region that small-target already reports. A unique frame match includes a ref, role, and name. Report findings without a rect without acting on an element. On Android, screenReaderOrder lists the refs a TalkBack swipe is estimated to visit, per app window, from a port of the TalkBack 16.2 traversal and focus rules: it is not observed, and it leaves out auto-scroll, scrolling past the screen, the order across windows, and web content. A stop the snapshot hides is listed by its first presented descendant that is not a stop itself; omittedStops counts stops with no node in the snapshot. iOS reports no order.',
   },
   run: (client, input) => client.capture.audit(input),
 });

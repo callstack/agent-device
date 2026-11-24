@@ -1,3 +1,4 @@
+import { auditResultRefs } from '@agent-device/contracts/audit-result-refs';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
 import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -219,8 +220,9 @@ function mergeFindRefPins(
 }
 
 /**
- * `audit` publishes a partial frame for exactly its finding refs (ADR 0014), like a read-only
- * `find`. A result without findings carries no generation, issues nothing, and leaves pins alone.
+ * `audit` publishes a partial frame for exactly its finding and screen-reader order refs (ADR 0014),
+ * like a read-only `find`. A result without refs carries no generation, issues nothing, and leaves
+ * pins alone.
  */
 function mergeAuditRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
@@ -229,9 +231,7 @@ function mergeAuditRefPins(
 ): void {
   const refsGeneration = result.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
-  const issued = result.findings.flatMap((finding) =>
-    finding.ref ? [finding.ref.replace(/^@/, '')] : [],
-  );
+  const issued = auditResultRefs(result).map((ref) => ref.replace(/^@/, ''));
   mergeIntoScopedPins(refPinsByScope, scopeKey, issued, refsGeneration);
 }
 

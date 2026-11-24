@@ -93,8 +93,28 @@ export type AuditChecks = {
   snapshot: 'complete' | 'partial' | 'unknown';
 };
 
+/**
+ * TalkBack's swipe order estimated from the capture, one entry per Android application window in
+ * capture order. It is computed with a port of TalkBack 16.2's traversal and focus rules, not
+ * observed from TalkBack. It leaves out auto-scroll, scrolling past the screen, the order across
+ * windows, and web content.
+ */
+export type AuditScreenReaderOrder = {
+  estimatedFrom: 'talkback-16.2';
+  windows: AuditScreenReaderWindowOrder[];
+};
+
+export type AuditScreenReaderWindowOrder = {
+  /** Plain refs in swipe order. They are valid only with the response's `refsGeneration`. */
+  refs: string[];
+  /** Stops with no node in the snapshot, left out of `refs`. Absent when none. */
+  omittedStops?: number;
+};
+
 export type AuditResult = {
   findings: AuditFinding[];
+  /** Android only, from a snapshot helper that reports the facts the estimate reads. */
+  screenReaderOrder?: AuditScreenReaderOrder;
   guidance: Partial<Record<AuditFindingKind, string>>;
   checks: AuditChecks;
   /** Checks the audit could not run or could only partly run, with the reason. */
@@ -104,8 +124,8 @@ export type AuditResult = {
 export type AuditSnapshotCommandResult = Omit<AuditResult, 'findings'> & {
   findings: (AuditFinding | NativeAuditFinding)[];
   /**
-   * Ref-frame epoch the finding refs were minted from (ADR 0014). Present only when the audit
-   * returned a finding with a ref; pair each ref with it (`@e7~s<refsGeneration>`) before a mutation.
+   * Ref-frame epoch the finding and screen-reader order refs were minted from (ADR 0014). Present
+   * only when the audit returned a ref; pair each ref with it (`@e7~s<refsGeneration>`) before a mutation.
    */
   refsGeneration?: number;
   warnings?: string[];

@@ -1,0 +1,20 @@
+TalkBack 229212fdf5842191d0a93fc95d9ca1423b346866 ported source notices
+
+packages/platform-android/src/screen-reader-order.ts is a TypeScript port of these files from
+https://github.com/google/talkback at commit 229212fdf5842191d0a93fc95d9ca1423b346866:
+
+utils/src/main/java/com/google/android/accessibility/utils/traversal/OrderedTraversalController.java
+utils/src/main/java/com/google/android/accessibility/utils/traversal/ReorderedChildrenIterator.java
+utils/src/main/java/com/google/android/accessibility/utils/traversal/NodeCachedBoundsCalculator.java
+utils/src/main/java/com/google/android/accessibility/utils/traversal/WorkingTree.java
+
+   Copyright (C) 2015 The Android Open Source Project
+
+utils/src/main/java/com/google/android/accessibility/utils/AccessibilityNodeInfoUtils.java
+
+   Copyright (C) 2012 The Android Open Source Project
+
+Licensed under the Apache License, Version 2.0. The port changes the files: it is translated to
+TypeScript, reads a captured accessibility tree instead of live nodes, drops nodes that are not
+important for accessibility, and leaves out web content, picture-in-picture, the FAB-first option,
+and initial focus.

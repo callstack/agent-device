@@ -21,10 +21,12 @@ export function bundledLicenseNotices(root: string): Rolldown.Plugin {
     name: 'bundled-license-notices',
     generateBundle(_options, bundle) {
       const packages = new Map<string, Manifest>();
+      let portedTalkBack = false;
       for (const output of Object.values(bundle)) {
         if (output.type !== 'chunk') continue;
         for (const [id, module] of Object.entries(output.modules)) {
           if (module.renderedLength === 0) continue;
+          portedTalkBack ||= path.relative(root, id) === TALKBACK_PORT_MODULE;
           const owner = thirdPartyPackage(root, id);
           if (owner) packages.set(owner.directory, owner.manifest);
         }
@@ -32,12 +34,31 @@ export function bundledLicenseNotices(root: string): Rolldown.Plugin {
       const dependencies = Array.from(packages, ([directory, manifest]) =>
         attributableDependency(root, directory, manifest),
       );
+      if (portedTalkBack) dependencies.push(talkBackNotice(root));
       this.emitFile({
         type: 'asset',
         fileName: 'THIRD_PARTY_NOTICES.txt',
         source: renderLicenseNotices(deduplicate(dependencies)),
       });
     },
+  };
+}
+
+/** This project's TypeScript port of TalkBack's traversal order, an Apache-2.0 derivative work. */
+const TALKBACK_PORT_MODULE = 'packages/platform-android/src/screen-reader-order.ts';
+
+/** Ported source has no package manifest; LICENSES/talkback.txt names the upstream commit. */
+function talkBackNotice(root: string): NoticeDependency {
+  const notices = fs.readFileSync(path.join(root, 'LICENSES/talkback.txt'), 'utf8');
+  const version = notices
+    .split(/\r?\n/, 1)[0]
+    ?.match(/^TalkBack (\S+) ported source notices$/)?.[1];
+  if (!version) throw new Error('LICENSES/talkback.txt must open with the ported TalkBack commit.');
+  return {
+    name: 'talkback',
+    version,
+    license: 'Apache-2.0',
+    texts: [notices, fs.readFileSync(path.join(root, 'LICENSES/Apache-2.0.txt'), 'utf8')],
   };
 }
 
