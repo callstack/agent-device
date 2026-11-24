@@ -348,14 +348,26 @@ export async function startLocalDaemon(settings: DaemonClientSettings): Promise<
     ...(phases ? { phases: describeStartupPhaseTimings(phases) } : {}),
     ...(daemonLogTail ? { daemonLogTail } : {}),
     metadataState: state,
-    hint:
-      effectiveReason === DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason
-        ? DAEMON_LISTEN_DENIED_HINT
-        : reason === DAEMON_UNAVAILABLE_REASONS.startupStalled.reason ||
-            reason === DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason
-          ? resolveStartupProgressHint(reason, startupTimeoutMs)
-          : resolveDaemonStartupHint(state, settings.paths),
+    hint: resolveStartupFailureHint(effectiveReason, startupTimeoutMs, () =>
+      resolveDaemonStartupHint(state, settings.paths),
+    ),
   });
+}
+
+function resolveStartupFailureHint(
+  reason: DaemonStartupFailureReason,
+  ceilingMs: number,
+  exitedHint: () => string,
+): string {
+  switch (reason) {
+    case DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason:
+      return DAEMON_LISTEN_DENIED_HINT;
+    case DAEMON_UNAVAILABLE_REASONS.startupStalled.reason:
+    case DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason:
+      return resolveStartupProgressHint(reason, ceilingMs);
+    case DAEMON_UNAVAILABLE_REASONS.startupExited.reason:
+      return exitedHint();
+  }
 }
 
 async function attemptLocalDaemonStartup(
