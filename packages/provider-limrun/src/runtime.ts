@@ -51,7 +51,6 @@ import {
   requireLimrunOrgClient,
 } from './client-options.ts';
 import {
-  limrunCustomHeaderNames,
   resolveLimrunRentalRecoveryPrincipal,
   resolveLimrunRuntimeInstance,
 } from './runtime-instance.ts';
@@ -109,7 +108,7 @@ export type LimrunRuntime = ProviderDeviceRuntime & {
 
 export type LimrunRuntimeRegistration = Readonly<{
   runtime: LimrunRuntime & {
-    prepareRentalRecovery(customHeaders: string | undefined): Promise<void>;
+    prepareRentalRecovery(): Promise<void>;
   };
   platformModule: PlatformRuntimeProviderModule;
 }>;
@@ -228,19 +227,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       : undefined;
   }
 
-  async prepareRentalRecovery(customHeaders: string | undefined): Promise<void> {
+  async prepareRentalRecovery(): Promise<void> {
     if (!this.limrun) return;
-    // The SDK can override authorization and add account routing headers.
-    const request = await this.limrun
-      .buildRequest({ method: 'get', path: '/' })
-      .catch(() => undefined);
-    this.rentalRecoveryPrincipal = request
-      ? resolveLimrunRentalRecoveryPrincipal(
-          this.limrun.baseURL,
-          request.req.headers,
-          limrunCustomHeaderNames(customHeaders),
-        )
-      : undefined;
+    this.rentalRecoveryPrincipal = await resolveLimrunRentalRecoveryPrincipal(this.limrun).catch(
+      () => undefined,
+    );
   }
 
   /**

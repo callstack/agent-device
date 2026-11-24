@@ -1,4 +1,6 @@
 import { providerRuntimeInstance } from '@agent-device/contracts/platform-runtime';
+import { isRecord } from '@agent-device/kernel/record';
+import type Limrun from '@limrun/api';
 import type { LimrunIosModel } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 
@@ -27,28 +29,28 @@ export function resolveLimrunRuntimeInstance(options: {
   ]);
 }
 
-/** Read the names from the same operator setting the SDK reads at construction. */
-export function limrunCustomHeaderNames(config: string | undefined): string[] {
-  const names = new Set<string>();
-  for (const line of config?.split('\n') ?? []) {
-    const separator = line.indexOf(':');
-    if (separator < 0) continue;
-    const name = line.slice(0, separator).trim().toLowerCase();
-    if (name && name !== 'authorization') names.add(name);
-  }
-  return [...names].sort();
-}
-
-export function resolveLimrunRentalRecoveryPrincipal(
-  baseUrl: string,
-  headers: Headers,
-  customHeaderNames: readonly string[],
-): string | undefined {
+export async function resolveLimrunRentalRecoveryPrincipal(
+  client: Limrun,
+): Promise<string | undefined> {
+  // The SDK retains its constructor-resolved overrides here, including those from its environment.
+  // If a future SDK no longer exposes this shape, the runtime cannot prove its recovery scope.
+  const options: unknown = Reflect.get(client, '_options');
+  if (!isRecord(options)) return undefined;
+  const defaults = options.defaultHeaders;
+  if (defaults !== undefined && !isRecord(defaults)) return undefined;
+  const customHeaderNames = [
+    ...new Set(Object.keys(defaults ?? {}).map((name) => name.toLowerCase())),
+  ]
+    .filter((name) => name !== 'authorization')
+    .sort();
+  const {
+    req: { headers },
+  } = await client.buildRequest({ method: 'get', path: '/' });
   const authorization = headers.get('authorization');
   if (!authorization) return undefined;
   return providerRuntimeInstance('limrun', [
     ['authorization', authorization],
-    ['baseUrl', baseUrl],
+    ['baseUrl', client.baseURL],
     [
       'customHeaders',
       customHeaderNames.length === 0

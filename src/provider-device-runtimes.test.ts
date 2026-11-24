@@ -25,6 +25,7 @@ vi.mock('@agent-device/plugins/store', async (importOriginal) =>
 vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
     readonly baseURL = 'https://limrun.example.test';
+    readonly _options = {};
     readonly iosInstances = {
       create: limrun.iosCreate,
       list: limrun.iosList,

@@ -58,14 +58,9 @@ test('rental recovery binds routing but ignores generated client and SDK telemet
     }),
   }).contributes;
   if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
-  let customHeaders: string | undefined;
-  const setCustomHeaders = (headers: string | undefined) => {
-    customHeaders = headers;
-    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', headers);
-  };
   const principal = async (env: Record<string, string>, clientVersion = '1.0.0') => {
     const setup = await provider.setup({
-      env: { LIMRUN_CUSTOM_HEADERS: customHeaders, ...env },
+      env,
       options: {},
       clientVersion,
       diagnostics: { emit: () => {} },
@@ -89,10 +84,16 @@ test('rental recovery binds routing but ignores generated client and SDK telemet
       return built;
     });
   vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
-  setCustomHeaders(undefined);
+  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', undefined);
   try {
     const first = await principal({ LIMRUN_API_KEY: 'fixture-key', LIMRUN_IOS_MODEL: 'iphone' });
     expect(first).toMatch(/^principal-[a-f0-9]{64}$/);
+    expect(
+      (await principal({
+        LIMRUN_API_KEY: 'fixture-key',
+        LIMRUN_CUSTOM_HEADERS: 'X-Host-Only: ignored',
+      })) === first,
+    ).toBe(true);
     sdkVersion = 'sdk-2';
     expect((await principal({ LIMRUN_API_KEY: 'fixture-key' }, '2.0.0')) === first).toBe(true);
     expect(
@@ -107,18 +108,18 @@ test('rental recovery binds routing but ignores generated client and SDK telemet
     vi.stubEnv('LIMRUN_BASE_URL', 'https://b.example.test');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
     vi.stubEnv('LIMRUN_BASE_URL', 'https://a.example.test');
-    setCustomHeaders('Authorization: Bearer alternate-fixture-credential');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'Authorization: Bearer alternate-fixture-credential');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(first);
-    setCustomHeaders('X-Account: account-a\nX-Route: region-a');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-a\nX-Route: region-a');
     const routed = await principal({ LIMRUN_API_KEY: 'fixture-key' });
     expect(routed).not.toBe(first);
-    setCustomHeaders('X-Route: region-a\nX-Account: account-a');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Route: region-a\nX-Account: account-a');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).toBe(routed);
-    setCustomHeaders('X-Account: account-b\nX-Route: region-a');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'X-Account: account-b\nX-Route: region-a');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(routed);
-    setCustomHeaders('User-Agent: operator-route-a');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'User-Agent: operator-route-a');
     const customAgent = await principal({ LIMRUN_API_KEY: 'fixture-key' });
-    setCustomHeaders('User-Agent: operator-route-b');
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', 'User-Agent: operator-route-b');
     expect(await principal({ LIMRUN_API_KEY: 'fixture-key' })).not.toBe(customAgent);
     expect(
       await principal({
@@ -132,30 +133,36 @@ test('rental recovery binds routing but ignores generated client and SDK telemet
   }
 });
 
-test('keeps Limrun registered when the SDK cannot build recovery proof', async () => {
-  const [provider] = limrunPlugin({
-    createDependencies: stubLimrunRuntimeDependencies,
-  }).contributes;
-  if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
-  const customHeaders = 'Invalid Header Name: fixture';
-  vi.stubEnv('LIMRUN_CUSTOM_HEADERS', customHeaders);
-  try {
-    const setup = await provider.setup({
-      env: { LIMRUN_API_KEY: 'fixture-key', LIMRUN_CUSTOM_HEADERS: customHeaders },
-      options: {},
-      clientVersion: 'test-version',
-      diagnostics: { emit: () => {} },
-      createError: (_code, message) => {
-        throw new Error(message);
-      },
-      runHostCommand: async () => {
-        throw new Error('Expected no host command');
-      },
-    });
-    if (!('runtime' in setup)) throw new Error('Expected a configured Limrun runtime');
-    expect(setup.runtime.provider).toBe('limrun');
-    expect(setup.runtime.rentalRecoveryPrincipal).toBeUndefined();
-  } finally {
-    vi.unstubAllEnvs();
-  }
-});
+test.each(['SDK', 'host'] as const)(
+  'keeps Limrun registered with a malformed %s header setting',
+  async (source) => {
+    const [provider] = limrunPlugin({
+      createDependencies: stubLimrunRuntimeDependencies,
+    }).contributes;
+    if (provider.kind !== 'provider') throw new Error('Expected the Limrun provider');
+    const customHeaders = 'Invalid Header Name: fixture';
+    vi.stubEnv('LIMRUN_CUSTOM_HEADERS', source === 'SDK' ? customHeaders : undefined);
+    try {
+      const setup = await provider.setup({
+        env: {
+          LIMRUN_API_KEY: 'fixture-key',
+          ...(source === 'host' ? { LIMRUN_CUSTOM_HEADERS: customHeaders } : {}),
+        },
+        options: {},
+        clientVersion: 'test-version',
+        diagnostics: { emit: () => {} },
+        createError: (_code, message) => {
+          throw new Error(message);
+        },
+        runHostCommand: async () => {
+          throw new Error('Expected no host command');
+        },
+      });
+      if (!('runtime' in setup)) throw new Error('Expected a configured Limrun runtime');
+      expect(setup.runtime.provider).toBe('limrun');
+      expect(setup.runtime.rentalRecoveryPrincipal !== undefined).toBe(source === 'host');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
+);
