@@ -19,7 +19,7 @@ import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundSnapshotCapture } from '../../snapshot-runtime-binding.ts';
 import type { recordTouchVisualizationEvent } from '../../recording-gestures.ts';
-import type { SessionStore } from '../../session-store.ts';
+import type { AuthorizedMutation, SessionStore } from '../../session-store.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -62,12 +62,34 @@ export type SettleObservationCaptureInput = {
   settleObservationCapture?: BoundSnapshotCapture;
 };
 
+/**
+ * The session authority the dispatcher hands the `find` route, for the one lifetime it admitted.
+ */
+export type FindSessionAuthority = Readonly<{
+  /** Lifetime-bound session effects: target-context read, ADR 0014 ref-frame expiry, recording. */
+  mutations: AuthorizedMutation;
+  /**
+   * Retained adapter (#5064 remaining debt): find's own target capture writes its observation
+   * through the store's snapshot choke point, which is a store-private write no command may hold as
+   * an operation yet. So that one leg gets the dispatcher's admitted ref instead of resolving the
+   * address again, and no action branch reads it.
+   */
+  captureRef: SessionRef;
+}>;
+
 export type FindRouteInput = {
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
+  /**
+   * Retained adapter (#5064 remaining debt): the read-only selector-runtime path (`exists`/`wait`/
+   * `list`/`get text`/`get attrs`) still resolves its session by address. The mutating actions use
+   * `findSession` and reach no store at all.
+   */
   sessionStore: SessionStore;
+  /** The admitted session's authority; absent when the address has no session. */
+  findSession?: FindSessionAuthority;
   invoke: DaemonInvokeFn;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;

@@ -36,6 +36,7 @@ import type {
   SessionState,
 } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
+import { expireRefFrame } from './ref-frame.ts';
 import { isSafeSessionSegment, safeSessionName } from '@agent-device/host-kit/session-paths';
 import {
   readRepairTombstoneFile,
@@ -675,6 +676,7 @@ function removeEmptySessionDirectory(directory: string): void {
 
 const sessionAuthority: unique symbol = Symbol();
 const openAuthority: unique symbol = Symbol();
+const mutationAuthority: unique symbol = Symbol();
 
 export type AuthorizedSession = Readonly<{
   [sessionAuthority]: true;
@@ -696,6 +698,37 @@ export type WithSessionExecutionLock = <T>(
   signal?: AbortSignal,
 ) => Promise<T>;
 
+/**
+ * What a command may learn about the session it acts on: the neutral facts its guards, runtime
+ * inputs and refusal wording need. The mutable session record stays behind this projection, so a
+ * converted caller can neither read nor write a session field it did not declare.
+ */
+export type SessionTargetContext = Readonly<{
+  /** Public session name, for refusal wording only. */
+  name: string;
+  device: DeviceInfo;
+  appBundleId?: string;
+  traceLogPath?: string;
+}>;
+
+/**
+ * The session effects of one admitted lifetime, handed to a mutating command by the dispatcher: the
+ * target context it reads before it acts, the ADR 0014 ref-frame expiry at its device side-effect
+ * seam, and its recorded action. They are constructed behind a private brand, so a route the
+ * dispatcher did not admit holds none of them, and every operation re-checks its own lifetime when
+ * used. An operation of an ended lifetime resolves only that lifetime and never the address again, so
+ * a stale capability can neither observe nor change a replacement session.
+ */
+export type AuthorizedMutation = Readonly<{
+  [mutationAuthority]: true;
+  /** The admitted facts, refusing with the ended lifetime's own typed reason. */
+  requireTargetContext(): SessionTargetContext;
+  /** Expires the admitted lifetime's ref frame, refusing with that lifetime's own typed reason. */
+  expireRefFrame(): void;
+  /** Records the action against the admitted lifetime; a no-op once that lifetime has ended. */
+  recordAction(entry: RecordActionEntry): void;
+}>;
+
 export class SessionCoordinator {
   readonly #store: SessionStore;
 
@@ -713,6 +746,42 @@ export class SessionCoordinator {
     const session = this.#store.requireCurrent(ref);
     assertRequestHoldsSessionLease(req, session);
     return this.bind(ref, () => active() && !isRequestCanceled(req.meta?.requestId));
+  }
+
+  /**
+   * Hands the admitted request the session effects a mutating command owns: the target context it
+   * reads, the ref-frame expiry at its side-effect seam, and its recorded action. The brand is
+   * constructed here only, so nothing outside the dispatcher can forge one, and every operation
+   * checks the admitted lifetime again when used. An ended lifetime refuses with its own typed
+   * reason and never resolves the address again, so a stale capability cannot reach a successor.
+   */
+  mutate(req: DaemonRequest, ref: SessionRef, active: () => boolean): AuthorizedMutation {
+    const session = this.#store.requireCurrent(ref);
+    assertRequestHoldsSessionLease(req, session);
+    const admitted = () => active() && !isRequestCanceled(req.meta?.requestId);
+    return {
+      [mutationAuthority]: true,
+      requireTargetContext: () => {
+        // Revocation is checked before the read, and the store owns the refusal: an ended lifetime
+        // reports its own typed reason, exactly as the direct read this operation replaced did.
+        if (!admitted()) throw createRequestCanceledError();
+        const current = this.#store.requireCurrent(ref);
+        return Object.freeze({
+          name: current.name,
+          device: current.device,
+          ...(current.appBundleId === undefined ? {} : { appBundleId: current.appBundleId }),
+          ...(current.trace?.outPath === undefined ? {} : { traceLogPath: current.trace.outPath }),
+        });
+      },
+      expireRefFrame: () => {
+        if (!admitted()) throw createRequestCanceledError();
+        expireRefFrame(this.#store.requireCurrent(ref));
+      },
+      recordAction: (entry) => {
+        if (!this.#store.resolveCurrent(ref)) return;
+        this.#store.recordAction(ref, entry);
+      },
+    };
   }
 
   observeDevice(

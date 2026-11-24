@@ -42,15 +42,15 @@ import {
   type SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { expireRefFrame } from '../../../core/ref-frame.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
-import type { SessionRef, SessionState } from '../../../core/session-state.ts';
-import { SessionStore } from '../../../core/session-store.ts';
+import type { SessionState } from '../../../core/session-state.ts';
+import type { AuthorizedMutation, SessionTargetContext } from '../../../core/session-store.ts';
+import type { RecordActionEntry } from '../../../core/session-action-recorder.ts';
 import { contextFromFlags } from '../../../core/context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
 import type { RequestCaptureProof } from '../../../core/capture-disclosure.ts';
 import { withCaptureDisclosures } from '../../../core/capture-disclosure.ts';
-import { recordSessionAction } from '../../../core/session-action-recorder.ts';
 import { stripInternalInteractionFlags } from '../../../core/deferred-interaction-outcome.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
 import { executeFocusPoint } from '../../focus-runtime.ts';
@@ -75,14 +75,14 @@ type FindContext = {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
-  sessionStore: SessionStore;
   invoke: DaemonInvokeFn;
-  sessionRef: SessionRef;
+  /** This request's admitted session effects (ADR 0040): target context, frame expiry, and recording. */
+  mutations: AuthorizedMutation;
   device: SessionState['device'];
   command: string;
   locator: FindLocator;
   query: string;
-  publicFlags: Record<string, unknown>;
+  publicFlags: CommandFlags;
   /** The one action-selected bind's directly-executed operations (ADR 0019 §9). */
   boundFocusPoint?: (input: FocusPointInput) => Promise<void>;
   boundTypeText?: TypeTextRuntimeOperations['typeText'];
@@ -109,7 +109,6 @@ type ResolvedMatch = {
 
 export async function handleFindCommands(params: FindRouteInput): Promise<DaemonResponse | null> {
   const { req, sessionName, logPath, sessionStore, invoke } = params;
-  const sessionRef = sessionStore.lookup(sessionName);
   const command = req.command;
   if (command !== 'find') return null;
 
@@ -142,10 +141,13 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   if (runtimeResponse) return runtimeResponse;
   // Read-only find actions (exists/wait/list/get_text/get_attrs) always return from
   // the selector runtime above, so only mutating actions (click/fill/focus/type)
-  // reach this point — and every mutating find needs an active session.
-  const session = sessionRef ? sessionStore.requireCurrent(sessionRef) : undefined;
-  if (!session || !sessionRef) return noActiveSessionError();
-  const device = session.device;
+  // reach this point — and every mutating find needs an active session. The dispatcher admitted
+  // exactly one lifetime for this request and hands its effects here, so the action branches below
+  // never resolve the address again and cannot land on a session that replaced the admitted one.
+  if (!params.findSession) return noActiveSessionError();
+  const { captureRef: sessionRef, mutations } = params.findSession;
+  const admittedTarget = mutations.requireTargetContext();
+  const device = admittedTarget.device;
   // R35 + ADR 0019 §9: ONE action-selected plan, ONE facts inspection, ONE bind. The plan
   // carries everything this action executes directly — the target capture always, plus
   // focusPoint for `find focus` and focusPoint+typeText for `find type` — so a leg can never
@@ -153,9 +155,9 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   const boundSelector = await admitAndBindSnapshotCapture({
     command: 'find',
     device,
-    session,
+    session: { name: admittedTarget.name },
     plan: resolveSelectorCaptureRuntimePlan({
-      hasActiveApp: session.appBundleId !== undefined,
+      hasActiveApp: admittedTarget.appBundleId !== undefined,
       intent: findRuntimeIntent(action),
     }),
     inspectFacts: params.inspectFacts,
@@ -182,11 +184,10 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   });
 
   const ctx: FindContext = {
-    sessionRef,
+    mutations,
     req,
     sessionName,
     logPath,
-    sessionStore,
     invoke,
     device,
     command,
@@ -302,17 +303,7 @@ function preresolvedTarget(match: ResolvedMatch): PreresolvedInteractionTarget {
 }
 
 async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<DaemonResponse> {
-  const {
-    req,
-    sessionName,
-    sessionStore,
-    sessionRef,
-    invoke,
-    command,
-    locator,
-    query,
-    publicFlags,
-  } = ctx;
+  const { req, sessionName, invoke, locator, query } = ctx;
   const response = await invoke({
     token: req.token,
     session: sessionName,
@@ -336,14 +327,7 @@ async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<
     readCommandMessage(response.data as Record<string, unknown>) ??
     `Tapped ${match.ref}${matchCoords ? ` (${matchCoords.x}, ${matchCoords.y})` : ''}`;
   Object.assign(matchData, successText(clickMessage));
-  recordSessionAction(
-    sessionStore,
-    sessionRef,
-    req,
-    command,
-    { ref: match.ref, action: 'click', locator, query },
-    { flags: publicFlags },
-  );
+  recordFindAction(ctx, match, 'click', { ref: match.ref, action: 'click', locator, query });
   return { ok: true, data: matchData };
 }
 
@@ -352,7 +336,7 @@ async function handleFindFill(
   match: ResolvedMatch,
   value: string | undefined,
 ): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, sessionRef, invoke, command, publicFlags } = ctx;
+  const { req, sessionName, invoke } = ctx;
   // `''` is the clear request (#2063); only a MISSING value is an error.
   if (value === undefined) {
     return errorResponse('INVALID_ARGS', 'find fill requires text (use "" to clear the field)');
@@ -366,14 +350,7 @@ async function handleFindFill(
     internal: { findResolvedTarget: preresolvedTarget(match) },
   });
   if (!response.ok) return response;
-  recordSessionAction(
-    sessionStore,
-    sessionRef,
-    req,
-    command,
-    { ref: match.ref, action: 'fill' },
-    { flags: publicFlags },
-  );
+  recordFindAction(ctx, match, 'fill', { ref: match.ref, action: 'fill' });
   return response;
 }
 
@@ -389,22 +366,17 @@ async function handleFindType(
   match: ResolvedMatch,
   value: string | undefined,
 ): Promise<DaemonResponse> {
-  const { req, logPath } = ctx;
   if (!value) {
     return errorResponse('INVALID_ARGS', 'find type requires text');
   }
-  const context = () => {
-    const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
-    return contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath);
-  };
+  const context = () => contextFromTargetContext(ctx);
   // The value is always text here, so a leading `@e12` is typed, not refused as a target ref.
   const request = parseTypeTextRequest([value], context(), { rejectRefTarget: false });
   const focused = await dispatchFocusForFindMatch(ctx, match, 'type');
   if (!focused.ok) return focused;
-  const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
   // The focus above already crossed the seam; expiry is idempotent, but keep it
   // explicit at the type dispatch so it does not rely on the focus-first order.
-  expireRefFrame(session);
+  ctx.mutations.expireRefFrame();
   // R41/R35: the operation came from the handler's ONE action-selected bind; the shared
   // executor is the single lexical owner of the `typeText` call and of the leaf's parse.
   const typeText = ctx.boundTypeText;
@@ -433,7 +405,6 @@ async function dispatchFocusForFindMatch(
   match: ResolvedMatch,
   action: 'focus' | 'type',
 ): Promise<FindFocusDispatch> {
-  const { req, logPath } = ctx;
   const coveredResponse = rejectCoveredFindMatch(match, 'focus');
   if (coveredResponse) return coveredResponse;
   const focusTarget = resolveFocusTarget({
@@ -496,8 +467,7 @@ async function dispatchFocusForFindMatch(
   // ADR 0014 side-effect seam: mutating find focus/type dispatch the device
   // command directly (they do not re-enter the interaction leaf), so expire the
   // frame here before the device op. Pre-seam guards above preserve the frame.
-  const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
-  expireRefFrame(session);
+  ctx.mutations.expireRefFrame();
   // R40/R35: the operation came from the handler's ONE action-selected bind; the shared
   // executor is the single lexical owner of the `focusPoint` call.
   const focusPoint = ctx.boundFocusPoint;
@@ -507,7 +477,7 @@ async function dispatchFocusForFindMatch(
   const response = await executeFocusPoint(
     { operations: { focusPoint } },
     coords,
-    contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+    contextFromTargetContext(ctx),
   );
   return { ok: true, data: response, targetAnnotation: describeNonHittableTarget(target, 'focus') };
 }
@@ -535,18 +505,16 @@ function offscreenRescue(ctx: FindContext): Parameters<typeof throwIfOffscreenTa
   const querySelector = ctx.boundQuerySelector;
   const exactSelector = directIdentityFindSelector(ctx);
   if (!querySelector || !exactSelector) return undefined;
-  const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
+  const target = ctx.mutations.requireTargetContext();
   return async (node, rootViewport) => {
     const nodeValue = exactSelector.key === 'id' ? node.identifier?.trim() : node.label?.trim();
     if (nodeValue !== exactSelector.value) return null;
     return await confirmIosOffscreenTargetVisible({
-      session,
+      session: target,
       node,
       rootViewport,
       querySelector,
-      execution: runtimeExecutionFromContext(
-        contextFromFlags(ctx.logPath, ctx.req.flags, session.appBundleId, session.trace?.outPath),
-      ),
+      execution: runtimeExecutionFromContext(contextFromTargetContext(ctx, target)),
       exactSelector,
     });
   };
@@ -570,20 +538,38 @@ function coveredFindResponse(
   );
 }
 
-function recordFindAction(ctx: FindContext, match: ResolvedMatch, action: string): void {
-  const { req, sessionStore, sessionRef, command, publicFlags } = ctx;
-  recordSessionAction(
-    sessionStore,
-    sessionRef,
-    req,
+/**
+ * The runtime context of the admitted session: the same three facts the direct store read used to
+ * hand the executors, taken from the lifetime-bound projection instead.
+ */
+function contextFromTargetContext(
+  ctx: FindContext,
+  target: SessionTargetContext = ctx.mutations.requireTargetContext(),
+) {
+  return contextFromFlags(ctx.logPath, ctx.req.flags, target.appBundleId, target.traceLogPath);
+}
+
+/**
+ * Records find's action against the admitted lifetime. `click` and `fill` pass their own result
+ * payload; every other action records the resolved ref and its own name.
+ */
+function recordFindAction(
+  ctx: FindContext,
+  match: ResolvedMatch,
+  action: string,
+  result?: RecordActionEntry['result'],
+): void {
+  const { req, command, publicFlags } = ctx;
+  ctx.mutations.recordAction({
     command,
-    { ref: match.ref, action },
-    { flags: publicFlags },
-  );
+    positionals: req.positionals ?? [],
+    flags: publicFlags,
+    result: result ?? { ref: match.ref, action },
+  });
 }
 
 // --- Helpers ---
 
-function publicFindFlags(flags: DaemonRequest['flags']): Record<string, unknown> {
+function publicFindFlags(flags: CommandFlags | undefined): CommandFlags {
   return { ...(stripInternalInteractionFlags(flags) ?? {}) };
 }

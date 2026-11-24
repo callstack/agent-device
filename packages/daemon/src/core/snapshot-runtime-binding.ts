@@ -120,12 +120,14 @@ export type AdmittedSnapshotCapture =
  * side-effect-free facts inspection, refusal before any binding, then exactly one bind on
  * the admitted device. `snapshot`/`diff` supply the four-way custom-actions plan and the
  * selector family the active-app plan; a new consumer supplies a plan and a command name.
+ * The session is named, not carried: this path binds a device, and the name is all its refusal
+ * wording needs.
  */
 export async function admitAndBindSnapshotCapture(
   params: Readonly<{
     command: string;
     device: SessionState['device'];
-    session: SessionState | undefined;
+    session: Readonly<{ name: string }> | undefined;
     plan: SnapshotRuntimePlan | SelectorCaptureRuntimePlan;
     inspectFacts?: InspectDeviceRuntimeFacts;
     platformServices: DaemonPlatformServices;
@@ -490,7 +492,7 @@ function selectSnapshotWithoutActiveApp(
 type SnapshotPlanUnavailableParams = {
   operation: (SnapshotRuntimePlan | SelectorCaptureRuntimePlan)['use']['required'][number];
   fact: RuntimeOperationFact;
-  session: SessionState | undefined;
+  session: Readonly<{ name: string }> | undefined;
   device: SessionState['device'];
   command: string;
   platformServices: DaemonPlatformServices;

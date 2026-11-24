@@ -18,6 +18,7 @@ import type {
   WithSessionExecutionLock,
 } from '../core/session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
+import type { FindSessionAuthority } from '../core/interaction/internal/types.ts';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,
@@ -76,6 +77,8 @@ type RequestHandlerChainParams = {
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   doctorSession?: AuthorizedSession;
+  /** The admitted session's authority, for the one converted mutating route (ADR 0040). */
+  findSession?: FindSessionAuthority;
   resolveSessionRef?: ResolveRequestSessionRef;
   withSessionExecutionLock?: WithSessionExecutionLock;
   requestScope: PlatformRequestScope;
@@ -303,6 +306,7 @@ async function runFindHandler(
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
+      findSession: params.findSession,
       createCommandSurface: params.createCommandSurface,
       invoke: params.invoke,
       inspectFacts: params.inspectFacts,

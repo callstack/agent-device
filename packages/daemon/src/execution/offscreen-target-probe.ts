@@ -3,7 +3,6 @@ import { isConfirmedOnScreenProbe } from '@agent-device/capture-kit/mobile-snaps
 import type { QuerySelectorRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
 import type { SnapshotRuntimeExecution } from '@agent-device/contracts/snapshot-runtime';
 import { deriveDirectIosNodeSelector } from '../core/direct-ios-selector.ts';
-import type { SessionState } from '../core/session-state.ts';
 
 /**
  * The #1542 rescue read: one live `querySelector` on the caller's request-bound operation,
@@ -14,7 +13,8 @@ import type { SessionState } from '../core/session-state.ts';
  * crash inside a guard that was about to refuse anyway.
  */
 export async function confirmIosOffscreenTargetVisible(params: {
-  session: SessionState;
+  /** The app scope of the session this read runs for; the probe reads no other session field. */
+  session: Readonly<{ appBundleId?: string }>;
   node: Pick<SnapshotNode, 'identifier' | 'label'>;
   rootViewport: Rect | null;
   querySelector: QuerySelectorRuntimeOperations['querySelector'];
