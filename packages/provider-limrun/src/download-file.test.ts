@@ -1,7 +1,9 @@
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { promisify } from 'node:util';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
@@ -49,6 +51,93 @@ test('streams the served file to disk with the bearer token the caller supplied'
   expect(fs.readFileSync(destinationPath, 'utf8')).toBe('ftypisom-payload');
 });
 
+test.skipIf(!process.allowedNodeEnvironmentFlags.has('--use-env-proxy'))(
+  'bypasses the environment proxy only for authenticated loopback HTTP',
+  async () => {
+    const originAuthorization: Array<string | undefined> = [];
+    const proxyAuthorization: Array<string | undefined> = [];
+    const url = await serve((request, response) => {
+      originAuthorization.push(request.headers.authorization);
+      response.end('instance payload');
+    });
+    const proxyUrl = await serve((request, response) => {
+      proxyAuthorization.push(request.headers.authorization);
+      response.end('proxy payload');
+    });
+    const dir = await mkdtempForTest('limrun-download-');
+    const authenticatedPath = path.join(dir, 'authenticated.mp4');
+    const publicPath = path.join(dir, 'public.mp4');
+
+    await promisify(execFile)(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        '--input-type=module',
+        '-e',
+        `
+          import { downloadLimrunFile } from './download-file.ts';
+          const [url, authenticatedPath, publicPath] = process.argv.slice(1);
+          await downloadLimrunFile({
+            url,
+            instance: { apiUrl: url, token: 'fixture-token' },
+            destinationPath: authenticatedPath,
+            timeoutMs: 5000,
+          });
+          await downloadLimrunFile({ url, destinationPath: publicPath, timeoutMs: 5000 });
+        `,
+        url,
+        authenticatedPath,
+        publicPath,
+      ],
+      {
+        cwd: import.meta.dirname,
+        env: {
+          ...process.env,
+          NODE_USE_ENV_PROXY: '1',
+          HTTP_PROXY: new URL(proxyUrl).origin,
+          http_proxy: new URL(proxyUrl).origin,
+          NO_PROXY: '',
+          no_proxy: '',
+        },
+        timeout: 10_000,
+      },
+    );
+
+    expect(proxyAuthorization).toEqual([undefined]);
+    expect(originAuthorization).toEqual(['Bearer fixture-token']);
+    expect(fs.readFileSync(authenticatedPath, 'utf8')).toBe('instance payload');
+    expect(fs.readFileSync(publicPath, 'utf8')).toBe('proxy payload');
+  },
+);
+
+test('accepts localhost. over HTTP only when the exact origin matches', async () => {
+  const requests: Array<string | undefined> = [];
+  const url = new URL(
+    await serve((request, response) => {
+      requests.push(request.headers.authorization);
+      response.end('instance payload');
+    }),
+  );
+  url.hostname = 'localhost.';
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  const options = { url: url.href, destinationPath, timeoutMs: 5_000 };
+
+  await expect(
+    downloadLimrunFile({
+      ...options,
+      instance: { apiUrl: `http://localhost:${url.port}`, token: 'fixture-token' },
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'limrun_download_endpoint_blocked' } });
+  expect(requests).toEqual([]);
+
+  await downloadLimrunFile({
+    ...options,
+    instance: { apiUrl: url.origin, token: 'fixture-token' },
+  });
+  expect(requests).toEqual(['Bearer fixture-token']);
+  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('instance payload');
+});
+
 test('a non-2xx answer is a typed failure carrying the status and no file is left behind', async () => {
   const url = await serve((_request, response) => {
     response.writeHead(404);
@@ -73,7 +162,12 @@ test('a stalled transfer ends at the deadline as a typed timeout and removes the
   });
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
 
-  const failure = downloadLimrunFile({ url, destinationPath, timeoutMs: 150 });
+  const failure = downloadLimrunFile({
+    url,
+    instance: { apiUrl: url, token: 'fixture-token' },
+    destinationPath,
+    timeoutMs: 150,
+  });
 
   await expect(failure).rejects.toBeInstanceOf(AppError);
   await expect(failure).rejects.toMatchObject({
@@ -253,11 +347,11 @@ test('rejects a recording URL on a different origin before making a request', as
   expect(traffic).not.toHaveBeenCalled();
 });
 
-test('refuses the first redirect of an authenticated download', async () => {
+test('refuses the first redirect of an authenticated download while public downloads follow it', async () => {
   const traffic = vi.fn();
   const redirect = await serve((request, response) => {
-    traffic(request);
-    response.end();
+    traffic(request.headers.authorization);
+    response.end('redirected payload');
   });
   const url = await serve((_request, response) => {
     response.writeHead(307, { location: redirect }).end();
@@ -272,6 +366,11 @@ test('refuses the first redirect of an authenticated download', async () => {
     }),
   ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
   expect(traffic).not.toHaveBeenCalled();
+  expect(fs.existsSync(destinationPath)).toBe(false);
+
+  await downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 });
+  expect(traffic).toHaveBeenCalledExactlyOnceWith(undefined);
+  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('redirected payload');
 });
 
 test('rejects an authenticated plaintext download to a non-loopback instance', async () => {

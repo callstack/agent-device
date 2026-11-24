@@ -36,30 +36,80 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
     const { instance } = options;
-    const url = instance ? await instanceDownloadUrl(instance.apiUrl, options.url) : options.url;
+    const instanceUrl = instance ? await instanceDownloadUrl(instance.apiUrl, options.url) : null;
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: instance ? { Authorization: `Bearer ${instance.token}` } : undefined,
-      redirect: instance ? 'error' : 'follow',
-      signal,
-    });
-    if (!response.ok) throw httpFailure(response);
-    if (!response.body) {
+    const body =
+      instance && instanceUrl?.protocol === 'http:'
+        ? await openDirectDownload(instanceUrl, instance.token, signal)
+        : await openFetchDownload(instanceUrl ?? options.url, instance?.token, signal);
+    if (!body) {
       throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
         reason: LIMRUN_DOWNLOAD_REASONS.emptyBody.reason,
         destination: path.basename(options.destinationPath),
       });
     }
-    await pipeline(
-      Readable.fromWeb(response.body as WebReadableStream<Uint8Array>),
-      fs.createWriteStream(options.destinationPath),
-      { signal },
-    );
+    await pipeline(body, fs.createWriteStream(options.destinationPath), { signal });
   } catch (error) {
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout, signal);
   }
+}
+
+async function openFetchDownload(
+  url: string | URL,
+  token: string | undefined,
+  signal: AbortSignal,
+): Promise<Readable | null> {
+  const authenticated = token !== undefined;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: authenticated ? { Authorization: `Bearer ${token}` } : undefined,
+    redirect: authenticated ? 'error' : 'follow',
+    signal,
+  });
+  if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
+    throw httpFailure(response.status);
+  }
+  return response.body ? Readable.fromWeb(response.body as WebReadableStream<Uint8Array>) : null;
+}
+
+async function openDirectDownload(
+  url: URL,
+  token: string,
+  signal: AbortSignal,
+): Promise<Readable | null> {
+  const { loadNodeHttpRequester } = await import('@agent-device/host-kit/transport');
+  const http = await loadNodeHttpRequester('http:');
+  signal.throwIfAborted();
+  const response = await new Promise<import('node:http').IncomingMessage>((resolve, reject) => {
+    const request = http.request(
+      url,
+      {
+        // A one-use agent bypasses Node's environment-proxy global agent.
+        agent: false,
+        headers: { Authorization: `Bearer ${token}`, 'Accept-Encoding': 'identity' },
+        signal,
+      },
+      resolve,
+    );
+    request.once('error', reject);
+    request.end();
+  });
+  const status = response.statusCode ?? 500;
+  if ([301, 302, 303, 307, 308].includes(status)) {
+    response.destroy();
+    throw new TypeError('Limrun refused the authenticated download redirect.');
+  }
+  if (status < 200 || status >= 300) {
+    response.destroy();
+    throw httpFailure(status);
+  }
+  if (status === 204 || status === 205) {
+    response.destroy();
+    return null;
+  }
+  return response;
 }
 
 async function instanceDownloadUrl(apiUrl: string, value: string): Promise<URL> {
@@ -84,10 +134,9 @@ async function instanceDownloadUrl(apiUrl: string, value: string): Promise<URL> 
  * carry that token out with or without its label. `statusCode` is what a caller acts on — a missing
  * recording and a missing file are both a 404 answer, not a failure of the transfer.
  */
-function httpFailure(response: Response): AppError {
-  void response.body?.cancel().catch(() => {});
-  return new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${response.status}`, {
-    statusCode: response.status,
+function httpFailure(statusCode: number): AppError {
+  return new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${statusCode}`, {
+    statusCode,
     reason: LIMRUN_DOWNLOAD_REASONS.httpError.reason,
   });
 }
