@@ -4,6 +4,7 @@ import { resolveHostedCloudAccess } from './cloud-access.ts';
 import {
   readCloudSessionRequest,
   createCloudSession,
+  deleteCloudSession,
   isDefinitiveCloudCreateRejection,
 } from './cloud-session-api.ts';
 
@@ -34,6 +35,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+test.each([
+  { status: 200, body: { id: response.id, state: 'failed' }, released: true },
+  { status: 200, body: { id: response.id, state: 'settled' }, released: true },
+  { status: 200, body: { id: response.id, state: 'stopping' }, released: false },
+  { status: 200, body: { id: 'other-session', state: 'settled' }, released: false },
+  { status: 404, body: { id: response.id, state: 'settled' }, released: false },
+])(
+  'requires an authoritative terminal state after a release conflict (%j)',
+  async ({ status, body, released }) => {
+    const fetchMock = vi.fn(async (_url: URL, init: RequestInit) =>
+      init.method === 'DELETE'
+        ? Response.json({ error: 'still_stopping' }, { status: 409 })
+        : Response.json(body, { status }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const release = deleteCloudSession(access, response.id);
+    if (released) await expect(release).resolves.toBeUndefined();
+    else await expect(release).rejects.toMatchObject({ details: { status: 409 } });
+    expect(
+      fetchMock.mock.calls.map(([url, { method, redirect }]) => [url.pathname, method, redirect]),
+    ).toEqual([
+      [`/v1/sessions/${response.id}`, 'DELETE', 'error'],
+      [`/v1/sessions/${response.id}`, 'GET', 'error'],
+    ]);
+  },
+);
 
 test('POSTs the requested limits with the cloud key and delivers the scoped attachment', async () => {
   const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) =>
