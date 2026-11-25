@@ -145,7 +145,7 @@ Exception: if the root is exactly the full-screen proof frame at the origin, the
 The proof frame comes from the AXRuntime probe. The probe reads two frames. It adds no XCTest tree read and does not change the channel budget.
 When AXRuntime reports the target as the primary app that fills the screen, the proof frame is that screen frame. A windowed or not-primary result gives no proof frame.
 When the probe proves nothing, the proof frame is the sole XCTest screen in native portrait points. On a physical device, the probe always proves nothing, because AXRuntime reports no app to the runner. No window smaller than the screen can equal that frame.
-`XCUIScreen` is main-actor isolated, so snapshot preparation reads the sole screen on main and hands it to the private-AX tier in `SnapshotCaptureTarget`.
+`XCUIScreen` is main-actor isolated, so snapshot preparation reads the sole screen on main, once per command (`soleDisplayPortraitSize`), and hands it to the private-AX tier in `SnapshotCaptureTarget`. The tree tier reads its viewport on main and reuses that read. A request that names a lit panel skips the read, because its plan has no private-AX tier.
 The payload carries any remaining uncertainty.
 In landscape, the root is in interface space and the screen frame is in native portrait space, so the root stays `derived`.
 

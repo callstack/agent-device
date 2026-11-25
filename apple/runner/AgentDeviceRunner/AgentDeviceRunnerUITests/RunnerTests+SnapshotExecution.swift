@@ -33,9 +33,12 @@ extension RunnerTests {
           )
         target.litPanelSurface = self.litPanelState.surface
         target.refusesSystemAlertSubstitution = context.observation != nil
-#if os(iOS)
-        target.soleScreenSize = self.soleDisplayPortraitSize() ?? .zero
-#endif
+        // Snapshot commands skip `executePrepared`, which starts every other command without a
+        // cached screen size, so a display change between snapshots is read again.
+        self.mainOwned.soleDisplayPortraitSize = nil
+        if self.requestLitPanel == nil {
+          target.soleScreenSize = self.commandSoleScreenSize()
+        }
         return .capture(
           target,
           systemSurface: context.systemSurface,

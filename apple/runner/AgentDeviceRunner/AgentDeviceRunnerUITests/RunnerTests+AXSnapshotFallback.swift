@@ -332,10 +332,12 @@ extension RunnerTests {
     #endif
   }
 
-  /// The sole XCTest screen read now, for a caller on the main thread.
-  static func liveSoleScreenSize() -> CGSize {
+  /// The device's only screen in portrait points, read at most once per command
+  /// (`soleDisplayPortraitSize`). `.zero` when the read fails or the platform has no such screen.
+  @MainActor
+  func commandSoleScreenSize() -> CGSize {
     #if os(iOS)
-      return RunnerSoleScreenSize()
+      return soleDisplayPortraitSize() ?? .zero
     #else
       return .zero
     #endif

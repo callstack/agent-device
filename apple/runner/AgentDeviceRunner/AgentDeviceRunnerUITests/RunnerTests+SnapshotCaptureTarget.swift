@@ -19,7 +19,8 @@ struct SnapshotCaptureTarget {
   var refusesSystemAlertSubstitution = false
   /// The device's only screen in portrait points, read on main because `XCUIScreen` is main-actor
   /// isolated. The off-main private-AX tier proves a full-screen root against it. `.zero` when the read
-  /// failed or the platform has no such screen.
+  /// failed, the platform has no such screen, or the request names a lit panel (its plan has no
+  /// private-AX tier).
   var soleScreenSize: CGSize = .zero
 }
 
