@@ -348,7 +348,7 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     const target = parsed.positionals[0];
     if (target === undefined) return action;
     if (target.startsWith('@')) {
-      // Recorded refs may carry a `~s<generation>` pin — strip and IGNORE it
+      // Recorded refs may carry a `-s<generation>` pin — strip and IGNORE it
       // (see stripRecordedRefGeneration: generations are session-scoped).
       action.positionals = [stripRecordedRefGeneration(target)];
       if (parsed.positionals[1]) {

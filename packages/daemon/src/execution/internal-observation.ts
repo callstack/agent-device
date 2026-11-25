@@ -6,6 +6,7 @@ import type {
   ReplayRefPublicationProjection,
   ReplayRefPublicationResult,
 } from '@agent-device/contracts/replay';
+import { REF_PIN_SEPARATOR, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import { readSessionRuntimeRevision, refFrame } from '../core/ref-frame.ts';
 import type { RefFrame } from '../core/ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
@@ -138,10 +139,18 @@ function resolveCurrentLineage(
 function normalizeRefBodies(refs: readonly string[]): Set<string> {
   const normalized = new Set<string>();
   for (const ref of refs) {
+    // A projected ref may arrive pinned (`@e12-s3`); the frame authorizes plain
+    // bodies. A token that is only a pin marker (`@-s3`) has no body, and anything
+    // else is kept as written so a ref the capture never published still reads as
+    // an invalid projection rather than vanishing from the set.
     const withoutAt = ref.startsWith('@') ? ref.slice(1) : ref;
-    const suffix = withoutAt.indexOf('~');
-    const body = suffix === -1 ? withoutAt : withoutAt.slice(0, suffix);
-    if (body.length > 0) normalized.add(body);
+    if (
+      withoutAt.length === 0 ||
+      withoutAt.startsWith(REF_PIN_SEPARATOR) ||
+      withoutAt.startsWith('~')
+    )
+      continue;
+    normalized.add(splitRefGenerationSuffix(withoutAt)?.base ?? withoutAt);
   }
   return normalized;
 }

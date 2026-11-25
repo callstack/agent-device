@@ -566,11 +566,11 @@ Use the output already shown to determine whether the feed-search UI is present,
       {
         id: 'pressesPinnedTailRefOrExactLabel',
         pattern:
-          /(?:^|\n)agent-device\s+(?:press|click)\s+(?:@e40~s5\b|'?label="?Profile"?'?)[^\n]*--settle\b/i,
+          /(?:^|\n)agent-device\s+(?:press|click)\s+(?:@e40-s5\b|'?label="?Profile"?'?)[^\n]*--settle\b/i,
       },
     ],
     forbidden: [
-      { id: 'noUnpinnedRef', pattern: /@e40(?!~s5\b)/i },
+      { id: 'noUnpinnedRef', pattern: /@e40(?!-s5\b)/i },
       { id: 'noBareRefTarget', pattern: BARE_REF_TARGET },
       { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },

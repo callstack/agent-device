@@ -128,13 +128,13 @@ test('drag requires two non-empty targets and validates each timing phase', () =
     readGesturePayload({
       kind: 'drag',
       source: 'id="drag-source"',
-      destination: '@e2~s42',
+      destination: '@e2-s42',
       destinationHoldMs: 0,
     }),
     {
       kind: 'drag',
       source: 'id="drag-source"',
-      destination: '@e2~s42',
+      destination: '@e2-s42',
       sourceHoldMs: undefined,
       moveMs: undefined,
       destinationHoldMs: 0,

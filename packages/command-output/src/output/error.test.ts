@@ -103,7 +103,7 @@ test('formatHumanError puts two or three distinguishable ambiguous candidates on
   // A reader that keeps one line (tail -1, head -1) still gets every ref it can act on.
   assert.match(
     summary,
-    /Next: Act on one ref .*: @e2~s7 \[button\] "Save"; @e5~s7 \[button\] "Save draft"; @e9~s7 \[link\] "Save as"$/,
+    /Next: Act on one ref .*: @e2-s7 \[button\] "Save"; @e5-s7 \[button\] "Save draft"; @e9-s7 \[link\] "Save as"$/,
   );
   assert.equal(body.join('\n').includes('Candidates:'), false);
 });
@@ -165,12 +165,12 @@ test('formatHumanError re-pins a candidate born stamped at an earlier epoch', ()
   const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements: text~="Save"', {
     matches: 2,
     refsGeneration: 750596,
-    candidates: ['@e2~s750595 [button] "Save"', '@e5 [button] "Save draft"'],
+    candidates: ['@e2-s750595 [button] "Save"', '@e5 [button] "Save draft"'],
   });
 
   const { summary } = formatHumanError(err);
 
-  assert.match(summary, /@e2~s750596 \[button\] "Save"; @e5~s750596 \[button\] "Save draft"$/);
+  assert.match(summary, /@e2-s750596 \[button\] "Save"; @e5-s750596 \[button\] "Save draft"$/);
 });
 
 // A tie can span booted and shut-down devices, and an id picked without the

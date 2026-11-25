@@ -86,7 +86,7 @@ test('Provider-backed integration Android audit issues the estimated TalkBack or
     assert.equal(order.windows.length, 1);
     assert.equal(order.windows[0]!.refs.length, 2);
     assert.equal(typeof audit.refsGeneration, 'number');
-    const ref = `${order.windows[0]!.refs[1]}~s${audit.refsGeneration}`;
+    const ref = `${order.windows[0]!.refs[1]}-s${audit.refsGeneration}`;
     const read = assertRpcOk(await daemon.callCommand('get', ['text', ref], selection));
     assert.equal(read.text, '42 GB used');
   } finally {

@@ -629,7 +629,7 @@ test('writeSessionLog optimizes selector chains and scopes fallback snapshots', 
   // #1783: hover @ref publishes as a portable selector line like click/longpress.
   fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'hover',
-    positionals: ['@e4~s12'],
+    positionals: ['@e4-s12'],
     flags: { platform: 'web', settle: true },
     result: { selectorChain: ['text="Second message"', 'role=link'] },
   });

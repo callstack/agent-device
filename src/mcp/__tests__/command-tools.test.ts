@@ -137,7 +137,7 @@ test('MCP pins every find-list ref so a plain follow-up press forwards pinned', 
   // pinned through MCP).
   assert.equal(
     listResult.content[0]?.text,
-    ['2 matches:', '= @e5~s41 [button] "Add"', '= @e9~s41 [cell] "Add another account"'].join('\n'),
+    ['2 matches:', '= @e5-s41 [button] "Add"', '= @e9-s41 [cell] "Add another account"'].join('\n'),
   );
 
   await executor.execute('press', { session: 'demo', ref: '@e9' });
@@ -146,7 +146,7 @@ test('MCP pins every find-list ref so a plain follow-up press forwards pinned', 
   const presses = calls.filter((call) => call.name === 'press');
   assert.deepEqual(
     presses.map((call) => call.input.ref),
-    ['@e9~s41', '@e5~s41'],
+    ['@e9-s41', '@e5-s41'],
   );
 });
 
@@ -651,7 +651,7 @@ test('MCP renders tool text from the unpinned input so the model never sees suff
   await executor.execute('snapshot', {});
   const result = await executor.execute('press', { ref: '@e2' });
 
-  assert.doesNotMatch(result.content[0]?.text ?? '', /~s9/);
+  assert.doesNotMatch(result.content[0]?.text ?? '', /-s9/);
 });
 
 test('MCP command tool executor pins refs for runCommand while keeping rendered text unpinned', async () => {
@@ -675,9 +675,9 @@ test('MCP command tool executor pins refs for runCommand while keeping rendered 
 
   assert.deepEqual(runCalls[1], {
     name: 'press',
-    input: { session: 'demo', ref: '@e2~s500012' },
+    input: { session: 'demo', ref: '@e2-s500012' },
   });
-  assert.doesNotMatch(result.content[0]?.text ?? '', /~s500012/);
+  assert.doesNotMatch(result.content[0]?.text ?? '', /-s500012/);
 });
 
 // --- ADR 0012 migration step 2: replay divergence is a ref-issuing error ---
@@ -750,7 +750,7 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
   // The error-path screen ref is pinned exactly like a successful ref-issuing
   // response — the caller's next command against @e5 forwards the generation.
   await executor.execute('press', { ref: '@e5' });
-  assert.deepEqual(runCalls[1]?.input, { ref: '@e5~s12' });
+  assert.deepEqual(runCalls[1]?.input, { ref: '@e5-s12' });
 });
 
 test('ambiguous interaction errors pin their candidate refs for the next mutation', async () => {
@@ -775,7 +775,7 @@ test('ambiguous interaction errors pin their candidate refs for the next mutatio
     selector: 'label="Team Standup"',
   });
   assert.equal(result.isError, true);
-  assert.match(result.content[0]?.text ?? '', /@e5~s42 \[cell\] "Team Standup"/);
+  assert.match(result.content[0]?.text ?? '', /@e5-s42 \[cell\] "Team Standup"/);
 
   await executor.execute('press', {
     session: 'demo',
@@ -783,7 +783,7 @@ test('ambiguous interaction errors pin their candidate refs for the next mutatio
   });
   assert.deepEqual(runCalls[1]?.input, {
     session: 'demo',
-    ref: '@e5~s42',
+    ref: '@e5-s42',
   });
 });
 

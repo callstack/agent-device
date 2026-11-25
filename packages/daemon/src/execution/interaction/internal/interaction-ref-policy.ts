@@ -1,5 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
+import { formatPinnedRef } from '@agent-device/kernel/snapshot';
 import type { RefFrameRejectReason, RefMutationFrame } from '../../../core/ref-frame.ts';
 import { interactionErrorResponse } from './interaction-response.ts';
 
@@ -35,7 +36,7 @@ export function assertRefMutationAdmitted(params: {
     scope !== 'all' &&
     scope.has(refBody) &&
     currentGeneration !== undefined
-      ? `@${refBody}~s${currentGeneration}`
+      ? formatPinnedRef(refBody, currentGeneration)
       : undefined;
   const replacement = settledDiffReplacement(params.frame, suggestedRef);
   throw new AppError(
@@ -87,12 +88,13 @@ function settledDiffReplacement(
   ) {
     return undefined;
   }
+  const epoch = frame.currentGeneration;
   const replacementRefs =
     suggestedRef === undefined &&
     frame.scope !== 'all' &&
     frame.scope.size > 0 &&
-    frame.currentGeneration !== undefined
-      ? Array.from(frame.scope, (body) => `@${body}~s${frame.currentGeneration}`)
+    epoch !== undefined
+      ? Array.from(frame.scope, (body) => formatPinnedRef(body, epoch))
       : undefined;
   return {
     replacementRefs,

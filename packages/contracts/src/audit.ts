@@ -125,7 +125,7 @@ export type AuditSnapshotCommandResult = Omit<AuditResult, 'findings'> & {
   findings: (AuditFinding | NativeAuditFinding)[];
   /**
    * Ref-frame epoch the finding and screen-reader order refs were minted from (ADR 0014). Present
-   * only when the audit returned a ref; pair each ref with it (`@e7~s<refsGeneration>`) before a mutation.
+   * only when the audit returned a ref; pair each ref with it (`@e7-s<refsGeneration>`) before a mutation.
    */
   refsGeneration?: number;
   warnings?: string[];

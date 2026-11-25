@@ -2,9 +2,13 @@ import fc from 'fast-check';
 import { expect, test } from 'vitest';
 import { formatRef, refArb } from '@agent-device/test-kit';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { normalizeRef, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
+import {
+  normalizeRef,
+  splitRecordedRefGenerationSuffix,
+  splitRefGenerationSuffix,
+} from '@agent-device/kernel/snapshot';
 
-// #1076 versioned refs: `~s<generation>` is accepted INPUT on every ref parse
+// #1076 versioned refs: `-s<generation>` is accepted INPUT on every ref parse
 // site; node lookup strips it, and callers that care read the generation.
 
 test('splitRefGenerationSuffix passes plain refs through without a generation', () => {
@@ -14,25 +18,47 @@ test('splitRefGenerationSuffix passes plain refs through without a generation', 
 });
 
 test('splitRefGenerationSuffix splits well-formed pinned refs', () => {
-  expect(splitRefGenerationSuffix('@e12~s3')).toEqual({ base: '@e12', generation: 3 });
-  expect(splitRefGenerationSuffix('e12~s3')).toEqual({ base: 'e12', generation: 3 });
-  expect(splitRefGenerationSuffix('@e7~s0')).toEqual({ base: '@e7', generation: 0 });
-  expect(splitRefGenerationSuffix('@e7~s142')).toEqual({ base: '@e7', generation: 142 });
+  expect(splitRefGenerationSuffix('@e12-s3')).toEqual({ base: '@e12', generation: 3 });
+  expect(splitRefGenerationSuffix('e12-s3')).toEqual({ base: 'e12', generation: 3 });
+  expect(splitRefGenerationSuffix('@e7-s0')).toEqual({ base: '@e7', generation: 0 });
+  expect(splitRefGenerationSuffix('@e7-s142')).toEqual({ base: '@e7', generation: 142 });
 });
 
 test('splitRefGenerationSuffix rejects malformed suffixes', () => {
   expect(splitRefGenerationSuffix('@e12~')).toBeNull();
-  expect(splitRefGenerationSuffix('@e12~s')).toBeNull();
+  expect(splitRefGenerationSuffix('@e12-s')).toBeNull();
   expect(splitRefGenerationSuffix('@e12~3')).toBeNull();
   expect(splitRefGenerationSuffix('@e12~x3')).toBeNull();
-  expect(splitRefGenerationSuffix('@e12~s3x')).toBeNull();
-  expect(splitRefGenerationSuffix('@e12~s-3')).toBeNull();
-  expect(splitRefGenerationSuffix('@e12~s3~s4')).toBeNull();
-  // A leading tilde has no ref to pin.
-  expect(splitRefGenerationSuffix('~s3')).toBeNull();
+  expect(splitRefGenerationSuffix('@e12-s3x')).toBeNull();
+  expect(splitRefGenerationSuffix('@e12-s-3')).toBeNull();
+  expect(splitRefGenerationSuffix('@e12-s3-s4')).toBeNull();
+  // A leading pin marker has no ref to pin.
+  expect(splitRefGenerationSuffix('-s3')).toBeNull();
 });
 
-// Property, not another example: `@eN~sM` is a two-part grammar, so split and
+test('splitRefGenerationSuffix refuses the retired `~s` spelling on live input', () => {
+  // Live CLI input speaks one grammar; the retired separator is accepted only
+  // where saved text is read (splitRecordedRefGenerationSuffix).
+  expect(splitRefGenerationSuffix('@e12~s3')).toBeNull();
+});
+
+test('splitRefGenerationSuffix reads a hyphen inside non-ref text as text, not a pin', () => {
+  // Callers pass selectors and labels through this split, so `-s` matters only
+  // on a ref-shaped token.
+  expect(splitRefGenerationSuffix('label=value-s')).toEqual({ base: 'label=value-s' });
+  // A ref-shaped token with a non-numeric tail is still a malformed pin.
+  expect(splitRefGenerationSuffix('@e12-sales')).toBeNull();
+});
+
+test('splitRecordedRefGenerationSuffix also accepts the retired `~s` spelling', () => {
+  expect(splitRecordedRefGenerationSuffix('@e12~s3')).toEqual({ base: '@e12', generation: 3 });
+  expect(splitRecordedRefGenerationSuffix('e12~s3')).toEqual({ base: 'e12', generation: 3 });
+  expect(splitRecordedRefGenerationSuffix('@e12-s3')).toEqual({ base: '@e12', generation: 3 });
+  expect(splitRecordedRefGenerationSuffix('@e12')).toEqual({ base: '@e12' });
+  expect(splitRecordedRefGenerationSuffix('@e12~s')).toBeNull();
+});
+
+// Property, not another example: `@eN-sM` is a two-part grammar, so split and
 // join must be inverses for every ref and generation, not just the pinned
 // examples above.
 test('splitting then rejoining any pinned ref returns the same token', () => {
@@ -56,12 +82,12 @@ test('normalizeRef keeps legacy behavior for plain refs', () => {
 });
 
 test('normalizeRef strips a well-formed generation suffix for node lookup', () => {
-  expect(normalizeRef('@e12~s3')).toBe('e12');
-  expect(normalizeRef('e12~s3')).toBe('e12');
+  expect(normalizeRef('@e12-s3')).toBe('e12');
+  expect(normalizeRef('e12-s3')).toBe('e12');
 });
 
 test('normalizeRef rejects malformed generation suffixes', () => {
-  expect(normalizeRef('@e12~s')).toBeNull();
+  expect(normalizeRef('@e12-s')).toBeNull();
   expect(normalizeRef('@e12~x3')).toBeNull();
   expect(normalizeRef('@e12~')).toBeNull();
 });

@@ -848,7 +848,7 @@ test.each([
 
 // ADR 0014 required evidence #7: a scoped snapshot publishes only its returned
 // namespace, so CLI text renders every reusable ref in the ready-to-copy
-// `@eN~s<refsGeneration>` form and discloses the generation once. A complete
+// `@eN-s<refsGeneration>` form and discloses the generation once. A complete
 // tree stays plain to protect the token budget, and --raw stays byte-for-byte.
 test('formatSnapshotText pins scoped tree refs and discloses the refs generation', () => {
   const text = withNoColor(() =>
@@ -864,7 +864,7 @@ test('formatSnapshotText pins scoped tree refs and discloses the refs generation
       { scoped: true },
     ),
   );
-  assert.match(text, /@e56~s752890 \[button\] "Submit"/);
+  assert.match(text, /@e56-s752890 \[button\] "Submit"/);
   assert.match(text, /Refs generation: 752890/);
   // A node without a ref keeps a refless line; nothing is invented.
   assert.match(text, /^\s+\[text\] "no ref here"$/m);
@@ -881,7 +881,7 @@ test('formatSnapshotText pins scoped flattened refs', () => {
       { scoped: true, flatten: true },
     ),
   );
-  assert.match(text, /@e3~s42 \[button\] "Buy"/);
+  assert.match(text, /@e3-s42 \[button\] "Buy"/);
 });
 
 test('formatSnapshotText keeps scoped refs bare when the response carries no generation', () => {
@@ -907,7 +907,7 @@ test('formatSnapshotText keeps a complete tree plain even when a generation is p
     }),
   );
   assert.match(text, /@e1 \[button\]/);
-  assert.doesNotMatch(text, /~s752890/);
+  assert.doesNotMatch(text, /-s752890/);
   assert.doesNotMatch(text, /Refs generation:/);
 });
 

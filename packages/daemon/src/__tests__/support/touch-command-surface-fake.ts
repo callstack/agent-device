@@ -453,7 +453,7 @@ function resolvedFromNode(
 }
 
 function refBody(ref: string): string {
-  return ref.replace(/^@/, '').replace(/~s\d+$/, '');
+  return ref.replace(/^@/, '').replace(/-s\d+$/, '');
 }
 
 function centerOf(node: SnapshotNode): Point | undefined {

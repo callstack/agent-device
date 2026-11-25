@@ -23,7 +23,7 @@ const outdatedObservations = new WeakSet<SnapshotState>();
  * may use to target a mutation. This module is the single owner of the frame's
  * transitions and of the admission decision; the frame value itself is declared in
  * `ref-frame-slot.ts`, below this module and the session record. The frame epoch reuses
- * the existing `snapshotGeneration`/`refsGeneration` counter and the `@e12~s42` pin grammar
+ * the existing `snapshotGeneration`/`refsGeneration` counter and the `@e12-s42` pin grammar
  * for wire compatibility.
  *
  * The frame is expired at the device side-effect seam, carries a non-`all`
@@ -244,8 +244,8 @@ export function readRefMutationFrame(params: {
  * observation, so an internal read capture cannot admit or reject a mutation by
  * positional coincidence.
  *
- * `refBody` is the plain ref body (no `@`, no `~s<n>` suffix). `mintedGeneration`
- * is the generation carried by a pinned input (`@e12~s42`), or `undefined` for a
+ * `refBody` is the plain ref body (no `@`, no `-s<n>` suffix). `mintedGeneration`
+ * is the generation carried by a pinned input (`@e12-s42`), or `undefined` for a
  * plain ref.
  */
 export function admitRefMutation(params: {

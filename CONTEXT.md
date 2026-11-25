@@ -153,7 +153,7 @@ The point just before a mutating device operation where the active ref frame bec
 The decision that an active ref frame's epoch and issuance scope authorize a ref mutation.
 
 **Ref generation pin**:
-An optional `~s<n>` suffix carrying the snapshot generation an `@ref` was minted from.
+An optional `-s<n>` suffix carrying the snapshot generation an `@ref` was minted from.
 
 **Deferred interaction outcome**:
 Post-response state recording whether a mutation's next capture still needs stabilization or

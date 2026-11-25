@@ -259,12 +259,12 @@ test('degenerate projected refs fail closed when publication normalizes to empty
         refsGeneration: input.refsGeneration,
         refs: [
           { ref: '@', role: 'button', label: 'Empty ref' },
-          { ref: '@~s3', role: 'button', label: 'Empty scoped ref' },
+          { ref: '@-s3', role: 'button', label: 'Empty scoped ref' },
         ],
       },
       suggestions: [
         { selector: 'label="Empty ref"', basis: 'label', ref: '@' },
-        { selector: 'label="Empty scoped ref"', basis: 'label', ref: '@~s3' },
+        { selector: 'label="Empty scoped ref"', basis: 'label', ref: '@-s3' },
       ],
       suggestionCount: 2,
     }),

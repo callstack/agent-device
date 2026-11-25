@@ -237,7 +237,7 @@ test('--scope output prints refs a caller can paste back as the same ref and gen
     (node) => node.ref,
   );
   assert.deepEqual(jsonRefs, ['e1', 'e2', 'e3']);
-  assert.deepEqual(printed, ['@e1~s752890', '@e2~s752890', '@e3~s752890']);
+  assert.deepEqual(printed, ['@e1-s752890', '@e2-s752890', '@e3-s752890']);
   for (const [i, pin] of printed.entries()) {
     assert.deepEqual(splitRefGenerationSuffix(pin), {
       base: `@${jsonRefs[i]}`,
@@ -258,6 +258,6 @@ test('output without --scope keeps plain refs even when a refs generation is pre
 
   for (const output of [withoutScope, blankScope]) {
     assert.match(output.text!, /@e1 \[/);
-    assert.doesNotMatch(output.text!, /~s\d/);
+    assert.doesNotMatch(output.text!, /@e\d+-s\d/);
   }
 });

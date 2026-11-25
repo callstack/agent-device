@@ -290,7 +290,7 @@ test('batch rejects removed positionals even when they were previously normaliza
   const result = await runCliCapture([
     'batch',
     '--steps',
-    '[{"command":"get","positionals":["text","@e5~s3","World","Clock"]}]',
+    '[{"command":"get","positionals":["text","@e5-s3","World","Clock"]}]',
     '--json',
   ]);
 

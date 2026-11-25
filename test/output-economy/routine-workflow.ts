@@ -266,7 +266,7 @@ function workflowSamples(steps: WorkflowStep[]): Record<string, EconomySample> {
 function refsInSample(sample: EconomySample): string[] {
   const serialized = 'text' in sample ? sample.text : JSON.stringify(sample.data);
   // ADR 0014: a partial CLI result may render a ready-to-copy pinned ref
-  // (`@e7~s14`). That still surfaces the plain target `@e7` — an agent pasting
+  // (`@e7-s14`). That still surfaces the plain target `@e7` — an agent pasting
   // the pinned form is targeting the same body — so normalize the pin away when
   // deciding which refs a response surfaced.
   return (serialized.match(REF_TOKEN_PATTERN) ?? []).map((ref) => {

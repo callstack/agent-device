@@ -138,7 +138,7 @@ test('an ambiguous is issues its printed candidates so press acts on the listed 
   // the frame the `is` refusal issued and resolves against THAT tree — the
   // listed button at (300,300), center (310,310) — not the interactive tree's
   // (10,20) button the same body named before.
-  const pinned = candidates[0]!.replace(/\s.*$/, '') + `~s${refsGeneration}`;
+  const pinned = candidates[0]!.replace(/\s.*$/, '') + `-s${refsGeneration}`;
   const press = await handleInteractionCommands({
     createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'press', positionals: [pinned], flags: {} },

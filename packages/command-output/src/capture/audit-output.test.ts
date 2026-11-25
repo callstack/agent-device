@@ -38,9 +38,9 @@ test('renders warnings and observations as aligned lines with the advisory wordi
     [
       'agent-device audit',
       '2 warnings, 1 observation — current screen',
-      '@e7~s3   small-target     button "Save Lemon Herb Rice"  22×22.5pt, below 44×44pt',
-      '@e9~s3   missing-name     text-field id="email"  No accessible name',
-      '@e12~s3  covered-control  button  Accessible action is unavailable to touch',
+      '@e7-s3   small-target     button "Save Lemon Herb Rice"  22×22.5pt, below 44×44pt',
+      '@e9-s3   missing-name     text-field id="email"  No accessible name',
+      '@e12-s3  covered-control  button  Accessible action is unavailable to touch',
       '',
     ].join('\n'),
   );
@@ -105,7 +105,7 @@ test('prints plain refs when the result carries no generation to pin them to', (
     limitations: [],
   });
   expect(output.text).toContain('@e9  missing-name');
-  expect(output.text).not.toContain('~s');
+  expect(output.text).not.toMatch(/@e\d+-s\d/);
 });
 
 test('says no findings and lists each limitation', () => {
@@ -189,8 +189,8 @@ test('prints native descriptions and point geometry alongside unchanged heuristi
     [
       'agent-device audit',
       '3 warnings — current screen',
-      '@e1~s2  missing-name  button  No accessible name',
-      'native  contrast  Low contrast  @e2~s2 button "Dictate"  [335.7,811 17.3×22]',
+      '@e1-s2  missing-name  button  No accessible name',
+      'native  contrast  Low contrast  @e2-s2 button "Dictate"  [335.7,811 17.3×22]',
       'native  dynamicType  Does not scale',
       '',
     ].join('\n'),

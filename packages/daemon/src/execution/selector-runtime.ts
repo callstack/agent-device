@@ -84,7 +84,7 @@ export async function dispatchFindReadOnlyViaRuntime(
     // freshly captured (and stored) session snapshot, so the client now holds
     // refs that match the stored tree again. As a ref-issuing response it also
     // carries the stored tree's generation ONCE (`refsGeneration`) so clients
-    // can pin the ref (`@e12~s3`).
+    // can pin the ref (`@e12-s3`).
     const publishedRefs =
       typeof data.ref === 'string'
         ? [data.ref]
@@ -162,7 +162,7 @@ export async function dispatchGetViaRuntime(
   // #1076 + ADR 0014: a get @ref binds against the retained ref-frame evidence,
   // so it never silently retargets to a newer positional tree. Its warning is
   // frame-derived: once the ref frame has expired any ref gets the frame-derived
-  // warning, else a pinned `@e12~s3` ref whose epoch no longer matches gets the
+  // warning, else a pinned `@e12-s3` ref whose epoch no longer matches gets the
   // precise generation-mismatch warning.
   const staleRefsWarning =
     target.target.kind === 'ref'
@@ -296,7 +296,7 @@ function parseGetTarget(req: DaemonRequest):
       target:
         | { kind: 'ref'; ref: string; fallbackLabel?: string }
         | { kind: 'selector'; selector: string };
-      /** Minted generation from a pinned `@e12~s3` ref (#1076), split off the ref. */
+      /** Minted generation from a pinned `@e12-s3` ref (#1076), split off the ref. */
       refGeneration?: number;
     }
   | { ok: false; response: DaemonResponse } {

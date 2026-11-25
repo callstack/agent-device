@@ -39,7 +39,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   ],
   workflow: [
     'Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name)',
-    'Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name). Pin with ~s<n> (press @e12~s4); every platform rejects a stale pinned ref',
+    'Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name). Pin with -s<n> (press @e12-s4); every platform rejects a stale pinned ref',
     'Unknown app id: devices, then apps, then open <discovered-app-id>. Never open artifact paths or invent package ids',
     'Truncated preview: snapshot -s @e12 (the current concrete ref), not get text. Missing target: scroll <dir> --until <selector>. TV/D-pad focus: help tv',
     'Mutating selector ambiguity: press/click/fill/longpress collapse duplicate accessibility wrappers only when every match is one ancestor-descendant chain resolving to the same actionable node. Matches in distinct subtrees fail with AMBIGUOUS_MATCH',

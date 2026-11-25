@@ -24,7 +24,7 @@ const TARGET_POSITION_BY_COMMAND = new Map<string, number>([
   ['wait', 0],
 ]);
 const POSITIONAL_AT_REFS_ARE_INVALID = new Set(['focus', 'scroll', 'swipe']);
-const CONCRETE_REF = /^@[ec]\d+(?:~s\d+)?$/;
+const CONCRETE_REF = /^@[ec]\d+(?:-s\d+)?$/;
 
 export function validateAgentDeviceCommand(value: unknown): ValidationResult {
   if (!isStringArray(value) || value.length === 0) {

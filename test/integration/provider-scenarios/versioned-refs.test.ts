@@ -14,7 +14,7 @@ const APP = 'com.example.app';
 const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
 // #1076 versioned refs: ref-issuing responses carry the session tree's
-// generation once (`refsGeneration`); a consumer may pin refs as `@e2~s<n>`.
+// generation once (`refsGeneration`); a consumer may pin refs as `@e2-s<n>`.
 // A pinned ref matching the stored generation is clean; a pinned ref from an
 // older generation is rejected with a PRECISE hint naming both generations,
 // including after a later find issued a NEWER generation (the find-blessing hole this
@@ -71,14 +71,14 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
     snapshotEntry(FIRST_SCREEN_NODES),
     // snapshot -i: issues the complete frame at generation g1
     snapshotEntry(),
-    // press @e2~s{g1}: pinned to the CURRENT frame — admitted, taps Cancel,
+    // press @e2-s{g1}: pinned to the CURRENT frame — admitted, taps Cancel,
     // and crosses the seam so the frame expires
     tapEntry(200, 422),
     // snapshot -i: re-issues a fresh complete frame at g2 (= g1+1)
     snapshotEntry(),
-    // press @e2~s{g1}: an outlived pin against the active g2 frame — rejected
+    // press @e2-s{g1}: an outlived pin against the active g2 frame — rejected
     // with a precise generation mismatch before any runner command
-    // press @e2~s{g2}: pinned to the current frame — admitted, taps Cancel
+    // press @e2-s{g2}: pinned to the current frame — admitted, taps Cancel
     tapEntry(200, 422),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
@@ -119,7 +119,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
       assert.ok(nodes.every((node) => node.ref === undefined || !node.ref.includes('~')));
 
       // A pin to the current frame is admitted; the tap crosses the seam.
-      const pinnedCurrent = await daemon.callCommand('press', [`@e2~s${g1}`], {});
+      const pinnedCurrent = await daemon.callCommand('press', [`@e2-s${g1}`], {});
       assert.equal(assertRpcOk(pinnedCurrent).warning, undefined);
 
       // ADR 0014: the mutation expired the frame, so a fresh observation is
@@ -131,7 +131,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
       assert.equal(g2, g1 + 1);
 
       // The outlived pin is rejected precisely against the active g2 frame.
-      const pinnedStale = await daemon.callCommand('press', [`@e2~s${g1}`], {});
+      const pinnedStale = await daemon.callCommand('press', [`@e2-s${g1}`], {});
       const pinnedStaleData = assertRpcError(
         pinnedStale,
         500,
@@ -148,7 +148,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
       );
 
       // A pin to the current generation is admitted.
-      const pinnedFresh = await daemon.callCommand('press', [`@e2~s${g2}`], {});
+      const pinnedFresh = await daemon.callCommand('press', [`@e2-s${g2}`], {});
       assert.equal(assertRpcOk(pinnedFresh).warning, undefined);
 
       runnerTranscript.assertComplete();

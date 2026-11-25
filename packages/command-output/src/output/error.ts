@@ -10,7 +10,7 @@ import {
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
-import { collapseWarningText } from '../output-common.ts';
+import { collapseWarningText, pinnedRefText } from '../output-common.ts';
 
 /**
  * A failure as the CLI prints it on stderr. `summary` is one line that carries the code, the
@@ -191,7 +191,7 @@ function readInlineCandidates(views: ErrorCandidateView[]): string[] | undefined
   return descriptions.size === lines.length ? lines : undefined;
 }
 
-const CANDIDATE_REF_PREFIX = /^@e\d+(?:~s\d+)?\s*/;
+const CANDIDATE_REF_PREFIX = /^@e\d+(?:-s\d+)?\s*/;
 
 function oneLine(text: string): string {
   return text.replaceAll(/\s+/g, ' ').trim();
@@ -240,5 +240,8 @@ function bootStateMarker(device: { booted?: boolean }): string {
  */
 function pinCandidateLine(candidate: string, generation: number | undefined): string {
   if (generation === undefined) return candidate;
-  return candidate.replace(/^@(e\d+)(?:~s\d+)?(?=\s|$)/, `@$1~s${generation}`);
+  return candidate.replace(
+    /^@(e\d+)(?:-s\d+)?(?=\s|$)/,
+    (_matched, body: string) => pinnedRefText(body, generation) ?? body,
+  );
 }

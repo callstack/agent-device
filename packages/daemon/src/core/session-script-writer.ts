@@ -572,7 +572,7 @@ function formatClickLikeActionLine(parts: string[], action: SessionAction): stri
   const first = action.positionals[0];
   if (!first) return undefined;
   if (first.startsWith('@')) {
-    // Recorded refs may carry a `~s<generation>` pin (#1076); scripts store the
+    // Recorded refs may carry a `-s<generation>` pin (#1076); scripts store the
     // plain ref — generations are meaningless outside the minting session.
     parts.push(formatScriptArg(stripRecordedRefGeneration(first)));
     appendRefLabel(parts, action);

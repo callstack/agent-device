@@ -128,7 +128,7 @@ test('parse rejects a leading snapshot ref, empty text, and an out-of-range dela
   const rejectRef = { rejectRefTarget: true };
   // A leading target ref is a mistargeted fill; the hint names the ref to fill instead.
   // Any `@e<digit>` start is a ref target: suffixed, malformed-generation, or uppercase.
-  for (const ref of ['@e5', '@e5~s2', '@e12-label', '@e12_foo', '@e1~s3x', '@e5x', '@E5']) {
+  for (const ref of ['@e5', '@e5-s2', '@e12-label', '@e12_foo', '@e1-s3x', '@e5x', '@E5']) {
     expect(() => parseTypeTextRequest([ref, 'hello'], {}, rejectRef)).toThrow(
       expect.objectContaining({
         code: 'INVALID_ARGS',

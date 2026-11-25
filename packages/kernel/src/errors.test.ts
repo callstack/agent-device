@@ -98,7 +98,7 @@ test('normalizeError retains redacted nested command errors through repeated nor
 test('readElementMatchCandidateRefs extracts refs from candidate lines', () => {
   assert.deepEqual(
     readElementMatchCandidateRefs({
-      candidates: ['@e2 [button] "Follow"', '@e5~s42 [button] "Follow"', 'not a ref'],
+      candidates: ['@e2 [button] "Follow"', '@e5-s42 [button] "Follow"', 'not a ref'],
     }),
     ['e2', 'e5'],
   );

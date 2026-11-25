@@ -31,7 +31,7 @@ Loop:
   End with: agent-device close
 
 Targets:
-  Copy refs exactly: @e12, @e12~s4. Keep @ and any ~sN pin; refs go stale
+  Copy refs exactly: @e12, @e12-s4. Keep @ and any -sN pin; refs go stale
     after mutations. A literal @handle is label="@handle", not a bare ref.
   Prefer refs, then id/label/role selectors. Selector keys: ${SELECTOR_KEY_NAMES.join(' ')}.
   Coordinates are last resort: after snapshot -i shows no semantic target, or a

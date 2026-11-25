@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs, AppError } from '@agent-device/kernel/errors';
+import { splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import {
   activatePartialRefFrame,
@@ -37,7 +38,7 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
   if (session.snapshot !== snapshot) {
     // #1076 versioned refs: every tree replacement advances the session's
     // snapshot generation, so refs pinned to an earlier generation
-    // (`@e12~s3`) can be diagnosed precisely.
+    // (`@e12-s3`) can be diagnosed precisely.
     session.snapshotGeneration = nextSnapshotGeneration(session.snapshotGeneration);
   }
   session.snapshot = snapshot;
@@ -75,7 +76,7 @@ export function setCommandSnapshot(
  * Advance `snapshotGeneration` (#1076 versioned refs). The FIRST bump of a
  * session lifetime seeds at a random 6-digit base instead of 1: a reopened
  * session restarts its counter, so a per-lifetime count starting at 1 would
- * let a stale `@e1~s1` pin from the previous lifetime silently read as
+ * let a stale `@e1-s1` pin from the previous lifetime silently read as
  * current. With a seeded base, cross-lifetime collisions are ~1e-6 instead of
  * common — the protection is probabilistic (seeded), NOT identity-based.
  * Within a lifetime the counter stays strictly monotonic (+1 per replacement),
@@ -85,14 +86,12 @@ function nextSnapshotGeneration(current: number | undefined): number {
   return current === undefined ? randomInt(100_000, 1_000_000) : current + 1;
 }
 
-/** Plain ref body: strip a leading `@` and any `~s<n>` generation suffix. */
+/** Plain ref body: strip a leading `@` and any `-s<n>` generation suffix. */
 function normalizeRefBody(ref: string): string {
   const withoutAt = ref.startsWith('@') ? ref.slice(1) : ref;
-  const suffix = withoutAt.indexOf('~');
-  return suffix === -1 ? withoutAt : withoutAt.slice(0, suffix);
-}
-
-/**
+  const split = splitRefGenerationSuffix(withoutAt);
+  return split ? split.base : withoutAt;
+} /**
  * ADR 0014 partial issuance: a `find`, settled diff, or replay divergence screen
  * publishes only the refs it actually returned. It activates a PARTIAL frame that
  * authorizes ONLY those ref bodies (scope = the emitted set) at the current
@@ -250,7 +249,7 @@ function collectSettleIssuedRefBodies(settle: SettleObservation): string[] {
 }
 
 /**
- * Warning for a ref pinned to a generation (`@e12~s3`) whose epoch no longer
+ * Warning for a ref pinned to a generation (`@e12-s3`) whose epoch no longer
  * matches the session's current ref-frame epoch (`refFrameEpoch`) — NOT the
  * latest observation generation. A read-only capture bumps the observation
  * counter without re-issuing the frame, so the two can diverge; the warning

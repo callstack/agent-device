@@ -31,7 +31,7 @@ async function email() {
     (n) => n.identifier === 'field-email' || n.identifier?.endsWith(':id/field-email'),
   );
   assert(node?.ref, 'The current test-app Checkout form must expose field-email');
-  return { ref: `@${node.ref}~s${snapshot.refsGeneration}` };
+  return { ref: `@${node.ref}-s${snapshot.refsGeneration}` };
 }
 let opened = false;
 try {

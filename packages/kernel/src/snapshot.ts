@@ -772,34 +772,104 @@ export function snapshotRefBodies(refCarriers: readonly { ref?: string }[]): str
 
 /**
  * Versioned-ref grammar (#1076): a ref argument may carry an optional
- * `~s<generation>` suffix pinning it to the session snapshot generation that
- * minted it, e.g. `@e12~s3`. Snapshot output stays plain `e12` refs (the tree is
+ * `-s<generation>` suffix pinning it to the session snapshot generation that
+ * minted it, e.g. `@e12-s3`. Snapshot output stays plain `e12` refs (the tree is
  * the most token-expensive artifact agents consume), except the CLI text of a
  * `--scope` snapshot, which prints every ref in this pinned form unless `--raw`
  * is set (ADR 0014).
  * Ref-issuing responses carry the generation ONCE as the additive
  * `refsGeneration` field.
+ *
+ * The separator is `-s` and nothing else: a printed ref is text an agent pastes
+ * straight into a shell command, so the whole token must stay a plain literal
+ * word for bash, zsh, and the command allow-rule matchers agents gate calls
+ * with. The retired `~s` separator failed that (`~` is an EXTENDED_GLOB hazard in
+ * zsh, and those matchers reject unquoted words containing it), which sent pasted
+ * pins into sandboxed runs. `formatPinnedRef` is the only writer of the form;
+ * `splitRefGenerationSuffix` and `splitRecordedRefGenerationSuffix` are the only
+ * readers.
  */
-const REF_GENERATION_SUFFIX_RE = /^~s(\d+)$/;
+export const REF_PIN_SEPARATOR = '-s';
+
+/**
+ * A pinned ref's generation suffix: the separator, then digits only, on a ref-shaped
+ * token. Ref bodies are minted as `e<digits>` only, so one `-s<digits>` tail is never
+ * ambiguous with a plain ref, a `key=value` selector, or a flag. The whole token must
+ * match, so text such as `@e12-sales` is not read as a pin.
+ */
+const CURRENT_REF_GENERATION_SUFFIX = /^(@?e\d+)-s(\d+)$/;
+
+/**
+ * Retired input-only spelling of the pin, accepted where saved replay scripts
+ * and recorded refs are read (`~s<generation>`). Never emitted.
+ */
+const LEGACY_REF_GENERATION_SUFFIX = /^(@?e\d+)~s(\d+)$/;
+
+/** Tokens only a ref can be: a bare or `@`-prefixed `e<digit>` run. */
+const REF_SHAPED_RE = /^@?e\d/;
+
+/** Either pin separator, current or retired: present means the token is a pin attempt. */
+const PIN_MARKER_RE = /~|-s/;
 
 export const REF_GRAMMAR_HINT =
-  'Refs look like @e12, optionally pinned to the snapshot generation that minted them: @e12~s3 (the ref, then "~s" and the refsGeneration reported by the issuing snapshot/find response).';
+  'Refs look like @e12, optionally pinned to the snapshot generation that minted them: @e12-s3 (the ref, then "-s" and the refsGeneration reported by the issuing snapshot/find response).';
 
 export type SplitRef = { base: string; generation?: number };
 
 /**
- * Split an optional `~s<generation>` suffix off a ref token (`@e12~s3` or bare
- * `e12~s3`). `base` keeps the token's `@` prefix (or lack of one). Returns null
- * when a `~` is present but the suffix does not match the grammar — callers
- * surface INVALID_ARGS with REF_GRAMMAR_HINT.
+ * Split an optional `-s<generation>` suffix off a ref token (`@e12-s3` or bare
+ * `e12-s3`). `base` keeps the token's `@` prefix (or lack of one). Returns null
+ * when a ref-shaped token carries a pin marker whose suffix does not match the
+ * grammar — callers surface INVALID_ARGS with REF_GRAMMAR_HINT. This is the live
+ * CLI grammar: the retired `~s` spelling is NOT accepted here.
  */
 export function splitRefGenerationSuffix(input: string): SplitRef | null {
+  return splitRefGenerationSuffixWith(input, CURRENT_REF_GENERATION_SUFFIX);
+}
+
+/**
+ * Replay-input variant of `splitRefGenerationSuffix`: also strips the retired
+ * `~s<generation>` spelling, because saved `.ad` scripts and refs recorded
+ * before the separator changed still carry it. It never rejects, so a malformed
+ * pin stays untouched for the daemon to name. Use it only where such saved text
+ * is read; live CLI input goes through `splitRefGenerationSuffix`.
+ */
+export function splitRecordedRefGenerationSuffix(input: string): SplitRef | null {
   const trimmed = input.trim();
-  const tildeIndex = trimmed.indexOf('~');
-  if (tildeIndex === -1) return { base: trimmed };
-  const match = REF_GENERATION_SUFFIX_RE.exec(trimmed.slice(tildeIndex));
-  if (!match || tildeIndex === 0) return null;
-  return { base: trimmed.slice(0, tildeIndex), generation: Number(match[1]) };
+  const legacy = LEGACY_REF_GENERATION_SUFFIX.exec(trimmed);
+  if (legacy) return { base: legacy[1]!, generation: Number(legacy[2]) };
+  return splitRefGenerationSuffixWith(trimmed, CURRENT_REF_GENERATION_SUFFIX);
+}
+
+function splitRefGenerationSuffixWith(input: string, suffix: RegExp): SplitRef | null {
+  const trimmed = input.trim();
+  const match = suffix.exec(trimmed);
+  if (match) return { base: match[1]!, generation: Number(match[2]) };
+  // A token that starts with a pin marker has no ref to pin: reject it instead of
+  // handing back a base that no ref namespace contains.
+  if (startsWithPinMarker(trimmed)) return null;
+  // A ref-shaped token carrying a pin marker is a pin attempt, never a plain
+  // ref: a non-numeric tail (`@e12-s`, `@e12-s3x`) or the retired marker on a
+  // live-input path is malformed, so reject it and let the caller name the
+  // grammar instead of resolving a ref body that was never minted. A token that
+  // is not ref-shaped is passed through: it is a selector or text, and only
+  // `-s`-shaped text such as `label=value-s` carries the separator by accident.
+  if (REF_SHAPED_RE.test(trimmed) && PIN_MARKER_RE.test(trimmed)) return null;
+  return { base: trimmed };
+}
+
+function startsWithPinMarker(token: string): boolean {
+  return token.startsWith('~') || token.startsWith(REF_PIN_SEPARATOR);
+}
+
+/**
+ * The one writer of the pinned-ref form: renders `@<body>` plus
+ * `REF_PIN_SEPARATOR` and the generation, ready to paste into a command. The
+ * body may be passed with or without its `@`.
+ */
+export function formatPinnedRef(ref: string, generation: number): string {
+  const body = ref.startsWith('@') ? ref.slice(1) : ref;
+  return `@${body}${REF_PIN_SEPARATOR}${generation}`;
 }
 
 export function normalizeRef(input: string): string | null {

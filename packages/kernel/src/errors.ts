@@ -206,7 +206,7 @@ export function readElementMatchCandidateRefs(
   details: Record<string, unknown> | undefined,
 ): string[] {
   return readStringArray(details?.candidates).flatMap((candidate) => {
-    const match = /^@(e\d+)(?:~s\d+)?(?:\s|$)/.exec(candidate);
+    const match = /^@(e\d+)(?:-s\d+)?(?:\s|$)/.exec(candidate);
     return match?.[1] ? [match[1]] : [];
   });
 }
