@@ -1,9 +1,10 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 /**
- * Custom actions are read through the private-AX snapshot backend, which only
- * the iOS simulator has. Every other target would accept `--actions`, take an
- * ordinary capture, and return nodes with no `actions` — indistinguishable from
- * "this screen has no custom actions". The guard runs after the session device
+ * Custom actions are read through the private-AX snapshot backend. iOS
+ * physical-device runners read private AX too, but the daemon admits
+ * `--actions` on the iOS simulator only. Every other target would accept
+ * `--actions`, take an ordinary capture, and return nodes with no `actions` —
+ * indistinguishable from "this screen has no custom actions". The guard runs after the session device
  * is resolved but before any device work, so a seeded session exercises it
  * without a real device.
  */
