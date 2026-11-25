@@ -235,7 +235,7 @@
     "packages/remote/src/artifact-download.ts#RemoteArtifactRequest": "sha256:8e4ef9a2751e5ce2bd4ec8c9ade2f3616933386f1d284dcba38f96bfb4a005dc",
     "packages/remote/src/artifact-download.ts#RemoteArtifactFetch": "sha256:e83939ec48a66917df9ec84becf53b6ca3c8115cfdada10731046381ac9e32c1",
     "packages/remote/src/artifact-download.ts#fetchRemoteArtifactFromUrl": "sha256:de6e71abdc758f760beffba0dc260473f88a8c60b13540b9c14d39f1a3d5e3a1",
-    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:8b3d7608dbee9735d6670b35cb9f9066d94b97bb0200f0830fe154d24f90017a",
+    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:bbf81a8b1e030f92cc9578039eebfc3ba2be5642997b4b305f717b67781675c3",
     "packages/daemon/src/core/request-session-intake.ts#resolveRequestSessionAtIntake": "sha256:d620b6ee56a8c2f74d2c161016fa19974cbc833e3b87fa522411e35b381d9bc9"
   },
   "compatibleChanges": [
@@ -721,8 +721,8 @@
     },
     {
       "declaration": "packages/remote/src/artifact-download.ts#requestRemoteArtifact",
-      "digest": "sha256:8b3d7608dbee9735d6670b35cb9f9066d94b97bb0200f0830fe154d24f90017a",
-      "rationale": "The optional client-local callback checks ownership after the connection is prepared and holds admission through header write completion. The response is read outside admission. The method, path, headers, status and body framing are unchanged."
+      "digest": "sha256:bbf81a8b1e030f92cc9578039eebfc3ba2be5642997b4b305f717b67781675c3",
+      "rationale": "The optional client-local callback checks ownership after the connection is prepared and holds admission through header write completion. The response is read outside admission. A refusal before send skips local file cleanup. The method, path, headers, status and body framing are unchanged."
     }
   ]
 }

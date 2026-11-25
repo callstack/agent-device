@@ -167,6 +167,7 @@ async function requestRemoteArtifact<T>(
   await destination.prepare();
   return await new Promise<T>((resolve, reject) => {
     let settled = false;
+    let sendStarted = !params.downloadHandoff;
     let materializationStarted = false;
     let timeoutError: AppError | undefined;
     const operation = new AbortController();
@@ -182,6 +183,10 @@ async function requestRemoteArtifact<T>(
     };
     const fail = (error: Error) => {
       if (!settleOnce()) return;
+      if (!sendStarted) {
+        reject(error);
+        return;
+      }
       // A cleanup that fails is reported on its own; the caller still receives the download's own error.
       void destination
         .cleanupOnError()
@@ -287,6 +292,9 @@ async function requestRemoteArtifact<T>(
       headers,
       params.downloadHandoff,
       operation.signal,
+      () => {
+        sendStarted = true;
+      },
     ).catch((error: unknown) => {
       request.destroy();
       fail(error instanceof Error ? error : new Error(String(error)));
@@ -299,6 +307,7 @@ async function writeAdmittedArtifactRequest(
   headers: http.OutgoingHttpHeaders,
   handoff: NonNullable<RemoteArtifactRequest['downloadHandoff']>,
   signal: AbortSignal,
+  markSendStarted: () => void,
 ): Promise<void> {
   const socket = (request.socket ?? (await once(request, 'socket', { signal }))[0]) as Socket & {
     encrypted?: boolean;
@@ -314,6 +323,7 @@ async function writeAdmittedArtifactRequest(
       if (value !== undefined) request.setHeader(name, value);
     }
     const written = once(request, 'finish', { signal });
+    markSendStarted();
     try {
       request.end();
     } catch (error) {

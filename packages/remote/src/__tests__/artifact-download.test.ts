@@ -399,6 +399,35 @@ test('a cleanup that fails after a failed download keeps the download error and 
   }
 });
 
+test('refused artifact admission preserves an existing destination', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact admission coverage')) return;
+  const tempRoot = mkdtempForTestSync('agent-device-artifact-admission-');
+  const destinationPath = path.join(tempRoot, 'screen.png');
+  fs.writeFileSync(destinationPath, 'previous artifact');
+  const refuse = new Error('lease disconnected');
+  let requests = 0;
+  const server = http.createServer((_req, res) => {
+    requests++;
+    res.end('unexpected artifact');
+  });
+  const port = await listenOnLoopback(server);
+  try {
+    await assert.rejects(
+      downloadTo(tempRoot, port, {
+        destinationPath,
+        downloadHandoff: async () => {
+          throw refuse;
+        },
+      }),
+      (error: unknown) => error === refuse,
+    );
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'previous artifact');
+    assert.equal(requests, 0);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
