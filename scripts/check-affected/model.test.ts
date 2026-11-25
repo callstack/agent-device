@@ -278,7 +278,7 @@ test('public package surface change selects the build and the published-package 
   // A public entry is the one surface a consumer resolves by name, so building it is not enough:
   // check:package proves it still imports from an install with no workspace links.
   assert.ok(result.includes('package'));
-  assert.ok(ids(['src/ai-sdk/index.ts']).includes('package'));
+  assert.ok(ids(['src/sdk/plugins.ts']).includes('package'));
 });
 
 test('docs-only change selects no checks and records the docs paths', () => {

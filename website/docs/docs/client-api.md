@@ -350,8 +350,7 @@ On Android, each successful `perf({ area: 'frames' })` read and each `open` of a
 `client.batch.run({ steps })` accepts structured steps:
 `{ command: 'open', input: { app: 'settings' } }`. Step `input` uses the same fields as the
 matching client command. Daemon-shaped `positionals`/`flags` steps are internal to the daemon and not
-part of the client API. To run daemon-shaped batches through your own dispatcher, see
-[Batch orchestration for custom transports](/docs/build-an-integration#batch-orchestration-for-custom-transports).
+part of the client API. See [Batching](/docs/batching) for request limits and failure behavior.
 
 ## Android `installFromSource()`
 
