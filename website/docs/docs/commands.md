@@ -1281,7 +1281,7 @@ Exact behavior: `agent-device help gesture`.
 <!-- /generated -->
 
 - Touch platforms refuse `hover`; use `longpress` for a hold. For `hover` on the web, see [Web Automation](#web-automation).
-- Add `--settle` to a supported `swipe` or `gesture` to wait for the UI to go quiet once after the final repetition. The diff compares with the last observed tree. Copy returned refs with their generation suffix. When the observation is inconclusive or the diff lacks your target, run `snapshot -i`.
+- Add `--settle` to a supported `swipe` or `gesture` to wait for the UI to go quiet after the final repetition. The diff compares with the last observed tree. Copy returned refs with their generation suffix. When the observation is inconclusive or the diff lacks your target, run `snapshot -i`.
 - `swipe` is a quick throw. `gesture pan` is a deliberate timed drag with one pointer, or two with `--pointer-count 2`. `gesture fling` is a fast directional throw. To update old scripts, see [Rewrite old gesture commands](/docs/migrating-gestures).
 - `gesture pan --hold-ms <ms>` holds one pointer before it moves, for drag handles that expose no element and so no ref, such as reorder grips.
 - `gesture drag source destination` holds one pointer from a selector or ref to another. It refuses coordinates; for a coordinate drag, use `gesture pan <x> <y> <dx> <dy> [ms] --hold-ms <ms>`. It and `--hold-ms` work on Android touch devices and iOS/iPadOS only.

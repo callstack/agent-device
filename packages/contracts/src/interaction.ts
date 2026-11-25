@@ -315,22 +315,6 @@ export type FindReadResult =
   /** #1625: the read-only inspection surface — every match, never a tap. */
   | { kind: 'list'; matches: Array<{ ref?: string; node: SnapshotNode }> };
 
-/** Common gesture response fields. Individual execution owners may add diagnostics. */
-export type GestureCommandResponseData = Record<string, unknown> & {
-  kind: string;
-  durationMs: number;
-  pointerCount: number;
-  from: Point;
-  to: Point;
-  settle?: SettleObservation;
-};
-
-export type SwipeCommandResponseData = GestureCommandResponseData & {
-  count: number;
-  pauseMs: number;
-  pattern: string;
-};
-
 export type SettleObservation = {
   settled: boolean;
   waitedMs: number;

@@ -13,6 +13,7 @@ import type {
   SwipeOptions,
   TypeTextOptions,
 } from '@agent-device/contracts/client';
+import { SWIPE_PATTERNS } from '@agent-device/contracts/scroll-gesture';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { readGesturePayload } from '@agent-device/gestures/gesture-payload-reader';
@@ -300,13 +301,6 @@ const unconfirmedFillResponseSchema = interactionResponseDataSchema({
   required: ['text', 'verification', 'requested', 'before', 'after', 'target'],
 });
 
-/**
- * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
- * the command map by `command-output-schemas.ts`. Non-strict like every other entry: no
- * `additionalProperties: false`, so additive response fields such as `settle`/`cost` keep
- * validating. #1652: the opt-in `settle` observation is NOT listed here — the trait derivation
- * pass in that file grafts it onto settle-capable entries.
- */
 const gesturePointResponse = objectSchema({ x: numberSchema(), y: numberSchema() }, ['x', 'y']);
 const gestureResponseProperties = {
   kind: stringSchema(),
@@ -317,6 +311,12 @@ const gestureResponseProperties = {
 };
 const gestureResponseRequired = Object.keys(gestureResponseProperties);
 
+/**
+ * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
+ * the command map by `command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields such as `settle`/`cost` keep
+ * validating. The registry adds `settle` to commands with the post-action observation trait.
+ */
 export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
   gesture: objectSchema(gestureResponseProperties, gestureResponseRequired),
   swipe: objectSchema(
@@ -324,7 +324,7 @@ export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
       ...gestureResponseProperties,
       count: numberSchema(),
       pauseMs: numberSchema(),
-      pattern: enumSchema(['one-way', 'ping-pong']),
+      pattern: enumSchema(SWIPE_PATTERNS),
     },
     [...gestureResponseRequired, 'count', 'pauseMs', 'pattern'],
   ),
@@ -376,8 +376,9 @@ export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
   ),
 } satisfies Pick<
   Record<keyof CommandResultMap, JsonSchema>,
-  'press' | 'click' | 'fill' | 'longpress' | 'hover' | 'find' | 'gesture' | 'swipe'
->;
+  'press' | 'click' | 'fill' | 'longpress' | 'hover' | 'find'
+> &
+  Record<'gesture' | 'swipe', JsonSchema>;
 
 /** The `.ad` preflight owns the same table, so `gesture pinch --count 3` is refused on both paths. */
 const GESTURE_FLAGS_BY_ACTION: Readonly<Record<string, readonly FlagKey[]>> = GESTURE_FLAGS_BY_KIND;
@@ -591,7 +592,7 @@ const swipeCommandFacet = defineCommandFacet({
     summary: 'Fling between coordinates',
     searchHint: 'flick slide carousel page',
     cliDetail:
-      'A swipe never pauses on the start point, so it does not engage a hold-to-reorder handle -- use gesture drag @src @dst for a held move. Use --settle to wait for the UI to go quiet once after the last repetition and compare with the last observed tree. The first read after a swipe waits for two captures to agree. --no-post-gesture-stabilization skips that wait for a caller whose own polling verifies the screen.',
+      'A swipe never pauses on the start point, so it does not engage a hold-to-reorder handle -- use gesture drag @src @dst for a held move. Use --settle to wait for the UI to go quiet after the last repetition and compare with the last observed tree. The first read after a swipe waits for two captures to agree. --no-post-gesture-stabilization skips that wait for a caller whose own polling verifies the screen.',
   },
   metadata: metadata('swipe'),
   run: (client, input) => client.interactions.swipe(input as SwipeOptions),
@@ -693,7 +694,7 @@ const gestureCommandFacet = defineCommandFacet({
     summary: 'Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures',
     searchHint: 'reorder zoom multi-touch',
     cliDetail:
-      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge|split-view-left|split-view-right|split-view-exit>, pinch <scale> [x y | @ref|selector] (centered on the screen when neither is given), rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]; drag holds the source down first (800 ms by default) before moving, which is what engages a reorder handle. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values. Use --settle to wait for the UI to go quiet once after the last repetition and compare with the last observed tree. gesture swipe accepts --no-post-gesture-stabilization to skip the stabilization wait before the next read, for a caller whose own polling verifies the screen.',
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge|split-view-left|split-view-right|split-view-exit>, pinch <scale> [x y | @ref|selector] (centered on the screen when neither is given), rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]; drag holds the source down first (800 ms by default) before moving, which is what engages a reorder handle. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values. Use --settle to wait for the UI to go quiet after the last repetition and compare with the last observed tree. gesture swipe accepts --no-post-gesture-stabilization to skip the stabilization wait before the next read, for a caller whose own polling verifies the screen.',
   },
   metadata: metadata('gesture'),
   run: (client, input) =>

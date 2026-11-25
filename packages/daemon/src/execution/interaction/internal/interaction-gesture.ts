@@ -377,8 +377,11 @@ async function dispatchGestureInteraction(
       actionFinishedAt: Date.now(),
     });
     if (!response.ok || !settle || !baseline) return response;
-    const observation = await observeGestureSettle(params, outcome.runtime, settle, baseline);
-    return { ok: true, data: { ...response.data, settle: observation } };
+    // Observation can fail after the action ran and was recorded.
+    return observeGestureSettle(params, outcome.runtime, settle, baseline).then(
+      (observation) => ({ ok: true as const, data: { ...response.data, settle: observation } }),
+      () => response,
+    );
   } catch (error) {
     // The same ambiguity-issuance rule the touch routes run: a refusal that
     // prints candidate refs must issue them on the frame that lists them, or

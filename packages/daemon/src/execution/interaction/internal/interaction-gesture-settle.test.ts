@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
 import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import { attachRefs } from '@agent-device/kernel/snapshot';
@@ -26,6 +27,7 @@ test.each([
   { command: 'swipe', settle: true, settled: true, surface: 'app' },
   { command: 'swipe', settle: true, settled: true, surface: 'outdated app' },
   { command: 'gesture', settle: true, settled: false, surface: 'app' },
+  { command: 'swipe', settle: true, settled: false, surface: 'unavailable observation' },
   { command: 'swipe', settle: true, settled: true, surface: 'android overlay' },
   { command: 'swipe', settle: true, settled: true, surface: 'retired session' },
 ] as const)(
@@ -34,6 +36,7 @@ test.each([
     const sessionName = 'gesture-settle';
     const overlay = surface === 'android overlay';
     const retired = surface === 'retired session';
+    const unavailable = surface === 'unavailable observation';
     const makeSession = overlay ? makeAndroidSession : makeIosSession;
     const session = makeSession(sessionName, { appBundleId: 'com.example.app' });
     const sessionStore = makeSessionStore();
@@ -78,6 +81,7 @@ test.each([
               expect(pendingSurfaceStabilization(session) !== undefined).toBe(command === 'swipe');
               expect(refFrameState(session)).toBe('expired');
               await config.backend.captureSnapshot?.({ session: sessionName });
+              if (unavailable) throw new Error('Observation unavailable');
               if (retired) sessionStore.retire(ref);
               return {
                 settled,
@@ -129,7 +133,7 @@ test.each([
       bindDevice: gestures.bindDevice,
     });
     expect(response).toMatchObject({ ok: true, data: { count: 2 } });
-    if (!response?.ok) return;
+    assert.ok(response?.ok);
     expect(dispatches).toHaveBeenCalledTimes(2);
     expect(gestures.inspectFacts).toHaveBeenCalledOnce();
     expect(gestures.bindDevice).toHaveBeenCalledOnce();
@@ -144,7 +148,11 @@ test.each([
         }),
       );
       expect(observe.mock.calls[0]?.[0].baseline.presentedSurface).toBe(baseline.presentedSurface);
-      expect(response.data?.settle).toMatchObject({ settled: settled && !retired, captures: 1 });
+      expect(response.data?.settle).toEqual(
+        unavailable
+          ? undefined
+          : expect.objectContaining({ settled: settled && !retired, captures: 1 }),
+      );
     }
     if (settled && !overlay && !retired) {
       expect(response.data?.settle).toMatchObject({ refsGeneration: session.snapshotGeneration });

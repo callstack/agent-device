@@ -26,15 +26,9 @@ import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from './system/index.ts';
 
 /**
  * Registry of per-command MCP `outputSchema`s, keyed by the daemon command
- * NAME. It is type-tied to the typed-result spine `CommandResultMap`
- * (@agent-device/command-registry/command-result) via
- * `satisfies Record<keyof CommandResultMap, JsonSchema>`, so the one-for-one
- * invariant is compiler-enforced: a new `CommandResultMap` entry without a schema
- * here is a missing-key error, and a typo'd/extra key is an excess-property error.
- * The genuinely-dynamic commands (snapshot overlays, gestures, perf, logs, …) are
- * absent from BOTH maps — their tools stay byte-identical to today (no
- * `outputSchema` key), exactly as `CommandResultMap` omits them rather than
- * inventing a shape.
+ * NAME. Every closed contract in `CommandResultMap` has a schema here.
+ * Gesture and swipe keep dynamic SDK results and advertise the known fields,
+ * including the opt-in settle observation, to MCP callers.
  *
  * There is no type→JSON-Schema generator in this repo. Schemas are hand-authored from
  * matching contract types, using the shared JSON-Schema primitives in
@@ -147,11 +141,11 @@ function withSettleObservation(schema: JsonSchema): JsonSchema {
  * Copies only — press and click share one base schema object, so an in-place
  * graft would leak across them.
  */
-function deriveSettleObservationSchemas(
-  schemas: Record<keyof CommandResultMap, JsonSchema>,
-): Record<keyof CommandResultMap, JsonSchema> {
-  const derived: Record<keyof CommandResultMap, JsonSchema> = { ...schemas };
-  for (const command of Object.keys(derived) as Array<keyof CommandResultMap>) {
+function deriveSettleObservationSchemas<Command extends string>(
+  schemas: Record<Command, JsonSchema>,
+): Record<Command, JsonSchema> {
+  const derived = { ...schemas };
+  for (const command of Object.keys(derived) as Command[]) {
     if (!commandSupportsSettleObservation(command)) continue;
     derived[command] = withSettleObservation(derived[command]);
   }

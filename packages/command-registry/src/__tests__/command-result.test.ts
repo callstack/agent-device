@@ -150,8 +150,6 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'lock-screen'
     | 'wait'
     | 'scroll'
-    | 'swipe'
-    | 'gesture'
     | 'prepare'
     | 'push'
     | 'trigger-app-event'

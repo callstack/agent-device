@@ -27,11 +27,9 @@ import type {
   ClickCommandResponseData,
   FillCommandResponseData,
   FindCommandResponseData,
-  GestureCommandResponseData,
   HoverCommandResponseData,
   LongPressCommandResponseData,
   PressCommandResponseData,
-  SwipeCommandResponseData,
 } from '@agent-device/contracts/interaction';
 import type { ClipboardCommandResult } from '@agent-device/contracts/clipboard';
 import type { KeyboardCommandResult } from '@agent-device/contracts/keyboard';
@@ -47,9 +45,10 @@ import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contr
  *
  * Maps a command name to the per-command result type from `@agent-device/contracts`. It
  * is SEEDED, not exhaustive: a command is listed here only once its accurate,
- * shared result shape lives in the contracts layer. Commands whose daemon
- * handler exposes no shared result contract (screenshot overlays, perf, logs, …)
- * are deliberately omitted.
+ * closed result shape lives in the contracts layer. Commands whose daemon
+ * handler spreads dynamic/Record data (screenshot overlays, gesture
+ * visualization, perf, logs, …) are deliberately omitted rather than given an
+ * invented shape.
  *
  * Batches 1-2 wired `boot` / `shutdown` / `viewport` and the navigation/action
  * commands `home` / `back` / `orientation` / `app-switcher` alongside the seed
@@ -78,7 +77,6 @@ export interface CommandResultMap {
   fill: FillCommandResponseData;
   find: FindCommandResponseData;
   fold: FoldCommandResult;
-  gesture: GestureCommandResponseData;
   'hardware-button': HardwareButtonCommandResult;
   home: HomeCommandResult;
   hover: HoverCommandResponseData;
@@ -94,7 +92,6 @@ export interface CommandResultMap {
   scroll: ScrollCommandResult;
   shake: ShakeCommandResult;
   shutdown: ShutdownCommandResult;
-  swipe: SwipeCommandResponseData;
   telephony: TelephonyCommandResult;
   test: ReplaySuiteResult;
   trace: TraceCommandResult;
