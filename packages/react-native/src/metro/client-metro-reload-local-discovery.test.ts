@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
-import { reloadMetro } from './index.ts';
+import { reloadMetro } from './client-metro.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
-import type { MetroAppTarget } from './metro/metro-dev-server-discovery.ts';
+import type { MetroAppTarget } from './metro-dev-server-discovery.ts';
 
-// These run the whole local reload path against a loopback dev server: the session record's app, the
-// host's listening ports, the real `/status` probe, and the real reload call. Only the port listing is
-// answered from a table, so a test does not sweep whatever else this machine listens on.
+// These run `reloadMetro`'s local-discovery branch against a loopback dev server: the session's app,
+// the host's listening ports, the real `/status` probe, and the real reload call. Only the port listing
+// is answered from a table, so a test sweeps its own ports and never a real Metro.
 
 const portListing = vi.hoisted(() => ({ ports: [] as number[] }));
 
