@@ -252,6 +252,7 @@ What a **Yes** does not claim:
 | [Phone hardware buttons](/docs/commands#navigation) | No | Volume only | Yes | Yes | No | No |
 | [iPhone Action Button](/docs/commands#navigation) | Models with an Action Button only | Models with an Action Button only | No | No | No | No |
 | [Shake](/docs/commands#navigation) | Yes | No | Yes | No | No | No |
+| [Lock screen](/docs/commands#navigation) | Yes | No | Yes | Yes | No | No |
 | [Foldable pose](/docs/commands#navigation) | Foldable models only | No | Foldable models only | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | No | No | No | No | No | No |
 | [System and app settings helpers](/docs/commands#settings-helpers) | Yes | No | Yes | Yes | Clear app state only; other settings and reads unsupported | Clear app state only; other settings and reads unsupported |
@@ -270,6 +271,7 @@ What a **Yes** does not claim:
 | [Phone hardware buttons](/docs/commands#navigation) | No | No | No | No | No |
 | [iPhone Action Button](/docs/commands#navigation) | No | No | No | No | No |
 | [Shake](/docs/commands#navigation) | No | No | No | No | No |
+| [Lock screen](/docs/commands#navigation) | No | No | No | No | No |
 | [Foldable pose](/docs/commands#navigation) | Foldable models only | No | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | Yes | Yes | Yes | Yes | Yes |
 | [System and app settings helpers](/docs/commands#settings-helpers) | Yes | Yes | Set only; no reads | No | No |
@@ -288,6 +290,7 @@ What a **Yes** does not claim:
 | [Phone hardware buttons](/docs/commands#navigation) | No | No | No | No |
 | [iPhone Action Button](/docs/commands#navigation) | No | No | No | No |
 | [Shake](/docs/commands#navigation) | No | No | No | No |
+| [Lock screen](/docs/commands#navigation) | No | No | No | No |
 | [Foldable pose](/docs/commands#navigation) | No | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | No | No | No | No |
 | [System and app settings helpers](/docs/commands#settings-helpers) | Set only; no reads | No | No | No |
@@ -306,6 +309,7 @@ What a **Yes** does not claim:
 | [Phone hardware buttons](/docs/commands#navigation) | Yes | Yes | Yes | Yes | No | Yes | No | No |
 | [iPhone Action Button](/docs/commands#navigation) | No | No | No | No | Models with an Action Button only | No | No | No |
 | [Shake](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
+| [Lock screen](/docs/commands#navigation) | No | No | No | No | Yes | No | No | No |
 | [Foldable pose](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | No | No | No | No | No | No | No | No |
 | [System and app settings helpers](/docs/commands#settings-helpers) | No | No | No | No | Yes | Yes | Appearance, location coordinates, permission, clear app state, and reset keychain; no reads | Appearance, location coordinates, permission, and clear app state; no reads |
@@ -317,6 +321,7 @@ What a **Yes** does not claim:
 What a **Yes** does not claim:
 
 - **Phone hardware buttons**: Each button is a separate operation; a target that answers the row still refuses buttons it does not model.
+- **Lock screen**: Unlock refuses a lock that asks for a PIN, pattern, password, or passcode.
 - **System and app settings helpers**: Each helper admits on its own, and a target may run only a subset of the helpers.
 - **Clipboard read and write**: A **Yes** means the target exposes clipboard automation. Android depends on the build: AOSP clipboard services from `android13-release` through `android16-release` have no `cmd clipboard` implementation, so such a build refuses the commands, and on builds that answer, Android focus rules can still make a read come back blank.
 
