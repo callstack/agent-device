@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
 import { readRegisteredDaemon, sendDaemonRequest } from '@agent-device/daemon-client';
@@ -6,6 +7,7 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import {
   readRemoteConnectionState,
   removeRemoteConnectionState,
@@ -184,8 +186,13 @@ test('expired attachments without a saved binding retire their generation before
       binding: undefined,
     });
   const credential = cloudAttachmentPath(location);
-  stop.mockRejectedValueOnce(new Error('retirement unconfirmed'));
-  await sweep();
+  const logPath = path.join(location.stateDir, 'expired-retirement.ndjson');
+  stop.mockRejectedValueOnce(new Error('private retirement failure'));
+  await withDiagnosticsScope({ debug: true, logPath }, sweep);
+  const diagnostics = fs.readFileSync(logPath, 'utf8');
+  expect(diagnostics).toContain('cloud_attachment_daemon_stop_unconfirmed');
+  expect(diagnostics).toContain('Run agent-device disconnect again');
+  expect(diagnostics).not.toContain('private retirement failure');
   expect(stop).toHaveBeenCalledExactlyOnceWith(
     expect.anything(),
     expect.objectContaining({

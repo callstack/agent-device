@@ -3,6 +3,7 @@ import path from 'node:path';
 import { LIMRUN } from '@agent-device/contracts/provider-plugin-catalog';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
 import { cloudConnectionDir, type ConnectionLocation } from './cloud-connection-record.ts';
@@ -94,12 +95,15 @@ export async function stopHostedLimrunDaemon(
     }
     await stopRecordedDaemon(identity, { paths, host });
   } catch {
+    const reason = CLOUD_LIMRUN_REASONS.daemonStopUnconfirmed.reason;
+    const hint = 'Run agent-device disconnect again to finish closing this session.';
+    emitDiagnostic({ level: 'warn', phase: reason, data: { session: location.session, hint } });
     throw new AppError(
       'COMMAND_FAILED',
       'Could not confirm the hosted attachment daemon stopped.',
       {
-        reason: CLOUD_LIMRUN_REASONS.daemonStopUnconfirmed.reason,
-        hint: 'Run agent-device disconnect again to finish closing this session.',
+        reason,
+        hint,
       },
     );
   }
