@@ -450,6 +450,7 @@ export const SUITE_EXCLUSIONS: Record<Platform, Partial<Record<PublicCommand, st
     [C.hardwareButton]: 'The iOS simulator runtime refuses hardware-button presses.',
     [C.shake]:
       'What a shake does is app-defined, and the fixture handles none, so there is no outcome to wait on.',
+    [C.lockScreen]: 'A locked screen covers the fixture for every step after it.',
   },
   android: {
     ...COMPOSITE_RUNNERS,
@@ -474,6 +475,7 @@ export const SUITE_EXCLUSIONS: Record<Platform, Partial<Record<PublicCommand, st
     [C.viewport]: 'The Android runtime refuses viewport; it resizes web viewports only.',
     [C.tvRemote]: 'Android TV only.',
     [C.fold]: 'Foldable emulators only; the suite emulator is a pixel_7 with one display.',
+    [C.lockScreen]: 'A locked screen covers the fixture for every step after it.',
   },
 };
 

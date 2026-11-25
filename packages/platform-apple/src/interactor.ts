@@ -201,6 +201,20 @@ export function createAppleInteractor(
       );
     },
     shake: () => shakeIosSimulator(device, runnerOpts.signal),
+    lockScreen: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'lockScreen', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
+    unlockScreen: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'unlockScreen', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
     // Volume presses reach the runner only on physical iPhone/iPad; the facts refuse every other
     // kind, and Apple exposes no power press at all, so no `power` member exists here.
     volumeUp: async () => {

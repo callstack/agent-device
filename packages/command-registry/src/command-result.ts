@@ -18,6 +18,7 @@ import type {
   FoldCommandResult,
   HardwareButtonCommandResult,
   HomeCommandResult,
+  LockScreenCommandResult,
   OrientationCommandResult,
   ShakeCommandResult,
   TvRemoteCommandResult,
@@ -80,6 +81,7 @@ export interface CommandResultMap {
   home: HomeCommandResult;
   hover: HoverCommandResponseData;
   keyboard: KeyboardCommandResult;
+  'lock-screen': LockScreenCommandResult;
   longpress: LongPressCommandResponseData;
   orientation: OrientationCommandResult;
   prepare: PrepareCommandResult;

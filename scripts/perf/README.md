@@ -60,6 +60,7 @@ Some shared steps use other screen coordinates or waits on Android. The `on.andr
 | `push` | Not timed: the fixture has no notification authorization. | lifecycle (adb broadcast) |
 | `telephony` | Not timed: the simulator refuses calls and SMS. | lifecycle (`telephony sms`) |
 | `shake` | Not timed: the fixture handles no shake. | Same reason. |
+| `lock-screen` | Not timed: a locked screen covers the fixture for every step after it. | Same reason. |
 | `snapshot` | home-reads: `snapshot-forced-tree` | heavy-feed: `snapshot-raw-one-shot` |
 | `audio` | Not timed: hosted runners grant no macOS audio permission. | Not timed: the Linux runner has no ScreenCaptureKit. |
 | `fold` | Not timed: iPhone Duo only. | Not timed: foldable emulators only. |

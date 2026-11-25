@@ -308,6 +308,22 @@ export const RUNNER_ERROR_CODES = {
     reason: RUNNER_ERROR_REASONS.hardwareControlUnavailable.reason,
     diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
   },
+  // The two `lock-screen` outcomes the iOS runner reports after its dispatch, so either may have
+  // changed the screen. The reasons are the spellings LOCK_SCREEN_REASONS declares in
+  // contracts/device-rotation.ts, which the Android owner raises too; a literal keeps that module
+  // out of this one's eager closure, as KEYBOARD_DISMISS_UNAVAILABLE does for its reason.
+  // SpringBoard still reports the previous lock state after the lock button or the unlock swipe.
+  LOCK_SCREEN_UNVERIFIED: {
+    dispatched: 'unknown',
+    reason: 'lock-screen-unverified',
+    diagnosticOnly: {},
+  },
+  // The unlock swipe raised a passcode prompt. The runner typed nothing, so the screen stays locked.
+  LOCK_SCREEN_SECURE: {
+    dispatched: 'unknown',
+    reason: 'lock-screen-secure',
+    diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
+  },
   // macOS `back` where the app's tree exposes no in-app back control. That refusal answered with no
   // code at all before, which left the caller reading prose, and the host read the reply as
   // `COMMAND_FAILED`. There is no wire-code override on purpose: the `UNSUPPORTED_OPERATION` family is

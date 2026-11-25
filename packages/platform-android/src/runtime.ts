@@ -120,6 +120,19 @@ function androidShakeFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'emulator') return shakeKindUnavailable;
   return device.target === 'tv' ? shakeTvUnavailable : available;
 }
+const lockScreenKindUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+  'lock-screen is supported on Android emulators and physical devices.',
+);
+/** An Android TV image shows no keyguard, so there is no lock state to verify. */
+const lockScreenTvUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+  'lock-screen is supported on Android phones and tablets only.',
+);
+function androidLockScreenFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind === 'simulator') return lockScreenKindUnavailable;
+  return device.target === 'tv' ? lockScreenTvUnavailable : available;
+}
 const headlessUnavailable = unavailableFact(
   PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Headless boot is supported only for Android emulators.',
@@ -375,6 +388,8 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
           shake: androidShakeFact(device),
+          lockScreen: androidLockScreenFact(device),
+          unlockScreen: androidLockScreenFact(device),
           ...androidHardwareButtonFacts(device),
         }),
         ...androidFoldableFacts(device),

@@ -216,6 +216,8 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     // phone volume and power keys the hardware-button command presses (#3848).
     'actionButton',
     'shake',
+    'lockScreen',
+    'unlockScreen',
     'volumeUp',
     'volumeDown',
     'power',

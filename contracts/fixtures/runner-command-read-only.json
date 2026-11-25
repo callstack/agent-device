@@ -91,6 +91,12 @@
   },
   {
     "command": {
+      "command": "lockScreen"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
       "command": "longPress"
     },
     "readOnly": false
@@ -200,6 +206,12 @@
   {
     "command": {
       "command": "type"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "unlockScreen"
     },
     "readOnly": false
   },

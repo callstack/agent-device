@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { LOCK_SCREEN_REASONS } from '@agent-device/contracts/device';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   COMMAND_ALREADY_FINISHED_RUNNER_CODE,
@@ -214,6 +215,27 @@ test('the hardware-control refusal keeps UNSUPPORTED_OPERATION and says nothing 
   // `reason` cannot mistake prose for the typed refusal.
   const untyped = commandFailed('actionButton requires a device model with an Action Button');
   assert.equal(untyped.details?.reason, undefined);
+});
+
+// The two lock-screen outcomes the runner reports after its dispatch publish the reasons the
+// Android owner raises for the same outcomes, so a caller branches on one vocabulary.
+test('the lock-screen runner outcomes publish the shared lock-screen reasons', () => {
+  assert.deepEqual(classifyRunnerReportedError('LOCK_SCREEN_UNVERIFIED'), {
+    code: 'COMMAND_FAILED',
+    details: {
+      runnerErrorCode: 'LOCK_SCREEN_UNVERIFIED',
+      reason: LOCK_SCREEN_REASONS.stateUnverified.reason,
+      dispatched: 'unknown',
+    },
+  });
+  assert.deepEqual(classifyRunnerReportedError('LOCK_SCREEN_SECURE'), {
+    code: 'UNSUPPORTED_OPERATION',
+    details: {
+      runnerErrorCode: 'LOCK_SCREEN_SECURE',
+      reason: LOCK_SCREEN_REASONS.secureLock.reason,
+      dispatched: 'unknown',
+    },
+  });
 });
 
 test('the keyboard-return refusal keeps UNSUPPORTED_OPERATION and reports an unknown dispatch', () => {

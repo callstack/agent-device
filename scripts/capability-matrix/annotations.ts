@@ -492,6 +492,13 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         link: docs('commands', 'navigation'),
       },
       {
+        id: 'lock-screen',
+        label: 'Lock screen',
+        commands: ['lock-screen'],
+        link: docs('commands', 'navigation'),
+        note: 'Unlock refuses a lock that asks for a PIN, pattern, password, or passcode.',
+      },
+      {
         id: 'fold',
         label: 'Foldable pose',
         commands: ['fold'],

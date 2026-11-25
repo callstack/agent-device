@@ -132,6 +132,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.actionButton]: () => one(),
   [PUBLIC_COMMANDS.shake]: () => one(),
   [PUBLIC_COMMANDS.hardwareButton]: () => one(['volume-up']),
+  [PUBLIC_COMMANDS.lockScreen]: () => one(['lock']),
   [PUBLIC_COMMANDS.fold]: () => one(['open']),
   [PUBLIC_COMMANDS.telephony]: () => one(['call', '5551234']),
 

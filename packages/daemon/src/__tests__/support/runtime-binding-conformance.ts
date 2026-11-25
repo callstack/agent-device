@@ -200,6 +200,29 @@ export const conformedRuntimeBindings = {
       ),
   },
   ...hardwareButtonConformedBindings(),
+  // Each `lock-screen` action is its own admission cell on the one `lock-screen` descriptor.
+  'lock-screen': {
+    plan: { refused: 'lockScreen', admitted: [] },
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundSystemButtonRuntime('lock-screen', {
+          device,
+          positionals: ['lock'],
+          ...bindings,
+        }),
+      ),
+  },
+  'lock-screen unlock': {
+    plan: { refused: 'unlockScreen', admitted: [], command: 'lock-screen' },
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundSystemButtonRuntime('lock-screen', {
+          device,
+          positionals: ['unlock'],
+          ...bindings,
+        }),
+      ),
+  },
   'tv-remote': {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundTvRemoteRuntime({ device, positionals: ['down'], ...bindings })),

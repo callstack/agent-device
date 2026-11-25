@@ -15,6 +15,7 @@ import type {
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
+  LockScreenCommandResult,
   OrientationCommandResult,
   ShakeCommandResult,
   TvRemoteCommandResult,
@@ -65,6 +66,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const tvRemote: Equal<CommandResult<'tv-remote'>, TvRemoteCommandResult> = true;
   const telephony: Equal<CommandResult<'telephony'>, TelephonyCommandResult> = true;
   const shake: Equal<CommandResult<'shake'>, ShakeCommandResult> = true;
+  const lockScreen: Equal<CommandResult<'lock-screen'>, LockScreenCommandResult> = true;
   const wait: Equal<CommandResult<'wait'>, WaitCommandResult> = true;
   const prepare: Equal<CommandResult<'prepare'>, PrepareCommandResult> = true;
   const push: Equal<CommandResult<'push'>, PushCommandResult> = true;
@@ -98,6 +100,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     tvRemote,
     telephony,
     shake,
+    lockScreen,
     wait,
     prepare,
     push,
@@ -144,6 +147,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'tv-remote'
     | 'telephony'
     | 'shake'
+    | 'lock-screen'
     | 'wait'
     | 'scroll'
     | 'prepare'

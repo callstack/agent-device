@@ -25,6 +25,8 @@ enum CommandType: String, Codable, CaseIterable {
   case actionButton
   case volumeUp
   case volumeDown
+  case lockScreen
+  case unlockScreen
   case keyboardDismiss
   case keyboardReturn
   case keyboardStatus
@@ -333,7 +335,9 @@ extension Command {
     case .pasteboardWrite:
       return .deviceState
 
-    case .actionButton, .volumeUp, .volumeDown:
+    // The lock screen belongs to the system: activating the session app first would dismiss the
+    // lock screen `lockScreen` shows, or bring forward the app `unlockScreen` must leave in place.
+    case .actionButton, .volumeUp, .volumeDown, .lockScreen, .unlockScreen:
       return .presentedSurfaceMutation
 
     case .querySelector:

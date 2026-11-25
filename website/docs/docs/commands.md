@@ -56,6 +56,7 @@ agent-device close
 agent-device back
 agent-device orientation landscape-left
 agent-device hardware-button volume-up
+agent-device lock-screen lock
 agent-device fold half-open
 agent-device telephony sms 5551234 "Your code is 1234"
 agent-device device status --platform android --serial emulator-5554
@@ -359,6 +360,20 @@ Exact behavior: `agent-device help hardware-button`.
 
 <!-- /generated -->
 
+<!-- generated:command lock-screen -->
+
+Lock or unlock the device screen.
+
+```bash
+agent-device lock-screen <lock|unlock>
+```
+
+Supported targets: [Lock screen](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help lock-screen`.
+
+<!-- /generated -->
+
 - `back` uses the app's own back navigation: the back key on Android, the visible back control on macOS, and the Menu button on tvOS. On macOS, an app with no back control by identifier or "Back" label refuses with `in_app_back_control_unavailable` and nothing is pressed; press the app's control by its ref.
 - iOS has no system back. `back` presses the navigation bar's system back button when it finds exactly one, and otherwise swipes from the left edge. It never presses a custom "Back" button, and it does not dismiss a modal or sheet: press that screen's Close or Cancel control. On Android, system back also closes dialogs.
 - `back_swipe_no_change` means the swipe did not change the screen. `details.dismissControls` lists the Back, Close, and Cancel buttons at the top of the app window as selectors, for example `agent-device press 'role=button label="Close"'`. `back` never presses them itself, because they can discard a draft.
@@ -371,7 +386,10 @@ Exact behavior: `agent-device help hardware-button`.
 - `shake` works on iOS simulators and local Android emulators, not on Android TV or remote providers. On iOS, the app gets a motion-shake event but no accelerometer data, so an app that detects shakes through CoreMotion does not see it. Take a snapshot to see what the app did.
 - On Android, `shake-rest-acceleration-unreadable` means the emulator console returned no accelerometer reading, so nothing was sent. `shake-console-refused` after a swing means the accelerometer may not be back at rest. Check with `adb emu sensor get acceleration`.
 - `hardware-button` presses a key once and reports the press, not what the OS did with it. Android presses every key. A physical iPhone or iPad presses volume only, iOS simulators refuse every key, and TV targets point you to `tv-remote`.
-- On Android, `power` toggles the screen. After a press that turns the screen off, later commands can hit a locked screen; use `hardware-button wake`.
+- On Android, `power` toggles the screen. After a press that turns the screen off, later commands can hit a locked screen; use `hardware-button wake`, or `lock-screen unlock` to dismiss the lock screen too.
+- `lock-screen` returns once the device reports the lock state, in `state`. `lock` leaves a locked screen alone. Android verifies with the keyguard state that `dumpsys window` reports. On a device with a PIN, pattern, or password and "Power button instantly locks" off, the keyguard appears only after "Lock after screen timeout", so `lock` waits that long too: at least 5 s, which Android applies even to a shorter setting, and at most one minute. iOS simulators verify with SpringBoard's lock state and, for `lock`, a lock screen surface. On iOS, a dark screen is woken with the lock button first: `unlock` then swipes up and needs the screen on, and `lock` presses again if the screen woke unlocked. `unlock` lands on the app that was in front, not on the Home Screen. On Android it always sends the wake event, which leaves a screen that is on unchanged.
+- The session app is not activated, so check the result with `screenshot`. On iOS, an app-scoped command such as `snapshot` brings the session app back to the front, which can dismiss the lock screen.
+- `lock-screen unlock` never enters a credential. A PIN, pattern, password, or passcode lock fails with `lock-screen-secure`; on Android nothing is sent (`dispatched: no`). `lock-screen-unverified` means the device still reports the previous state. On Android, `lock` on a screen lock set to None fails with `lock-screen-disabled` and sends nothing (`dispatched: no`), because there is no lock screen to show. `lock-screen-state-unreadable` means `dumpsys` reported no keyguard state or no lock type for the foreground user, and nothing was sent.
 
 Fold a foldable device:
 

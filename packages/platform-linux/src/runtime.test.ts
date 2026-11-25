@@ -222,6 +222,8 @@ function expectLinuxNavigationAndKeyboardFacts(
     // and neither does it have the phone volume and power keys hardware-button presses (#3848).
     'actionButton',
     'shake',
+    'lockScreen',
+    'unlockScreen',
     'volumeUp',
     'volumeDown',
     'power',

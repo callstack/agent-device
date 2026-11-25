@@ -1,5 +1,10 @@
 import type { BackMode } from './back-mode.ts';
-import type { DeviceRotation, FoldPose, HardwareButtonName } from './device-rotation.ts';
+import type {
+  DeviceRotation,
+  FoldPose,
+  HardwareButtonName,
+  LockScreenState,
+} from './device-rotation.ts';
 import type { FoldScreenReport } from './fold-runtime.ts';
 import type { SettleObservation } from './interaction.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
@@ -110,5 +115,17 @@ export type TvRemoteCommandResult = {
 export type HardwareButtonCommandResult = {
   action: 'hardware-button';
   button: HardwareButtonName;
+  message: string;
+};
+
+/**
+ * `lock-screen` — `{ action: 'lock-screen', state, message }`.
+ *
+ * `state` is the lock state the device reported after the command, read back rather than assumed
+ * from the dispatch. A request that found the screen already in that state reports it too.
+ */
+export type LockScreenCommandResult = {
+  action: 'lock-screen';
+  state: LockScreenState;
   message: string;
 };

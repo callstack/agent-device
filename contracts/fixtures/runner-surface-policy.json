@@ -23,6 +23,8 @@
   "actionButton": "none",
   "volumeUp": "none",
   "volumeDown": "none",
+  "lockScreen": "none",
+  "unlockScreen": "none",
   "keyboardDismiss": "app-windows",
   "keyboardReturn": "none",
   "keyboardStatus": "app-windows",

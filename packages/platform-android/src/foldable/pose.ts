@@ -6,10 +6,8 @@ import { sleep } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
-import { runAndroidShell } from '../adb.ts';
 import { runEmulatorConsole } from '../emulator-console.ts';
-import { androidAdbResultError } from '../adb-failure.ts';
-import type { AndroidAdbExecutorResult } from '../adb-transport.ts';
+import { readAndroidKeyguardShowing, runCheckedAndroidShell } from '../keyguard.ts';
 
 /**
  * The emulator console's posture ids (`adb emu posture <id>`) and the device state Android
@@ -83,7 +81,8 @@ export async function setAndroidFoldPose(
 
   // Only a fold to the cover display raises the keyguard, and a keyguard already showing is not
   // the fold's to clear: only one that `closed` raises is dismissed.
-  const lockedBefore = pose === 'closed' && (await isKeyguardShowing(device, signal));
+  const lockedBefore =
+    pose === 'closed' && (await readAndroidKeyguardShowing(device, signal)) === true;
   await sendEmulatorPosture(device, pose, posture.id, signal);
   emitDiagnostic({
     level: 'info',
@@ -155,7 +154,11 @@ async function readDeviceStates(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<Map<string, string>> {
-  const { stdout } = await shell(device, ['cmd', 'device_state', 'print-states'], signal);
+  const { stdout } = await runCheckedAndroidShell(
+    device,
+    ['cmd', 'device_state', 'print-states'],
+    signal,
+  );
   const states = new Map<string, string>();
   for (const match of stdout.matchAll(/identifier=(\d+), name='([A-Z_]+)'/g)) {
     states.set(match[2]!, match[1]!);
@@ -245,7 +248,11 @@ async function readDeviceState(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<string | undefined> {
-  const { stdout } = await shell(device, ['cmd', 'device_state', 'print-state'], signal);
+  const { stdout } = await runCheckedAndroidShell(
+    device,
+    ['cmd', 'device_state', 'print-state'],
+    signal,
+  );
   return /\d+/.exec(stdout)?.[0];
 }
 
@@ -266,10 +273,10 @@ async function dismissFoldLockScreen(
   let dismissed = false;
   for (let attempt = 1; attempt <= ANDROID_FOLD_SETTLE_ATTEMPTS; attempt += 1) {
     await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
-    if (await isKeyguardShowing(device, signal)) {
+    if ((await readAndroidKeyguardShowing(device, signal)) === true) {
       clearReads = 0;
       dismissed = true;
-      await shell(device, ['wm', 'dismiss-keyguard'], signal);
+      await runCheckedAndroidShell(device, ['wm', 'dismiss-keyguard'], signal);
     } else {
       clearReads += 1;
       if (clearReads >= LOCK_SCREEN_CLEAR_READS) break;
@@ -291,14 +298,6 @@ async function dismissFoldLockScreen(
   }
 }
 
-async function isKeyguardShowing(
-  device: DeviceInfo,
-  signal: AbortSignal | undefined,
-): Promise<boolean> {
-  const { stdout } = await shell(device, ['dumpsys', 'window'], signal);
-  return stdout.includes('isKeyguardShowing=true');
-}
-
 /** The hinge sensor the guest reads, as the console reports it: `hinge-angle0 = <degrees>`. */
 async function readHingeAngle(
   device: DeviceInfo,
@@ -315,25 +314,4 @@ async function readHingeAngle(
     });
   }
   return Number(match[1]);
-}
-
-/**
- * An executor may hand back a failed result instead of throwing (the managed scoped transport
- * does), so every read checks the exit code itself before trusting stdout: a failed
- * `print-states` must be an adb failure, never an empty state list read as a phone.
- */
-async function shell(
-  device: DeviceInfo,
-  words: readonly string[],
-  signal: AbortSignal | undefined,
-): Promise<AndroidAdbExecutorResult> {
-  const result = await runAndroidShell(device, words, { signal, allowFailure: true });
-  if (result.exitCode !== 0) {
-    throw androidAdbResultError(
-      `adb shell ${words.join(' ')} exited with code ${result.exitCode}`,
-      result,
-      { deviceId: device.id },
-    );
-  }
-  return result;
 }

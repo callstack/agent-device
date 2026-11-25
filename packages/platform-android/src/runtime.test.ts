@@ -245,6 +245,39 @@ test('Android admits the hardware-button facts on phones and tablets and refuses
   }
 });
 
+test('Android admits the lock-screen facts on phones and tablets and refuses a TV target', async () => {
+  const cells = ['lockScreen', 'unlockScreen'] as const;
+  for (const runtimeDevice of [
+    ANDROID_EMULATOR,
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    UNKNOWN_KIND_DEVICE,
+  ]) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    for (const operation of cells) {
+      expect(binding.facts.operations[operation]).toEqual({ available: true });
+      expect(binding.operations[operation]).toBeTypeOf('function');
+    }
+  }
+
+  const refusals = [
+    [{ ...ANDROID_EMULATOR, target: 'tv' as const }, 'unsupported-platform-leaf'],
+    [{ ...ANDROID_EMULATOR, kind: 'simulator' as const }, 'unsupported-device-kind'],
+  ] as const;
+  for (const [runtimeDevice, reason] of refusals) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    for (const operation of cells) {
+      expect(binding.facts.operations[operation]).toMatchObject({ available: false, reason });
+      expect(binding.operations[operation]).toBeUndefined();
+    }
+  }
+});
+
 test('admits Android tv-remote only for a real TV target', async () => {
   const tvDevice = { ...ANDROID_EMULATOR, kind: 'emulator' as const, target: 'tv' as const };
   const binding = await bindOrdinary(

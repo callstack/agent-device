@@ -4,6 +4,7 @@ import {
   FOLD_SCREEN_COORDINATE_SPACE,
   FOLD_POSES,
   HARDWARE_BUTTON_NAMES,
+  LOCK_SCREEN_STATES,
   ORIENTATION_REQUESTS,
   TELEPHONY_CALL_ACTIONS,
 } from '@agent-device/contracts/device';
@@ -101,6 +102,14 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
       message: stringSchema(),
     },
     ['action', 'button', 'message'],
+  ),
+  'lock-screen': objectSchema(
+    {
+      action: constSchema('lock-screen'),
+      state: enumSchema(LOCK_SCREEN_STATES),
+      message: stringSchema(),
+    },
+    ['action', 'state', 'message'],
   ),
   // packages/contracts/src/telephony-input.ts — discriminated union on `action`.
   telephony: {
@@ -220,6 +229,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   | 'shake'
   | 'tv-remote'
   | 'hardware-button'
+  | 'lock-screen'
   | 'telephony'
   | 'clipboard'
   | 'appstate'

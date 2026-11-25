@@ -248,9 +248,10 @@ extension RunnerTests {
   /// Commands that did not exist at the merge-base, so no classification of its is compared with
   /// theirs. `appState` arrived with #2929, `pasteboardWrite` with the runner-written simulator
   /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge, `keyboardStatus` with
-  /// the return key in `keyboard status`.
+  /// the return key in `keyboard status`, `lockScreen` and `unlockScreen` with `lock-screen`.
   private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
     .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge, .keyboardStatus, .accessibilityAudit,
+    .lockScreen, .unlockScreen,
   ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
@@ -337,6 +338,14 @@ extension RunnerTests {
       ),
       (
         .volumeDown,
+        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true, isReadOnly: false)
+      ),
+      (
+        .lockScreen,
+        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true, isReadOnly: false)
+      ),
+      (
+        .unlockScreen,
         expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true, isReadOnly: false)
       ),
       (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),

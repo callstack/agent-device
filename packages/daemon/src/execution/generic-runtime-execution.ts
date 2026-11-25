@@ -48,7 +48,7 @@ export async function resolveGenericRuntimeExecution(
   if (isSystemButtonRouteCommand(params.req.command)) {
     return await resolveBoundSystemButtonRuntime(params.req.command, {
       device: params.session.device,
-      // Only `hardware-button` reads these; the resolver owns the arity refusal for a miss.
+      // Only `hardware-button` and `lock-screen` read these; their resolvers own the arity refusal.
       positionals: params.req.positionals,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
