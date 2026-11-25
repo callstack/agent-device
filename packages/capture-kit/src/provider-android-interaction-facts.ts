@@ -1,4 +1,5 @@
 import {
+  type RuntimeOperationFact,
   unavailableFact,
   PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
@@ -26,7 +27,10 @@ import { type DeviceInfo } from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
 const unsupported = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason);
-export function providerAndroidInteractionFacts(device: DeviceInfo) {
+export function providerAndroidInteractionFacts(
+  device: DeviceInfo,
+  clipboard: RuntimeOperationFact,
+) {
   const tv = device.target === 'tv';
   return {
     ...focusRuntimeOperationFacts({ focus: available }),
@@ -72,7 +76,7 @@ export function providerAndroidInteractionFacts(device: DeviceInfo) {
       dismiss: available,
       enter: available,
     }),
-    ...clipboardRuntimeOperationFacts({ unsupported, read: available, write: available }),
+    ...clipboardRuntimeOperationFacts({ unsupported, read: clipboard, write: clipboard }),
     ...systemButtonRuntimeOperationFacts({
       unsupported,
       home: available,

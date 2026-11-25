@@ -21,13 +21,14 @@ const child = spawn(
 const exited = once(child, 'close');
 let closed = false;
 function stop() {
+  if (closed) return;
   closed = true;
   try {
     renameSync(directory, directory + '-closed');
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
-  child.kill('SIGKILL');
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
 }
 process.once('disconnect', stop);
 if (!process.connected) stop();
@@ -47,11 +48,7 @@ try {
   void notifyReady().catch(stop);
   await exited;
 } finally {
-  if (child.exitCode === null && child.signalCode === null) {
-    stop();
-    await exited.catch(() => undefined);
-  }
-  closed = true;
+  stop();
   await rm(directory + '-closed', { recursive: true, force: true });
   if (process.connected) process.disconnect();
 }

@@ -30,8 +30,10 @@ import {
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import {
   listAndroidAppsWithAdb,
-  type AndroidAdbProvider,
+  loadAndroidClipboardSupport,
 } from '@agent-device/platform-android/mechanics';
+
+import type { AdcSession } from './runtime.ts';
 
 const available = { available: true } as const;
 const unsupported = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason);
@@ -42,19 +44,32 @@ export async function createPlatformOwner(
   runtime: ProviderDeviceRuntime,
   host: PlatformRuntimeHost,
   android: Pick<ProviderAndroidHost, 'getForegroundApp' | 'bindDeployment'>,
-  getAdb: (device: DeviceInfo) => AndroidAdbProvider,
-  leaseIdFor: (device: DeviceInfo) => string,
+  sessionFor: (device: DeviceInfo) => AdcSession,
 ): Promise<PlatformRuntimeOwner> {
-  const providerAndroidInteractionFacts = await loadProviderAndroidInteractionFacts();
+  const [providerAndroidInteractionFacts, clipboardSupport] = await Promise.all([
+    loadProviderAndroidInteractionFacts(),
+    loadAndroidClipboardSupport(),
+  ]);
   const ownsDevice = runtime.ownsDevice;
-  function factsFor(device: DeviceInfo) {
+  async function factsFor(device: DeviceInfo) {
     const base = createUnavailablePlatformRuntimeFacts(device, owner, unavailable);
     if (!ownsDevice(device)) return base;
+    const session = sessionFor(device);
+    session.clipboardSupport ??= clipboardSupport.probeAndroidClipboardShellSupport(
+      session.adb.exec,
+      AbortSignal.timeout(5_000),
+    );
+    const probe = session.clipboardSupport;
+    const support = await probe;
+    if (support === 'probe-failed' && session.clipboardSupport === probe)
+      delete session.clipboardSupport;
+    if (!ownsDevice(device)) return base;
+    const clipboard = clipboardSupport.androidClipboardRuntimeFact(support);
     return {
       device: base.device,
       operations: {
         ...base.operations,
-        ...providerAndroidInteractionFacts(device),
+        ...providerAndroidInteractionFacts(device, clipboard),
         captureSnapshot: available,
         captureSnapshotWithoutActiveApp: available,
         captureScreenshot: available,
@@ -80,16 +95,16 @@ export async function createPlatformOwner(
   return {
     owner,
     ownsDevice,
-    inspectFacts: async (device) => factsFor(device),
+    inspectFacts: factsFor,
     async bind({ device, intent, scope }) {
       if (
         !ownsDevice(device) ||
         (intent.kind === 'exact-owner' && !sameRuntimeOwner(intent.owner, owner))
       )
         throw new AppError('DEVICE_NOT_FOUND', 'No active ADC lease owns this device.');
-      const facts = factsFor(device);
+      const facts = await factsFor(device);
       const signal = scope.signal;
-      const adb = getAdb(device);
+      const { adb } = sessionFor(device);
       function requireInteractor() {
         const interactor = runtime.getInteractor(device);
         if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'ADC lease is closed.');
@@ -146,7 +161,7 @@ export async function createPlatformOwner(
           ensureReady: async () => device,
           bootTarget: async () => device,
           shutdownTarget: async ({ releaseLease }) => {
-            const leaseId = leaseIdFor(device);
+            const { leaseId } = sessionFor(device);
             return await releaseLease(leaseId);
           },
           async listApps({ filter }) {

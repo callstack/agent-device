@@ -1,11 +1,40 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { PROVIDER_PROFILE_FIELD_FLAGS } from '@agent-device/contracts/remote';
+import {
+  rejectRefusedProviderProfileFields,
+  type ProviderProfileFieldDeclaration,
+} from '@agent-device/contracts/provider-profile-fields';
+
+const profileFields: ProviderProfileFieldDeclaration = {
+  provider: 'adc',
+  label: 'ADC',
+  fields: {
+    providerApp: 'refused',
+    providerOsVersion: 'refused',
+    providerDeviceType: 'refused',
+    providerProject: 'refused',
+    providerBuild: 'refused',
+    providerSessionName: 'refused',
+    providerDeviceOrientation: 'refused',
+    providerGeoLocation: 'refused',
+    providerTimezone: 'refused',
+    providerAppiumVersion: 'refused',
+    providerLanguage: 'refused',
+    providerLocale: 'refused',
+    providerNetworkProfile: 'refused',
+    providerCustomNetwork: 'refused',
+    providerNoResignApp: 'refused',
+    providerNetworkLogs: 'refused',
+    providerNetworkHosts: 'refused',
+    awsProjectArn: 'refused',
+    awsDeviceArn: 'refused',
+    awsAppArn: 'refused',
+    awsRegion: 'refused',
+    awsInteractionMode: 'refused',
+  },
+};
 
 export function formFactor(flags?: Readonly<Record<string, unknown>>) {
-  for (const [field, flag] of Object.entries(PROVIDER_PROFILE_FIELD_FLAGS)) {
-    if (flags?.[field] !== undefined)
-      throw new AppError('INVALID_ARGS', `ADC does not support ${flag}.`);
-  }
+  rejectRefusedProviderProfileFields(flags, profileFields);
   if (flags?.platform && flags.platform !== 'android')
     throw new AppError('INVALID_ARGS', 'ADC requires Android.');
   if (flags?.target === 'tv') return 'tv';

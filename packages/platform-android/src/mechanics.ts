@@ -103,18 +103,8 @@ export {
   type AndroidBlockingDialogFocus,
   type AndroidBlockingDialogRead,
 } from './app-parsers.ts';
-export async function androidClipboardShellSupportForResult(
-  ...args: Parameters<
-    typeof import('./clipboard-shell-response.ts').androidClipboardShellSupportForResult
-  >
-): Promise<
-  Awaited<
-    ReturnType<typeof import('./clipboard-shell-response.ts').androidClipboardShellSupportForResult>
-  >
-> {
-  const { androidClipboardShellSupportForResult: load } =
-    await import('./clipboard-shell-response.ts');
-  return load(...args);
+export async function loadAndroidClipboardSupport() {
+  return await import('./clipboard-shell-response.ts');
 }
 export {
   dismissAndroidKeyboard,

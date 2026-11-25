@@ -1,3 +1,5 @@
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import * as adbModule from './adb.ts';
 import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
@@ -19,7 +21,7 @@ const lease: DeviceLease = {
 const url = 'wss://adc.test/v2/leases/a0000000-0000-4000-8000-000000000001/adb';
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 it('attaches an Android TV and closes only its local tunnel', async () => {
@@ -67,6 +69,71 @@ it('attaches an Android TV and closes only its local tunnel', async () => {
   expect(close).toHaveBeenCalledOnce();
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it.each([
+  { target: 'mobile', stderr: '', available: true },
+  { target: 'tv', stderr: 'No shell command implementation.', available: false },
+] as const)(
+  'reports clipboard support from the leased $target after a transient ADB failure',
+  async ({ target, stderr, available }) => {
+    const exec = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('device offline'))
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr });
+    const provider = vi.spyOn(adbModule, 'createAdbProvider').mockReturnValue({ exec });
+    const config = credentials({
+      ADC_LEASE_TOKEN: 'lease',
+      ADC_ADB_WEBSOCKET_URL: url,
+      ADC_API_URL: 'https://adc.test',
+    });
+    vi.mocked(connectAdb).mockResolvedValueOnce({
+      serial: 'localfilesystem:/test-device',
+      socketSpec: 'localfilesystem:/test-server',
+      closed: new AbortController().signal,
+      close: async () => {},
+    });
+    const android = {
+      createLeaseInteractor: vi.fn(),
+      getForegroundApp: vi.fn(),
+      bindDeployment: vi.fn(),
+    };
+    const { runtime, platformModule } = createRegistration(config, {}, android);
+    try {
+      await runtime.leaseLifecycle.allocate!(lease, { flags: { target } });
+      const devices = await runtime.deviceInventoryProvider({
+        leaseProvider: 'adc',
+        leaseId: lease.leaseId,
+      });
+      const device = devices?.[0];
+      if (!device) throw new Error('Expected the leased device.');
+      const host = new Proxy({} as PlatformRuntimeHost, {
+        get() {
+          throw new Error('The lease must use its own ADB provider.');
+        },
+      });
+      const owner = await platformModule.loadRuntime(host);
+      const unknown = await owner.inspectFacts(device);
+      expect(unknown.operations.readClipboard.available).toBe(false);
+      expect(unknown.operations.writeClipboard.available).toBe(false);
+      const facts = await owner.inspectFacts(device);
+      expect(facts.operations.readClipboard.available).toBe(available);
+      expect(facts.operations.writeClipboard.available).toBe(available);
+      const scope = {
+        signal: new AbortController().signal,
+        diagnostics: { emit: vi.fn() },
+        progress: { report: vi.fn() },
+      };
+      const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+      expect(binding.facts.operations.readClipboard).toEqual(facts.operations.readClipboard);
+      expect(binding.operations.readClipboard !== undefined).toBe(available);
+      expect(binding.operations.writeClipboard !== undefined).toBe(available);
+      expect(exec).toHaveBeenCalledTimes(2);
+    } finally {
+      provider.mockRestore();
+      await runtime.leaseLifecycle.release!(lease);
+    }
+  },
+);
 
 it('releases a direct ADC booking when its tunnel fails', async () => {
   const requests: string[] = [];

@@ -8,7 +8,7 @@ From a checkout containing the ADC plugin on `0.22`, you can build and install t
 
 ```bash
 pnpm --filter @agent-device/adc pack --pack-destination /tmp
-agent-device plugins add /tmp/agent-device-adc-0.22.0-dev.tgz
+agent-device plugins add /tmp/agent-device-adc-0.22.0-dev.1.tgz
 ```
 
 ### Rent a device

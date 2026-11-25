@@ -58,7 +58,7 @@ it('sets up an attached phone without using workspace credentials or contacting 
     ADC_ADB_WEBSOCKET_URL: 'wss://adc.test/v2/leases/a0000000-0000-4000-8000-000000000001/adb',
     ADC_LEASE_TOKEN: 'lease',
   };
-  const request = context(env, {});
+  const request = context(env, { providerNetworkLogs: false, providerProject: '' });
   const [plugin] = adc().contributes;
   const result = await plugin.connection?.resolve(request);
   expect(result?.profile.target).toBe('mobile');

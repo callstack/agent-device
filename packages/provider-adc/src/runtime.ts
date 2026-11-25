@@ -9,6 +9,8 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { createAdbProvider } from './adb.ts';
+import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
+import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { matchesPlatformSelector, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -20,7 +22,13 @@ import { connectAdb } from './tunnel.ts';
 import { formFactor } from './target.ts';
 
 type Handle = { leaseId: string; adcId?: string };
-type Session = { device: DeviceInfo };
+export type AdcSession = {
+  leaseId: string;
+  socketSpec: string;
+  device: DeviceInfo;
+  adb: AndroidAdbProvider;
+  clipboardSupport?: Promise<AndroidClipboardShellSupport>;
+};
 type Allocation = { tv: boolean; rental?: LeaseLifecycleContext['rental'] };
 
 function reconciliationKey(leaseId: string) {
@@ -78,7 +86,7 @@ export function createRegistration(
       throw new AppError('COMMAND_FAILED', 'The ADC booking is no longer active.');
     return await client.access(id, signal);
   }
-  const table = createProviderLeaseTable<Session, Handle, Allocation>({
+  const table = createProviderLeaseTable<AdcSession, Handle, Allocation>({
     startTimeoutMs: 180_000,
     stopTimeoutMs: 25_000,
     async start(lease, { tv, rental }, control) {
@@ -118,7 +126,9 @@ export function createRegistration(
       };
       tunnel.closed.addEventListener('abort', terminal, { once: true });
       if (tunnel.closed.aborted) throw new AppError('DEVICE_NOT_FOUND', 'ADC tunnel closed.');
-      return { status: 'ready', session: { device }, handle };
+      const adb = createAdbProvider(device.id, () => sessionFor(device).socketSpec, env);
+      const session = { leaseId, socketSpec: tunnel.socketSpec, device, adb };
+      return { status: 'ready', session, handle };
     },
     async stop(handle) {
       const tunnel = tunnels.get(handle.leaseId);
@@ -154,21 +164,11 @@ export function createRegistration(
     ['credential', principal],
     ['endpoint', origin],
   ]);
-  function leaseIdFor(device: DeviceInfo) {
+  function sessionFor(device: DeviceInfo) {
     const leaseId = deviceLeases.get(device.id);
-    if (!leaseId || !table.live(leaseId))
-      throw new AppError('DEVICE_NOT_FOUND', 'ADC lease is closed.');
-    return leaseId;
-  }
-  function adbSocket(device: DeviceInfo) {
-    const leaseId = leaseIdFor(device);
-    const tunnel = tunnels.get(leaseId);
-    if (!tunnel) throw new AppError('DEVICE_NOT_FOUND', 'ADC lease is closed.');
-    return tunnel.socketSpec;
-  }
-
-  function getAdb(device: DeviceInfo) {
-    return createAdbProvider(device.id, () => adbSocket(device), env);
+    const session = leaseId && table.live(leaseId);
+    if (!session) throw new AppError('DEVICE_NOT_FOUND', 'ADC lease is closed.');
+    return session;
   }
   async function reportClosedTunnel(leaseId: string): Promise<never> {
     await table.release(leaseId);
@@ -236,7 +236,7 @@ export function createRegistration(
     },
     getInteractor(device) {
       if (!runtime.ownsDevice(device)) return undefined;
-      const adb = getAdb(device);
+      const { adb } = sessionFor(device);
       return android.createLeaseInteractor(device, adb);
     },
     ownsDevice(device) {
@@ -252,7 +252,7 @@ export function createRegistration(
       owner,
       async loadRuntime(host: PlatformRuntimeHost) {
         const { createPlatformOwner } = await import('./platform.ts');
-        return createPlatformOwner(owner, runtime, host, android, getAdb, leaseIdFor);
+        return createPlatformOwner(owner, runtime, host, android, sessionFor);
       },
     },
   };

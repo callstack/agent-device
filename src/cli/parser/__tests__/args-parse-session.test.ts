@@ -24,6 +24,7 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       strictFlags: true,
       assertParsed: (parsed) => {
         assert.equal(parsed.command, 'connect');
+        assert.equal(parsed.flags.platform, 'android');
         assert.equal(parsed.flags.target, 'tv');
       },
     },

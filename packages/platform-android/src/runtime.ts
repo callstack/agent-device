@@ -59,7 +59,10 @@ import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit
 import { androidFoldableFacts, createAndroidFoldableOperations } from './foldable/runtime.ts';
 import { androidTelephonyFacts, createAndroidTelephonyOperations } from './telephony/runtime.ts';
 import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
-import { ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT } from './clipboard-shell-response.ts';
+import {
+  androidClipboardRuntimeFact,
+  clipboardShellUnavailable,
+} from './clipboard-shell-response.ts';
 import { createAndroidPerfOperations } from './perf/runtime.ts';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
@@ -238,23 +241,6 @@ function androidTouchFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? focusKindUnavailable : available;
 }
 
-const clipboardShellUnavailable = unavailableFact(
-  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
-  ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
-);
-
-/**
- * The probe could not reach the device, so this owner does not know whether the build supports a
- * shell clipboard. Refusing is the conservative answer and the only honest one: reporting
- * available would hand the caller a capability execution may immediately reject, which is the
- * exact failure fact-based admission exists to prevent. Deliberately not cached — the next
- * inspection asks again.
- */
-const clipboardShellUnknown = unavailableFact(
-  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
-  'Could not determine whether this Android build supports a shell clipboard: the adb probe did not complete. Retry once the device is reachable.',
-);
-
 /**
  * `probe-failed` covers both ways this owner can end up without an answer: the probe ran and could
  * not reach the device, or the host exposes no probe at all. Neither is evidence of support, and
@@ -302,8 +288,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
     // the device is up, but a failed probe says nothing about the build and must not become a
     // verdict this owner repeats for the rest of its life.
     if (support !== 'probe-failed') clipboardShell.set(device.id, support);
-    if (support === 'supported') return available;
-    return support === 'unsupported' ? clipboardShellUnavailable : clipboardShellUnknown;
+    return androidClipboardRuntimeFact(support);
   };
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
     const logs = await appLogs.inspectFacts(device);

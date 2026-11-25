@@ -1,13 +1,30 @@
 import { createServer } from 'node:https';
-import { getCACertificates, setDefaultCACertificates } from 'node:tls';
+import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import path from 'node:path';
-import { expect, it } from 'vitest';
-import { WebSocketServer } from 'ws';
+import { expect, it, vi } from 'vitest';
+import { WebSocketServer, type ClientOptions } from 'ws';
 import { connectAdb } from './tunnel.ts';
+
+function tlsFixture(name: string) {
+  return new URL(`../../../test/integration/provider-scenarios/fixtures/${name}`, import.meta.url);
+}
+
+vi.mock('ws', async (importOriginal) => {
+  const ws = await importOriginal<typeof import('ws')>();
+  const ca = await readFile(tlsFixture('localhost-cert.pem'));
+  return {
+    ...ws,
+    default: class extends ws.WebSocket {
+      constructor(url: URL, options: ClientOptions) {
+        super(url, { ...options, ca });
+      }
+    },
+  };
+});
 
 it.skipIf(process.platform === 'win32')(
   'relays bytes through a private socket and reaps its ADB server on disconnect',
@@ -25,15 +42,10 @@ it.skipIf(process.platform === 'win32')(
       "if (args.includes('get-state')) process.stdout.write('device');",
     ].join('\n');
     await writeFile(adb, executable, { mode: 0o700 });
-    const fixtures = new URL(
-      '../../../test/integration/provider-scenarios/fixtures/',
-      import.meta.url,
-    );
-    const cert = await readFile(new URL('localhost-cert.pem', fixtures));
-    const key = await readFile(new URL('localhost-key.pem', fixtures));
+
+    const cert = await readFile(tlsFixture('localhost-cert.pem'));
+    const key = await readFile(tlsFixture('localhost-key.pem'));
     const tls = createServer({ cert, key });
-    const oldCA = getCACertificates();
-    setDefaultCACertificates([cert.toString()]);
     const vendor = new WebSocketServer({ server: tls });
     tls.listen(0, '127.0.0.1');
     let tunnel: Awaited<ReturnType<typeof connectAdb>> | undefined;
@@ -68,13 +80,28 @@ it.skipIf(process.platform === 'win32')(
       await tunnel.close();
       tunnel = undefined;
       await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(stat(directory + '-closed')).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await tunnel?.close();
       for (const ws of vendor.clients) ws.terminate();
       await new Promise<void>((resolve) => vendor.close(() => resolve()));
-      setDefaultCACertificates(oldCA);
       await new Promise<void>((resolve) => tls.close(() => resolve()));
       await rm(sdk, { recursive: true, force: true });
     }
+  },
+);
+
+it.skipIf(process.platform === 'win32')(
+  'removes the socket directory when adb exits on its own',
+  async () => {
+    const root = await mkdtempForTest('adc-supervisor-');
+    const directory = path.join(root, 'sockets');
+    await mkdir(directory);
+    const helper = new URL('./adb-server.mjs', import.meta.url);
+    const supervisor = fork(helper, ['/usr/bin/true', directory], { execArgv: [] });
+    const [code] = await once(supervisor, 'exit');
+    expect(code).toBe(0);
+    await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(directory + '-closed')).rejects.toMatchObject({ code: 'ENOENT' });
   },
 );

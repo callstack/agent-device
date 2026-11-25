@@ -1,7 +1,31 @@
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import type { AndroidAdbExecutorResult } from './adb-executor.ts';
+import {
+  PLATFORM_RUNTIME_REASONS,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
+import {
+  runAdbShell,
+  type AndroidAdbExecutor,
+  type AndroidAdbExecutorResult,
+} from './adb-executor.ts';
 import { isAndroidShellCommandUnsupported, reportsAndroidNoShellCommand } from './adb.ts';
+
+export async function probeAndroidClipboardShellSupport(
+  adb: AndroidAdbExecutor,
+  signal?: AbortSignal,
+): Promise<AndroidClipboardShellSupport> {
+  try {
+    const result = await runAdbShell(adb, ['cmd', 'clipboard', 'get', 'text'], {
+      allowFailure: true,
+      signal,
+    });
+    const verdict = classifyAndroidClipboardShellResponse(result);
+    return androidClipboardShellSupportForVerdict(verdict);
+  } catch {
+    return 'probe-failed';
+  }
+}
 
 /** What the device answered an `adb shell cmd clipboard …` call. */
 export type AndroidClipboardShellVerdict = 'executed' | 'no-shell-command' | 'call-failed';
@@ -19,8 +43,32 @@ const ANDROID_CLIPBOARD_REASONS = {
  * What to do instead, carried by both the fact that refuses admission and the error that refuses
  * execution: the substitute is a device-side check, never another adb attempt.
  */
-export const ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT =
+const ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT =
   'This Android build ships no shell implementation for the clipboard service, so adb cannot read or write the clipboard on it. Verify a copy flow by pasting into a focused field and reading that field back.';
+
+export const clipboardShellUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
+  ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
+);
+
+/**
+ * The probe could not reach the device, so this owner does not know whether the build supports a
+ * shell clipboard. Refusing is the conservative answer and the only honest one: reporting
+ * available would hand the caller a capability execution may immediately reject, which is the
+ * exact failure fact-based admission exists to prevent. Deliberately not cached — the next
+ * inspection asks again.
+ */
+const clipboardShellUnknown = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
+  'Could not determine whether this Android build supports a shell clipboard: the adb probe did not complete. Retry once the device is reachable.',
+);
+
+const clipboardAvailable = { available: true } as const;
+
+export function androidClipboardRuntimeFact(support: AndroidClipboardShellSupport) {
+  if (support === 'supported') return clipboardAvailable;
+  return support === 'unsupported' ? clipboardShellUnavailable : clipboardShellUnknown;
+}
 
 /**
  * Classifies one clipboard shell call from what the device said about it.
@@ -59,17 +107,6 @@ export function androidClipboardShellSupportForVerdict(
 ): AndroidClipboardShellSupport {
   if (verdict === 'executed') return 'supported';
   return verdict === 'no-shell-command' ? 'unsupported' : 'probe-failed';
-}
-
-/**
- * The admission verdict for one probe call, for a caller that holds only what adb answered. The
- * verdict vocabulary stays here: a caller that composes it itself would have to know which
- * sentences outrank which streams, which is the part only this owner should assert.
- */
-export function androidClipboardShellSupportForResult(
-  result: Pick<AndroidAdbExecutorResult, 'exitCode' | 'stdout' | 'stderr'>,
-): AndroidClipboardShellSupport {
-  return androidClipboardShellSupportForVerdict(classifyAndroidClipboardShellResponse(result));
 }
 
 /**
