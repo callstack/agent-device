@@ -103,6 +103,7 @@ test('an ended lease reply completes without updating a locked connection', asyn
       .mockImplementation((options) => acquire({ ...options, timeoutMs: 0 }));
     try {
       await forgetEndedConnectionLease(flags, reply, host);
+      assert.equal(bounded.mock.calls.length, 0);
       assert.equal(readRemoteConnectionState(flags)?.leaseId, LEASE_ID);
     } finally {
       bounded.mockRestore();

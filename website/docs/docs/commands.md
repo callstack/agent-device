@@ -2554,7 +2554,7 @@ agent-device snapshot -i
 agent-device disconnect
 ```
 
-Use `--vendor <id>` to select a vendor. Use `--max-minutes <minutes>` to request a duration. The connect output shows the actual deadline. Pass `--show-viewer` to open the live viewer in your browser.
+Use `--vendor <id>` to select a vendor. Use `--max-minutes <minutes>` to request a duration. The JSON output includes the rental deadline. Pass `--show-viewer` to open the live viewer in your browser.
 
 Use `--needs <capability,...>` to require every listed capability. For example, `agent-device connect cloud --platform android --needs adb,viewer` requires ADB and live view. If no vendor matches, check the platform and capabilities with `connect list`. If the cloud session API tries another vendor after an allocation fails, the connect output names the unavailable vendor.
 
@@ -2629,7 +2629,7 @@ The following option table describes `connect [provider]`.
 Configure remote or provider state.
 
 ```bash
-agent-device connect [cloud] list [--live] [--json] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login] [--vendor <id>] [--max-minutes <minutes>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer]
+agent-device connect [cloud] list [--live] [--json] | connect cloud --platform ios|android [--vendor <id>] [--max-minutes <minutes>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
 ```
 
 | Option | What it does |

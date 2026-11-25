@@ -53,7 +53,13 @@ export function withEnsuredDaemon(
       : context;
     const target = resolveEnsurableDaemon(req, host);
     if (!target) {
-      await admit?.(async () => {}, 'startup', req);
+      if (admit) {
+        const guard = createStartupWaitGuard({
+          signal: context?.signal,
+          requestId: req.meta?.requestId,
+        });
+        await guard.guard(() => admit(async () => guard.refuseIfAborted(), 'startup', req));
+      }
       return await transport(req, transportContext);
     }
     const stateDir = resolveDaemonPaths(target.stateDir, { env: host.env, cwd: host.cwd }).baseDir;

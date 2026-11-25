@@ -18,7 +18,7 @@ The daemon is authoritative for admission, ownership, and session lifetime.
 `open` is the natural acquisition point.
 Runner and process locks remain separate backend guards.
 
-For `connect cloud`, the hosted session API owns the device rental. The CLI asks it to allocate during connect so it can enforce the session deadline and return a scoped attachment. The CLI records the allocation identity before attaching. It can recover an interrupted allocation or end the rental without a live daemon. The daemon retains authority over the requests it receives.
+For `connect cloud`, the hosted session API owns the device rental and enforces the rental deadline. The CLI asks the API to allocate during connect and receives a scoped attachment. The CLI records the allocation identity before attaching. It can recover an interrupted allocation or end the rental without a live daemon. The daemon retains authority over its session lifetime and the requests it receives.
 
 The proxy token authenticates the host, not the client: every client of one proxy can hold the same token.
 The lease id is the credential that proves ownership of a leased session.

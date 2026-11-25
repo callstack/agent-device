@@ -160,10 +160,14 @@ async function sendRemote(
 
 test('hosted RPC errors never request the peer diagnostic record', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  await withRemoteDaemon(async (baseUrl, seen) => {
-    await sendRemote(baseUrl, { command: 'clipboard', positionals: ['read'] }, 'lease-1', true);
-    assert.deepEqual(seen, []);
-  });
+  const routes: string[] = [];
+  await withRemoteDaemon(
+    async (baseUrl) => {
+      await sendRemote(baseUrl, { command: 'clipboard', positionals: ['read'] }, 'lease-1', true);
+    },
+    (route) => routes.push(route),
+  );
+  assert.deepEqual(routes, ['GET /health', 'POST /rpc']);
 });
 
 async function runEveryRequestKind(leaseId: string | undefined): Promise<SeenRequest[]> {

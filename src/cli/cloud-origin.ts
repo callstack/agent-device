@@ -32,8 +32,7 @@ export function parseCloudUrl(value: string, configured?: CloudOriginVariable): 
 
 export function parseCloudEndpoint(
   value: string,
-  secure: 'https:' | 'wss:',
-  plaintext: 'http:' | 'ws:',
+  ...[secure, plaintext]: ['https:', 'http:'] | ['wss:', 'ws:']
 ): URL | undefined {
   const url = URL.parse(value);
   if (!url || url.username || url.password) return undefined;

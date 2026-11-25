@@ -244,26 +244,29 @@ test('legacy hosted profiles do not refresh credentials or dispatch device comma
     };
     const failed = await runCliCapture([...args, '--daemon-auth-token', 'explicit-fixture-token'], {
       env: teardownEnv,
-      sendToDaemon: async (_req, options) => {
-        expect(options?.authToken).toBe('explicit-fixture-token');
-        expect(options?.skipRemoteDiagnostics).toBe(true);
+      sendToDaemon: async () => {
         return {
           ok: false,
           error: { code: 'COMMAND_FAILED', message: 'echoed explicit-fixture-token' },
         };
       },
     });
+    expect(failed.transportOptions).toEqual([
+      expect.objectContaining({ authToken: 'explicit-fixture-token', skipRemoteDiagnostics: true }),
+    ]);
     expect(failed.code).toBe(1);
     expect(failed.stdout).toContain('returned an invalid response');
     expect(failed.stdout + failed.stderr).not.toContain('explicit-fixture-token');
     expect(readRemoteConnectionState({ stateDir, session })?.leaseId).toBe('fixture-legacy-lease');
     const echoed = await runCliCapture(args, {
       env: teardownEnv,
-      sendToDaemon: async (_req, options) => {
-        expect(options?.authToken).toBe('fixture-key');
+      sendToDaemon: async () => {
         return { ok: false, error: { code: 'COMMAND_FAILED', message: 'echoed fixture-key' } };
       },
     });
+    expect(echoed.transportOptions).toEqual([
+      expect.objectContaining({ authToken: 'fixture-key' }),
+    ]);
     expect(echoed.stdout).toContain('returned an invalid response');
     expect(echoed.stdout + echoed.stderr).not.toContain('fixture-key');
     const pending = await runCliCapture(args, {
@@ -352,6 +355,49 @@ test('a credential-bound legacy record without a lease clears locally', async ()
     expect(readRemoteConnectionState(location)).toBeNull();
   } finally {
     stopMetro.mockRestore();
+  }
+});
+
+test('disconnect uses the saved custom origin and clears a binding without a transaction record', async () => {
+  const { stateDir, session, cloudBaseUrl } = seedLegacyConnection();
+  const location = { stateDir, session };
+  const state = readRemoteConnectionState(location)!;
+  const id = '00000000-0000-4000-8000-000000000001';
+  seedConnectionState({
+    stateDir,
+    state: {
+      ...state,
+      cloudSession: {
+        id,
+        vendor: 'provider-a',
+        generation: 'fixture-generation',
+        transport: 'agent-device-daemon',
+        baseUrl: cloudBaseUrl,
+        deadlineAt: new Date(Date.now() + 3600_000).toISOString(),
+      },
+    },
+  });
+  const fetchMock = vi.fn(
+    async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const result = await runCliCapture(['disconnect', '--json'], {
+      env: {
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_SESSION: session,
+        AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-key',
+        AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: cloudBaseUrl,
+      },
+    });
+    expect(result.code, result.stdout).toBeNull();
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      new URL(`/v1/sessions/${id}`, cloudBaseUrl),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect(readRemoteConnectionState(location)).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
   }
 });
 

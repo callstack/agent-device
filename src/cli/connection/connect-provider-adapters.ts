@@ -150,6 +150,12 @@ export async function resolveConnectProviderProfile(options: {
       remoteConfig: resolved.resolvedPath,
     };
     const route = providerRouteForConnection({ daemonBaseUrl: flags.daemonBaseUrl, env });
+    if (leaseProvider === 'cloud' && route === 'drives-connection') {
+      throw new AppError(
+        'INVALID_ARGS',
+        'Use connect cloud --platform ios or android to allocate a hosted session.',
+      );
+    }
     await admitProviderForRoute(leaseProvider, route, env);
     const provider =
       isConnectProviderName(leaseProvider, env) &&

@@ -25,12 +25,9 @@ export async function resolveHostedCloudAccess(options: {
   interactive?: boolean;
 }): Promise<HostedCloudAccess> {
   const { env, stateDir, savedOrigin } = options;
-  const { cloudBaseUrl, authEnv, configuredOrigin } = resolveHostedOrigin(env, savedOrigin);
-  const key = resolveBoundCloudApiKey(env, configuredOrigin);
-  if (key) {
-    assertSameHostedOrigin(configuredOrigin, cloudBaseUrl);
-    return { accessToken: key, cloudBaseUrl };
-  }
+  const { cloudBaseUrl, authEnv } = resolveHostedOrigin(env, savedOrigin);
+  const key = resolveBoundCloudApiKey(env, cloudBaseUrl, hostedOriginMismatch);
+  if (key) return { accessToken: key, cloudBaseUrl };
   const flags = { json: false, help: false, version: false };
   const access = await readHostedLogin({ env: authEnv, stateDir, flags });
   if (access) return { ...access, cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl) };
@@ -62,7 +59,6 @@ function resolveHostedOrigin(env: EnvMap, savedOrigin: string | undefined) {
   if (pinnedOrigin && configuredOrigin) assertSameHostedOrigin(configuredOrigin, pinnedOrigin);
   return {
     cloudBaseUrl: pinnedOrigin ?? configuredOrigin ?? DEFAULT_CLOUD_BASE_URL,
-    configuredOrigin: configuredOrigin ?? DEFAULT_CLOUD_BASE_URL,
     authEnv: pinnedOrigin ? { ...env, AGENT_DEVICE_CLOUD_BASE_URL: pinnedOrigin } : env,
   };
 }
@@ -83,7 +79,15 @@ async function readHostedLogin(options: Parameters<typeof resolveCliSessionAcces
 
 function assertSameHostedOrigin(configured: string, saved: string): void {
   if (configured === saved) return;
-  throw new AppError('INVALID_ARGS', 'Cloud API origin differs from the saved connection.', {
-    reason: CLOUD_ACCESS_REASONS.savedOriginMismatch.reason,
-  });
+  throw hostedOriginMismatch();
+}
+
+function hostedOriginMismatch(): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'Cloud API origin differs from the credential or saved connection.',
+    {
+      reason: CLOUD_ACCESS_REASONS.savedOriginMismatch.reason,
+    },
+  );
 }

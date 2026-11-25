@@ -108,9 +108,10 @@ export function presentConnectReadiness(
       : verification;
   return {
     ...configured,
-    preparationMessage:
-      buildLeasePreparationNotice(state, configured, env)?.message ??
-      'No live device session has been created.',
+    preparationMessage: state.cloudSession
+      ? 'The hosted device is ready.'
+      : (buildLeasePreparationNotice(state, configured, env)?.message ??
+        'No live device session has been created.'),
     ...buildConnectWorkflow(state, configured, env),
   };
 }
@@ -153,9 +154,7 @@ export function renderConnectSuccess(options: {
     `${status === 'verified' ? 'Verified' : 'Status'}: ${readiness.verificationMessage}`,
   ];
   if (state.cloudSession && options.fallbackFrom?.length) {
-    lines.push(
-      `Using ${state.cloudSession.vendor}; ${options.fallbackFrom.join(', ')} was unavailable`,
-    );
+    lines.push(renderVendorFallback(state.cloudSession.vendor, options.fallbackFrom));
   }
   if (readiness.project) {
     lines.push(`Project: ${readiness.project.name ?? readiness.project.reference} — verified`);
@@ -169,6 +168,11 @@ export function renderConnectSuccess(options: {
   if (runtimePreparation) lines.push(runtimePreparation.message);
   if (previousLeaseNotice) lines.push(previousLeaseNotice.message);
   return lines.join('\n');
+}
+
+function renderVendorFallback(vendor: string, unavailable: string[]): string {
+  const verb = unavailable.length === 1 ? 'was' : 'were';
+  return `Using ${vendor}. ${unavailable.join(', ')} ${verb} unavailable.`;
 }
 
 export function serializeConnectionState(options: {

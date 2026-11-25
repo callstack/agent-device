@@ -157,13 +157,19 @@ async function fetchRemoteRequestDiagnostics(params: {
   try {
     const transport = await loadNodeHttpRequester(url.protocol);
     await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+    const { settleWithin } = await import('@agent-device/host-kit/settle-within');
+    const timeout = new AbortController();
+    const timeoutMessage = `fetch timed out after ${REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS}ms`;
     const start = () =>
       new Promise<string | undefined>((resolve) => {
+        if (timeout.signal.aborted) {
+          resolve(timeoutMessage);
+          return;
+        }
         let settled = false;
         const settle = (reason: string | undefined) => {
           if (settled) return;
           settled = true;
-          clearTimeout(timeoutHandle);
           if (reason === undefined) {
             resolve(undefined);
             return;
@@ -179,6 +185,7 @@ async function fetchRemoteRequestDiagnostics(params: {
             port: url.port,
             method: 'GET',
             path: url.pathname + url.search,
+            signal: timeout.signal,
             headers: {
               ...buildDaemonHttpAuthHeaders(endpoint.token),
               ...buildDaemonHttpTenantHeaders(endpoint.tenantId),
@@ -228,17 +235,23 @@ async function fetchRemoteRequestDiagnostics(params: {
             res.pipe(sink);
           },
         );
-        const timeoutHandle = setTimeout(() => {
-          settle(`fetch timed out after ${REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS}ms`);
-          request.destroy();
-        }, REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS);
         request.on('error', (error: Error) => {
-          settle(error.message);
+          settle(timeout.signal.aborted ? timeoutMessage : error.message);
         });
         request.end();
       });
-    const admission = params.handoff?.(async () => ({ result: start() }));
-    return await (admission ? (await admission).result : start());
+    const admission = params.handoff?.(async () => {
+      const result = start();
+      void result.catch(() => {});
+      return { result };
+    });
+    const outcome = await settleWithin(
+      async () => await (admission ? (await admission).result : start()),
+      REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS,
+    );
+    if (outcome.kind === 'settled') return outcome.value;
+    timeout.abort();
+    return timeoutMessage;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }

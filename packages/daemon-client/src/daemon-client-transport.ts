@@ -233,8 +233,7 @@ export async function readRemoteDaemonHealth(
 ): Promise<RemoteDaemonHealth> {
   const health = await readDaemonHttpHealth(info, probeTimeoutMs, callerSignal, dispatch);
   if (!info.baseUrl || !health.reachable) return health;
-  // Every link a command RPC crosses has to speak the client's protocol: a proxy that reports a
-  // skewed daemon behind it fails here, before the RPC, exactly like a skewed proxy does.
+  // Check each link's protocol before sending RPC.
   const incompatible = [health, health.upstream].find(
     (link): link is RemoteDaemonHealthLink & { rpcProtocolVersion: number } =>
       typeof link?.rpcProtocolVersion === 'number' &&
@@ -283,6 +282,7 @@ async function readDaemonHttpHealth(
   const unreachable = (): RemoteDaemonHealth => unreachableDaemonHealth(timeoutSignal, deadline);
   if (!transport || healthProbeExpired(signal, deadline)) return unreachable();
   return await new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => resolve(unreachable()), { once: true });
     void handoff(dispatch, () => {
       if (healthProbeExpired(signal, deadline)) {
         resolve(unreachable());

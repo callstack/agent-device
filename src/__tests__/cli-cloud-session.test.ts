@@ -172,7 +172,7 @@ test('passes every requested capability and reports the vendor fallback', async 
   const args = ['connect', 'cloud', '--platform', 'ios', '--needs', 'app-install, viewer'];
   const connect = await runCliCapture(args, { env });
   expect(connect.code, connect.stderr || connect.stdout).toBeNull();
-  expect(connect.stdout).toContain('Using provider-a; limrun was unavailable');
+  expect(connect.stdout).toContain('Using provider-a. limrun was unavailable.');
   expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1].body))).toMatchObject({
     platform: 'ios',
     needs: ['app-install', 'viewer'],
@@ -770,7 +770,7 @@ test('expiry removes scoped credentials and refuses to route the command', async
   stubCloudApi();
   expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
   const attachment = cloudAttachmentPath(location);
-  expect(fs.statSync(attachment).mode & 0o777).toBe(0o600);
+  if (process.platform !== 'win32') expect(fs.statSync(attachment).mode & 0o777).toBe(0o600);
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse(hostedDevice.deadlineAt) + 1);
   const expired = await runCliCapture(['snapshot', '-i', '--json'], { env });
   expect(JSON.parse(expired.stdout).error).toMatchObject({

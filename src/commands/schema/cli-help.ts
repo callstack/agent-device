@@ -509,7 +509,7 @@ Device cloud interfaces:
 
 Cloud session security and recovery:
   Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing.
-  Set AGENT_DEVICE_DAEMON_AUTH_TOKEN or pass --daemon-auth-token to connect and disconnect.
+  Authenticate to the hosted API with agent-device auth login or AGENT_DEVICE_CLOUD_API_KEY.
   After a connect timeout, retry with the same session and allocation options, or run disconnect to end the pending session.
 
 Direct proxy flow for a remote Mac/simulator:

@@ -198,14 +198,14 @@ test('reports typed device and os rejections', async () => {
   });
 });
 
-test('accepts every vendor on both platforms', () => {
+test('accepts a catalog vendor on Android', () => {
   expect(
     readCloudSessionRequest({
       help: false,
       json: false,
       version: false,
       platform: 'android',
-      vendor: 'provider-a',
+      vendor: '  provider-a  ',
     }),
   ).toMatchObject({ platform: 'android', vendor: 'provider-a' });
 });

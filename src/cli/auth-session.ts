@@ -482,9 +482,8 @@ export async function resolveCliSessionAccess(options: {
   // This read only asks whether there is a session to exchange, so a command that has none takes no
   // lock and writes nothing. The credential is read again once the lock is held.
   const stored = readExchangeableCliSession(stateDir);
-  if (!stored) return null;
+  if (!stored || isExpired(stored.expiresAt, io?.now)) return null;
   await assertStoredSessionOrigin(stored, env);
-  if (isExpired(stored.expiresAt, io?.now)) return null;
   // A refresh read is not a change the cloud will not repeat: a wait that times out fails with its
   // typed reason, and the next command asks again.
   const catalogCredentials = options.catalog ? new Set<string>() : undefined;
@@ -492,9 +491,8 @@ export async function resolveCliSessionAccess(options: {
     stateDir,
     async () => {
       const session = readExchangeableCliSession(stateDir);
-      if (!session) return null;
+      if (!session || isExpired(session.expiresAt, io?.now)) return null;
       await assertStoredSessionOrigin(session, env);
-      if (isExpired(session.expiresAt, io?.now)) return null;
       return await exchangeCliSessionAccess({ stateDir, session, flags, io, catalogCredentials });
     },
     { io },

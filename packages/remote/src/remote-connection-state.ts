@@ -966,6 +966,7 @@ function isOptionalCloudSessionBinding(value: unknown): boolean {
   return (
     hasStringFields(record, ['id', 'baseUrl', 'deadlineAt', 'generation']) &&
     typeof record.vendor === 'string' &&
+    (record.viewerAvailable === undefined || typeof record.viewerAvailable === 'boolean') &&
     record.transport === 'agent-device-daemon'
   );
 }

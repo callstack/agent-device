@@ -97,7 +97,7 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
 | `cloud_origin_mismatch` | A hosted connection already records the API origin that owns its lease. |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
-| `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
+| `cloud_catalog_key_origin_mismatch` | The API key and selected cloud endpoint specify different origins. |
 | `connection_busy` | A connection operation is in progress for the session. |
 | `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
 | `insufficient_balance` | The account balance cannot cover the cost to start the session. |
@@ -631,7 +631,7 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
-| `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
+| `cloud_catalog_key_origin_mismatch` | The API key and selected cloud endpoint specify different origins. |
 
 ### Cloud sessions
 

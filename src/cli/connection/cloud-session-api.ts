@@ -73,7 +73,7 @@ export function readCloudSessionRequest(flags: CliFlags) {
   }
   return {
     platform: flags.platform,
-    vendor: flags.vendor,
+    vendor: flags.vendor?.trim(),
     accepts: ['agent-device-daemon'] as const,
     maxMinutes: flags.maxMinutes,
     ...(needs ? { needs } : {}),

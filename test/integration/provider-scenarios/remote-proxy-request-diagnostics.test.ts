@@ -95,14 +95,16 @@ test('Provider-backed integration local proxy serves the daemon diagnostics reco
       assert.ok(
         directRequest && typeof directRequest === 'object' && !(directRequest instanceof URL),
       );
-      const directOptions = directRequest as {
+      const { signal, ...directOptions } = directRequest as {
         protocol?: string;
         host?: string;
         port?: string;
         method?: string;
         path?: string;
         headers?: Record<string, string>;
+        signal?: AbortSignal;
       };
+      assert.ok(signal instanceof AbortSignal);
       assert.equal(directRequestSpy.mock.calls.length, 1);
       assert.deepEqual(directOptions, {
         protocol: 'http:',

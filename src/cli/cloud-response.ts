@@ -57,7 +57,9 @@ export async function fetchCloudApi(url: URL, init: RequestInit): Promise<Respon
   try {
     return await fetch(url, { ...init, redirect: 'error' });
   } catch {
-    throw new AppError('COMMAND_FAILED', 'Could not reach the cloud session API.');
+    throw new AppError('COMMAND_FAILED', 'Could not reach the cloud session API.', {
+      hint: 'Verify the cloud API origin and network connection before retrying.',
+    });
   }
 }
 

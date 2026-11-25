@@ -377,6 +377,7 @@ type ProcessLockWaitOptions = ProcessLockOptions & {
   timeoutMs?: number;
   pollMs?: number;
   signal?: AbortSignal;
+  /** Runs on each poll that finds the lock busy. Throw to abort the wait. */
   onContention?: () => void;
 };
 

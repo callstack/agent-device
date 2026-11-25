@@ -90,7 +90,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('a new CLI process with the same state directory and session name reuses the committed binding without a second create', async () => {
+test('a second CLI invocation with the same state directory and session name reuses the committed binding without a second create', async () => {
   const stateDir = freshStateDir();
   const broker = stubBroker();
   const first = await runCliCapture(connectArgs, { env: processEnv(stateDir) });

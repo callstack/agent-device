@@ -172,7 +172,8 @@ function removeCloudState(
   state: RemoteConnectionState | null,
   record: CloudConnectionRecord | null,
 ): void {
-  if (!state?.cloudSession || state.cloudSession.generation !== record?.generation) return;
+  if (!state?.cloudSession || (record && state.cloudSession.generation !== record.generation))
+    return;
   removeRemoteConnectionState(location);
   removeGeneratedRemoteConfigIfUnused({
     stateDir: location.stateDir,
