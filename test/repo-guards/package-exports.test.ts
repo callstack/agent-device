@@ -20,22 +20,8 @@ const tsdownConfig = (await import(
 };
 const buildEntries = tsdownConfig.default.entry ?? {};
 
-const supportedSubpaths = [
-  '.',
-  './io',
-  './artifacts',
-  './metro',
-  './batch',
-  './remote-config',
-  './install-source',
-  './android-adb',
-  './contracts',
-  './selectors',
-  './finders',
-  './ai-sdk',
-  './plugins',
-];
-const typeOnlySubpaths = new Set(['./remote-config', './plugins']);
+const supportedSubpaths = ['.', './contracts', './selectors', './plugins'];
+const typeOnlySubpaths = new Set(['./plugins']);
 
 function exportTarget(subpath: string): { import: string; types: string } {
   const target = pkg.exports[subpath];
