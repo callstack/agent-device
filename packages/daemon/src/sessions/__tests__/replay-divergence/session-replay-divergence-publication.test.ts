@@ -248,7 +248,9 @@ test('missing capture evidence fails closed instead of exposing unauthorized ref
   expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
-test('degenerate projected refs fail closed when publication normalizes to empty', () => {
+test('a projected ref that is only a pin marker fails closed as an invalid projection', () => {
+  // `@` has no body at all; `@-s3` is a pin with no ref to pin. Neither may
+  // vanish from the set, because the capture never published either one.
   const input = scenario();
   const result = boundReplayDivergenceForSession({
     sessionStore: input.replaySession.store,
@@ -275,7 +277,7 @@ test('degenerate projected refs fail closed when publication normalizes to empty
   expect(result.screen).toEqual(
     expect.objectContaining({
       state: 'unavailable',
-      reason: 'ref-publication-empty',
+      reason: 'ref-publication-invalid-projection',
     }),
   );
   expect(result.suggestions).toEqual([

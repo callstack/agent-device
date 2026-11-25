@@ -6,7 +6,7 @@ import type {
   ReplayRefPublicationProjection,
   ReplayRefPublicationResult,
 } from '@agent-device/contracts/replay';
-import { REF_PIN_SEPARATOR, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
+import { splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import { readSessionRuntimeRevision, refFrame } from '../core/ref-frame.ts';
 import type { RefFrame } from '../core/ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
@@ -140,16 +140,11 @@ function normalizeRefBodies(refs: readonly string[]): Set<string> {
   const normalized = new Set<string>();
   for (const ref of refs) {
     // A projected ref may arrive pinned (`@e12-s3`); the frame authorizes plain
-    // bodies. A token that is only a pin marker (`@-s3`) has no body, and anything
-    // else is kept as written so a ref the capture never published still reads as
-    // an invalid projection rather than vanishing from the set.
+    // bodies. A malformed pin, including one that is only a pin marker (`@-s3`), is
+    // kept as written, so a ref the capture never published — or one that was never
+    // a ref at all — reads as an invalid projection instead of vanishing from the set.
     const withoutAt = ref.startsWith('@') ? ref.slice(1) : ref;
-    if (
-      withoutAt.length === 0 ||
-      withoutAt.startsWith(REF_PIN_SEPARATOR) ||
-      withoutAt.startsWith('~')
-    )
-      continue;
+    if (withoutAt.length === 0) continue;
     normalized.add(splitRefGenerationSuffix(withoutAt)?.base ?? withoutAt);
   }
   return normalized;

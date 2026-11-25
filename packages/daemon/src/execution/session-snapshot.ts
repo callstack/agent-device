@@ -91,7 +91,9 @@ function normalizeRefBody(ref: string): string {
   const withoutAt = ref.startsWith('@') ? ref.slice(1) : ref;
   const split = splitRefGenerationSuffix(withoutAt);
   return split ? split.base : withoutAt;
-} /**
+}
+
+/**
  * ADR 0014 partial issuance: a `find`, settled diff, or replay divergence screen
  * publishes only the refs it actually returned. It activates a PARTIAL frame that
  * authorizes ONLY those ref bodies (scope = the emitted set) at the current
