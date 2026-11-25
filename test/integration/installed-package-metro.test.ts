@@ -95,7 +95,7 @@ async function runNodeModuleJson(cwd: string, args: string[], script: string): P
   return readJson(stdout);
 }
 
-/** A v2 plugin written against the packed `agent-device/plugins` types, type-checked as a consumer. */
+/** Compile the retained SDK names and official plugins against packed declarations. */
 async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<void> {
   for (const name of ['maestro', 'replay']) {
     const tarball = path.join(consumerRoot, `${name}.tgz`);

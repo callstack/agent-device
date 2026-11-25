@@ -13,6 +13,8 @@ import type {
 } from '@agent-device/contracts/navigation';
 import type { ClipboardCommandResult } from '@agent-device/contracts/clipboard';
 import {
+  centerOfRect,
+  normalizeError,
   daemonRuntimeSchema,
   jsonRpcRequestSchema,
   type AppErrorCode,
@@ -25,7 +27,6 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { defaultHintForCode } from './contracts.ts';
-import { centerOfRect, normalizeError } from '@agent-device/kernel/contracts';
 import { AppError } from './index.ts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 
