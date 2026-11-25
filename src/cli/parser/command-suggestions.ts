@@ -168,6 +168,18 @@ export function suggestCommandFor(command: string): string | undefined {
   return `one of: ${nearest.join(', ')}`;
 }
 
+/**
+ * True when an unknown command has one answer: a curated alias or a single nearest
+ * name. A multi-candidate guess or no guess is not one; the root card shows the shapes.
+ */
+export function hasSingleCommandSuggestion(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return (
+    Object.hasOwn(COMMAND_ALIAS_SUGGESTIONS, normalized) ||
+    getNearestCommandNames(normalized).length === 1
+  );
+}
+
 // Unknown flag names that read like an app/bundle identity concept. `open` (and
 // the commands the curated map above points agents toward) take the app or
 // bundle id as a positional argument, not a flag, so a bare "Unknown flag"

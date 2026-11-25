@@ -22,7 +22,7 @@ import {
 import {
   formatUnknownCommandMessage,
   formatUnknownFlagMessage,
-  suggestCommandFor,
+  hasSingleCommandSuggestion,
   UNKNOWN_COMMAND_POINTER,
 } from './command-suggestions.ts';
 
@@ -524,12 +524,11 @@ export async function usageForCommand(command: string): Promise<string | null> {
 
 /**
  * What a help read for an unknown name prints after its error line: the short
- * pointer when the suggestion maps already answered the question, the root
- * decision card otherwise. A confident suggestion makes the card another read on
- * the way back to a command.
+ * pointer when the suggestion names one command, the root decision card when it
+ * lists several candidates or none.
  */
 export async function usageForUnknownCommand(command: string): Promise<string> {
-  if (suggestCommandFor(command)) return UNKNOWN_COMMAND_POINTER;
+  if (hasSingleCommandSuggestion(command)) return UNKNOWN_COMMAND_POINTER;
   return `${await usage()}\n`;
 }
 

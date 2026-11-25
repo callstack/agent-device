@@ -266,6 +266,15 @@ for (const argv of [
   });
 }
 
+test('help with a single nearest name stays short; several candidates keep the root card', async () => {
+  const single = await runCliCapture(['help', 'presss']);
+  assert.match(single.stderr, /Did you mean press\?/);
+  assert.doesNotMatch(single.stdout, /All \d+ commands:/);
+  const several = await runCliCapture(['help', 'scr']);
+  assert.match(several.stderr, /one of: scroll, screenshot/);
+  assert.match(several.stdout, /All \d+ commands: agent-device help commands/);
+});
+
 test('the bare reload command fails in the parser with the same short hint', async () => {
   const result = await runCliCapture(['reload']);
   assert.equal(result.code, 1);
