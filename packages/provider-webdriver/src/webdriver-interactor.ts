@@ -10,6 +10,7 @@ import type {
   KeyboardStatusResult,
 } from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import { isSplitViewContactOrigin } from '@agent-device/gestures/gesture-plan';
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
@@ -280,7 +281,7 @@ class WebDriverInteractor implements Interactor {
   }
 
   async performGesture(plan: GesturePlan): Promise<Record<string, unknown>> {
-    if (plan.topology === 'single' && plan.contactOrigin === 'split-view-edge') {
+    if (plan.topology === 'single' && isSplitViewContactOrigin(plan.contactOrigin)) {
       throw splitViewUnavailableError('WebDriver providers do not support Split View');
     }
     this.requireSupport(webDriverOperationForGesture(plan));

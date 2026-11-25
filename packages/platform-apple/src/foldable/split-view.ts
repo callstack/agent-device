@@ -1,20 +1,28 @@
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import { isSplitViewContactOrigin } from '@agent-device/gestures/gesture-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { splitViewUnavailableError } from '@agent-device/contracts/scroll-gesture';
 import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS } from '../core/config.ts';
 import { readFoldablePanelTable } from './orientation.ts';
 
-/**
- * The runner form of a Split View plan. Only a foldable simulator with its inner panel lit has
- * Split View; elsewhere the same bottom-edge touch opens Home or the app switcher, so the plan is
- * refused before any touch. The runner sends the contact as an ordinary screen-edge touch.
- */
+/** Converts a Split View contact to the runner's contact origin after checking the lit panel. */
 export async function appleSplitViewRunnerPlan(
   device: DeviceInfo,
   plan: GesturePlan,
   signal: AbortSignal | undefined,
 ): Promise<GesturePlan> {
-  if (plan.topology !== 'single' || plan.contactOrigin !== 'split-view-edge') return plan;
+  if (plan.topology !== 'single' || !isSplitViewContactOrigin(plan.contactOrigin)) return plan;
+  await requireAppleSplitViewPanel(device, signal);
+  const { contactOrigin, ...runnerPlan } = plan;
+  return contactOrigin === 'split-view-edge'
+    ? { ...runnerPlan, contactOrigin: 'screen-edge' }
+    : runnerPlan;
+}
+
+export async function requireAppleSplitViewPanel(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<void> {
   const table =
     device.kind === 'simulator'
       ? await readFoldablePanelTable(device, {
@@ -32,5 +40,4 @@ export async function appleSplitViewRunnerPlan(
       { deviceId: device.id, panelTable: table.kind },
     );
   }
-  return { ...plan, contactOrigin: 'screen-edge' };
 }

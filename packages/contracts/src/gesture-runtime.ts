@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import type { GesturePlan } from './gesture-plan-types.ts';
+import type { GesturePlan, GestureViewportScope } from './gesture-plan-types.ts';
 import {
   localInteractorSource,
   providerInteractorSource,
@@ -26,7 +26,7 @@ export type GesturePlanInput = Readonly<{
 
 /** Reading the gesture coordinate frame needs no plan — only the owner's authority. */
 export type GestureViewportInput = Readonly<{
-  includesKeyboard?: true;
+  scope?: GestureViewportScope;
   options?: Readonly<{ appBundleId?: string }>;
   execution?: SnapshotRuntimeExecution;
 }>;
@@ -152,8 +152,8 @@ function bindGestureOperations(
                 'Runtime owner advertised gestureViewport without an interactor implementation',
               );
             }
-            return input.includesKeyboard
-              ? await interactor.gestureViewport(true)
+            return input.scope
+              ? await interactor.gestureViewport(input.scope)
               : await interactor.gestureViewport();
           },
         }

@@ -257,6 +257,7 @@ struct Command: Codable {
   let textEntryMode: String?
   let action: String?
   let includesKeyboard: Bool?
+  let displayViewport: Bool?
   let x: Double?
   let y: Double?
   let button: String?

@@ -9,7 +9,7 @@ import type { FillUnconfirmedVerification } from './fill-evidence.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
-import type { GesturePlan } from './gesture-plan-types.ts';
+import type { GesturePlan, GestureViewportScope } from './gesture-plan-types.ts';
 import type { ReadSettingResult, SettingOptions } from './settings.ts';
 import type { ReadableSetting } from './settings-catalog.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -416,7 +416,7 @@ export type Interactor = {
   ): Promise<{
     found: boolean;
   }>;
-  gestureViewport?(includesKeyboard?: true): Promise<Rect>;
+  gestureViewport?(scope?: GestureViewportScope): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
   /**
    * Optional (parity with `actionButton`): opens the springboard, a control not every owner

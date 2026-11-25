@@ -22,7 +22,7 @@ import {
   assertScrollGestureInput,
 } from '@agent-device/contracts/scroll-gesture';
 import { assertAppleMultiTouchSupported } from './multitouch-support.ts';
-import { appleSplitViewRunnerPlan } from './foldable/split-view.ts';
+import { appleSplitViewRunnerPlan, requireAppleSplitViewPanel } from './foldable/split-view.ts';
 import {
   isMacOs,
   isTvOsDevice,
@@ -184,13 +184,15 @@ export function iosRunnerOverrides(
         );
       },
       performGesture: async (plan) => await performGestureApple(device, ctx, runnerOpts, plan),
-      gestureViewport: async (includesKeyboard) => {
+      gestureViewport: async (scope) => {
+        if (scope === 'display') await requireAppleSplitViewPanel(device, runnerOpts.signal);
         const result = await runAppleRunnerCommand(
           device,
           {
             command: 'gestureViewport',
             appBundleId: ctx.appBundleId,
-            ...(includesKeyboard ? { includesKeyboard } : {}),
+            ...(scope === 'including-keyboard' ? { includesKeyboard: true } : {}),
+            ...(scope === 'display' ? { displayViewport: true } : {}),
           },
           runnerOpts,
         );

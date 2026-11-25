@@ -82,6 +82,7 @@ export type RunnerCommand = {
   textEntryMode?: 'append' | 'replace';
   action?: 'get' | 'accept' | 'dismiss';
   includesKeyboard?: boolean;
+  displayViewport?: boolean;
   x?: number;
   y?: number;
   button?: ClickButton;

@@ -11,10 +11,16 @@ const to = { x: 120, y: 320 };
 const pan = { kind: 'pan', origin: from, delta: { x: 0, y: 100 }, durationMs: 500 };
 
 test.each([
-  { name: 'one-finger pan', command: 'gesture', input: pan, includesKeyboard: true },
+  { name: 'one-finger pan', command: 'gesture', input: pan, scope: 'including-keyboard' },
   { name: 'two-finger pan', command: 'gesture', input: { ...pan, pointerCount: 2 } },
   { name: 'fling', command: 'gesture', input: { kind: 'fling', direction: 'down', origin: from } },
   { name: 'swipe', command: 'swipe', input: { from, to } },
+  {
+    name: 'Split View exit',
+    command: 'gesture',
+    input: { kind: 'swipe', preset: 'split-view-exit' },
+    scope: 'display',
+  },
   {
     name: 'Maestro coordinate swipe',
     command: 'gesture',
@@ -64,8 +70,8 @@ test.each([
 
   expect(response).toMatchObject({ ok: true });
   expect(gestureViewport).toHaveBeenCalledOnce();
-  expect(gestureViewport.mock.calls[0]?.[0].includesKeyboard).toBe(
-    'includesKeyboard' in scenario ? scenario.includesKeyboard : undefined,
+  expect(gestureViewport.mock.calls[0]?.[0].scope).toBe(
+    'scope' in scenario ? scenario.scope : undefined,
   );
 });
 
