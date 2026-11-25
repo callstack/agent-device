@@ -193,7 +193,7 @@ function readInlineCandidates(views: ErrorCandidateView[]): string[] | undefined
 
 /**
  * The printed ref at the head of a candidate line, pin included; group 1 is the plain
- * body. The kernel owns this grammar (`readPinnedRefPrefix`,
+ * body. The kernel owns this grammar (`splitRefGenerationSuffix` and `formatPinnedRef`,
  * `@agent-device/kernel/snapshot`); it is spelled here because this module sits in the
  * CLI façade's eager module closure, which the gate in
  * `scripts/__tests__/eager-closure-budgets.test.ts` holds to no growth. `error.test.ts`
