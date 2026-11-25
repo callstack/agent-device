@@ -60,7 +60,7 @@
     "packages/daemon-client/src/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:27ac0a5299324aab39fa2c4fe0e0d32b1eb1515df47c7f4aa75a75d66b8b5a3e",
     "packages/daemon-client/src/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
     "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
-    "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8c7041b929b35b7d727dea81005f1f344e5bd6ac7dc4f2ceaa26fcecd12d5a81",
+    "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:447b4337ee39eb06149e49761949e59b0f3cc572d9bcba2fd619009e91e3a650",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
     "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:0189e2868139a1b0227478f3022ef8e9db413c9afd4de7eedba6be4cc651c9cd",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:bb12e15a022c532aa55bb6ce714688d29c25f247f3dac690b68f19f3e357c35b",
@@ -496,7 +496,7 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
-      "digest": "sha256:8c7041b929b35b7d727dea81005f1f344e5bd6ac7dc4f2ceaa26fcecd12d5a81",
+      "digest": "sha256:447b4337ee39eb06149e49761949e59b0f3cc572d9bcba2fd619009e91e3a650",
       "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): the two invalid-response rejections also gain details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; nothing is sent or read differently. #4511 (client-side only): the success branch passes the client state directory along with the host, so remote artifact materialization can read the client's own record of a remote recording's destination. Nothing is sent or parsed differently. Its two invalid-response rejections now read details.reason from DAEMON_TRANSPORT_REASONS instead of a literal in this declaration, so only the identifier expression moved; the value published is the identical string and nothing a peer sends or parses moves. Client-local admission is forwarded to response handlers that may fetch artifacts. RPC response parsing and the accepted success and error envelopes are unchanged. Hosted callers can suppress remote diagnostic localization through a client-local option. Accepted response framing and all transmitted RPC fields are unchanged. The RPC response handler adapts the client-local admission callback for artifact GETs. Older peers send the same success and error envelopes."
     },
     {

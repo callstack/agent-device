@@ -18,7 +18,7 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import { dispatchDaemonRequest, type DaemonDispatch } from './daemon-client-request.ts';
+import type { DaemonDispatch } from './daemon-client-request.ts';
 import {
   DAEMON_REQUEST_MAX_BYTES,
   DAEMON_RPC_PROTOCOL_VERSION,
@@ -45,7 +45,12 @@ export function handleDaemonHttpResponseBody(
     const endpoint: DaemonArtifactEndpoint = {
       baseUrl: info.baseUrl,
       token: info.token,
-      downloadHandoff: (start) => dispatchDaemonRequest(dispatch, start),
+      downloadHandoff: dispatch
+        ? async (start) => {
+            const { dispatchDaemonRequest } = await import('./daemon-client-request.ts');
+            return await dispatchDaemonRequest(dispatch, start);
+          }
+        : undefined,
     };
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
