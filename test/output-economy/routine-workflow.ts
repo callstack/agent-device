@@ -269,10 +269,7 @@ function refsInSample(sample: EconomySample): string[] {
   // (`@e7-s14`). That still surfaces the plain target `@e7` — an agent pasting
   // the pinned form is targeting the same body — so normalize the pin away when
   // deciding which refs a response surfaced.
-  return (serialized.match(REF_TOKEN_PATTERN) ?? []).map((ref) => {
-    const suffix = ref.indexOf('~');
-    return suffix === -1 ? ref : ref.slice(0, suffix);
-  });
+  return (serialized.match(REF_TOKEN_PATTERN) ?? []).map((ref) => ref.replace(/-s\d+$/, ''));
 }
 
 function measureRoutineWorkflow(
