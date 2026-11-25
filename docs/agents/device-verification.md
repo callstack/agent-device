@@ -1,6 +1,7 @@
 # Verify on a device
 
-Use this for Apple runner changes or manual device runs. For foldables, also read [foldable verification](device-foldable.md).
+For a requested manual device run, use this guide.
+For foldables, also read [foldable verification](device-foldable.md).
 
 ## Prepare
 
@@ -47,7 +48,7 @@ The physical runner handoff checklist is in `docs/evidence/ios-physical-runner-h
 
 ## Platform policy
 
-For Apple runner changes, run `pnpm check:xctest-selection` and build the affected target.
+For Apple runner changes, CI runs `pnpm check:xctest-selection`.
 Swift `#if` guards own the XCTest classification. Do not keep a second list of test names.
 Use macOS host lanes for pure decisions. Use simulator lanes for iOS and XCTest semantics.
 If system policy rejects an unsigned host bundle, rebuild with `CODE_SIGN_IDENTITY="Apple Development"`

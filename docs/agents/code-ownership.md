@@ -1,6 +1,6 @@
 # Code ownership
 
-Before you edit a module with many callers, run `pnpm depgraph affected <path>`.
+If direct callers do not show the affected boundary, use `pnpm depgraph affected <path>` when it is available.
 
 ## Declarations
 

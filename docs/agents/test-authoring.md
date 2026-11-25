@@ -15,15 +15,15 @@ For native behavior, use the owning E2E lane.
 For pure logic, types, or exhaustive cases, use focused tests.
 If an existing scenario covers the regression, extend it.
 Do not add test-only production exports or dependency injection.
-Without the fix, a regression test must fail for the intended reason.
-Use [isolated experiments](test-experiments.md).
-Pure moves retain their tests. Verify discovery at the new path.
+Write the regression test so that it fails for the intended reason without the fix.
+For a requested experiment, use [isolated experiments](test-experiments.md).
+For a pure move, retain the tests and their runner coverage.
 Pair classifier positives with the closest negative.
 Prove identical error text without the typed reason cannot trigger recovery.
 For callback canaries, assert semantic success.
 Automatic replay coverage requires a PR or scheduled lane that runs the scenario at the actual head.
 
-Reject assertion-free probes, self-comparisons, subject-derived expectations, duplicate cases, and mocks that assert their own inputs.
+Reject assertion-free probes, self-comparisons, assertions about prose, subject-derived expectations, duplicate cases, and mocks that assert their own inputs.
 
 Match test names to exercised inputs.
 Type-only checks do not prove runtime behavior.
@@ -55,12 +55,11 @@ Import the subject module, not a platform barrel.
 
 ## Run a focused test
 
-Use `pnpm exec vitest run --project unit-core <path>`.
+For a focused test, run `pnpm exec vitest run --project unit-core <test-file>`.
 For `packages/apple-runner/src/**`, use `--project apple-runner`.
 Local runs default to four workers.
 For a different host share, set `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>`. CI ignores it.
-The root tsconfig includes scripts TypeScript.
-Verify runner inclusion; typechecking does not prove collection.
+Verify runner inclusion separately from typechecking.
 
 For a provider scenario, use `pnpm exec vitest run --project provider-integration <path>`.
 For device smoke, use the owning checked-in harness.

@@ -1,21 +1,24 @@
 # Open or update a PR
 
-After validation, a request to open or ship a PR authorizes branch creation, commits, push, and PR creation. Merging and releasing need separate authorization.
+A request to open or ship a PR authorizes branch creation, commits, push, and PR creation.
+Before you merge or release, get separate authorization.
 
 ## Validate
 
-Follow [validation](testing.md).
-A serialized gate stage can validate the pushed head instead.
-An authorized incomplete draft can record a blocker. A blocker is not a pass.
-Push once per review round. Each push restarts CI. Drafts skip device lanes.
+If you are a worker, publish the change with CI pending.
+For maintainer validation, follow [validation](testing.md).
+If you have authorization to open an incomplete draft, record its blocker.
+For each review round, push once.
+Each push restarts CI. Drafts skip device lanes.
 
-For device-facing changes, follow [device verification](device-verification.md).
-Report missing devices or commands.
+If the task includes manual device verification, follow the [device guide](device-verification.md).
+If a device or command blocks that run, report it.
 
 - Published: the branch is pushed, the PR is open, and validation status is recorded at a named commit.
 - Merge-ready: required checks pass at the head, with live evidence for device-facing changes.
 
-Do not wait for CI merely to report publication.
+A device-facing change affects live dispatch, capture, interaction, app lifecycle, or native execution.
+
 Do not report skipped integration or coverage as passed.
 
 ## New public package
@@ -25,9 +28,9 @@ First, the maintainer publishes an empty placeholder version, for example `0.0.0
 Then the maintainer configures the npm trusted publisher for the release workflow.
 Only after these steps does the PR remove `"private": true`.
 
-## Self-review
+## Coordinator review
 
-Give an independent reviewer the worktree, the merge-base SHA, the head SHA, and the task requirements.
+Give the reviewer the worktree, merge-base SHA, head SHA, and task requirements.
 In the first review, do not supply an implementation summary.
 Review that SHA range with AGENTS.md and [review guidance](review.md).
 
@@ -35,7 +38,6 @@ In later rounds, supply the SHA reviewed before, its findings, and their disposi
 Review the changes since that SHA and the interactions that they affect.
 After a rebase, compare the branch ranges with `git range-diff <old-base>..<old-head> <new-base>..<new-head>`.
 Fix accepted findings with the smallest change. Prefer configuration or deletion to new code.
-Rerun affected checks.
 For rejected findings, record a reason.
 If no independent reviewer is available, read the full diff again cold. Report that limitation.
 At the [review](review.md) growth thresholds, this fallback is not enough.
@@ -50,17 +52,19 @@ Never push tags.
 Put enforcement edits in a final `chore(gates): <what and why>` commit.
 
 For conflicts or relevant upstream changes, rebase. Disjoint changes alone do not require rebase.
-After a rebase, validate the new head. Keep old evidence attributed to its original SHA.
+After a rebase, keep old evidence attributed to its original SHA.
 
 ## PR body
 
 The `pr-body` gate enforces the sections and the 250-word limit.
-Update the body after each push. Open as draft only when requested or incomplete.
+If the scope or evidence changes, update the body.
+If the task requests a draft or the implementation is incomplete, open as draft.
 
 - `## Summary`: the invariant and behavior, the reason, the linked issue, and scope expansion.
 - `## Before / after`: for `feat` and `fix`, up to 3 calls at base and head, with the
   output that differs. Or state `No observable change` with a reason.
 - `## Value`: for a refactor, 2–4 numbers measured at base and head.
-- `## Validation`: the tested SHA and receipt, command results, CI obligations, and unresolved risks.
+- `## Validation`: validation status at the head SHA, available evidence, and unresolved risks.
   Use evidence accessible remotely.
+  If CI is pending, record `CI pending`.
   For docs-only changes, explain why runtime tests do not apply.
