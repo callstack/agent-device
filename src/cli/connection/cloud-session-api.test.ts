@@ -612,6 +612,8 @@ test('uses the normalized attachment bearer for both viewer filtering and storag
 
 test.each([
   ['2026-11-19T16:00:00+01:00', '2026-11-19T15:00:00.000Z'],
+  ['2026-11-19T16:00:00+0100', '2026-11-19T15:00:00.000Z'],
+  ['2026-11-19T10:00:00.123456-0500', '2026-11-19T15:00:00.123Z'],
   ['2026-11-19T10:00:00.123456-05:00', '2026-11-19T15:00:00.123Z'],
 ])('stores an ISO broker deadline in canonical UTC (%s)', async (deadlineAt, canonical) => {
   vi.stubGlobal(
