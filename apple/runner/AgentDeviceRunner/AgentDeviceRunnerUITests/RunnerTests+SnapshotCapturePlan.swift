@@ -154,7 +154,8 @@ extension RunnerTests {
     var xCTestTierRan = false
 
     // Only iOS runners penalize the channel. Every iOS runner, Simulator or physical device, has
-    // the private-AX backend, so a penalized plan defers to it.
+    // the private-AX backend, so a penalized regular visible plan defers to it. Raw and lit-panel
+    // plans keep their order.
     var xCTestChannelPenalized = false
     var breakerPenalized = false
     var xCTestRecoveryProbeDue = false
