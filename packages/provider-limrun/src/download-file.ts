@@ -148,7 +148,7 @@ function downloadFailure(
  * what went wrong without quoting the request it happened on.
  */
 function transportSummary(error: unknown): string {
-  if (error instanceof TypeError) return 'invalid-request';
+  if (error instanceof TypeError) return 'request-failed';
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' && code.length > 0 ? code : 'unknown';
 }

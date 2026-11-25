@@ -80,7 +80,7 @@ test('streams an authenticated HTTPS download and refuses the first redirect', a
         await downloadLimrunFile({ ...options, url: origin + '/file' });
         assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'ftypisom-payload');
         await assert.rejects(downloadLimrunFile({ ...options, url: origin + '/redirect' }), {
-          details: { reason: 'limrun_download_failed', transport: 'invalid-request' }
+          details: { reason: 'limrun_download_failed', transport: 'request-failed' }
         });
         assert.equal(fs.existsSync(destinationPath), false);
       `,
@@ -199,7 +199,7 @@ test('a malformed download URL publishes neither the URL nor the transport messa
 
   expect(failure).toBeInstanceOf(AppError);
   const details = (failure as AppError).details ?? {};
-  expect(details).toEqual({ reason: 'limrun_download_failed', transport: 'invalid-request' });
+  expect(details).toEqual({ reason: 'limrun_download_failed', transport: 'request-failed' });
   expect(JSON.stringify(details)).not.toMatch(token);
   expect(JSON.stringify((failure as AppError).cause ?? '')).not.toMatch(token);
 });
