@@ -1,6 +1,8 @@
 import { defineConfig } from 'tsdown';
+import { jpegDecoderOnly } from '../build-config/src/index.ts';
 
 export default defineConfig({
+  plugins: [jpegDecoderOnly()],
   entry: {
     'agent-device': 'src/plugin.ts',
     'png-worker': '../capture-kit/src/png-worker.ts',

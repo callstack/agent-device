@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { defineConfig } from 'tsdown';
 import { bundledLicenseNotices } from './scripts/lib/bundled-license-notices.ts';
+import { jpegDecoderOnly } from './packages/build-config/src/index.ts';
 
 const typeScriptPackageJsonUrl = pathToFileURL(
   createRequire(import.meta.url).resolve('typescript/package.json'),
@@ -125,7 +126,7 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
-  plugins: [bundledLicenseNotices(import.meta.dirname)],
+  plugins: [jpegDecoderOnly(), bundledLicenseNotices(import.meta.dirname)],
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),

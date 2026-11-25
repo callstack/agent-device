@@ -1,5 +1,22 @@
 import { readFileSync } from 'node:fs';
-import type { InputOptions } from 'rolldown';
+import { createRequire } from 'node:module';
+import type { InputOptions, Plugin } from 'rolldown';
+
+export function jpegDecoderOnly(): Plugin {
+  const id = '\0agent-device:jpeg-decoder';
+  const require = createRequire(new URL('../../capture-kit/package.json', import.meta.url));
+  return {
+    name: 'jpeg-decoder-only',
+    resolveId(source) {
+      if (source === 'jpeg-js') return id;
+    },
+    load(source) {
+      if (source === id) {
+        return `export { default as decode } from ${JSON.stringify(require.resolve('jpeg-js/lib/decoder.js'))};`;
+      }
+    },
+  };
+}
 
 export const strictBundlerInputOptions: InputOptions = {
   onLog(level, log, handler) {
