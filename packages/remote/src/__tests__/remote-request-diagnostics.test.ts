@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -127,6 +127,76 @@ test('an unreachable record leaves no path and names the daemon and request inst
     });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+test('a timed-out diagnostics fetch closes its sink and removes the record before returning', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const stateDir = mkdtempForTestSync('remote-diagnostics-timeout-');
+  const destination = path.join(
+    stateDir,
+    'remote-diagnostics',
+    'cwd_9f1_default',
+    'requests',
+    'abc123.ndjson',
+  );
+  const server = http.createServer((_request, response) => {
+    response.writeHead(200);
+    response.write(RECORD);
+  });
+  const opened = deferred<fs.WriteStream>();
+  const createWriteStream = fs.createWriteStream;
+  const open = vi.spyOn(fs, 'createWriteStream').mockImplementation((...args) => {
+    const sink = createWriteStream(...args);
+    sink.once('open', () => opened.resolve(sink));
+    return sink;
+  });
+  const removing = deferred<void>();
+  const allowRemoval = deferred<void>();
+  const rm = fs.promises.rm;
+  const removal = vi.spyOn(fs.promises, 'rm').mockImplementation(async (...args) => {
+    if (args[0] === destination) {
+      removing.resolve();
+      await allowRemoval.promise;
+    }
+    return rm(...args);
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let reported = false;
+    const diagnostic = localizeRemoteDaemonError(remoteError(), {
+      endpoint: { baseUrl: `http://127.0.0.1:${port}`, token: 'daemon-secret' },
+      stateDir,
+    }).then((value) => {
+      reported = true;
+      return value;
+    });
+    const sink = await opened.promise;
+    await vi.advanceTimersByTimeAsync(10_000);
+    await removing.promise;
+    assert.equal(reported, false);
+    assert.equal(sink.closed, true);
+    allowRemoval.resolve();
+    const result = await diagnostic;
+    assert.equal(result.logPath, undefined);
+    assert.match(result.logPathUnavailable ?? '', /fetch timed out/);
+    assert.equal(fs.existsSync(destination), false);
+  } finally {
+    allowRemoval.resolve();
+    vi.useRealTimers();
+    removal.mockRestore();
+    open.mockRestore();
+    await closeLoopbackServer(server);
   }
 });
 

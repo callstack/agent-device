@@ -160,23 +160,25 @@ async function fetchRemoteRequestDiagnostics(params: {
     const { settleWithin } = await import('@agent-device/host-kit/settle-within');
     const timeout = new AbortController();
     const timeoutMessage = `fetch timed out after ${REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS}ms`;
+    let download: Promise<string | undefined> | undefined;
     const start = () =>
-      new Promise<string | undefined>((resolve) => {
+      (download = new Promise<string | undefined>((resolve) => {
         if (timeout.signal.aborted) {
           resolve(timeoutMessage);
           return;
         }
         let settled = false;
+        let sink: fs.WriteStream | undefined;
+        const onTimeout = () => settle(timeoutMessage);
         const settle = (reason: string | undefined) => {
           if (settled) return;
           settled = true;
+          timeout.signal.removeEventListener('abort', onTimeout);
           if (reason === undefined) {
             resolve(undefined);
             return;
           }
-          void fs.promises.rm(destinationPath, { force: true }).finally(() => {
-            resolve(reason);
-          });
+          void discardDiagnosticDownload(destinationPath, sink).then(() => resolve(reason));
         };
         const request = transport.request(
           {
@@ -211,35 +213,32 @@ async function fetchRemoteRequestDiagnostics(params: {
               settle(`HTTP ${statusCode}`);
               return;
             }
-            const sink = fs.createWriteStream(destinationPath);
+            const output = (sink = fs.createWriteStream(destinationPath));
             res.off('error', settleReadError);
             let bytes = 0;
             res.on('data', (chunk: Buffer) => {
               bytes += chunk.length;
               if (bytes > REMOTE_DIAGNOSTICS_MAX_BYTES) {
                 request.destroy();
-                sink.destroy();
                 settle(`record exceeds ${REMOTE_DIAGNOSTICS_MAX_BYTES} bytes`);
               }
             });
-            res.on('error', (error: Error) => {
-              sink.destroy();
+            res.on('error', (error: Error) => settle(error.message));
+            output.on('error', (error: Error) => {
               settle(error.message);
             });
-            sink.on('error', (error: Error) => {
-              settle(error.message);
-            });
-            sink.on('finish', () => {
+            output.on('finish', () => {
               settle(undefined);
             });
-            res.pipe(sink);
+            res.pipe(output);
           },
         );
         request.on('error', (error: Error) => {
           settle(timeout.signal.aborted ? timeoutMessage : error.message);
         });
+        timeout.signal.addEventListener('abort', onTimeout, { once: true });
         request.end();
-      });
+      }));
     const admission = params.handoff?.(async () => {
       const result = start();
       void result.catch(() => {});
@@ -251,8 +250,21 @@ async function fetchRemoteRequestDiagnostics(params: {
     );
     if (outcome.kind === 'settled') return outcome.value;
     timeout.abort();
+    await download;
     return timeoutMessage;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
+}
+
+async function discardDiagnosticDownload(
+  destinationPath: string,
+  sink: fs.WriteStream | undefined,
+) {
+  if (sink && !sink.closed) {
+    const closed = new Promise<void>((resolve) => sink.once('close', resolve));
+    sink.destroy();
+    await closed;
+  }
+  await fs.promises.rm(destinationPath, { force: true }).catch(() => {});
 }
