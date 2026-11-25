@@ -8,7 +8,9 @@ The daemon owns sessions. Registry declarations route commands to platform runti
 For a delegated task, CI owns validation.
 Do not run local gates, check scripts, coverage, or project-wide tests.
 To write a test, run only that test file.
-Push, report the head SHA with checks pending, and stop.
+Push the change.
+Report the head SHA with checks pending.
+Do not wait for CI.
 The coordinator relays CI results and review.
 
 ## Task routing
