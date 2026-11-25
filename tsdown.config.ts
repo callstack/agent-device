@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { defineConfig } from 'tsdown';
 import { bundledLicenseNotices } from './scripts/lib/bundled-license-notices.ts';
-import { jpegDecoderOnly } from './packages/build-config/src/index.ts';
+import { jpegDecoderOnly } from './scripts/lib/jpeg-decoder-only.ts';
 
 const typeScriptPackageJsonUrl = pathToFileURL(
   createRequire(import.meta.url).resolve('typescript/package.json'),

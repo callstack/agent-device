@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsdown';
 import { fileURLToPath } from 'node:url';
-import { jpegDecoderOnly } from '@agent-device/build-config';
+import { jpegDecoderOnly } from '../../scripts/lib/jpeg-decoder-only.ts';
 import { bundledLicenseNotices } from '../../scripts/lib/bundled-license-notices.ts';
 
 export default defineConfig({
