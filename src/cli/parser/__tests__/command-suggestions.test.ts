@@ -70,7 +70,7 @@ for (const guess of ['start', 'restart']) {
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'INVALID_ARGS' &&
-        error.message.includes('open <app> --relaunch'),
+        error.message.includes('Did you mean open <app> --relaunch'),
     );
   });
 }
