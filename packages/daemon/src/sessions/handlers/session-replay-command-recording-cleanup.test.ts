@@ -52,11 +52,12 @@ test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
     const tenantId = 'recording-suite';
     const clientRoot = path.join(root, 'client');
     const copy = fs.promises.copyFile;
+    const inventoryAtCopy: unknown[] = [];
     const copyRecording = vi
       .spyOn(fs.promises, 'copyFile')
       .mockImplementation(async (from, to, flags) => {
         if (path.basename(String(to)) === 'recording.gesture-telemetry.json') {
-          expect(await listDownloadableArtifacts({ tenantId }, {})).toEqual([]);
+          inventoryAtCopy.push(await listDownloadableArtifacts({ tenantId }, {}));
           if (outcome === 'copy failure') throw new Error('Archive sidecar copy failed.');
         }
         return copy(from, to, flags);
@@ -129,6 +130,7 @@ test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
       const archiveRecording = archiveFiles.find((file) => path.basename(file) === 'recording.mp4');
       const inventory = await listDownloadableArtifacts({ tenantId }, {});
       try {
+        expect(inventoryAtCopy).toEqual(outcome === 'missing sidecar' ? [] : [[]]);
         const output = inventory.find((artifact) => artifact.artifactType === 'screen-recording');
         if (outcome !== 'complete') {
           expect(runtime.forceCleanup).not.toHaveBeenCalled();

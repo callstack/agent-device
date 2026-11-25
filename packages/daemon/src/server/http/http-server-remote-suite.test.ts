@@ -50,9 +50,12 @@ test('trusted remote suites with a repeated request ID download distinct archive
       expect(data.executed).toBe(1);
       return data.artifacts![0]!.artifactId!;
     };
-    const first = await run('first-archive-only');
-    const second = await run('second-archive-only');
+    const created: string[] = [];
     try {
+      const first = await run('first-archive-only');
+      created.push(first);
+      const second = await run('second-archive-only');
+      created.push(second);
       expect(first).not.toBe(second);
       for (const [id, wanted, unwanted] of [
         [first, 'first-archive-only', 'second-archive-only'],
@@ -67,8 +70,7 @@ test('trusted remote suites with a repeated request ID download distinct archive
         expect(archive.includes(Buffer.from(unwanted))).toBe(false);
       }
     } finally {
-      cleanupDownloadableArtifact(first);
-      cleanupDownloadableArtifact(second);
+      for (const id of created) cleanupDownloadableArtifact(id);
     }
   });
 });

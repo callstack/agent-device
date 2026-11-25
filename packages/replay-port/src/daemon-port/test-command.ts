@@ -361,27 +361,8 @@ function withOriginalTestRefusalGuidance(
 }
 
 /**
- * #2246: against a remote daemon, the client redirects `--artifacts-dir` to a temp directory on
- * THIS host before the suite runs (`prepareRemoteRequestArtifacts` in
- * `packages/remote/src/daemon-artifacts.ts`) — the caller's real `cwd` names no path here, so the
- * scheduler above must never resolve suite artifacts against it. `req.meta.clientArtifactPaths`
- * is how that client tells the daemon the real caller-local ROOT (e.g. `--artifacts-dir`, or its
- * default) it will pull the directory back into once the request returns — that root is resolved
- * client-side *before* the suite runs, so it never contains the suite's own invocation id.
- *
- * `data.artifactsDir` (the daemon-local suite directory) is always `<redirected root>/<suite
- * invocation id>`: `createDirectoryArchive` (`packages/daemon/src/resources/artifact-tracking.ts`) tars it as
- * `-C dirname(daemonRoot) -- basename(daemonRoot)`, so extracting that archive under the
- * caller-local root reproduces the SAME invocation-id segment there. The caller-facing root is
- * therefore `path.join(clientRoot, basename(daemonRoot))`, not `clientRoot` itself — every path
- * this rewrites must land under that, matching where the client will actually put the files.
- *
- * Rewriting every artifact path in the response to that root, and registering the directory
- * itself as one downloadable artifact are host concerns: the scheduler only ever
- * reports paths on its own filesystem.
- *
- * A local daemon never sets `clientArtifactPaths` (the client only redirects for a remote one),
- * so this is a no-op there and the response is returned unchanged.
+ * Projects remote suite paths from the daemon's archive root to the client's destination.
+ * Public callers without a destination get safe relative paths and recording IDs.
  */
 export function attachRemoteReplayTestArtifacts(
   data: ReplaySuiteResult,

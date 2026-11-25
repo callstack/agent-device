@@ -552,10 +552,10 @@ function assertRequestMayStopRecording(
   ref?: SessionRef,
 ): void {
   const { metadata, lifecycle } = envelope;
+  const remote = metadata?.remoteCaptureOutput === true;
   const owner = recordingOutputLeaseVerifier(metadata);
   if (metadata?.suiteRecordingArchivePath && !params.suiteRecording)
     throw leasedOutputRefusal('Recording');
-  const remote = metadata?.remoteCaptureOutput === true;
   const admitted = params.req.internal?.admittedLease;
   if (isRemoteRecordingRequest(params) && (owner === undefined || !remote))
     throw leasedOutputRefusal('Recording');
