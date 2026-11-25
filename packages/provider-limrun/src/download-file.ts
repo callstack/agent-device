@@ -1,11 +1,8 @@
-import type { LookupAddress } from 'node:dns';
-import { addAbortListener, once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
-import type { LoopbackDownloadReply, LoopbackDownloadRequest } from './loopback-download-worker.ts';
 import {
   AppError,
   createRequestCanceledError,
@@ -23,10 +20,8 @@ const LIMRUN_DOWNLOAD_REASONS = {
   timeout: { reason: 'limrun_download_timeout' },
   // The transfer failed before it could ask the instance for the file.
   failed: { reason: 'limrun_download_failed' },
-  // An authenticated download must use the instance origin and a secure transport.
+  // An authenticated download requires HTTPS on the instance origin.
   endpointBlocked: { reason: 'limrun_download_endpoint_blocked' },
-  // An authenticated loopback download refused the instance redirect.
-  redirectBlocked: { reason: 'limrun_download_redirect_blocked' },
 } as const satisfies ReasonTable<'limrun'>;
 
 /**
@@ -41,14 +36,10 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
     const { instance } = options;
-    const instanceUrl = instance ? await instanceDownloadUrl(instance.apiUrl, options.url) : null;
+    const url = instance ? instanceDownloadUrl(instance.apiUrl, options.url) : options.url;
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    if (instance && instanceUrl?.protocol === 'http:') {
-      await downloadFromLoopback(instanceUrl, instance.token, options.destinationPath, signal);
-    } else {
-      const body = await openFetchDownload(instanceUrl ?? options.url, instance?.token, signal);
-      await writeDownloadBody(body, options.destinationPath, signal);
-    }
+    const body = await openFetchDownload(url, instance?.token, signal);
+    await writeDownloadBody(body, options.destinationPath, signal);
   } catch (error) {
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout, signal);
@@ -74,75 +65,6 @@ async function openFetchDownload(
   return response.body as WebReadableStream<Uint8Array> | null;
 }
 
-async function downloadFromLoopback(
-  url: URL,
-  token: string,
-  destinationPath: string,
-  signal: AbortSignal,
-): Promise<void> {
-  const [{ Worker }, { lookup }, { isLoopbackUrlHostname }] = await Promise.all([
-    import('node:worker_threads'),
-    import('node:dns/promises').then(({ default: dns }) => dns),
-    import('@agent-device/host-kit/transport'),
-  ]);
-  signal.throwIfAborted();
-  const hostname = url.hostname.replace(/^\[(.*)\]$/, '$1');
-  const answers = await new Promise<LookupAddress[]>((resolve, reject) => {
-    const onAbort = addAbortListener(signal, () => reject(signal.reason));
-    void lookup(hostname, { all: true, order: 'verbatim' })
-      .then(resolve, reject)
-      .finally(() => {
-        onAbort[Symbol.dispose]();
-      });
-  });
-  const addresses = answers.map(({ address }) => address).filter(isLoopbackUrlHostname);
-  if (addresses.length === 0) throw new Error('No loopback address resolved.');
-  signal.throwIfAborted();
-
-  const fromSource = import.meta.url.endsWith('.ts');
-  const entry = fromSource ? './loopback-download-worker.ts' : './loopback-download-worker.mjs';
-  // Fetch publishes request and response data to its isolate's diagnostics channels.
-  // Keep the host's subscribers, preload hooks, proxy configuration and debug settings out.
-  const worker = new Worker(new URL(entry, import.meta.url), {
-    env: {},
-    execArgv: fromSource ? ['--experimental-strip-types'] : [],
-    stdout: true,
-    stderr: true,
-  });
-  worker.stdout.resume();
-  worker.stderr.resume();
-  const exited = new AbortController();
-  const onWorkerExit = () => exited.abort(new Error('Limrun loopback download worker stopped.'));
-  worker.once('exit', onWorkerExit);
-  worker.on('error', onWorkerExit);
-  const workerSignal = AbortSignal.any([signal, exited.signal]);
-  try {
-    // Node's worker debug logger can print the constructor options.
-    worker.postMessage({ url: url.href, token, addresses } satisfies LoopbackDownloadRequest);
-    const [reply] = (await once(worker, 'message', { signal: workerSignal })) as [
-      LoopbackDownloadReply,
-    ];
-    signal.throwIfAborted();
-    if ('failed' in reply) {
-      throw new AppError('COMMAND_FAILED', 'Limrun download failed', {
-        reason: LIMRUN_DOWNLOAD_REASONS.failed.reason,
-        transport: 'loopback-fetch-failed',
-      });
-    }
-    const { status, body } = reply;
-    if ([301, 302, 303, 307, 308].includes(status)) {
-      throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download redirect.', {
-        reason: LIMRUN_DOWNLOAD_REASONS.redirectBlocked.reason,
-        statusCode: status,
-      });
-    }
-    if (status < 200 || status >= 300) throw httpFailure(status);
-    await writeDownloadBody(body, destinationPath, workerSignal);
-  } finally {
-    await worker.terminate();
-  }
-}
-
 async function writeDownloadBody(
   body: WebReadableStream<Uint8Array> | null | undefined,
   destinationPath: string,
@@ -157,18 +79,14 @@ async function writeDownloadBody(
   await pipeline(Readable.fromWeb(body), fs.createWriteStream(destinationPath), { signal });
 }
 
-async function instanceDownloadUrl(apiUrl: string, value: string): Promise<URL> {
+function instanceDownloadUrl(apiUrl: string, value: string): URL {
   const url = URL.parse(value);
   const instance = URL.parse(apiUrl);
   if (!url || !instance) throw new TypeError('Invalid Limrun download endpoint.');
-  const secure =
-    url.protocol === 'https:' ||
-    (url.protocol === 'http:' &&
-      (url.hostname === 'localhost.' ||
-        (await import('@agent-device/host-kit/transport')).isLoopbackUrlHostname(url.hostname)));
-  if (url.origin !== instance.origin || url.username || url.password || !secure) {
+  if (url.origin !== instance.origin || url.username || url.password || url.protocol !== 'https:') {
     throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download endpoint.', {
       reason: LIMRUN_DOWNLOAD_REASONS.endpointBlocked.reason,
+      hint: 'Use an HTTPS instance URL and download from that same origin.',
     });
   }
   return url;

@@ -904,8 +904,7 @@ These reasons can come from more than one command.
 | `limrun_download_http_error` | The instance refused the download; its HTTP status answers for the refusal. |
 | `limrun_download_timeout` | The transfer's own deadline passed before the file reached disk. |
 | `limrun_download_failed` | The transfer failed before it could ask the instance for the file. |
-| `limrun_download_endpoint_blocked` | An authenticated download must use the instance origin and a secure transport. |
-| `limrun_download_redirect_blocked` | An authenticated loopback download refused the instance redirect. |
+| `limrun_download_endpoint_blocked` | An authenticated download requires HTTPS on the instance origin. |
 | `limrun_instance_command_failed` | The instance refused or could not answer the command; its text, with this session's credential removed, is the message. |
 | `limrun_file_response_invalid` | The instance returned an unreadable JSON reply for a simulator file operation. |
 | `limrun_xctest_slot_occupied` | Another XCTest run holds the simulator's one run slot. |

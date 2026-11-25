@@ -1,10 +1,15 @@
-import { isLoopbackUrlHostname } from '@agent-device/host-kit/transport';
+import net from 'node:net';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 const CLOUD_ORIGIN_REASONS = {
   // The cloud API origin is not HTTPS or loopback HTTP, or includes user information.
   invalid: { reason: 'cloud_invalid_origin', commands: ['auth', 'connect'] },
 } as const satisfies ReasonTable<'cloud auth'>;
+
+const LOOPBACK = new net.BlockList();
+LOOPBACK.addSubnet('127.0.0.0', 8, 'ipv4');
+LOOPBACK.addAddress('::1', 'ipv6');
+LOOPBACK.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
 type CloudOriginVariable = 'AGENT_DEVICE_CLOUD_BASE_URL' | 'AGENT_DEVICE_CLOUD_API_KEY_ORIGIN';
 
@@ -32,5 +37,12 @@ export function parseCloudEndpoint(
   const url = URL.parse(value);
   if (!url || url.username || url.password) return undefined;
   if (url.protocol === secure) return url;
-  if (url.protocol === plaintext && isLoopbackUrlHostname(url.hostname)) return url;
+  if (url.protocol === plaintext && isLoopbackHostname(url.hostname)) return url;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  if (hostname === 'localhost') return true;
+  const address = hostname.replace(/^\[(.*)\]$/, '$1');
+  const family = net.isIP(address);
+  return family !== 0 && LOOPBACK.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }

@@ -79,6 +79,8 @@ If your shell's account variables, or its instance variables for the platform yo
 
 `install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. For a signed asset URL, use `install-from-source <url>` in the active session. This path does not need `LIMRUN_API_KEY`.
 
+Use an HTTPS instance URL to download recordings and simulator files. These downloads use the same origin as the instance and refuse redirects.
+
 ## Keep idle sessions alive
 
 Limrun ends an instance after its inactivity timeout, which an idle session can reach while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. Keep-alive is off by default.

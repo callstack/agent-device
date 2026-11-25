@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { types } from 'node:util';
 import type { ClientRequest, IncomingMessage } from 'node:http';
-import net, { type Socket } from 'node:net';
+import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 
 export function consumeTextLines(
@@ -296,20 +296,4 @@ export function observeClientRequestPhases(
       if (socket && connectEvent) socket.off(connectEvent, onConnected);
     },
   };
-}
-
-let loopbackAddresses: net.BlockList | undefined;
-
-export function isLoopbackUrlHostname(hostname: string): boolean {
-  if (hostname === 'localhost') return true;
-  const address = hostname.replace(/^\[(.*)\]$/, '$1');
-  const family = net.isIP(address);
-  if (family === 0) return false;
-  if (!loopbackAddresses) {
-    loopbackAddresses = new net.BlockList();
-    loopbackAddresses.addSubnet('127.0.0.0', 8, 'ipv4');
-    loopbackAddresses.addAddress('::1', 'ipv6');
-    loopbackAddresses.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
-  }
-  return loopbackAddresses.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }

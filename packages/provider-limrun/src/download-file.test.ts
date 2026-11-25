@@ -1,19 +1,17 @@
 import { execFile } from 'node:child_process';
-import dns from 'node:dns/promises';
-import type { LookupAddress, LookupAllOptions } from 'node:dns';
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { once } from 'node:events';
 import { promisify } from 'node:util';
-import { brotliCompressSync, deflateRawSync, deflateSync, gzipSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { downloadLimrunFile } from './download-file.ts';
 
-const servers: http.Server[] = [];
+const servers: Array<http.Server | https.Server> = [];
 
 afterEach(async () => {
   await Promise.all(
@@ -35,298 +33,65 @@ async function serve(handler: http.RequestListener): Promise<string> {
   return `http://127.0.0.1:${port}/files?name=recording.mp4`;
 }
 
-test('streams the served file to disk with the bearer token the caller supplied', async () => {
-  let authorization: string | undefined;
-  const url = await serve((request, response) => {
-    authorization = request.headers.authorization;
-    response.writeHead(200, { 'content-type': 'video/mp4' });
-    response.end(Buffer.from('ftypisom-payload'));
-  });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-
-  await downloadLimrunFile({
-    url,
-    instance: { apiUrl: url, token: 'instance-token' },
-    destinationPath,
-    timeoutMs: 5_000,
-  });
-
-  expect(authorization).toBe('Bearer instance-token');
-  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('ftypisom-payload');
-});
-
-test('keeps authenticated loopback traffic off the proxy and out of diagnostics', async () => {
-  const originRequests: Array<{ host?: string; authorization?: string }> = [];
-  let proxyRequests = 0;
-  const url = new URL(
-    await serve((request, response) => {
-      originRequests.push({
-        host: request.headers.host,
-        authorization: request.headers.authorization,
-      });
-      if (request.url?.includes('malformed-fixture-query')) {
-        const query = new URL(request.url, 'http://fixture').search;
-        request.socket.end(`HTTP/1.1 200 OK\r\nX:${query}\r\ninvalid header\r\n\r\n`);
-      } else {
-        response.end('instance payload');
-      }
-    }),
+test('streams an authenticated HTTPS download and refuses the first redirect', async () => {
+  const fixture = new URL(
+    '../../../test/integration/provider-scenarios/fixtures/',
+    import.meta.url,
   );
-  url.hostname = 'localhost.';
-  url.search = '?download=private-fixture-query';
-  const proxyUrl = await serve((_request, response) => {
-    proxyRequests += 1;
-    response.end('proxy payload');
-  });
-  const dir = await mkdtempForTest('limrun-download-');
-  const authenticatedPath = path.join(dir, 'authenticated.mp4');
-
-  const { stderr } = await promisify(execFile)(
+  const certPath = new URL('localhost-cert.pem', fixture);
+  const authorizations: Array<string | undefined> = [];
+  const redirected = vi.fn();
+  const server = https.createServer(
+    {
+      key: fs.readFileSync(new URL('localhost-key.pem', fixture)),
+      cert: fs.readFileSync(certPath),
+    },
+    (request, response) => {
+      authorizations.push(request.headers.authorization);
+      if (request.url === '/redirect') {
+        response.writeHead(307, { location: '/target' }).end();
+        return;
+      }
+      if (request.url === '/target') redirected();
+      response.end('ftypisom-payload');
+    },
+  );
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const origin = `https://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  const entry = new URL('./download-file.ts', import.meta.url).href;
+  await promisify(execFile)(
     process.execPath,
     [
       '--experimental-strip-types',
       '--input-type=module',
-      '-e',
+      '--eval',
       `
         import assert from 'node:assert/strict';
-        import { subscribe } from 'node:diagnostics_channel';
-        import dns from 'node:dns/promises';
-        import 'node:http';
-        import { PerformanceObserver } from 'node:perf_hooks';
-        import { downloadLimrunFile } from './download-file.ts';
-        const [url, authenticatedPath] = process.argv.slice(1);
-        let observed = 0;
-        for (const name of [
-          'http.client.request.start',
-          'http.client.response.finish',
-          'undici:request:create',
-          'undici:client:sendHeaders',
-          'undici:request:headers',
-          'undici:request:error',
-        ]) subscribe(name, () => { observed += 1; });
-        const observer = new PerformanceObserver((list) => {
-          observed += list.getEntries().length;
+        import fs from 'node:fs';
+        const [entry, origin, destinationPath] = process.argv.slice(1);
+        const { downloadLimrunFile } = await import(entry);
+        const options = {
+          instance: { apiUrl: origin, token: 'fixture-token' },
+          destinationPath,
+          timeoutMs: 5000
+        };
+        await downloadLimrunFile({ ...options, url: origin + '/file' });
+        assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'ftypisom-payload');
+        await assert.rejects(downloadLimrunFile({ ...options, url: origin + '/redirect' }), {
+          details: { reason: 'limrun_download_failed', transport: 'invalid-request' }
         });
-        observer.observe({ entryTypes: ['http'] });
-        const lookup = dns.lookup;
-        dns.lookup = (hostname, options) =>
-          hostname === 'localhost.'
-            ? Promise.resolve([{ address: '127.0.0.1', family: 4 }])
-            : lookup(hostname, options);
-        await downloadLimrunFile({
-          url,
-          instance: { apiUrl: url, token: 'private-fixture-bearer' },
-          destinationPath: authenticatedPath,
-          timeoutMs: 1000,
-        });
-        const malformed = new URL(url);
-        malformed.search = '?malformed-fixture-query';
-        await assert.rejects(
-          downloadLimrunFile({
-            url: malformed.href,
-            instance: { apiUrl: url, token: 'private-fixture-bearer' },
-            destinationPath: authenticatedPath + '.malformed',
-            timeoutMs: 1000,
-          }),
-          (error) => {
-            assert.equal(error.details.reason, 'limrun_download_failed');
-            assert.equal(error.details.transport, 'loopback-fetch-failed');
-            assert.doesNotMatch(JSON.stringify(error), /malformed-fixture-query|private-fixture-bearer/);
-            return true;
-          },
-        );
-        await new Promise(setImmediate);
-        observer.disconnect();
-        assert.equal(observed, 0);
+        assert.equal(fs.existsSync(destinationPath), false);
       `,
-      url.href,
-      authenticatedPath,
+      entry,
+      origin,
+      destinationPath,
     ],
-    {
-      cwd: import.meta.dirname,
-      env: {
-        NODE_DEBUG: 'http,net,undici,fetch,worker',
-        NODE_USE_ENV_PROXY: '1',
-        HTTP_PROXY: new URL(proxyUrl).origin,
-        http_proxy: new URL(proxyUrl).origin,
-        no_proxy: '',
-      },
-      timeout: 3_000,
-    },
+    { env: { ...process.env, NODE_EXTRA_CA_CERTS: fileURLToPath(certPath) } },
   );
-
-  expect(originRequests).toEqual([
-    { host: url.host, authorization: 'Bearer private-fixture-bearer' },
-    { host: url.host, authorization: 'Bearer private-fixture-bearer' },
-  ]);
-  for (const secret of [
-    'private-fixture-bearer',
-    'private-fixture-query',
-    'malformed-fixture-query',
-  ]) {
-    expect(stderr).not.toContain(secret);
-    expect(stderr.replaceAll(/\s/g, '')).not.toContain(Buffer.from(secret).toString('hex'));
-  }
-  expect(fs.readFileSync(authenticatedPath, 'utf8')).toBe('instance payload');
-  expect(fs.existsSync(authenticatedPath + '.malformed')).toBe(false);
-  expect(proxyRequests).toBe(0);
-});
-
-test('falls back only to loopback answers in resolver order', async (t) => {
-  const received: string[] = [];
-  const url = new URL(
-    await serve((_request, response) => {
-      received.push('ipv4');
-      response.end('IPv4');
-    }),
-  );
-  const ipv6 = http.createServer((request, response) => {
-    received.push(request.headers.authorization ?? '');
-    response.end('IPv6');
-  });
-  ipv6.listen({ host: '::1', port: Number(url.port), ipv6Only: true });
-  try {
-    await once(ipv6, 'listening');
-  } catch (error) {
-    if (['EADDRNOTAVAIL', 'EAFNOSUPPORT'].includes((error as NodeJS.ErrnoException).code ?? '')) {
-      t.skip('IPv6 loopback is unavailable');
-      return;
-    }
-    throw error;
-  }
-  servers.push(ipv6);
-  const resolver: { lookup(host: string, options: LookupAllOptions): Promise<LookupAddress[]> } =
-    dns;
-  const lookup = vi.spyOn(resolver, 'lookup').mockResolvedValue([
-    { address: '192.0.2.1', family: 4 },
-    { address: '::1', family: 6 },
-  ]);
-  try {
-    url.hostname = 'localhost';
-    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-    const options = {
-      url: url.href,
-      instance: { apiUrl: url.origin, token: 'fixture-token' },
-      destinationPath,
-      timeoutMs: 1000,
-    };
-    await downloadLimrunFile(options);
-    expect(received).toEqual(['Bearer fixture-token']);
-    expect(fs.readFileSync(destinationPath, 'utf8')).toBe('IPv6');
-
-    lookup.mockResolvedValue([{ address: '192.0.2.1', family: 4 }]);
-    await expect(downloadLimrunFile(options)).rejects.toMatchObject({
-      details: { reason: 'limrun_download_failed' },
-    });
-    expect(received).toEqual(['Bearer fixture-token']);
-    expect(fs.existsSync(destinationPath)).toBe(false);
-
-    lookup.mockResolvedValue([
-      { address: '127.0.0.2', family: 4 },
-      { address: '127.0.0.1', family: 4 },
-      { address: '::1', family: 6 },
-    ]);
-    await downloadLimrunFile(options);
-    expect(received).toEqual(['Bearer fixture-token', 'ipv4']);
-    expect(fs.readFileSync(destinationPath, 'utf8')).toBe('IPv4');
-  } finally {
-    lookup.mockRestore();
-  }
-});
-
-test.each([
-  ['gzip', gzipSync],
-  ['gzip', (payload: Buffer) => gzipSync(payload).subarray(0, -8)],
-  ['deflate', deflateSync],
-  ['deflate', deflateRawSync],
-  ['gzip, br', (payload: Buffer) => brotliCompressSync(gzipSync(payload))],
-  ['compress', (payload: Buffer) => payload],
-])(
-  'decodes %s on an authenticated loopback reply before writing the file',
-  async (encoding, compress) => {
-    const payload = Buffer.from('ftypisom-payload');
-    const url = await serve((_request, response) => {
-      response.writeHead(200, { 'content-encoding': encoding });
-      response.end(compress(payload));
-    });
-    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-    await downloadLimrunFile({
-      url,
-      instance: { apiUrl: url, token: 'fixture-token' },
-      destinationPath,
-      timeoutMs: 1000,
-    });
-    expect(fs.readFileSync(destinationPath)).toEqual(payload);
-  },
-);
-
-test('rejects a loopback reply with more than five content codings', async () => {
-  const url = await serve((_request, response) => {
-    response.writeHead(200, { 'content-encoding': 'compress, gzip, gzip, gzip, gzip, gzip' });
-    response.end('fixture payload');
-  });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  await expect(
-    downloadLimrunFile({
-      url,
-      instance: { apiUrl: url, token: 'fixture-token' },
-      destinationPath,
-      timeoutMs: 1000,
-    }),
-  ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
-  expect(fs.existsSync(destinationPath)).toBe(false);
-});
-
-test('rejects a switching-protocols reply and leaves no file', async () => {
-  const url = await serve((_request, response) => {
-    response.writeHead(101, { Connection: 'Upgrade', Upgrade: 'fixture' });
-    response.end();
-  });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  const signal = AbortSignal.timeout(1_000);
-  await expect(
-    Promise.race([
-      downloadLimrunFile({
-        url,
-        instance: { apiUrl: url, token: 'fixture-token' },
-        destinationPath,
-        timeoutMs: 1_000,
-        signal,
-      }),
-      new Promise<void>((resolve) =>
-        signal.addEventListener('abort', () => resolve(), { once: true }),
-      ),
-    ]),
-  ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
-  expect(fs.existsSync(destinationPath)).toBe(false);
-});
-
-test('accepts localhost. over HTTP only when the exact origin matches', async () => {
-  const requests: Array<string | undefined> = [];
-  const url = new URL(
-    await serve((request, response) => {
-      requests.push(request.headers.authorization);
-      response.end('instance payload');
-    }),
-  );
-  url.hostname = 'localhost.';
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  const options = { url: url.href, destinationPath, timeoutMs: 5_000 };
-
-  await expect(
-    downloadLimrunFile({
-      ...options,
-      instance: { apiUrl: `http://localhost:${url.port}`, token: 'fixture-token' },
-    }),
-  ).rejects.toMatchObject({ details: { reason: 'limrun_download_endpoint_blocked' } });
-  expect(requests).toEqual([]);
-
-  await downloadLimrunFile({
-    ...options,
-    instance: { apiUrl: url.origin, token: 'fixture-token' },
-  });
-  expect(requests).toEqual(['Bearer fixture-token']);
-  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('instance payload');
+  expect(authorizations).toEqual(['Bearer fixture-token', 'Bearer fixture-token']);
+  expect(redirected).not.toHaveBeenCalled();
 });
 
 test('a non-2xx answer is a typed failure carrying the status and no file is left behind', async () => {
@@ -355,7 +120,6 @@ test('a stalled transfer ends at the deadline as a typed timeout and removes the
 
   const failure = downloadLimrunFile({
     url,
-    instance: { apiUrl: url, token: 'fixture-token' },
     destinationPath,
     timeoutMs: 150,
   });
@@ -390,10 +154,12 @@ test('a non-2xx answer whose body stalls is answered by its status without waiti
 // reason answer for the failure, and the token cannot survive a clipping or a short length.
 test('an HTTP failure publishes its status and reason, and no peer body text at all', async () => {
   const token = 'abc123';
-  const url = await serve((_request, response) => {
-    response.writeHead(500);
-    response.end(`upstream rejected ${token} for this transfer`);
-  });
+  const url = 'https://instance.example/recording';
+  const request = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(
+      new Response(`upstream rejected ${token} for this transfer`, { status: 500 }),
+    );
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
 
   let failure: unknown;
@@ -412,6 +178,7 @@ test('an HTTP failure publishes its status and reason, and no peer body text at 
     reason: 'limrun_download_http_error',
   });
   expect(JSON.stringify((failure as AppError).details)).not.toMatch(token);
+  request.mockRestore();
 });
 
 // A malformed URL is the failure an attached instance can cause: it answers with its bare bearer token
@@ -520,60 +287,14 @@ test.each(['default', 'typed', 'deadline'] as const)(
   },
 );
 
-test('rejects a recording URL on a different origin before making a request', async () => {
-  const traffic = vi.fn();
-  const url = await serve((request, response) => {
-    traffic(request);
-    response.end();
-  });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  await expect(
-    downloadLimrunFile({
-      url,
-      instance: { apiUrl: 'https://instance.example', token: 'test-token' },
-      destinationPath,
-      timeoutMs: 5_000,
-    }),
-  ).rejects.toMatchObject({ details: { reason: 'limrun_download_endpoint_blocked' } });
-  expect(traffic).not.toHaveBeenCalled();
-});
-
-test('refuses the first redirect of an authenticated download while public downloads follow it', async () => {
-  const traffic = vi.fn();
-  const redirect = await serve((request, response) => {
-    traffic(request.headers.authorization);
-    response.end('redirected payload');
-  });
-  const url = await serve((_request, response) => {
-    response.writeHead(307, { location: redirect }).end();
-  });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  await expect(
-    downloadLimrunFile({
-      url,
-      instance: { apiUrl: url, token: 'test-token' },
-      destinationPath,
-      timeoutMs: 5_000,
-    }),
-  ).rejects.toMatchObject({
-    details: { reason: 'limrun_download_redirect_blocked', statusCode: 307 },
-  });
-  expect(traffic).not.toHaveBeenCalled();
-  expect(fs.existsSync(destinationPath)).toBe(false);
-
-  await downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 });
-  expect(traffic).toHaveBeenCalledExactlyOnceWith(undefined);
-  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('redirected payload');
-});
-
-test('rejects an authenticated plaintext download to a non-loopback instance', async () => {
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+test('rejects a recording URL on a different HTTPS origin before making a request', async () => {
   const request = vi.spyOn(globalThis, 'fetch');
   try {
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
     await expect(
       downloadLimrunFile({
-        url: 'http://instance.example/recording',
-        instance: { apiUrl: 'http://instance.example', token: 'test-token' },
+        url: 'https://files.example/recording',
+        instance: { apiUrl: 'https://instance.example', token: 'test-token' },
         destinationPath,
         timeoutMs: 5_000,
       }),
@@ -583,3 +304,45 @@ test('rejects an authenticated plaintext download to a non-loopback instance', a
     request.mockRestore();
   }
 });
+
+test('follows redirects for public downloads without a bearer', async () => {
+  const traffic = vi.fn();
+  const redirect = await serve((request, response) => {
+    traffic(request.headers.authorization);
+    response.end('redirected payload');
+  });
+  const url = await serve((_request, response) => {
+    response.writeHead(307, { location: redirect }).end();
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+  await downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 });
+  expect(traffic).toHaveBeenCalledExactlyOnceWith(undefined);
+  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('redirected payload');
+});
+
+test.each(['http://127.0.0.1', 'http://localhost.', 'http://instance.example'])(
+  'rejects an authenticated plaintext download from %s before fetch',
+  async (origin) => {
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+    const request = vi.spyOn(globalThis, 'fetch');
+    try {
+      await expect(
+        downloadLimrunFile({
+          url: origin + '/recording',
+          instance: { apiUrl: origin, token: 'test-token' },
+          destinationPath,
+          timeoutMs: 5_000,
+        }),
+      ).rejects.toMatchObject({
+        details: {
+          reason: 'limrun_download_endpoint_blocked',
+          hint: expect.stringContaining('HTTPS'),
+        },
+      });
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+    }
+  },
+);
