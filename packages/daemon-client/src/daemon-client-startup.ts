@@ -134,6 +134,9 @@ async function refineReplacement(
   if (!options.refineUnreachable || decision.kind !== 'replace') return decision;
   if (!isProcessAlive(info.pid)) return { ...decision, cause: 'unreachable' };
   if (decision.cause === 'unreachable') {
+    // The ladder probed the advertised endpoints before it answered `replace`. It is asked again
+    // here, so a refusal observed at this point still withholds the death verdict, and a live pid
+    // that answers now is judged a transport mismatch rather than a dead daemon.
     const probe = await probeReusableDaemon(info, 'auto', options.deadline);
     if (probe.denial) return { kind: 'connectDenied', denial: probe.denial };
     if (probe.reachable) return { ...decision, cause: 'transport' };
@@ -656,13 +659,13 @@ async function readReadyLaunchedDaemon(
 ): Promise<DaemonInfo | null> {
   const info = readDaemonInfo(settings.paths.infoPath);
   if (!info || !isLaunchedDaemon(info, launch)) return null;
+  let probe: DaemonProbeVerdict;
   try {
-    const probe = await probeDaemonReachability(
+    probe = await probeDaemonReachability(
       info,
       settings.transportPreference,
       remainingStartupBudget(deadline),
     );
-    return probe.reachable && Date.now() < deadline ? info : null;
   } catch (error) {
     const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
     emitDiagnostic({
@@ -680,6 +683,18 @@ async function readReadyLaunchedDaemon(
     }
     throw error;
   }
+  if (probe.denial) {
+    // The host refused this client's connect to the daemon it launched, so readiness cannot be
+    // observed and the outcome is terminal. It is not a failed startup: the stalled and ceiling paths
+    // call `retireStartupAttempt`, which would signal a daemon this client cannot see, and a daemon
+    // that registered is healthy — this sandbox is not.
+    throw daemonConnectDeniedError({
+      info,
+      denial: probe.denial,
+      stateDir: settings.paths.baseDir,
+    });
+  }
+  return probe.reachable && Date.now() < deadline ? info : null;
 }
 
 function isLaunchedDaemon(info: DaemonInfo, launch: DaemonStartupLaunch): boolean {

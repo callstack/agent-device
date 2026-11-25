@@ -1,7 +1,16 @@
 import net from 'node:net';
+import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 
-/** How long one reachability probe of the local daemon's loopback endpoint may take. */
-export const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
+// One reachability probe of one daemon endpoint, and the verdict it answers with. The transport owns
+// making requests; this module owns what an endpoint's silence MEANS, because a connect the HOST
+// refused (EPERM or EACCES under a sandbox around this client) is evidence about this client and not
+// evidence about the daemon. Nothing here is reached by a static value import: its one caller loads it
+// with a function-scoped `await import` (`probeTransportEndpoint` in `daemon-client-transport.ts`), so
+// no client entry surface evaluates a module for a verdict it only reads on a probe
+// (`scripts/__tests__/eager-closure-budgets.ts`).
+
+/** How long one loopback connect may take before the probe calls it silent. */
+const LOOPBACK_CONNECT_TIMEOUT_MS = 500;
 
 /** The errnos that say the host refused the connect itself, as a sandbox around the caller does. */
 const LOOPBACK_DENIED_CODES: ReadonlySet<string> = new Set(['EPERM', 'EACCES']);
@@ -28,6 +37,13 @@ export type DaemonProbeVerdict = Readonly<{
   denial?: LoopbackConnectDenial;
 }>;
 
+/** One HTTP reachability probe: the health endpoint to ask, the auth it needs, and its time budget. */
+export type HttpEndpointProbe = Readonly<{
+  endpoint: string;
+  headers: Readonly<Record<string, string>>;
+  timeoutMs: number;
+}>;
+
 /**
  * Whether an errno from a loopback connect says the host refused it, as a sandbox around this client
  * does. A refusal is not an answer from the daemon: unlike a reset or a timeout, it says nothing about
@@ -43,13 +59,13 @@ export function readLoopbackConnectDenial(
 }
 
 /**
- * One connect to one loopback port. A refusal from the host is reported as a denial: it is not an
- * answer from the daemon, and it is the only reachability evidence a sandboxed client can be refused.
+ * One connect to one loopback port. A refusal from the host is reported as a denial, not as an answer
+ * from the daemon: nothing says whether the daemon behind that port serves.
  */
 export function probeLoopbackPort(
   port: number | undefined,
   transport: LoopbackTransport,
-  timeoutMs = LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
+  timeoutMs = LOOPBACK_CONNECT_TIMEOUT_MS,
 ): Promise<DaemonProbeVerdict> {
   if (!port || timeoutMs <= 0) return Promise.resolve({ reachable: false });
   return new Promise((resolve) => {
@@ -63,7 +79,7 @@ export function probeLoopbackPort(
       socket.destroy();
       resolve(verdict);
     };
-    socket.setTimeout(Math.min(LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS, Math.ceil(timeoutMs)));
+    socket.setTimeout(Math.min(LOOPBACK_CONNECT_TIMEOUT_MS, Math.ceil(timeoutMs)));
     socket.on('timeout', () => {
       finish({ reachable: false });
     });
@@ -71,5 +87,65 @@ export function probeLoopbackPort(
       const denial = readLoopbackConnectDenial(error.code, transport, port);
       finish(denial ? { reachable: false, denial } : { reachable: false });
     });
+  });
+}
+
+/**
+ * One health request to one advertised endpoint, as a reachability verdict.
+ *
+ * The request is made on a FRESH connection: `agent: false` is load-bearing, not hygiene. Since Node
+ * 19 the global agent keeps sockets alive, so a pooled request would ride an idle socket from an
+ * earlier command rather than proving that a connect to this daemon is allowed NOW — which is the only
+ * thing that can tell a refused endpoint from a silent one. The time budget is ABSOLUTE and covers
+ * loading the requester, so a late loader never opens a request the probe already gave up on.
+ *
+ * A response answers the probe. Only a connect the HOST refused to a LOOPBACK endpoint carries a
+ * denial: a refusal is not an answer from the daemon, and a refusal on a remote endpoint is not the
+ * loopback denial this verdict names.
+ */
+export async function probeHttpEndpoint(probe: HttpEndpointProbe): Promise<DaemonProbeVerdict> {
+  const url = new URL(probe.endpoint);
+  const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  const port = Number(url.port) || (url.protocol === 'https:' ? 443 : 80);
+  if (probe.timeoutMs <= 0) return { reachable: false };
+  const deadline = performance.now() + probe.timeoutMs;
+  const timeoutSignal = AbortSignal.timeout(Math.ceil(probe.timeoutMs));
+  const requester = await Promise.race([
+    loadNodeHttpRequester(url.protocol),
+    new Promise<null>((resolve) => {
+      timeoutSignal.addEventListener('abort', () => resolve(null), { once: true });
+    }),
+  ]);
+  if (!requester || timeoutSignal.aborted || performance.now() >= deadline)
+    return { reachable: false };
+  return await new Promise((resolve) => {
+    const request = requester.request(
+      {
+        protocol: url.protocol,
+        host: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        method: 'GET',
+        timeout: probe.timeoutMs,
+        agent: false,
+        signal: timeoutSignal,
+        headers: probe.headers,
+      },
+      (response) => {
+        // Any status under 500 is an answer from the daemon. The body is irrelevant to reachability,
+        // so it is drained and dropped: an undrained response holds its socket open past the finding.
+        response.resume();
+        resolve({ reachable: (response.statusCode ?? 500) < 500 });
+      },
+    );
+    request.on('timeout', () => {
+      request.destroy();
+      resolve({ reachable: false });
+    });
+    request.on('error', (error: NodeJS.ErrnoException) => {
+      const denial = loopback ? readLoopbackConnectDenial(error.code, 'http', port) : undefined;
+      resolve(denial ? { reachable: false, denial } : { reachable: false });
+    });
+    request.end();
   });
 }

@@ -5,8 +5,13 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import { loadNodeHttpRequester, consumeTextLines } from '@agent-device/host-kit/transport';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
+import type {
+  DaemonProbeVerdict,
+  LoopbackConnectDenial,
+  LoopbackTransport,
+} from './daemon-client-loopback-probe.ts';
 
-// The post-timeout liveness probe (#3177): the question a daemon reset may no longer assume. The
+// The post-timeout liveness probe (#3177): the question that a daemon reset may no longer assume. The
 // daemon owns request-scoped recovery, so a reset is only justified for a daemon that answers
 // nothing, and it must be asked on FRESH connections — the timed-out connection is the one the
 // transport already tore down to cancel that request.
@@ -21,17 +26,20 @@ const UNRESPONSIVE_PROBE_GAP_MS = 200;
 
 /**
  * The one verdict that may end a daemon for answering nothing: every probe of several missed. Each
- * caller that retires on silence asks here, so the evidence is the same on every path.
+ * caller that retires on silence asks here, so the evidence is the same on every path. A probe the
+ * HOST refused stops the round at once: a refusal is not a missed probe, and repeating it cannot
+ * turn one into an answer about the daemon.
  */
 export async function answersLivenessProbe(
   info: DaemonInfo,
   params: Readonly<{ session?: string }> = {},
-): Promise<boolean> {
+): Promise<DaemonProbeVerdict> {
   for (let probe = 1; probe <= UNRESPONSIVE_PROBES; probe += 1) {
-    if (await probeDaemonResponsive(info, params)) return true;
+    const verdict = await probeDaemonResponsive(info, params);
+    if (verdict.reachable || verdict.denial) return verdict;
     if (probe < UNRESPONSIVE_PROBES) await sleep(UNRESPONSIVE_PROBE_GAP_MS);
   }
-  return false;
+  return { reachable: false };
 }
 
 /**
@@ -45,54 +53,91 @@ export async function answersLivenessProbe(
  * would outlive an idle timeout, and the negative verdict must land inside the window. A leg never
  * rejects: a probe that cannot ask is an endpoint that did not answer. `session` rides along so an
  * isolation-scoped daemon routes the probe like the request it follows.
+ *
+ * A verdict that is neither an answer nor a refusal is the only one that says the daemon served
+ * nothing. A connect the host refused (EPERM or EACCES under a sandbox around this client) carries
+ * that refusal instead, so no caller reads a daemon it cannot reach as an unresponsive one.
  */
 export async function probeDaemonResponsive(
   info: DaemonInfo,
   params: Readonly<{ session?: string }> = {},
-): Promise<boolean> {
+): Promise<DaemonProbeVerdict> {
+  // The verdict's shape and the errno that names a refusal belong to the probe module. It is loaded
+  // here, not at module scope: this file is a lazy path itself (`daemon-client-timeout.ts` imports it
+  // on a timeout) and no client entry surface pays for a verdict it only reads on a probe.
+  const { readLoopbackConnectDenial } = await import('./daemon-client-loopback-probe.ts');
   const deadlineAtMs = Date.now() + LIVENESS_PROBE_BUDGET_MS;
   const legs: ProbeLeg[] = [];
   if (info.httpPort) legs.push(probeHttpHealth(info.httpPort, deadlineAtMs));
   if (info.port) legs.push(probeSocketRpc(info.port, info.token, params.session, deadlineAtMs));
-  if (legs.length === 0) return false;
-  return await new Promise<boolean>((resolve) => {
+  if (legs.length === 0) return { reachable: false };
+  const silent: SilentProbeLeg[] = [];
+  return await new Promise<DaemonProbeVerdict>((resolve) => {
     let outstanding = legs.length;
-    const settle = (answered: boolean): void => {
-      if (answered) {
+    const settle = (answer: ProbeLegAnswer): void => {
+      if (answer.answered) {
         for (const leg of legs) leg.cancel();
-        resolve(true);
+        resolve({ reachable: true });
         return;
       }
-      if (--outstanding === 0) resolve(false);
+      silent.push(answer);
+      if (--outstanding > 0) return;
+      // Both legs answered nothing. A refusal among them withholds the unresponsive verdict: this
+      // client cannot read the other leg's silence as proof the daemon is hung once the host has
+      // shown it refuses this daemon's endpoint. Both legs are waited for rather than settled on the
+      // first refusal, because an answer on either one is the better finding and the deadline bounds
+      // the wait either way.
+      const denial = silent
+        .map((leg) => readLoopbackConnectDenial(leg.errno, leg.transport, leg.port))
+        .find((verdict): verdict is LoopbackConnectDenial => verdict !== undefined);
+      resolve(denial ? { reachable: false, denial } : { reachable: false });
     };
-    for (const leg of legs) leg.answer.then(settle, () => settle(false));
+    for (const leg of legs) {
+      leg.answer.then(settle, () => settle({ ...leg.endpoint, answered: false }));
+    }
   });
 }
 
-type ProbeLeg = Readonly<{ answer: Promise<boolean>; cancel: () => void }>;
+/** The endpoint family and port one liveness leg probed. */
+type ProbeEndpoint = Readonly<{ transport: LoopbackTransport; port: number }>;
 
-function createProbeLeg(deadlineAtMs: number): {
+/** One leg's answer: it served, or it did not, carrying the errno that refused its connect. */
+type ProbeLegAnswer = ProbeEndpoint & Readonly<{ answered: boolean; errno?: string }>;
+
+/** A leg that did not answer, kept so a refusal among them can be named at the end. */
+type SilentProbeLeg = ProbeEndpoint & Readonly<{ errno?: string }>;
+
+type ProbeLeg = Readonly<{
+  answer: Promise<ProbeLegAnswer>;
+  endpoint: ProbeEndpoint;
+  cancel: () => void;
+}>;
+
+function createProbeLeg(
+  endpoint: ProbeEndpoint,
+  deadlineAtMs: number,
+): {
   leg: ProbeLeg;
-  settle: (answered: boolean) => void;
+  settle: (answered: boolean, errno?: string) => void;
   attach: (destroyTransport: () => void) => void;
 } {
   let settled = false;
   let destroy: (() => void) | undefined;
-  let resolveAnswer: (answered: boolean) => void = () => {};
-  const answer = new Promise<boolean>((resolve) => {
+  let resolveAnswer: (answer: ProbeLegAnswer) => void = () => {};
+  const answer = new Promise<ProbeLegAnswer>((resolve) => {
     resolveAnswer = resolve;
   });
   const deadlineHandle = setTimeout(() => settle(false), Math.max(1, deadlineAtMs - Date.now()));
   deadlineHandle.unref?.();
-  function settle(answered: boolean): void {
+  function settle(answered: boolean, errno?: string): void {
     if (settled) return;
     settled = true;
     clearTimeout(deadlineHandle);
     destroy?.();
-    resolveAnswer(answered);
+    resolveAnswer({ ...endpoint, answered, ...(errno === undefined ? {} : { errno }) });
   }
   return {
-    leg: { answer, cancel: () => settle(false) },
+    leg: { answer, endpoint, cancel: () => settle(false) },
     settle,
     attach: (destroyTransport) => {
       destroy = destroyTransport;
@@ -103,7 +148,7 @@ function createProbeLeg(deadlineAtMs: number): {
 }
 
 function probeHttpHealth(httpPort: number, deadlineAtMs: number): ProbeLeg {
-  const probe = createProbeLeg(deadlineAtMs);
+  const probe = createProbeLeg({ transport: 'http', port: httpPort }, deadlineAtMs);
   // This leg builds detached. Catch transport-construction errors here so they settle the probe.
   void (async () => {
     try {
@@ -122,7 +167,7 @@ function probeHttpHealth(httpPort: number, deadlineAtMs: number): ProbeLeg {
           probe.settle(true);
         },
       );
-      request.on('error', () => probe.settle(false));
+      request.on('error', (error: NodeJS.ErrnoException) => probe.settle(false, error.code));
       probe.attach(() => request.destroy());
       request.end();
     } catch {
@@ -138,7 +183,7 @@ function probeSocketRpc(
   session: string | undefined,
   deadlineAtMs: number,
 ): ProbeLeg {
-  const probe = createProbeLeg(deadlineAtMs);
+  const probe = createProbeLeg({ transport: 'socket', port }, deadlineAtMs);
   // The same malformed-record shape as the HTTP leg, and this one builds synchronously: a throw
   // here would escape `probeDaemonResponsive` altogether, replacing the caller's timeout error
   // with a crash from the recovery path and discarding the other leg's answer.
@@ -163,7 +208,7 @@ function probeSocketRpc(
     // that it reads and answers, not that it accepted this command.
     if (parsed.lines.length > 0) probe.settle(true);
   });
-  socket.on('error', () => probe.settle(false));
+  socket.on('error', (error: NodeJS.ErrnoException) => probe.settle(false, error.code));
   socket.on('close', () => probe.settle(false));
   return probe.leg;
 }

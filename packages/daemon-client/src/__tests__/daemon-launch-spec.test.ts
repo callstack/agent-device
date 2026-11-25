@@ -166,6 +166,25 @@ test('a same-version daemon the host refused to connect to is not judged unreach
   );
 });
 
+// A replacement retires a live process, so no branch of the ladder may answer it on the record alone.
+// Before this, only a NEWER daemon was probed: an older or code-mismatched one was replaced without
+// ever being seen, which let a client whose sandbox refuses the connect kill a healthy daemon.
+test('a version mismatch the host refused to probe is a denial, not a replacement', async () => {
+  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), denied()), {
+    kind: 'connectDenied',
+    denial: DENIAL,
+  });
+});
+
+test('a code mismatch the host refused to probe is a denial, not a replacement', async () => {
+  useClientTree(false);
+
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'checkout' }), denied()),
+    { kind: 'connectDenied', denial: DENIAL },
+  );
+});
+
 // The refusal outranks the newer-daemon refusal: both stop the daemon being touched, and only
 // `connectDenied` says the reason is this client's sandbox rather than the daemon's version.
 test('a connect the host refused never reads as a newer daemon to refuse', async () => {

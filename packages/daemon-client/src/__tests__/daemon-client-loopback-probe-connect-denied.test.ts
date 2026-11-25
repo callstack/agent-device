@@ -29,23 +29,32 @@ import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
 
 const DENIED_ERRNO = 'EPERM';
 
+/** A host refusal to answer a probe with, naming the errno and endpoint family it refused. */
+type DeniedProbe = Readonly<{ errno: 'EPERM' | 'EACCES'; transport: 'socket' | 'http' }>;
+
 const { mockProbeAnswers, mockSpawnDaemon } = vi.hoisted(() => ({
-  /** What each probe of the registered daemon answers, in order; `denied` is a host refusal. */
-  mockProbeAnswers: [] as ('denied' | 'silent')[],
+  /**
+   * What each probe of the registered daemon answers, in order: `'silent'`, or the refusal the host
+   * gave. `null` stands for silence so the list reads as answers, not as verdict shapes.
+   */
+  mockProbeAnswers: [] as (DeniedProbe | null)[],
   mockSpawnDaemon: vi.fn(),
 }));
+
+function denied(errno: DeniedProbe['errno'], transport: DeniedProbe['transport']): DeniedProbe {
+  return { errno, transport };
+}
 
 vi.mock('../daemon-client-transport.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../daemon-client-transport.ts')>();
   return {
     ...actual,
     probeDaemonReachability: async (...args: Parameters<typeof actual.probeDaemonReachability>) => {
-      const answer = mockProbeAnswers.shift() ?? 'silent';
-      if (answer !== 'denied') return { reachable: false };
-      return {
-        reachable: false,
-        denial: { errno: DENIED_ERRNO, transport: 'socket', port: args[0].port ?? 0 },
-      };
+      const answer = mockProbeAnswers.shift();
+      if (!answer) return { reachable: false };
+      // The port is the one this probe aimed at, as the real probe reports it.
+      const port = answer.transport === 'http' ? (args[0].httpPort ?? 0) : (args[0].port ?? 0);
+      return { reachable: false, denial: { ...answer, port } };
     },
   };
 });
@@ -61,13 +70,16 @@ afterEach(() => {
 });
 
 /**
- * A stand-in for the daemon running OUTSIDE the sandbox: a live process whose command reads as an
- * agent-device daemon, plus a registration this client wrote by hand. The client never started this
- * lifetime, so an unreachable judgement lands as a retirement it may not confirm.
+ * A stand-in for the daemon running OUTSIDE the sandbox: a live process, plus a registration this
+ * client wrote by hand that points at loopback endpoints and this pid. The process is a plain `node
+ * -e` stand-in, not a daemon build: what makes it a daemon is the registration and the live pid, and
+ * `readProcessCommand` is read only as a skip guard for environments where process inspection is
+ * unavailable. The client never started this lifetime, so an unreachable judgement lands as a
+ * retirement it may not confirm.
  */
 async function withRegisteredStandIn(
   t: { skip: (reason: string) => void },
-  body: (input: { stateDir: string; pid: number }) => Promise<void>,
+  body: (input: { stateDir: string; pid: number; port: number; httpPort: number }) => Promise<void>,
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const stateDir = mkdtempForTestSync('agent-device-connect-denied-');
@@ -80,6 +92,7 @@ async function withRegisteredStandIn(
   const pid = standIn.child.pid;
   assert.ok(pid, 'the stand-in has a pid');
   const server = net.createServer((socket) => socket.on('error', () => {}));
+  const httpServer = net.createServer((socket) => socket.on('error', () => {}));
   try {
     await new Promise((resolve) => setTimeout(resolve, 50));
     const processStartTime = readProcessStartTime(pid) ?? undefined;
@@ -89,13 +102,15 @@ async function withRegisteredStandIn(
       return;
     }
     const port = await listenOnLoopback(server);
+    const httpPort = await listenOnLoopback(httpServer);
     const paths = resolveDaemonPaths(stateDir);
     fs.mkdirSync(paths.baseDir, { recursive: true });
     fs.writeFileSync(
       paths.infoPath,
       `${JSON.stringify({
         port,
-        transport: 'socket',
+        transport: 'dual',
+        httpPort,
         token: 'local-secret',
         pid,
         version: readVersion(),
@@ -104,8 +119,9 @@ async function withRegisteredStandIn(
       })}\n`,
       'utf8',
     );
-    await body({ stateDir, pid });
+    await body({ stateDir, pid, port, httpPort });
   } finally {
+    await closeLoopbackServer(httpServer);
     await closeLoopbackServer(server);
     if (isProcessAlive(pid)) {
       process.kill(pid, 'SIGKILL');
@@ -115,12 +131,12 @@ async function withRegisteredStandIn(
   }
 }
 
-function sendDevices(stateDir: string) {
+function sendDevices(stateDir: string, transport: 'socket' | 'http' = 'socket') {
   return sendToDaemon({
     session: 'default',
     command: 'devices',
     positionals: [],
-    flags: { stateDir, daemonTransport: 'socket' },
+    flags: { stateDir, daemonTransport: transport },
     meta: { requestId: 'req-connect-denied' },
   });
 }
@@ -139,7 +155,7 @@ async function rejection(pending: Promise<unknown>): Promise<AppError> {
 
 test('a connect the host refused names the sandbox and leaves the daemon running', async (t) => {
   await withRegisteredStandIn(t, async ({ stateDir, pid }) => {
-    mockProbeAnswers.push('denied');
+    mockProbeAnswers.push(denied(DENIED_ERRNO, 'socket'));
 
     const failure = await rejection(sendDevices(stateDir));
 
@@ -153,9 +169,65 @@ test('a connect the host refused names the sandbox and leaves the daemon running
   });
 });
 
+// Both endpoint families and both refused errnos have to reach the caller with the details they were
+// refused with: a regression that dropped `transport` or rewrote `errno` would otherwise pass here.
+// The stand-in daemon serves both endpoints, so the client probes its socket leg first and falls back
+// to HTTP: an HTTP refusal therefore arrives as the SECOND leg's answer, which is the shape a real
+// sandbox produces when it refuses only the family the socket leg does not cover.
+test.for([
+  { errno: 'EPERM', leg: 'socket' },
+  { errno: 'EACCES', leg: 'socket' },
+  { errno: 'EACCES', leg: 'http' },
+  { errno: 'EPERM', leg: 'http' },
+] as const)(
+  'a refusal of the %s endpoint with %s reports both in the reason details',
+  async ({ errno, leg }, t) => {
+    await withRegisteredStandIn(t, async ({ stateDir, pid, port, httpPort }) => {
+      mockProbeAnswers.push(denied(errno, leg));
+
+      // The client is pinned to the leg under test, so the refusal it reports is that leg's.
+      const failure = await rejection(sendDevices(stateDir, leg));
+
+      assert.equal(failure.details?.reason, 'daemon-connect-denied');
+      assert.equal(failure.details?.errno, errno);
+      assert.equal(failure.details?.transport, leg);
+      assert.equal(failure.details?.port, leg === 'http' ? httpPort : port);
+      assert.equal((failure.details?.daemon as { pid?: number } | undefined)?.pid, pid);
+      assert.equal(mockSpawnDaemon.mock.calls.length, 0);
+      assert.equal(isProcessAlive(pid), true);
+    });
+  },
+);
+
+// An attach client starts and replaces nothing anyway, so its only wrong answer would read as "no
+// daemon is running" and send the caller to start one it cannot reach either.
+test('an attach client told about a refusal does not report a daemon that is not running', async (t) => {
+  await withRegisteredStandIn(t, async ({ stateDir, pid }) => {
+    mockProbeAnswers.push(denied(DENIED_ERRNO, 'socket'));
+
+    const failure = await rejection(
+      sendToDaemon(
+        {
+          session: 'default',
+          command: 'devices',
+          positionals: [],
+          flags: { stateDir, daemonTransport: 'socket' },
+          meta: { requestId: 'req-attach-denied' },
+        },
+        { daemonLifecycle: 'attach' },
+      ),
+    );
+
+    assert.equal(failure.details?.reason, 'daemon-connect-denied');
+    assert.equal(failure.details?.errno, DENIED_ERRNO);
+    assert.equal((failure.details?.daemon as { pid?: number } | undefined)?.pid, pid);
+    assert.equal(isProcessAlive(pid), true, 'an attach client signals nothing either');
+  });
+});
+
 test('a probe that goes unanswered is still judged unreachable, not denied', async (t) => {
   await withRegisteredStandIn(t, async ({ stateDir, pid }) => {
-    mockProbeAnswers.push('silent', 'silent', 'silent', 'silent');
+    mockProbeAnswers.push(null, null, null, null);
 
     const failure = await rejection(sendDevices(stateDir));
 

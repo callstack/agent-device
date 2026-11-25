@@ -141,15 +141,15 @@ export async function resolveDaemonTakeover(
 ): Promise<DaemonTakeoverDecision> {
   const clientVersion = readVersion();
   if (info.version !== clientVersion) {
-    // Probed exactly where it was probed before: only a newer daemon's answer decides a refusal on
-    // its own. Where the probe is made, a connect the host refused answers `connectDenied` rather
-    // than a death verdict, so a newer daemon is never retired by a client that cannot see it.
-    if (info.version && isNewerVersion(info.version, clientVersion)) {
-      const advertised = await reachability.onAnyAdvertisedTransport();
-      if (advertised.denial) return { kind: 'connectDenied', denial: advertised.denial };
-      if (advertised.reachable)
-        return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
-    }
+    // A replacement retires a live process, so no branch of the ladder answers it on the record
+    // alone: the advertised endpoints are probed first, and a connect the HOST refused answers
+    // `connectDenied` instead of a death verdict. This is where the probe used to happen only for a
+    // NEWER daemon; an older or mismatched one was replaced unprobed, which let a client whose
+    // sandbox refuses the connect kill a daemon it never saw.
+    const advertised = await reachability.onAnyAdvertisedTransport();
+    if (advertised.denial) return { kind: 'connectDenied', denial: advertised.denial };
+    if (info.version && isNewerVersion(info.version, clientVersion) && advertised.reachable)
+      return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
     return {
       kind: 'replace',
       reason: `version mismatch (client v${clientVersion})`,
@@ -158,7 +158,11 @@ export async function resolveDaemonTakeover(
   }
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
-  if (codeMismatch) return { kind: 'replace', reason: codeMismatch, cause: 'code' };
+  if (codeMismatch) {
+    const advertised = await reachability.onAnyAdvertisedTransport();
+    if (advertised.denial) return { kind: 'connectDenied', denial: advertised.denial };
+    return { kind: 'replace', reason: codeMismatch, cause: 'code' };
+  }
   const probe = await reachability.onClientTransport();
   if (probe.denial) return { kind: 'connectDenied', denial: probe.denial };
   if (!probe.reachable) return { kind: 'replace', reason: 'unreachable', cause: 'unreachable' };

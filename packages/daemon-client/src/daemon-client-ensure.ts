@@ -182,7 +182,17 @@ async function awaitDrainedDaemon(
     });
     return 'left';
   }
-  if (await answersLivenessProbe(info)) throw await daemonDrainTimeoutError(info, settings);
+  const liveness = await answersLivenessProbe(info);
+  // A connect the host refused says nothing about whether this daemon is hung, so it is not a drain
+  // to name: the refusal travels to the caller, which names the sandbox and the way out.
+  if (liveness.denial) {
+    throw daemonConnectDeniedError({
+      info,
+      denial: liveness.denial,
+      stateDir: settings.paths.baseDir,
+    });
+  }
+  if (liveness.reachable) throw await daemonDrainTimeoutError(info, settings);
   const retirement = await stopDaemonForTakeover(info, settings.paths, 'force');
   if (retirement.status !== 'retained') return 'retired';
   // Nothing was signaled because the process could not be proved to be a daemon of its own: either its
@@ -214,7 +224,17 @@ async function quiesceOrRetireUnresponsive(
       error.details?.reason !== DAEMON_TRANSPORT_REASONS.timeout.reason
     )
       throw error;
-    if (await answersLivenessProbe(info)) throw error;
+    const liveness = await answersLivenessProbe(info);
+    if (liveness.denial) {
+      // The refusal is the finding, not the timeout: a daemon this client cannot reach because the
+      // host refused the connect is never force-retired.
+      throw daemonConnectDeniedError({
+        info,
+        denial: liveness.denial,
+        stateDir: settings.paths.baseDir,
+      });
+    }
+    if (liveness.reachable) throw error;
     await retireDaemonForTakeover(info, settings.paths, 'force');
     return 'retired';
   }

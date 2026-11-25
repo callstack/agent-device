@@ -63,14 +63,16 @@ export async function handleRequestTimeout(
   // transport performed when this client's connection died is the recovery that request needed,
   // and sibling sessions survive. Only a daemon answering neither endpoint in the probe window is
   // the hung daemon a reset was designed for.
-  const probeAnswered = resetEligible
+  const liveness = resetEligible
     ? await (
         await import('./daemon-client-liveness-probe.ts')
       ).answersLivenessProbe(info, {
         session,
       })
     : undefined;
-  const unresponsive = probeAnswered === false;
+  // A probe the HOST refused is neither an answer nor an unresponsive verdict: this client holds no
+  // evidence about the daemon, so a reset-eligible timeout does not retire it.
+  const unresponsive = liveness !== undefined && !liveness.reachable && !liveness.denial;
   const mayRetire = unresponsive && retireUnresponsive;
   // Loaded only here: a timeout is the one place that needs it, and the CLI's eager closure must
   // not pay for it.
@@ -93,7 +95,8 @@ export async function handleRequestTimeout(
       daemonPidForceKilled: resetDaemon ? daemonWasForceKilled(retirement) : undefined,
       daemonRetirement: retirement,
       daemonPreservedAfterTimeout: preserved || (!remote && !mayRetire),
-      daemonLivenessProbeAnswered: probeAnswered,
+      daemonLivenessProbeAnswered: liveness?.reachable,
+      daemonLivenessConnectDenied: liveness?.denial,
       daemonBaseUrl: info.baseUrl,
     },
   });
