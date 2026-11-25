@@ -118,24 +118,23 @@ async function rejectDaemonHttpRpcError(
     return;
   }
   const baseUrl = info.baseUrl;
-  const hydrate = async () => {
-    const localized = options.skipRemoteDiagnostics
-      ? payload
-      : await localizeRemoteDaemonError(payload, {
-          endpoint: {
-            baseUrl,
-            token: info.token,
-            tenantId: req.meta?.tenantId,
-            leaseId: leaseScopeFromRequest(req).leaseId,
-          },
-          stateDir,
-          requestId,
-        });
-    return await settleFailedDeliveryReceipt(info, req, stateDir, localized);
-  };
-  const mayDownload = payload.diagnosticsRecord || payload.details?.scriptDeliveryReceipt;
-  const report = dispatch && mayDownload ? () => dispatch(hydrate) : hydrate;
-  const errorToReport = await report().catch(() => ({ ...payload, logPath: undefined }));
+  const localized = options.skipRemoteDiagnostics
+    ? payload
+    : await localizeRemoteDaemonError(payload, {
+        endpoint: {
+          baseUrl,
+          token: info.token,
+          tenantId: req.meta?.tenantId,
+          leaseId: leaseScopeFromRequest(req).leaseId,
+        },
+        stateDir,
+        requestId,
+        handoff: dispatch,
+      });
+  const deliver = () => settleFailedDeliveryReceipt(info, req, stateDir, localized);
+  const report =
+    dispatch && payload.details?.scriptDeliveryReceipt ? () => dispatch(deliver) : deliver;
+  const errorToReport = await report().catch(() => ({ ...localized, logPath: undefined }));
   reject(appErrorFromDaemonError(errorToReport, requestId));
 }
 

@@ -240,7 +240,7 @@ test('legacy hosted profiles do not refresh credentials or dispatch device comma
     const teardownEnv = {
       ...env,
       AGENT_DEVICE_DAEMON_BASE_URL: daemonBaseUrl,
-      AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'fixture-key',
+      AGENT_DEVICE_DAEMON_AUTH_TOKEN: '  fixture-key  ',
     };
     const failed = await runCliCapture([...args, '--daemon-auth-token', 'explicit-fixture-token'], {
       env: teardownEnv,
@@ -257,6 +257,15 @@ test('legacy hosted profiles do not refresh credentials or dispatch device comma
     expect(failed.stdout).toContain('returned an invalid response');
     expect(failed.stdout + failed.stderr).not.toContain('explicit-fixture-token');
     expect(readRemoteConnectionState({ stateDir, session })?.leaseId).toBe('fixture-legacy-lease');
+    const echoed = await runCliCapture(args, {
+      env: teardownEnv,
+      sendToDaemon: async (_req, options) => {
+        expect(options?.authToken).toBe('fixture-key');
+        return { ok: false, error: { code: 'COMMAND_FAILED', message: 'echoed fixture-key' } };
+      },
+    });
+    expect(echoed.stdout).toContain('returned an invalid response');
+    expect(echoed.stdout + echoed.stderr).not.toContain('fixture-key');
     const pending = await runCliCapture(args, {
       env: teardownEnv,
       sendToDaemon: async () => ({ ok: true, data: { released: false } }),

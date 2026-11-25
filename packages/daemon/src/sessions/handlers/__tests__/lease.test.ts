@@ -309,6 +309,12 @@ test('lease_release ends the sessions opened under the released lease', async ()
     ok: true,
     data: { released: false, absent: true },
   });
+  const ending = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  registry.beginLeaseEnd(ending, { providerRelease: 'pending', sessionsSettled: false });
+  assert.deepEqual(await release(` ${ending.leaseId.toUpperCase()} `), {
+    ok: true,
+    data: { released: false },
+  });
   assert.deepEqual(ended, [lease.leaseId]);
 });
 

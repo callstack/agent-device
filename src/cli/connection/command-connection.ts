@@ -89,12 +89,13 @@ function legacyDisconnectFlags(
 ): CliFlags {
   if (!state || state.cloudSession || !isLegacyCloudProfile(stateDir, state.remoteConfigPath))
     return flags;
+  const token = explicitFlagKeys.has('daemonAuthToken')
+    ? input.daemonAuthToken
+    : env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   return {
     ...flags,
     daemonBaseUrl: env.AGENT_DEVICE_DAEMON_BASE_URL,
-    daemonAuthToken: explicitFlagKeys.has('daemonAuthToken')
-      ? input.daemonAuthToken
-      : env.AGENT_DEVICE_DAEMON_AUTH_TOKEN,
+    daemonAuthToken: token?.trim(),
   };
 }
 

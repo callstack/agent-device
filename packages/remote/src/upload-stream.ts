@@ -118,13 +118,13 @@ async function streamFileToHttpRequestAttempt(options: {
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
   const watchdog = createTransferPhaseWatchdog(options.signal);
-  watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
 
   let upload: Promise<void> | undefined;
   let uploadSettled = false;
   const start = () =>
     new Promise<UploadStreamResponse>((resolve, reject) => {
       watchdog.signal.throwIfAborted();
+      watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
       const fail = (error: unknown) => {
         phases.dispose();
         stopObservingWrites();
@@ -170,6 +170,7 @@ async function streamFileToHttpRequestAttempt(options: {
         );
       });
 
+      if (options.handoff) req.flushHeaders();
       const fileStream = fs.createReadStream(options.payloadPath, { start: options.startOffset });
       const progressTransform = createUploadProgressTransform({
         stage: options.progress?.stage ?? 'legacy',

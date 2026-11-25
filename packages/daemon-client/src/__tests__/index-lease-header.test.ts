@@ -5,7 +5,7 @@
  * and sends no such header when no lease is held.
  */
 
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -18,6 +18,7 @@ import {
 } from '@agent-device/test-kit';
 import { sendToDaemon } from '../index.ts';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
+import * as hostTransport from '@agent-device/host-kit/transport';
 
 const DAEMON_TOKEN = 'remote-secret';
 
@@ -196,11 +197,33 @@ test('a remote upload, artifact download and diagnostics fetch name the held lea
   ]);
 });
 
-test('remote install admits each request without holding admission through upload', async (t) => {
+test('upload and diagnostics hold admission for each credential handoff', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   let held = 0;
   let handoffs = 0;
   const observed: Array<[string, number]> = [];
+  const uploadFlushes: number[] = [];
+  const phaseStarts: Array<[string, number]> = [];
+  const createWatchdog = hostTransport.createTransferPhaseWatchdog;
+  const watchdogFactory = vi
+    .spyOn(hostTransport, 'createTransferPhaseWatchdog')
+    .mockImplementation((signal) => {
+      const watchdog = createWatchdog(signal);
+      return {
+        ...watchdog,
+        arm(phase, timeoutMs) {
+          if (phase === 'preflight' || phase === 'connect') phaseStarts.push([phase, held]);
+          watchdog.arm(phase, timeoutMs);
+        },
+      };
+    });
+  const flushHeaders = http.ClientRequest.prototype.flushHeaders;
+  const flush = vi
+    .spyOn(http.ClientRequest.prototype, 'flushHeaders')
+    .mockImplementation(function (this: http.ClientRequest) {
+      if (this.path === '/upload') uploadFlushes.push(held);
+      flushHeaders.call(this);
+    });
   const dispatch = async <T>(start: () => Promise<T>): Promise<T> => {
     held++;
     handoffs++;
@@ -210,27 +233,47 @@ test('remote install admits each request without holding admission through uploa
       held--;
     }
   };
-  await withRemoteDaemon(
-    async (baseUrl) => {
-      const apkPath = path.join(tempDir('agent-device-upload-admission-'), 'app.apk');
-      fs.writeFileSync(apkPath, 'apk-bytes');
-      await sendRemote(
-        baseUrl,
-        { command: 'install', positionals: [apkPath] },
-        undefined,
-        true,
-        dispatch,
-      );
-    },
-    (route) => observed.push([route, held]),
-  );
+  try {
+    await withRemoteDaemon(
+      async (baseUrl) => {
+        const apkPath = path.join(tempDir('agent-device-upload-admission-'), 'app.apk');
+        fs.writeFileSync(apkPath, 'apk-bytes');
+        await sendRemote(
+          baseUrl,
+          { command: 'install', positionals: [apkPath] },
+          undefined,
+          true,
+          dispatch,
+        );
+        await sendRemote(
+          baseUrl,
+          { command: 'clipboard', positionals: ['read'] },
+          'lease-1',
+          false,
+          dispatch,
+        );
+      },
+      (route) => observed.push([route, held]),
+    );
+  } finally {
+    flush.mockRestore();
+    watchdogFactory.mockRestore();
+  }
   assert.deepEqual(observed, [
     ['GET /health', 0],
     ['POST /upload/preflight', 0],
     ['POST /upload', 0],
     ['POST /rpc', 0],
+    ['GET /health', 0],
+    ['POST /rpc', 0],
+    ['GET /sessions/default/requests/req-clipboard/diagnostics', 0],
   ]);
   assert.equal(handoffs, observed.length);
+  assert.deepEqual(uploadFlushes, [1]);
+  assert.deepEqual(phaseStarts, [
+    ['preflight', 1],
+    ['connect', 1],
+  ]);
 });
 
 test('a remote upload, artifact download and diagnostics fetch send no lease header without a lease', async (t) => {

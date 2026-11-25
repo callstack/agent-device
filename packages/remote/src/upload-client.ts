@@ -342,17 +342,18 @@ async function requestUploadControl(
   handoff?: UploadHandoff,
 ): Promise<{ response: Response; body: unknown }> {
   const watchdog = createTransferPhaseWatchdog(callerSignal);
-  watchdog.signal.throwIfAborted();
-  watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
   try {
     // Redirects could forward the daemon token, so these control requests never follow them.
-    const start = () =>
-      fetch(url, {
+    const start = () => {
+      watchdog.signal.throwIfAborted();
+      watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
+      return fetch(url, {
         ...init,
         method: 'POST',
         redirect: 'error',
         signal: watchdog.signal,
       });
+    };
     const response = await (handoff?.(start) ?? start());
     const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
     watchdog.signal.throwIfAborted();
