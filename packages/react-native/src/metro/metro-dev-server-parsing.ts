@@ -12,7 +12,7 @@ const MAX_PORT = 65_535;
 const NETSTAT_LISTEN_STATE = 'LISTEN';
 
 /** The body a running React Native dev server answers on `/status`. */
-export const METRO_STATUS_READY_TEXT = 'packager-status:running';
+const METRO_STATUS_READY_TEXT = 'packager-status:running';
 
 export function isMetroStatusBody(text: string): boolean {
   return text.includes(METRO_STATUS_READY_TEXT);
@@ -75,7 +75,7 @@ export function parsePortFromSocketName(name: string): number | undefined {
  * The port a `netstat` local address ends with, after either separator the two platforms use. A
  * wildcard address such as `*.*` names no port.
  */
-export function parsePortFromNetstatAddress(address: string): number | undefined {
+function parsePortFromNetstatAddress(address: string): number | undefined {
   const withoutBrackets = address.replace(/\]$/, '');
   const separator = Math.max(withoutBrackets.lastIndexOf(':'), withoutBrackets.lastIndexOf('.'));
   if (separator <= 0) return undefined;
@@ -100,7 +100,7 @@ export function parseAppReportedServerUrl(settingsJson: string): URL | undefined
  * A `host:port` address, as React Native stores it. The port token must be plain digits:
  * `127.0.0.1:8081junk` is a broken value, not a hint to reload port 8081.
  */
-export function parseHostAndPort(value: string, scheme: 'http' | 'https'): URL | undefined {
+function parseHostAndPort(value: string, scheme: 'http' | 'https'): URL | undefined {
   const separator = value.lastIndexOf(':');
   if (separator <= 0) return undefined;
   const host = value.slice(0, separator);
@@ -134,7 +134,7 @@ function parsePortToken(token: string): number | undefined {
   return port >= 1 && port <= MAX_PORT ? port : undefined;
 }
 
-export function parseJsonObject(text: string): Record<string, unknown> | undefined {
+function parseJsonObject(text: string): Record<string, unknown> | undefined {
   try {
     const parsed: unknown = JSON.parse(text);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)

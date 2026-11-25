@@ -19,6 +19,7 @@ import type {
   CaptureSnapshotResult,
   DaemonBinding,
   DaemonLifecycle,
+  DeviceSelectionMetadata,
   FlingOptions,
   MaterializationReleaseOptions,
   PanOptions,
@@ -30,7 +31,6 @@ import type {
 } from '@agent-device/contracts/client';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
 import type { MetroPrepareOptions } from '@agent-device/contracts/remote';
-import type { DeviceSelectionMetadata } from '@agent-device/contracts/client';
 import { isNonDefaultResponseLevel, type ResponseLevel } from '@agent-device/kernel/contracts';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';

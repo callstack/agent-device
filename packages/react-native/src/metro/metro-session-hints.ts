@@ -239,6 +239,10 @@ export type MetroSessionOpenInput = {
   app?: MetroAppTarget;
 };
 
+/**
+ * Records what `open` left behind: the address it bound, or the app it launched when it bound none. An
+ * open never drops a record the session still needs, and a fresh session never inherits one.
+ */
 export function recordOpenedMetroSession(
   options: MetroSessionOptions,
   input: MetroSessionOpenInput,
@@ -248,36 +252,55 @@ export function recordOpenedMetroSession(
     const stored = readMetroSessionRecord(scope);
     const app = input.app ? keepProvenHost(input.app, stored?.app) : undefined;
     const url = runtimeServerUrl(input.runtime);
-    if (url) {
-      const binding = input.explicitRuntime ? undefined : readMetroSessionHints(scope);
-      if (binding && (input.sessionReused || binding.deviceBaseUrls?.includes(url))) {
-        if (app) writeMetroSessionHints({ ...scope, hints: { ...binding, app } });
-        return;
-      }
-      writeMetroSessionHints({
-        ...scope,
-        hints: { controlBaseUrl: url, ...(app ? { app } : {}) },
-      });
-      return;
-    }
-    // No dev-server hint came with the open, so no address is bound. What is recorded is the app this
-    // open launched: a later reload looks that app's own address up from it. A reused session can
-    // open a different app, so a recorded app always replaces the previous one, and it keeps whatever
-    // address the session already bound. An open that reports no app leaves a reused session's record
-    // alone and clears a stale one on a fresh session.
-    if (app) {
-      writeMetroSessionHints({
-        ...scope,
-        hints: {
-          ...(stored?.controlBaseUrl ? { controlBaseUrl: stored.controlBaseUrl } : {}),
-          ...(stored?.deviceBaseUrls ? { deviceBaseUrls: stored.deviceBaseUrls } : {}),
-          app,
-        },
-      });
-      return;
-    }
-    if (!input.sessionReused) clearMetroSessionHints(scope);
+    if (url) recordOpenedBinding(scope, input, url, app);
+    else recordOpenedApp(scope, input.sessionReused, app, stored);
   } catch {}
+}
+
+/**
+ * Records the dev-server address this open bound. A reused session, or one that re-binds an address one
+ * of its devices already uses, keeps the binding it has: the address it published to those devices is
+ * the one they are dialling.
+ */
+function recordOpenedBinding(
+  scope: MetroSessionScope,
+  input: MetroSessionOpenInput,
+  url: string,
+  app: MetroAppTarget | undefined,
+): void {
+  const binding = input.explicitRuntime ? undefined : readMetroSessionHints(scope);
+  if (binding && (input.sessionReused || binding.deviceBaseUrls?.includes(url))) {
+    if (app) writeMetroSessionHints({ ...scope, hints: { ...binding, app } });
+    return;
+  }
+  writeMetroSessionHints({ ...scope, hints: { controlBaseUrl: url, ...(app ? { app } : {}) } });
+}
+
+/**
+ * Records an open that bound no address. What is left is the app this open launched: a later reload
+ * looks that app's own dev-server address up from it. A reused session can open a different app, so a
+ * recorded app always replaces the previous one and keeps the address the session already had. An open
+ * that reports no app leaves a reused session's record alone and clears a stale one on a fresh session.
+ */
+function recordOpenedApp(
+  scope: MetroSessionScope,
+  sessionReused: boolean,
+  app: MetroAppTarget | undefined,
+  stored: MetroSessionRecord | undefined,
+): void {
+  if (!app) {
+    if (!sessionReused) clearMetroSessionHints(scope);
+    return;
+  }
+  writeMetroSessionHints({ ...scope, hints: { ...bindingFields(stored), app } });
+}
+
+/** The address fields of a stored record, apart from the app recorded beside them. */
+function bindingFields(stored: MetroSessionRecord | undefined): MetroSessionHints {
+  return {
+    ...(stored?.controlBaseUrl ? { controlBaseUrl: stored.controlBaseUrl } : {}),
+    ...(stored?.deviceBaseUrls ? { deviceBaseUrls: stored.deviceBaseUrls } : {}),
+  };
 }
 
 /**

@@ -23,7 +23,7 @@ test('the project-root header is kept plain, percent-decoded, or dropped when em
   assert.equal(parseMetroProjectRootHeader('  /home/dev/app  '), '/home/dev/app');
   assert.equal(
     parseMetroProjectRootHeader('C%3A%5CUsers%5Cdev%5Cproyecto%20n%E2%80%99%C3%AD'),
-    'C:\\Users\\dev\\proyecto n’í',
+    String.raw`C:\Users\dev\proyecto n’í`,
   );
   assert.equal(parseMetroProjectRootHeader('/app/%E2%80%'), '/app/%E2%80%');
   assert.equal(parseMetroProjectRootHeader(''), undefined);

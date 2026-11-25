@@ -231,6 +231,7 @@ test('a port lister that fails, or finds nothing, yields no server', async () =>
 
 test('every listening port is probed, in bounded batches rather than at once', async () => {
   const ports = Array.from({ length: 100 }, (_, index) => 20_000 + index);
+  const lastPort = ports.at(-1)!;
   let inFlight = 0;
   let peakInFlight = 0;
   const matching = await discoverLocalMetroServer({
@@ -241,13 +242,11 @@ test('every listening port is probed, in bounded batches rather than at once', a
       peakInFlight = Math.max(peakInFlight, inFlight);
       await Promise.resolve();
       inFlight -= 1;
-      return Number(url.port) === ports[ports.length - 1]
-        ? serverAt(ports[ports.length - 1]!, '/app/project')
-        : undefined;
+      return Number(url.port) === lastPort ? serverAt(lastPort, '/app/project') : undefined;
     },
   });
   // The 100th port is a real candidate: truncating at the concurrency limit would miss it.
-  assert.equal(matching?.serverUrl.port, String(ports[ports.length - 1]));
+  assert.equal(matching?.serverUrl.port, String(lastPort));
   assert.ok(peakInFlight <= 32, `peak in-flight was ${peakInFlight}`);
 });
 
