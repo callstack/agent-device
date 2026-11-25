@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { attachRefs } from '@agent-device/kernel/snapshot';
+import { attachRefs, formatPinnedRef } from '@agent-device/kernel/snapshot';
 import {
   makeIosSession,
   authoringPublication,
@@ -84,8 +84,8 @@ async function runDrag(sessionStore: ReturnType<typeof makeSessionStore>, sessio
       flags: {},
       input: {
         kind: 'drag',
-        source: '@e2-s42',
-        destination: '@e3-s42',
+        source: formatPinnedRef('@e2', 42),
+        destination: formatPinnedRef('@e3', 42),
         sourceHoldMs: 700,
         moveMs: 600,
         destinationHoldMs: 200,
@@ -242,8 +242,8 @@ test('an ambiguous drag issues its printed candidates so press acts on the liste
   const printedLines = response.error.details?.candidates as string[] | undefined;
   const firstPrinted = printedLines?.[0];
   if (!firstPrinted) throw new Error('expected the refusal to print candidates');
-  const printed = `${firstPrinted.replace(/\s.*$/, '')}-s${refsGeneration}`;
-  expect(printed).toBe(`@e2-s${refsGeneration}`);
+  const printed = formatPinnedRef(firstPrinted.replace(/\s.*$/, ''), refsGeneration);
+  expect(printed).toBe(formatPinnedRef('@e2', refsGeneration));
   const press = await handleInteractionCommands({
     createCommandSurface: createTouchCommandSurface({}),
     req: { token: 't', session: sessionName, command: 'press', positionals: [printed], flags: {} },

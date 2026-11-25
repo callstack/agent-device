@@ -105,7 +105,7 @@ test('prints plain refs when the result carries no generation to pin them to', (
     limitations: [],
   });
   expect(output.text).toContain('@e9  missing-name');
-  expect(output.text).not.toMatch(/@e\d+-s\d/);
+  expect(output.text).not.toMatch(/@e\d+(?:-s|~s)\d/);
 });
 
 test('says no findings and lists each limitation', () => {

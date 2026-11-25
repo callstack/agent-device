@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from '../src/cli/parser/args.ts';
 import { isCommandName, readInputFromCli } from '@agent-device/command-surface';
 import { parseFindArgs } from '@agent-device/selectors';
+import { splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 
 type ValidationKind = 'agent-device-grammar' | 'pseudo-ref';
 
@@ -24,7 +25,17 @@ const TARGET_POSITION_BY_COMMAND = new Map<string, number>([
   ['wait', 0],
 ]);
 const POSITIONAL_AT_REFS_ARE_INVALID = new Set(['focus', 'scroll', 'swipe']);
-const CONCRETE_REF = /^@[ec]\d+(?:-s\d+)?$/;
+
+/**
+ * Whether a target positional is an observed ref: a snapshot ref (`@eN`, optionally
+ * pinned) read through the kernel's own grammar, or a React DevTools component ref
+ * (`@cN`), which is a different namespace the kernel grammar does not cover.
+ */
+function isObservedRef(token: string): boolean {
+  if (/^@c\d+$/.test(token)) return true;
+  const split = splitRefGenerationSuffix(token);
+  return split !== null && /^@e\d+$/.test(split.base);
+}
 
 export function validateAgentDeviceCommand(value: unknown): ValidationResult {
   if (!isStringArray(value) || value.length === 0) {
@@ -42,7 +53,7 @@ function validateParsedCommand(parsed: ReturnType<typeof parseArgs>): Validation
   if (!parsed.command) return validateGlobalFlags(parsed.flags);
 
   const pseudoRef = targetRefCandidate(parsed.command, parsed.positionals);
-  if (pseudoRef && !CONCRETE_REF.test(pseudoRef)) {
+  if (pseudoRef && !isObservedRef(pseudoRef)) {
     return invalid('pseudo-ref', `Pseudo ref "${pseudoRef}" is not an observed @eN or @cN ref.`);
   }
 

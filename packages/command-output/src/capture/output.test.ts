@@ -258,6 +258,7 @@ test('output without --scope keeps plain refs even when a refs generation is pre
 
   for (const output of [withoutScope, blankScope]) {
     assert.match(output.text!, /@e1 \[/);
-    assert.doesNotMatch(output.text!, /@e\d+-s\d/);
+    // Both separators: a leaked retired pin must fail here too.
+    assert.doesNotMatch(output.text!, /@e\d+(?:-s|~s)\d/);
   }
 });

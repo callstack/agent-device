@@ -17,8 +17,8 @@ function isScriptRuntimePlatform(
 
 /**
  * #1076 versioned refs: a recorded ref positional may carry a generation pin
- * (`@e12-s3`, or the retired `~s3` spelling from a script saved before the pin
- * separator changed). Generations are meaningless
+ * (`@e12-s3`, or the retired whole-token `@e12~s3` spelling from a script saved
+ * before the pin separator changed). Generations are meaningless
  * outside the session that minted them — a replayed script runs against a NEW
  * session with its own generation counter — so replay parsing and script
  * writing strip well-formed suffixes and IGNORE the generation instead of

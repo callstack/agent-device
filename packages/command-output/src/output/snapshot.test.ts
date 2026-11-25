@@ -907,7 +907,7 @@ test('formatSnapshotText keeps a complete tree plain even when a generation is p
     }),
   );
   assert.match(text, /@e1 \[button\]/);
-  assert.doesNotMatch(text, /-s752890/);
+  assert.doesNotMatch(text, /(?:-s|~s)752890/);
   assert.doesNotMatch(text, /Refs generation:/);
 });
 
