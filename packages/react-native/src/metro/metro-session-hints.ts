@@ -6,11 +6,15 @@ import path from 'node:path';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import { resolveMetroServerUrl, type MetroReloadTargetInput } from './metro-reload-endpoints.ts';
+import type { MetroAppTarget } from './metro-dev-server-discovery.ts';
 
-/** Reload control and the prepared device addresses that may reuse it on a fresh open. */
+/** Reload control, the prepared device addresses that may reuse it, and the app the session opened. */
 export type MetroSessionHints = {
-  controlBaseUrl: string;
+  /** Absent when the session opened an app without any dev-server hint to bind. */
+  controlBaseUrl?: string;
   deviceBaseUrls?: string[];
+  /** The app this session opened, so a reload can ask that app's host about it. */
+  app?: MetroAppTarget;
 };
 
 export type MetroSessionScope = { stateDir: string; session: string };
@@ -45,7 +49,15 @@ export function writeMetroSessionHints(
   fs.writeFileSync(filePath, `${JSON.stringify(options.hints, null, 2)}\n`, 'utf8');
 }
 
-export function readMetroSessionHints(options: MetroSessionScope): MetroSessionHints | undefined {
+/** The stored session record: the control address, the device addresses, and the app it opened. */
+type MetroSessionRecord = {
+  raw: Record<string, unknown>;
+  controlBaseUrl?: string;
+  deviceBaseUrls?: string[];
+  app?: MetroAppTarget;
+};
+
+function readMetroSessionRecord(options: MetroSessionScope): MetroSessionRecord | undefined {
   const filePath = metroSessionHintsPath(options.stateDir, options.session);
   let raw: string;
   try {
@@ -61,36 +73,90 @@ export function readMetroSessionHints(options: MetroSessionScope): MetroSessionH
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
   const record = parsed as Record<string, unknown>;
-  try {
-    const runtime = {
-      metroHost: typeof record.metroHost === 'string' ? record.metroHost : undefined,
-      metroPort: typeof record.metroPort === 'number' ? record.metroPort : undefined,
-      bundleUrl: typeof record.bundleUrl === 'string' ? record.bundleUrl : undefined,
-    };
-    if (
-      typeof record.controlBaseUrl !== 'string' &&
-      Object.values(runtime).every((value) => value === undefined)
-    )
-      return undefined;
-    const url =
-      typeof record.controlBaseUrl === 'string'
-        ? new URL(record.controlBaseUrl)
-        : resolveMetroServerUrl({ runtime });
-    return url.protocol === 'http:' || url.protocol === 'https:'
-      ? {
-          controlBaseUrl: url.toString(),
-          ...(Array.isArray(record.deviceBaseUrls)
-            ? {
-                deviceBaseUrls: record.deviceBaseUrls.filter(
-                  (value): value is string => typeof value === 'string',
-                ),
-              }
-            : {}),
-        }
+  const app = readStoredAppTarget(record.app);
+  const deviceBaseUrls = Array.isArray(record.deviceBaseUrls)
+    ? record.deviceBaseUrls.filter((value): value is string => typeof value === 'string')
+    : undefined;
+  const controlBaseUrl =
+    typeof record.controlBaseUrl === 'string' ? record.controlBaseUrl : undefined;
+  return {
+    raw: record,
+    ...(controlBaseUrl ? { controlBaseUrl } : {}),
+    ...(deviceBaseUrls ? { deviceBaseUrls } : {}),
+    ...(app ? { app } : {}),
+  };
+}
+
+function readStoredAppTarget(value: unknown): MetroAppTarget | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const platform =
+    record.platform === 'ios' || record.platform === 'android' ? record.platform : undefined;
+  const deviceId = typeof record.deviceId === 'string' ? record.deviceId : undefined;
+  if (!platform || !deviceId) return undefined;
+  const deviceKind =
+    record.deviceKind === 'simulator' ||
+    record.deviceKind === 'emulator' ||
+    record.deviceKind === 'device'
+      ? record.deviceKind
       : undefined;
+  return {
+    platform,
+    deviceId,
+    ...(deviceKind ? { deviceKind } : {}),
+    ...(typeof record.appId === 'string' ? { appId: record.appId } : {}),
+  };
+}
+
+/** The app a session opened, even when the session never bound a dev server. */
+export function readMetroSessionAppTarget(
+  options: MetroSessionOptions,
+): MetroAppTarget | undefined {
+  let scope: MetroSessionScope;
+  try {
+    scope = resolveMetroSessionScope(options);
   } catch {
     return undefined;
   }
+  return readMetroSessionRecord(scope)?.app;
+}
+
+export function readMetroSessionHints(options: MetroSessionScope): MetroSessionHints | undefined {
+  const stored = readMetroSessionRecord(options);
+  if (!stored) return undefined;
+  // An app-only record binds no address: reload discovers the dev server instead of resolving one.
+  if (!stored.controlBaseUrl && !hasStoredRuntimeHints(stored.raw)) return undefined;
+  try {
+    const url = stored.controlBaseUrl
+      ? new URL(stored.controlBaseUrl)
+      : resolveMetroServerUrl({ runtime: readStoredRuntimeHints(stored.raw) });
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+    return {
+      controlBaseUrl: url.toString(),
+      ...(stored.deviceBaseUrls ? { deviceBaseUrls: stored.deviceBaseUrls } : {}),
+      ...(stored.app ? { app: stored.app } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+type LegacyRuntimeHintRecord = Record<string, unknown>;
+
+function hasStoredRuntimeHints(record: LegacyRuntimeHintRecord): boolean {
+  return Object.values(readStoredRuntimeHints(record)).some((value) => value !== undefined);
+}
+
+function readStoredRuntimeHints(record: LegacyRuntimeHintRecord): {
+  metroHost?: string;
+  metroPort?: number;
+  bundleUrl?: string;
+} {
+  return {
+    metroHost: typeof record.metroHost === 'string' ? record.metroHost : undefined,
+    metroPort: typeof record.metroPort === 'number' ? record.metroPort : undefined,
+    bundleUrl: typeof record.bundleUrl === 'string' ? record.bundleUrl : undefined,
+  };
 }
 
 export function clearMetroSessionHints(options: MetroSessionScope): void {
@@ -113,8 +179,8 @@ export function resolveSessionMetroServerUrl(
 
 function readScopedMetroSessionRuntime(scope: MetroSessionScope): SessionRuntimeHints | undefined {
   try {
-    const binding = readMetroSessionHints(scope);
-    return binding ? { bundleUrl: binding.controlBaseUrl } : undefined;
+    const controlBaseUrl = readMetroSessionHints(scope)?.controlBaseUrl;
+    return controlBaseUrl ? { bundleUrl: controlBaseUrl } : undefined;
   } catch {
     return undefined;
   }
@@ -166,6 +232,8 @@ export type MetroSessionOpenInput = {
   runtime: SessionRuntimeHints | undefined;
   explicitRuntime: boolean;
   sessionReused: boolean;
+  /** The app the open launched, so a later reload can ask its host for the app's own address. */
+  app?: MetroAppTarget;
 };
 
 export function recordOpenedMetroSession(
@@ -178,8 +246,19 @@ export function recordOpenedMetroSession(
     if (url) {
       const binding = input.explicitRuntime ? undefined : readMetroSessionHints(scope);
       if (binding && (input.sessionReused || binding.deviceBaseUrls?.includes(url))) return;
-      writeMetroSessionHints({ ...scope, hints: { controlBaseUrl: url } });
-    } else if (!input.sessionReused) clearMetroSessionHints(scope);
+      writeMetroSessionHints({
+        ...scope,
+        hints: { controlBaseUrl: url, ...(input.app ? { app: input.app } : {}) },
+      });
+      return;
+    }
+    // No dev-server hint came with the open, so no address is bound. A fresh session still records
+    // the app it opened: that is what a later reload looks the app's own address up from. A reused
+    // session keeps whatever its first open recorded.
+    if (!input.sessionReused) {
+      if (input.app) writeMetroSessionHints({ ...scope, hints: { app: input.app } });
+      else clearMetroSessionHints(scope);
+    }
   } catch {}
 }
 

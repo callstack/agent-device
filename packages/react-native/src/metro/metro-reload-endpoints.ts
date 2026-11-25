@@ -5,9 +5,8 @@ import {
   trimRuntimeValue,
 } from '@agent-device/host-kit/runtime-transport-hints';
 
-const DEFAULT_METRO_HOST = 'localhost';
-const DEFAULT_METRO_PORT = 8081;
-
+export const DEFAULT_METRO_HOST = 'localhost';
+export const DEFAULT_METRO_PORT = 8081;
 // Expo apps load JS through this virtual entry; index.bundle fails on Expo dev servers.
 export const EXPO_VIRTUAL_ENTRY_BUNDLE_PATH = '.expo/.virtual-metro-entry.bundle';
 
@@ -34,6 +33,23 @@ export function parsePort(value: number | string | undefined, fallback: number):
   return parsed;
 }
 
+/**
+ * Whether the caller or the session already names a dev server: a bundle URL, a host, or a port from
+ * either. When this is false, nothing is bound, and resolving a reload target needs a discovery step
+ * rather than a default address.
+ */
+export function isMetroTargetBound(input: MetroReloadTargetInput): boolean {
+  const explicit =
+    trimRuntimeValue(input.bundleUrl) !== undefined ||
+    trimRuntimeValue(input.metroHost) !== undefined ||
+    input.metroPort !== undefined;
+  const session =
+    trimRuntimeValue(input.runtime?.bundleUrl) !== undefined ||
+    trimRuntimeValue(input.runtime?.metroHost) !== undefined ||
+    input.runtime?.metroPort !== undefined;
+  return explicit || session;
+}
+
 // Explicit flags win over session runtime hints, which win over localhost:8081.
 export function resolveMetroServerUrl(input: MetroReloadTargetInput): URL {
   const explicitBundleUrl = trimRuntimeValue(input.bundleUrl);
@@ -58,7 +74,11 @@ export function resolveMetroServerUrl(input: MetroReloadTargetInput): URL {
 }
 
 export function resolveMetroReloadEndpoints(input: MetroReloadTargetInput): MetroReloadEndpoints {
-  const serverUrl = resolveMetroServerUrl(input);
+  return buildMetroReloadEndpoints(resolveMetroServerUrl(input));
+}
+
+/** The reload control endpoints of one dev-server address, keeping its mount prefix. */
+export function buildMetroReloadEndpoints(serverUrl: URL): MetroReloadEndpoints {
   const prefix = serverUrl.pathname.replace(/\/+$/, '');
   const reloadUrl = new URL(serverUrl);
   reloadUrl.pathname = `${prefix}/reload`;

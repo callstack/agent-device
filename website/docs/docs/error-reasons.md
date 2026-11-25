@@ -832,6 +832,12 @@ These reasons can come from more than one command.
 | `event_creation_failed` | macOS could not create the keyboard or mouse event to post. |
 | `missing_button` | No button on the alert fits the requested accept or dismiss. |
 
+### Metro reload
+
+| Reason | Meaning |
+| --- | --- |
+| `metro_dev_server_unresolved` | No dev server is bound to the session and none was found for its app; nothing was reloaded. |
+
 ### Platform runtime
 
 | Reason | Meaning |

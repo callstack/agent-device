@@ -63,8 +63,12 @@ import {
 } from '@agent-device/command-surface';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { createDaemonTransport, createRequestGuard } from '@agent-device/daemon-client';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import {
+  daemonBaseUrlIsLocal,
+  resolveDaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import * as devServer from '@agent-device/react-native';
+import type { MetroAppTarget } from '@agent-device/react-native';
 import {
   asOptionalRecord,
   readPresentedSurfaceFact,
@@ -114,6 +118,8 @@ export function createAgentDeviceClient(
   ) => devServer.recordOpenedMetroSession(withHost(options), input);
   const readMetroSessionRuntime = (options: { session: string; stateDir?: string }) =>
     devServer.readMetroSessionRuntime(withHost(options));
+  const readMetroSessionAppTarget = (options: { session: string; stateDir?: string }) =>
+    devServer.readMetroSessionAppTarget(withHost(options));
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the
@@ -336,17 +342,18 @@ export function createAgentDeviceClient(
       open: async (options: AppOpenOptions) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('open', options);
+        const device = normalizeOpenDevice(data);
+        const appBundleId = readOptionalString(data, 'appBundleId');
+        const appId = appBundleId;
         await recordOpenedMetroSession(
           { ...mergeClientOptions(config, options), session },
           {
             explicitRuntime: options.runtime !== undefined,
             runtime: mergeClientOptions(config, options).runtime,
             sessionReused: data.sessionReused === true,
+            app: metroAppTargetFromOpen(device, appBundleId),
           },
         );
-        const device = normalizeOpenDevice(data);
-        const appBundleId = readOptionalString(data, 'appBundleId');
-        const appId = appBundleId;
         return {
           session,
           ...readScriptDeliveryDisclosure(data),
@@ -428,15 +435,26 @@ export function createAgentDeviceClient(
         );
         return result;
       },
-      reload: async (options = {}) =>
-        await reloadMetro({
+      reload: async (options = {}) => {
+        const session = resolveSessionName(config.session);
+        const sessionOptions = { ...config, session };
+        // Discovery reads this machine: an app's stored address in a simulator container, and this
+        // host's listening ports. A client aimed at a non-loopback daemon drives devices on another
+        // machine, so its reload keeps the address its hints resolve to and probes nothing here.
+        if (!daemonIsLocal(config, host)) {
+          return await reloadMetro({
+            ...options,
+            runtime: (await readMetroSessionRuntime(sessionOptions)) ?? config.runtime,
+          });
+        }
+        return await reloadMetro({
           ...options,
-          runtime:
-            (await readMetroSessionRuntime({
-              ...config,
-              session: resolveSessionName(config.session),
-            })) ?? config.runtime,
-        }),
+          runtime: (await readMetroSessionRuntime(sessionOptions)) ?? config.runtime,
+          host,
+          projectRoot: config.cwd ?? host.cwd,
+          app: await readMetroSessionAppTarget(sessionOptions),
+        });
+      },
     },
     capture: {
       snapshot: async (options: CaptureSnapshotOptions = {}) => {
@@ -561,6 +579,34 @@ function centeredGestureInput(
     ...common,
     kind,
     ...(x === undefined && y === undefined ? {} : { origin: { x, y } }),
+  };
+}
+
+/**
+ * Whether this client talks to a daemon on this machine. Discovery in `metro reload` reads local
+ * state — a simulator container file, this host's listening ports — so it is only meaningful when
+ * the devices the session drives are hosted here too, which for a client is the daemon's machine.
+ */
+function daemonIsLocal(config: AgentDeviceClientConfig, host: HostEnvironment): boolean {
+  return daemonBaseUrlIsLocal(config.daemonBaseUrl ?? host.env.AGENT_DEVICE_DAEMON_BASE_URL);
+}
+
+/**
+ * The app an `open` launched, in the shape the Metro reload discovery reads back. Only an iOS or
+ * Android app with a resolved device and bundle id is worth recording: anything else has no
+ * app-reported dev server to look up.
+ */
+function metroAppTargetFromOpen(
+  device: ReturnType<typeof normalizeOpenDevice>,
+  appBundleId: string | undefined,
+): MetroAppTarget | undefined {
+  if (!device || !appBundleId) return undefined;
+  if (device.platform !== 'ios' && device.platform !== 'android') return undefined;
+  return {
+    platform: device.platform,
+    deviceId: device.id,
+    ...(device.kind ? { deviceKind: device.kind } : {}),
+    appId: appBundleId,
   };
 }
 
