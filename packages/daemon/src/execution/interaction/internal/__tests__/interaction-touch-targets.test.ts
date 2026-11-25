@@ -337,3 +337,29 @@ test('parseTouchTarget refuses a malformed generation suffix as a second key', (
   if (parsed.ok || parsed.response.ok) return;
   expect(parsed.response.error.message).toContain('Separate the keys');
 });
+
+test('parseTouchTarget refuses a second key pinned with the retired separator', () => {
+  // A paste from a pre-separator client or a saved script must not become a
+  // fallback label: `press @e13 @e14~s3` would press one key and call it done.
+  const parsed = parseTouchTarget(['@e13', '@e14~s3'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.code).toBe('INVALID_ARGS');
+  // The refusal names the current spelling of the pin the caller is holding.
+  expect(parsed.response.error.message).toContain('"~s" is retired');
+  expect(parsed.response.error.message).toContain('Use @e14-s3.');
+});
+
+test('parseTouchTarget refuses a retired pin on the acted ref', () => {
+  const parsed = parseTouchTarget(['@e13~s3'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.message).toContain('"~s" is retired');
+});
+
+test('parseTouchTarget refuses a retired pin inside a ref sequence', () => {
+  const parsed = parseTouchTarget(['@e13,@e14~s3'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.message).toContain('"~s" is retired');
+});

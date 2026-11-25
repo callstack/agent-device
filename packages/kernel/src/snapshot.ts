@@ -785,9 +785,12 @@ export function snapshotRefBodies(refCarriers: readonly { ref?: string }[]): str
  * word for bash, zsh, and the command allow-rule matchers agents gate calls
  * with. The retired `~s` separator failed that (`~` is an EXTENDED_GLOB hazard in
  * zsh, and those matchers reject unquoted words containing it), which sent pasted
- * pins into sandboxed runs. `formatPinnedRef` is the only writer of the form;
+ * pins into sandboxed runs. `formatPinnedRef` is the kernel's writer of the form
+ * (`pinnedRefText` in `packages/command-output/src/output-common.ts` renders the
+ * same text for the CLI façade, which keeps its own spelling to stay inside the
+ * ADR-0019 eager-closure budget; `output-common.test.ts` binds the two).
  * `splitRefGenerationSuffix` and `splitRecordedRefGenerationSuffix` are the only
- * readers.
+ * readers of a token.
  */
 export const REF_PIN_SEPARATOR = '-s';
 
@@ -811,6 +814,60 @@ const REF_SHAPED_RE = /^@?e\d/;
 /** Either pin separator, current or retired: present means the token is a pin attempt. */
 const PIN_MARKER_RE = /~|-s/;
 
+/** Well-formed ref token, `@`-prefixed: the shape a frame issues. */
+const REF_TOKEN_RE = /^@e\d+$/;
+
+/** A ref-shaped token spelling its pin with the retired separator. */
+const RETIRED_PIN_RE = /^@?e\d+~/;
+
+/** A ref-shaped token carrying a `-s` pin that is not well formed: `@e12-s`, `@e12-s3x`. */
+const MALFORMED_CURRENT_PIN_RE = /^@?e\d+(?:-s|-s\d+\w+)$/;
+
+/**
+ * Whether a token can only be a ref: a plain or pinned ref (`@e12`, `@e12-s3`), or a
+ * ref-shaped token whose pin is malformed (`@e12-s`) or retired (`@e12~s3`). A surface
+ * that reads one ref beside free text uses this to refuse a second ref rather than
+ * reading it as trailing text, so the retired spelling is never dropped as a label.
+ * Input that must also *resolve* the ref goes through `splitRefGenerationSuffix`, which
+ * names the grammar. Text that only looks ref-shaped (`@e12-sales`) is not a ref here,
+ * matching the split readers.
+ */
+export function isRefToken(input: string): boolean {
+  const trimmed = input.trim();
+  if (!REF_SHAPED_RE.test(trimmed)) return false;
+  if (RETIRED_PIN_RE.test(trimmed) || MALFORMED_CURRENT_PIN_RE.test(trimmed)) return true;
+  const split = splitRefGenerationSuffix(trimmed);
+  if (split === null) return false;
+  return REF_TOKEN_RE.test(split.base);
+}
+
+/**
+ * Whether a token spells its pin with the retired `~s` separator (`@e12~s3`). Live input
+ * refuses it, and the refusal must name the current `-s` form.
+ */
+export function isRetiredRefPin(input: string): boolean {
+  return RETIRED_PIN_RE.test(input.trim());
+}
+
+/** Says what a retired pin becomes, shared by every live-input refusal. */
+export const REF_RETIRED_PIN_HINT =
+  'The generation pin separator is "-s" (@e12-s3). The retired "~s" spelling is read only when a saved .ad script replays.';
+
+/**
+ * Live-input refusal for a ref token pinned with the retired separator, carrying the
+ * exact fix (`@e12~s3` reads as `@e12-s3`). Returns null for any other token, including
+ * a malformed one: those keep the generic malformed-suffix refusal, because there is no
+ * fix to name.
+ */
+export function retiredRefPinRefusal(input: string): string | null {
+  const legacy = LEGACY_REF_GENERATION_SUFFIX.exec(input.trim());
+  if (!legacy) return null;
+  return (
+    `Invalid ref "${input.trim()}" — the pin separator "~s" is retired.` +
+    ` Use ${formatPinnedRef(legacy[1]!, Number(legacy[2]))}. ${REF_RETIRED_PIN_HINT}`
+  );
+}
+
 export const REF_GRAMMAR_HINT =
   'Refs look like @e12, optionally pinned to the snapshot generation that minted them: @e12-s3 (the ref, then "-s" and the refsGeneration reported by the issuing snapshot/find response).';
 
@@ -830,9 +887,10 @@ export function splitRefGenerationSuffix(input: string): SplitRef | null {
 /**
  * Replay-input variant of `splitRefGenerationSuffix`: also strips the retired
  * `~s<generation>` spelling, because saved `.ad` scripts and refs recorded
- * before the separator changed still carry it. It never rejects, so a malformed
- * pin stays untouched for the daemon to name. Use it only where such saved text
- * is read; live CLI input goes through `splitRefGenerationSuffix`.
+ * before the separator changed still carry it. A malformed pin returns null and the
+ * caller leaves the token untouched for the daemon to name, as it does for any token
+ * this reader cannot split. Use it only where such saved text is read; live CLI input
+ * goes through `splitRefGenerationSuffix`.
  */
 export function splitRecordedRefGenerationSuffix(input: string): SplitRef | null {
   const trimmed = input.trim();

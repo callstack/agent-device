@@ -10,6 +10,7 @@ import {
   stripAtPrefix,
   type DecodedFillTarget,
 } from '@agent-device/selectors/interaction-positionals';
+import { isRefToken, retiredRefPinRefusal } from '@agent-device/kernel/snapshot';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
@@ -59,20 +60,26 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
     if (
       SEQUENCE_TOUCH_COMMANDS.has(commandLabel) &&
       spaceSeparatedRef !== undefined &&
-      /^@e\d+(-s?\d*)?$/.test(spaceSeparatedRef.trim())
+      isRefToken(spaceSeparatedRef)
     ) {
       // `press @e13 @e14` is a comma-separated plan typed with spaces. On the
       // single-ref path the extra positional would become a fallback label and
       // every key after the first would be lost to a silent success — the
-      // exact failure class the sequence form exists to remove.
+      // exact failure class the sequence form exists to remove. A second key
+      // pinned with the retired separator is the same mistake, and its refusal
+      // has to name the current spelling: the caller is holding a pin.
+      const secondKey = spaceSeparatedRef.trim();
+      const retired = retiredRefPinRefusal(secondKey);
       return {
         ok: false,
-        response: errorResponse(
-          'INVALID_ARGS',
-          `"${spaceSeparatedRef.trim()}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
-          undefined,
-          { hint: REF_SEQUENCE_HINT },
-        ),
+        response: retired
+          ? errorResponse('INVALID_ARGS', retired, { hint: REF_SEQUENCE_HINT })
+          : errorResponse(
+              'INVALID_ARGS',
+              `"${secondKey}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
+              undefined,
+              { hint: REF_SEQUENCE_HINT },
+            ),
       };
     }
     const versioned = parseVersionedRefPositional(first);

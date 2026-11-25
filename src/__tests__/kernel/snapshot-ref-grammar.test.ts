@@ -3,7 +3,9 @@ import { expect, test } from 'vitest';
 import { formatRef, refArb } from '@agent-device/test-kit';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
+  isRefToken,
   normalizeRef,
+  retiredRefPinRefusal,
   splitRecordedRefGenerationSuffix,
   splitRefGenerationSuffix,
 } from '@agent-device/kernel/snapshot';
@@ -55,7 +57,31 @@ test('splitRecordedRefGenerationSuffix also accepts the retired `~s` spelling', 
   expect(splitRecordedRefGenerationSuffix('e12~s3')).toEqual({ base: 'e12', generation: 3 });
   expect(splitRecordedRefGenerationSuffix('@e12-s3')).toEqual({ base: '@e12', generation: 3 });
   expect(splitRecordedRefGenerationSuffix('@e12')).toEqual({ base: '@e12' });
+  // A malformed pin returns null on either separator; the caller leaves the token
+  // untouched for the daemon to name.
   expect(splitRecordedRefGenerationSuffix('@e12~s')).toBeNull();
+  expect(splitRecordedRefGenerationSuffix('@e12-s')).toBeNull();
+});
+
+test('isRefToken recognizes every ref spelling and rejects text', () => {
+  for (const token of ['@e12', '@e12-s3', '@e12-s', '@e12~s3', '@e12~', ' @e12 ']) {
+    expect(isRefToken(token), token).toBe(true);
+  }
+  for (const token of ['@e12-sales', '@e', 'label=@e1', 'Email field', '-s3', '']) {
+    expect(isRefToken(token), token).toBe(false);
+  }
+});
+
+test('retiredRefPinRefusal names the current spelling and the exact fix', () => {
+  const refusal = retiredRefPinRefusal('@e12~s3');
+  expect(refusal).toContain('"~s" is retired');
+  expect(refusal).toContain('Use @e12-s3.');
+  // Anything the retired grammar cannot read keeps the generic malformed-suffix refusal.
+  expect(retiredRefPinRefusal('@e12~')).toBeNull();
+  expect(retiredRefPinRefusal('@e12~x3')).toBeNull();
+  expect(retiredRefPinRefusal('@e12-s3')).toBeNull();
+  expect(retiredRefPinRefusal('@e12')).toBeNull();
+  expect(retiredRefPinRefusal('~s3')).toBeNull();
 });
 
 // Property, not another example: `@eN-sM` is a two-part grammar, so split and
