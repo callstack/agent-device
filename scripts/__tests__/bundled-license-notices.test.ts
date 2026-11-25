@@ -17,7 +17,7 @@ test('Maestro emits JPEG attribution with its production bundle', async () => {
     [
       fileURLToPath(new URL('../../node_modules/tsdown/dist/run.mjs', import.meta.url)),
       '--config',
-      '../../scripts/maestro-tsdown.config.ts',
+      '../../maestro-tsdown.config.ts',
       '--out-dir',
       output,
       '--no-dts',
