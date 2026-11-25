@@ -7,7 +7,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
-import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
+import { brotliCompressSync, deflateRawSync, deflateSync, gzipSync } from 'node:zlib';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
@@ -55,7 +55,7 @@ test('streams the served file to disk with the bearer token the caller supplied'
   expect(fs.readFileSync(destinationPath, 'utf8')).toBe('ftypisom-payload');
 });
 
-test('keeps authenticated loopback downloads off the proxy and out of socket diagnostics', async () => {
+test('keeps authenticated loopback traffic off the proxy and out of diagnostics', async () => {
   const originRequests: Array<{ host?: string; authorization?: string }> = [];
   let proxyRequests = 0;
   const url = new URL(
@@ -64,7 +64,12 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
         host: request.headers.host,
         authorization: request.headers.authorization,
       });
-      response.end('instance payload');
+      if (request.url?.includes('malformed-fixture-query')) {
+        const query = new URL(request.url, 'http://fixture').search;
+        request.socket.end(`HTTP/1.1 200 OK\r\nX:${query}\r\ninvalid header\r\n\r\n`);
+      } else {
+        response.end('instance payload');
+      }
     }),
   );
   url.hostname = 'localhost.';
@@ -75,7 +80,6 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
   });
   const dir = await mkdtempForTest('limrun-download-');
   const authenticatedPath = path.join(dir, 'authenticated.mp4');
-  const envProxySupported = process.allowedNodeEnvironmentFlags.has('--use-env-proxy');
 
   const { stderr } = await promisify(execFile)(
     process.execPath,
@@ -84,9 +88,26 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
       '--input-type=module',
       '-e',
       `
+        import assert from 'node:assert/strict';
+        import { subscribe } from 'node:diagnostics_channel';
         import dns from 'node:dns/promises';
+        import 'node:http';
+        import { PerformanceObserver } from 'node:perf_hooks';
         import { downloadLimrunFile } from './download-file.ts';
         const [url, authenticatedPath] = process.argv.slice(1);
+        let observed = 0;
+        for (const name of [
+          'http.client.request.start',
+          'http.client.response.finish',
+          'undici:request:create',
+          'undici:client:sendHeaders',
+          'undici:request:headers',
+          'undici:request:error',
+        ]) subscribe(name, () => { observed += 1; });
+        const observer = new PerformanceObserver((list) => {
+          observed += list.getEntries().length;
+        });
+        observer.observe({ entryTypes: ['http'] });
         const lookup = dns.lookup;
         dns.lookup = (hostname, options) =>
           hostname === 'localhost.'
@@ -98,6 +119,25 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
           destinationPath: authenticatedPath,
           timeoutMs: 1000,
         });
+        const malformed = new URL(url);
+        malformed.search = '?malformed-fixture-query';
+        await assert.rejects(
+          downloadLimrunFile({
+            url: malformed.href,
+            instance: { apiUrl: url, token: 'private-fixture-bearer' },
+            destinationPath: authenticatedPath + '.malformed',
+            timeoutMs: 1000,
+          }),
+          (error) => {
+            assert.equal(error.details.reason, 'limrun_download_failed');
+            assert.equal(error.details.transport, 'loopback-fetch-failed');
+            assert.doesNotMatch(JSON.stringify(error), /malformed-fixture-query|private-fixture-bearer/);
+            return true;
+          },
+        );
+        await new Promise(setImmediate);
+        observer.disconnect();
+        assert.equal(observed, 0);
       `,
       url.href,
       authenticatedPath,
@@ -105,28 +145,34 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
     {
       cwd: import.meta.dirname,
       env: {
-        NODE_DEBUG: 'http,net,undici,fetch',
+        NODE_DEBUG: 'http,net,undici,fetch,worker',
         NODE_USE_ENV_PROXY: '1',
         HTTP_PROXY: new URL(proxyUrl).origin,
         http_proxy: new URL(proxyUrl).origin,
         no_proxy: '',
       },
-      timeout: 2_000,
+      timeout: 3_000,
     },
   );
 
   expect(originRequests).toEqual([
     { host: url.host, authorization: 'Bearer private-fixture-bearer' },
+    { host: url.host, authorization: 'Bearer private-fixture-bearer' },
   ]);
-  expect(stderr).toMatch(/NET \d+:/);
-  if (envProxySupported) expect(stderr).toContain('new http: agent with proxy config');
-  expect(stderr).not.toContain('private-fixture-bearer');
-  expect(stderr).not.toContain('private-fixture-query');
+  for (const secret of [
+    'private-fixture-bearer',
+    'private-fixture-query',
+    'malformed-fixture-query',
+  ]) {
+    expect(stderr).not.toContain(secret);
+    expect(stderr.replaceAll(/\s/g, '')).not.toContain(Buffer.from(secret).toString('hex'));
+  }
   expect(fs.readFileSync(authenticatedPath, 'utf8')).toBe('instance payload');
+  expect(fs.existsSync(authenticatedPath + '.malformed')).toBe(false);
   expect(proxyRequests).toBe(0);
 });
 
-test('uses the resolver’s IPv6 loopback without falling back to an unlisted IPv4 listener', async (t) => {
+test('falls back only to loopback answers in resolver order', async (t) => {
   const received: string[] = [];
   const url = new URL(
     await serve((_request, response) => {
@@ -174,6 +220,15 @@ test('uses the resolver’s IPv6 loopback without falling back to an unlisted IP
     });
     expect(received).toEqual(['Bearer fixture-token']);
     expect(fs.existsSync(destinationPath)).toBe(false);
+
+    lookup.mockResolvedValue([
+      { address: '127.0.0.2', family: 4 },
+      { address: '127.0.0.1', family: 4 },
+      { address: '::1', family: 6 },
+    ]);
+    await downloadLimrunFile(options);
+    expect(received).toEqual(['Bearer fixture-token', 'ipv4']);
+    expect(fs.readFileSync(destinationPath, 'utf8')).toBe('IPv4');
   } finally {
     lookup.mockRestore();
   }
@@ -181,8 +236,11 @@ test('uses the resolver’s IPv6 loopback without falling back to an unlisted IP
 
 test.each([
   ['gzip', gzipSync],
+  ['gzip', (payload: Buffer) => gzipSync(payload).subarray(0, -8)],
   ['deflate', deflateSync],
+  ['deflate', deflateRawSync],
   ['gzip, br', (payload: Buffer) => brotliCompressSync(gzipSync(payload))],
+  ['compress', (payload: Buffer) => payload],
 ])(
   'decodes %s on an authenticated loopback reply before writing the file',
   async (encoding, compress) => {
@@ -201,6 +259,23 @@ test.each([
     expect(fs.readFileSync(destinationPath)).toEqual(payload);
   },
 );
+
+test('rejects a loopback reply with more than five content codings', async () => {
+  const url = await serve((_request, response) => {
+    response.writeHead(200, { 'content-encoding': 'compress, gzip, gzip, gzip, gzip, gzip' });
+    response.end('fixture payload');
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  await expect(
+    downloadLimrunFile({
+      url,
+      instance: { apiUrl: url, token: 'fixture-token' },
+      destinationPath,
+      timeoutMs: 1000,
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
+  expect(fs.existsSync(destinationPath)).toBe(false);
+});
 
 test('rejects a switching-protocols reply and leaves no file', async () => {
   const url = await serve((_request, response) => {

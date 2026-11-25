@@ -1027,6 +1027,9 @@ importers:
       '@limrun/api':
         specifier: ^0.69.1
         version: 0.69.1(supports-color@7.2.0)
+      undici:
+        specifier: 7.30.1
+        version: 7.30.1
     devDependencies:
       '@agent-device/build-config':
         specifier: workspace:*

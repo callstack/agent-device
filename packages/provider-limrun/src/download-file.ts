@@ -1,8 +1,11 @@
+import type { LookupAddress } from 'node:dns';
+import { addAbortListener, once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Readable, type Transform } from 'node:stream';
+import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
+import type { LoopbackDownloadReply, LoopbackDownloadRequest } from './loopback-download-worker.ts';
 import {
   AppError,
   createRequestCanceledError,
@@ -40,17 +43,12 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
     const { instance } = options;
     const instanceUrl = instance ? await instanceDownloadUrl(instance.apiUrl, options.url) : null;
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    const body =
-      instance && instanceUrl?.protocol === 'http:'
-        ? await openLoopbackDownload(instanceUrl, instance.token, signal)
-        : await openFetchDownload(instanceUrl ?? options.url, instance?.token, signal);
-    if (!body) {
-      throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
-        reason: LIMRUN_DOWNLOAD_REASONS.emptyBody.reason,
-        destination: path.basename(options.destinationPath),
-      });
+    if (instance && instanceUrl?.protocol === 'http:') {
+      await downloadFromLoopback(instanceUrl, instance.token, options.destinationPath, signal);
+    } else {
+      const body = await openFetchDownload(instanceUrl ?? options.url, instance?.token, signal);
+      await writeDownloadBody(body, options.destinationPath, signal);
     }
-    await pipeline([...body, fs.createWriteStream(options.destinationPath)], { signal });
   } catch (error) {
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout, signal);
@@ -61,7 +59,7 @@ async function openFetchDownload(
   url: string | URL,
   token: string | undefined,
   signal: AbortSignal,
-): Promise<Readable[] | null> {
+): Promise<WebReadableStream<Uint8Array> | null> {
   const authenticated = token !== undefined;
   const response = await fetch(url, {
     method: 'GET',
@@ -73,115 +71,90 @@ async function openFetchDownload(
     void response.body?.cancel().catch(() => {});
     throw httpFailure(response.status);
   }
-  return response.body ? [Readable.fromWeb(response.body as WebReadableStream<Uint8Array>)] : null;
+  return response.body as WebReadableStream<Uint8Array> | null;
 }
 
-async function openLoopbackDownload(
+async function downloadFromLoopback(
   url: URL,
   token: string,
+  destinationPath: string,
   signal: AbortSignal,
-): Promise<Readable[] | null> {
-  const [{ request }, { createConnection }, { default: dns }, { isLoopbackUrlHostname }, zlib] =
-    await Promise.all([
-      import('node:http'),
-      import('node:net'),
-      import('node:dns/promises'),
-      import('@agent-device/host-kit/transport'),
-      import('node:zlib'),
-    ]);
+): Promise<void> {
+  const [{ Worker }, { lookup }, { isLoopbackUrlHostname }] = await Promise.all([
+    import('node:worker_threads'),
+    import('node:dns/promises').then(({ default: dns }) => dns),
+    import('@agent-device/host-kit/transport'),
+  ]);
   signal.throwIfAborted();
-  const host = url.hostname.replace(/^\[(.*)\]$/, '$1');
-  const port = Number(url.port || 80);
-  const response = await new Promise<import('node:http').IncomingMessage>((resolve, reject) => {
-    const req = request(
-      {
-        hostname: host,
-        port,
-        path: url.pathname + url.search,
-        headers: {
-          Host: url.host,
-          Authorization: `Bearer ${token}`,
-          'Accept-Encoding': 'gzip, deflate, br',
-        },
-        signal,
-        // Supplying a socket bypasses the global proxy. Socket diagnostics see only dial options.
-        createConnection: () =>
-          createConnection({
-            host,
-            port,
-            autoSelectFamily: true,
-            lookup: (hostname, options, callback) => {
-              void dns.lookup(hostname, { ...options, all: true }).then(
-                (answers) => {
-                  const allowed = answers.filter(({ address }) => isLoopbackUrlHostname(address));
-                  const first = allowed[0];
-                  if (!first) callback(new Error('No loopback address resolved.'), '', 0);
-                  else if (options.all) callback(null, allowed);
-                  else callback(null, first.address, first.family);
-                },
-                (error: NodeJS.ErrnoException) => callback(error, '', 0),
-              );
-            },
-          }),
-      },
-      resolve,
-    );
-    req.once('error', reject);
-    req.once('close', () => reject(new TypeError('Limrun download closed before responding.')));
-    req.end();
+  const hostname = url.hostname.replace(/^\[(.*)\]$/, '$1');
+  const answers = await new Promise<LookupAddress[]>((resolve, reject) => {
+    const onAbort = addAbortListener(signal, () => reject(signal.reason));
+    void lookup(hostname, { all: true, order: 'verbatim' })
+      .then(resolve, reject)
+      .finally(() => {
+        onAbort[Symbol.dispose]();
+      });
   });
-  return readLoopbackBody(response, zlib);
+  const addresses = answers.map(({ address }) => address).filter(isLoopbackUrlHostname);
+  if (addresses.length === 0) throw new Error('No loopback address resolved.');
+  signal.throwIfAborted();
+
+  const fromSource = import.meta.url.endsWith('.ts');
+  const entry = fromSource ? './loopback-download-worker.ts' : './loopback-download-worker.mjs';
+  // Fetch publishes request and response data to its isolate's diagnostics channels.
+  // Keep the host's subscribers, preload hooks, proxy configuration and debug settings out.
+  const worker = new Worker(new URL(entry, import.meta.url), {
+    env: {},
+    execArgv: fromSource ? ['--experimental-strip-types'] : [],
+    stdout: true,
+    stderr: true,
+  });
+  worker.stdout.resume();
+  worker.stderr.resume();
+  const exited = new AbortController();
+  const onWorkerExit = () => exited.abort(new Error('Limrun loopback download worker stopped.'));
+  worker.once('exit', onWorkerExit);
+  worker.on('error', onWorkerExit);
+  const workerSignal = AbortSignal.any([signal, exited.signal]);
+  try {
+    // Node's worker debug logger can print the constructor options.
+    worker.postMessage({ url: url.href, token, addresses } satisfies LoopbackDownloadRequest);
+    const [reply] = (await once(worker, 'message', { signal: workerSignal })) as [
+      LoopbackDownloadReply,
+    ];
+    signal.throwIfAborted();
+    if ('failed' in reply) {
+      throw new AppError('COMMAND_FAILED', 'Limrun download failed', {
+        reason: LIMRUN_DOWNLOAD_REASONS.failed.reason,
+        transport: 'loopback-fetch-failed',
+      });
+    }
+    const { status, body } = reply;
+    if ([301, 302, 303, 307, 308].includes(status)) {
+      throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download redirect.', {
+        reason: LIMRUN_DOWNLOAD_REASONS.redirectBlocked.reason,
+        statusCode: status,
+      });
+    }
+    if (status < 200 || status >= 300) throw httpFailure(status);
+    await writeDownloadBody(body, destinationPath, workerSignal);
+  } finally {
+    await worker.terminate();
+  }
 }
 
-function readLoopbackBody(
-  response: import('node:http').IncomingMessage,
-  zlib: typeof import('node:zlib'),
-): Readable[] | null {
-  const status = response.statusCode ?? 500;
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    response.destroy();
-    throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download redirect.', {
-      reason: LIMRUN_DOWNLOAD_REASONS.redirectBlocked.reason,
-      statusCode: status,
+async function writeDownloadBody(
+  body: WebReadableStream<Uint8Array> | null | undefined,
+  destinationPath: string,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!body) {
+    throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
+      reason: LIMRUN_DOWNLOAD_REASONS.emptyBody.reason,
+      destination: path.basename(destinationPath),
     });
   }
-  if (status < 200 || status >= 300) {
-    response.destroy();
-    throw httpFailure(status);
-  }
-  if (status === 204 || status === 205) {
-    response.destroy();
-    return null;
-  }
-
-  const encoding = response.headers['content-encoding'];
-  if (!encoding) return [response];
-  const { createGunzip, createInflate, createBrotliDecompress, createZstdDecompress } = zlib;
-  const decoders = new Map<string, (() => Transform) | undefined>([
-    ['gzip', createGunzip],
-    ['x-gzip', createGunzip],
-    ['deflate', createInflate],
-    ['br', createBrotliDecompress],
-    ['zstd', createZstdDecompress],
-  ]);
-  const codings = encoding
-    .toLowerCase()
-    .split(',')
-    .map((coding) => coding.trim());
-  if (
-    codings.length > 5 ||
-    codings.some((coding) => coding !== 'identity' && !decoders.get(coding))
-  ) {
-    response.destroy();
-    throw new TypeError('Limrun returned an unsupported content encoding.');
-  }
-  return [
-    response,
-    ...codings.reverse().flatMap((coding) => {
-      const decoder = decoders.get(coding);
-      return decoder ? [decoder()] : [];
-    }),
-  ];
+  await pipeline(Readable.fromWeb(body), fs.createWriteStream(destinationPath), { signal });
 }
 
 async function instanceDownloadUrl(apiUrl: string, value: string): Promise<URL> {

@@ -9,7 +9,7 @@ export const primaryExport = {
 };
 export const additionalExports = { './package.json': './package.json' };
 // The Limrun SDK is the plugin's own dependency, so a user can update it without a core release.
-export const dependencies = { '@limrun/api': '^0.69.1' };
+export const dependencies = { '@limrun/api': '^0.69.1', undici: '7.30.1' };
 export const args = ['--platform', 'android'];
 export const fetchRedirects = ['https://api.limrun.com'];
 
