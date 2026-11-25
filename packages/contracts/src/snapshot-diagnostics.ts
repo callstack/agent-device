@@ -1,6 +1,6 @@
 import type { SnapshotBackend, SnapshotProvenance } from '@agent-device/contracts/snapshot-model';
 import type { PublicPlatform } from '@agent-device/kernel/device';
-import { isRecord } from './json.ts';
+import { isRecord } from '@agent-device/kernel/record';
 
 /**
  * The public platforms, keyed against the kernel union so a platform added there without a key here
