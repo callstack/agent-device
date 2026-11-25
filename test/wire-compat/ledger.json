@@ -71,7 +71,7 @@
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:96a79a8ff5a078916ee7bffed1d9624d0ba9c0dcbd8e2c55f9abf37fccfef744",
     "packages/daemon-client/src/daemon-client-transport.ts#isHealthService": "sha256:ffd2c774e0efca5e5d2b01f9d37fe9b76aaf5e7569e07d9208fe667473771c10",
-    "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:d018b3dcf6f39e597cdd2cfa81c5ee236cee24f52a93c3643f9c63df08cf751d",
+    "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:daa6e91f50fe154f1779e53432d8ae85fbb317df1b09ada4234a8e87a8d6288f",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:c4f638b4df43f572e105b6f8df578fe90ebf64cb56002e4d029a109bdbc167d1",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthVersion": "sha256:856bd74aa8b2f205b6b30855755f16391015bffc1b6a323f618b51c26e749bfd",
@@ -166,7 +166,7 @@
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
-    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:7050260a34fb2382d173b47697fc6fb3fa08710c5c9cc9e534a2837305f8b0a6",
+    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:5ed629637b404551a0a0fbe69ebeaf486c83175ed18d39661cf061ba5597b7f7",
     "packages/remote/src/remote-request-diagnostics.ts#localizeRemoteDaemonError": "sha256:2c41ead5811875c1bebb644cf2b4e7613dcaee03b3f4d97a2dca3678a65fa384",
     "packages/remote/src/upload-client-artifact.ts#PreparedUploadArtifact": "sha256:5c40027d47feda3c946e836372b9f08ad866ab1612708b0d506551545f931ea4",
     "packages/remote/src/upload-client.ts#ARTIFACT_HASH_ALGORITHM": "sha256:328c135ea5f9d89fd2c142b440d5402a61d19f9044bf0504dfc2c525e58c1909",
@@ -440,8 +440,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth",
-      "digest": "sha256:d018b3dcf6f39e597cdd2cfa81c5ee236cee24f52a93c3643f9c63df08cf751d",
-      "rationale": "The health-probe budget includes requester loading and response completion. The caller AbortSignal joins the probe timer only in-process; caller cancellation remains distinct from probe expiry. No signal, timedOut flag, request route, auth header or accepted health payload field changes on the wire, so released daemons and proxies parse and respond as before (ADR 0006). Client-only admission guards the actual health request handoff. The GET path, auth headers, response statuses and health payload accepted from existing peers are unchanged."
+      "digest": "sha256:daa6e91f50fe154f1779e53432d8ae85fbb317df1b09ada4234a8e87a8d6288f",
+      "rationale": "The health-probe budget includes requester loading and response completion. The caller AbortSignal joins the probe timer only in-process; caller cancellation remains distinct from probe expiry. No signal, timedOut flag, request route, auth header or accepted health payload field changes on the wire, so released daemons and proxies parse and respond as before (ADR 0006). Client-only admission guards the actual health request handoff. The GET path, auth headers, response statuses and health payload accepted from existing peers are unchanged. The client deadline now bounds admission as well as the request. HTTP messages stay the same."
     },
     {
       "declaration": "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint",
@@ -450,8 +450,8 @@
     },
     {
       "declaration": "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics",
-      "digest": "sha256:7050260a34fb2382d173b47697fc6fb3fa08710c5c9cc9e534a2837305f8b0a6",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). The client admits the diagnostics GET at send time, then receives and writes its body after release. The HTTP request and error framing are unchanged."
+      "digest": "sha256:5ed629637b404551a0a0fbe69ebeaf486c83175ed18d39661cf061ba5597b7f7",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). The client admits the diagnostics GET at send time, then receives and writes its body after release. The HTTP request and error framing are unchanged. The client deadline now bounds admission as well as the request. HTTP messages stay the same."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#uploadDirectArtifact",
