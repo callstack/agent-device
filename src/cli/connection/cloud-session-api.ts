@@ -4,6 +4,11 @@ import { sleep } from '@agent-device/host-kit/retry';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
+  isCredentialEndpoint,
+  parseDaemonAttachment,
+  type CloudAttachment,
+} from './cloud-attachment-schema.ts';
+import {
   asCloudRecord,
   containsCloudCredential,
   cloudUrlContainsCredential,
@@ -24,12 +29,6 @@ const CLOUD_SESSION_API_REASONS = {
 } as const satisfies ReasonTable<'cloud sessions'>;
 
 type CloudAccess = { cloudBaseUrl: string; accessToken: string };
-
-export type CloudAttachment = {
-  kind: 'agent-device-daemon';
-  daemonBaseUrl: string;
-  daemonAuthToken: string;
-};
 
 export type CreatedCloudSession = {
   binding: Omit<CloudSessionBinding, 'generation'>;
@@ -529,25 +528,8 @@ function isPublicCatalogId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z0-9][a-z0-9_-]{0,127}$/i.test(value);
 }
 
-export function parseCloudAttachment(value: unknown): CloudAttachment | undefined {
-  const entry = asCloudRecord(value);
-  return entry?.kind === 'agent-device-daemon' ? parseDaemonAttachment(entry) : undefined;
-}
-
-function parseDaemonAttachment(entry: Record<string, unknown> | undefined) {
-  const { daemonBaseUrl, daemonAuthToken } = entry ?? {};
-  if (isCredentialEndpoint(daemonBaseUrl) && isCloudText(daemonAuthToken)) {
-    return { kind: 'agent-device-daemon' as const, daemonBaseUrl, daemonAuthToken };
-  }
-  return undefined;
-}
-
 function invalidSession(): AppError {
   return new AppError('COMMAND_FAILED', 'Cloud session API returned an invalid session.', {
     reason: CLOUD_SESSION_API_REASONS.invalidSession.reason,
   });
-}
-
-function isCredentialEndpoint(value: unknown): value is string {
-  return typeof value === 'string' && !!parseCloudEndpoint(value, 'https:', 'http:');
 }
