@@ -7,7 +7,7 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { withConnectionLock } from './cloud-connection-record.ts';
+import { tryWithConnectionLock } from './cloud-connection-record.ts';
 import { declaredConnectionCapabilities } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 
@@ -31,8 +31,9 @@ export async function forgetEndedConnectionLease(
     env: host.env,
   }).baseDir;
   const session = flags.session ?? 'default';
-  await withConnectionLock(stateDir, session, async () => {
-    const state = readRemoteConnectionState({ stateDir, session });
+  const location = { stateDir, session };
+  await tryWithConnectionLock(location, () => {
+    const state = readRemoteConnectionState(location);
     if (state?.cloudSession?.generation !== cloudGeneration) return;
     if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
     if (isHostAllocatedLease(state)) return;

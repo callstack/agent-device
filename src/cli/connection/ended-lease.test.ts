@@ -2,6 +2,7 @@ import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/te
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test, vi } from 'vitest';
+import * as hostFiles from '@agent-device/host-kit/file';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   connectionWorkspace,
@@ -12,6 +13,7 @@ import { readRemoteConnectionState } from '@agent-device/remote/remote-connectio
 import { createAgentDeviceClient } from '@agent-device/client';
 import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
 import { forgetEndedConnectionLease } from './ended-lease.ts';
+import { withConnectionLock } from './cloud-connection-record.ts';
 import { primeProviderConnection } from './provider-policy.ts';
 
 vi.mock('@agent-device/plugins/store', async (importOriginal) =>
@@ -25,10 +27,7 @@ bindTestCommandHost();
 const LEASE_ID = 'abc123abc123abc1';
 const ENDED = [{ leaseId: LEASE_ID, outcome: 'released' }] as const;
 
-async function endLeaseOnConnection(
-  response: DaemonResponse,
-  overrides: Partial<StoredConnectionSeed> = {},
-) {
+function seedEndedLeaseConnection(overrides: Partial<StoredConnectionSeed> = {}) {
   const { stateDir, remoteConfigPath } = connectionWorkspace('agent-device-ended-lease-');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
   seedConnectionState({
@@ -45,7 +44,7 @@ async function endLeaseOnConnection(
       ...overrides,
     },
   });
-  const flags = {
+  return {
     json: true,
     help: false,
     version: false,
@@ -53,8 +52,15 @@ async function endLeaseOnConnection(
     remoteConfig: remoteConfigPath,
     session: 'adc-proxy',
   };
+}
+
+async function endLeaseOnConnection(
+  response: DaemonResponse,
+  overrides: Partial<StoredConnectionSeed> = {},
+) {
+  const flags = seedEndedLeaseConnection(overrides);
   await forgetEndedConnectionLease(flags, response, createTestHostEnvironment());
-  return { flags, state: readRemoteConnectionState({ stateDir, session: 'adc-proxy' }) };
+  return { flags, state: readRemoteConnectionState(flags) };
 }
 
 async function storedStateAfter(
@@ -84,6 +90,26 @@ test('an ended lease is forgotten from a reply or its error details', async () =
     assert.equal(stored?.leaseId, undefined);
     assert.equal(stored?.endedLeaseId, LEASE_ID);
   }
+});
+
+test('an ended lease reply completes without updating a locked connection', async () => {
+  const flags = seedEndedLeaseConnection();
+  const host = createTestHostEnvironment();
+  const reply: DaemonResponse = { ok: true, data: { endedLeases: [...ENDED] } };
+  const acquire = hostFiles.acquireProcessLock;
+  await withConnectionLock(flags.stateDir, flags.session, async () => {
+    const bounded = vi
+      .spyOn(hostFiles, 'acquireProcessLock')
+      .mockImplementation((options) => acquire({ ...options, timeoutMs: 0 }));
+    try {
+      await forgetEndedConnectionLease(flags, reply, host);
+      assert.equal(readRemoteConnectionState(flags)?.leaseId, LEASE_ID);
+    } finally {
+      bounded.mockRestore();
+    }
+  });
+  await forgetEndedConnectionLease(flags, reply, host);
+  assert.equal(readRemoteConnectionState(flags)?.endedLeaseId, LEASE_ID);
 });
 
 test('the stored lease stays unless the reply ends that lease at response level', async () => {

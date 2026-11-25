@@ -77,6 +77,18 @@ export async function withConnectionLock<T>(
   });
 }
 
+export async function tryWithConnectionLock(
+  location: ConnectionLocation,
+  task: () => Promise<void> | void,
+): Promise<void> {
+  const lock = tryAcquireProcessLock(connectionLockOptions(location));
+  if (lock.status !== 'acquired') return;
+  await withProcessLock({
+    acquire: async () => lock.acquisition.release,
+    task: async () => await task(),
+  });
+}
+
 export function refuseContendedConnection(
   location: ConnectionLocation,
   command: 'connect' | 'disconnect',
@@ -302,14 +314,9 @@ export async function cleanExpiredCloudAttachments(stateDir: string): Promise<vo
     if (!entry.isDirectory()) continue;
     const location = readExpiredAttachmentLocation(stateDir, path.join(root, entry.name));
     if (!location) continue;
-    const lock = tryAcquireProcessLock(connectionLockOptions(location));
-    if (lock.status !== 'acquired') continue;
-    await withProcessLock({
-      acquire: async () => lock.acquisition.release,
-      task: async () => {
-        const current = readCloudConnection(location);
-        if (current && isExpired(current)) removeCloudAttachment(location);
-      },
+    await tryWithConnectionLock(location, () => {
+      const current = readCloudConnection(location);
+      if (current && isExpired(current)) removeCloudAttachment(location);
     });
   }
 }
