@@ -23,9 +23,6 @@ importers:
 
   .:
     devDependencies:
-      '@agent-device/build-config':
-        specifier: workspace:*
-        version: link:packages/build-config
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:packages/ad-script
@@ -38,6 +35,9 @@ importers:
       '@agent-device/browserstack':
         specifier: workspace:*
         version: link:packages/provider-browserstack
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:packages/build-config
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:packages/capture-kit
