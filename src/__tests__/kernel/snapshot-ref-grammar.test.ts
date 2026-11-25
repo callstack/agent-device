@@ -64,12 +64,31 @@ test('splitRecordedRefGenerationSuffix also accepts the retired `~s` spelling', 
 });
 
 test('isRefToken recognizes every ref spelling and rejects text', () => {
-  for (const token of ['@e12', '@e12-s3', '@e12-s', '@e12~s3', '@e12~', ' @e12 ']) {
+  for (const token of ['@e12', '@e12-s3', '@e12-s', '@e12~s3', '@e12~', '@e12-sales', ' @e12 ']) {
     expect(isRefToken(token), token).toBe(true);
   }
-  for (const token of ['@e12-sales', '@e', 'label=@e1', 'Email field', '-s3', '']) {
+  for (const token of ['@e', 'label=@e1', 'Email field', '-s3', '']) {
     expect(isRefToken(token), token).toBe(false);
   }
+});
+
+test('ref grammar stays linear on an adversarial ref-shaped token', () => {
+  // A pasted argument that starts like a pin and repeats the digit run for a long tail is
+  // still just one rejected token. A pattern here that backtracks over the run turns one
+  // argument into a daemon stall, so the reads must stay linear in its length.
+  const adversarial = [
+    `@e0-s${'0'.repeat(100_000)}!`,
+    `@e${'0'.repeat(100_000)}-s${'9'.repeat(100_000)}x`,
+    `@e0~s${'0'.repeat(100_000)}x`,
+  ];
+  const startedAt = performance.now();
+  for (const token of adversarial) {
+    expect(splitRefGenerationSuffix(token)).toBeNull();
+    expect(splitRecordedRefGenerationSuffix(token)).toBeNull();
+    expect(isRefToken(token)).toBe(true);
+    expect(retiredRefPinRefusal(token)).toBeNull();
+  }
+  expect(performance.now() - startedAt).toBeLessThan(1000);
 });
 
 test('retiredRefPinRefusal names the current spelling and the exact fix', () => {

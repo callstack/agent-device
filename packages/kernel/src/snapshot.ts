@@ -814,35 +814,29 @@ const REF_SHAPED_RE = /^@?e\d/;
 /** Either pin separator, current or retired: present means the token is a pin attempt. */
 const PIN_MARKER_RE = /~|-s/;
 
-/** Well-formed ref token, `@`-prefixed: the shape a frame issues. */
-const REF_TOKEN_RE = /^@e\d+$/;
-
-/** A ref-shaped token spelling its pin with the retired separator. */
-const RETIRED_PIN_RE = /^@?e\d+~/;
-
-/** A ref-shaped token carrying a `-s` pin that is not well formed: `@e12-s`, `@e12-s3x`. */
-const MALFORMED_CURRENT_PIN_RE = /^@?e\d+(?:-s|-s\d+\w+)$/;
+/** A plain ref token, with or without its `@`: the shape a frame issues. */
+const PLAIN_REF_TOKEN_RE = /^@?e\d+$/;
 
 /**
- * Whether a token can only be a ref: a plain or pinned ref (`@e12`, `@e12-s3`), or a
- * ref-shaped token whose pin is malformed (`@e12-s`) or retired (`@e12~s3`). A surface
- * that reads one ref beside free text uses this to refuse a second ref rather than
- * reading it as trailing text, so the retired spelling is never dropped as a label.
- * Input that must also *resolve* the ref goes through `splitRefGenerationSuffix`, which
- * names the grammar. Text that only looks ref-shaped (`@e12-sales`) is not a ref here,
- * matching the split readers.
+ * Whether a token can only be a ref: a plain ref (`@e12`), a pinned ref (`@e12-s3`), or a
+ * ref-shaped token whose pin the grammar rejects (`@e12-s`, `@e12~s3`, `@e12-sales`). All
+ * three are pin attempts, so a surface that reads one ref beside free text refuses them
+ * instead of reading the second positional as trailing text — the retired spelling can
+ * then never be dropped as a fallback label. Input that must also *resolve* the ref goes
+ * through `splitRefGenerationSuffix`, which names the grammar. A token that is not
+ * ref-shaped is never a ref here. Linear in the token's length: it adds no pattern of its
+ * own beyond the anchored ones the split readers use.
  */
 export function isRefToken(input: string): boolean {
   const trimmed = input.trim();
   if (!REF_SHAPED_RE.test(trimmed)) return false;
-  if (RETIRED_PIN_RE.test(trimmed) || MALFORMED_CURRENT_PIN_RE.test(trimmed)) return true;
   const split = splitRefGenerationSuffix(trimmed);
-  if (split === null) return false;
-  return REF_TOKEN_RE.test(split.base);
+  if (split === null) return true;
+  return PLAIN_REF_TOKEN_RE.test(split.base);
 }
 
-/** Says what a retired pin becomes, shared by every live-input refusal. */
-export const REF_RETIRED_PIN_HINT =
+/** Says what a retired pin becomes; part of every live-input refusal of the form. */
+const REF_RETIRED_PIN_HINT =
   'The generation pin separator is "-s" (@e12-s3). The retired "~s" spelling is read only when a saved .ad script replays.';
 
 /**
