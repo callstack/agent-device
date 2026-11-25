@@ -340,10 +340,15 @@ export async function withCloudConnectionOwner<T>(
   generation: string | undefined,
   task: () => Promise<T> | T,
 ): Promise<T> {
-  return await withConnectionLock(location.stateDir, location.session, async () => {
-    assertCloudConnectionOwner(location, generation);
-    return await task();
-  });
+  return await withConnectionLock(
+    location.stateDir,
+    location.session,
+    async () => {
+      assertCloudConnectionOwner(location, generation);
+      return await task();
+    },
+    generation === undefined ? () => assertCloudConnectionOwner(location, undefined) : undefined,
+  );
 }
 
 export function cloudConnectionUnavailable(

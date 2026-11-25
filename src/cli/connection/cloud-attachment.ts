@@ -122,17 +122,15 @@ export async function protectHostedDaemonTransport(
     new AppError('COMMAND_FAILED', 'The hosted daemon returned an invalid response.');
   return async (request, options) => {
     const onProgress = options?.onProgress;
-    const response = await transport(
-      request,
-      onProgress
-        ? {
-            ...options,
-            onProgress: (event) => {
-              if (safe(event)) onProgress(event);
-            },
-          }
-        : options,
-    ).catch((error: unknown) => {
+    const response = await transport(request, {
+      ...options,
+      skipRemoteDiagnostics: true,
+      onProgress:
+        onProgress &&
+        ((event) => {
+          if (safe(event)) onProgress(event);
+        }),
+    }).catch((error: unknown) => {
       if (!safe(normalizeError(error))) throw rejectEcho();
       throw error;
     });

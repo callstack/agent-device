@@ -16,6 +16,23 @@ import {
 
 bindTestCommandHost();
 
+test('non-interactive hosted access names the hosted key and custom issuer', async () => {
+  await assert.rejects(
+    resolveHostedCloudAccess({
+      stateDir: mkdtempForTestSync('hosted-ci-auth-'),
+      interactive: true,
+      env: { CI: 'true', AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
+    }),
+    (error: unknown) => {
+      const result = normalizeError(error);
+      assert.match(result.hint ?? '', /AGENT_DEVICE_CLOUD_API_KEY/);
+      assert.match(result.hint ?? '', /AGENT_DEVICE_CLOUD_API_KEY_ORIGIN/);
+      assert.doesNotMatch(result.hint ?? '', /AGENT_DEVICE_DAEMON_AUTH_TOKEN/);
+      return true;
+    },
+  );
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

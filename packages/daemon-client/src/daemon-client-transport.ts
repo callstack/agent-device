@@ -44,6 +44,7 @@ type SendRequestOptions = {
   host: HostEnvironment;
   onProgress?: RequestProgressSink;
   dispatch?: DaemonDispatch;
+  skipRemoteDiagnostics?: boolean;
   /** Caller cancellation refuses an unsent request or destroys its in-flight connection. */
   signal?: AbortSignal;
   /**
@@ -863,6 +864,7 @@ async function sendHttpRequest(
         stateDir: statePaths.baseDir,
         host: options.host,
         dispatch: options.dispatch,
+        skipRemoteDiagnostics: options.skipRemoteDiagnostics,
         resolve: resolveOnce,
         reject: rejectOnce,
       });

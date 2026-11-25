@@ -191,6 +191,7 @@ async function sendToDaemonOnHost(
                 signal: options.signal,
                 timeoutRecovery: resolveTimeoutRecovery(settings),
                 dispatch: options.dispatch,
+                skipRemoteDiagnostics: options.skipRemoteDiagnostics,
               },
             );
           if (!info.baseUrl || !request.meta?.clientArtifactPaths?.savedScript)

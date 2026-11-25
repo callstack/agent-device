@@ -817,7 +817,7 @@ function unusableDeviceAuthStartResponse(field: UnusableDeviceAuthStartField): A
   });
 }
 
-function detectAuthMode(
+export function detectAuthMode(
   env: EnvMap,
   io?: AuthIo,
 ): 'local-browser' | 'device-code' | 'non-interactive' {

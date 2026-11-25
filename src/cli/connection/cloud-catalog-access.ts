@@ -51,6 +51,6 @@ export async function resolveCloudCatalogAccess(options: {
 export function cloudApiKeyRequired(): AppError {
   return new AppError('UNAUTHORIZED', 'A cloud API key or CLI login is required.', {
     reason: CLOUD_CATALOG_REASONS.apiKeyRequired.reason,
-    hint: 'Run agent-device auth login or set AGENT_DEVICE_CLOUD_API_KEY for this origin.',
+    hint: 'Run agent-device auth login or set AGENT_DEVICE_CLOUD_API_KEY. For a custom origin, also set AGENT_DEVICE_CLOUD_API_KEY_ORIGIN.',
   });
 }

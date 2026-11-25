@@ -14,6 +14,10 @@ import {
   withConnectionLock,
 } from '../connection/cloud-connection-record.ts';
 import { connectCloudSession, releaseCloudConnection } from '../connection/cloud-connect.ts';
+import {
+  isLegacyCloudProfile,
+  requireLegacyTeardownCredential,
+} from '../connection/active-connection.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -558,11 +562,48 @@ export const disconnectCommand: ClientCommandHandler = async ({
         return true;
       }
       requireLeasedConnectionSession(state, flags.session);
+      if (isLegacyCloudProfile(stateDir, state.remoteConfigPath)) {
+        if (
+          !current ||
+          current.leaseId !== state.leaseId ||
+          current.tenant !== state.tenant ||
+          current.runId !== state.runId ||
+          current.remoteConfigPath !== state.remoteConfigPath ||
+          !remoteConnectionLeaseIdentityMatches(current, state)
+        ) {
+          throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
+        }
+        await disconnectLegacyCloud(flags, client, stateDir, current);
+        return true;
+      }
       return await disconnectProvider(flags, client, stateDir, state);
     },
     () => refuseContendedCloudAllocation(location),
   );
 };
+
+async function disconnectLegacyCloud(
+  flags: CliFlags,
+  client: ConnectionCommandParams['client'],
+  stateDir: string,
+  state: RemoteConnectionState,
+): Promise<void> {
+  const token = requireLegacyTeardownCredential(state, flags);
+  try {
+    if (!(await releaseRemoteConnectionLease(client, state, token)).released) {
+      throw new AppError('COMMAND_FAILED', 'The saved daemon did not confirm lease release.');
+    }
+  } catch (error) {
+    if (!isInactiveLeaseError(error)) throw error;
+  }
+  removeRemoteConnectionState({ stateDir, session: state.session });
+  removeGeneratedRemoteConfigIfUnused({ stateDir, remoteConfigPath: state.remoteConfigPath });
+  await writeCommandOutput(
+    flags,
+    { connected: false, session: state.session, released: true },
+    () => `Ended cloud session "${state.session}".`,
+  );
+}
 
 async function disconnectCloud(connection: CloudConnection, flags: CliFlags): Promise<boolean> {
   if (flags.session === undefined) throw remoteSessionRequiredError(undefined);

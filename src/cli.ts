@@ -411,6 +411,11 @@ async function resolveRunContextOrExit(
       session: effectiveFlags.session ?? flags.session,
       binding: cloudSession,
       remoteConfig: effectiveFlags.remoteConfig,
+      remoteRoute: [
+        defaults,
+        effectiveFlags.daemonBaseUrl,
+        base.host.env.AGENT_DEVICE_DAEMON_BASE_URL,
+      ].some(Boolean),
     });
     return {
       ...base,

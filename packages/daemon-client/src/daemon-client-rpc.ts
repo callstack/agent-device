@@ -34,6 +34,7 @@ export function handleDaemonHttpResponseBody(
     stateDir: string;
     host: HostEnvironment;
     dispatch?: DaemonDispatch;
+    skipRemoteDiagnostics?: boolean;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
@@ -42,7 +43,7 @@ export function handleDaemonHttpResponseBody(
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, dispatch, reject });
+      void rejectDaemonHttpRpcError(parsed.error, options);
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -101,28 +102,35 @@ async function rejectDaemonHttpRpcError(
     req: DaemonWireRequest;
     stateDir: string;
     dispatch?: DaemonDispatch;
+    skipRemoteDiagnostics?: boolean;
     reject: (error: unknown) => void;
   },
 ): Promise<void> {
   const { info, req, stateDir, dispatch, reject } = options;
   const requestId = req.meta?.requestId;
   const payload = toDaemonHttpRpcError(error);
+  if (options.skipRemoteDiagnostics) {
+    payload.logPath = undefined;
+    payload.diagnosticsRecord = undefined;
+  }
   if (!info.baseUrl) {
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
   const baseUrl = info.baseUrl;
   const hydrate = async () => {
-    const localized = await localizeRemoteDaemonError(payload, {
-      endpoint: {
-        baseUrl,
-        token: info.token,
-        tenantId: req.meta?.tenantId,
-        leaseId: leaseScopeFromRequest(req).leaseId,
-      },
-      stateDir,
-      requestId,
-    });
+    const localized = options.skipRemoteDiagnostics
+      ? payload
+      : await localizeRemoteDaemonError(payload, {
+          endpoint: {
+            baseUrl,
+            token: info.token,
+            tenantId: req.meta?.tenantId,
+            leaseId: leaseScopeFromRequest(req).leaseId,
+          },
+          stateDir,
+          requestId,
+        });
     return await settleFailedDeliveryReceipt(info, req, stateDir, localized);
   };
   const mayDownload = payload.diagnosticsRecord || payload.details?.scriptDeliveryReceipt;

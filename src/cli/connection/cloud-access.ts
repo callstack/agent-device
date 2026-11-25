@@ -3,6 +3,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   DEFAULT_CLOUD_BASE_URL,
+  detectAuthMode,
   loginWithDeviceAuth,
   resolveCliSessionAccess,
 } from '../auth-session.ts';
@@ -36,7 +37,12 @@ export async function resolveHostedCloudAccess(options: {
     !!(savedOrigin || options.flags),
   );
   if (access) return { ...access, cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl) };
-  if (!options.interactive || options.flags?.noLogin) throw cloudApiKeyRequired();
+  if (
+    !options.interactive ||
+    options.flags?.noLogin ||
+    detectAuthMode(authEnv) === 'non-interactive'
+  )
+    throw cloudApiKeyRequired();
   const login = await loginWithDeviceAuth({
     env: authEnv,
     stateDir,

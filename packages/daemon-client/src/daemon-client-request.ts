@@ -11,6 +11,7 @@ export type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
   onProgress?: RequestProgressSink;
   /** Runs the synchronous request handoff while the caller's admission is held. */
   dispatch?: DaemonDispatch;
+  skipRemoteDiagnostics?: boolean;
 };
 
 /** What a client sends one daemon request through. */

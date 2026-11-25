@@ -60,9 +60,9 @@
     "packages/daemon-client/src/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:27ac0a5299324aab39fa2c4fe0e0d32b1eb1515df47c7f4aa75a75d66b8b5a3e",
     "packages/daemon-client/src/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
     "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
-    "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:70c481f53a1c58a4c46a58a0749df806e77a077a2c3b2454f89319a4b8a42df3",
+    "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:132d64d1b49c766b59b7f5c50f2a1fce666f32df907847501dee3c5455f821b3",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:039f8f733a67189e91c81f549640abc95e7024c2b20235e31f74059254dcd4da",
+    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:f76eb74e328cb1ff10b4addad20e86ee8073381bfdf21103059a9c42323f4b83",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:3057dc5d5a54c6f59af1a457f538eda1635e8b70f75013f8d232efab53286108",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_SERVICES": "sha256:3e9d09c1e78adf1d537aa22053e2dee7d35a33d37942721701476a0c06dff52b",
@@ -488,8 +488,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
-      "digest": "sha256:70c481f53a1c58a4c46a58a0749df806e77a077a2c3b2454f89319a4b8a42df3",
-      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): the two invalid-response rejections also gain details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; nothing is sent or read differently. #4511 (client-side only): the success branch passes the client state directory along with the host, so remote artifact materialization can read the client's own record of a remote recording's destination. Nothing is sent or parsed differently. Its two invalid-response rejections now read details.reason from DAEMON_TRANSPORT_REASONS instead of a literal in this declaration, so only the identifier expression moved; the value published is the identical string and nothing a peer sends or parses moves. Client-local admission is forwarded to response handlers that may fetch artifacts. RPC response parsing and the accepted success and error envelopes are unchanged."
+      "digest": "sha256:132d64d1b49c766b59b7f5c50f2a1fce666f32df907847501dee3c5455f821b3",
+      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): the two invalid-response rejections also gain details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; nothing is sent or read differently. #4511 (client-side only): the success branch passes the client state directory along with the host, so remote artifact materialization can read the client's own record of a remote recording's destination. Nothing is sent or parsed differently. Its two invalid-response rejections now read details.reason from DAEMON_TRANSPORT_REASONS instead of a literal in this declaration, so only the identifier expression moved; the value published is the identical string and nothing a peer sends or parses moves. Client-local admission is forwarded to response handlers that may fetch artifacts. RPC response parsing and the accepted success and error envelopes are unchanged. Hosted callers can suppress remote diagnostic localization through a client-local option. Accepted response framing and all transmitted RPC fields are unchanged."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult",
@@ -683,8 +683,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
-      "digest": "sha256:039f8f733a67189e91c81f549640abc95e7024c2b20235e31f74059254dcd4da",
-      "rationale": "Admission controls client-side artifact and diagnostics requests after an error. The remote error projection consumes the same fields and does not require a new field from the peer."
+      "digest": "sha256:f76eb74e328cb1ff10b4addad20e86ee8073381bfdf21103059a9c42323f4b83",
+      "rationale": "Admission controls client-side artifact and diagnostics requests after an error. The remote error projection consumes the same fields and does not require a new field from the peer. Hosted callers can suppress remote diagnostic localization through a client-local option. Accepted response framing and all transmitted RPC fields are unchanged."
     }
   ]
 }

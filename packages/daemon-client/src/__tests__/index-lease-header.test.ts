@@ -129,6 +129,7 @@ async function sendRemote(
     flags?: Record<string, unknown>;
   },
   leaseId: string | undefined,
+  skipRemoteDiagnostics?: boolean,
 ): Promise<void> {
   await sendToDaemon(
     {
@@ -146,12 +147,20 @@ async function sendRemote(
         ...(leaseId ? { leaseId } : {}),
       },
     } as Parameters<typeof sendToDaemon>[0],
-    { authToken: DAEMON_TOKEN },
+    { authToken: DAEMON_TOKEN, skipRemoteDiagnostics },
   ).catch((error: unknown) => {
     // `clipboard` fails on purpose; only its diagnostics fetch is under test.
     if (request.command !== 'clipboard') throw error;
   });
 }
+
+test('hosted RPC errors never request the peer diagnostic record', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  await withRemoteDaemon(async (baseUrl, seen) => {
+    await sendRemote(baseUrl, { command: 'clipboard', positionals: ['read'] }, 'lease-1', true);
+    assert.deepEqual(seen, []);
+  });
+});
 
 async function runEveryRequestKind(leaseId: string | undefined): Promise<SeenRequest[]> {
   let observed: SeenRequest[] = [];
