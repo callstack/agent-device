@@ -258,6 +258,35 @@ test('grant all stops at a failure that is not a refusal', async () => {
   expect(failed.details).toEqual({ stderr: 'Invalid device: booted', permissions: ['calendar'] });
 });
 
+test.for(['grant', 'deny', 'reset'])(
+  '%s notifications refuses before resolving the app or running simctl',
+  async (state) => {
+    const runSimctl = recordingRunner([refusal('Failed to set access')]);
+    const resolveApp = vi.fn(async (app: string) => app);
+
+    const error = await appErrorFrom(
+      applySimctlSetting(
+        request(runSimctl, {
+          setting: 'permission',
+          state,
+          appBundleId: 'com.example.app',
+          resolveApp,
+          options: { permissionTarget: 'notifications' },
+        }),
+      ),
+    );
+
+    expect(runSimctl).not.toHaveBeenCalled();
+    expect(resolveApp).not.toHaveBeenCalled();
+    expect(error).toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'ios-notification-permission-unsupported' },
+    });
+    expect(error.details?.hint).toContain('alert accept');
+    expect(error.details?.hint).toContain('alert dismiss');
+  },
+);
+
 test('a privacy service the runtime refuses is unsupported; other failures pass through', async () => {
   const refused = new AppError('COMMAND_FAILED', 'simctl exited with code 1', {
     stderr: 'Failed to grant access to com.example.app\nOperation not permitted',
@@ -270,13 +299,13 @@ test('a privacy service the runtime refuses is unsupported; other failures pass 
     setting: 'permission',
     state: 'grant',
     appBundleId: 'com.example.app',
-    options: { permissionTarget: 'notifications' },
+    options: { permissionTarget: 'camera' },
   });
 
   await expect(applySimctlSetting(grant)).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     message:
-      'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
+      'iOS simulator does not support setting camera permission via simctl privacy on this runtime.',
     details: { deviceId: 'SIM-1', appBundleId: 'com.example.app' },
     cause: refused,
   });
@@ -297,25 +326,23 @@ test('a refused privacy service reports the device id the caller names, not the 
         setting: 'permission',
         state: 'grant',
         appBundleId: 'com.example.app',
-        options: { permissionTarget: 'notifications' },
+        options: { permissionTarget: 'camera' },
       }),
     ),
   ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: { deviceId: 'limrun:ios:lease-a', appBundleId: 'com.example.app' },
   });
-  expect(argvs(runSimctl)).toEqual([
-    ['privacy', 'booted', 'grant', 'notifications', 'com.example.app'],
-  ]);
+  expect(argvs(runSimctl)).toEqual([['privacy', 'booted', 'grant', 'camera', 'com.example.app']]);
 });
 
 test.for([
-  { state: 'deny', action: 'revoke', target: 'notifications', wording: 'Failed to revoke access' },
+  { state: 'deny', action: 'revoke', target: 'camera', wording: 'Failed to revoke access' },
   { state: 'grant', action: 'grant', target: 'calendar', wording: 'Failed to set access' },
   {
     state: 'grant',
     action: 'grant',
-    target: 'notifications',
+    target: 'camera',
     wording:
       'Underlying error (domain=NSPOSIXErrorDomain, code=1):\n\tFailed to create TCC authorization record',
   },
@@ -362,18 +389,18 @@ test('a refused targeted reset fails instead of a reset all that would clear ear
     });
 
   await applySimctlSetting(permission('grant', 'microphone'));
-  const error = await appErrorFrom(applySimctlSetting(permission('reset', 'notifications')));
+  const error = await appErrorFrom(applySimctlSetting(permission('reset', 'camera')));
 
   expect(error).toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     message:
-      'iOS simulator does not support resetting notifications permission via simctl privacy on this runtime.',
+      'iOS simulator does not support resetting camera permission via simctl privacy on this runtime.',
     details: { deviceId: 'SIM-1', appBundleId: 'com.example.app' },
     cause: refused,
   });
   expect(argvs(runSimctl)).toEqual([
     ['privacy', 'SIM-1', 'grant', 'microphone', 'com.example.app'],
-    ['privacy', 'SIM-1', 'reset', 'notifications', 'com.example.app'],
+    ['privacy', 'SIM-1', 'reset', 'camera', 'com.example.app'],
   ]);
 });
 

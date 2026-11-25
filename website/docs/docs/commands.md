@@ -1811,7 +1811,8 @@ Permissions:
 
 - On iOS and Android, `permission` applies to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. `--app` counts only on the command line; `AGENT_DEVICE_TARGET_APP` never retargets a settings change.
 - Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, or `bluetooth` takes no app).
-- On iOS simulators, the simulator decides which permissions it can change and refuses the rest. `grant all` skips a refused service with a warning.
+- On iOS simulators, targeting `notifications` with `grant`, `deny`, or `reset` returns `ios-notification-permission-unsupported`. Use `alert accept` or `alert dismiss` to answer the notification prompt.
+- On iOS simulators, the simulator decides which other permissions it can change and refuses the rest. `grant all` skips a refused service with a warning.
 - On Android, a permission group applies only the permissions the app declares. `full|limited` applies only to iOS `photos`.
 - Android kills a running app when you revoke one of its granted permissions. After `deny` or `reset`, run `open <app> --relaunch` when the warning says so.
 - On macOS, `grant` opens System Settings when access needs your approval; it never grants silently. `deny` is unsupported.

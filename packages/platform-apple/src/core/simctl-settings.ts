@@ -6,7 +6,7 @@ import {
   type SimctlSettingRequest,
 } from '@agent-device/contracts/settings';
 import { type MobilePermissionTarget } from '@agent-device/contracts/settings-catalog';
-import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
+import { AppError, sessionAppRequiredDetails, type ReasonTable } from '@agent-device/kernel/errors';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 
 /** Changes one simulator setting through `simctl`; the Apple package owns this plan for every runner. */
@@ -46,6 +46,11 @@ async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): 
   await runSimctl(['ui', udid, 'appearance', target]);
 }
 
+const SIMCTL_SETTINGS_REASONS = {
+  // iOS simulator notification prompts must be answered with `alert accept` or `alert dismiss`.
+  notificationsUnsupported: { reason: 'ios-notification-permission-unsupported' },
+} as const satisfies ReasonTable<'settings'>;
+
 async function setPermission(
   request: SimctlSettingRequest,
 ): Promise<Record<string, unknown> | void> {
@@ -53,6 +58,17 @@ async function setPermission(
   const permissionAction = parsePermissionAction(state);
   const action = permissionAction === 'deny' ? 'revoke' : permissionAction;
   const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
+  if (target === 'notifications') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'iOS simulators do not support changing notification permissions through settings permission.',
+      {
+        reason: SIMCTL_SETTINGS_REASONS.notificationsUnsupported.reason,
+        deviceId,
+        hint: 'Use `alert accept` or `alert dismiss` to answer the notification prompt.',
+      },
+    );
+  }
   const appBundleId = await requireAppBundleId(request);
   if (target === 'all' && action !== 'reset') {
     return await setEveryIosPrivacyService(request, action, appBundleId);
