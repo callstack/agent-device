@@ -114,7 +114,7 @@ function parseCloudAppSource(value: string): { url: string } {
   if (!url || url.username || url.password) {
     throw new AppError(
       'INVALID_ARGS',
-      '--app-url requires an HTTPS URL without credentials, a query, or a fragment.',
+      '--app-url requires an HTTPS archive URL of at most 2048 ASCII characters without spaces, backslashes, credentials, a query, or a fragment.',
       { reason: CLOUD_SESSION_API_REASONS.appUrlFormat.reason },
     );
   }
@@ -155,10 +155,9 @@ export async function createCloudSession(
   attempt: CloudCreateAttempt,
 ): Promise<CreatedCloudSession> {
   const record = await postCloudSession(access, request, attempt);
-  if (request.app && containsCloudCredential(record.body, [request.app.url])) {
-    throw invalidSession();
-  }
-  return parseCloudSession(record.body, record.id, access, request);
+  const session = parseCloudSession(record.body, record.id, access, request);
+  if (request.app && containsCloudCredential(session, [request.app.url])) throw invalidSession();
+  return session;
 }
 
 export async function lookupCloudSession(

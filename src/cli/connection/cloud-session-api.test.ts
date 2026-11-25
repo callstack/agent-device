@@ -104,27 +104,31 @@ test.each([
   'https://archives.example/app.zip?signature=secret',
   'https://archives.example/app.zip#secret',
   'https:///archives.example/app.zip',
+  'https://café.example/app.zip',
+  `https://archives.example/${'a'.repeat(2048)}.zip`,
 ])('rejects an invalid archive URL without echoing it (%s)', (appUrl) => {
   expect(() => readCloudSessionRequest({ ...baseFlags, appUrl })).toThrow(
     expect.objectContaining({
-      message: '--app-url requires an HTTPS URL without credentials, a query, or a fragment.',
+      message:
+        '--app-url requires an HTTPS archive URL of at most 2048 ASCII characters without spaces, backslashes, credentials, a query, or a fragment.',
       details: { reason: 'cloud_invalid_app_url' },
     }),
   );
 });
 
 test('sends app and spend cap together to the preloaded route', async () => {
+  const appUrl = 'https://archives.example/app.zip';
   const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) =>
-    Response.json(response, { status: 201 }),
+    Response.json({ ...response, app: { url: appUrl } }, { status: 201 }),
   );
   vi.stubGlobal('fetch', fetchMock);
-  const appUrl = 'https://archives.example/app.zip';
-  await createCloudSession(
+  const session = await createCloudSession(
     access,
     readCloudSessionRequest({ ...baseFlags, appUrl, maxUsd: '0.50' }),
     attempt,
   );
 
+  expect(JSON.stringify(session)).not.toContain(appUrl);
   expect(fetchMock).toHaveBeenCalledOnce();
   const [url, init] = fetchMock.mock.calls[0]!;
   expect(url.pathname).toBe('/v1/sessions/preloaded');
@@ -133,6 +137,22 @@ test('sends app and spend cap together to the preloaded route', async () => {
     app: { url: appUrl },
     maxUsdMicros: '500000',
   });
+});
+
+test('rejects a preload response that uses the archive URL as the daemon endpoint', async () => {
+  const appUrl = 'https://archives.example/app.zip';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json(
+        { ...response, attach: { ...response.attach, daemonBaseUrl: appUrl } },
+        { status: 201 },
+      ),
+    ),
+  );
+  await expect(
+    createCloudSession(access, readCloudSessionRequest({ ...baseFlags, appUrl }), attempt),
+  ).rejects.toMatchObject({ details: { reason: 'cloud_session_invalid' } });
 });
 
 test.each([
