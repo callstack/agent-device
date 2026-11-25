@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown';
-import { jpegDecoderOnly } from '../build-config/src/index.ts';
+import { jpegDecoderOnly } from '@agent-device/build-config';
 
 export default defineConfig({
   plugins: [jpegDecoderOnly()],
