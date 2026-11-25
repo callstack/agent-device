@@ -841,14 +841,6 @@ export function isRefToken(input: string): boolean {
   return REF_TOKEN_RE.test(split.base);
 }
 
-/**
- * Whether a token spells its pin with the retired `~s` separator (`@e12~s3`). Live input
- * refuses it, and the refusal must name the current `-s` form.
- */
-export function isRetiredRefPin(input: string): boolean {
-  return RETIRED_PIN_RE.test(input.trim());
-}
-
 /** Says what a retired pin becomes, shared by every live-input refusal. */
 export const REF_RETIRED_PIN_HINT =
   'The generation pin separator is "-s" (@e12-s3). The retired "~s" spelling is read only when a saved .ad script replays.';
@@ -921,9 +913,11 @@ function startsWithPinMarker(token: string): boolean {
 }
 
 /**
- * The one writer of the pinned-ref form: renders `@<body>` plus
+ * The kernel's writer of the pinned-ref form: renders `@<body>` plus
  * `REF_PIN_SEPARATOR` and the generation, ready to paste into a command. The
- * body may be passed with or without its `@`.
+ * body may be passed with or without its `@`. `pinnedRefText` in
+ * `packages/command-output/src/output-common.ts` renders the same text for the
+ * CLI façade within its eager-closure budget; `output-common.test.ts` binds them.
  */
 export function formatPinnedRef(ref: string, generation: number): string {
   const body = ref.startsWith('@') ? ref.slice(1) : ref;
