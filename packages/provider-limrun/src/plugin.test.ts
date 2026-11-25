@@ -265,6 +265,25 @@ test('setup refuses a partial instance set naming the variable it still needs', 
   assert.equal(createDependencies.mock.calls.length, 0);
 });
 
+test.each([
+  [60_000, 'limrun_hosted_attachment_account_key_conflict'],
+  [-1_000, 'limrun_hosted_attachment_expired'],
+  ['invalid', 'limrun_hosted_attachment_expired'],
+])('hosted setup refuses deadline %s with %s before registering', async (deadline, reason) => {
+  const createDependencies = vi.fn(() => stubDependencies());
+  const setup = await providerOf(limrunPlugin({ createDependencies })).setup(
+    pluginHost({
+      LIMRUN_API_KEY: 'fixture-account-key',
+      LIM_IOS_INSTANCE_URL: 'https://instance.example',
+      LIM_IOS_INSTANCE_TOKEN: 'fixture-instance-token',
+      LIMRUN_HOSTED_ATTACHMENT_DEADLINE:
+        typeof deadline === 'number' ? new Date(Date.now() + deadline).toISOString() : deadline,
+    }),
+  );
+  assert.equal(setup.dormant?.reason, reason);
+  assert.equal(createDependencies.mock.calls.length, 0);
+});
+
 test('an isolated hosted attachment stops its runtime when the deadline passes', async () => {
   vi.useFakeTimers();
   const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });

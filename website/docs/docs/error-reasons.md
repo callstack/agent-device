@@ -925,6 +925,7 @@ These reasons can come from more than one command.
 | `limrun_instance_delete_unconfirmed` | A release could not confirm Limrun deleted the instance, so it may still be billed. |
 | `limrun_lease_released_mid_allocation` | The lease was released while its instance was still being prepared for the allocation. |
 | `limrun_hosted_attachment_expired` | The hosted attachment deadline passed or could not be validated. |
+| `limrun_hosted_attachment_account_key_conflict` | A hosted attachment cannot run with an ambient Limrun account key. |
 | `limrun_lease_not_live` | The lease holds no live session, so the command that addresses it has nothing to act on. |
 | `limrun_runtime_shut_down` | This runtime is shut down, so it refuses to allocate a lease into it. |
 | `limrun_app_sync_retired` | The app-sync session of this lease has ended, so no further sync runs on it. |

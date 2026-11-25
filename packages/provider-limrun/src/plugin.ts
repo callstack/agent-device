@@ -23,6 +23,8 @@ export type LimrunPluginOptions = Readonly<{
 const ATTACHMENT_REASONS = {
   // The hosted attachment deadline passed or could not be validated.
   expired: { reason: 'limrun_hosted_attachment_expired' },
+  // A hosted attachment cannot run with an ambient Limrun account key.
+  accountKeyConflict: { reason: 'limrun_hosted_attachment_account_key_conflict' },
 } as const satisfies ReasonTable<'limrun provider'>;
 
 const LIMRUN_CONNECTION: PluginConnection = {
@@ -58,17 +60,8 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
           if (!credentials) return { dormant: LIMRUN_CREDENTIAL_DORMANCY };
           const deadline = host.env.LIMRUN_HOSTED_ATTACHMENT_DEADLINE;
           const expiresAt = deadline === undefined ? undefined : Date.parse(deadline);
-          if (
-            expiresAt !== undefined &&
-            (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || credentials.apiKey)
-          ) {
-            return {
-              dormant: {
-                reason: ATTACHMENT_REASONS.expired.reason,
-                message: 'The scoped Limrun attachment has no usable deadline.',
-              },
-            };
-          }
+          const dormant = hostedAttachmentDormancy(expiresAt, Boolean(credentials.apiKey));
+          if (dormant) return { dormant };
           const [register, dependencies] = await Promise.all([
             import('./runtime.ts'),
             options.createDependencies
@@ -119,6 +112,23 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
       },
     ],
   };
+}
+
+function hostedAttachmentDormancy(expiresAt: number | undefined, hasAccountKey: boolean) {
+  if (expiresAt === undefined) return undefined;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return {
+      reason: ATTACHMENT_REASONS.expired.reason,
+      message: 'The scoped Limrun attachment has no usable deadline.',
+    };
+  }
+  if (hasAccountKey) {
+    return {
+      reason: ATTACHMENT_REASONS.accountKeyConflict.reason,
+      message: 'The scoped Limrun attachment cannot run with a Limrun account key.',
+      hint: 'Unset LIMRUN_API_KEY before starting the hosted attachment daemon.',
+    };
+  }
 }
 
 function shutdownHostedRuntimeAt(deadline: number, close: () => Promise<void>): () => void {
