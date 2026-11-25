@@ -87,8 +87,9 @@ These failures carry a typed `error.details.reason`:
 You drive Limrun, BrowserStack, AWS Device Farm, and TestMu AI devices with the same typed client methods. Use the CLI `connect` flow to persist connection state locally. Pass provider settings in the client config when your Node.js integration already owns credentials and provider selectors.
 
 ```ts
-import { createAgentDeviceClient } from 'agent-device';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
+await ensureDaemon();
 const client = createAgentDeviceClient({
   session: 'checkout-android',
   leaseProvider: 'browserstack',
