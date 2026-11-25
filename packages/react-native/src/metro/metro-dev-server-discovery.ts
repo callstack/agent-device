@@ -10,16 +10,26 @@ import {
   resolveMetroServerUrl,
   type MetroReloadTargetInput,
 } from './metro-reload-endpoints.ts';
+import {
+  isMetroStatusBody,
+  parseAppReportedServerUrl,
+  parseLsofListeningPorts,
+  parseMetroProjectRootHeader,
+  parseNetstatListeningPorts,
+  projectRootsOverlap,
+} from './metro-dev-server-parsing.ts';
 
 /**
- * The session's app, as `open` recorded it: the one thing a sessionless reload can still ask about
- * on the machine that hosts the device.
+ * The session's app, as `open` recorded it. `hostedLocally` is the trait `open` observed — the
+ * session's device runs on the machine that hosts the record — so a reload knows whether it may read
+ * this machine's simulator containers and listening ports at all.
  */
 export type MetroAppTarget = Readonly<{
   platform: 'ios' | 'android';
   deviceKind?: 'simulator' | 'emulator' | 'device';
   deviceId: string;
   appId?: string;
+  hostedLocally?: boolean;
 }>;
 
 /** How a reload reached the dev server it is about to call. */
@@ -45,10 +55,7 @@ export const METRO_RELOAD_REASONS = {
   devServerUnresolved: { reason: 'metro_dev_server_unresolved' },
 } as const satisfies ReasonTable<'metro reload'>;
 
-const IOS_JS_LOCATION_KEY = 'RCT_jsLocation';
-const IOS_PACKAGER_SCHEME_KEY = 'RCT_packager_scheme';
 const SIMULATOR_DEVICES_ROOT = 'Library/Developer/CoreSimulator/Devices';
-const METRO_STATUS_READY_TEXT = 'packager-status:running';
 const METRO_PROJECT_ROOT_HEADER = 'x-react-native-project-root';
 const HOST_READ_TIMEOUT_MS = 1_500;
 const STATUS_PROBE_TIMEOUT_MS = 800;
@@ -81,13 +88,14 @@ export type ResolveMetroReloadServerInput = MetroReloadTargetInput &
  * 1. The binding: `--metro-host`/`--metro-port`/`--bundle-url`, or the address the session bound
  *    through `metro prepare` or `open`'s Metro hint flags. The caller's answer is never second-guessed.
  * 2. What the app itself reports — on an iOS simulator, the dev-server address React Native keeps in
- *    the app's preferences. The app cannot be wrong about the server it loads its bundle from.
+ *    the app's preferences. The app cannot be wrong about the server it loads its bundle from, but a
+ *    live server at that address still has to serve this project to count.
  * 3. A local dev server that serves the current project.
  *
- * Only a session whose app runs on a local simulator or emulator reaches steps 2 and 3: a remote
- * device's host is not this machine, so its sessions keep their existing behavior, including the
- * default address. With no signal at all, this fails typed rather than calling `localhost:8081`,
- * which in an unbound session belongs to whichever project happens to own that port.
+ * Only a session whose app runs on a simulator or emulator reaches steps 2 and 3: a physical device's
+ * host is not this machine, so its sessions keep their existing behavior, including the default
+ * address. With no signal at all, this fails typed rather than calling `localhost:8081`, which in an
+ * unbound session belongs to whichever project happens to own that port.
  */
 export async function resolveMetroReloadServerUrl(
   input: ResolveMetroReloadServerInput,
@@ -97,29 +105,28 @@ export async function resolveMetroReloadServerUrl(
   }
 
   const app = input.app;
-  if (!app || !canDiscoverForDeviceKind(app.deviceKind)) {
-    // Nothing to discover from: no recorded app, or a device this machine does not host. The
+  if (!app || !canDiscoverForApp(app)) {
+    // Nothing to discover from: no recorded app, or an app whose host this machine cannot prove. The
     // address the caller's hints resolve to, default included, stays what it always was.
     return { serverUrl: resolveMetroServerUrl(input), resolvedBy: 'default' };
   }
 
   const host = input.host;
   const probe = input.probe ?? {};
-  const projectRoot = input.projectRoot ?? host.cwd;
+  const projectRoots = candidateProjectRoots([input.projectRoot ?? host.cwd, host.cwd]);
   const reported = await (probe.readAppReportedServerUrl ?? readAppReportedMetroServerUrl)(
     app,
     host,
   ).catch(() => undefined);
-  if (reported) {
-    // The app cannot be wrong about the server it loads from, but its stored address can outlive that
-    // server. On loopback, where this host can answer for it, one bounded probe settles it.
-    if (!isLoopbackUrl(reported) || (await probeIsRunningDevServer(reported, probe))) {
-      return { serverUrl: reported, resolvedBy: 'app-reported' };
-    }
+  if (reported && (await servesProjectRoot(reported, projectRoots, probe))) {
+    // The app cannot be wrong about the server it loads from, but its stored address can outlive
+    // that server, and somebody else's Metro can take the port. On loopback, where this host can
+    // answer for it, one bounded probe settles both questions.
+    return { serverUrl: reported, resolvedBy: 'app-reported' };
   }
 
   const discovered = await discoverLocalMetroServer({
-    projectRoots: [projectRoot, host.cwd],
+    projectRoots,
     listListeningPorts: probe.listListeningPorts ?? listLocalListeningPorts,
     probeServer: probe.probeServer ?? probeLocalMetroServer,
   });
@@ -131,12 +138,33 @@ export async function resolveMetroReloadServerUrl(
 }
 
 /**
- * Whether reload may look for a dev server on this machine for a session's device. A physical or
- * provider-hosted device runs somewhere else: its dev server is not a local port, so probing here
- * would answer a question nobody asked.
+ * Whether reload may look for a dev server on this machine for a session's app. It may, only when
+ * `open` recorded the app as hosted here: a provider-hosted or physical device runs somewhere else,
+ * so its dev server is not one of this machine's ports, and probing here would answer a question
+ * nobody asked.
  */
-export function canDiscoverForDeviceKind(kind: MetroAppTarget['deviceKind']): boolean {
-  return kind === 'simulator' || kind === 'emulator';
+export function canDiscoverForApp(app: MetroAppTarget | undefined): boolean {
+  if (!app || app.hostedLocally !== true) return false;
+  return app.deviceKind === 'simulator' || app.deviceKind === 'emulator';
+}
+
+/**
+ * Confirms an app-reported address against the project it must serve. A server that is not running,
+ * or one that names a project unrelated to this session, is refused. A server that reports no root at
+ * all is accepted: the app named this address itself, and older dev servers send no root header.
+ */
+async function servesProjectRoot(
+  serverUrl: URL,
+  projectRoots: string[],
+  probe: MetroDevServerProbe,
+): Promise<boolean> {
+  if (!isLoopbackUrl(serverUrl)) return true;
+  const probeServer = probe.probeServer ?? probeLocalMetroServer;
+  const running = await probeServer(serverUrl, STATUS_PROBE_TIMEOUT_MS).catch(() => undefined);
+  // The app named this address itself, so a server that answers and names no root stays what it
+  // reported. Only a root that names a different project refuses it.
+  if (!running) return false;
+  return running.projectRoot === undefined || matchesProjectRoot(running, projectRoots);
 }
 
 /**
@@ -145,13 +173,22 @@ export function canDiscoverForDeviceKind(kind: MetroAppTarget['deviceKind']): bo
  * file from the device container without a device round-trip. A physical device, an Android app, or
  * an app that never stored an address reports nothing.
  */
-async function readAppReportedMetroServerUrl(
+export async function readAppReportedMetroServerUrl(
   app: MetroAppTarget,
   host: HostEnvironment,
 ): Promise<URL | undefined> {
   if (app.platform !== 'ios' || app.deviceKind !== 'simulator' || !app.appId) return undefined;
   const home = host.env.HOME;
   if (!home) return undefined;
+  const settingsJson = await readSimulatorAppPreferences(app, home);
+  return settingsJson === undefined ? undefined : parseAppReportedServerUrl(settingsJson);
+}
+
+/** The app's preferences plist as JSON, or undefined when the host cannot answer for it. */
+async function readSimulatorAppPreferences(
+  app: MetroAppTarget,
+  home: string,
+): Promise<string | undefined> {
   const plist = path.join(
     home,
     SIMULATOR_DEVICES_ROOT,
@@ -165,21 +202,17 @@ async function readAppReportedMetroServerUrl(
   const result = await runCmd('plutil', ['-convert', 'json', '-o', '-', plist], {
     allowFailure: true,
     timeoutMs: HOST_READ_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) return undefined;
-  const settings = parseJsonObject(result.stdout);
-  const reported = asNonEmptyString(settings?.[IOS_JS_LOCATION_KEY]);
-  if (!reported) return undefined;
-  const scheme = settings?.[IOS_PACKAGER_SCHEME_KEY] === 'https' ? 'https' : 'http';
-  return parseHostAndPort(reported, scheme);
+  }).catch(() => undefined);
+  if (!result || result.exitCode !== 0) return undefined;
+  return result.stdout;
 }
 
 /**
  * The local dev server that serves this project: a listening port whose `/status` answers
- * `packager-status:running` and whose `X-React-Native-Project-Root` contains or is contained by one
- * of the project roots (a monorepo server serves from the repo root). Ports come from what a local
- * process actually listens on, each probe is short, and they run concurrently, so a miss costs one
- * bounded sweep rather than a reload timeout. A project-root match always wins, and a server that
+ * `packager-status:running` and whose `X-React-Native-Project-Root` is one of the project roots or a
+ * parent or child of one (a monorepo server serves from the repo root). Ports come from what a local
+ * process actually listens on, each probe is short, and they run bounded in parallel, so a miss costs
+ * one bounded sweep rather than a reload timeout. A project-root match always wins, and a server that
  * names a different project never counts, so another project's Metro is not reloaded by accident.
  */
 export async function discoverLocalMetroServer(
@@ -192,56 +225,69 @@ export async function discoverLocalMetroServer(
 ): Promise<LocalMetroServer | undefined> {
   const ports = await input.listListeningPorts().catch(() => [] as number[]);
   const timeoutMs = input.probeTimeoutMs ?? STATUS_PROBE_TIMEOUT_MS;
-  const probes = ports
-    .slice(0, MAX_CONCURRENT_STATUS_PROBES)
-    .map((port) => input.probeServer(new URL(`http://127.0.0.1:${port}`), timeoutMs));
-  const candidates = (await Promise.allSettled(probes))
-    .filter(
-      (settled): settled is PromiseFulfilledResult<LocalMetroServer | undefined> =>
-        settled.status === 'fulfilled',
-    )
-    .map((settled) => settled.value)
-    .filter((candidate): candidate is LocalMetroServer => candidate !== undefined);
-  if (candidates.length === 0) return undefined;
-
+  const servers = await probePorts(ports, input.probeServer, timeoutMs);
   const roots = candidateProjectRoots(input.projectRoots);
-  // Only a server that names one of these projects (or one of their parents or children, as a
-  // monorepo server reports the repo root) counts. A running server for another project, or one that
-  // reports no root at all, is not this session's dev server, and reloading it would act on the
-  // wrong app.
-  return candidates.find((candidate) =>
-    candidate.projectRoot
-      ? roots.some((root) => projectRootsOverlap(root, normalizeRealPath(candidate.projectRoot!)))
-      : false,
-  );
+  return servers.find((candidate) => matchesProjectRoot(candidate, roots));
 }
 
-async function probeIsRunningDevServer(
-  serverUrl: URL,
-  probe: MetroDevServerProbe,
-): Promise<boolean> {
-  const probeServer = probe.probeServer ?? probeLocalMetroServer;
-  const confirmed = await probeServer(serverUrl, STATUS_PROBE_TIMEOUT_MS).catch(() => undefined);
-  return confirmed !== undefined;
+/** Probes every port, at most MAX_CONCURRENT_STATUS_PROBES at a time, keeping probe failures quiet. */
+async function probePorts(
+  ports: number[],
+  probeServer: (serverUrl: URL, timeoutMs: number) => Promise<LocalMetroServer | undefined>,
+  timeoutMs: number,
+): Promise<LocalMetroServer[]> {
+  const servers: LocalMetroServer[] = [];
+  for (let start = 0; start < ports.length; start += MAX_CONCURRENT_STATUS_PROBES) {
+    const batch = ports
+      .slice(start, start + MAX_CONCURRENT_STATUS_PROBES)
+      .map((port) => probeServer(new URL(`http://127.0.0.1:${port}`), timeoutMs));
+    for (const settled of await Promise.allSettled(batch)) {
+      if (settled.status === 'fulfilled' && settled.value) servers.push(settled.value);
+    }
+  }
+  return servers;
 }
 
-async function listLocalListeningPorts(): Promise<number[]> {
-  const result = await runCmd('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fn'], {
+function matchesProjectRoot(candidate: LocalMetroServer, projectRoots: string[]): boolean {
+  if (!candidate.projectRoot) return false;
+  const serverRoot = normalizeRealPath(candidate.projectRoot);
+  return projectRoots.some((root) => projectRootsOverlap(root, serverRoot));
+}
+
+function normalizeRealPath(input: string): string {
+  try {
+    return fs.realpathSync(input);
+  } catch {
+    return path.resolve(input);
+  }
+}
+
+/**
+ * The ports this host's processes listen on: what `lsof` reports, or, where `lsof` is not installed,
+ * what `netstat` reports. A host with neither tool yields no ports, and reload answers with the typed
+ * failure rather than a crash or a guess.
+ */
+export async function listLocalListeningPorts(): Promise<number[]> {
+  const lsof = await runHostCommand('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fn']);
+  if (lsof !== undefined) {
+    const ports = parseLsofListeningPorts(lsof);
+    if (ports.length > 0) return ports;
+  }
+  const netstat = await runHostCommand('netstat', ['-an', '-p', 'tcp']);
+  return netstat === undefined ? [] : parseNetstatListeningPorts(netstat);
+}
+
+/** A host command's stdout, or undefined when it is missing, fails, or times out. */
+async function runHostCommand(command: string, args: string[]): Promise<string | undefined> {
+  const result = await runCmd(command, args, {
     allowFailure: true,
     timeoutMs: HOST_READ_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) return [];
-  const ports = new Set<number>();
-  for (const line of result.stdout.split('\n')) {
-    if (!line.startsWith('n')) continue;
-    const port = readPortFromSocketName(line.slice(1));
-    if (port !== undefined) ports.add(port);
-  }
-  return [...ports].sort((left, right) => left - right);
+  }).catch(() => undefined);
+  return result && result.exitCode === 0 ? result.stdout : undefined;
 }
 
 /** One bounded `/status` read of a loopback address: running dev server, plus its project root. */
-async function probeLocalMetroServer(
+export async function probeLocalMetroServer(
   serverUrl: URL,
   timeoutMs: number,
 ): Promise<LocalMetroServer | undefined> {
@@ -251,8 +297,10 @@ async function probeLocalMetroServer(
     });
     if (!response.ok) return undefined;
     const body = await response.text();
-    if (!body.includes(METRO_STATUS_READY_TEXT)) return undefined;
-    const projectRoot = response.headers.get(METRO_PROJECT_ROOT_HEADER);
+    if (!isMetroStatusBody(body)) return undefined;
+    const projectRoot = parseMetroProjectRootHeader(
+      response.headers.get(METRO_PROJECT_ROOT_HEADER),
+    );
     return { serverUrl, ...(projectRoot ? { projectRoot } : {}) };
   } catch {
     return undefined;
@@ -278,32 +326,13 @@ export function metroDevServerUnresolvedError(): AppError {
   );
 }
 
-function readPortFromSocketName(name: string): number | undefined {
-  const separator = name.lastIndexOf(':');
-  if (separator <= 0) return undefined;
-  const port = Number.parseInt(name.slice(separator + 1), 10);
-  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : undefined;
-}
-
 function isLoopbackUrl(url: URL): boolean {
   return ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'].includes(url.hostname);
-}
-
-function projectRootsOverlap(left: string, right: string): boolean {
-  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
 }
 
 function candidateProjectRoots(projectRoots: string[]): string[] {
   const resolved = projectRoots.map((root) => normalizeRealPath(root));
   return [...new Set(resolved)];
-}
-
-function normalizeRealPath(input: string): string {
-  try {
-    return fs.realpathSync(input);
-  } catch {
-    return path.resolve(input);
-  }
 }
 
 function fileExists(filePath: string): boolean {
@@ -312,33 +341,5 @@ function fileExists(filePath: string): boolean {
     return true;
   } catch {
     return false;
-  }
-}
-
-function parseJsonObject(text: string): Record<string, unknown> | undefined {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function asNonEmptyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function parseHostAndPort(value: string, scheme: 'http' | 'https'): URL | undefined {
-  const separator = value.lastIndexOf(':');
-  if (separator <= 0) return undefined;
-  const host = value.slice(0, separator);
-  const port = Number.parseInt(value.slice(separator + 1), 10);
-  if (!host || !Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
-  try {
-    return new URL(`${scheme}://${host}:${port}`);
-  } catch {
-    return undefined;
   }
 }

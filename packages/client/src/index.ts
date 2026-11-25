@@ -30,6 +30,7 @@ import type {
 } from '@agent-device/contracts/client';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
 import type { MetroPrepareOptions } from '@agent-device/contracts/remote';
+import type { DeviceSelectionMetadata } from '@agent-device/contracts/client';
 import { isNonDefaultResponseLevel, type ResponseLevel } from '@agent-device/kernel/contracts';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
@@ -345,13 +346,18 @@ export function createAgentDeviceClient(
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
+        const selection = normalizeDeviceSelection(data.selection);
         await recordOpenedMetroSession(
           { ...mergeClientOptions(config, options), session },
           {
             explicitRuntime: options.runtime !== undefined,
             runtime: mergeClientOptions(config, options).runtime,
             sessionReused: data.sessionReused === true,
-            app: metroAppTargetFromOpen(device, appBundleId),
+            app: metroAppTargetFromOpen(
+              device,
+              appBundleId,
+              appHostedLocally(config, host, selection),
+            ),
           },
         );
         return {
@@ -364,7 +370,7 @@ export function createAgentDeviceClient(
           appName: readOptionalString(data, 'appName'),
           appBundleId,
           appId,
-          selection: normalizeDeviceSelection(data.selection),
+          selection,
           startup: normalizeStartupSample(data.startup),
           runtime: normalizeRuntimeHints(data.runtime),
           device,
@@ -592,6 +598,20 @@ function daemonIsLocal(config: AgentDeviceClientConfig, host: HostEnvironment): 
 }
 
 /**
+ * Whether `open` proved the session's device runs on this machine: the daemon answers here, and it
+ * resolved the device from this host's own inventory. A provider device, a device inherited from an
+ * earlier request, or a daemon on another machine leaves it unproven, and reload then skips the local
+ * lookups instead of reading unrelated state.
+ */
+function appHostedLocally(
+  config: AgentDeviceClientConfig,
+  host: HostEnvironment,
+  selection: DeviceSelectionMetadata | undefined,
+): boolean {
+  return daemonIsLocal(config, host) && selection?.source === 'local';
+}
+
+/**
  * The app an `open` launched, in the shape the Metro reload discovery reads back. Only an iOS or
  * Android app with a resolved device and bundle id is worth recording: anything else has no
  * app-reported dev server to look up.
@@ -599,6 +619,7 @@ function daemonIsLocal(config: AgentDeviceClientConfig, host: HostEnvironment): 
 function metroAppTargetFromOpen(
   device: ReturnType<typeof normalizeOpenDevice>,
   appBundleId: string | undefined,
+  hostedLocally: boolean,
 ): MetroAppTarget | undefined {
   if (!device || !appBundleId) return undefined;
   if (device.platform !== 'ios' && device.platform !== 'android') return undefined;
@@ -607,6 +628,7 @@ function metroAppTargetFromOpen(
     deviceId: device.id,
     ...(device.kind ? { deviceKind: device.kind } : {}),
     appId: appBundleId,
+    ...(hostedLocally ? { hostedLocally: true } : {}),
   };
 }
 

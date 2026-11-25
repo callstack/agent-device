@@ -39,15 +39,22 @@ export function parsePort(value: number | string | undefined, fallback: number):
  * rather than a default address.
  */
 export function isMetroTargetBound(input: MetroReloadTargetInput): boolean {
-  const explicit =
-    trimRuntimeValue(input.bundleUrl) !== undefined ||
-    trimRuntimeValue(input.metroHost) !== undefined ||
-    input.metroPort !== undefined;
-  const session =
+  return (
+    namesDevServer(input) ||
     trimRuntimeValue(input.runtime?.bundleUrl) !== undefined ||
     trimRuntimeValue(input.runtime?.metroHost) !== undefined ||
-    input.runtime?.metroPort !== undefined;
-  return explicit || session;
+    input.runtime?.metroPort !== undefined
+  );
+}
+
+function namesDevServer(input: MetroReloadTargetInput): boolean {
+  // `parsePort` treats an empty or blank port as absent, and so does this: a caller that sent
+  // nothing must reach discovery rather than resolve to the default address.
+  return (
+    trimRuntimeValue(input.bundleUrl) !== undefined ||
+    trimRuntimeValue(input.metroHost) !== undefined ||
+    (input.metroPort !== undefined && trimRuntimeValue(String(input.metroPort)) !== undefined)
+  );
 }
 
 // Explicit flags win over session runtime hints, which win over localhost:8081.

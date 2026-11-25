@@ -105,6 +105,9 @@ function readStoredAppTarget(value: unknown): MetroAppTarget | undefined {
     deviceId,
     ...(deviceKind ? { deviceKind } : {}),
     ...(typeof record.appId === 'string' ? { appId: record.appId } : {}),
+    // Only an explicit `true` says the device is hosted here; a record from before this field, or a
+    // provider device, reads as not proven local.
+    ...(record.hostedLocally === true ? { hostedLocally: true } : {}),
   };
 }
 
@@ -252,13 +255,23 @@ export function recordOpenedMetroSession(
       });
       return;
     }
-    // No dev-server hint came with the open, so no address is bound. A fresh session still records
-    // the app it opened: that is what a later reload looks the app's own address up from. A reused
-    // session keeps whatever its first open recorded.
-    if (!input.sessionReused) {
-      if (input.app) writeMetroSessionHints({ ...scope, hints: { app: input.app } });
-      else clearMetroSessionHints(scope);
+    // No dev-server hint came with the open, so no address is bound. What is recorded is the app this
+    // open launched: a later reload looks that app's own address up from it. A reused session can
+    // open a different app, so a recorded app always replaces the previous one; an open that reports
+    // no app keeps what a reused session already had, and clears a stale record on a fresh session.
+    if (input.app) {
+      const binding = readMetroSessionHints(scope);
+      writeMetroSessionHints({
+        ...scope,
+        hints: {
+          ...(binding?.controlBaseUrl ? { controlBaseUrl: binding.controlBaseUrl } : {}),
+          ...(binding?.deviceBaseUrls ? { deviceBaseUrls: binding.deviceBaseUrls } : {}),
+          app: input.app,
+        },
+      });
+      return;
     }
+    if (!input.sessionReused) clearMetroSessionHints(scope);
   } catch {}
 }
 

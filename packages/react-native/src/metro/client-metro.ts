@@ -1052,6 +1052,12 @@ async function broadcastReloadOverMessageSocket(
   });
 }
 
+/**
+ * Resolves the reload endpoints. With a `host`, an unbound target goes through discovery, which fails
+ * typed rather than calling `localhost:8081`. Without one, this stays the pre-discovery behavior: the
+ * address the flags and runtime hints resolve to, the default included, because a caller that names
+ * no host has named no machine to look a dev server up on.
+ */
 async function resolveReloadEndpoints(input: ReloadMetroOptions): Promise<MetroReloadEndpoints> {
   if (!input.host) return resolveMetroReloadEndpoints(input);
   const resolved = await resolveMetroReloadServerUrl({
