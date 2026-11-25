@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { LeaseLifecycleContext, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { ProviderAndroidHost } from 'agent-device/plugins/device-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
@@ -15,7 +16,15 @@ import { connectAdb } from './tunnel.ts';
 import { formFactor } from './target.ts';
 
 type Handle = { leaseId: string; adcId?: string };
-type Session = { device: DeviceInfo; adcId: string };
+type Session = { device: DeviceInfo };
+type Allocation = { tv: boolean; rental?: LeaseLifecycleContext['rental'] };
+
+function reconciliationKey(leaseId: string) {
+  const hash = createHash('sha256');
+  hash.update('agent-device:adc:lease:v1\0');
+  hash.update(leaseId);
+  return hash.digest('hex');
+}
 export function createRegistration(
   config: Credentials,
   env: NodeJS.ProcessEnv,
@@ -27,28 +36,52 @@ export function createRegistration(
   const client = config.kind === 'direct' ? adcClient(config) : undefined;
   const tunnels = new Map<string, Awaited<ReturnType<typeof connectAdb>>>();
   const deviceLeases = new Map<string, string>();
-  const table = createProviderLeaseTable<Session, Handle, boolean>({
+  let attachedOwner: string | undefined;
+  const submitted = new Set<string>();
+  const table = createProviderLeaseTable<Session, Handle, Allocation>({
     startTimeoutMs: 180_000,
     stopTimeoutMs: 25_000,
-    async start(lease, tv, control) {
+    async start(lease, { tv, rental }, control) {
       const { leaseId } = lease;
       const { signal } = control;
+      const handle: Handle = { leaseId };
+      const key = reconciliationKey(leaseId);
       let access;
       if (config.kind === 'attached') {
+        if (attachedOwner !== undefined && attachedOwner !== leaseId)
+          throw new AppError('DEVICE_IN_USE', 'This attached ADC lease already has a session.');
+        attachedOwner = leaseId;
+        control.rented(handle);
+        rental?.beforeCreate(key);
         access = config.access;
       } else {
         if (!client) throw new Error('Missing ADC client');
-        let record = await client.create(leaseId, tv, signal);
-        control.rented({ leaseId, adcId: record.id });
+        rental?.beforeCreate(key);
+        submitted.add(leaseId);
+        let record;
+        try {
+          record = await client.create(key, tv, signal);
+        } catch (error) {
+          if (
+            error instanceof AppError &&
+            [400, 401, 403, 422].includes(Number(error.details?.httpStatus))
+          ) {
+            submitted.delete(leaseId);
+          }
+          throw error;
+        }
+        const id = record.id;
+        handle.adcId = id;
+        control.rented(handle);
+        rental?.rented(id);
         while (record.status === 'queued') {
           await delay(500, undefined, { signal });
-          record = await client.get(record.id, signal);
+          record = await client.get(id, signal);
         }
         if (record.status !== 'active')
-          throw new AppError('COMMAND_FAILED', `ADC lease ended with status ${record.status}.`);
-        access = await client.access(record.id, signal);
+          throw new AppError('COMMAND_FAILED', 'The ADC booking is no longer active.');
+        access = await client.access(id, signal);
       }
-      const handle = { leaseId, adcId: access.leaseId };
       const tunnel = await connectAdb(access, env, signal);
       if (signal.aborted) {
         await tunnel.close();
@@ -64,7 +97,12 @@ export function createRegistration(
         name: tv ? 'ADC Android TV' : 'ADC Android phone',
         target: tv ? 'tv' : 'mobile',
       };
-      return { status: 'ready', session: { device, adcId: access.leaseId }, handle };
+      const terminal = () => {
+        void table.release(leaseId).catch(() => {});
+      };
+      tunnel.closed.addEventListener('abort', terminal, { once: true });
+      if (tunnel.closed.aborted) throw new AppError('DEVICE_NOT_FOUND', 'ADC tunnel closed.');
+      return { status: 'ready', session: { device }, handle };
     },
     async stop(handle) {
       const tunnel = tunnels.get(handle.leaseId);
@@ -76,12 +114,18 @@ export function createRegistration(
           await tunnel.close();
           tunnels.delete(handle.leaseId);
         }
+        if (attachedOwner === handle.leaseId) attachedOwner = undefined;
       }
+      submitted.delete(handle.leaseId);
     },
     handleKey: (handle) => handle.leaseId,
     async findByLease({ leaseId }) {
-      const adcId = await client?.find(leaseId);
-      return adcId ? { leaseId, adcId } : { leaseId };
+      if (!client || !submitted.has(leaseId)) return { leaseId };
+      const key = reconciliationKey(leaseId);
+      const adcId = await client.find(key);
+      if (!adcId)
+        throw new AppError('COMMAND_FAILED', 'ADC has not confirmed the booking outcome.');
+      return { leaseId, adcId };
     },
     shuttingDown: () => new AppError('COMMAND_FAILED', 'ADC is shutting down.'),
     releasing: () => new AppError('COMMAND_FAILED', 'ADC lease is being released.'),
@@ -118,17 +162,34 @@ export function createRegistration(
       async allocate(lease, context) {
         if (lease.leaseProvider !== 'adc' || lease.backend !== 'android-instance') return undefined;
         const tv = formFactor(context?.flags) === 'tv';
-        const session = await table.allocate(lease, tv, {
-          ...context,
-          requireJoinable(previous) {
-            if (previous !== tv)
-              throw new AppError(
-                'INVALID_ARGS',
-                'ADC lease already selected a different form factor.',
-              );
+        const session = await table.allocate(
+          lease,
+          { tv, rental: context?.rental },
+          {
+            ...context,
+            requireJoinable(previous) {
+              if (previous.tv !== tv)
+                throw new AppError(
+                  'INVALID_ARGS',
+                  'ADC lease already selected a different form factor.',
+                );
+            },
           },
-        });
-        return { device: session.device, providerSessionId: session.adcId };
+        );
+        return { device: session.device };
+      },
+      async recoverRental(lease, identity, recordInstance) {
+        if (lease.leaseProvider !== 'adc') return false;
+        if (!client) return true;
+        let id = identity.instanceId;
+        if (!id) {
+          if (!identity.reconciliationKey) return false;
+          id = await client.find(identity.reconciliationKey);
+          if (!id) return false;
+          recordInstance(id);
+        }
+        await client.end(id);
+        return true;
       },
       async release(lease) {
         if (lease.leaseProvider !== 'adc') return undefined;
@@ -139,9 +200,6 @@ export function createRegistration(
           return { release: 'unknown', error };
         }
       },
-    },
-    async recoverExpiredLease(lease) {
-      if (lease.leaseProvider === 'adc') await table.recover(lease);
     },
     async deviceInventoryProvider(request) {
       if (request.leaseProvider !== 'adc' || !request.leaseId) return null;

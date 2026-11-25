@@ -2,7 +2,7 @@
 // foreground adb process here so it can always be reaped before removing its sockets.
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { statSync } from 'node:fs';
+import { statSync, renameSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -22,6 +22,11 @@ const exited = once(child, 'close');
 let closed = false;
 function stop() {
   closed = true;
+  try {
+    renameSync(directory, directory + '-closed');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
   child.kill('SIGKILL');
 }
 process.once('disconnect', stop);
@@ -47,6 +52,6 @@ try {
     await exited.catch(() => undefined);
   }
   closed = true;
-  await rm(directory, { recursive: true, force: true });
+  await rm(directory + '-closed', { recursive: true, force: true });
   if (process.connected) process.disconnect();
 }

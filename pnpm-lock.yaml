@@ -26,9 +26,6 @@ importers:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:packages/ad-script
-      '@agent-device/adc':
-        specifier: workspace:*
-        version: link:packages/provider-adc
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:packages/apple-runner

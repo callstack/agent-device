@@ -1,3 +1,6 @@
+import { createServer } from 'node:https';
+import { readFile } from 'node:fs/promises';
+import { getCACertificates, setDefaultCACertificates } from 'node:tls';
 import { once } from 'node:events';
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
@@ -23,18 +26,28 @@ it.skipIf(process.platform === 'win32')(
       "if (args.includes('get-state')) process.stdout.write('device');",
     ].join('\n');
     await writeFile(adb, executable, { mode: 0o700 });
-    const vendor = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    const fixtures = new URL(
+      '../../../test/integration/provider-scenarios/fixtures/',
+      import.meta.url,
+    );
+    const cert = await readFile(new URL('localhost-cert.pem', fixtures));
+    const key = await readFile(new URL('localhost-key.pem', fixtures));
+    const tls = createServer({ cert, key });
+    const oldCA = getCACertificates();
+    setDefaultCACertificates([cert.toString()]);
+    const vendor = new WebSocketServer({ server: tls });
+    tls.listen(0, '127.0.0.1');
     let tunnel: Awaited<ReturnType<typeof connectAdb>> | undefined;
     try {
       await once(vendor, 'listening');
       const address = vendor.address();
       if (!address || typeof address === 'string') throw new Error('Expected a TCP port');
-      const url = new URL(`ws://127.0.0.1:${address.port}/v2/leases/one/adb`);
+      const url = new URL(`wss://127.0.0.1:${address.port}/v2/leases/one/adb`);
       const handshake = once(vendor, 'connection');
       vendor.on('connection', (ws) => ws.on('message', (message) => ws.send(message)));
       const signal = AbortSignal.timeout(10_000);
       tunnel = await connectAdb(
-        { url, token: 'lease-token', leaseId: 'one' },
+        { url, token: 'lease-token' },
         { ...process.env, ANDROID_HOME: sdk },
         signal,
       );
@@ -60,6 +73,8 @@ it.skipIf(process.platform === 'win32')(
       await tunnel?.close();
       for (const ws of vendor.clients) ws.terminate();
       await new Promise<void>((resolve) => vendor.close(() => resolve()));
+      setDefaultCACertificates(oldCA);
+      await new Promise<void>((resolve) => tls.close(() => resolve()));
       await rm(sdk, { recursive: true, force: true });
     }
   },

@@ -15,7 +15,7 @@ const lease: DeviceLease = {
   expiresAt: 1000,
   heartbeatAt: 1,
 };
-const url = 'wss://adc.test/v2/leases/one/adb';
+const url = 'wss://adc.test/v2/leases/a0000000-0000-4000-8000-000000000001/adb';
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
@@ -27,10 +27,15 @@ it('attaches an Android TV and closes only its local tunnel', async () => {
   const close = vi.fn(async () => {});
   vi.mocked(connectAdb).mockResolvedValue({
     serial: '127.0.0.1:1234',
+    closed: new AbortController().signal,
     socketSpec: 'localfilesystem:/test',
     close,
   });
-  const config = credentials({ ADC_LEASE_TOKEN: 'lease-token', ADC_ADB_WEBSOCKET_URL: url });
+  const config = credentials({
+    ADC_API_URL: 'https://adc.test',
+    ADC_LEASE_TOKEN: 'lease-token',
+    ADC_ADB_WEBSOCKET_URL: url,
+  });
   const { runtime, platformModule } = createRegistration(
     config,
     {},
@@ -39,7 +44,6 @@ it('attaches an Android TV and closes only its local tunnel', async () => {
   expect(platformModule.owner.provider).toBe('adc');
   const result = await runtime.leaseLifecycle.allocate?.(lease, { flags: { target: 'tv' } });
   expect(result).toMatchObject({
-    providerSessionId: 'one',
     device: { target: 'tv', id: '127.0.0.1:1234' },
   });
   const request = { leaseProvider: 'adc', leaseId: lease.leaseId };
@@ -69,7 +73,7 @@ it('releases a direct ADC booking when its tunnel fails', async () => {
     requests.push(`${init.method} ${input.pathname}`);
     const body = input.pathname.endsWith('/access')
       ? { token: 'lease', websocket_url: url }
-      : { id: 'one', status: 'active' };
+      : { id: 'a0000000-0000-4000-8000-000000000001', status: 'active' };
     return Response.json(body);
   });
   vi.mocked(connectAdb).mockRejectedValue(new Error('ADB unavailable'));
@@ -83,14 +87,18 @@ it('releases a direct ADC booking when its tunnel fails', async () => {
   await expect(runtime.leaseLifecycle.allocate?.(lease)).rejects.toThrow('ADB unavailable');
   expect(requests).toEqual([
     'POST /v2/leases',
-    'POST /v2/leases/one/access',
-    'DELETE /v2/leases/one',
+    'POST /v2/leases/a0000000-0000-4000-8000-000000000001/access',
+    'DELETE /v2/leases/a0000000-0000-4000-8000-000000000001',
   ]);
 });
 
 it('only recovers a booking that echoes the requested idempotency key', async () => {
   const unrelated = { id: 'foreign', status: 'active' };
-  const expected = { id: 'own', status: 'active', idempotency_key: 'mine' };
+  const expected = {
+    id: 'a0000000-0000-4000-8000-000000000001',
+    status: 'active',
+    idempotency_key: 'mine',
+  };
   const fetch = vi
     .fn()
     .mockResolvedValueOnce(Response.json({ leases: [unrelated] }))
@@ -98,5 +106,88 @@ it('only recovers a booking that echoes the requested idempotency key', async ()
   vi.stubGlobal('fetch', fetch);
   const client = adcClient({ kind: 'direct', origin: new URL('https://adc.test'), key: 'key' });
   await expect(client.find('mine')).resolves.toBeUndefined();
-  await expect(client.find('mine')).resolves.toBe('own');
+  await expect(client.find('mine')).resolves.toBe('a0000000-0000-4000-8000-000000000001');
+});
+
+it('reserves one broker device before dialing and frees it when the endpoint closes', async () => {
+  const closed = new AbortController();
+  const close = vi.fn(async () => {});
+  type Tunnel = Awaited<ReturnType<typeof connectAdb>>;
+  let finish!: (tunnel: Tunnel) => void;
+  const pending = new Promise<Tunnel>((resolve) => {
+    finish = resolve;
+  });
+  vi.mocked(connectAdb).mockReturnValueOnce(pending);
+  const config = credentials({
+    ADC_API_URL: 'https://adc.test',
+    ADC_ADB_WEBSOCKET_URL: url,
+    ADC_LEASE_TOKEN: 'scoped',
+  });
+  const host = {
+    createLeaseInteractor: vi.fn(),
+    getForegroundApp: vi.fn(),
+    bindDeployment: vi.fn(),
+  };
+  const { runtime } = createRegistration(config, {}, host);
+  const first = runtime.leaseLifecycle.allocate!(lease);
+  const other = { ...lease, leaseId: 'other-session' };
+  await expect(runtime.leaseLifecycle.allocate!(other)).rejects.toMatchObject({
+    code: 'DEVICE_IN_USE',
+  });
+  expect(connectAdb).toHaveBeenCalledOnce();
+  finish({
+    serial: 'localfilesystem:/test-device',
+    socketSpec: 'localfilesystem:/test-server',
+    closed: closed.signal,
+    close,
+  });
+  const ready = await first;
+  expect(ready).not.toHaveProperty('providerSessionId');
+  closed.abort();
+  const devices = await runtime.deviceInventoryProvider({
+    leaseProvider: 'adc',
+    leaseId: lease.leaseId,
+  });
+  expect(devices).toEqual([]);
+  await runtime.leaseLifecycle.release!(lease);
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it('keeps an ambiguous create pending and recovers its confirmed ADC booking after restart', async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const id = 'a0000000-0000-4000-8000-000000000001';
+  const config = credentials({ ADC_API_KEY: 'workspace', ADC_API_URL: 'https://adc.test' });
+  const host = {
+    createLeaseInteractor: vi.fn(),
+    getForegroundApp: vi.fn(),
+    bindDeployment: vi.fn(),
+  };
+  const { runtime } = createRegistration(config, {}, host);
+  const beforeCreate = vi.fn();
+  const rented = vi.fn();
+  fetch
+    .mockRejectedValueOnce(new Error('disconnected'))
+    .mockImplementation(async () => Response.json({ leases: [] }));
+  await expect(
+    runtime.leaseLifecycle.allocate!(lease, { rental: { beforeCreate, rented } }),
+  ).rejects.toThrow();
+  const key = beforeCreate.mock.calls[0]?.[0];
+  expect(key).toMatch(/^[a-f0-9]{64}$/);
+  expect(JSON.parse(fetch.mock.calls[0]![1].body).idempotency_key).toBe(key);
+  expect(rented).not.toHaveBeenCalled();
+  expect(await runtime.leaseLifecycle.release!(lease)).toMatchObject({ release: 'unknown' });
+  const restarted = createRegistration(config, {}, host).runtime;
+  const record = vi.fn();
+  const recover = () =>
+    restarted.leaseLifecycle.recoverRental!(lease, { reconciliationKey: key }, record);
+  expect(await recover()).toBe(false);
+  fetch.mockResolvedValueOnce(
+    Response.json({ leases: [{ id, status: 'active', idempotency_key: key }] }),
+  );
+  fetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+  expect(await recover()).toBe(true);
+  expect(record).toHaveBeenCalledWith(id);
+  expect(fetch.mock.lastCall?.[0].pathname).toBe('/v2/leases/' + id);
+  expect(fetch.mock.lastCall?.[1].method).toBe('DELETE');
 });

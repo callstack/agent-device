@@ -54,7 +54,8 @@ it('sets up an attached phone without using workspace credentials or contacting 
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
   const env = {
-    ADC_ADB_WEBSOCKET_URL: 'wss://adc.test/v2/leases/device/adb',
+    ADC_API_URL: 'https://adc.test',
+    ADC_ADB_WEBSOCKET_URL: 'wss://adc.test/v2/leases/a0000000-0000-4000-8000-000000000001/adb',
     ADC_LEASE_TOKEN: 'lease',
   };
   const request = context(env, {});
@@ -95,14 +96,18 @@ it('checks the returned access URL is bound to the requested lease and origin', 
   });
   const signal = new AbortController().signal;
   for (const url of [
-    'wss://adc.test/v2/leases/other/adb',
-    'wss://elsewhere.test/v2/leases/one/adb',
+    'wss://adc.test/v2/leases/b0000000-0000-4000-8000-000000000002/adb',
+    'wss://elsewhere.test/v2/leases/a0000000-0000-4000-8000-000000000001/adb',
   ]) {
     fetch.mockResolvedValueOnce(Response.json({ websocket_url: url, token: 'lease' }));
-    await expect(client.access('one', signal)).rejects.toThrow('different endpoint');
+    await expect(client.access('a0000000-0000-4000-8000-000000000001', signal)).rejects.toThrow(
+      'different endpoint',
+    );
   }
   fetch.mockResolvedValueOnce(Response.json({}));
-  await expect(client.access('one', signal)).rejects.toThrow('invalid ADB credentials');
+  await expect(client.access('a0000000-0000-4000-8000-000000000001', signal)).rejects.toThrow(
+    'invalid ADB credentials',
+  );
 });
 
 it('leaves the installed plugin dormant until credentials are configured', async () => {
@@ -112,4 +117,44 @@ it('leaves the installed plugin dormant until credentials are configured', async
   expect(result).toHaveProperty('dormant');
   const incomplete = context({ ADC_LEASE_TOKEN: 'lease' }, {});
   await expect(plugin.setup(incomplete.host)).rejects.toThrow('attached ADC device');
+});
+
+it('binds attached credentials to the configured encrypted origin before opening a socket', () => {
+  const id = 'a0000000-0000-4000-8000-000000000001';
+  const env = {
+    ADC_API_URL: 'https://adc.test',
+    ADC_LEASE_TOKEN: 'scoped',
+    ADC_ADB_WEBSOCKET_URL: 'wss://adc.test/v2/leases/' + id + '/adb',
+  };
+  for (const invalid of [
+    { ...env, ADC_API_URL: 'http://127.0.0.1' },
+    { ...env, ADC_ADB_WEBSOCKET_URL: 'ws://127.0.0.1/v2/leases/' + id + '/adb' },
+    { ...env, ADC_ADB_WEBSOCKET_URL: 'wss://other.test/v2/leases/' + id + '/adb' },
+    { ...env, ADC_LEASE_TOKEN: id },
+    { ...env, ADC_LEASE_TOKEN: 'secret\r\nvalue' },
+    { ADC_API_KEY: 'hidden\nkey' },
+  ])
+    expect(() => credentials(invalid)).toThrow();
+});
+
+it('keeps upstream response bodies, unknown states and header failures out of errors', async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const client = adcClient({
+    kind: 'direct',
+    origin: new URL('https://adc.test'),
+    key: 'hidden-key',
+  });
+  const id = 'a0000000-0000-4000-8000-000000000001';
+  const signal = new AbortController().signal;
+  fetch.mockResolvedValueOnce(new Response('hidden-key'));
+  await expect(client.get(id, signal)).rejects.toThrow(/^ADC returned invalid JSON\.$/);
+  fetch.mockResolvedValueOnce(Response.json({ id, status: 'hidden-key' }));
+  await expect(client.get(id, signal)).rejects.toThrow(/^ADC returned an invalid lease\.$/);
+  fetch.mockResolvedValueOnce(
+    Response.json({ id: 'b0000000-0000-4000-8000-000000000002', status: 'active' }),
+  );
+  await expect(client.get(id, signal)).rejects.toThrow(/^ADC returned a different lease\.$/);
+  fetch.mockRejectedValueOnce(new Error('hidden-key'));
+  await expect(client.verify()).rejects.toThrow(/^ADC request did not complete\.$/);
 });

@@ -14,7 +14,6 @@ import {
   providerRouteForConnection,
 } from './provider-policy.ts';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
-import adc from '@agent-device/adc';
 import limrun from '@agent-device/limrun';
 import awsDeviceFarm from '@agent-device/aws-device-farm';
 import browserstack from '@agent-device/browserstack';
@@ -146,7 +145,6 @@ test('the plugin catalog copies the connection capabilities each plugin declares
   // The catalog answers a connection's lease policy on a route that loads no plugin, so every copy it
   // carries must equal what the plugin itself declares.
   for (const [provider, plugin] of [
-    ['adc', adc()],
     ['limrun', limrun()],
     ['aws-device-farm', awsDeviceFarm()],
     ['browserstack', browserstack()],
