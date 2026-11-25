@@ -105,7 +105,13 @@ test('packed core excludes native execution and a standalone replay plugin uses 
     assert.match(
       run(
         process.execPath,
-        [path.join(root, 'packages/replay/test/packed-runtime.mjs'), core, plugin, scratch],
+        [
+          '--experimental-strip-types',
+          path.join(root, 'packages/replay/test/packed-runtime.mjs'),
+          core,
+          plugin,
+          scratch,
+        ],
         consumer,
       ),
       /Packed native replay/,
