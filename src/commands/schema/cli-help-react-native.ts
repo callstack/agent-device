@@ -33,6 +33,7 @@ React Native dev loop:
 
 Overlays and busy RN UIs:
   If snapshot reports a React Native warning/error overlay, handle it before interacting with the app: run agent-device react-native dismiss-overlay. The command sends the safe LogBox/RedBox action and verifies the overlay is gone with a fresh post-dismiss snapshot -i.
+  If snapshot reports that the Expo dev menu looks open, press its Close button before acting on the app. open on an iOS simulator launches a detected development client with disableAutoLaunch=1, which keeps the menu closed; add it yourself to a launch URL you pass.
   If the command reports the overlay is still visible, use screenshot --overlay-refs for visual evidence and report the overlay instead of pressing warning/error text manually.
   Do not manually press warning/error text bodies, collapsed banner bodies, full-screen warning parents, or broad LogBox/RedBox refs. The dismiss-overlay command owns the narrow LogBox/RedBox targeting policy.
   Report the overlay in the final summary. Use screenshot --overlay-refs before dismissing only if visual evidence is required.
