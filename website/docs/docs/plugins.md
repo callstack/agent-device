@@ -105,11 +105,11 @@ The interface is experimental. A plugin package exports a factory at `./agent-de
 ```
 
 ```ts
-import type { AgentDevicePluginFactory } from 'agent-device/plugins';
+import type { AgentDevicePlugin } from 'agent-device/plugins';
 
 type ExampleOptions = { credentials?: { username: string; accessKey: string } };
 
-const example: AgentDevicePluginFactory<ExampleOptions> = (options = {}) => ({
+const example = (options: ExampleOptions = {}): AgentDevicePlugin => ({
   apiVersion: 3,
   contributes: [
     {
