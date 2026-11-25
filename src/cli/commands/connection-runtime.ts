@@ -19,6 +19,7 @@ import {
   connectionProviderCapabilities,
   providerRouteForConnection,
 } from '../connection/provider-policy.ts';
+import { withCloudConnectionOwner } from '../connection/cloud-connection-record.ts';
 import {
   acquireConnectionLease,
   createLeaseLedger,
@@ -84,6 +85,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   positionals?: string[];
   batchSteps?: BatchStep[];
   forceRuntimePrepare?: boolean;
+  cloudGeneration?: string;
 }): Promise<{
   flags: CliFlags;
   runtime?: SessionRuntimeHints;
@@ -132,6 +134,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       stateDir,
       state: nextState,
       leaseLedger,
+      cloudGeneration: options.cloudGeneration,
       preparedMetroCleanupOnFailure: runtimePreparation.preparedMetroCleanupOnFailure,
       metroCleanupToStop: runtimePreparation.metroCleanupToStop,
     });
@@ -159,6 +162,7 @@ async function persistMaterializedConnection(options: {
   stateDir: string;
   state: RemoteConnectionState;
   leaseLedger: LeaseLedger;
+  cloudGeneration?: string;
   preparedMetroCleanupOnFailure?: RemoteConnectionState['metro'];
   metroCleanupToStop?: RemoteConnectionState['metro'];
 }): Promise<void> {
@@ -167,11 +171,16 @@ async function persistMaterializedConnection(options: {
       // The session record is the durable commit point: the moment it lands, it names the lease and
       // the ledger stops owning it. The active-pointer update that follows is a convenience reader
       // for the default session; its failure leaves the named lease owned by the record, not by us.
-      writeRemoteConnectionState({
-        stateDir: options.stateDir,
-        state: options.state,
-        onSessionRecordCommitted: () => options.leaseLedger.transfer(options.state.leaseId),
-      });
+      await withCloudConnectionOwner(
+        { stateDir: options.stateDir, session: options.state.session },
+        options.cloudGeneration,
+        () =>
+          writeRemoteConnectionState({
+            stateDir: options.stateDir,
+            state: options.state,
+            onSessionRecordCommitted: () => options.leaseLedger.transfer(options.state.leaseId),
+          }),
+      );
     } catch (error) {
       // The caller's rollback ends any lease the record never came to name.
       await stopMetroCleanup(options.preparedMetroCleanupOnFailure);

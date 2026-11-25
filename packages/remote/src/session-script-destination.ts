@@ -11,7 +11,11 @@ import type { DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { DaemonArtifactEndpoint, fetchRemoteArtifact } from './daemon-artifacts.ts';
+import type {
+  DaemonArtifactEndpoint,
+  RemoteDaemonArtifactEndpoint,
+  fetchRemoteArtifact,
+} from './daemon-artifacts.ts';
 import {
   createRecord,
   readRecord,
@@ -74,7 +78,7 @@ export type SessionScriptDelivery = Readonly<{
  */
 async function settleScriptReceipt(
   context: Readonly<{
-    endpoint: Required<DaemonArtifactEndpoint>;
+    endpoint: RemoteDaemonArtifactEndpoint;
     req: DaemonWireRequest;
     stateDir: string;
     fetch: typeof fetchRemoteArtifact;
@@ -144,7 +148,7 @@ function retireQuietly(req: DaemonWireRequest, file: string): Promise<void> {
  * this client already made.
  */
 export function sessionScriptDelivery(
-  endpoint: Required<DaemonArtifactEndpoint>,
+  endpoint: RemoteDaemonArtifactEndpoint,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string,
@@ -238,7 +242,7 @@ function discloseDeliveryFailure(
  * disclosure rides the error the caller receives.
  */
 export async function settleScriptDeliveryReceiptOfFailure(
-  endpoint: Required<DaemonArtifactEndpoint>,
+  endpoint: RemoteDaemonArtifactEndpoint,
   req: DaemonWireRequest,
   error: DaemonError,
   stateDir: string,

@@ -18,6 +18,7 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { profileToCliFlags } from '../remote-config-flags.ts';
+import { isLegacyCloudProfile } from './active-connection.ts';
 
 export type CommandConnection = {
   stateDir: string;
@@ -51,9 +52,11 @@ export function resolveCommandConnection(
   const request = { ...host, session: flags.session, remoteConfig: flags.remoteConfig };
   if (options.claimForDisconnect) {
     const defaults = claimRemoteConnectionDefaults({ ...request, stateDir: paths.baseDir });
+    const merged = mergeConnectionFlags(flags, defaults.flags, explicitFlagKeys);
+    const effectiveFlags = legacyDisconnectFlags(defaults.claimed, paths.baseDir, merged, options);
     return {
       daemonPaths: paths,
-      effectiveFlags: mergeConnectionFlags(flags, defaults.flags, explicitFlagKeys),
+      effectiveFlags,
       defaults,
       connection: null,
     };
@@ -76,6 +79,24 @@ export function resolveCommandConnection(
     merged,
     remoteConfig: merged.remoteConfig,
   });
+}
+
+function legacyDisconnectFlags(
+  state: RemoteConnectionState | null | undefined,
+  stateDir: string,
+  flags: CliFlags,
+  { host: { env }, flags: input, explicitFlagKeys }: CommandConnectionOptions,
+): CliFlags {
+  if (!state || state.cloudSession || !isLegacyCloudProfile(stateDir, state.remoteConfigPath))
+    return flags;
+  const token = explicitFlagKeys.has('daemonAuthToken')
+    ? input.daemonAuthToken
+    : env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
+  return {
+    ...flags,
+    daemonBaseUrl: env.AGENT_DEVICE_DAEMON_BASE_URL,
+    daemonAuthToken: token?.trim(),
+  };
 }
 
 function resolveMaterializingConnection(

@@ -384,6 +384,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         REMOTE_REQUEST_DIAGNOSTICS,
         'RemoteDiagnosticsEndpoint',
+        'DiagnosticsHandoff',
         'RemoteDaemonErrorPayload',
         'localizeRemoteDaemonError',
         'fetchRemoteRequestDiagnostics',
@@ -443,6 +444,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         UPLOAD_STREAM,
         'MAX_UPLOAD_REDIRECTS',
         'UploadStreamResponse',
+        'UploadHandoff',
         'streamFileToHttpRequest',
         'streamFileToHttpRequestAttempt',
         'buildUploadRequestHeaders',
@@ -458,6 +460,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         REMOTE_ARTIFACTS,
         'DaemonArtifactEndpoint',
+        'RemoteDaemonArtifactEndpoint',
         'buildDaemonArtifactUrl',
         'isRemoteDaemon',
         'DownloadRemoteArtifactParams',

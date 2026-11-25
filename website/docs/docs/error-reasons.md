@@ -95,8 +95,20 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `cli_session_issuer_unverified` | The stored CLI session does not record the cloud that issued its credential, as a session saved by an older CLI does not, so the credential is not sent. Run agent-device auth login. |
 | `cloud_auth_redirect_refused` | A cloud auth request got a redirect it does not follow: to another origin, past the third hop, or to a missing Location or one with a username or password. Nothing was sent to the target. |
 | `cloud_invalid_origin` | The cloud API origin is not HTTPS or loopback HTTP, or includes user information. |
+| `cloud_origin_mismatch` | A hosted connection already records the API origin that owns its lease. |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
-| `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
+| `cloud_catalog_key_origin_mismatch` | The API key and selected cloud endpoint specify different origins. |
+| `connection_busy` | A connection operation is in progress for the session. |
+| `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
+| `insufficient_balance` | The account balance cannot cover the cost to start the session. |
+| `cloud_transport_unsupported` | The cloud session uses an attachment transport this CLI cannot drive. |
+| `cloud_session_invalid` | The cloud API returned an invalid session response. |
+
+### `disconnect`
+
+| Reason | Meaning |
+| --- | --- |
+| `connection_busy` | A connection operation is in progress for the session. |
 
 ### `events`
 
@@ -604,6 +616,12 @@ These reasons can come from more than one command.
 | `ARCHIVE_UNSAFE_ENTRY` | The archive holds a link, a special file, or an encrypted entry. |
 | `ARCHIVE_UNSAFE_PATH` | An archive entry's name is absolute, escaping, or otherwise not one relative path. |
 
+### Cloud access
+
+| Reason | Meaning |
+| --- | --- |
+| `cloud_origin_mismatch` | A hosted connection already records the API origin that owns its lease. |
+
 ### Cloud auth
 
 | Reason | Meaning |
@@ -615,7 +633,27 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
-| `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
+| `cloud_catalog_key_origin_mismatch` | The API key and selected cloud endpoint specify different origins. |
+
+### Cloud sessions
+
+| Reason | Meaning |
+| --- | --- |
+| `cloud_attachment_unavailable` | The saved session attachment is missing, invalid, or for a different transport. |
+| `cloud_credential_store_unsafe` | A cloud credential directory or file is unsafe to reuse. |
+| `cloud_connection_record_unreadable` | The saved cloud connection record cannot be read safely. |
+| `cloud_connection_session_mismatch` | The saved cloud connection belongs to another named session. |
+| `cloud_connect_pending_conflict` | A pending cloud request must finish or end before its options change. |
+| `connection_busy` | A connection operation is in progress for the session. |
+| `cloud_connection_owns_session` | The named session is owned by a cloud connection. |
+| `cloud_connection_changed` | The named cloud connection changed before the operation could complete. |
+| `cloud_connection_expired` | The cloud session passed its deadline. |
+| `cloud_connect_rollback_failed` | The cloud did not confirm cleanup after attachment failed. |
+| `cloud_session_id_changed` | The cloud returned a different session ID for the same request. |
+| `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
+| `insufficient_balance` | The account balance cannot cover the cost to start the session. |
+| `cloud_transport_unsupported` | The cloud session uses an attachment transport this CLI cannot drive. |
+| `cloud_session_invalid` | The cloud API returned an invalid session response. |
 
 ### Command flags
 

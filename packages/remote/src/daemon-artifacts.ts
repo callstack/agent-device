@@ -20,9 +20,10 @@ import {
   recordingExtensionForPlatform,
 } from '@agent-device/capture-kit/recording-output-path';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
+import type { RemoteArtifactRequest } from './artifact-download.ts';
 import type { SessionScriptDelivery } from './session-script-destination.ts';
 import { uploadArtifact } from './upload-client.ts';
-import { withUploadPreparationDeadline } from './upload-stream.ts';
+import { withUploadPreparationDeadline, type UploadHandoff } from './upload-stream.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
 // Mirrors `DEFAULT_TEST_ARTIFACTS_ROOT` in `packages/replay-test/src/internal/session-test-artifacts.ts`
@@ -34,7 +35,12 @@ const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
 export type DaemonArtifactEndpoint = {
   baseUrl?: string;
   token: string;
+  downloadHandoff?: RemoteArtifactRequest['downloadHandoff'];
 };
+
+export type RemoteDaemonArtifactEndpoint = DaemonArtifactEndpoint & { baseUrl: string };
+
+type UploadEndpoint = DaemonArtifactEndpoint & { uploadHandoff?: UploadHandoff };
 
 export type PreparedRemoteRequest = {
   positionals: string[];
@@ -46,7 +52,7 @@ export type PreparedRemoteRequest = {
 
 export async function prepareRemoteRequestArtifacts(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
   onProgress?: RequestProgressSink,
@@ -69,7 +75,7 @@ export async function prepareRemoteRequestArtifacts(
 
 async function prepareRemoteRequestArtifactsWithinBudget(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
   onProgress: RequestProgressSink | undefined,
@@ -164,7 +170,7 @@ function prepareRemoteScriptOutput(
 
 async function prepareRemoteInstallPackage(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   positionals: string[],
   onProgress: UploadProgressSink | undefined,
   signal: AbortSignal,
@@ -186,6 +192,7 @@ async function prepareRemoteInstallPackage(
     localPath,
     baseUrl: info.baseUrl!,
     token: info.token,
+    handoff: info.uploadHandoff,
     platform: req.flags?.platform,
     leaseId: leaseScopeFromRequest(req).leaseId,
     onProgress,
@@ -248,7 +255,7 @@ function createPreparedRemoteRequest(
 
 async function prepareRemoteInstallSource(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   onProgress: UploadProgressSink | undefined,
   signal: AbortSignal,
   host: HostEnvironment,
@@ -291,6 +298,7 @@ async function prepareRemoteInstallSource(
     localPath,
     baseUrl: info.baseUrl!,
     token: info.token,
+    handoff: info.uploadHandoff,
     platform: req.flags?.platform,
     leaseId: leaseScopeFromRequest(req).leaseId,
     onProgress,
@@ -511,7 +519,7 @@ export async function materializeRemoteArtifacts(
   stateDir: string,
 ): Promise<DaemonResponse> {
   if (!info.baseUrl) return response;
-  const endpoint = { baseUrl: info.baseUrl, token: info.token };
+  const endpoint = { ...info, baseUrl: info.baseUrl };
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const download = (scripts?: SessionScriptDelivery) =>
     downloadResponseArtifacts(endpoint, req, response, host, scripts);
@@ -530,7 +538,7 @@ export async function materializeRemoteArtifacts(
 }
 
 async function downloadResponseArtifacts(
-  endpoint: Required<DaemonArtifactEndpoint>,
+  endpoint: RemoteDaemonArtifactEndpoint,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
   host: HostEnvironment,
@@ -562,7 +570,7 @@ async function downloadResponseArtifacts(
 }
 
 async function downloadOneArtifact(
-  endpoint: Required<DaemonArtifactEndpoint>,
+  endpoint: RemoteDaemonArtifactEndpoint,
   req: DaemonWireRequest,
   host: HostEnvironment,
   artifact: DaemonArtifact & { artifactId: string },
@@ -785,6 +793,7 @@ type DownloadRemoteArtifactParams = {
   artifactId: string;
   destinationPath: string;
   requestScope: DaemonWireRequest['meta'];
+  downloadHandoff?: DaemonArtifactEndpoint['downloadHandoff'];
   timeoutMs?: number;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
@@ -809,6 +818,7 @@ type FetchRemoteArtifactParams = {
   token: string;
   artifactId: string;
   requestScope: DaemonWireRequest['meta'];
+  downloadHandoff?: DaemonArtifactEndpoint['downloadHandoff'];
   /** The fetch stops once the body crosses this size. */
   maxBytes: number;
 };

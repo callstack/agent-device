@@ -9,6 +9,12 @@ import { isDaemonNotRunningError } from './daemon-lifecycle-errors.ts';
 export type EnsuringTransportOptions = {
   /** The host the ensured daemon is resolved and started from; the process's own when omitted. */
   host?: HostEnvironment;
+  /** Controls local daemon startup and the request's final transport handoff. */
+  admit?: <T>(
+    start: () => Promise<T>,
+    phase: 'startup' | 'dispatch',
+    req: Parameters<DaemonTransport>[0],
+  ) => Promise<T>;
   /**
    * Called when ensuring replaced a daemon: an `incompatible` one that held no work, or an
    * `unreachable` one that answered nothing.
@@ -41,20 +47,34 @@ export function withEnsuredDaemon(
     // Loaded on the first request: the lifecycle module is not part of what every CLI start pays for.
     const { resolveEnsurableDaemon } = await import('./daemon-client-lifecycle.ts');
     const host = options.host ?? captureHostEnvironment(process);
+    const { admit } = options;
+    const transportContext: Parameters<DaemonTransport>[1] = admit
+      ? { ...context, dispatch: (send) => admit(send, 'dispatch', req) }
+      : context;
     const target = resolveEnsurableDaemon(req, host);
-    if (!target) return await transport(req, context);
+    if (!target) {
+      if (admit) {
+        const guard = createStartupWaitGuard({
+          signal: context?.signal,
+          requestId: req.meta?.requestId,
+        });
+        await guard.guard(() => admit(async () => guard.refuseIfAborted(), 'startup', req));
+      }
+      return await transport(req, transportContext);
+    }
     const stateDir = resolveDaemonPaths(target.stateDir, { env: host.env, cwd: host.cwd }).baseDir;
     // A caller that has already given up starts nothing: attaching refuses before any connection.
     if (context?.signal?.aborted) {
       return await transport(req, context);
     }
-    const cancellation = createStartupWaitGuard({
+    const admissionGuard = createStartupWaitGuard({
       signal: context?.signal,
       requestId: req.meta?.requestId,
     });
     // A finished ensure is kept for the rest of this transport's life. A rejected one is dropped so
     // the next request retries, and one whose daemon has since gone is dropped by the attach below.
     const ensure = async (): Promise<{ relied: Promise<unknown> }> => {
+      admissionGuard.refuseIfAborted();
       let pending = ensured.get(stateDir);
       if (!pending) {
         const started = ensureLocalDaemon(target, stateDir, host, options);
@@ -64,11 +84,15 @@ export function withEnsuredDaemon(
           if (ensured.get(stateDir) === started) ensured.delete(stateDir);
         });
       }
-      await cancellation.guard(() => pending);
+      await pending;
       return { relied: pending };
     };
-    const { relied } = await ensure();
-    const attach = async () => await transport(req, context);
+    // Cancellation ends the caller's wait. A startup already in progress must finish before
+    // admission releases the connection lock.
+    const admitAndEnsure = () =>
+      admissionGuard.guard(() => (admit ? admit(ensure, 'startup', req) : ensure()));
+    const { relied } = await admitAndEnsure();
+    const attach = async () => await transport(req, transportContext);
     try {
       return await attach();
     } catch (error) {
@@ -78,7 +102,7 @@ export function withEnsuredDaemon(
       // Only the promise this attach relied on is dropped: a concurrent request may already have
       // replaced it with a fresh one.
       if (ensured.get(stateDir) === relied) ensured.delete(stateDir);
-      await ensure();
+      await admitAndEnsure();
       return await attach();
     }
   };

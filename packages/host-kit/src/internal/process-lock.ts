@@ -373,14 +373,22 @@ function isSameClaim(left: ProcessLockOwnerRecord, right: ProcessLockOwnerRecord
   );
 }
 
+type ProcessLockWaitOptions = ProcessLockOptions & {
+  timeoutMs?: number;
+  pollMs?: number;
+  signal?: AbortSignal;
+  /** Runs on each poll that finds the lock busy. Throw to abort the wait. */
+  onContention?: () => void;
+};
+
 export async function acquireProcessLock(
-  params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number; signal?: AbortSignal },
+  params: ProcessLockWaitOptions,
 ): Promise<ProcessLockRelease> {
   return (await acquireProcessLockAcquisition(params)).release;
 }
 
 export async function acquireProcessLockAcquisition(
-  params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number; signal?: AbortSignal },
+  params: ProcessLockWaitOptions,
 ): Promise<ProcessLockAcquisition> {
   const deadline = Date.now() + (params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
@@ -391,6 +399,7 @@ export async function acquireProcessLockAcquisition(
     throwIfCanceled(params.signal);
     const attempt = attemptProcessLock(params, await gatherWaitEvidence(params, observe));
     if (attempt.status === 'acquired') return attempt.acquisition;
+    if (attempt.status === 'busy') params.onContention?.();
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     await (await import('./retry.ts')).sleep(Math.min(pollMs, remaining), params.signal);

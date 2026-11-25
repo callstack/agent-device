@@ -10,6 +10,7 @@ test('cli.ts command dispatch checks are recognized by parser-level unknown-comm
   // The exact set, so a reader that collects nothing, or stops collecting, fails here instead
   // of passing over an empty loop.
   assert.deepEqual([...commands].sort(), [
+    'auth',
     'batch',
     'cdp',
     'close',

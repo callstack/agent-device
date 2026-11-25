@@ -8,7 +8,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import { type EnvMap, type HostEnvironment } from '@agent-device/kernel/source-value';
 
-import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
@@ -22,9 +21,10 @@ import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
+import type { CreatedCloudSession } from './cloud-session-api.ts';
 
 type ConnectProfile = { flags: CliFlags; remoteConfigPath: string };
-type ResolvedConnectProfile = ConnectProfile & { provider?: ConnectProvider };
+export type ResolvedConnectProfile = ConnectProfile & { provider?: ConnectProvider };
 
 export type ConfiguredConnectionVerification = {
   service: string;
@@ -55,15 +55,7 @@ type ConnectProviderAdapter = {
  * settings, not a provider's callbacks. Every provider is an installed plugin and answers `resolve`
  * and `verify` through its connection callbacks.
  */
-const CONNECT_PROVIDER_ADAPTERS: Readonly<Record<'cloud' | 'proxy', ConnectProviderAdapter>> = {
-  cloud: {
-    resolve: resolveCloudConnectProfile,
-    verify: async () => ({
-      service: 'the configured cloud service',
-      status: 'verified',
-      verificationMessage: 'Credentials and connection profile verified.',
-    }),
-  },
+const CONNECT_PROVIDER_ADAPTERS: Readonly<Record<'proxy', ConnectProviderAdapter>> = {
   proxy: {
     resolve: resolveProxyConnectProfile,
     verify: async () => ({
@@ -89,6 +81,54 @@ async function providerConnection(
   return await withPluginConnection(provider, [], host.env, async (connection) => connection);
 }
 
+export function usesCloudSessionApi(
+  provider: ConnectProvider | undefined,
+  flags: CliFlags,
+): boolean {
+  return (
+    provider === 'cloud' ||
+    (!provider &&
+      !flags.remoteConfig &&
+      !shouldUseProxyConnectShortcut(flags) &&
+      !flags.daemonBaseUrl)
+  );
+}
+
+export async function resolveCloudSessionProfile(
+  context: AdapterContext,
+  session: CreatedCloudSession,
+): Promise<ResolvedConnectProfile> {
+  const { binding } = session;
+  const clientId = buildConnectClientId('cloud', binding.baseUrl, binding.id);
+  const flags = {
+    ...context.flags,
+    daemonBaseUrl: undefined,
+    daemonAuthToken: undefined,
+    daemonServerMode: undefined,
+    leaseId: undefined,
+    leaseBackend: undefined,
+    tenant: 'cloud',
+    runId: `cloud-${clientId}`,
+    target: 'mobile' as const,
+  };
+  const profile = {
+    tenant: flags.tenant,
+    runId: flags.runId,
+    session: flags.session,
+    platform: flags.platform,
+    target: flags.target,
+  };
+  return {
+    ...persistAndResolveGeneratedProfile({
+      ...context,
+      flags,
+      provider: 'cloud',
+      profile: { ...profile, clientId },
+    }),
+    provider: 'cloud',
+  };
+}
+
 export async function resolveConnectProviderProfile(options: {
   provider?: ConnectProvider;
   flags: CliFlags;
@@ -110,6 +150,12 @@ export async function resolveConnectProviderProfile(options: {
       remoteConfig: resolved.resolvedPath,
     };
     const route = providerRouteForConnection({ daemonBaseUrl: flags.daemonBaseUrl, env });
+    if (leaseProvider === 'cloud' && route === 'drives-connection') {
+      throw new AppError(
+        'INVALID_ARGS',
+        'Use connect cloud --platform ios or android to allocate a hosted session.',
+      );
+    }
     await admitProviderForRoute(leaseProvider, route, env);
     const provider =
       isConnectProviderName(leaseProvider, env) &&
@@ -118,14 +164,13 @@ export async function resolveConnectProviderProfile(options: {
         : undefined;
     return { flags, remoteConfigPath: resolved.resolvedPath, provider };
   }
+  const context = { flags: options.flags, stateDir: options.stateDir, cwd, env };
   const provider =
-    options.provider ?? (shouldUseProxyConnectShortcut(options.flags) ? 'proxy' : 'cloud');
-  const context = {
-    flags: options.flags,
-    stateDir: options.stateDir,
-    cwd,
-    env,
-  };
+    options.provider ?? (shouldUseProxyConnectShortcut(options.flags) ? 'proxy' : undefined);
+  if (!provider && options.flags.daemonBaseUrl)
+    return resolveConfiguredDaemon(context, options.flags.daemonBaseUrl);
+  if (!provider)
+    throw new AppError('INVALID_ARGS', 'Use connect cloud or supply a daemon endpoint.');
   const adapter = builtinConnectAdapter(provider);
   const profile = adapter
     ? await adapter.resolve(context)
@@ -135,6 +180,30 @@ export async function resolveConnectProviderProfile(options: {
         context,
       );
   return { ...profile, provider };
+}
+
+function resolveConfiguredDaemon(context: AdapterContext, daemonBaseUrl: string): ConnectProfile {
+  const { flags } = context;
+  const clientId = buildConnectClientId(context.stateDir, daemonBaseUrl, flags.session);
+  return persistAndResolveGeneratedProfile({
+    ...context,
+    provider: 'daemon',
+    profile: {
+      daemonBaseUrl,
+      daemonTransport: flags.daemonTransport ?? 'http',
+      daemonServerMode: flags.daemonServerMode,
+      tenant: flags.tenant ?? 'daemon',
+      runId: flags.runId ?? `daemon-${clientId}`,
+      leaseId: flags.leaseId,
+      leaseBackend: flags.leaseBackend,
+      sessionIsolation: flags.sessionIsolation,
+      platform: flags.platform,
+      target: flags.target,
+      session: flags.session,
+      clientId,
+      ...readMetroProfileFields(flags),
+    },
+  });
 }
 
 /**

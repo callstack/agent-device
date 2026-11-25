@@ -72,6 +72,8 @@ export type UploadStreamResponse = {
   body: string;
 };
 
+export type UploadHandoff = <T>(start: () => Promise<T>) => Promise<T>;
+
 export async function streamFileToHttpRequest(options: {
   url: URL;
   method: 'POST' | 'PUT';
@@ -83,6 +85,7 @@ export async function streamFileToHttpRequest(options: {
   /** All hops share the enclosing aggregate/caller signal. */
   signal: AbortSignal;
   progress?: UploadStreamProgressOptions;
+  handoff?: UploadHandoff;
 }): Promise<UploadStreamResponse> {
   return await streamFileToHttpRequestAttempt({ ...options, redirectCount: 0, startOffset: 0 });
 }
@@ -103,6 +106,7 @@ async function streamFileToHttpRequestAttempt(options: {
   redirectCount: number;
   startOffset: number;
   progress?: UploadStreamProgressOptions;
+  handoff?: UploadHandoff;
 }): Promise<UploadStreamResponse> {
   options.signal.throwIfAborted();
   // This module sits in the CLI's eager import closure via the remote-artifact
@@ -114,137 +118,147 @@ async function streamFileToHttpRequestAttempt(options: {
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
   const watchdog = createTransferPhaseWatchdog(options.signal);
-  watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
 
   let upload: Promise<void> | undefined;
   let uploadSettled = false;
-  return await new Promise<UploadStreamResponse>((resolve, reject) => {
-    const fail = (error: unknown) => {
-      phases.dispose();
-      stopObservingWrites();
-      watchdog.dispose();
-      req.destroy();
-      reject(watchdog.signal.aborted ? watchdog.signal.reason : error);
-    };
-    const req = transport.request(
-      {
-        protocol: options.url.protocol,
-        host: options.url.hostname,
-        port: options.url.port,
-        method: options.method,
-        path: options.url.pathname + options.url.search,
-        headers,
-        // Aborting destroys the request mid-stream, which is the only way to stop bytes that are
-        // already piped at a device this client no longer holds the lease on.
-        signal: watchdog.signal,
-      },
-      (res) => {
-        addAbortSignal(watchdog.signal, res);
-        void handleUploadResponse(res).then(resolve).catch(fail);
-      },
-    );
-
-    const phases = observeClientRequestPhases(req, watchdog);
-    const stopObservingWrites = observeCompletedRequestWrites(req, watchdog.signal, () =>
-      watchdog.touchBody(),
-    );
-
-    req.on('error', (err) => {
-      if (phases.responseStarted) return;
-      fail(
-        new AppError(
-          'COMMAND_FAILED',
-          options.errorMessage,
-          {
-            ...(options.errorHint ? { hint: options.errorHint } : {}),
-            ...retryableUploadStreamDetail(options),
-          },
-          err,
-        ),
+  const start = () =>
+    new Promise<UploadStreamResponse>((resolve, reject) => {
+      watchdog.signal.throwIfAborted();
+      watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
+      const fail = (error: unknown) => {
+        phases.dispose();
+        stopObservingWrites();
+        watchdog.dispose();
+        req.destroy();
+        reject(watchdog.signal.aborted ? watchdog.signal.reason : error);
+      };
+      const req = transport.request(
+        {
+          protocol: options.url.protocol,
+          host: options.url.hostname,
+          port: options.url.port,
+          method: options.method,
+          path: options.url.pathname + options.url.search,
+          headers,
+          // Aborting destroys the request mid-stream, which is the only way to stop bytes that are
+          // already piped at a device this client no longer holds the lease on.
+          signal: watchdog.signal,
+        },
+        (res) => {
+          addAbortSignal(watchdog.signal, res);
+          void handleUploadResponse(res).then(resolve).catch(fail);
+        },
       );
-    });
 
-    const fileStream = fs.createReadStream(options.payloadPath, { start: options.startOffset });
-    const progressTransform = createUploadProgressTransform({
-      stage: options.progress?.stage ?? 'legacy',
-      fileName: options.progress?.fileName ?? path.basename(options.payloadPath),
-      startOffset: options.startOffset,
-      totalBytes: payloadSize,
-      onProgress: options.progress?.onProgress,
-    });
-    upload = (async () => {
-      await pipeline(fileStream, progressTransform, req, { signal: watchdog.signal });
-      uploadSettled = true;
-    })().catch((err: unknown) => {
-      // After a response, only this attempt's own teardown ends the pipeline, and the server's
-      // verdict stays the outcome: a 413 read completely is a 413, not a transport break.
-      if (phases.responseStarted) return;
-      const error = err instanceof Error ? err : new Error(String(err));
-      fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
-    });
+      const phases = observeClientRequestPhases(req, watchdog);
+      const stopObservingWrites = observeCompletedRequestWrites(req, watchdog.signal, () =>
+        watchdog.touchBody(),
+      );
 
-    async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
-      const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
-      // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
-      // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
-      if (!uploadSettled) req.destroy();
-      await upload!.catch(() => undefined);
-      phases.dispose();
-      stopObservingWrites();
-      watchdog.dispose();
+      req.on('error', (err) => {
+        if (phases.responseStarted) return;
+        fail(
+          new AppError(
+            'COMMAND_FAILED',
+            options.errorMessage,
+            {
+              ...(options.errorHint ? { hint: options.errorHint } : {}),
+              ...retryableUploadStreamDetail(options),
+            },
+            err,
+          ),
+        );
+      });
 
-      const statusCode = res.statusCode ?? 500;
-      const location = res.headers.location;
-      if (location && isUploadRedirectStatus(statusCode)) {
-        if (options.redirectCount >= MAX_UPLOAD_REDIRECTS) {
-          throw new AppError('COMMAND_FAILED', 'Artifact upload exceeded redirect limit', {
-            maxRedirects: MAX_UPLOAD_REDIRECTS,
-            url: options.url.toString(),
+      if (options.handoff) req.flushHeaders();
+      const fileStream = fs.createReadStream(options.payloadPath, { start: options.startOffset });
+      const progressTransform = createUploadProgressTransform({
+        stage: options.progress?.stage ?? 'legacy',
+        fileName: options.progress?.fileName ?? path.basename(options.payloadPath),
+        startOffset: options.startOffset,
+        totalBytes: payloadSize,
+        onProgress: options.progress?.onProgress,
+      });
+      upload = (async () => {
+        await pipeline(fileStream, progressTransform, req, { signal: watchdog.signal });
+        uploadSettled = true;
+      })().catch((err: unknown) => {
+        // After a response, only this attempt's own teardown ends the pipeline, and the server's
+        // verdict stays the outcome: a 413 read completely is a 413, not a transport break.
+        if (phases.responseStarted) return;
+        const error = err instanceof Error ? err : new Error(String(err));
+        fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
+      });
+
+      async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
+        const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
+        // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
+        // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
+        if (!uploadSettled) req.destroy();
+        await upload!.catch(() => undefined);
+        phases.dispose();
+        stopObservingWrites();
+        watchdog.dispose();
+
+        const statusCode = res.statusCode ?? 500;
+        const location = res.headers.location;
+        if (location && isUploadRedirectStatus(statusCode)) {
+          if (options.redirectCount >= MAX_UPLOAD_REDIRECTS) {
+            throw new AppError('COMMAND_FAILED', 'Artifact upload exceeded redirect limit', {
+              maxRedirects: MAX_UPLOAD_REDIRECTS,
+              url: options.url.toString(),
+            });
+          }
+          const redirectedUrl = new URL(location, options.url);
+          // The request headers carry the daemon token or a signed ticket, and the body is the
+          // artifact: neither may follow a hop to an origin the caller did not choose.
+          if (redirectedUrl.origin !== options.url.origin) {
+            throw new AppError(
+              'COMMAND_FAILED',
+              'Artifact upload refused a cross-origin redirect',
+              {
+                reason: UPLOAD_TRANSFER_REASONS.crossOriginRedirect.reason,
+                url: options.url.toString(),
+                redirectOrigin: redirectedUrl.origin,
+              },
+            );
+          }
+          return await streamFileToHttpRequestAttempt({
+            ...options,
+            url: redirectedUrl,
+            redirectCount: options.redirectCount + 1,
           });
         }
-        const redirectedUrl = new URL(location, options.url);
-        // The request headers carry the daemon token or a signed ticket, and the body is the
-        // artifact: neither may follow a hop to an origin the caller did not choose.
-        if (redirectedUrl.origin !== options.url.origin) {
-          throw new AppError('COMMAND_FAILED', 'Artifact upload refused a cross-origin redirect', {
-            reason: UPLOAD_TRANSFER_REASONS.crossOriginRedirect.reason,
-            url: options.url.toString(),
-            redirectOrigin: redirectedUrl.origin,
+
+        const resumeOffset = isUploadResumeStatus(statusCode)
+          ? parseUploadResumeOffset(res.headers, payloadSize)
+          : undefined;
+        if (resumeOffset !== undefined) {
+          if (resumeOffset >= payloadSize) {
+            return { statusCode: 200, statusMessage: 'Upload already complete', body: '' };
+          }
+          if (resumeOffset <= options.startOffset) {
+            throw new AppError('COMMAND_FAILED', 'Artifact upload resume did not advance', {
+              offset: resumeOffset,
+              previousOffset: options.startOffset,
+              url: options.url.toString(),
+            });
+          }
+          return await streamFileToHttpRequestAttempt({
+            ...options,
+            startOffset: resumeOffset,
           });
         }
-        return await streamFileToHttpRequestAttempt({
-          ...options,
-          url: redirectedUrl,
-          redirectCount: options.redirectCount + 1,
-        });
+
+        return { statusCode, statusMessage: res.statusMessage, body };
       }
-
-      const resumeOffset = isUploadResumeStatus(statusCode)
-        ? parseUploadResumeOffset(res.headers, payloadSize)
-        : undefined;
-      if (resumeOffset !== undefined) {
-        if (resumeOffset >= payloadSize) {
-          return { statusCode: 200, statusMessage: 'Upload already complete', body: '' };
-        }
-        if (resumeOffset <= options.startOffset) {
-          throw new AppError('COMMAND_FAILED', 'Artifact upload resume did not advance', {
-            offset: resumeOffset,
-            previousOffset: options.startOffset,
-            url: options.url.toString(),
-          });
-        }
-        return await streamFileToHttpRequestAttempt({
-          ...options,
-          startOffset: resumeOffset,
-        });
-      }
-
-      return { statusCode, statusMessage: res.statusMessage, body };
-    }
-  }).finally(async () => {
+    });
+  try {
+    return await (options.handoff?.(start) ?? start());
+  } finally {
     watchdog.dispose();
     await upload;
-  });
+  }
 }
 
 function retryableUploadStreamDetail(options: { retryable?: boolean }): Record<string, true> {

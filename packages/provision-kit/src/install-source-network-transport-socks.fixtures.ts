@@ -330,7 +330,6 @@ function createSocksProxyFixture(params: {
         destination: `${address.host}:${address.port}`,
         authMethod,
       });
-      client.write(socksReply(SOCKS_REPLY_OK));
       startRelay(address.host, address.port, address.offset);
       return address.offset;
     }
@@ -345,6 +344,7 @@ function createSocksProxyFixture(params: {
       upstream.once('connect', () => {
         if (rest.length > 0) upstream.write(rest);
         client.pipe(upstream);
+        client.write(socksReply(SOCKS_REPLY_OK));
         upstream.pipe(client);
       });
     }

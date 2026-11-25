@@ -323,8 +323,23 @@ async function createClient(
   if (deps.createClient) return await deps.createClient(config, devicePin);
   const { createAgentDeviceClient } = await import('@agent-device/client');
   const { createEnsuredDaemonTransport } = await import('@agent-device/daemon-client');
+  const { resolveDaemonPaths } = await import('@agent-device/daemon-contracts/daemon-resolution');
+  const { readCloudConnection, withCloudConnectionOwner } =
+    await import('../cli/connection/cloud-connection-record.ts');
   // One client per tool call, so each call ensures the daemon it is about to use.
-  const ensuring = createEnsuredDaemonTransport({ host });
+  const ensuring = createEnsuredDaemonTransport({
+    host,
+    admit: (start, _phase, req) => {
+      const { baseDir: stateDir } = resolveDaemonPaths(
+        req.flags?.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR,
+        host,
+      );
+      const location = { stateDir, session: req.session ?? 'default' };
+      return readCloudConnection(location)
+        ? withCloudConnectionOwner(location, undefined, start)
+        : start();
+    },
+  });
   return createAgentDeviceClient(config, {
     host,
     devicePin,

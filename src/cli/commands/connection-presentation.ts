@@ -38,7 +38,7 @@ export function buildLeasePreparationNotice(
   verification: ConnectVerification | undefined,
   env: NodeJS.ProcessEnv,
 ): LeasePreparationNotice | undefined {
-  if (state.leaseId) return undefined;
+  if (state.leaseId || state.cloudSession) return undefined;
   if (isConfiguredAwsConnection(state, verification) && verification.app?.status === 'missing') {
     return {
       status: 'deferred',
@@ -108,9 +108,10 @@ export function presentConnectReadiness(
       : verification;
   return {
     ...configured,
-    preparationMessage:
-      buildLeasePreparationNotice(state, configured, env)?.message ??
-      'No live device session has been created.',
+    preparationMessage: state.cloudSession
+      ? 'The hosted device is ready.'
+      : (buildLeasePreparationNotice(state, configured, env)?.message ??
+        'No live device session has been created.'),
     ...buildConnectWorkflow(state, configured, env),
   };
 }
@@ -133,6 +134,7 @@ export function renderConnectSuccess(options: {
   runtimePreparation?: RuntimePreparationNotice;
   previousLeaseNotice?: PreviousLeaseReleaseNotice;
   env: NodeJS.ProcessEnv;
+  fallbackFrom?: string[];
 }): string {
   const { state, readiness, runtimePreparation, previousLeaseNotice, env } = options;
   if (!readiness) {
@@ -151,6 +153,9 @@ export function renderConnectSuccess(options: {
     `${status === 'verified' ? 'Connected' : 'Configured'} successfully with ${readiness.service}.`,
     `${status === 'verified' ? 'Verified' : 'Status'}: ${readiness.verificationMessage}`,
   ];
+  if (state.cloudSession && options.fallbackFrom?.length) {
+    lines.push(renderVendorFallback(state.cloudSession.vendor, options.fallbackFrom));
+  }
   if (readiness.project) {
     lines.push(`Project: ${readiness.project.name ?? readiness.project.reference} — verified`);
   }
@@ -165,12 +170,18 @@ export function renderConnectSuccess(options: {
   return lines.join('\n');
 }
 
+function renderVendorFallback(vendor: string, unavailable: string[]): string {
+  const verb = unavailable.length === 1 ? 'was' : 'were';
+  return `Using ${vendor}. ${unavailable.join(', ')} ${verb} unavailable.`;
+}
+
 export function serializeConnectionState(options: {
   state: RemoteConnectionState;
   runtimePreparation?: RuntimePreparationNotice;
   readiness?: ConnectReadiness;
   previousLeaseNotice?: PreviousLeaseReleaseNotice;
   env: NodeJS.ProcessEnv;
+  fallbackFrom?: string[];
 }): Record<string, unknown> {
   const { state, runtimePreparation, readiness, previousLeaseNotice, env } = options;
   const leasePreparation = buildLeasePreparationNotice(state, readiness, env);
@@ -189,6 +200,15 @@ export function serializeConnectionState(options: {
     remoteConfigHash: state.remoteConfigHash,
     daemonBaseUrlFingerprint: fingerprint(state.daemon?.baseUrl),
     liveSession: buildLiveSessionField(state),
+    ...(state.cloudSession
+      ? {
+          cloudSessionId: state.cloudSession.id,
+          vendor: state.cloudSession.vendor,
+          deadlineAt: state.cloudSession.deadlineAt,
+          viewerAvailable: state.cloudSession.viewerAvailable === true,
+          ...(options.fallbackFrom?.length ? { fallbackFrom: options.fallbackFrom } : {}),
+        }
+      : {}),
     ...buildReadinessFields(readiness, leasePreparation),
     metro: state.metro
       ? { prepared: true, projectRoot: state.metro.projectRoot }
@@ -201,7 +221,7 @@ export function serializeConnectionState(options: {
 
 function buildLiveSessionField(state: RemoteConnectionState): Record<string, unknown> {
   return {
-    status: state.leaseId ? 'created' : 'not-created',
+    status: state.leaseId || state.cloudSession ? 'created' : 'not-created',
     ...(state.leaseId ? { leaseId: state.leaseId } : {}),
   };
 }

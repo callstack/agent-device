@@ -18,7 +18,7 @@ export function parseCloudOrigin(value: string, configured?: CloudOriginVariable
 }
 
 export function parseCloudUrl(value: string, configured?: CloudOriginVariable): URL {
-  const url = parseCloudEndpoint(value);
+  const url = parseCloudEndpoint(value, 'https:', 'http:');
   if (url) return url;
   throw new AppError(
     'INVALID_ARGS',
@@ -30,11 +30,14 @@ export function parseCloudUrl(value: string, configured?: CloudOriginVariable): 
   );
 }
 
-function parseCloudEndpoint(value: string): URL | undefined {
+export function parseCloudEndpoint(
+  value: string,
+  ...[secure, plaintext]: ['https:', 'http:'] | ['wss:', 'ws:']
+): URL | undefined {
   const url = URL.parse(value);
   if (!url || url.username || url.password) return undefined;
-  if (url.protocol === 'https:') return url;
-  if (url.protocol === 'http:' && isLoopbackHostname(url.hostname)) return url;
+  if (url.protocol === secure) return url;
+  if (url.protocol === plaintext && isLoopbackHostname(url.hostname)) return url;
 }
 
 function isLoopbackHostname(hostname: string): boolean {

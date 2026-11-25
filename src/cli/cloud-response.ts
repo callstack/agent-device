@@ -38,3 +38,49 @@ export async function readCloudJsonResponse<T>(
   }
   return parsed as T;
 }
+
+export function asCloudRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+export function isCloudText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function isCloudTextArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isCloudText);
+}
+
+export async function fetchCloudApi(url: URL, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, redirect: 'error' });
+  } catch {
+    throw new AppError('COMMAND_FAILED', 'Could not reach the cloud session API.', {
+      hint: 'Verify the cloud API origin and network connection before retrying.',
+    });
+  }
+}
+
+export function containsCloudCredential(value: unknown, credentials: readonly string[]): boolean {
+  const json = JSON.stringify(value);
+  return (
+    json !== undefined &&
+    credentials.some((credential) => json.includes(JSON.stringify(credential).slice(1, -1)))
+  );
+}
+
+export function cloudUrlContainsCredential(value: string, credentials: readonly string[]): boolean {
+  let url = value;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (containsCloudCredential(url, credentials)) return true;
+    if (!/%[0-9a-f]{2}/i.test(url)) return false;
+    try {
+      url = decodeURIComponent(url);
+    } catch {
+      return true;
+    }
+  }
+  return true;
+}

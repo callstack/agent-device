@@ -11,12 +11,14 @@ import {
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
+  type DaemonArtifactEndpoint,
   fetchRemoteArtifact,
   materializeRemoteArtifacts,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
+import type { DaemonDispatch } from './daemon-client-request.ts';
 import {
   DAEMON_REQUEST_MAX_BYTES,
   DAEMON_RPC_PROTOCOL_VERSION,
@@ -32,15 +34,22 @@ export function handleDaemonHttpResponseBody(
     req: DaemonWireRequest;
     stateDir: string;
     host: HostEnvironment;
+    dispatch?: DaemonDispatch;
+    skipRemoteDiagnostics?: boolean;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, host, resolve, reject } = options;
+  const { info, req, stateDir, host, dispatch, resolve, reject } = options;
   try {
+    const endpoint: DaemonArtifactEndpoint = {
+      baseUrl: info.baseUrl,
+      token: info.token,
+      downloadHandoff: dispatch,
+    };
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, reject });
+      void rejectDaemonHttpRpcError(parsed.error, { ...options, info: endpoint });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -52,7 +61,7 @@ export function handleDaemonHttpResponseBody(
       );
       return;
     }
-    void resolveDaemonHttpResult(info, req, parsed.result, { host, stateDir }, resolve, reject);
+    void resolveDaemonHttpResult(endpoint, req, parsed.result, { host, stateDir }, resolve, reject);
   } catch (err) {
     reject(
       new AppError(
@@ -88,35 +97,41 @@ function parseDaemonHttpResponseBody(body: string): {
 async function rejectDaemonHttpRpcError(
   error: { message?: string; data?: Record<string, unknown> },
   options: {
-    info: DaemonInfo;
+    info: DaemonArtifactEndpoint;
     req: DaemonWireRequest;
     stateDir: string;
+    dispatch?: DaemonDispatch;
+    skipRemoteDiagnostics?: boolean;
     reject: (error: unknown) => void;
   },
 ): Promise<void> {
-  const { info, req, stateDir, reject } = options;
+  const { info, req, stateDir, dispatch, reject } = options;
   const requestId = req.meta?.requestId;
   const payload = toDaemonHttpRpcError(error);
+  if (options.skipRemoteDiagnostics) {
+    payload.logPath = undefined;
+    payload.diagnosticsRecord = undefined;
+  }
   if (!info.baseUrl) {
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
-  const localized = await localizeRemoteDaemonError(payload, {
-    endpoint: {
-      baseUrl: info.baseUrl,
-      token: info.token,
-      tenantId: req.meta?.tenantId,
-      leaseId: leaseScopeFromRequest(req).leaseId,
-    },
-    stateDir,
-    requestId,
-  });
-  reject(
-    appErrorFromDaemonError(
-      await settleFailedDeliveryReceipt(info, req, stateDir, localized),
-      requestId,
-    ),
-  );
+  const baseUrl = info.baseUrl;
+  const localized = options.skipRemoteDiagnostics
+    ? payload
+    : await localizeRemoteDaemonError(payload, {
+        endpoint: {
+          baseUrl,
+          token: info.token,
+          tenantId: req.meta?.tenantId,
+          leaseId: leaseScopeFromRequest(req).leaseId,
+        },
+        stateDir,
+        requestId,
+        handoff: dispatch,
+      });
+  const errorToReport = await settleFailedDeliveryReceipt(info, req, stateDir, localized);
+  reject(appErrorFromDaemonError(errorToReport, requestId));
 }
 
 /**
@@ -125,7 +140,7 @@ async function rejectDaemonHttpRpcError(
  * caller receives. Never throws, so a receipt that cannot settle still leaves the original failure.
  */
 async function settleFailedDeliveryReceipt(
-  info: DaemonInfo,
+  info: DaemonArtifactEndpoint,
   req: DaemonWireRequest,
   stateDir: string,
   error: DaemonError,
@@ -133,7 +148,7 @@ async function settleFailedDeliveryReceipt(
   if (!info.baseUrl) return error;
   try {
     return await settleScriptDeliveryReceiptOfFailure(
-      { baseUrl: info.baseUrl, token: info.token },
+      { ...info, baseUrl: info.baseUrl },
       req,
       error,
       stateDir,
@@ -191,7 +206,7 @@ function appErrorFromDaemonError(error: DaemonError, requestId: string | undefin
 }
 
 async function resolveDaemonHttpResult(
-  info: DaemonInfo,
+  info: DaemonArtifactEndpoint,
   req: DaemonWireRequest,
   result: DaemonResponse,
   client: { host: HostEnvironment; stateDir: string },
@@ -199,11 +214,11 @@ async function resolveDaemonHttpResult(
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
-    resolve(
-      info.baseUrl && result.ok
-        ? await materializeRemoteArtifacts(info, req, result, client.host, client.stateDir)
-        : result,
-    );
+    if (!info.baseUrl || !result.ok) {
+      resolve(result);
+      return;
+    }
+    resolve(await materializeRemoteArtifacts(info, req, result, client.host, client.stateDir));
   } catch (error) {
     // The daemon answered, so the request ran; only bringing its artifacts here failed.
     reject(await discloseAnsweredRequestFailure(error, req));

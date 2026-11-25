@@ -39,6 +39,8 @@ export type RemoteDiagnosticsEndpoint = {
   leaseId?: string;
 };
 
+type DiagnosticsHandoff = <T>(start: () => Promise<T>) => Promise<T>;
+
 /**
  * An error payload as it arrived from a REMOTE daemon. `logPath` is typed away
  * rather than merely deleted, so nothing downstream can put the daemon's path
@@ -77,7 +79,12 @@ function stripDaemonLogPath(error: DaemonError): RemoteDaemonErrorPayload {
  */
 export async function localizeRemoteDaemonError(
   error: DaemonError,
-  params: { endpoint: RemoteDiagnosticsEndpoint; stateDir: string; requestId?: string },
+  params: {
+    endpoint: RemoteDiagnosticsEndpoint;
+    stateDir: string;
+    requestId?: string;
+    handoff?: DiagnosticsHandoff;
+  },
 ): Promise<DaemonError> {
   const payload = stripDaemonLogPath(error);
   const ref = error.diagnosticsRecord;
@@ -99,6 +106,7 @@ export async function localizeRemoteDaemonError(
       endpoint: params.endpoint,
       ref,
       destinationPath,
+      handoff: params.handoff,
     });
     if (failure) {
       return withUnavailableRecord(payload, params.endpoint, requestId, failure);
@@ -137,6 +145,7 @@ async function fetchRemoteRequestDiagnostics(params: {
   endpoint: RemoteDiagnosticsEndpoint;
   ref: DiagnosticsRecordRef;
   destinationPath: string;
+  handoff?: DiagnosticsHandoff;
 }): Promise<string | undefined> {
   const { endpoint, ref, destinationPath } = params;
   let url: URL;
@@ -148,73 +157,112 @@ async function fetchRemoteRequestDiagnostics(params: {
   try {
     const transport = await loadNodeHttpRequester(url.protocol);
     await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
-    return await new Promise<string | undefined>((resolve) => {
-      let settled = false;
-      const settle = (reason: string | undefined) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutHandle);
-        if (reason === undefined) {
-          resolve(undefined);
+    const { settleWithin } = await import('@agent-device/host-kit/settle-within');
+    const timeout = new AbortController();
+    const timeoutMessage = `fetch timed out after ${REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS}ms`;
+    let download: Promise<string | undefined> | undefined;
+    const start = () =>
+      (download = new Promise<string | undefined>((resolve) => {
+        if (timeout.signal.aborted) {
+          resolve(timeoutMessage);
           return;
         }
-        void fs.promises.rm(destinationPath, { force: true }).finally(() => {
-          resolve(reason);
-        });
-      };
-      const request = transport.request(
-        {
-          protocol: url.protocol,
-          host: url.hostname,
-          port: url.port,
-          method: 'GET',
-          path: url.pathname + url.search,
-          headers: {
-            ...buildDaemonHttpAuthHeaders(endpoint.token),
-            ...buildDaemonHttpTenantHeaders(endpoint.tenantId),
-            ...buildDaemonHttpLeaseHeaders(endpoint.leaseId),
-          },
-        },
-        (res) => {
-          const statusCode = res.statusCode ?? 500;
-          if (statusCode !== 200) {
-            res.resume();
-            settle(`HTTP ${statusCode}`);
+        let settled = false;
+        let discard = () => discardDiagnosticDownload(destinationPath);
+        const onTimeout = () => settle(timeoutMessage);
+        const settle = (reason: string | undefined) => {
+          if (settled) return;
+          settled = true;
+          timeout.signal.removeEventListener('abort', onTimeout);
+          if (reason === undefined) {
+            resolve(undefined);
             return;
           }
-          const sink = fs.createWriteStream(destinationPath);
-          let bytes = 0;
-          res.on('data', (chunk: Buffer) => {
-            bytes += chunk.length;
-            if (bytes > REMOTE_DIAGNOSTICS_MAX_BYTES) {
-              request.destroy();
-              sink.destroy();
-              settle(`record exceeds ${REMOTE_DIAGNOSTICS_MAX_BYTES} bytes`);
+          void discard().then(() => resolve(reason));
+        };
+        const request = transport.request(
+          {
+            protocol: url.protocol,
+            host: url.hostname,
+            port: url.port,
+            method: 'GET',
+            path: url.pathname + url.search,
+            signal: timeout.signal,
+            headers: {
+              ...buildDaemonHttpAuthHeaders(endpoint.token),
+              ...buildDaemonHttpTenantHeaders(endpoint.tenantId),
+              ...buildDaemonHttpLeaseHeaders(endpoint.leaseId),
+            },
+          },
+          async (res) => {
+            const settleReadError = (error: Error) => settle(error.message);
+            res.on('error', settleReadError);
+            try {
+              await admission;
+            } catch {
+              res.destroy();
+              return;
             }
-          });
-          res.on('error', (error: Error) => {
-            sink.destroy();
-            settle(error.message);
-          });
-          sink.on('error', (error: Error) => {
-            settle(error.message);
-          });
-          sink.on('finish', () => {
-            settle(undefined);
-          });
-          res.pipe(sink);
-        },
-      );
-      const timeoutHandle = setTimeout(() => {
-        settle(`fetch timed out after ${REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS}ms`);
-        request.destroy();
-      }, REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS);
-      request.on('error', (error: Error) => {
-        settle(error.message);
-      });
-      request.end();
+            if (settled) {
+              res.destroy();
+              return;
+            }
+            const statusCode = res.statusCode ?? 500;
+            if (statusCode !== 200) {
+              res.resume();
+              settle(`HTTP ${statusCode}`);
+              return;
+            }
+            const sink = fs.createWriteStream(destinationPath);
+            discard = () => discardDiagnosticDownload(destinationPath, sink);
+            res.off('error', settleReadError);
+            let bytes = 0;
+            res.on('data', (chunk: Buffer) => {
+              bytes += chunk.length;
+              if (bytes > REMOTE_DIAGNOSTICS_MAX_BYTES) {
+                request.destroy();
+                settle(`record exceeds ${REMOTE_DIAGNOSTICS_MAX_BYTES} bytes`);
+              }
+            });
+            res.on('error', (error: Error) => settle(error.message));
+            sink.on('error', (error: Error) => {
+              settle(error.message);
+            });
+            sink.on('finish', () => {
+              settle(undefined);
+            });
+            res.pipe(sink);
+          },
+        );
+        request.on('error', (error: Error) => {
+          settle(timeout.signal.aborted ? timeoutMessage : error.message);
+        });
+        timeout.signal.addEventListener('abort', onTimeout, { once: true });
+        request.end();
+      }));
+    const admission = params.handoff?.(async () => {
+      const result = start();
+      void result.catch(() => {});
+      return { result };
     });
+    const outcome = await settleWithin(
+      async () => await (admission ? (await admission).result : start()),
+      REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS,
+    );
+    if (outcome.kind === 'settled') return outcome.value;
+    timeout.abort();
+    await download;
+    return timeoutMessage;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
+}
+
+async function discardDiagnosticDownload(destinationPath: string, sink?: fs.WriteStream) {
+  if (sink && !sink.closed) {
+    const closed = new Promise<void>((resolve) => sink.once('close', resolve));
+    sink.destroy();
+    await closed;
+  }
+  await fs.promises.rm(destinationPath, { force: true }).catch(() => {});
 }

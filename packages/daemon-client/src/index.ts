@@ -31,10 +31,11 @@ import type {
   DaemonRequest,
   DaemonResponse,
   DaemonTransportOptions,
+  DaemonTransport,
 } from './daemon-client-request.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-export type { DaemonRequest, DaemonResponse };
+export type { DaemonRequest, DaemonResponse, DaemonTransport };
 export { readRegisteredDaemon };
 export { formatDaemonTakeoverNotice } from './daemon-client-metadata.ts';
 
@@ -61,11 +62,24 @@ export function createDaemonTransport(host: HostEnvironment) {
 export function resolveRunTransport(
   deps: {
     sendToDaemon: typeof sendToDaemon;
-    transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
+    transportForHost?: (
+      host: HostEnvironment,
+      admit?: EnsuringTransportOptions['admit'],
+    ) => typeof sendToDaemon;
   },
   host: HostEnvironment,
+  admit?: EnsuringTransportOptions['admit'],
 ): typeof sendToDaemon {
-  return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+  if (!admit) return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+  if (deps.transportForHost) return deps.transportForHost(host, admit);
+  return async (req, context) => {
+    await admit(async () => {}, 'startup', req);
+    const { dispatchDaemonRequest } = await import('./daemon-client-request.ts');
+    return await dispatchDaemonRequest(
+      (send) => admit(send, 'dispatch', req),
+      () => deps.sendToDaemon(req, context),
+    );
+  };
 }
 
 async function sendToDaemonOnHost(
@@ -108,12 +122,11 @@ async function sendToDaemonOnHost(
       // A remote `/health` gate sends nothing until it opens, so it may wait out an outage for as
       // long as this command's own budget.
       async () =>
-        await connectToDaemon(
-          settings,
-          requestTimeoutMs === undefined
-            ? undefined
-            : { budgetMs: requestTimeoutMs, signal: options.signal },
-        ),
+        await connectToDaemon(settings, {
+          budgetMs: requestTimeoutMs,
+          signal: requestTimeoutMs === undefined ? undefined : options.signal,
+          dispatch: options.dispatch,
+        }),
       {
         requestId,
         session: req.session,
@@ -121,15 +134,8 @@ async function sendToDaemonOnHost(
     );
   });
   const info = daemon.info;
-  const preparedRemoteRequest = await cancellation.guard(
-    async () =>
-      await protectArtifactUploadWithLeaseBeats(
-        info,
-        settings,
-        requestWithoutAuthFlag,
-        options.signal,
-        options.onProgress,
-      ),
+  const preparedRemoteRequest = await cancellation.guard(() =>
+    protectArtifactUploadWithLeaseBeats(info, settings, requestWithoutAuthFlag, options),
   );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
 
@@ -171,6 +177,8 @@ async function sendToDaemonOnHost(
                 onProgress: options.onProgress,
                 signal: options.signal,
                 timeoutRecovery: resolveTimeoutRecovery(settings),
+                dispatch: options.dispatch,
+                skipRemoteDiagnostics: options.skipRemoteDiagnostics,
               },
             );
           if (!info.baseUrl || !request.meta?.clientArtifactPaths?.savedScript)
@@ -399,14 +407,22 @@ async function protectArtifactUploadWithLeaseBeats(
   info: DaemonInfo,
   settings: DaemonClientSettings,
   request: Omit<DaemonRequest, 'token'>,
-  callerSignal: AbortSignal | undefined,
-  onProgress: DaemonTransportOptions['onProgress'],
+  { dispatch, onProgress, signal: callerSignal }: DaemonTransportOptions,
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
+  const endpoint = dispatch
+    ? {
+        ...info,
+        uploadHandoff: async <T>(start: () => Promise<T>) => {
+          const { dispatchDaemonRequest } = await import('./daemon-client-request.ts');
+          return await dispatchDaemonRequest(dispatch, start);
+        },
+      }
+    : info;
   if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
     return await prepareRemoteRequestArtifacts(
       request,
-      info,
+      endpoint,
       callerSignal ?? new AbortController().signal,
       settings.host,
       onProgress,
@@ -415,13 +431,13 @@ async function protectArtifactUploadWithLeaseBeats(
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
     await import('./daemon-client-lease-beat.ts');
   return await runProtectedLeaseWork({
-    heartbeat: buildUploadLeaseHeartbeat(info, settings, request),
+    heartbeat: buildUploadLeaseHeartbeat(info, settings, request, dispatch),
     // The upload stops for either owner of its signal: the lease beat finding the lease gone, or
     // the caller aborting this one call.
     task: (leaseSignal) =>
       prepareRemoteRequestArtifacts(
         request,
-        info,
+        endpoint,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
         settings.host,
         onProgress,

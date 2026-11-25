@@ -5,7 +5,7 @@
  * and sends no such header when no lease is held.
  */
 
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -18,6 +18,7 @@ import {
 } from '@agent-device/test-kit';
 import { sendToDaemon } from '../index.ts';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
+import * as hostTransport from '@agent-device/host-kit/transport';
 
 const DAEMON_TOKEN = 'remote-secret';
 
@@ -43,6 +44,7 @@ function tempDir(prefix: string): string {
  */
 async function withRemoteDaemon(
   run: (baseUrl: string, seen: SeenRequest[]) => Promise<void>,
+  observeRequest?: (route: string) => void,
 ): Promise<void> {
   const seen: SeenRequest[] = [];
   const server = http.createServer((req, res) => {
@@ -50,6 +52,7 @@ async function withRemoteDaemon(
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
       const route = `${req.method} ${req.url}`;
+      observeRequest?.(route);
       if (req.url === '/health') {
         res.statusCode = 200;
         res.end();
@@ -129,6 +132,8 @@ async function sendRemote(
     flags?: Record<string, unknown>;
   },
   leaseId: string | undefined,
+  skipRemoteDiagnostics?: boolean,
+  dispatch?: NonNullable<Parameters<typeof sendToDaemon>[1]>['dispatch'],
 ): Promise<void> {
   await sendToDaemon(
     {
@@ -146,12 +151,24 @@ async function sendRemote(
         ...(leaseId ? { leaseId } : {}),
       },
     } as Parameters<typeof sendToDaemon>[0],
-    { authToken: DAEMON_TOKEN },
+    { authToken: DAEMON_TOKEN, skipRemoteDiagnostics, dispatch },
   ).catch((error: unknown) => {
     // `clipboard` fails on purpose; only its diagnostics fetch is under test.
     if (request.command !== 'clipboard') throw error;
   });
 }
+
+test('hosted RPC errors never request the peer diagnostic record', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const routes: string[] = [];
+  await withRemoteDaemon(
+    async (baseUrl) => {
+      await sendRemote(baseUrl, { command: 'clipboard', positionals: ['read'] }, 'lease-1', true);
+    },
+    (route) => routes.push(route),
+  );
+  assert.deepEqual(routes, ['GET /health', 'POST /rpc']);
+});
 
 async function runEveryRequestKind(leaseId: string | undefined): Promise<SeenRequest[]> {
   let observed: SeenRequest[] = [];
@@ -181,6 +198,85 @@ test('a remote upload, artifact download and diagnostics fetch name the held lea
       route: 'GET /sessions/default/requests/req-clipboard/diagnostics',
       leaseHeader: 'lease-1',
     },
+  ]);
+});
+
+test('upload and diagnostics hold admission for each credential handoff', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let held = 0;
+  let handoffs = 0;
+  const observed: Array<[string, number]> = [];
+  const uploadFlushes: number[] = [];
+  const phaseStarts: Array<[string, number]> = [];
+  const createWatchdog = hostTransport.createTransferPhaseWatchdog;
+  const watchdogFactory = vi
+    .spyOn(hostTransport, 'createTransferPhaseWatchdog')
+    .mockImplementation((signal) => {
+      const watchdog = createWatchdog(signal);
+      return {
+        ...watchdog,
+        arm(phase, timeoutMs) {
+          if (phase === 'preflight' || phase === 'connect') phaseStarts.push([phase, held]);
+          watchdog.arm(phase, timeoutMs);
+        },
+      };
+    });
+  const flushHeaders = http.ClientRequest.prototype.flushHeaders;
+  const flush = vi
+    .spyOn(http.ClientRequest.prototype, 'flushHeaders')
+    .mockImplementation(function (this: http.ClientRequest) {
+      if (this.path === '/upload') uploadFlushes.push(held);
+      flushHeaders.call(this);
+    });
+  const dispatch = async <T>(start: () => Promise<T>): Promise<T> => {
+    held++;
+    handoffs++;
+    try {
+      return await start();
+    } finally {
+      held--;
+    }
+  };
+  try {
+    await withRemoteDaemon(
+      async (baseUrl) => {
+        const apkPath = path.join(tempDir('agent-device-upload-admission-'), 'app.apk');
+        fs.writeFileSync(apkPath, 'apk-bytes');
+        await sendRemote(
+          baseUrl,
+          { command: 'install', positionals: [apkPath] },
+          undefined,
+          true,
+          dispatch,
+        );
+        await sendRemote(
+          baseUrl,
+          { command: 'clipboard', positionals: ['read'] },
+          'lease-1',
+          false,
+          dispatch,
+        );
+      },
+      (route) => observed.push([route, held]),
+    );
+  } finally {
+    flush.mockRestore();
+    watchdogFactory.mockRestore();
+  }
+  assert.deepEqual(observed, [
+    ['GET /health', 0],
+    ['POST /upload/preflight', 0],
+    ['POST /upload', 0],
+    ['POST /rpc', 0],
+    ['GET /health', 0],
+    ['POST /rpc', 0],
+    ['GET /sessions/default/requests/req-clipboard/diagnostics', 0],
+  ]);
+  assert.equal(handoffs, observed.length);
+  assert.deepEqual(uploadFlushes, [1]);
+  assert.deepEqual(phaseStarts, [
+    ['preflight', 1],
+    ['connect', 1],
   ]);
 });
 

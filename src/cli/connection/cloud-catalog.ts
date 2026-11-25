@@ -1,5 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { readCloudJsonResponse } from '../cloud-response.ts';
+import {
+  asCloudRecord,
+  containsCloudCredential,
+  fetchCloudApi,
+  isCloudText,
+  isCloudTextArray,
+  readCloudJsonResponse,
+} from '../cloud-response.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { writeCommandOutput } from '../commands/shared.ts';
 import { resolveCloudCatalogAccess } from './cloud-catalog-access.ts';
@@ -70,13 +77,10 @@ export async function listCloudVendors(
 ): Promise<CloudVendorRow[]> {
   const url = new URL('/v1/vendors', baseUrl);
   if (options.live) url.searchParams.set('availability', 'live');
-  const response = await fetch(url, {
+  const response = await fetchCloudApi(url, {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
-    redirect: 'error',
     signal: AbortSignal.timeout(30_000),
-  }).catch(() => {
-    throw new AppError('COMMAND_FAILED', 'Could not reach the cloud session API.');
   });
   const rows = await readCloudJsonResponse<unknown>(response, {
     invalidJsonMessage: 'Cloud session API returned invalid JSON.',
@@ -85,7 +89,7 @@ export async function listCloudVendors(
   if (
     !Array.isArray(rows) ||
     !rows.every(isCloudVendorRow) ||
-    containsCredential(rows, [accessToken, ...(options.catalogCredentials ?? [])])
+    containsCloudCredential(rows, [accessToken, ...(options.catalogCredentials ?? [])])
   ) {
     throw new AppError('COMMAND_FAILED', 'Cloud session API returned an invalid vendor list.');
   }
@@ -94,11 +98,6 @@ export async function listCloudVendors(
   return rows.map((row) =>
     row.availability ? row : { ...row, availability: unsupportedAvailability(checkedAt) },
   );
-}
-
-function containsCredential(rows: CloudVendorRow[], credentials: string[]): boolean {
-  const json = JSON.stringify(rows);
-  return credentials.some((credential) => json.includes(JSON.stringify(credential).slice(1, -1)));
 }
 
 function unsupportedAvailability(checkedAt: string): CloudVendorAvailability {
@@ -111,14 +110,14 @@ function unsupportedAvailability(checkedAt: string): CloudVendorAvailability {
 }
 
 function isCloudVendorRow(value: unknown): value is CloudVendorRow {
-  const row = asRecord(value);
+  const row = asCloudRecord(value);
   return (
     !!row &&
-    nonEmpty(row.vendor) &&
-    nonEmpty(row.platform) &&
+    isCloudText(row.vendor) &&
+    isCloudText(row.platform) &&
     typeof row.usdPerMinute === 'number' &&
     Number.isFinite(row.usdPerMinute) &&
-    isStringArray(row.capabilities) &&
+    isCloudTextArray(row.capabilities) &&
     typeof row.viewer === 'boolean' &&
     typeof row.available === 'boolean' &&
     isOptional(row.usdMicrosPerMinute, isMicros) &&
@@ -140,7 +139,7 @@ function isPositiveInteger(value: unknown): boolean {
 }
 
 function isAvailability(value: unknown): boolean {
-  const availability = asRecord(value);
+  const availability = asCloudRecord(value);
   return (
     !!availability &&
     isMember(AVAILABILITY_STATES, availability.state) &&
@@ -162,18 +161,4 @@ export function formatCloudVendorRow(row: CloudVendorRow): string {
     ? `  availability: ${availability.state}${availability.reason ? ` (${availability.reason})` : ''}`
     : '';
   return `${row.vendor} ${row.platform}  $${row.usdPerMinute}/min${minimum}  capabilities: ${row.capabilities.join(', ') || 'none'}  live view: ${row.viewer ? 'yes' : 'no'}  available: ${row.available ? 'yes' : 'no'}${live}`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function nonEmpty(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(nonEmpty);
 }

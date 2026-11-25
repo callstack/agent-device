@@ -4,7 +4,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { publishScriptFileSync, scriptAncestryReason } from '@agent-device/host-kit/file';
-import type { DaemonArtifactEndpoint, fetchRemoteArtifact } from './daemon-artifacts.ts';
+import type { RemoteDaemonArtifactEndpoint, fetchRemoteArtifact } from './daemon-artifacts.ts';
 import {
   readRecord,
   recordPath,
@@ -33,7 +33,7 @@ type PublishOutcome =
  */
 export async function publishScriptVersion(
   context: Readonly<{
-    endpoint: Required<DaemonArtifactEndpoint>;
+    endpoint: RemoteDaemonArtifactEndpoint;
     req: DaemonWireRequest;
     stateDir: string;
     fetch: typeof fetchRemoteArtifact;

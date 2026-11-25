@@ -1,7 +1,9 @@
+import { once } from 'node:events';
 import fs from 'node:fs';
 // Type-only: a runtime `node:http` import would load it eagerly for every CLI command. The actual
 // HTTP stack loads through `loadNodeHttpRequester` only when a remote daemon returns an artifact.
 import type http from 'node:http';
+import type { Socket } from 'node:net';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -26,11 +28,13 @@ const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
 /** An error answer is read this far for the diagnostic, then the response is dropped. */
 const MAX_ERROR_BODY_CHARS = 65_536;
 
-type RemoteArtifactRequest = {
+export type RemoteArtifactRequest = {
   artifactUrl: URL;
   token: string;
   artifactId: string;
   requestScope: DaemonRequestMeta | undefined;
+  /** Holds admission through the credential-bearing write. */
+  downloadHandoff?: <T>(start: () => Promise<T>) => Promise<T>;
   timeoutMs?: number;
 };
 
@@ -163,6 +167,7 @@ async function requestRemoteArtifact<T>(
   await destination.prepare();
   return await new Promise<T>((resolve, reject) => {
     let settled = false;
+    let sendStarted = !params.downloadHandoff;
     let materializationStarted = false;
     let timeoutError: AppError | undefined;
     const operation = new AbortController();
@@ -178,6 +183,10 @@ async function requestRemoteArtifact<T>(
     };
     const fail = (error: Error) => {
       if (!settleOnce()) return;
+      if (!sendStarted) {
+        reject(error);
+        return;
+      }
       // A cleanup that fails is reported on its own; the caller still receives the download's own error.
       void destination
         .cleanupOnError()
@@ -190,6 +199,11 @@ async function requestRemoteArtifact<T>(
         )
         .finally(() => reject(error));
     };
+    const headers = {
+      ...buildDaemonHttpAuthHeaders(params.token),
+      ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
+      ...buildDaemonHttpLeaseHeaders(params.requestScope?.leaseId),
+    };
     const request = transport.request(
       {
         protocol: params.artifactUrl.protocol,
@@ -197,11 +211,7 @@ async function requestRemoteArtifact<T>(
         port: params.artifactUrl.port,
         method: 'GET',
         path: params.artifactUrl.pathname + params.artifactUrl.search,
-        headers: {
-          ...buildDaemonHttpAuthHeaders(params.token),
-          ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
-          ...buildDaemonHttpLeaseHeaders(params.requestScope?.leaseId),
-        },
+        headers: params.downloadHandoff ? undefined : headers,
       },
       (res) => {
         if (res.statusCode !== 200) {
@@ -250,6 +260,7 @@ async function requestRemoteArtifact<T>(
       if (!materializationStarted) fail(timeoutError);
     }, timeoutMs);
     request.on('error', (error) => {
+      if (!request.writableFinished) operation.abort(error);
       if (materializationStarted) return;
       if (error instanceof AppError) {
         fail(timeoutError ?? error);
@@ -268,7 +279,58 @@ async function requestRemoteArtifact<T>(
         ),
       );
     });
-    request.end();
+    if (!params.downloadHandoff) {
+      request.end();
+      return;
+    }
+    request.once('close', () => {
+      if (!request.writableFinished)
+        operation.abort(new Error('Artifact request closed before writing.'));
+    });
+    void writeAdmittedArtifactRequest(
+      request,
+      headers,
+      params.downloadHandoff,
+      operation.signal,
+      () => {
+        sendStarted = true;
+      },
+    ).catch((error: unknown) => {
+      request.destroy();
+      fail(error instanceof Error ? error : new Error(String(error)));
+    });
+  });
+}
+
+async function writeAdmittedArtifactRequest(
+  request: http.ClientRequest,
+  headers: http.OutgoingHttpHeaders,
+  handoff: NonNullable<RemoteArtifactRequest['downloadHandoff']>,
+  signal: AbortSignal,
+  markSendStarted: () => void,
+): Promise<void> {
+  const socket = (request.socket ?? (await once(request, 'socket', { signal }))[0]) as Socket & {
+    encrypted?: boolean;
+    secureConnecting?: boolean;
+  };
+  if (socket.connecting || socket.secureConnecting) {
+    await once(socket, socket.encrypted ? 'secureConnect' : 'connect', { signal });
+  }
+  signal.throwIfAborted();
+  await handoff(async () => {
+    signal.throwIfAborted();
+    for (const [name, value] of Object.entries(headers)) {
+      if (value !== undefined) request.setHeader(name, value);
+    }
+    const written = once(request, 'finish', { signal });
+    markSendStarted();
+    try {
+      request.end();
+    } catch (error) {
+      void written.catch(() => {});
+      throw error;
+    }
+    await written;
   });
 }
 

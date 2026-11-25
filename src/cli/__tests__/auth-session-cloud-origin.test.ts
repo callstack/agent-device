@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { resolveHostedCloudAccess } from '../connection/cloud-access.ts';
 import {
   loginWithDeviceAuth,
   readCliSession,
   resolveCliSessionPath,
-  resolveCloudAccessForConnect,
   resolveRemoteAuth,
   writeCliSession,
 } from '../auth-session.ts';
@@ -94,6 +94,45 @@ function writeRawSession(stateDir: string, record: Record<string, unknown>): voi
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(record));
 }
+
+test.each([
+  ['unverified', 'cli_session_issuer_unverified'],
+  ['revoked', 'cli_session_revoked'],
+  ['tokenless', 'cli_session_refresh_unanswered'],
+])('hosted login reports its own credential hint for a %s session', async (kind, reason) => {
+  const stateDir = mkdtempForTestSync('agent-device-hosted-auth-hint-');
+  const cloudBaseUrl = 'https://cloud.example';
+  const session = {
+    id: 'fixture-id',
+    refreshCredential: 'fixture-refresh',
+    createdAt: new Date().toISOString(),
+  };
+  if (kind === 'unverified') writeRawSession(stateDir, { ...session, version: 1 });
+  else writeCliSession({ stateDir, session: { ...session, version: 2, cloudBaseUrl } });
+  const fetchMock = vi.fn(async () =>
+    Response.json(kind === 'revoked' ? { status: 'revoked' } : {}),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    await assert.rejects(
+      resolveHostedCloudAccess({
+        stateDir,
+        env: { CI: '1', AGENT_DEVICE_CLOUD_BASE_URL: cloudBaseUrl },
+      }),
+      (error: unknown) => {
+        const normalized = normalizeError(error);
+        assert.equal(normalized.code, 'UNAUTHORIZED');
+        assert.equal(normalized.details?.reason, reason);
+        assert.match(normalized.hint ?? '', /AGENT_DEVICE_CLOUD_API_KEY_ORIGIN/);
+        assert.doesNotMatch(normalized.hint ?? '', /AGENT_DEVICE_DAEMON_AUTH_TOKEN/);
+        return true;
+      },
+    );
+    assert.equal(fetchMock.mock.calls.length, kind === 'unverified' ? 0 : 1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 const isIssuerUnverified = (error: unknown) => {
   const normalized = normalizeError(error);
@@ -351,41 +390,4 @@ test('authorization keeps polling when a pending response carries an empty error
   } finally {
     vi.useRealTimers();
   }
-});
-
-test('legacy cloud connection identity keeps the validated URL path', async () => {
-  const result = await resolveCloudAccessForConnect({
-    stateDir: mkdtempForTestSync('agent-device-auth-path-'),
-    flags: { ...baseFlags, daemonAuthToken: 'fixture-token' },
-    env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example/console/' },
-  });
-  assert.equal(result.cloudBaseUrl, 'https://cloud.example/console');
-});
-
-test('legacy cloud connection identity keeps the saved issuer URL path', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-auth-saved-path-');
-  writeCliSession({
-    stateDir,
-    session: {
-      version: 2,
-      id: 'legacy-session',
-      cloudBaseUrl: 'https://cloud.example/console',
-      refreshCredential: 'fixture-refresh-token',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-  });
-  const requests: string[] = [];
-  const result = await resolveCloudAccessForConnect({
-    stateDir,
-    flags: baseFlags,
-    env: {},
-    io: {
-      fetch: async (url) => {
-        requests.push(String(url));
-        return jsonResponse({ accessToken: 'fixture-access-token' });
-      },
-    },
-  });
-  assert.equal(result.cloudBaseUrl, 'https://cloud.example/console');
-  assert.deepEqual(requests, [REFRESH]);
 });

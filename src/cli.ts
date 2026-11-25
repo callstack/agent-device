@@ -12,11 +12,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { exitAfterFlush, writeStderr, writeStdout } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
-import {
-  createEnsuredDaemonTransport,
-  resolveRunTransport,
-  sendToDaemon,
-} from '@agent-device/daemon-client';
+import { createEnsuredDaemonTransport, resolveRunTransport } from '@agent-device/daemon-client';
 import fs from 'node:fs';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
 import type { CommandProgressState } from '@agent-device/command-output';
@@ -56,21 +52,17 @@ import { remoteSessionRequiredError } from '@agent-device/contracts/lease-scope'
 import {
   buildRemoteConnectionRequestMetadata,
   type RemoteConnectionState,
+  type CloudSessionBinding,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
-import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 
-type CliDeps = {
-  sendToDaemon: typeof sendToDaemon;
-  /** Builds the transport that talks as a given host; injected deps leave it out. */
-  transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
-};
+type CliDeps = Parameters<typeof resolveRunTransport>[0];
 
-type CliDaemonTransport = typeof sendToDaemon;
+type CliDaemonTransport = ReturnType<typeof resolveRunTransport>;
 type CliDaemonRequest = Parameters<CliDaemonTransport>[0];
 type CliDaemonTransportOptions = Parameters<CliDaemonTransport>[1];
 type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
@@ -86,8 +78,8 @@ const printJson = (
 
 const DEFAULT_CLI_DEPS: CliDeps = {
   sendToDaemon: createEnsuredDaemonTransport({ onReplaced: writeDaemonReplacedNotice }),
-  transportForHost: (host) =>
-    createEnsuredDaemonTransport({ host, onReplaced: writeDaemonReplacedNotice }),
+  transportForHost: (host, admit) =>
+    createEnsuredDaemonTransport({ host, admit, onReplaced: writeDaemonReplacedNotice }),
 };
 
 function writeDaemonReplacedNotice(replaced: {
@@ -146,6 +138,8 @@ export async function runCli(
 }
 
 async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment): Promise<void> {
+  // One transport per run: its ensure-once state is shared by the materialization client and the
+  // command client, so a run ensures the daemon once.
   const requestId = createRequestId();
   const version = readVersion();
   const debugEnabled = isDebugRequested(argv);
@@ -172,9 +166,6 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         jsonRequested,
         debugEnabled,
       });
-      // One transport per run: its ensure-once state is shared by the materialization client and the
-      // command client, so a run ensures the daemon once.
-      const transport = resolveRunTransport(deps, host);
       const debugOutputEnabled = isParsedDebugRequested(command, parsed.providedFlags);
       const ctx = await resolveRunContextOrExit(parsed, {
         host,
@@ -183,10 +174,14 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         requestId,
         debugOutputEnabled,
       });
-      registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
+      if (ctx.effectiveFlags.daemonAuthToken)
+        registerDiagnosticSensitiveValue(ctx.effectiveFlags.daemonAuthToken);
       let logTailStopper: (() => void) | null = null;
       try {
         if (command === 'react-devtools') {
+          if (ctx.cloudSession) {
+            throw new AppError('INVALID_ARGS', 'This command is unavailable on a cloud session.');
+          }
           await exitAfterFlush(await runReactDevtoolsCli(ctx));
           return;
         }
@@ -207,9 +202,20 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           stateDir: ctx.daemonPaths.baseDir,
           flags: ctx.effectiveFlags,
         });
+        await applySavedCloudAttachment(ctx);
+        let transport = resolveRunTransport(deps, ctx.host, ctx.admitConnection);
+        if (ctx.effectiveFlags.daemonAuthToken) {
+          const { protectConnectionTransport } =
+            await import('./cli/connection/cloud-attachment.ts');
+          transport = await protectConnectionTransport(ctx, transport);
+        }
         await resolveRemoteContext(ctx, transport);
-        registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
+        if (ctx.effectiveFlags.daemonAuthToken)
+          registerDiagnosticSensitiveValue(ctx.effectiveFlags.daemonAuthToken);
         if (command === 'cdp') {
+          if (ctx.cloudSession) {
+            throw new AppError('INVALID_ARGS', 'This command is unavailable on a cloud session.');
+          }
           await exitAfterFlush(
             await runAgentCdpCommand(positionals, {
               flags: ctx.effectiveFlags,
@@ -223,17 +229,19 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         logTailStopper = maybeStartDaemonLogTail(ctx);
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
         const commandProgress = createCommandProgressState();
+        const send = createCliDaemonTransport({
+          host: ctx.host,
+          command,
+          flags: ctx.effectiveFlags,
+          replayTestReporterRuntime,
+          commandProgress,
+          cloudGeneration: ctx.cloudSession?.generation,
+          transport,
+        });
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
           host: ctx.host,
           devicePin: ctx.devicePin,
-          transport: createCliDaemonTransport({
-            host,
-            command,
-            flags: ctx.effectiveFlags,
-            replayTestReporterRuntime,
-            commandProgress,
-            transport,
-          }),
+          transport: send,
         });
         await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
       } catch (error) {
@@ -243,10 +251,6 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
       }
     },
   );
-}
-
-function registerDaemonAuthDiagnosticValue(flags: CliFlags): void {
-  if (flags.daemonAuthToken) registerDiagnosticSensitiveValue(flags.daemonAuthToken);
 }
 
 type ParsedCliInput = {
@@ -334,6 +338,8 @@ type CliRunContext = {
   hadConnectionDefaults: boolean;
   claimedConnection?: RemoteConnectionState | null;
   commandConnection: CommandConnection | null;
+  cloudSession?: CloudSessionBinding;
+  admitConnection?: Parameters<typeof resolveRunTransport>[2];
   explicitFlagKeys: Set<FlagKey>;
   // Mutated in place by resolveRemoteContext (auth, materialization) so the
   // failure handler always sees the same state the throwing phase saw.
@@ -364,18 +370,23 @@ async function resolveRunContextOrExit(
       configuredPlatform: parsed.flags.platform,
       configuredSession: parsed.flags.session,
     });
-    const skipPlatformDefault =
-      getCommandSchema(base.command)?.explicitOnlyFlags?.includes('platform') === true;
-    const flags =
-      binding.lockPolicy || skipPlatformDefault
-        ? { ...parsed.flags }
-        : applyDefaultPlatformBinding(parsed.flags, {
-            env: base.host.env,
-            policyOverrides: parsed.flags,
-            configuredPlatform: parsed.flags.platform,
-            configuredSession: parsed.flags.session,
-          });
-    await preflightCommandConnection(base, flags, parsed.remoteConfigLeaseProvider);
+    const flags = bindRunPlatform(parsed.flags, base.command, base.host, binding);
+    if (base.command === 'connect' && flags.remoteConfig) {
+      const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
+      await admitConnectProfileWithDiagnostics(
+        parsed.remoteConfigLeaseProvider,
+        flags.daemonBaseUrl,
+        base.host,
+      );
+    }
+    // A leased remote config, or a connect without one (it always leases through a provider), needs
+    // an explicit session before anything is resolved or leased (#3931).
+    const leasedRemoteConfig =
+      parsed.remoteConfigLeaseProvider && runsOnRemoteConnection(base.command);
+    const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
+    if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
+      throw remoteSessionRequiredError(parsed.remoteConfigLeaseProvider);
+    }
     const { resolveCommandConnection } = await import('./cli/connection/command-connection.ts');
     const { daemonPaths, effectiveFlags, defaults, connection } = resolveCommandConnection({
       host: base.host,
@@ -388,9 +399,26 @@ async function resolveRunContextOrExit(
       materializes: shouldMaterializeRemoteConnection(base.command),
       claimForDisconnect: base.command === 'disconnect',
     });
+    const { resolveCloudAdmission } = await import('./cli/connection/active-connection.ts');
+    const cloudSession = defaults?.cloudSession;
+    const admitConnection = await resolveCloudAdmission({
+      command: base.command,
+      usesSessions: runsOnRemoteConnection(base.command),
+      stateDir: daemonPaths.baseDir,
+      session: effectiveFlags.session ?? flags.session,
+      binding: cloudSession,
+      remoteConfig: effectiveFlags.remoteConfig,
+      remoteRoute: [
+        defaults,
+        effectiveFlags.daemonBaseUrl,
+        base.host.env.AGENT_DEVICE_DAEMON_BASE_URL,
+      ].some(Boolean),
+    });
     return {
       ...base,
       binding,
+      cloudSession,
+      admitConnection,
       flags,
       daemonPaths,
       sessionName: flags.session ?? 'default',
@@ -422,25 +450,21 @@ async function resolveRunContextOrExit(
   }
 }
 
-async function preflightCommandConnection(
-  base: Pick<CliRunContext, 'command' | 'positionals' | 'host'>,
+function bindRunPlatform(
   flags: CliFlags,
-  remoteConfigLeaseProvider: string | undefined,
-): Promise<void> {
-  if (base.command === 'connect' && flags.remoteConfig) {
-    const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
-    await admitConnectProfileWithDiagnostics(
-      remoteConfigLeaseProvider,
-      flags.daemonBaseUrl,
-      base.host,
-    );
+  command: string,
+  host: HostEnvironment,
+  binding: ReturnType<typeof resolveBindingSettings>,
+): CliFlags {
+  if (binding.lockPolicy || getCommandSchema(command)?.explicitOnlyFlags?.includes('platform')) {
+    return { ...flags };
   }
-  // A leased remote config, or a connect without one, needs a named session before leasing (#3931).
-  const leasedRemoteConfig = remoteConfigLeaseProvider && runsOnRemoteConnection(base.command);
-  const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
-  if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
-    throw remoteSessionRequiredError(remoteConfigLeaseProvider);
-  }
+  return applyDefaultPlatformBinding(flags, {
+    env: host.env,
+    policyOverrides: flags,
+    configuredPlatform: flags.platform,
+    configuredSession: flags.session,
+  });
 }
 
 async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
@@ -450,6 +474,25 @@ async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
     stateDir: ctx.daemonPaths.baseDir,
     session: ctx.effectiveFlags.session ?? ctx.sessionName,
   });
+}
+
+async function applySavedCloudAttachment(ctx: CliRunContext): Promise<void> {
+  const session = ctx.cloudSession;
+  if (!session || ctx.command === 'disconnect' || ctx.command === 'auth') return;
+  const { bindCloudAttachment } = await import('./cli/connection/cloud-attachment.ts');
+  const location = { stateDir: ctx.daemonPaths.baseDir, session: ctx.sessionName };
+  const attachment = await bindCloudAttachment({
+    host: ctx.host,
+    flags: ctx.effectiveFlags,
+    location,
+    session,
+  });
+  ctx.host = attachment.host;
+  ctx.effectiveFlags = attachment.flags;
+  if (session.transport === 'agent-device-daemon') {
+    ctx.connectionMetadata = undefined;
+    ctx.commandConnection = null;
+  }
 }
 
 async function resolveRemoteContext(
@@ -478,21 +521,23 @@ async function resolveRemoteContext(
     ctx.connectionMetadata = buildRemoteConnectionRequestMetadata(selection.state);
   }
 
-  if (shouldResolveRemoteAuth(ctx.command)) {
-    const authResolution = await resolveRemoteAuthForCli({
+  if (!ctx.cloudSession && shouldResolveRemoteAuth(ctx.command)) {
+    const { resolveConnectionAuthFlags } = await import('./cli/connection/active-connection.ts');
+    ctx.effectiveFlags = await resolveConnectionAuthFlags({
       command: ctx.command,
+      provider: ctx.positionals[0],
       flags: ctx.effectiveFlags,
-      stateDir: ctx.daemonPaths.baseDir,
-      env: ctx.host.env,
+      host: ctx.host,
+      location: { stateDir: ctx.daemonPaths.baseDir, session: ctx.sessionName },
     });
-    ctx.effectiveFlags = authResolution.flags;
   }
 
   if (remote && selection) {
+    const send = createClientDaemonTransport(transport);
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
       host: ctx.host,
       devicePin: ctx.devicePin,
-      transport: createClientDaemonTransport(transport),
+      transport: send,
     });
     const materialized = await remote.materializeRemoteConnectionForCommand({
       selection,
@@ -504,6 +549,7 @@ async function resolveRemoteContext(
       positionals: ctx.positionals,
       batchSteps: ctx.parsedBatchSteps,
       forceRuntimePrepare: hasExplicitMetroRuntimeOverrides(ctx.explicitFlagKeys),
+      cloudGeneration: ctx.cloudSession?.generation,
     });
     ctx.effectiveFlags = materialized.flags;
     ctx.resolvedRuntime = materialized.runtime;
@@ -824,6 +870,7 @@ type CliDaemonTransportSetup = {
   replayTestReporterRuntime?: ReplayTestReporterRuntime;
   commandProgress: CommandProgressState;
   transport: CliDaemonTransport;
+  cloudGeneration?: string;
 };
 
 /**
@@ -831,12 +878,14 @@ type CliDaemonTransportSetup = {
  * stored lease when the reply names it.
  */
 function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
+  const { flags, host, cloudGeneration } = options;
   const send = createCliProgressTransport(options);
-  if (!options.flags.remoteConfig) return send;
+  if (!flags.remoteConfig || options.command === 'connect' || options.command === 'disconnect')
+    return send;
   return async (req, context) => {
     const response = await send(req, context);
     const { forgetEndedConnectionLease } = await import('./cli/connection/ended-lease.ts');
-    forgetEndedConnectionLease(options.flags, response, options.host);
+    await forgetEndedConnectionLease(flags, response, host, cloudGeneration);
     return response;
   };
 }

@@ -9,6 +9,7 @@ import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-cli
 import {
   isRetryableUploadStreamError,
   streamFileToHttpRequest,
+  type UploadHandoff,
   withUploadPreparationDeadline,
 } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
@@ -37,6 +38,7 @@ type UploadArtifactOptions = {
    * that found the device's lease gone. Aborted requests reject with the signal's own reason.
    */
   signal?: AbortSignal;
+  handoff?: UploadHandoff;
 };
 
 type UploadResponse = {
@@ -93,6 +95,7 @@ async function uploadArtifactWithinBudget(
       artifact: prepared,
       uploadAttemptId,
       signal: options.signal,
+      handoff: options.handoff,
     });
 
     if (preflight?.kind === 'cache-hit') {
@@ -108,6 +111,7 @@ async function uploadArtifactWithinBudget(
         uploadAttemptId,
         onProgress: options.onProgress,
         signal: options.signal,
+        handoff: options.handoff,
       });
       if (directUpload) return directUpload;
       options.onProgress?.({
@@ -123,6 +127,7 @@ async function uploadArtifactWithinBudget(
         artifact: prepared,
         onProgress: options.onProgress,
         signal: options.signal,
+        handoff: options.handoff,
       });
     }
 
@@ -133,6 +138,7 @@ async function uploadArtifactWithinBudget(
       artifact: prepared,
       onProgress: options.onProgress,
       signal: options.signal,
+      handoff: options.handoff,
     });
   } finally {
     prepared.cleanup();
@@ -148,6 +154,7 @@ async function tryDirectUploadWithResume(options: {
   uploadAttemptId: string;
   onProgress?: UploadProgressSink;
   signal: AbortSignal;
+  handoff?: UploadHandoff;
 }): Promise<string | undefined> {
   const uploadOnce = async (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
@@ -159,6 +166,7 @@ async function tryDirectUploadWithResume(options: {
       leaseId: options.leaseId,
       uploadId: preflight.uploadId,
       signal: options.signal,
+      handoff: options.handoff,
     });
   };
 
@@ -191,6 +199,7 @@ async function retryDirectUpload(
     uploadAttemptId: string;
     onProgress?: UploadProgressSink;
     signal: AbortSignal;
+    handoff?: UploadHandoff;
   },
   uploadOnce: (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
@@ -203,6 +212,7 @@ async function retryDirectUpload(
     artifact: options.artifact,
     uploadAttemptId: options.uploadAttemptId,
     signal: options.signal,
+    handoff: options.handoff,
   });
   if (retryPreflight?.kind === 'cache-hit') {
     return retryPreflight.uploadId;
@@ -231,6 +241,7 @@ async function uploadLegacyArtifact(options: {
   artifact: PreparedUploadArtifact;
   onProgress?: UploadProgressSink;
   signal: AbortSignal;
+  handoff?: UploadHandoff;
 }): Promise<string> {
   const { normalizedBase, token, leaseId, artifact } = options;
   const uploadUrl = new URL('upload', normalizedBase);
@@ -253,6 +264,7 @@ async function uploadLegacyArtifact(options: {
     errorMessage: 'Failed to upload artifact to remote daemon',
     errorHint: 'Verify the remote daemon is reachable and supports artifact uploads.',
     signal: options.signal,
+    handoff: options.handoff,
     progress: {
       stage: 'legacy',
       fileName: artifact.fileName,
@@ -279,6 +291,7 @@ async function requestUploadPreflight(options: {
   artifact: PreparedUploadArtifact;
   uploadAttemptId: string;
   signal?: AbortSignal;
+  handoff?: UploadHandoff;
 }): Promise<UploadPreflightResult | undefined> {
   const preflightUrl = new URL('upload/preflight', options.normalizedBase);
   const headers: Record<string, string> = {
@@ -306,6 +319,7 @@ async function requestUploadPreflight(options: {
     },
     'preflight',
     options.signal,
+    options.handoff,
   ).catch((error: unknown) => {
     // A failed preflight is ordinary here — the caller falls back to the legacy upload. A canceled
     // one is not: there is nothing to fall back to when the lease that paid for this upload is gone.
@@ -325,18 +339,22 @@ async function requestUploadControl(
   init: { headers: Record<string, string>; body: string },
   phase: 'preflight' | 'finalize',
   callerSignal?: AbortSignal,
+  handoff?: UploadHandoff,
 ): Promise<{ response: Response; body: unknown }> {
   const watchdog = createTransferPhaseWatchdog(callerSignal);
-  watchdog.signal.throwIfAborted();
-  watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
   try {
     // Redirects could forward the daemon token, so these control requests never follow them.
-    const response = await fetch(url, {
-      ...init,
-      method: 'POST',
-      redirect: 'error',
-      signal: watchdog.signal,
-    });
+    const start = () => {
+      watchdog.signal.throwIfAborted();
+      watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
+      return fetch(url, {
+        ...init,
+        method: 'POST',
+        redirect: 'error',
+        signal: watchdog.signal,
+      });
+    };
+    const response = await (handoff?.(start) ?? start());
     const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
     watchdog.signal.throwIfAborted();
     return { response, body };
@@ -393,6 +411,7 @@ async function uploadDirectArtifact(
     artifact: PreparedUploadArtifact;
     onProgress?: UploadProgressSink;
     signal: AbortSignal;
+    handoff?: UploadHandoff;
   },
   ticket: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
 ): Promise<void> {
@@ -411,6 +430,7 @@ async function uploadDirectArtifact(
     errorMessage: 'Failed to upload artifact with direct upload ticket',
     retryable: true,
     signal,
+    handoff: options.handoff,
     progress: {
       stage: 'direct',
       fileName: artifact.fileName,
@@ -432,6 +452,7 @@ async function finalizeDirectUpload(options: {
   leaseId?: string;
   uploadId: string;
   signal?: AbortSignal;
+  handoff?: UploadHandoff;
 }): Promise<string> {
   const finalizeUrl = new URL('upload/finalize', options.normalizedBase);
   const headers: Record<string, string> = {
@@ -451,6 +472,7 @@ async function finalizeDirectUpload(options: {
     },
     'finalize',
     options.signal,
+    options.handoff,
   ).catch((error: unknown) => {
     // As with preflight: a canceled finalize is not a transport failure to report, it is the caller
     // saying this upload is no longer worth finishing.
