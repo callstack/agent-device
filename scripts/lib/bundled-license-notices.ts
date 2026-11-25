@@ -17,6 +17,7 @@ type Manifest = {
  * and emits the notices beside the bundle. Extra notices are read from root's LICENSES directory.
  */
 export function bundledLicenseNotices(root: string): Rolldown.Plugin {
+  const projectRoot = path.resolve(root);
   return {
     name: 'bundled-license-notices',
     generateBundle(_options, bundle) {
@@ -25,12 +26,12 @@ export function bundledLicenseNotices(root: string): Rolldown.Plugin {
         if (output.type !== 'chunk') continue;
         for (const [id, module] of Object.entries(output.modules)) {
           if (module.renderedLength === 0) continue;
-          const owner = thirdPartyPackage(root, id);
+          const owner = thirdPartyPackage(projectRoot, id);
           if (owner) packages.set(owner.directory, owner.manifest);
         }
       }
       const dependencies = Array.from(packages, ([directory, manifest]) =>
-        attributableDependency(root, directory, manifest),
+        attributableDependency(projectRoot, directory, manifest),
       );
       this.emitFile({
         type: 'asset',
@@ -50,7 +51,7 @@ function readManifest(directory: string): Manifest | undefined {
 
 /**
  * The package that owns a bundled module: the nearest `package.json` with a name. A `package.json`
- * without one only marks a module type. Root and private workspace packages are this project's code.
+ * without one only marks a module type. Root and workspace packages are this project's code.
  * A module under `node_modules` must find its package before it leaves that `node_modules`.
  */
 function thirdPartyPackage(
@@ -63,7 +64,10 @@ function thirdPartyPackage(
     const manifest = readManifest(directory);
     if (manifest) {
       const vendored = directory.split(path.sep).includes('node_modules');
-      return manifest.private === true && !vendored ? undefined : { directory, manifest };
+      const isWorkspace = path.dirname(directory) === path.join(root, 'packages');
+      return !vendored && (manifest.private === true || isWorkspace)
+        ? undefined
+        : { directory, manifest };
     }
     const parent = path.dirname(directory);
     if (path.basename(directory) === 'node_modules' || parent === directory) {

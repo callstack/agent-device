@@ -5,10 +5,11 @@ replace the licenses listed here.
 
 ## Bundled JavaScript dependencies
 
-Each build generates `dist/src/THIRD_PARTY_NOTICES.txt` from the dependencies
-included in the bundle. That file ships in the npm package with the dependencies'
-license texts and applicable NOTICE contents. Dependencies resolved separately at
-runtime retain the license files in their own packages.
+The `agent-device` package includes `dist/src/THIRD_PARTY_NOTICES.txt`. The
+`@agent-device/maestro` package includes `dist/THIRD_PARTY_NOTICES.txt`. Each file
+contains the bundled dependencies' license texts and applicable NOTICE
+contents. Dependencies resolved at runtime retain the license files in their
+own packages.
 
 `jpeg-js` also carries source-file notices for its decoder and encoder, beyond
 the package-level BSD license. These are retained in

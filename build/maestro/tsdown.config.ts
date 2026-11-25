@@ -1,6 +1,14 @@
 import { defineConfig } from 'tsdown';
+import { fileURLToPath } from 'node:url';
+import { jpegDecoderOnly } from '../../scripts/lib/jpeg-decoder-only.ts';
+import { bundledLicenseNotices } from '../../scripts/lib/bundled-license-notices.ts';
 
 export default defineConfig({
+  cwd: fileURLToPath(new URL('../../packages/maestro', import.meta.url)),
+  plugins: [
+    jpegDecoderOnly(),
+    bundledLicenseNotices(fileURLToPath(new URL('../..', import.meta.url))),
+  ],
   entry: {
     'agent-device': 'src/plugin.ts',
     'png-worker': '../capture-kit/src/png-worker.ts',

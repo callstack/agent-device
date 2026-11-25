@@ -2,12 +2,96 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
 
 const execFileAsync = promisify(execFile);
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+
+async function buildWithMaps(cwd: string, config: string): Promise<string> {
+  const output = await mkdtempForTest('jpeg-bundle-');
+  await execFileAsync(
+    process.execPath,
+    [
+      fileURLToPath(new URL('../../node_modules/tsdown/dist/run.mjs', import.meta.url)),
+      '--config',
+      config,
+      '--out-dir',
+      output,
+      '--no-dts',
+      '--sourcemap',
+    ],
+    { cwd },
+  );
+  return output;
+}
+
+async function assertDecoderOnly(output: string): Promise<void> {
+  const mapFiles = (await fs.readdir(output)).filter((file) => /\.m?js\.map$/.test(file));
+  const jpegModules = new Set<string>();
+  for (const file of mapFiles) {
+    const map = JSON.parse(await fs.readFile(path.join(output, file), 'utf8')) as {
+      sources: string[];
+    };
+    for (const source of map.sources) {
+      const module = source.replaceAll('\\', '/').split('/jpeg-js/lib/')[1];
+      if (module) jpegModules.add(module);
+    }
+  }
+  assert.deepEqual([...jpegModules], ['decoder.js']);
+}
+
+test('core bundles only the JPEG decoder and decodes a screenshot', async () => {
+  const output = await buildWithMaps(repoRoot, 'tsdown.config.ts');
+  await assertDecoderOnly(output);
+  await fs.writeFile(path.join(output, 'package.json'), '{"type":"module"}');
+  const { decodeScreenshotImage } = await import(
+    pathToFileURL(path.join(output, 'screenshot-image.js')).href
+  );
+  const jpeg = await fs.readFile(path.join(repoRoot, 'examples/test-app/assets/gesture-earth.jpg'));
+  const image = decodeScreenshotImage(jpeg, 'JPEG fixture');
+  assert.equal(image.width, 720);
+  assert.equal(image.height, 480);
+  assert.equal(image.data.length, 720 * 480 * 4);
+}, 60_000);
+
+test('Maestro bundles only the JPEG decoder and emits its attribution', async () => {
+  const output = await buildWithMaps(
+    path.join(repoRoot, 'packages/maestro'),
+    '../../build/maestro/tsdown.config.ts',
+  );
+  await assertDecoderOnly(output);
+  const notices = await fs.readFile(path.join(output, 'THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.match(notices, /jpeg-js@0\.4\.4/);
+  assert.match(notices, /jpeg-js 0\.4\.4 source-file notices/);
+  assert.match(notices, /Apache License\s+Version 2\.0/);
+}, 60_000);
+
+test('a root with a trailing separator excludes the project and workspaces but attributes nested packages', async () => {
+  const root = await fixture({
+    'input.ts': [
+      "export { value } from './packages/public/index.js';",
+      "export { nested } from './packages/public/vendor/nested/index.js';",
+      "export { own } from './own.js';",
+    ].join('\n'),
+    'own.js': 'export const own = process.env.FIXTURE_OWN;',
+    'packages/public/package.json': JSON.stringify({ name: '@fixture/public', version: '1.0.0' }),
+    'packages/public/index.js': 'export const value = process.env.FIXTURE_VALUE;',
+    'packages/public/vendor/nested/package.json': JSON.stringify({
+      name: 'nested',
+      version: '1.0.0',
+      license: 'MIT',
+    }),
+    'packages/public/vendor/nested/index.js': 'export const nested = process.env.FIXTURE_NESTED;',
+    'packages/public/vendor/nested/LICENSE': 'Copyright nested fixture\nFull license terms.',
+  });
+  await bundle(root + path.sep);
+  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.doesNotMatch(notices, /@fixture\/public|fixture-project/);
+  assert.match(notices, /nested@1\.0\.0 \(MIT\)/);
+});
 
 /** One record type for fixture files, so table rows that name different files share a shape. */
 function fixtureFiles(files: Record<string, string>): Record<string, string> {
