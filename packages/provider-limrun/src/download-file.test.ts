@@ -1,10 +1,13 @@
 import { execFile } from 'node:child_process';
+import dns from 'node:dns/promises';
+import type { LookupAddress, LookupAllOptions } from 'node:dns';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { once } from 'node:events';
 import { promisify } from 'node:util';
-import { gzipSync } from 'node:zlib';
+import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
@@ -81,17 +84,14 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
       '--input-type=module',
       '-e',
       `
-        import dns from 'node:dns';
+        import dns from 'node:dns/promises';
         import { downloadLimrunFile } from './download-file.ts';
         const [url, authenticatedPath] = process.argv.slice(1);
         const lookup = dns.lookup;
-        dns.lookup = (hostname, options, callback) => {
-          if (hostname === 'localhost.') {
-            callback(new Error('The authenticated socket must bypass OS lookup for localhost.'));
-            return;
-          }
-          return lookup(hostname, options, callback);
-        };
+        dns.lookup = (hostname, options) =>
+          hostname === 'localhost.'
+            ? Promise.resolve([{ address: '127.0.0.1', family: 4 }])
+            : lookup(hostname, options);
         await downloadLimrunFile({
           url,
           instance: { apiUrl: url, token: 'private-fixture-bearer' },
@@ -105,7 +105,7 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
     {
       cwd: import.meta.dirname,
       env: {
-        NODE_DEBUG: 'http,net',
+        NODE_DEBUG: 'http,net,undici,fetch',
         NODE_USE_ENV_PROXY: '1',
         HTTP_PROXY: new URL(proxyUrl).origin,
         http_proxy: new URL(proxyUrl).origin,
@@ -126,21 +126,81 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
   expect(proxyRequests).toBe(0);
 });
 
-test('decodes a compressed authenticated loopback reply before writing the file', async () => {
-  const payload = Buffer.from('ftypisom-payload');
-  const url = await serve((_request, response) => {
-    response.writeHead(200, { 'content-encoding': 'gzip' });
-    response.end(gzipSync(payload));
+test('uses the resolver’s IPv6 loopback without falling back to an unlisted IPv4 listener', async (t) => {
+  const received: string[] = [];
+  const url = new URL(
+    await serve((_request, response) => {
+      received.push('ipv4');
+      response.end('IPv4');
+    }),
+  );
+  const ipv6 = http.createServer((request, response) => {
+    received.push(request.headers.authorization ?? '');
+    response.end('IPv6');
   });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  await downloadLimrunFile({
-    url,
-    instance: { apiUrl: url, token: 'fixture-token' },
-    destinationPath,
-    timeoutMs: 1000,
-  });
-  expect(fs.readFileSync(destinationPath)).toEqual(payload);
+  ipv6.listen({ host: '::1', port: Number(url.port), ipv6Only: true });
+  try {
+    await once(ipv6, 'listening');
+  } catch (error) {
+    if (['EADDRNOTAVAIL', 'EAFNOSUPPORT'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+      t.skip('IPv6 loopback is unavailable');
+      return;
+    }
+    throw error;
+  }
+  servers.push(ipv6);
+  const resolver: { lookup(host: string, options: LookupAllOptions): Promise<LookupAddress[]> } =
+    dns;
+  const lookup = vi.spyOn(resolver, 'lookup').mockResolvedValue([
+    { address: '192.0.2.1', family: 4 },
+    { address: '::1', family: 6 },
+  ]);
+  try {
+    url.hostname = 'localhost';
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+    const options = {
+      url: url.href,
+      instance: { apiUrl: url.origin, token: 'fixture-token' },
+      destinationPath,
+      timeoutMs: 1000,
+    };
+    await downloadLimrunFile(options);
+    expect(received).toEqual(['Bearer fixture-token']);
+    expect(fs.readFileSync(destinationPath, 'utf8')).toBe('IPv6');
+
+    lookup.mockResolvedValue([{ address: '192.0.2.1', family: 4 }]);
+    await expect(downloadLimrunFile(options)).rejects.toMatchObject({
+      details: { reason: 'limrun_download_failed' },
+    });
+    expect(received).toEqual(['Bearer fixture-token']);
+    expect(fs.existsSync(destinationPath)).toBe(false);
+  } finally {
+    lookup.mockRestore();
+  }
 });
+
+test.each([
+  ['gzip', gzipSync],
+  ['deflate', deflateSync],
+  ['gzip, br', (payload: Buffer) => brotliCompressSync(gzipSync(payload))],
+])(
+  'decodes %s on an authenticated loopback reply before writing the file',
+  async (encoding, compress) => {
+    const payload = Buffer.from('ftypisom-payload');
+    const url = await serve((_request, response) => {
+      response.writeHead(200, { 'content-encoding': encoding });
+      response.end(compress(payload));
+    });
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+    await downloadLimrunFile({
+      url,
+      instance: { apiUrl: url, token: 'fixture-token' },
+      destinationPath,
+      timeoutMs: 1000,
+    });
+    expect(fs.readFileSync(destinationPath)).toEqual(payload);
+  },
+);
 
 test('rejects a switching-protocols reply and leaves no file', async () => {
   const url = await serve((_request, response) => {

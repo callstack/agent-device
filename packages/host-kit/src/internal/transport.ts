@@ -301,7 +301,7 @@ export function observeClientRequestPhases(
 let loopbackAddresses: net.BlockList | undefined;
 
 export function isLoopbackUrlHostname(hostname: string): boolean {
-  if (hostname === 'localhost' || hostname === 'localhost.') return true;
+  if (hostname === 'localhost') return true;
   const address = hostname.replace(/^\[(.*)\]$/, '$1');
   const family = net.isIP(address);
   if (family === 0) return false;
