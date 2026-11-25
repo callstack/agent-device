@@ -60,7 +60,7 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
     result: C,
     metadata: DurableResourceEnvelope<K>['metadata'],
     producer?: DurableCaptureFinishIntent,
-  ): JsonObject;
+  ): JsonObject | Promise<JsonObject>;
   /**
    * The completion this kind stored in a record that is already committed, or nothing it can serve.
    *

@@ -35,9 +35,8 @@ import {
   settleCommittedFileOutputs,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
-import { localEnv, successfulData, withHttp } from './http-output.fixtures.ts';
-import { runBatchCommands } from '../../sessions/handlers/session-batch.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
+import { localEnv, successfulData, withHttp } from './http-output.fixtures.ts';
 
 const outputCases = [
   { command: 'screenshot', positionals: ['/host/screenshot.png'] },
@@ -677,30 +676,6 @@ test.each([
     });
   },
 );
-
-test('batch recording keeps remote origin and generates a session-owned destination', async () => {
-  const harness = makeRecordRuntimeHarness('remote-batch-record-');
-  const response = await runBatchCommands(
-    {
-      token: 'test-token',
-      session: harness.sessionName,
-      command: 'batch',
-      positionals: [],
-      flags: { batchSteps: [{ command: 'record', positionals: ['start'] }] },
-      meta: { cwd: '/client/chosen-root' },
-      internal: { publicNetworkOnly: true },
-    },
-    harness.sessionName,
-    async (request) =>
-      await harness.run(request.positionals, request.meta, request.flags, request.internal),
-  );
-  if (!response.ok) throw new Error(response.error.message);
-  const results = response.data?.results as Array<{ data: { outPath: string } }>;
-  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
-  expect(path.dirname(source)).toBe(harness.sessionStore.resolveSessionDir(harness.sessionName));
-  expect(results[0]!.data.outPath).toBe(path.basename(source));
-  await harness.run(['stop']);
-});
 
 test('remote perf memory output reaches the runtime only as a session artifact and downloads by ID', async () => {
   const root = mkdtempForTestSync('remote-perf-memory-');

@@ -19,10 +19,12 @@ import { screenshotCommandSurface } from '../../__tests__/support/screenshot-com
 import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
+  cleanupDownloadableArtifact,
   settleCommittedFileOutputs,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
+import { runBatchCommands } from '../../sessions/handlers/session-batch.ts';
 import { successfulData, withHttp } from './http-output.fixtures.ts';
 
 test.each(['caller destination', 'remote placeholder', 'public remote', 'public digest'])(
@@ -338,6 +340,69 @@ test('direct HTTP recording replay requires known remote output provenance', asy
       });
       expect(download.status).toBe(200);
       expect(await download.text()).toBe('recorded-video');
+    },
+  );
+});
+
+test('batch recording keeps remote origin and generates a session-owned destination', async () => {
+  const harness = makeRecordRuntimeHarness('remote-batch-record-');
+  const start = harness.runtime.start.getMockImplementation()!;
+  harness.runtime.start.mockImplementation(async (input) => {
+    fs.writeFileSync(input.outputPath, 'recorded-video');
+    return await start(input);
+  });
+  const response = await runBatchCommands(
+    {
+      token: 'test-token',
+      session: harness.sessionName,
+      command: 'batch',
+      positionals: [],
+      flags: { batchSteps: [{ command: 'record', positionals: ['start'] }] },
+      meta: { cwd: '/client/chosen-root' },
+      internal: { publicNetworkOnly: true },
+    },
+    harness.sessionName,
+    async (request) =>
+      await harness.run(request.positionals, request.meta, request.flags, request.internal),
+  );
+  if (!response.ok) throw new Error(response.error.message);
+  const results = response.data?.results as Array<{ data: { outPath: string } }>;
+  const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+  expect(path.dirname(source)).toBe(harness.sessionStore.resolveSessionDir(harness.sessionName));
+  expect(results[0]!.data.outPath).toBe(path.basename(source));
+  const stopped = await harness.run(['stop']);
+  if (!stopped.ok) throw new Error(stopped.error.message);
+  for (const { artifactId } of stopped.data?.artifacts ?? []) {
+    if (artifactId) cleanupDownloadableArtifact(artifactId);
+  }
+});
+
+test('record stop replay refuses an artifact whose file has been replaced', async () => {
+  const harness = makeRecordRuntimeHarness('replaced-remote-recording-');
+  const start = harness.runtime.start.getMockImplementation()!;
+  harness.runtime.start.mockImplementation(async (input) => {
+    fs.writeFileSync(input.outputPath, 'recorded-video');
+    return await start(input);
+  });
+  await withHttp(
+    async (request) =>
+      await harness.run(request.positionals, request.meta, request.flags, request.internal),
+    async (post) => {
+      successfulData(await post({ command: 'record', positionals: ['start'] }));
+      const stop = () => post({ command: 'record', positionals: ['stop'] });
+      const { artifacts } = successfulData(await stop());
+      expect(artifacts?.[0]?.artifactId).toBeTypeOf('string');
+      const capturePath = harness.runtime.start.mock.calls[0]![0].outputPath;
+      fs.writeFileSync(capturePath + '.replacement', 'replacement');
+      fs.renameSync(capturePath + '.replacement', capturePath);
+      try {
+        expect((await stop()).error?.data?.details).toMatchObject({ reason: 'RESOURCE_EXPIRED' });
+        expect(fs.readFileSync(capturePath, 'utf8')).toBe('replacement');
+      } finally {
+        for (const { artifactId } of artifacts ?? []) {
+          if (artifactId) cleanupDownloadableArtifact(artifactId);
+        }
+      }
     },
   );
 });

@@ -11,7 +11,7 @@ import {
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
-import { markRequestCanceled } from '@agent-device/host-kit/request';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { defineUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createDaemonHttpServer } from './http-server.ts';
@@ -246,6 +246,7 @@ test.each([
         cleanupDownloadableArtifact(id);
       }
     } finally {
+      clearRequestCanceled(canceledStopId);
       await closeLoopbackServer(server);
     }
   },

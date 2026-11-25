@@ -340,7 +340,7 @@ export function commitRecordingFileOutputs(
     if (
       completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS <= Date.now() ||
       entry?.cleanupRequested ||
-      (!publish && !entry)
+      (!publish && (!entry || readOutputIdentity(entry.artifactPath, true) !== entry.output))
     ) {
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }

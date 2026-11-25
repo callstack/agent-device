@@ -260,6 +260,7 @@ async function finishSessionScreenRecording(params: {
   if (
     record.status !== 'decoded' ||
     record.envelope.lifecycle !== 'completed' ||
+    record.envelope.sessionId !== recording.envelope.sessionId ||
     record.envelope.fence.token !== recording.envelope.fence.token ||
     record.envelope.fence.generation !== recording.envelope.fence.generation
   )

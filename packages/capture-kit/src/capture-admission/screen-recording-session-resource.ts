@@ -22,8 +22,6 @@ import type {
   DurableCaptureRecoveryControl,
   DurableCaptureSessionBinding,
 } from '../durable-capture/index.ts';
-import { chunkPathAt } from '../recording/output-path.ts';
-import { deriveRecordingTelemetryPath } from '../recording/telemetry.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
@@ -78,15 +76,19 @@ export function finishLiveScreenRecording(params: {
   return screenRecordingDurableResource.finishLive(params);
 }
 
-function recordingCompletionMetadata(
+async function recordingCompletionMetadata(
   result: ScreenRecordingCompletion,
   metadata: JsonObject | undefined,
   producer?: DurableCaptureFinishIntent,
-): JsonObject {
+): Promise<JsonObject> {
   const completion = encodeScreenRecordingCompletionMetadata(result);
   const reservedPath = metadata?.remoteCapturePath;
   if (!producer || typeof reservedPath !== 'string') return completion;
   try {
+    const [{ chunkPathAt }, { deriveRecordingTelemetryPath }] = await Promise.all([
+      import('../recording/output-path.ts'),
+      import('../recording/telemetry.ts'),
+    ]);
     if (
       result.outPath !== reservedPath ||
       result.chunks?.some(
