@@ -299,6 +299,7 @@
     }
   },
   "devDependencies": {
+    "@agent-device/build-config": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/apple-runner": "workspace:*",
     "@agent-device/aws-device-farm": "workspace:*",

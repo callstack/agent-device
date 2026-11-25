@@ -9,6 +9,38 @@ import { mkdtempForTest } from '@agent-device/test-kit';
 
 const execFileAsync = promisify(execFile);
 
+test('Maestro emits JPEG attribution with its production bundle', async () => {
+  const output = await mkdtempForTest('maestro-notices-');
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  await execFileAsync(
+    process.execPath,
+    [
+      fileURLToPath(new URL('../../node_modules/tsdown/dist/run.mjs', import.meta.url)),
+      '--config',
+      '../../scripts/maestro-tsdown.config.ts',
+      '--out-dir',
+      output,
+      '--no-dts',
+    ],
+    { cwd: path.join(root, 'packages/maestro') },
+  );
+  const notices = await fs.readFile(path.join(output, 'THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.match(notices, /jpeg-js@0\.4\.4/);
+  assert.match(notices, /jpeg-js 0\.4\.4 source-file notices/);
+  assert.match(notices, /Apache License\s+Version 2\.0/);
+}, 60_000);
+
+test('public workspace code is not treated as a third-party package', async () => {
+  const root = await fixture({
+    'input.ts': "export { value } from './packages/public/index.js';",
+    'packages/public/package.json': JSON.stringify({ name: '@fixture/public', version: '1.0.0' }),
+    'packages/public/index.js': 'export const value = process.env.FIXTURE_VALUE;',
+  });
+  await bundle(root);
+  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.doesNotMatch(notices, /@fixture\/public/);
+});
+
 /** One record type for fixture files, so table rows that name different files share a shape. */
 function fixtureFiles(files: Record<string, string>): Record<string, string> {
   return files;

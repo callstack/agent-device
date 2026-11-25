@@ -50,7 +50,7 @@ function readManifest(directory: string): Manifest | undefined {
 
 /**
  * The package that owns a bundled module: the nearest `package.json` with a name. A `package.json`
- * without one only marks a module type. Root and private workspace packages are this project's code.
+ * without one only marks a module type. Root and workspace packages are this project's code.
  * A module under `node_modules` must find its package before it leaves that `node_modules`.
  */
 function thirdPartyPackage(
@@ -63,7 +63,15 @@ function thirdPartyPackage(
     const manifest = readManifest(directory);
     if (manifest) {
       const vendored = directory.split(path.sep).includes('node_modules');
-      return manifest.private === true && !vendored ? undefined : { directory, manifest };
+      const workspace = path.relative(path.join(root, 'packages'), directory);
+      const isWorkspace =
+        workspace !== '' &&
+        !workspace.startsWith(`..${path.sep}`) &&
+        workspace !== '..' &&
+        !path.isAbsolute(workspace);
+      return !vendored && (manifest.private === true || isWorkspace)
+        ? undefined
+        : { directory, manifest };
     }
     const parent = path.dirname(directory);
     if (path.basename(directory) === 'node_modules' || parent === directory) {

@@ -691,7 +691,6 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   assert.deepEqual([...maestroPackage.workspaceDependencies].sort(), [
     '@agent-device/ad-script',
-    '@agent-device/build-config',
     '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/gestures',
