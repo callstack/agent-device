@@ -344,8 +344,6 @@ type CliRunContext = {
   hostedLeaseId?: string;
   admitConnection?: Parameters<typeof resolveRunTransport>[2];
   explicitFlagKeys: Set<FlagKey>;
-  // Mutated in place by resolveRemoteContext (auth, materialization) so the
-  // failure handler always sees the same state the throwing phase saw.
   effectiveFlags: CliFlags;
   resolvedRuntime: SessionRuntimeHints | undefined;
   connectionMetadata: RemoteConnectionRequestMetadata | undefined;
@@ -881,10 +879,6 @@ type CliDaemonTransportSetup = {
   cloudGeneration?: string;
 };
 
-/**
- * A remote connection reads each daemon reply for the leases its request ended, and forgets the
- * stored lease when the reply names it.
- */
 function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
   const { flags, host, cloudGeneration } = options;
   const send = createCliProgressTransport(options);
