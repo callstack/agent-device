@@ -181,25 +181,24 @@ test('an HTTP failure publishes its status and reason, and no peer body text at 
   request.mockRestore();
 });
 
-// A malformed URL is the failure an attached instance can cause: it answers with its bare bearer token
-// as the download URL. Neither the URL nor fetch's message about it may be published.
-test('a malformed download URL publishes neither the URL nor the transport message', async () => {
+test.each([
+  ['public', 'invalid-request'],
+  ['instance-authenticated', 'request-failed'],
+] as const)('a malformed %s download URL stays private', async (mode, transport) => {
   const token = 'liminst_9b74c9897bac770ffc029102a200c5de';
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-
-  let failure: unknown;
-  await downloadLimrunFile({
+  const failure = await downloadLimrunFile({
     url: token,
-    instance: { apiUrl: 'https://instance.example', token },
+    ...(mode === 'instance-authenticated'
+      ? { instance: { apiUrl: 'https://instance.example', token } }
+      : {}),
     destinationPath,
     timeoutMs: 5_000,
-  }).catch((error: AppError) => {
-    failure = error;
-  });
+  }).catch((error: unknown) => error);
 
   expect(failure).toBeInstanceOf(AppError);
   const details = (failure as AppError).details ?? {};
-  expect(details).toEqual({ reason: 'limrun_download_failed', transport: 'request-failed' });
+  expect(details).toEqual({ reason: 'limrun_download_failed', transport });
   expect(JSON.stringify(details)).not.toMatch(token);
   expect(JSON.stringify((failure as AppError).cause ?? '')).not.toMatch(token);
 });

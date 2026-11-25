@@ -118,6 +118,7 @@ function downloadFailure(
   signal: AbortSignal,
 ): unknown {
   if (error instanceof AppError) return error;
+  const authenticated = options.instance !== undefined;
   if (options.signal?.aborted && signal.reason === options.signal.reason) {
     const reason: unknown = options.signal.reason;
     if (reason instanceof AppError) return reason;
@@ -127,7 +128,7 @@ function downloadFailure(
     return new AppError('COMMAND_FAILED', 'Limrun download deadline expired', {
       reason: LIMRUN_DOWNLOAD_REASONS.timeout.reason,
       timeoutMs: options.timeoutMs,
-      transport: transportSummary(error),
+      transport: transportSummary(error, authenticated),
     });
   }
   if (timeout.aborted) {
@@ -138,17 +139,16 @@ function downloadFailure(
   }
   return new AppError('COMMAND_FAILED', 'Limrun download failed', {
     reason: LIMRUN_DOWNLOAD_REASONS.failed.reason,
-    transport: transportSummary(error),
+    transport: transportSummary(error, authenticated),
   });
 }
 
 /**
- * The transport's own code for a failure, without its message. `fetch` names a malformed request URL
- * with a `TypeError` and reports a socket failure with a Node code like `ECONNREFUSED`; both answer for
- * what went wrong without quoting the request it happened on.
+ * Fetch uses `TypeError` for redirect refusals as well as invalid requests. Keep the public
+ * download label and use a broader label for authenticated requests that refuse redirects.
  */
-function transportSummary(error: unknown): string {
-  if (error instanceof TypeError) return 'request-failed';
+function transportSummary(error: unknown, authenticated: boolean): string {
+  if (error instanceof TypeError) return authenticated ? 'request-failed' : 'invalid-request';
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' && code.length > 0 ? code : 'unknown';
 }
