@@ -39,7 +39,6 @@ export function createAdbProvider(
 ): AndroidAdbProvider {
   const adb = adbExecutable(env);
   const childEnv = adbEnvironment(env);
-  const scope = { host: { env: childEnv, cwd: process.cwd() }, requestEnv: {} };
   function route(args: readonly string[], serverPort?: number) {
     const { target, command } = parseAndroidAdbArgv(args);
     if (target.hostGlobals || target.server.kind !== 'ambient' || serverPort !== undefined)
@@ -55,6 +54,7 @@ export function createAdbProvider(
   return {
     exec: async (args, options) => {
       const argv = route(args, options?.serverPort);
+      const scope = { host: { env: childEnv, cwd: options?.cwd ?? '.' }, requestEnv: {} };
       const run = () => runCmd(adb, argv, { ...options, env: childEnv });
       const terminal = () => withoutCommandExecutorOverride(run);
       return await withCommandHost(scope, terminal);

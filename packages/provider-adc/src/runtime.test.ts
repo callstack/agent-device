@@ -151,6 +151,10 @@ it('reserves one broker device before dialing and frees it when the endpoint clo
     leaseId: lease.leaseId,
   });
   expect(devices).toEqual([]);
+  await expect(runtime.leaseLifecycle.allocate!(lease)).rejects.toMatchObject({
+    details: { reason: LEASE_REASONS.instanceEnded.reason },
+  });
+  expect(connectAdb).toHaveBeenCalledOnce();
   await expect(runtime.leaseLifecycle.heartbeat!(lease)).rejects.toMatchObject({
     details: { reason: LEASE_REASONS.instanceEnded.reason },
   });

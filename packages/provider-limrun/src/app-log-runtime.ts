@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { bindProviderInteractionOperations } from '@agent-device/contracts/provider-interaction';
 import { createLimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
@@ -182,6 +183,7 @@ function bindLimrunAppLogs(
     return interactor;
   };
   const interaction = bindProviderInteractionOperations({
+    pause: (milliseconds) => sleep(milliseconds, undefined, { signal }),
     screenshotHint: 'Limrun captures through its provider endpoint',
     device,
     signal,

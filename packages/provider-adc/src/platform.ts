@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { ProviderAndroidHost } from 'agent-device/plugins/device-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -94,6 +95,7 @@ export function createPlatformOwner(
         return interactor;
       }
       const interaction = bindProviderInteractionOperations({
+        pause: (milliseconds) => sleep(milliseconds, undefined, { signal }),
         device,
         signal,
         facts: facts.operations,

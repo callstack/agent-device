@@ -272,6 +272,7 @@ test('long press is admitted on both direct-session legs and closed with a dead 
 test('a provider iOS capture refuses an explicit runner request instead of returning a provider screenshot', async () => {
   const screenshot = vi.fn(async () => ({}));
   const operations = bindProviderInteractionOperations({
+    pause: vi.fn(),
     screenshotHint: 'Limrun captures through its provider endpoint',
     device: iosDevice,
     signal: new AbortController().signal,

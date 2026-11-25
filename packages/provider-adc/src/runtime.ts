@@ -157,6 +157,12 @@ export function createRegistration(
   function getAdb(device: DeviceInfo) {
     return createAdbProvider(device.id, () => adbSocket(device), env);
   }
+  async function reportClosedTunnel(leaseId: string): Promise<never> {
+    await table.release(leaseId);
+    throw new AppError('COMMAND_FAILED', 'The ADC device connection ended.', {
+      reason: LEASE_REASONS.instanceEnded.reason,
+    });
+  }
   const owner = providerRuntimeOwner('adc', instance);
   const runtime: ProviderDeviceRuntime = {
     provider: 'adc',
@@ -164,6 +170,7 @@ export function createRegistration(
     leaseLifecycle: {
       async allocate(lease, context) {
         if (lease.leaseProvider !== 'adc' || lease.backend !== 'android-instance') return undefined;
+        if (endedTunnels.has(lease.leaseId)) return await reportClosedTunnel(lease.leaseId);
         const tv = formFactor(context?.flags) === 'tv';
         const session = await table.allocate(
           lease,
@@ -196,11 +203,7 @@ export function createRegistration(
       },
       async heartbeat(lease) {
         if (lease.leaseProvider !== 'adc' || !endedTunnels.has(lease.leaseId)) return undefined;
-        await table.release(lease.leaseId);
-        endedTunnels.delete(lease.leaseId);
-        throw new AppError('COMMAND_FAILED', 'The ADC device connection ended.', {
-          reason: LEASE_REASONS.instanceEnded.reason,
-        });
+        return await reportClosedTunnel(lease.leaseId);
       },
       async release(lease) {
         if (lease.leaseProvider !== 'adc') return undefined;

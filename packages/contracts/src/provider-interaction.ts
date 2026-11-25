@@ -36,7 +36,6 @@ import {
 import { bindProviderTouchInteractor, touchRuntimeOperationFacts } from './touch-runtime.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import { type DeviceInfo } from '@agent-device/kernel/device';
-import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
 const unsupported = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason);
@@ -110,6 +109,7 @@ export function bindProviderInteractionOperations(
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor;
     presentIosAcquisition?: SnapshotRuntimePresenter;
     screenshotHint: string;
+    pause(milliseconds: number): Promise<void>;
     facts: RuntimeFacts<PlatformRuntimeOperations>['operations'];
   }>,
 ) {
@@ -132,7 +132,7 @@ export function bindProviderInteractionOperations(
       signal,
       resolveInteractor,
       facts: params.facts,
-      pause: async (milliseconds) => await sleep(milliseconds, undefined, { signal }),
+      pause: params.pause,
     }),
     ...bindProviderScreenshotInteractor({
       device,
