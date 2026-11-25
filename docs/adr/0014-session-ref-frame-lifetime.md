@@ -477,8 +477,10 @@ The daemon never captures automatically for the sole purpose of a ref renewal.
 
 Older clients remain wire-parse-compatible:
 
-- Command grammar and `refsGeneration` remain unchanged.
+- The shape of a pinned ref (one ref body plus one generation suffix) and `refsGeneration` remain unchanged, so an older client still parses every response.
 - Structured error details are additive.
+
+The pin's separator is not wire-compatible in behavior: the 2026-11-25 amendment retired `~s` for `-s`, so an older client that types or pastes `~s<generation>` is refused on live command input and must resend with `-s`.
 
 Thus, ADR 0006 requires no protocol bump.
 But older clients are not fully compatible in behavior:
