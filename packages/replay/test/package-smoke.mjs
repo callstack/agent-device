@@ -49,7 +49,7 @@ function assertIsolatedDaemonStopped(cli, cwd, env, stateDir) {
   assert.equal(status.data.state, 'stopped', JSON.stringify({ stop, status }));
 }
 
-test('packed core excludes native execution and a standalone replay plugin uses the real host', () => {
+test('packed core CLI and SDK run an installed replay plugin through the detached daemon', async (t) => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-package-'));
   try {
     const coreTarball = path.join(
@@ -102,20 +102,22 @@ test('packed core excludes native execution and a standalone replay plugin uses 
       assert.match(help, /plugin, install separately/);
       assert.match(help, /agent-device plugins add @agent-device\/replay/);
     }
-    assert.match(
-      run(
-        process.execPath,
-        [
-          '--experimental-strip-types',
-          path.join(root, 'packages/replay/test/packed-runtime.mjs'),
-          core,
-          plugin,
-          scratch,
-        ],
-        consumer,
-      ),
-      /Packed native replay/,
-    );
+    await t.test('packed replay plugin with the private source host', () => {
+      assert.match(
+        run(
+          process.execPath,
+          [
+            '--experimental-strip-types',
+            path.join(root, 'packages/replay/test/packed-runtime.mjs'),
+            core,
+            plugin,
+            scratch,
+          ],
+          consumer,
+        ),
+        /Packed native replay plugin passed against the source host/,
+      );
+    });
 
     // The managed route: the same packed core CLI selects the archive through its own public
     // `plugins add`, with no embedded factory and no workspace to borrow an engine from.
@@ -231,6 +233,23 @@ test('packed core excludes native execution and a standalone replay plugin uses 
       const served = running.data.plugins.find((entry) => entry.package === '@agent-device/replay');
       assert.equal(served?.source, 'store');
       assert.equal(served?.state, 'active');
+      const sdkReplay = JSON.parse(
+        runCmdSync(
+          process.execPath,
+          [
+            '--input-type=module',
+            '-e',
+            `import { createAgentDeviceClient } from 'agent-device';
+             const client = createAgentDeviceClient({ session: 'package-managed-sdk' });
+             console.log(JSON.stringify(await client.replay.run({ path: process.argv[1] })));`,
+            script,
+          ],
+          { cwd: consumer, env: managedEnv, timeoutMs: 120_000 },
+        ).stdout,
+      );
+      assert.equal(sdkReplay.replayed, 0);
+      assert.equal(sdkReplay.sessionActive, false);
+      assert.deepEqual(sdkReplay.artifactPaths, []);
     } catch (error) {
       primaryError = error;
     }

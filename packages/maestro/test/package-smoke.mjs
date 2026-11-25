@@ -187,7 +187,7 @@ test('packed core excludes the engine and the managed plugin works without works
       'run-script-debug',
       'run-script-env',
     ]) {
-      await t.test(`packed runtime ${mode}`, () => {
+      await t.test(`packed Maestro plugin with source host: ${mode}`, () => {
         const output = run(
           process.execPath,
           [

@@ -1,5 +1,5 @@
 // The client port the command definitions invoke: the typed Node client surface as the command
-// layer calls it. Stated in terms of contracts and command-registry vocabulary only; the published
+// layer calls it. It uses contracts and command-registry vocabulary.
 // The SDK re-exports `AgentDeviceClient` (ADR 0008).
 import type {
   AgentDeviceCapabilitiesResult,

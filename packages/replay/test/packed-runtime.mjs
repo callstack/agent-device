@@ -104,6 +104,4 @@ try {
 } finally {
   await installed.close();
 }
-process.stdout.write(
-  'Packed native replay, suites, failure isolation and embedded scopes passed.\n',
-);
+process.stdout.write('Packed native replay plugin passed against the source host.\n');

@@ -300,7 +300,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     const expectedIntegrity = `sha512-${crypto.createHash('sha512').update(fs.readFileSync(replayArchive)).digest('base64')}`;
     const selection = await runNodeModuleJson(
       consumerRoot,
-      ['--input-type=module', '-e'],
+      ['--experimental-strip-types', '--input-type=module', '-e'],
       `import { addPluginArtifact } from ${JSON.stringify(pathToFileURL(path.join(repoRoot, 'packages/plugins/src/store.ts')).href)};
        const selected = await addPluginArtifact(${JSON.stringify(replayArchive)}, {
          cwd: process.cwd(),
@@ -370,6 +370,7 @@ export function fixture(provider, setupOverride) {
       await execFileText(
         process.execPath,
         [
+          '--experimental-strip-types',
           '--input-type=module',
           '-e',
           String.raw`
@@ -454,6 +455,7 @@ try {
   const child = await exec(
     process.execPath,
     [
+      '--experimental-strip-types',
       '--input-type=module',
       '-e',
       "import { createAgentDeviceClient } from " + JSON.stringify(${JSON.stringify(pathToFileURL(path.join(repoRoot, 'packages/client/src/index.ts')).href)}) + "; console.log(JSON.stringify(await createAgentDeviceClient(" + config + ").sessions.list()));",

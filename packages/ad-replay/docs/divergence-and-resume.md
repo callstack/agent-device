@@ -99,7 +99,7 @@ Text shows a compact report; JSON includes the complete structured error.
 MCP returns `isError: true` and the same compact text summary.
 The default MCP server returns that text only, so the text carries the repair fields: step, repair hint, screen refs, and suggestions.
 The repair hint includes the concrete resume command when `resume.allowed` is true.
-Use `agent-device mcp --structured` to also return the object in `structuredContent`.
+`agent-device mcp --structured` and data hosts that request structured results also return the object in `structuredContent`.
 MCP treats divergence as a ref-issuing result, including on the error path.
 Before return, it merges and pins every `screen` ref with `refsGeneration`.
 CLI and direct clients receive the daemon error's unpinned refs and generation.

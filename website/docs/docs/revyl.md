@@ -155,21 +155,19 @@ which is what a local fake of the API is for.
 
 ## Use it from JavaScript
 
-Install and connect the plugin as described above, then start a local daemon before creating the client:
+Install and connect the plugin as described above. Use the same shell so the
+client uses the CLI's state directory and Revyl credentials:
 
 ```ts
 import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
-const stateDir = './.my-app/agent-device-state';
-await ensureDaemon({ stateDir });
-const client = createAgentDeviceClient({ stateDir, session: 'checkout-ios' });
-const devices = await client.devices.list({ platform: 'ios' });
-console.log(devices);
+await ensureDaemon();
+const client = createAgentDeviceClient({ session: 'checkout-ios' });
 ```
 
-`apiUrl` is optional and only needed for a staging or private Revyl backend. Leaving both out makes
-the plugin read `REVYL_API_KEY` from the environment, which is also the only path a CLI or MCP session
-takes when the daemon loads the plugin from the plugin store.
+If you passed `--state-dir` to the CLI, pass the same `stateDir` to both
+`ensureDaemon()` and `createAgentDeviceClient()`. Call `client.apps.open()` to start
+work on the session and rent a device.
 
 ## Troubleshoot
 

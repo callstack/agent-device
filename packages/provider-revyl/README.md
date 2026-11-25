@@ -24,9 +24,9 @@ After you add or update the plugin, close your sessions and run `agent-device da
 
 ## Use it from JavaScript
 
-Install and connect the plugin with the commands above. Start the local daemon
-before creating the client. Use the same state directory and session as your
-CLI connection, and make `REVYL_API_KEY` and, for a private backend, the optional `REVYL_API_URL` available to the daemon.
+Run this in the same shell as the CLI commands above so the daemon can read
+`REVYL_API_KEY` and, for a private backend, the optional `REVYL_API_URL`. The example uses the CLI's default state directory. If you
+passed `--state-dir` to the CLI, pass the same `stateDir` to both calls.
 
 ```js
 import { createAgentDeviceClient, ensureDaemon } from 'agent-device';

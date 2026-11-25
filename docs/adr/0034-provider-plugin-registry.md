@@ -24,7 +24,7 @@ In 0.22, providers, replay, and platform families need one plugin contract.
 The options-taking factory remains at the `./agent-device` entry.
 The managed store remains the installation owner.
 The store calls the factory with `config.json` `plugins[name].options`.
-A JavaScript host passes its own options.
+An internal embedding host can pass its own options.
 A plugin that takes credentials as options declares no environment variables for them.
 Those credentials stay out of the environment fingerprint.
 The host resolves the entry with import conditions and falls back to the package root only when the subpath is absent.
@@ -179,11 +179,11 @@ Reopen the decision when one asks, and design the published interface against th
 
 ## Daemon ownership
 
-Clients attach to an existing daemon and cannot start or replace one. Call `ensureDaemon()` to start or replace a detached daemon explicitly. The internal embedded runtime can own a runtime in its process. The `startAgentDevice` SDK export is removed in 0.22. The returned client and serializable `clientConfig` identify that exact instance. Attaching checks normal version and code compatibility before checking the instance pin. `close()` in the host process is the only way to shut an embedded runtime down, and returns its `ShutdownReport`. `daemon stop` refuses live embedded ownership with `daemon-owner-embedded` and live unrecognized ownership with `daemon-owner-unrecognized`, without a request or signal. The embedded-ownership refusal names the host PID and directs the caller to close the runtime there. Stop may retire an embedded or unrecognized registration when its recorded host lifetime has provably exited. The CLI cannot replace a live embedded runtime. Registration and its lock remain held while requests or platform owners are unfinished.
+Clients attach to an existing daemon and cannot start or replace one. Call `ensureDaemon()` to start or replace a detached daemon explicitly. The public SDK supports detached daemon startup. The repository’s internal `src/host.ts` entry can start an embedded runtime for internal callers and tests. The returned client and serializable `clientConfig` identify that exact instance. Attaching checks normal version and code compatibility before checking the instance pin. `close()` in the host process is the only way to shut an embedded runtime down, and returns its `ShutdownReport`. `daemon stop` refuses live embedded ownership with `daemon-owner-embedded` and live unrecognized ownership with `daemon-owner-unrecognized`, without a request or signal. The embedded-ownership refusal names the host PID and directs the caller to close the runtime there. Stop may retire an embedded or unrecognized registration when its recorded host lifetime has provably exited. The CLI cannot replace a live embedded runtime. Registration and its lock remain held while requests or platform owners are unfinished.
 
-The embedder supplies plugin objects directly. They follow the built-ins through the same registry validation; this runtime does not read the plugin store. Plugin failures remain inventory data. Logging adapters, a separate package entry, and disposal protocols are not required to own a daemon: the library exposes the client, its attach configuration, and `close()`.
+The embedder supplies plugin objects directly. They follow the built-ins through the same registry validation; this runtime does not read the plugin store. Plugin failures remain inventory data. The internal host entry returns the client, its attach configuration, and `close()`.
 
-Decision history: owner-only close replaces external embedded shutdown so the CLI cannot end work its host owns; a proven host exit permits registration retirement. The former client-managed startup path was removed in 0.22; explicit ensuring keeps daemon replacement separate from attachment (#3759). The main-entry API replaces the proposed host subpath and optional host controls, keeping ownership and attachment on the existing runtime and client paths (#3757).
+Decision history: owner-only close replaces external embedded shutdown so the CLI cannot end work its host owns; a proven host exit permits registration retirement. The former client-managed startup path was removed in 0.22; explicit ensuring keeps daemon replacement separate from attachment (#3759). The former public `startAgentDevice` API (#3757) was removed in 0.22. The SDK retains explicit detached startup and attachment.
 
 ## Alternatives refused
 
