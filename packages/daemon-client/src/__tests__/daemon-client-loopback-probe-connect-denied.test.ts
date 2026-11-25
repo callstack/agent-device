@@ -3,7 +3,7 @@ import EventEmitter from 'node:events';
 import fs from 'node:fs';
 import net from 'node:net';
 import { afterEach, test, vi } from 'vitest';
-import { runCmdBackground } from '@agent-device/host-kit/command';
+import { runCmdBackground, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,
   readProcessCommand,
@@ -23,6 +23,7 @@ import { sendToDaemon } from '../index.ts';
 import { probeLoopbackPort, readAdvertisedConnectDenial } from '../daemon-client-loopback-probe.ts';
 import {
   finishRegisteredDaemonFixture,
+  finishRegisteredDaemonFixtures,
   planRegisteredDaemonLaunches,
 } from './registered-daemon-fixture.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
@@ -36,13 +37,12 @@ const DENIED_ERRNO = 'EPERM';
 /** A host refusal to answer a probe with, naming the errno and endpoint family it refused. */
 type DeniedProbe = Readonly<{ errno: 'EPERM' | 'EACCES'; transport: 'socket' | 'http' }>;
 
-const { mockProbeAnswers, mockSpawnDaemon } = vi.hoisted(() => ({
+const { mockProbeAnswers } = vi.hoisted(() => ({
   /**
    * What each probe of the registered daemon answers, in order: `'silent'`, or the refusal the host
    * gave. `null` stands for silence so the list reads as answers, not as verdict shapes.
    */
   mockProbeAnswers: [] as (DeniedProbe | null)[],
-  mockSpawnDaemon: vi.fn(),
 }));
 
 function denied(errno: DeniedProbe['errno'], transport: DeniedProbe['transport']): DeniedProbe {
@@ -63,14 +63,17 @@ vi.mock('../daemon-client-transport.ts', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmdDetachedMonitored: mockSpawnDaemon };
-});
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
+  runCmdDetachedMonitored: vi.fn(),
+}));
 
-afterEach(() => {
+const spawnDaemon = vi.mocked(runCmdDetachedMonitored);
+
+afterEach(async () => {
   mockProbeAnswers.length = 0;
-  mockSpawnDaemon.mockReset();
+  spawnDaemon.mockReset();
+  await finishRegisteredDaemonFixtures();
 });
 
 /**
@@ -168,7 +171,7 @@ test('a connect the host refused names the sandbox and leaves the daemon running
     assert.equal((failure.details?.daemon as { pid?: number } | undefined)?.pid, pid);
     assert.match(String(failure.details?.hint), /A sandbox around this command/);
     assert.match(String(failure.details?.hint), /host access/);
-    assert.equal(mockSpawnDaemon.mock.calls.length, 0, 'a refusal is not a dead daemon to replace');
+    assert.equal(spawnDaemon.mock.calls.length, 0, 'a refusal is not a dead daemon to replace');
     assert.equal(isProcessAlive(pid), true, 'the daemon outside the sandbox is not signaled');
   });
 });
@@ -197,7 +200,7 @@ test.for([
       assert.equal(failure.details?.transport, leg);
       assert.equal(failure.details?.port, leg === 'http' ? httpPort : port);
       assert.equal((failure.details?.daemon as { pid?: number } | undefined)?.pid, pid);
-      assert.equal(mockSpawnDaemon.mock.calls.length, 0);
+      assert.equal(spawnDaemon.mock.calls.length, 0);
       assert.equal(isProcessAlive(pid), true);
     });
   },
@@ -213,7 +216,7 @@ test('a launched daemon whose readiness connect the host refused is left running
   const paths = resolveDaemonPaths(stateDir);
   const server = net.createServer((socket) => socket.on('error', () => {}));
   const httpPort = await listenOnLoopback(server);
-  mockSpawnDaemon.mockImplementation(
+  spawnDaemon.mockImplementation(
     planRegisteredDaemonLaunches([
       {
         kind: 'registered',

@@ -121,18 +121,27 @@ test('a fresh connect the host refused is not answered around by a pooled socket
     res.end('{}');
   });
   const port = await listenOnLoopback(server);
-  // Prime with the SAME module object the probe loads, or the pool holds no candidate and the test
-  // proves nothing.
-  const requester = await hostTransport.loadNodeHttpRequester('http:');
+  // The agent is shared with every other case in this file and with every file this worker reuses,
+  // and the OS hands loopback ports out again, so the pool may already hold a socket for THIS port
+  // from a server that is gone. Riding one would write the prime to a peer that never answers, so
+  // this endpoint's pooled sockets go before the prime, and again after it.
   const { globalAgent } = await import('node:http');
+  destroyPooledSockets(globalAgent, port);
+  // Prime with the SAME module object the probe loads, or the pool holds no candidate and the test
+  // proves nothing. The prime is bounded so a pool this case does not control cannot hold the case
+  // open to the test budget.
+  const requester = await hostTransport.loadNodeHttpRequester('http:');
   await new Promise<void>((resolve, reject) => {
     const request = requester.request(
-      { host: '127.0.0.1', port, path: '/health', method: 'GET' },
+      { host: '127.0.0.1', port, path: '/health', method: 'GET', timeout: 2_000 },
       (res) => {
         res.resume();
         res.on('end', resolve);
       },
     );
+    request.on('timeout', () => {
+      request.destroy(new Error(`the prime reached no daemon on port ${port}`));
+    });
     request.on('error', reject);
     request.end();
   });
@@ -167,11 +176,23 @@ test('a fresh connect the host refused is not answered around by a pooled socket
   } finally {
     connect.mockRestore();
     // The primed socket is back in the pool now, pointed at a server about to close. A later case
-    // that is handed this port by the OS would otherwise ride it and lose its request.
-    globalAgent.destroy();
+    // that is handed this port by the OS would otherwise ride it and lose its request. Only this
+    // endpoint's pooled sockets go: the agent is shared with every other case in this file.
+    destroyPooledSockets(globalAgent, port);
     await closeLoopbackServer(server);
   }
 });
+
+/** Drops the keep-alive sockets the pool holds for one loopback port, and only those. */
+function destroyPooledSockets(agent: http.Agent, port: number): void {
+  // Node types the pool as read-only, and this is the one place a test has to empty it.
+  const free = agent.freeSockets as Record<string, net.Socket[] | undefined>;
+  for (const [key, sockets] of Object.entries(free)) {
+    if (!key.endsWith(`:${port}:`)) continue;
+    for (const socket of sockets ?? []) socket.destroy();
+    delete free[key];
+  }
+}
 
 /** Whether this Node keeps sockets alive on the global agent, which is what makes a pool exist. */
 async function poolPrimesUnderTestAgent(): Promise<boolean> {
