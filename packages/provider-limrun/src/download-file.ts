@@ -25,9 +25,9 @@ const LIMRUN_DOWNLOAD_REASONS = {
 } as const satisfies ReasonTable<'limrun'>;
 
 /**
- * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs`; a
- * failed or timed-out attempt leaves no file at the destination, so the caller can retry from the
- * same URL and never mistakes an earlier attempt's file for this one's.
+ * Streams a public or instance-authenticated download to disk. Instance downloads require HTTPS
+ * on the instance origin and refuse redirects. The transfer is bounded by `timeoutMs`. A failed
+ * or timed-out attempt leaves no file at the destination.
  *
  * The destination is chosen by the caller. Download URLs and transport messages stay private.
  */

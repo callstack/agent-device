@@ -160,25 +160,28 @@ test('an HTTP failure publishes its status and reason, and no peer body text at 
     .mockResolvedValueOnce(
       new Response(`upstream rejected ${token} for this transfer`, { status: 500 }),
     );
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  try {
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
 
-  let failure: unknown;
-  await downloadLimrunFile({
-    url,
-    instance: { apiUrl: url, token },
-    destinationPath,
-    timeoutMs: 5_000,
-  }).catch((error: AppError) => {
-    failure = error;
-  });
+    let failure: unknown;
+    await downloadLimrunFile({
+      url,
+      instance: { apiUrl: url, token },
+      destinationPath,
+      timeoutMs: 5_000,
+    }).catch((error: AppError) => {
+      failure = error;
+    });
 
-  expect(failure).toBeInstanceOf(AppError);
-  expect((failure as AppError).details).toEqual({
-    statusCode: 500,
-    reason: 'limrun_download_http_error',
-  });
-  expect(JSON.stringify((failure as AppError).details)).not.toMatch(token);
-  request.mockRestore();
+    expect(failure).toBeInstanceOf(AppError);
+    expect((failure as AppError).details).toEqual({
+      statusCode: 500,
+      reason: 'limrun_download_http_error',
+    });
+    expect(JSON.stringify((failure as AppError).details)).not.toMatch(token);
+  } finally {
+    request.mockRestore();
+  }
 });
 
 test.each([
