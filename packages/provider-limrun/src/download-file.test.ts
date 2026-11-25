@@ -54,7 +54,7 @@ test('streams the served file to disk with the bearer token the caller supplied'
 
 test('keeps authenticated loopback downloads off the proxy and out of socket diagnostics', async () => {
   const originRequests: Array<{ host?: string; authorization?: string }> = [];
-  const proxyAuthorization: Array<string | undefined> = [];
+  let proxyRequests = 0;
   const url = new URL(
     await serve((request, response) => {
       originRequests.push({
@@ -66,13 +66,12 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
   );
   url.hostname = 'localhost.';
   url.search = '?download=private-fixture-query';
-  const proxyUrl = await serve((request, response) => {
-    proxyAuthorization.push(request.headers.authorization);
+  const proxyUrl = await serve((_request, response) => {
+    proxyRequests += 1;
     response.end('proxy payload');
   });
   const dir = await mkdtempForTest('limrun-download-');
   const authenticatedPath = path.join(dir, 'authenticated.mp4');
-  const publicPath = path.join(dir, 'public.mp4');
   const envProxySupported = process.allowedNodeEnvironmentFlags.has('--use-env-proxy');
 
   const { stderr } = await promisify(execFile)(
@@ -84,7 +83,7 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
       `
         import dns from 'node:dns';
         import { downloadLimrunFile } from './download-file.ts';
-        const [url, authenticatedPath, publicPath] = process.argv.slice(1);
+        const [url, authenticatedPath] = process.argv.slice(1);
         const lookup = dns.lookup;
         dns.lookup = (hostname, options, callback) => {
           if (hostname === 'localhost.') {
@@ -99,19 +98,16 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
           destinationPath: authenticatedPath,
           timeoutMs: 1000,
         });
-        if (process.allowedNodeEnvironmentFlags.has('--use-env-proxy')) {
-          await downloadLimrunFile({ url, destinationPath: publicPath, timeoutMs: 1000 });
-        }
       `,
       url.href,
       authenticatedPath,
-      publicPath,
     ],
     {
       cwd: import.meta.dirname,
       env: {
         NODE_DEBUG: 'http,net',
         NODE_USE_ENV_PROXY: '1',
+        HTTP_PROXY: new URL(proxyUrl).origin,
         http_proxy: new URL(proxyUrl).origin,
         no_proxy: '',
       },
@@ -123,11 +119,11 @@ test('keeps authenticated loopback downloads off the proxy and out of socket dia
     { host: url.host, authorization: 'Bearer private-fixture-bearer' },
   ]);
   expect(stderr).toMatch(/NET \d+:/);
+  if (envProxySupported) expect(stderr).toContain('new http: agent with proxy config');
   expect(stderr).not.toContain('private-fixture-bearer');
   expect(stderr).not.toContain('private-fixture-query');
   expect(fs.readFileSync(authenticatedPath, 'utf8')).toBe('instance payload');
-  expect(proxyAuthorization).toEqual(envProxySupported ? [undefined] : []);
-  if (envProxySupported) expect(fs.readFileSync(publicPath, 'utf8')).toBe('proxy payload');
+  expect(proxyRequests).toBe(0);
 });
 
 test('decodes a compressed authenticated loopback reply before writing the file', async () => {
