@@ -697,14 +697,10 @@ async function startDaemonRuntimeOnHost(
     {
       handleRequest,
       startupRecovered,
-      ...(attachment
-        ? {}
-        : {
-            leaseRegistry,
-            leaseLifecycleProvider: deps.leaseLifecycleProvider,
-            endSessionsForLease: async (leaseId: string) =>
-              await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
-          }),
+      hostAdminEnabled: !attachment,
+      leaseLifecycleProvider: deps.leaseLifecycleProvider,
+      leaseRegistry,
+      endSessionsForLease: async (leaseId) => await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
       token,
       retainArtifacts,
       env,

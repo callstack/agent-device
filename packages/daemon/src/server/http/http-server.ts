@@ -97,6 +97,7 @@ const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
+  hostAdminEnabled?: boolean;
   startupRecovered?: Promise<void>;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   endSessionsForLease?: (leaseId: string) => Promise<void>;
@@ -168,6 +169,7 @@ export async function createDaemonHttpServer(options: {
     }
 
     if (
+      options.hostAdminEnabled !== false &&
       token &&
       options.leaseRegistry &&
       tryHandleHostAdminHttpRoute({
