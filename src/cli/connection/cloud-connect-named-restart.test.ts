@@ -260,7 +260,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-test('slow hosted allocation reports bounded stderr progress and aborts the final status read', async () => {
+test('slow hosted allocation prints only safe deadlines and stops polling after allocation', async () => {
   vi.useFakeTimers();
   const stateDir = freshStateDir();
   const deadline = new Date(Date.now() + 3600_000).toISOString();
@@ -281,8 +281,24 @@ test('slow hosted allocation reports bounded stderr progress and aborts the fina
       if (polls.length === 1) {
         return Response.json({ error: 'private-upstream-detail' }, { status: 401 });
       }
-      if (polls.length === 2) return Response.json({ state: 'running', deadlineAt: deadline });
+      if (polls.length === 2) {
+        return Response.json({ state: 'allocating', deadlineAt: '2037-02-31T00:00:00Z' });
+      }
       if (polls.length === 3) {
+        return Response.json({
+          state: 'allocating',
+          deadlineAt: '2037-02-01T00:00:00.1Z',
+          attach: { token: ' 100Z ' },
+        });
+      }
+      if (polls.length === 4) {
+        return Response.json({
+          state: 'allocating',
+          deadlineAt: '2037-02-01T00:00:00.1Z',
+          attach: { daemonAuthToken: '00.1Z' },
+        });
+      }
+      if (polls.length === 5) {
         return Response.json({
           state: 'allocating',
           deadlineAt: deadline,
@@ -299,8 +315,8 @@ test('slow hosted allocation reports bounded stderr progress and aborts the fina
   await posted.promise;
   await vi.advanceTimersByTimeAsync(4_999);
   expect(polls).toHaveLength(0);
-  await vi.advanceTimersByTimeAsync(15_001);
-  expect(polls).toHaveLength(4);
+  await vi.advanceTimersByTimeAsync(25_001);
+  expect(polls).toHaveLength(6);
   expect(requestKey).toEqual(expect.any(String));
   for (const { url, init } of polls) {
     expect(url.origin).toBe('https://cloud.example');
@@ -308,6 +324,10 @@ test('slow hosted allocation reports bounded stderr progress and aborts the fina
     expect([...url.searchParams]).toEqual([['idempotencyKey', requestKey]]);
     expect(init).toMatchObject({ method: 'GET', redirect: 'error' });
   }
+
+  pendingPoll.resolve(Response.json({ state: 'running', deadlineAt: deadline }));
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(polls).toHaveLength(6);
 
   created.resolve(
     Response.json(
@@ -328,10 +348,9 @@ test('slow hosted allocation reports bounded stderr progress and aborts the fina
   expect(result.stderr).toBe(
     'connect cloud: allocating, 5s elapsed\n' +
       'connect cloud: allocating, 10s elapsed\n' +
-      `connect cloud: allocating, 15s elapsed (session deadline ${deadline})\n`,
+      'connect cloud: allocating, 15s elapsed\n' +
+      'connect cloud: allocating, 20s elapsed\n' +
+      `connect cloud: allocating, 25s elapsed (session deadline ${deadline})\n`,
   );
-  expect(polls[3]?.init.signal?.aborted).toBe(true);
-  pendingPoll.resolve(Response.json({ state: 'allocating', deadlineAt: deadline }));
-  await vi.advanceTimersByTimeAsync(10_000);
-  expect(polls).toHaveLength(4);
+  expect(polls[5]?.init.signal?.aborted).toBe(true);
 });

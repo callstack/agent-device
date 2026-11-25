@@ -3,7 +3,10 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
-import { startCloudConnectProgress } from './cloud-connect-progress.ts';
+import {
+  startCloudConnectProgress,
+  type CloudAllocationProgress,
+} from './cloud-connect-progress.ts';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
   isCredentialEndpoint,
@@ -164,7 +167,7 @@ export async function createCloudSession(
     registerDiagnosticSensitiveValue(encodeURIComponent(archiveUrl));
   }
   const stop = startCloudConnectProgress(CONNECT_TIMEOUT_MS, (signal) =>
-    readCloudAllocationDeadline(access, attempt.key, signal),
+    readCloudAllocationProgress(access, attempt.key, signal),
   );
   const record = await postCloudSession(access, request, attempt).finally(stop);
   const session = parseCloudSession(record.body, record.id, access, request);
@@ -226,11 +229,11 @@ function fetchCloudSessionStatus(access: CloudAccess, key: string, signal: Abort
   });
 }
 
-async function readCloudAllocationDeadline(
+async function readCloudAllocationProgress(
   access: CloudAccess,
   key: string,
   signal: AbortSignal,
-): Promise<number | undefined> {
+): Promise<CloudAllocationProgress | undefined> {
   const response = await fetchCloudSessionStatus(
     access,
     key,
@@ -241,9 +244,28 @@ async function readCloudAllocationDeadline(
     return undefined;
   }
   const body = asCloudRecord(await response.json());
-  if (body?.state !== 'allocating' || typeof body.deadlineAt !== 'string') return undefined;
-  const deadline = Date.parse(body.deadlineAt);
-  return Number.isFinite(deadline) ? deadline : undefined;
+  switch (body?.state) {
+    case 'running':
+    case 'ending':
+    case 'failed':
+    case 'settled':
+      return { kind: 'settled' };
+    case 'allocating':
+      return { kind: 'allocating', deadlineAt: readSafeProgressDeadline(body, access.accessToken) };
+    default:
+      return undefined;
+  }
+}
+
+function readSafeProgressDeadline(body: Record<string, unknown>, accessToken: string) {
+  const deadline = canonicalDeadline(body.deadlineAt);
+  if (!deadline) return;
+  const credentials = [
+    accessToken,
+    readScopedToken(body.attach, true),
+    readScopedToken(body.attach, false),
+  ].filter((token): token is string => Boolean(token));
+  if (!containsCloudCredential([body.deadlineAt, deadline], credentials)) return deadline;
 }
 
 type CreatedResponse = { kind: 'created'; id: string; body: Record<string, unknown> };

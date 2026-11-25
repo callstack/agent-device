@@ -2,9 +2,13 @@ import { writeStderrBestEffort } from '../process-exit.ts';
 
 const PROGRESS_INTERVAL_MS = 5_000;
 
+export type CloudAllocationProgress =
+  | { kind: 'allocating'; deadlineAt?: string }
+  | { kind: 'settled' };
+
 export function startCloudConnectProgress(
   windowMs: number,
-  readDeadline: (signal: AbortSignal) => Promise<number | undefined>,
+  readProgress: (signal: AbortSignal) => Promise<CloudAllocationProgress | undefined>,
 ): () => void {
   const startedAt = performance.now();
   const controller = new AbortController();
@@ -18,11 +22,14 @@ export function startCloudConnectProgress(
   }
 
   async function tick() {
-    const deadline = await readDeadline(controller.signal).catch(() => undefined);
+    const progress = await readProgress(controller.signal).catch(() => undefined);
     if (controller.signal.aborted) return;
+    if (progress?.kind === 'settled') {
+      controller.abort();
+      return;
+    }
     const elapsedSeconds = Math.floor((performance.now() - startedAt) / 1_000);
-    const deadlineText =
-      deadline === undefined ? '' : ` (session deadline ${new Date(deadline).toISOString()})`;
+    const deadlineText = progress?.deadlineAt ? ` (session deadline ${progress.deadlineAt})` : '';
     writeStderrBestEffort(`connect cloud: allocating, ${elapsedSeconds}s elapsed${deadlineText}\n`);
     timer = schedule();
   }
