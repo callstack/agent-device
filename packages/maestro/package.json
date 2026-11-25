@@ -46,7 +46,7 @@
     "agent-device": "workspace:*"
   },
   "scripts": {
-    "build": "tsdown --config ../../maestro-tsdown.config.ts",
+    "build": "tsdown --config ../../build/maestro/tsdown.config.ts",
     "prepack": "pnpm build"
   },
   "files": [
