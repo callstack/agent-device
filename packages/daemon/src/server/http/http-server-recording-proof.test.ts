@@ -143,6 +143,65 @@ test.each(['terminal write', 'native marker'] as const)(
   },
 );
 
+test('a failed export checkpoint allows downloading the re-produced recording', async () => {
+  await withRecording(async (harness, post, base, capturePath) => {
+    const finish = harness.runtime.finish.getMockImplementation()!;
+    const rename = fs.renameSync;
+    const finalize = vi.fn(async () => {
+      const next = `${capturePath}.producer`;
+      fs.writeFileSync(next, `producer-video-${finalize.mock.calls.length}`);
+      rename(next, capturePath);
+      return { nativePathDisposition: 'retired' as const };
+    });
+    harness.runtime.finish.mockImplementation(async (progress) => {
+      const { result } = await finish();
+      const outcome = await stopAndExportScreenRecording({
+        snapshot: { ...result, gestureEvents: [] },
+        progress,
+        steps: {
+          stop: async () => ({ observation: { recorder: 'confirmed' } }),
+          collect: async () => {},
+          finalize,
+          discard: async () => {},
+        },
+      });
+      return { ...outcome, result: { ...result, ...outcome.result, scope: 'app' } };
+    });
+    const manifest = screenRecordingResourceStore.resolvePath(
+      harness.sessionStore.resolveSessionDir(harness.sessionName),
+    );
+    let checkpointFailed = false;
+    const failCheckpoint = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      if (!checkpointFailed && to === manifest) {
+        const pending = JSON.parse(fs.readFileSync(from, 'utf8'));
+        if (pending.lifecycle === 'open' && pending.metadata?.exportPath === capturePath) {
+          checkpointFailed = true;
+          throw new Error('Export checkpoint rename failed');
+        }
+      }
+      rename(from, to);
+    });
+    try {
+      expect((await post(STOP)).error).toBeDefined();
+      expect(checkpointFailed).toBe(true);
+      expect(finalize).toHaveBeenCalledOnce();
+      const { artifacts } = successfulData(await post(STOP));
+      expect(finalize).toHaveBeenCalledTimes(2);
+      const id = artifacts?.[0]?.artifactId;
+      expect(id).toBeTypeOf('string');
+      try {
+        const download = await fetch(`${base}/artifacts/${id}`, { headers: HEADERS });
+        expect(download.status).toBe(200);
+        expect(await download.text()).toBe('producer-video-2');
+      } finally {
+        if (id) cleanupDownloadableArtifact(id);
+      }
+    } finally {
+      failCheckpoint.mockRestore();
+    }
+  });
+});
+
 test('the first stop validates the whole committed set before publishing any ID', async () => {
   await withRecording(async (harness, post, base, capturePath) => {
     const finish = harness.runtime.finish.getMockImplementation()!;

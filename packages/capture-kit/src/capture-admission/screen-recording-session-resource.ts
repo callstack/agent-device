@@ -103,11 +103,10 @@ async function finishRecordingExport(
   if (readStopCheckpoints(progress.learned).exportPath && !liveExportProofs.has(handle)) {
     liveExportProofs.set(handle, null);
   }
-  const rememberExport = (
+  const readExportProof = (
     outPath: string,
     { chunks, telemetryPath }: ScreenRecordingFinalization,
-  ) => {
-    if (liveExportProofs.has(handle)) return;
+  ): RecordingExportProof | null => {
     try {
       if (
         outPath !== reservedPath ||
@@ -125,33 +124,40 @@ async function finishRecordingExport(
         ...(chunks?.slice(1).map(({ path }) => path) ?? []),
         ...(telemetryPath ? [telemetryPath] : []),
       ];
-      liveExportProofs.set(handle, {
+      return {
         completedAt: Date.now(),
         identities: files.map((file) => {
           const stat = fs.lstatSync(file);
           if (!stat.isFile()) throw new Error('Recording export is not a regular file.');
           return outputFileIdentity(stat);
         }),
-      });
+      };
     } catch (error) {
-      liveExportProofs.set(handle, null);
       emitDiagnostic({
         level: 'warn',
         phase: 'screen_recording_export_proof_failed',
         data: { error: errorMessage(error) },
       });
+      return null;
     }
   };
   const outcome = await handle.finish({
     ...progress,
     record: (fact) => {
       const { exportPath, finalization } = readStopCheckpoints(fact);
-      if (exportPath) rememberExport(exportPath, finalization ?? {});
+      const proof =
+        exportPath && !liveExportProofs.has(handle)
+          ? readExportProof(exportPath, finalization ?? {})
+          : undefined;
       progress.record(fact);
+      // A failed checkpoint can cause retry to produce a new export.
+      if (proof !== undefined) liveExportProofs.set(handle, proof);
     },
   });
   if (outcome.status !== 'completed' || outcome.alreadyCompleted) return { outcome };
-  rememberExport(outcome.result.outPath, outcome.result);
+  if (!liveExportProofs.has(handle)) {
+    liveExportProofs.set(handle, readExportProof(outcome.result.outPath, outcome.result));
+  }
   const proof = liveExportProofs.get(handle);
   return { outcome, ...(proof ? { metadata: { remoteCaptureExport: proof } } : {}) };
 }
