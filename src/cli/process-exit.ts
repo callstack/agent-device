@@ -1,3 +1,4 @@
+import type { Writable } from 'node:stream';
 import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
@@ -42,22 +43,47 @@ export function writeStderr(text: string): void {
   process.stderr.write(escapeTerminalText(text));
 }
 
-type OptionalStderr = Pick<NodeJS.WriteStream, 'write'> & {
-  on?: (event: 'error', listener: () => void) => unknown;
-};
-const errorAbsorbingStreams = new WeakSet<OptionalStderr>();
+type OptionalStderr = Pick<Writable, 'write'> &
+  Partial<Pick<Writable, 'once' | 'removeListener' | 'writable'>>;
+const pendingStderrWrites = new WeakMap<OptionalStderr, { count: number; cleanup: () => void }>();
 
-/** Keep an asynchronous stderr write failure from interrupting the command. */
+/** Keep failures from optional writes from interrupting the command. */
 export function writeStderrBestEffort(text: string, stream: OptionalStderr = process.stderr): void {
-  if (stream.on && !errorAbsorbingStreams.has(stream)) {
-    stream.on('error', () => {});
-    errorAbsorbingStreams.add(stream);
-  }
+  if (stream.writable === false) return;
+  const finish = observeStderrWrite(stream);
   try {
-    stream.write(escapeTerminalText(text));
+    if (finish) {
+      stream.write(escapeTerminalText(text), (error) => {
+        // A failed Writable invokes its write callback before emitting error or close.
+        if (!error) finish();
+      });
+    } else {
+      stream.write(escapeTerminalText(text));
+    }
   } catch {
-    // Optional output also tolerates a synchronous write failure.
+    finish?.();
   }
+}
+
+function observeStderrWrite(stream: OptionalStderr): (() => void) | undefined {
+  if (!stream.once || !stream.removeListener) return undefined;
+  let pending = pendingStderrWrites.get(stream);
+  if (!pending) {
+    const cleanup = () => {
+      pendingStderrWrites.delete(stream);
+      stream.removeListener?.('error', cleanup);
+      stream.removeListener?.('close', cleanup);
+    };
+    pending = { count: 0, cleanup };
+    pendingStderrWrites.set(stream, pending);
+    stream.once('error', cleanup);
+    stream.once('close', cleanup);
+  }
+  const batch = pending;
+  batch.count++;
+  return () => {
+    if (pendingStderrWrites.get(stream) === batch && --batch.count === 0) batch.cleanup();
+  };
 }
 
 export function writeStdoutRaw(text: string): void {

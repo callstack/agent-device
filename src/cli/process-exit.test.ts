@@ -126,4 +126,21 @@ test('best-effort stderr absorbs an asynchronous write error', async () => {
   writeStderrBestEffort('allocation progress\n', stream);
   await closed;
   assert.equal(attempted, 'allocation progress\n');
+  assert.equal(stream.listenerCount('error'), 0);
+});
+
+test('a completed best-effort stderr write does not absorb later stream errors', async () => {
+  const stream = new Writable({ write: (_chunk, _encoding, done) => done() });
+  writeStderrBestEffort('allocation progress\n', stream);
+  writeStderrBestEffort('more allocation progress\n', stream);
+  assert.equal(stream.listenerCount('error'), 1);
+  await new Promise<void>((resolve, reject) => {
+    stream.write('ordinary diagnostic\n', (error) => (error ? reject(error) : resolve()));
+  });
+
+  const failure = new Error('unrelated stderr failure');
+  assert.throws(
+    () => stream.emit('error', failure),
+    (error) => error === failure,
+  );
 });
