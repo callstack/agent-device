@@ -336,12 +336,15 @@ export function commitRecordingFileOutputs(
   publish: boolean,
 ): DaemonArtifact[] {
   const artifacts = pendingArtifacts();
-  for (const { artifactId } of files) {
+  const expired = completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS <= Date.now();
+  for (const { artifactId, path: artifactPath, sourceIdentity } of files) {
     const entry = artifacts.get(artifactId);
     if (
-      completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS <= Date.now() ||
+      expired ||
       entry?.cleanupRequested ||
-      (!publish && (!entry || readOutputIdentity(entry.artifactPath, true) !== entry.output))
+      (!publish && !entry) ||
+      (entry && (entry.artifactPath !== artifactPath || entry.output !== sourceIdentity)) ||
+      readOutputIdentity(artifactPath, true) !== sourceIdentity
     ) {
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }
@@ -577,23 +580,23 @@ export async function openDownloadableArtifact(
 }
 
 function openRegisteredFile(artifactId: string, entry: ArtifactEntry): fs.ReadStream {
-  const fd = fs.openSync(
-    entry.artifactPath,
-    fs.constants.O_RDONLY |
-      fs.constants.O_NONBLOCK |
-      (entry.reservation ? fs.constants.O_NOFOLLOW : 0),
-  );
+  let fd: number | undefined;
   try {
+    fd = fs.openSync(
+      entry.artifactPath,
+      fs.constants.O_RDONLY |
+        fs.constants.O_NONBLOCK |
+        (entry.reservation ? fs.constants.O_NOFOLLOW : 0),
+    );
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || outputFileIdentity(stat) !== entry.output) {
-      cleanupDownloadableArtifact(artifactId);
-      throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
-    }
-    return fs.createReadStream(entry.artifactPath, { fd });
-  } catch (error) {
-    fs.closeSync(fd);
-    throw error;
+    if (stat.isFile() && outputFileIdentity(stat) === entry.output)
+      return fs.createReadStream(entry.artifactPath, { fd });
+  } catch {
+    // The file is no longer readable through the registered identity.
   }
+  if (fd !== undefined) fs.closeSync(fd);
+  cleanupDownloadableArtifact(artifactId);
+  throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
 }
 
 function cancelArtifactDownload(
@@ -682,17 +685,8 @@ function readDownloadableArtifactEntry(
   if (entry.cleanupRequested) {
     throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   }
-  let stat: fs.Stats;
-  try {
-    stat = statArtifactPath(entry);
-  } catch {
-    cleanupDownloadableArtifact(artifactId);
-    throw new AppError('COMMAND_FAILED', `Artifact file is missing: ${entry.artifactPath}`);
-  }
-  if (outputFileIdentity(stat) !== entry.output) {
-    cleanupDownloadableArtifact(artifactId);
-    throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
-  }
+  const stat = statRegisteredOutput(artifactId, entry);
+  if (!stat) throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   return { entry, stat };
 }
 

@@ -1,5 +1,10 @@
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
+import type {
+  DurableCaptureProgress,
+  FinishOutcome,
+  LiveResourceHandle,
+} from '@agent-device/contracts/durable-resource';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type {
   ResourceOwnershipFence,
@@ -56,11 +61,12 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   resourceKind: K;
   displayName: string;
   store: DurableCaptureResourceStore<K>;
-  completionMetadata(
-    result: C,
-    metadata: DurableResourceEnvelope<K>['metadata'],
-    producer?: DurableCaptureFinishIntent,
-  ): JsonObject | Promise<JsonObject>;
+  completionMetadata(result: C): JsonObject;
+  /** Runs only for the live producer. Its metadata is written with the terminal result. */
+  finishLive?(
+    handle: LiveResourceHandle<C>,
+    progress: DurableCaptureProgress,
+  ): Promise<{ outcome: FinishOutcome<C>; metadata?: JsonObject }>;
   /**
    * The completion this kind stored in a record that is already committed, or nothing it can serve.
    *

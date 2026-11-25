@@ -133,7 +133,7 @@ async function handleRecordCommandUnsafe(
     return missingAppSessionResponse(req);
   }
   const authorized = plan.kind === 'start' ? undefined : readStopEnvelope(params);
-  if (authorized) assertRequestMayStopRecording(params, authorized);
+  if (authorized) assertRequestMayStopRecording(params, authorized, existingRef);
   const resolvedSession = await resolveRecordingSession(params, existingRef, authorized?.device);
   const { session } = resolvedSession;
   if (plan.kind === 'start') {
@@ -434,7 +434,7 @@ async function stopRecording(
     stopped =
       kind === 'stop-live'
         ? await finishAuthorizedLiveRecording(params, ref!, authorized)
-        : await finishRecovered(params, session, needsReadiness, authorized);
+        : await finishRecovered(params, session, needsReadiness, authorized, ref);
   } catch (error) {
     deleteTerminalRecordOnlySession(params, ref);
     throw error;
@@ -488,7 +488,7 @@ async function finishAuthorizedLiveRecording(
   if (!authorized || !active || !sameRecordingFence(active.envelope, authorized))
     throw leasedOutputRefusal('Recording');
   await finishLiveScreenRecording({ intent: 'capture', binding });
-  return { envelope: requireFinishedEnvelope(params, authorized), recordsSessionAction: true };
+  return { envelope: requireFinishedEnvelope(params, authorized, ref), recordsSessionAction: true };
 }
 
 function isRemoteRecordingRequest(params: RecordRuntimeHandlerParams): boolean {
@@ -520,6 +520,7 @@ function sameRecordingFence(
 function requireFinishedEnvelope(
   params: RecordRuntimeHandlerParams,
   expected: DurableResourceEnvelope<'screen-recording'>,
+  ref?: SessionRef,
 ) {
   const envelope = readStopEnvelope(params);
   if (
@@ -529,7 +530,7 @@ function requireFinishedEnvelope(
     envelope.metadata?.remoteCapturePath !== expected.metadata?.remoteCapturePath
   )
     throw leasedOutputRefusal('Recording');
-  assertRequestMayStopRecording(params, envelope);
+  assertRequestMayStopRecording(params, envelope, ref);
   return envelope;
 }
 
@@ -540,27 +541,26 @@ function requireFinishedEnvelope(
 function assertRequestMayStopRecording(
   params: RecordRuntimeHandlerParams,
   envelope: DurableResourceEnvelope<'screen-recording'>,
+  ref?: SessionRef,
 ): void {
   const { metadata, lifecycle } = envelope;
   const owner = recordingOutputLeaseVerifier(metadata);
-  if (
-    isRemoteRecordingRequest(params) &&
-    (owner === undefined || metadata?.remoteCaptureOutput !== true)
-  ) {
+  const remote = metadata?.remoteCaptureOutput === true;
+  const admitted = params.req.internal?.admittedLease;
+  if (isRemoteRecordingRequest(params) && (owner === undefined || !remote))
     throw leasedOutputRefusal('Recording');
+  if (remote) {
+    const tenant = normalizeTenantId(admitted?.tenantId ?? params.req.meta?.tenantId) ?? null;
+    if (tenant !== metadata.remoteCaptureTenantId) throw leasedOutputRefusal('Recording');
+    if (ref && ref.lifetime.journalId !== metadata.remoteCaptureLifetime)
+      throw leasedOutputRefusal('Recording');
   }
-  if (
-    metadata?.remoteCaptureOutput === true &&
-    typeof metadata.remoteCaptureTenantId === 'string' &&
-    metadata.remoteCaptureTenantId !==
-      normalizeTenantId(params.req.internal?.admittedLease?.tenantId ?? params.req.meta?.tenantId)
-  )
-    throw leasedOutputRefusal('Recording');
   if (typeof owner !== 'string') return;
+  const admittedLeaseId = admitted?.leaseId;
   const presented =
     lifecycle === 'completed'
-      ? (resolveLeaseScope(params.req).leaseId ?? params.req.internal?.admittedLease?.leaseId)
-      : params.req.internal?.admittedLease?.leaseId;
+      ? (resolveLeaseScope(params.req).leaseId ?? admittedLeaseId)
+      : admittedLeaseId;
   if (!requestHoldsOutputLease(owner, presented)) throw leasedOutputRefusal('Recording');
 }
 
@@ -594,6 +594,7 @@ async function finishRecovered(
   session: SessionState,
   needsReadiness: boolean,
   authorized: DurableResourceEnvelope<'screen-recording'> | undefined,
+  ref?: SessionRef,
 ): Promise<ScreenRecordingStop> {
   if (!authorized) throw new AppError('INVALID_ARGS', 'no active recording');
   const recovery = resolveScreenRecordingStopRecovery({
@@ -611,12 +612,12 @@ async function finishRecovered(
     scope: params.requestScope,
     acquireControl: (envelope, scope) => {
       if (!sameRecordingFence(envelope, recovery.envelope)) throw leasedOutputRefusal('Recording');
-      assertRequestMayStopRecording(params, envelope);
+      assertRequestMayStopRecording(params, envelope, ref);
       return acquire(envelope, scope);
     },
   });
   return {
-    envelope: requireFinishedEnvelope(params, authorized),
+    envelope: requireFinishedEnvelope(params, authorized, ref),
     recordsSessionAction: true,
   };
 }

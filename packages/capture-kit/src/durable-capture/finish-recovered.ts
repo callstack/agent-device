@@ -82,7 +82,7 @@ export async function finishRecoveredDurableCapture<
           // caller is being served, so this attempt writes nothing of its own.
           onCompleted: () => undefined,
           run: async (lease) => {
-            await transitionFinishOutcome(definition, lease, {
+            transitionFinishOutcome(definition, lease, {
               status: 'completed',
               result,
               alreadyCompleted: true,

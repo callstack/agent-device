@@ -125,25 +125,21 @@ export async function finishDurableCaptureHandle<
       settleIfMissing(lease);
       markCompletingDurableCapture(lease);
       const progress = createStopProgress(lease);
-      let finishOutcome: FinishOutcome<C>;
+      let finished: { outcome: FinishOutcome<C>; metadata?: JsonObject };
       try {
-        finishOutcome = await params.handle.finish(progress);
+        finished =
+          params.producer && definition.finishLive
+            ? await definition.finishLive(params.handle, progress)
+            : { outcome: await params.handle.finish(progress) };
       } catch (finishError) {
         settleIfMissing(lease);
         await respondToFailedFinish(definition, lease, params, finishError, params.intent);
         throw finishError;
       }
-      if (finishOutcome.status === 'completed') {
-        await transitionFinishOutcome(
-          definition,
-          lease,
-          finishOutcome,
-          params.producer ? params.intent : undefined,
-        );
-        return finishOutcome.result;
-      }
-      await transitionFinishOutcome(definition, lease, finishOutcome);
-      const finishError = cleanupPendingError(definition, finishOutcome);
+      const { outcome, metadata } = finished;
+      transitionFinishOutcome(definition, lease, outcome, metadata);
+      if (outcome.status === 'completed') return outcome.result;
+      const finishError = cleanupPendingError(definition, outcome);
       settleIfMissing(lease);
       await respondToFailedFinish(definition, lease, params, finishError, params.intent);
       throw finishError;
@@ -353,17 +349,18 @@ function cleanupPendingError(
   );
 }
 
-export async function transitionFinishOutcome<K extends string, C>(
+export function transitionFinishOutcome<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureOpenResourceFenceLease<K>,
   outcome: FinishOutcome<C>,
-  producer?: DurableCaptureFinishIntent,
-): Promise<void> {
+  producerMetadata?: JsonObject,
+): void {
   if (outcome.status === 'completed') {
     lease.transition('completed', {
       metadata: {
         ...(lease.envelope.metadata ?? {}),
-        ...(await definition.completionMetadata(outcome.result, lease.envelope.metadata, producer)),
+        ...definition.completionMetadata(outcome.result),
+        ...producerMetadata,
         phase: 'completed',
       },
     });

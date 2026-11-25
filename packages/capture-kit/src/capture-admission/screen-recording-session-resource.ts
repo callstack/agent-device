@@ -1,7 +1,12 @@
 import fs from 'node:fs';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { outputFileIdentity } from '@agent-device/host-kit/file';
+import type {
+  DurableCaptureProgress,
+  LiveResourceHandle,
+} from '@agent-device/contracts/durable-resource';
+import type { ScreenRecordingFinalization } from '@agent-device/contracts/recording-stop-progress';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -38,7 +43,8 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   resourceKind: 'screen-recording',
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
-  completionMetadata: recordingCompletionMetadata,
+  completionMetadata: encodeScreenRecordingCompletionMetadata,
+  finishLive: finishRecordingExport,
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
   // record is served the same export the first stop was answered with. That answer is a cold path: the
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
@@ -76,51 +82,78 @@ export function finishLiveScreenRecording(params: {
   return screenRecordingDurableResource.finishLive(params);
 }
 
-async function recordingCompletionMetadata(
-  result: ScreenRecordingCompletion,
-  metadata: JsonObject | undefined,
-  producer?: DurableCaptureFinishIntent,
-): Promise<JsonObject> {
-  const completion = encodeScreenRecordingCompletionMetadata(result);
-  const reservedPath = metadata?.remoteCapturePath;
-  if (!producer || typeof reservedPath !== 'string') return completion;
-  try {
-    const [{ chunkPathAt }, { deriveRecordingTelemetryPath }] = await Promise.all([
+type RecordingExportProof = Readonly<{ completedAt: number; identities: string[] }>;
+const liveExportProofs = new WeakMap<
+  LiveResourceHandle<ScreenRecordingCompletion>,
+  RecordingExportProof | null
+>();
+
+async function finishRecordingExport(
+  handle: LiveResourceHandle<ScreenRecordingCompletion>,
+  progress: DurableCaptureProgress,
+) {
+  const reservedPath = progress.learned?.remoteCapturePath;
+  if (typeof reservedPath !== 'string') return { outcome: await handle.finish(progress) };
+  const [{ chunkPathAt }, { deriveRecordingTelemetryPath }, { readStopCheckpoints }] =
+    await Promise.all([
       import('../recording/output-path.ts'),
       import('../recording/telemetry.ts'),
+      import('../recording/stop-checkpoints.ts'),
     ]);
-    if (
-      result.outPath !== reservedPath ||
-      result.chunks?.some(
-        (chunk, offset) =>
-          chunk.index !== offset + 1 || chunk.path !== chunkPathAt(reservedPath, chunk.index),
-      ) ||
-      (result.telemetryPath !== undefined &&
-        result.telemetryPath !== deriveRecordingTelemetryPath(reservedPath))
-    )
-      throw new Error('Recording export does not match its reservation.');
-    const files = [
-      reservedPath,
-      ...(result.chunks?.slice(1).map(({ path }) => path) ?? []),
-      ...(result.telemetryPath ? [result.telemetryPath] : []),
-    ];
-    const identities = files.map((file) => {
-      const stat = fs.lstatSync(file);
-      if (!stat.isFile()) throw new Error('Recording export is not a regular file.');
-      return outputFileIdentity(stat);
-    });
-    return { ...completion, remoteCaptureExport: { completedAt: Date.now(), identities } };
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'screen_recording_export_proof_failed',
-      data: { error: errorMessage(error) },
-    });
-    if (producer === 'disposal') return completion;
-    throw new AppError('COMMAND_FAILED', 'Recording export proof could not be recorded.', {
-      retriable: true,
-    });
+  if (readStopCheckpoints(progress.learned).exportPath && !liveExportProofs.has(handle)) {
+    liveExportProofs.set(handle, null);
   }
+  const rememberExport = (
+    outPath: string,
+    { chunks, telemetryPath }: ScreenRecordingFinalization,
+  ) => {
+    if (liveExportProofs.has(handle)) return;
+    try {
+      if (
+        outPath !== reservedPath ||
+        chunks?.some(
+          (chunk, offset) =>
+            chunk.index !== offset + 1 || chunk.path !== chunkPathAt(reservedPath, chunk.index),
+        ) ||
+        (telemetryPath !== undefined &&
+          telemetryPath !== deriveRecordingTelemetryPath(reservedPath))
+      ) {
+        throw new Error('Recording export does not match its reservation.');
+      }
+      const files = [
+        reservedPath,
+        ...(chunks?.slice(1).map(({ path }) => path) ?? []),
+        ...(telemetryPath ? [telemetryPath] : []),
+      ];
+      liveExportProofs.set(handle, {
+        completedAt: Date.now(),
+        identities: files.map((file) => {
+          const stat = fs.lstatSync(file);
+          if (!stat.isFile()) throw new Error('Recording export is not a regular file.');
+          return outputFileIdentity(stat);
+        }),
+      });
+    } catch (error) {
+      liveExportProofs.set(handle, null);
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'screen_recording_export_proof_failed',
+        data: { error: errorMessage(error) },
+      });
+    }
+  };
+  const outcome = await handle.finish({
+    ...progress,
+    record: (fact) => {
+      const { exportPath, finalization } = readStopCheckpoints(fact);
+      if (exportPath) rememberExport(exportPath, finalization ?? {});
+      progress.record(fact);
+    },
+  });
+  if (outcome.status !== 'completed' || outcome.alreadyCompleted) return { outcome };
+  rememberExport(outcome.result.outPath, outcome.result);
+  const proof = liveExportProofs.get(handle);
+  return { outcome, ...(proof ? { metadata: { remoteCaptureExport: proof } } : {}) };
 }
 
 export function encodeScreenRecordingCompletionMetadata(
