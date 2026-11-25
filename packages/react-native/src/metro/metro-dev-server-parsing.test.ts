@@ -42,6 +42,14 @@ test('lsof field output yields each listening socket once, ordered by port', () 
   );
 });
 
+test('a zone-scoped IPv6 listener is skipped, not dialled', () => {
+  const sockets = parseLsofListeningSockets(
+    'n[fe80::1%en0]:7000\nnfe80:1::1%en0:7001\nn127.0.0.1:8081\n',
+  );
+  assert.deepEqual(sockets, [{ host: '127.0.0.1', port: 8081 }]);
+  assert.doesNotThrow(() => sockets.map((socket) => socketUrl(socket)));
+});
+
 test('lsof keeps the address family it reports, brackets and all', () => {
   // Metro bound to IPv6 loopback only is unreachable on 127.0.0.1, so this is the address it must be
   // dialled at; a wildcard listener is kept as loopback, which reaches every address of this host.

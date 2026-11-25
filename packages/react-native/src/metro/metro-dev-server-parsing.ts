@@ -106,8 +106,9 @@ function parseListeningSocket(address: string): ListeningSocket | undefined {
 }
 
 function namedSocket(host: string, port: number | undefined): ListeningSocket | undefined {
-  // A host left holding a bracket came from a name that is not an address at all.
-  if (!host || port === undefined || host.includes('[') || host.includes(']')) return undefined;
+  // A host left holding a bracket came from a name that is not an address at all, and a zone-scoped
+  // one (`fe80::1%en0`) is no address `new URL` can dial.
+  if (!host || port === undefined || /[[\]%]/.test(host)) return undefined;
   return { host: WILDCARD_HOSTS.has(host) ? LOOPBACK_HOST : host, port };
 }
 
