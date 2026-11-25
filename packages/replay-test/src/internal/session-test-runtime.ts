@@ -171,7 +171,7 @@ export async function runReplayTestAttempt(
         ts: new Date().toISOString(),
         session: sessionName,
       });
-      const cleanupWarnings = await cleanupSession(sessionName);
+      const cleanupWarnings = await cleanupSession(sessionName, artifactPaths);
       if (outcome && cleanupWarnings)
         for (const warning of cleanupWarnings) outcome = appendReplayTestWarning(outcome, warning);
       appendReplayTestTimingEvent(tracePath, {
@@ -210,16 +210,19 @@ function finishReplayTestAttempt(
   timedOut: boolean,
   artifactPaths: Set<string>,
 ): ReplayTestAttemptOutcome {
-  if (timedOut && outcome?.status === 'failed') {
-    const paths = [...artifactPaths];
-    return {
-      ...outcome,
-      artifactPaths: paths,
-      error: {
-        ...outcome.error,
-        details: { ...outcome.error.details, artifactPaths: paths },
-      },
-    };
+  if (outcome) {
+    const paths = [...new Set([...outcome.artifactPaths, ...artifactPaths])];
+    if (timedOut && outcome.status === 'failed') {
+      return {
+        ...outcome,
+        artifactPaths: paths,
+        error: {
+          ...outcome.error,
+          details: { ...outcome.error.details, artifactPaths: paths },
+        },
+      };
+    }
+    return { ...outcome, artifactPaths: paths };
   }
   return (
     outcome ??

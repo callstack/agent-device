@@ -99,6 +99,7 @@ export type RecordRuntimeHandlerParams = Readonly<{
   bindExactDevice: BindExactDeviceRuntime;
   admissionLedger: ScreenRecordingAdmissionLedger;
   requestScope: PlatformRequestScope;
+  suiteRecording?: true;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
 }>;
@@ -271,7 +272,7 @@ async function startRecording(
     owner: runtime.owner,
     fence,
     ...started,
-    envelope: withCaptureOwner(started.envelope, params.req, outputPaths, lifetimeId),
+    envelope: withCaptureOwner(started.envelope, params, outputPaths, lifetimeId),
     throwIfCanceled: params.throwIfCanceled,
   });
   const adoptedRef = ref ?? draft!.requireRef();
@@ -299,7 +300,7 @@ async function startRecording(
  */
 function withCaptureOwner(
   envelope: DurableResourceEnvelope<'screen-recording'>,
-  req: DaemonRequest,
+  { req, suiteRecording }: RecordRuntimeHandlerParams,
   output: RecordingStartPaths,
   lifetimeId: string,
 ): DurableResourceEnvelope<'screen-recording'> {
@@ -317,6 +318,7 @@ function withCaptureOwner(
             remoteCaptureReservation: envelope.fence.token,
             remoteCaptureLifetime: lifetimeId,
             remoteCaptureTenantId: tenantId ?? null,
+            ...(suiteRecording ? { suiteRecordingArchivePath: req.positionals?.[1] } : {}),
           }
         : {}),
       ...(!output.daemonOwned && tenantId ? { remoteCaptureTenantId: tenantId } : {}),
@@ -341,6 +343,7 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
       session.device.platform,
       params.sessionStore.host.cwd,
       params.sessionStore.ensureSessionDir(params.sessionName),
+      params.suiteRecording,
     ),
   };
 }
@@ -353,6 +356,7 @@ function resolveRecordingStartPaths(
   platform: Platform,
   hostCwd: string,
   sessionDir: string,
+  suiteRecording?: true,
 ): RecordingStartPaths {
   const requestedPath = req.positionals?.[1];
   const clientOutputPath = req.meta?.clientArtifactPaths?.outPath;
@@ -360,6 +364,7 @@ function resolveRecordingStartPaths(
     requestedPath !== undefined &&
     isRemoteTempArtifactPath(requestedPath, 'recording', path.extname(requestedPath));
   if (
+    suiteRecording ||
     req.internal?.publicNetworkOnly ||
     (clientOutputPath !== undefined && (requestedPath === undefined || remotePlaceholder))
   ) {
@@ -456,6 +461,9 @@ async function stopRecording(
   // session has to be re-read here, because the record this stop started with may have gained an
   // app, a capture, a claim, or a lease while the recording was being finished.
   if (ref) retireRecordOnlySession(params.sessionStore, ref);
+  if (envelope.metadata?.suiteRecordingArchivePath) {
+    return { ok: true, data: { recording: 'stopped' } };
+  }
   const remote =
     isRemoteRecordingRequest(params) || envelope.metadata?.remoteCaptureOutput === true;
   const artifacts = remote
@@ -545,6 +553,8 @@ function assertRequestMayStopRecording(
 ): void {
   const { metadata, lifecycle } = envelope;
   const owner = recordingOutputLeaseVerifier(metadata);
+  if (metadata?.suiteRecordingArchivePath && !params.suiteRecording)
+    throw leasedOutputRefusal('Recording');
   const remote = metadata?.remoteCaptureOutput === true;
   const admitted = params.req.internal?.admittedLease;
   if (isRemoteRecordingRequest(params) && (owner === undefined || !remote))

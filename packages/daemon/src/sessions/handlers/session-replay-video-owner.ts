@@ -25,6 +25,7 @@ export type ReplayTestVideoOwnerParams = Readonly<{
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   requestScope?: PlatformRequestScope;
   throwIfCanceled?: () => void;
+  suiteRequest?: DaemonRequest;
 }>;
 
 export function createReplayTestVideoOwner(
@@ -73,7 +74,12 @@ export function createReplayTestVideoOwner(
               );
         await holdDevice(ref.session.device.id);
         return await handleRecordCommand({
-          req: recordRequest(request),
+          req: recordRequest(request, params.suiteRequest),
+          suiteRecording:
+            params.suiteRequest?.internal?.publicNetworkOnly ||
+            params.suiteRequest?.meta?.clientArtifactPaths?.artifactsDir
+              ? true
+              : undefined,
           sessionName: ref.address,
           sessionRef: ref,
           sessionStore,
@@ -102,13 +108,17 @@ export function createReplayTestVideoOwner(
   };
 }
 
-function recordRequest(request: ReplayRecordVideoRequest): DaemonRequest {
+function recordRequest(request: ReplayRecordVideoRequest, suite?: DaemonRequest): DaemonRequest {
   return {
     token: request.request.token,
     session: request.sessionName,
     command: 'record',
     positionals: request.phase === 'start' ? ['start', request.outputPath] : ['stop'],
     flags: {},
-    meta: request.request.meta,
+    meta: {
+      ...request.request.meta,
+      tenantId: suite?.meta?.tenantId ?? request.request.meta?.tenantId,
+    },
+    internal: { admittedLease: suite?.internal?.admittedLease },
   };
 }

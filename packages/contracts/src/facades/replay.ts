@@ -11,6 +11,7 @@ export type {
   ReplayScriptSourceBundle,
   ReplaySuiteAttemptFailure,
   ReplaySuiteResult,
+  ReplaySuiteRecordingArtifact,
   ReplaySuiteTestFailed,
   ReplaySuiteTestPassed,
   ReplaySuiteTestResult,
