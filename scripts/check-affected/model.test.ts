@@ -610,7 +610,7 @@ test('Maestro conformance Vitest inputs retain their registered unit runner', ()
 test('managed engine non-source inputs retain conservative full selection', () => {
   for (const file of [
     'packages/maestro/package.json',
-    'packages/maestro/tsdown.config.ts',
+    'build/maestro/tsdown.config.ts',
     'packages/maestro/test/package-artifact.test.mjs',
     'packages/replay-port/package.json',
     'packages/replay-port/test/artifact.test.mjs',
