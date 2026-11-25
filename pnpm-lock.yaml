@@ -949,6 +949,9 @@ importers:
       '@agent-device/build-config':
         specifier: workspace:*
         version: link:../build-config
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

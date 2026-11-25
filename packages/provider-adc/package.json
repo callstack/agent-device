@@ -32,7 +32,8 @@
     "@agent-device/test-kit": "workspace:*",
     "@agent-device/build-config": "workspace:*",
     "@agent-device/platform-android": "workspace:*",
-    "@agent-device/host-kit": "workspace:*"
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*"
   },
   "publishConfig": {
     "exports": {

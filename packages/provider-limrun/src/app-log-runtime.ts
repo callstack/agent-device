@@ -1,5 +1,8 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { bindProviderInteractionOperations } from '@agent-device/contracts/provider-interaction';
+import {
+  bindProviderInteractionOperations,
+  type ProviderAndroidInteractionFacts,
+} from '@agent-device/capture-kit/provider-interaction';
 import { createLimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunIosRunner } from './runtime-dependencies.ts';
@@ -68,6 +71,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     bindPerformance(device: DeviceInfo): Promise<LimrunAndroidPerfOperations | undefined>;
     host: PlatformRuntimeHost;
     runtimeInstance: string;
+    androidInteractionFacts: ProviderAndroidInteractionFacts;
     ownsDevice(device: DeviceInfo): boolean;
     getIosRunner(device: DeviceInfo): LimrunIosRunner | undefined;
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;

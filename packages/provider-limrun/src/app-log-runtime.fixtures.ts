@@ -1,9 +1,12 @@
+import { loadProviderAndroidInteractionFacts } from '@agent-device/capture-kit/provider-interaction';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { testIosRunner } from './ios-runner.fixtures.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { LimrunPlatformRuntimeOwnerOptions } from './app-log-runtime.ts';
+
+const androidInteractionFacts = await loadProviderAndroidInteractionFacts();
 
 export const limrunIosSimulator: DeviceInfo = {
   platform: 'apple',
@@ -29,6 +32,7 @@ export function limrunOwnerOptions(
   overrides: Partial<LimrunPlatformRuntimeOwnerOptions> = {},
 ): LimrunPlatformRuntimeOwnerOptions {
   return {
+    androidInteractionFacts,
     bindPerformance: async () => undefined,
     host: unusedLimrunHost(),
     runtimeInstance: 'default',

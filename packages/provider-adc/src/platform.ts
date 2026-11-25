@@ -19,8 +19,8 @@ import {
 } from '@agent-device/contracts/platform-runtime-unavailable';
 import {
   bindProviderInteractionOperations,
-  providerAndroidInteractionFacts,
-} from '@agent-device/contracts/provider-interaction';
+  loadProviderAndroidInteractionFacts,
+} from '@agent-device/capture-kit/provider-interaction';
 import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
 import { availableApplicationLifecycleOperations } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -37,14 +37,15 @@ const available = { available: true } as const;
 const unsupported = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason);
 const unavailable = createFullyUnavailablePlatformRuntimeFacts(unsupported);
 
-export function createPlatformOwner(
+export async function createPlatformOwner(
   owner: RuntimeOwnerRef,
   runtime: ProviderDeviceRuntime,
   host: PlatformRuntimeHost,
   android: Pick<ProviderAndroidHost, 'getForegroundApp' | 'bindDeployment'>,
   getAdb: (device: DeviceInfo) => AndroidAdbProvider,
   leaseIdFor: (device: DeviceInfo) => string,
-): PlatformRuntimeOwner {
+): Promise<PlatformRuntimeOwner> {
+  const providerAndroidInteractionFacts = await loadProviderAndroidInteractionFacts();
   const ownsDevice = runtime.ownsDevice;
   function factsFor(device: DeviceInfo) {
     const base = createUnavailablePlatformRuntimeFacts(device, owner, unavailable);

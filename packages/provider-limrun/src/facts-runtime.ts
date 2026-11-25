@@ -1,4 +1,3 @@
-import { providerAndroidInteractionFacts } from '@agent-device/contracts/provider-interaction';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import {
   providerRuntimeOwner,
@@ -146,7 +145,7 @@ export function limrunAppLogFacts(
   const isAndroid = device.platform === 'android';
   const runner = options.getIosRunner(device);
   if (!isAndroid && !runner) throw invalidRuntimeContract('Limrun iOS session has no Apple runner');
-  const interactionFacts = isAndroid ? providerAndroidInteractionFacts(device) : runner!.facts;
+  const interactionFacts = isAndroid ? options.androidInteractionFacts(device) : runner!.facts;
   return Object.freeze({
     device: { ...deviceShape(device), providerMode: 'provider-runtime' },
     operations: {

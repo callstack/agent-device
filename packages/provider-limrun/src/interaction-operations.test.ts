@@ -1,4 +1,4 @@
-import { bindProviderInteractionOperations } from '@agent-device/contracts/provider-interaction';
+import { bindProviderInteractionOperations } from '@agent-device/capture-kit/provider-interaction';
 import { testIosRunner } from './ios-runner.fixtures.ts';
 import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import {
