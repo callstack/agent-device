@@ -480,7 +480,9 @@ test('refuses the first redirect of an authenticated download while public downl
       destinationPath,
       timeoutMs: 5_000,
     }),
-  ).rejects.toMatchObject({ details: { reason: 'limrun_download_failed' } });
+  ).rejects.toMatchObject({
+    details: { reason: 'limrun_download_redirect_blocked', statusCode: 307 },
+  });
   expect(traffic).not.toHaveBeenCalled();
   expect(fs.existsSync(destinationPath)).toBe(false);
 

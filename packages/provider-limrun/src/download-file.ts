@@ -22,6 +22,8 @@ const LIMRUN_DOWNLOAD_REASONS = {
   failed: { reason: 'limrun_download_failed' },
   // An authenticated download must use the instance origin and a secure transport.
   endpointBlocked: { reason: 'limrun_download_endpoint_blocked' },
+  // An authenticated loopback download refused the instance redirect.
+  redirectBlocked: { reason: 'limrun_download_redirect_blocked' },
 } as const satisfies ReasonTable<'limrun'>;
 
 /**
@@ -138,7 +140,10 @@ function readLoopbackBody(
   const status = response.statusCode ?? 500;
   if ([301, 302, 303, 307, 308].includes(status)) {
     response.destroy();
-    throw new TypeError('Limrun refused the authenticated download redirect.');
+    throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download redirect.', {
+      reason: LIMRUN_DOWNLOAD_REASONS.redirectBlocked.reason,
+      statusCode: status,
+    });
   }
   if (status < 200 || status >= 300) {
     response.destroy();
