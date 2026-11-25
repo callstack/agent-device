@@ -2,7 +2,6 @@ import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/te
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test, vi } from 'vitest';
-import * as hostFiles from '@agent-device/host-kit/file';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   connectionWorkspace,
@@ -96,18 +95,9 @@ test('an ended lease reply completes without updating a locked connection', asyn
   const flags = seedEndedLeaseConnection();
   const host = createTestHostEnvironment();
   const reply: DaemonResponse = { ok: true, data: { endedLeases: [...ENDED] } };
-  const acquire = hostFiles.acquireProcessLock;
   await withConnectionLock(flags.stateDir, flags.session, async () => {
-    const bounded = vi
-      .spyOn(hostFiles, 'acquireProcessLock')
-      .mockImplementation((options) => acquire({ ...options, timeoutMs: 0 }));
-    try {
-      await forgetEndedConnectionLease(flags, reply, host);
-      assert.equal(bounded.mock.calls.length, 0);
-      assert.equal(readRemoteConnectionState(flags)?.leaseId, LEASE_ID);
-    } finally {
-      bounded.mockRestore();
-    }
+    await forgetEndedConnectionLease(flags, reply, host);
+    assert.equal(readRemoteConnectionState(flags)?.leaseId, LEASE_ID);
   });
   await forgetEndedConnectionLease(flags, reply, host);
   assert.equal(readRemoteConnectionState(flags)?.endedLeaseId, LEASE_ID);

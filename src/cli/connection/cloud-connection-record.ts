@@ -164,10 +164,14 @@ export function assertCloudCredentialFile(status: fs.Stats): void {
 }
 
 function assertOwnedEntry(status: fs.Stats, correctKind: boolean, exposure: number): void {
-  const uid = process.geteuid?.();
-  if (!correctKind || (uid !== undefined && (status.uid !== uid || status.mode & exposure))) {
+  if (!correctKind || !isOwnedEntry(status, exposure)) {
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
   }
+}
+
+function isOwnedEntry(status: fs.Stats, exposure: number): boolean {
+  const uid = process.geteuid?.();
+  return uid === undefined || (status.uid === uid && (status.mode & exposure) === 0);
 }
 
 function recordPath(location: ConnectionLocation): string {
@@ -305,10 +309,13 @@ function isExpired(record: CloudConnectionRecord): boolean {
 
 export async function cleanExpiredCloudAttachments(stateDir: string): Promise<void> {
   const root = path.join(stateDir, 'cloud-connections');
-  if (!lstatIfPresent(root) || !admitCloudStateRoot(stateDir)) return;
   const status = lstatIfPresent(root);
-  const uid = process.geteuid?.();
-  if (!status?.isDirectory() || (uid !== undefined && (status.uid !== uid || status.mode & 0o022)))
+  if (
+    !status ||
+    !admitCloudStateRoot(stateDir) ||
+    !status.isDirectory() ||
+    !isOwnedEntry(status, 0o022)
+  )
     return;
   for (const entry of readCloudConnectionDirectory(root)) {
     if (!entry.isDirectory()) continue;
@@ -335,10 +342,9 @@ function readExpiredAttachmentLocation(
   dir: string,
 ): ConnectionLocation | undefined {
   const status = lstatIfPresent(dir);
-  const uid = process.geteuid?.();
   if (
     !status?.isDirectory() ||
-    (uid !== undefined && (status.uid !== uid || status.mode & 0o077)) ||
+    !isOwnedEntry(status, 0o077) ||
     !lstatIfPresent(path.join(dir, 'attachment.json'))
   )
     return undefined;

@@ -66,12 +66,7 @@ test('cloud access with no-login reports auth requirement after reuse options ar
   await assert.rejects(
     resolveHostedCloudAccess({
       stateDir: mkdtempForTestSync('agent-device-connect-cloud-auth-miss-'),
-      flags: {
-        json: false,
-        help: false,
-        version: false,
-        noLogin: true,
-      },
+      noLogin: true,
       env: {},
       interactive: true,
     }),

@@ -174,7 +174,7 @@ async function connectCloudProfile(
   const request = readCloudSessionRequest(params.flags);
   const access = await resolveHostedCloudAccess({
     env: host.env,
-    flags: params.flags,
+    noLogin: params.flags.noLogin,
     stateDir: location.stateDir,
     interactive: true,
     savedOrigin: pending?.origin,

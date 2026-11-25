@@ -1,5 +1,4 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import type { CliFlags } from '@agent-device/contracts/command';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   DEFAULT_CLOUD_BASE_URL,
@@ -20,7 +19,7 @@ export type HostedCloudAccess = { accessToken: string; cloudBaseUrl: string };
 export async function resolveHostedCloudAccess(options: {
   stateDir: string;
   env: EnvMap;
-  flags?: CliFlags;
+  noLogin?: boolean;
   savedOrigin?: string;
   interactive?: boolean;
 }): Promise<HostedCloudAccess> {
@@ -31,11 +30,7 @@ export async function resolveHostedCloudAccess(options: {
   const flags = { json: false, help: false, version: false };
   const access = await readHostedLogin({ env: authEnv, stateDir, flags });
   if (access) return { ...access, cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl) };
-  if (
-    !options.interactive ||
-    options.flags?.noLogin ||
-    detectAuthMode(authEnv) === 'non-interactive'
-  )
+  if (!options.interactive || options.noLogin || detectAuthMode(authEnv) === 'non-interactive')
     throw cloudApiKeyRequired();
   const login = await loginWithDeviceAuth({
     env: authEnv,
