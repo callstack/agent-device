@@ -443,6 +443,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         UPLOAD_STREAM,
         'MAX_UPLOAD_REDIRECTS',
         'UploadStreamResponse',
+        'UploadHandoff',
         'streamFileToHttpRequest',
         'streamFileToHttpRequestAttempt',
         'buildUploadRequestHeaders',
