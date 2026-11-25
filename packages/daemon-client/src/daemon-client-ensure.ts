@@ -27,6 +27,7 @@ import { answersLivenessProbe } from './daemon-client-liveness-probe.ts';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
 import {
   DAEMON_UNAVAILABLE_REASONS,
+  daemonConnectDeniedError,
   daemonIdentityOf,
   daemonDrainTimeoutError,
   daemonIncompatibleError,
@@ -97,6 +98,14 @@ async function ensureOnce(
   switch (decision.kind) {
     case 'reuse':
       return { kind: 'connected', daemon: { info, startedByClient: false }, started: false };
+    // The host refused this client's connect, so the daemon's state is unknown and it is left alone:
+    // the refusal travels to the caller, which names the sandbox and the way out.
+    case 'connectDenied':
+      throw daemonConnectDeniedError({
+        info,
+        denial: decision.denial,
+        stateDir: settings.paths.baseDir,
+      });
     case 'refuseNewer':
       throw await daemonIncompatibleError({
         info,

@@ -9,6 +9,7 @@ import type {
 import { daemonBindingMismatchError } from './daemon-client-binding.ts';
 import {
   DAEMON_UNAVAILABLE_REASONS,
+  daemonConnectDeniedError,
   daemonIncompatibleError,
   daemonNotRunningError,
 } from './daemon-lifecycle-errors.ts';
@@ -44,6 +45,10 @@ export async function connectToDaemon(
   switch (decision.kind) {
     case 'reuse':
       break;
+    // An attach client replaced nothing anyway; the refusal still has to name the sandbox rather than
+    // read as "no daemon is running".
+    case 'connectDenied':
+      throw daemonConnectDeniedError({ info, denial: decision.denial, stateDir });
     case 'refuseNewer':
       throw await daemonIncompatibleError({ info, mismatch: 'newer', stateDir });
     case 'replace':

@@ -9,6 +9,7 @@ import {
   type DaemonReachability,
   resolveLocalDaemonCodeIdentity,
 } from '../daemon-launch-spec.ts';
+import type { DaemonProbeVerdict } from '../daemon-client-loopback-probe.ts';
 import { isSourceCheckoutProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 
@@ -128,9 +129,9 @@ test('a version mismatch is decided without asking the client transport', async 
   const decision = await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), {
     onClientTransport: async () => {
       asked = true;
-      return false;
+      return silent;
     },
-    onAnyAdvertisedTransport: async () => false,
+    onAnyAdvertisedTransport: async () => silent,
   });
 
   assert.equal(decision.kind, 'replace');
@@ -156,6 +157,24 @@ test('a same-version daemon the client transport cannot reach is replaced', asyn
   );
 });
 
+test('a same-version daemon the host refused to connect to is not judged unreachable', async () => {
+  useClientTree(false);
+
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'installed' }), denied()),
+    { kind: 'connectDenied', denial: DENIAL },
+  );
+});
+
+// The refusal outranks the newer-daemon refusal: both stop the daemon being touched, and only
+// `connectDenied` says the reason is this client's sandbox rather than the daemon's version.
+test('a connect the host refused never reads as a newer daemon to refuse', async () => {
+  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), denied()), {
+    kind: 'connectDenied',
+    denial: DENIAL,
+  });
+});
+
 test('a reachable daemon older than the client is replaced', async () => {
   assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), reachable()), {
     kind: 'replace',
@@ -175,16 +194,32 @@ function useClientTree(sourceCheckout: boolean): void {
 }
 
 function reachable(): DaemonReachability {
-  return { onClientTransport: async () => true, onAnyAdvertisedTransport: async () => true };
+  return {
+    onClientTransport: async () => answered,
+    onAnyAdvertisedTransport: async () => answered,
+  };
 }
 
 function unreachable(): DaemonReachability {
-  return { onClientTransport: async () => false, onAnyAdvertisedTransport: async () => false };
+  return { onClientTransport: async () => silent, onAnyAdvertisedTransport: async () => silent };
 }
 
 function onlyOnAnotherTransport(): DaemonReachability {
-  return { onClientTransport: async () => false, onAnyAdvertisedTransport: async () => true };
+  return { onClientTransport: async () => silent, onAnyAdvertisedTransport: async () => answered };
 }
+
+/** The host refused every endpoint this client tried, as its sandbox does. */
+function denied(): DaemonReachability {
+  return {
+    onClientTransport: async () => ({ reachable: false, denial: DENIAL }),
+    onAnyAdvertisedTransport: async () => ({ reachable: false, denial: DENIAL }),
+  };
+}
+
+const DENIAL = { errno: 'EPERM', transport: 'socket', port: 41_234 } as const;
+
+const answered: DaemonProbeVerdict = { reachable: true };
+const silent: DaemonProbeVerdict = { reachable: false };
 
 function runningDaemon(info: {
   version?: string;

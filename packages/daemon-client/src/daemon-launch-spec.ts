@@ -13,6 +13,7 @@ import {
   computeDaemonCodeSignature,
   resolveDaemonCodeOrigin,
 } from '@agent-device/host-kit/code-signature';
+import type { DaemonProbeVerdict } from './daemon-client-loopback-probe.ts';
 import type { DaemonInfo, DaemonTakeoverDecision } from './daemon-client-metadata.ts';
 
 type DaemonLaunchSpec = {
@@ -111,23 +112,28 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
  * Reuse needs the daemon on the transport this client will route through; refusal needs only
  * proof that the daemon is alive, on any transport its metadata advertises. A client whose
  * transport preference the daemon does not serve must still see a live newer daemon.
+ *
+ * Each probe answers with a verdict, not a boolean: a connect the host refused is evidence about
+ * the sandbox around this client, not about the daemon, and no caller may read it as "dead".
  */
 export type DaemonReachability = {
   /** Asked last, only once version and code identity leave the decision to it. */
-  onClientTransport: () => Promise<boolean>;
-  onAnyAdvertisedTransport: () => Promise<boolean>;
+  onClientTransport: () => Promise<DaemonProbeVerdict>;
+  onAnyAdvertisedTransport: () => Promise<DaemonProbeVerdict>;
 };
 
 /**
- * One ladder decides reuse, replace, or refuse, so a daemon can never be reused and announced as
- * replaced, or replaced without a reason to print. The version answers first because it is cheap
- * and decides alone for the common pair of installed trees; the code identity
- * (`resolveCodeIdentityMismatch`) answers next and unreachability last.
+ * One ladder decides reuse, replace, refuse, or "the host refused this client", so a daemon can
+ * never be reused and announced as replaced, or replaced without a reason to print. The version
+ * answers first because it is cheap and decides alone for the common pair of installed trees; the
+ * code identity (`resolveCodeIdentityMismatch`) answers next and unreachability last.
  *
  * A live daemon NEWER than this client is neither reused nor replaced: it was started by a
  * newer install that may still own live sessions, and an older binary that a package manager
  * hoisted onto PATH must not kill it under that install. An unreachable newer daemon is dead and
- * replaced like any version mismatch.
+ * replaced like any version mismatch. A probe the HOST refused answers `connectDenied` on either
+ * branch instead: this client never saw the daemon, so it holds no evidence that the daemon is
+ * dead, and retiring it would end a daemon only this client's sandbox cannot reach.
  */
 export async function resolveDaemonTakeover(
   info: DaemonInfo,
@@ -135,12 +141,14 @@ export async function resolveDaemonTakeover(
 ): Promise<DaemonTakeoverDecision> {
   const clientVersion = readVersion();
   if (info.version !== clientVersion) {
-    if (
-      info.version &&
-      isNewerVersion(info.version, clientVersion) &&
-      (await reachability.onAnyAdvertisedTransport())
-    ) {
-      return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
+    // Probed exactly where it was probed before: only a newer daemon's answer decides a refusal on
+    // its own. Where the probe is made, a connect the host refused answers `connectDenied` rather
+    // than a death verdict, so a newer daemon is never retired by a client that cannot see it.
+    if (info.version && isNewerVersion(info.version, clientVersion)) {
+      const advertised = await reachability.onAnyAdvertisedTransport();
+      if (advertised.denial) return { kind: 'connectDenied', denial: advertised.denial };
+      if (advertised.reachable)
+        return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
     }
     return {
       kind: 'replace',
@@ -151,9 +159,9 @@ export async function resolveDaemonTakeover(
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
   if (codeMismatch) return { kind: 'replace', reason: codeMismatch, cause: 'code' };
-  if (!(await reachability.onClientTransport())) {
-    return { kind: 'replace', reason: 'unreachable', cause: 'unreachable' };
-  }
+  const probe = await reachability.onClientTransport();
+  if (probe.denial) return { kind: 'connectDenied', denial: probe.denial };
+  if (!probe.reachable) return { kind: 'replace', reason: 'unreachable', cause: 'unreachable' };
   return { kind: 'reuse' };
 }
 

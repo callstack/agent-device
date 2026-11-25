@@ -582,6 +582,7 @@ These reasons can come from more than one command.
 | `DAEMON_POLICY_MISMATCH` | The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names. |
 | `startup-exited` | The daemon process ended before it registered a reachable endpoint, for a cause other than a denied loopback listen. |
 | `startup-listen-denied` | The daemon process ended because the host refused its loopback listen, as a sandbox around the launching command does. |
+| `daemon-connect-denied` | The host refused this client's loopback connect to the registered daemon, as a sandbox around it does; `details.daemon` names the daemon left alone. |
 | `startup-stalled` | The daemon stayed registered and reachable but never reported the startup phase that follows. |
 | `startup-ceiling` | Startup passed the ceiling its own startup budget allows, so this client stopped waiting. |
 | `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer "which daemon" two different ways. |

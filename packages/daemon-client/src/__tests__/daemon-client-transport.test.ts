@@ -23,8 +23,8 @@ import {
 } from '@agent-device/contracts/daemon-http';
 import { sendToDaemon } from '../index.ts';
 import {
-  canConnect,
   isDaemonTransportUnavailableError,
+  probeDaemonReachability,
   sendRequest,
 } from '../daemon-client-transport.ts';
 import { DAEMON_UNAVAILABLE_REASONS } from '../daemon-lifecycle-errors.ts';
@@ -62,7 +62,13 @@ test('auto health probing reserves time for a healthy fallback when HTTP hangs',
     const httpPort = await listenOnLoopback(httpServer);
     const port = await listenOnLoopback(socketServer);
     assert.equal(
-      await canConnect({ token: 'secret', pid: 1, transport: 'http', httpPort, port }, 'auto', 120),
+      (
+        await probeDaemonReachability(
+          { token: 'secret', pid: 1, transport: 'http', httpPort, port },
+          'auto',
+          120,
+        )
+      ).reachable,
       true,
     );
   } finally {
@@ -93,10 +99,12 @@ test('the health deadline includes requester loading and forbids a late request'
   try {
     const httpPort = await listenOnLoopback(server);
     let settled = false;
-    probing = canConnect({ token: 'secret', pid: 1, httpPort }, 'http', 40).then((reachable) => {
-      settled = true;
-      return reachable;
-    });
+    probing = probeDaemonReachability({ token: 'secret', pid: 1, httpPort }, 'http', 40).then(
+      (probe) => {
+        settled = true;
+        return probe.reachable;
+      },
+    );
     await sleep(90);
     assert.equal(settled, true, 'loading must not extend the probe deadline');
     assert.equal(await probing, false);
@@ -560,7 +568,7 @@ test.for([
 
 test('an endpoint missing for the requested transport rejects with a typed reason the classifier accepts', async () => {
   const socketOnly = { port: 1, token: 't', pid: 1 };
-  const error = await canConnect(socketOnly, 'http').then(
+  const error = await probeDaemonReachability(socketOnly, 'http').then(
     () => undefined,
     (error: unknown) => error,
   );

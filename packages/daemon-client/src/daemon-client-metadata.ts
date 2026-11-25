@@ -1,6 +1,6 @@
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { isProcessPid } from '@agent-device/host-kit/process';
-
+import type { LoopbackConnectDenial } from './daemon-client-loopback-probe.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   admitDaemonStateRoot,
@@ -42,8 +42,7 @@ export type DaemonInfo = {
   remoteUpstreamInstanceId?: string;
 };
 
-/**
- * Why a daemon is not the one this client would use. `transport` means alive but not on the
+/** Why a daemon is not the one this client would use. `transport` means alive but not on the
  * transport this client uses: the ladder only ever answers `unreachable` for it, and a caller that
  * must not kill a live daemon refines it with `observeLocalDaemon`.
  */
@@ -53,7 +52,12 @@ export type DaemonTakeoverCause = 'version' | 'code' | 'transport' | 'unreachabl
 export type DaemonTakeoverDecision =
   | { kind: 'reuse' }
   | { kind: 'replace'; reason: string; cause: DaemonTakeoverCause }
-  | { kind: 'refuseNewer'; daemonVersion: string; clientVersion: string };
+  | { kind: 'refuseNewer'; daemonVersion: string; clientVersion: string }
+  /**
+   * The host refused this client's connect to the registered daemon, so the client cannot tell
+   * whether that daemon lives. Nothing is replaced, retired, or signaled on this answer.
+   */
+  | { kind: 'connectDenied'; denial: LoopbackConnectDenial };
 
 export type DaemonObservationSettings = {
   paths: DaemonPaths;
