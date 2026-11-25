@@ -6,13 +6,19 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+import {
+  readRemoteConnectionState,
+  removeRemoteConnectionState,
+} from '@agent-device/remote/remote-connection-state';
 import * as browserLaunch from '../cli/browser-launch.ts';
 import { bindCloudAttachment, bindHostedDaemon } from '../cli/connection/cloud-attachment.ts';
 import {
   cloudAttachmentPath,
   readCloudConnection,
+  writeCloudConnection,
 } from '../cli/connection/cloud-connection-record.ts';
+import { resolveCloudAdmission } from '../cli/connection/active-connection.ts';
+import { cloudLimrunDaemonDir } from '../cli/connection/cloud-limrun.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { createTestClient, grantedLease } from './remote-connection.fixtures.ts';
 import { runCliCapture } from './cli-capture.ts';
@@ -156,6 +162,41 @@ test('fences and retires the attachment before a missing broker credential preve
   expect(mock.mock.calls).toHaveLength(1);
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
   expect(mock.mock.calls[1]?.[1].method).toBe('DELETE');
+});
+
+test('expired attachments without a saved binding retire their generation before removing credentials', async () => {
+  const env = limrunEnv('current');
+  const location = locationOf(env);
+  const broker = stubCloudApi();
+  broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+  expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  const record = readCloudConnection(location)!;
+  writeCloudConnection(location, { ...record, deadlineAt: new Date(0).toISOString() });
+  removeRemoteConnectionState(location);
+
+  const sweep = () =>
+    resolveCloudAdmission({
+      command: 'connect',
+      usesSessions: true,
+      stateDir: location.stateDir,
+      host: createTestHostEnvironment({ env }),
+      session: location.session,
+      binding: undefined,
+    });
+  const credential = cloudAttachmentPath(location);
+  stop.mockRejectedValueOnce(new Error('retirement unconfirmed'));
+  await sweep();
+  expect(stop).toHaveBeenCalledExactlyOnceWith(
+    expect.anything(),
+    expect.objectContaining({
+      paths: expect.objectContaining({ baseDir: cloudLimrunDaemonDir(location, record) }),
+    }),
+  );
+  expect(fs.existsSync(credential)).toBe(true);
+
+  await sweep();
+  expect(stop).toHaveBeenCalledTimes(2);
+  expect(fs.existsSync(credential)).toBe(false);
 });
 
 test('disconnect preserves recovery when a startup owns the lock before publishing a registration', async () => {

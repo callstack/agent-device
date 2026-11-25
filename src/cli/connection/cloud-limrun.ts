@@ -71,11 +71,11 @@ export function cloudLimrunEnv(
 
 export async function stopHostedLimrunDaemon(
   location: ConnectionLocation,
-  binding: CloudSessionBinding | undefined,
+  generation: string | undefined,
   host: HostEnvironment,
 ): Promise<void> {
-  if (binding?.transport !== 'limrun') return;
-  const paths = resolveDaemonPaths(cloudLimrunDaemonDir(location, binding), host);
+  if (!generation) return;
+  const paths = resolveDaemonPaths(cloudLimrunDaemonDir(location, { generation }), host);
   try {
     const { stopRecordedDaemon } = await import('@agent-device/daemon-client');
     const { readDaemonStopIdentity } =

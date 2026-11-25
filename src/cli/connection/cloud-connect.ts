@@ -126,7 +126,9 @@ export async function releaseCloudConnection(options: {
   const binding = cloudBindingForTeardown(location, state, record);
   markCloudConnectionClosing(location, record);
   removeCloudAttachment(location);
-  const retirementFailure = await stopHostedLimrunDaemon(location, binding, host).then(
+  const daemonGeneration =
+    binding?.transport === 'agent-device-daemon' ? undefined : (record ?? binding)?.generation;
+  const retirementFailure = await stopHostedLimrunDaemon(location, daemonGeneration, host).then(
     () => undefined,
     (error: unknown) => error,
   );

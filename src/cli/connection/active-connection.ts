@@ -31,10 +31,8 @@ export async function resolveCloudAdmission(options: {
   const { command, usesSessions, stateDir, session, binding } = options;
   if (!usesSessions || command === 'auth') return;
   await cleanExpiredCloudAttachments(stateDir, async (location, generation) => {
-    const expired = readRemoteConnectionState(location)?.cloudSession;
-    if (expired?.transport !== 'limrun' || expired.generation !== generation) return;
     const { stopHostedLimrunDaemon } = await import('./cloud-limrun.ts');
-    await stopHostedLimrunDaemon(location, expired, options.host);
+    await stopHostedLimrunDaemon(location, generation, options.host);
   });
   if (command === 'connect' || command === 'connection' || command === 'disconnect') return;
   if (!binding && isLegacyCloudProfile(stateDir, options.remoteConfig)) {
