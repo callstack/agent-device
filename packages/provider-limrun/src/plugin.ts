@@ -21,8 +21,9 @@ export type LimrunPluginOptions = Readonly<{
 }>;
 
 const ATTACHMENT_REASONS = {
-  // The hosted attachment deadline passed or could not be validated.
+  // The hosted attachment deadline has passed.
   expired: { reason: 'limrun_hosted_attachment_expired' },
+  // The hosted attachment deadline could not be parsed.
   invalidDeadline: { reason: 'limrun_hosted_attachment_invalid_deadline' },
   // A hosted attachment cannot run with an ambient Limrun account key.
   accountKeyConflict: { reason: 'limrun_hosted_attachment_account_key_conflict' },
