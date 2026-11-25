@@ -80,32 +80,29 @@ test('auto health probing reserves time for a healthy fallback when HTTP hangs',
 // Two shapes of a reachability probe that a boolean "unreachable" would report wrongly, both of which
 // a caller reads before it retires a daemon: a fallback leg that answers AFTER the deadline must not
 // bury the refusal the first leg already proved, and a refusal of a fresh connect must not be answered
-// around by a keep-alive socket an earlier command left in the pool.
+// around by a keep-alive socket an earlier command left in the pool. Neither case may leave global
+// state behind: this file's other cases run real loopback servers on ports the OS reuses, and a frozen
+// clock, a patched `connect`, or a free socket left in the global agent all reach them.
 test('a fallback leg answering past the deadline still reports the first leg as a denial', async () => {
   const probe = await import('../daemon-client-loopback-probe.ts');
   const denial = { errno: 'EPERM', transport: 'socket', port: 41_234 } as const;
-  // A clock the two legs move on, so "late" is settled rather than raced: the socket leg is refused
-  // at once, the HTTP leg answers, and the answer lands after the probe's deadline.
-  let now = 1_000;
-  const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
-  const socketLeg = vi
-    .spyOn(probe, 'probeLoopbackPort')
-    .mockResolvedValue({ reachable: false, denial });
-  const httpLeg = vi.spyOn(probe, 'probeHttpEndpoint').mockImplementation(async () => {
-    now += 500;
-    return { reachable: true };
+  // "Late" is spent, not faked: the budget is 20 ms and the socket leg answers after 40 ms, so the
+  // deadline has provably passed by the time the fallback's answer lands.
+  const socketLeg = vi.spyOn(probe, 'probeLoopbackPort').mockImplementation(async () => {
+    await sleep(40);
+    return { reachable: false, denial };
   });
+  const httpLeg = vi.spyOn(probe, 'probeHttpEndpoint').mockResolvedValue({ reachable: true });
   try {
     assert.deepEqual(
       await probeDaemonReachability(
         { token: 'secret', pid: 1, transport: 'dual', port: 41_234, httpPort: 41_235 },
         'auto',
-        100,
+        20,
       ),
       { reachable: false, denial },
     );
   } finally {
-    clock.mockRestore();
     socketLeg.mockRestore();
     httpLeg.mockRestore();
   }
@@ -115,8 +112,8 @@ test('a fresh connect the host refused is not answered around by a pooled socket
   if (await skipWhenLoopbackUnavailable(t)) return;
   // The pool the probe must not ride, primed the way an earlier command primes it: one keep-alive
   // health request whose socket returns to the global agent. Discriminator: every NEW connect is
-  // refused from here on, so a verdict of `reachable` could only come from the pooled socket, and a
-  // denial that arrives with the daemon having seen nothing but the prime is the whole claim.
+  // refused for the probe's own port, so a verdict of `reachable` could only come from the pooled
+  // socket, and a denial that arrives with the daemon having seen nothing but the prime is the claim.
   if (!(await poolPrimesUnderTestAgent())) return;
   const askedUrls: string[] = [];
   const server = http.createServer((req, res) => {
@@ -127,6 +124,7 @@ test('a fresh connect the host refused is not answered around by a pooled socket
   // Prime with the SAME module object the probe loads, or the pool holds no candidate and the test
   // proves nothing.
   const requester = await hostTransport.loadNodeHttpRequester('http:');
+  const { globalAgent } = await import('node:http');
   await new Promise<void>((resolve, reject) => {
     const request = requester.request(
       { host: '127.0.0.1', port, path: '/health', method: 'GET' },
@@ -139,13 +137,24 @@ test('a fresh connect the host refused is not answered around by a pooled socket
     request.end();
   });
   // A host that refuses a connect answers it immediately, with no round trip: the socket ends with
-  // the errno and never carries a request.
-  const connect = vi
-    .spyOn(net.Socket.prototype, 'connect')
-    .mockImplementation(function (this: net.Socket) {
-      this.destroy(Object.assign(new Error('EPERM'), { code: 'EPERM' }));
-      return this;
-    });
+  // the errno and never carries a request. Scoped to the probed port — Node hands `connect` its
+  // normalized-args array and the port in it is a string — so nothing else this worker might be
+  // connecting is refused, and the real `connect` still runs for every other target.
+  const realConnect = net.Socket.prototype.connect;
+  const connect = vi.spyOn(net.Socket.prototype, 'connect').mockImplementation(function (
+    this: net.Socket,
+    ...args: Parameters<net.Socket['connect']>
+  ) {
+    const [first] = args;
+    const options = Array.isArray(first) ? first[0] : first;
+    const aimedPort =
+      typeof options === 'object' && options !== null && 'port' in options
+        ? Number((options as { port?: unknown }).port)
+        : Number.NaN;
+    if (aimedPort !== port) return realConnect.apply(this, args as never);
+    this.destroy(Object.assign(new Error('EPERM'), { code: 'EPERM' }));
+    return this;
+  });
   try {
     assert.deepEqual(
       await probeDaemonReachability({ token: 'secret', pid: 1, httpPort: port }, 'http'),
@@ -157,6 +166,9 @@ test('a fresh connect the host refused is not answered around by a pooled socket
     assert.deepEqual(askedUrls, ['/health'], 'only the prime reached the daemon');
   } finally {
     connect.mockRestore();
+    // The primed socket is back in the pool now, pointed at a server about to close. A later case
+    // that is handed this port by the OS would otherwise ride it and lose its request.
+    globalAgent.destroy();
     await closeLoopbackServer(server);
   }
 });
