@@ -302,6 +302,17 @@ test('remote recording without client metadata stays in its session and download
       expect(stopped.result?.data?.outPath).toBe(path.basename(source));
       const artifact = stopped.result?.data?.artifacts?.[0];
       expect(artifact?.artifactId).toBeTypeOf('string');
+      const tenantHeaders = {
+        authorization: 'Bearer test-token',
+        [DAEMON_HTTP_TENANT_HEADER]: 'named-tenant',
+      };
+      const inventory = await fetch(`${base}/artifacts`, { headers: tenantHeaders });
+      expect(inventory.status).toBe(200);
+      expect(await inventory.json()).toMatchObject({ artifacts: [] });
+      const denied = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {
+        headers: tenantHeaders,
+      });
+      expect(denied.status).toBe(401);
       const download = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {
         headers: { authorization: 'Bearer test-token' },
       });

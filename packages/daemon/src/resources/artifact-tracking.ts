@@ -17,6 +17,7 @@ import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/obser
 import type { PackedGzipTar } from '@agent-device/host-kit/gzip-tar';
 import {
   expiredTenantOwnedEntryError,
+  matchesTenantOwnedEntry,
   requireTenantOwnedEntry,
   type TenantOwnedResourceKind,
 } from '../core/tenant-owned-entry.ts';
@@ -176,7 +177,7 @@ type ArtifactDownload = {
 
 type ArtifactEntry = {
   artifactPath: string;
-  tenantId?: string;
+  tenantId?: string | null;
   leaseVerifier?: string;
   reservation?: Readonly<{ directory?: string; lifetimeId: string }>;
   /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
@@ -354,7 +355,7 @@ export function commitRecordingFileOutputs(
           artifactPath,
           artifactType: delivery.artifactType,
           fileName: delivery.fileName,
-          tenantId: producer.tenantId,
+          tenantId: producer.tenantId ?? null,
           leaseVerifier: producer.leaseVerifier ?? undefined,
           sessionName,
         },
@@ -409,7 +410,7 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
 function addArtifactEntry(
   artifacts: Map<string, ArtifactEntry>,
   artifactId: string,
-  params: DownloadableArtifactRegistration,
+  params: Omit<DownloadableArtifactRegistration, 'tenantId'> & Pick<ArtifactEntry, 'tenantId'>,
   output: string | undefined,
   sourceCleanup: ArtifactSourceCleanup,
   reservation?: ArtifactEntry['reservation'],
@@ -828,7 +829,7 @@ function canReadArtifact(entry: ArtifactEntry, reader: DownloadableArtifactReade
   return (
     !entry.cleanupRequested &&
     !entry.awaitingDelivery &&
-    (!entry.tenantId || entry.tenantId === reader.tenantId) &&
+    matchesTenantOwnedEntry(entry, reader.tenantId) &&
     requestHoldsOutputLease(entry.leaseVerifier, reader.leaseId)
   );
 }
