@@ -37,7 +37,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@limrun/api": "^0.69.1"
+    "@limrun/api": "^0.69.1",
+    "undici": "7.30.1"
   },
   "devDependencies": {
     "@agent-device/build-config": "workspace:*",
