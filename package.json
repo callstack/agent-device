@@ -22,34 +22,6 @@
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
-    "./io": {
-      "types": "./dist/src/io.d.ts",
-      "import": "./dist/src/io.js"
-    },
-    "./artifacts": {
-      "types": "./dist/src/artifacts.d.ts",
-      "import": "./dist/src/artifacts.js"
-    },
-    "./metro": {
-      "types": "./dist/src/metro.d.ts",
-      "import": "./dist/src/metro.js"
-    },
-    "./batch": {
-      "types": "./dist/src/batch.d.ts",
-      "import": "./dist/src/batch.js"
-    },
-    "./remote-config": {
-      "types": "./dist/src/remote-config.d.ts",
-      "import": "./dist/src/remote-config.js"
-    },
-    "./install-source": {
-      "types": "./dist/src/install-source.d.ts",
-      "import": "./dist/src/install-source.js"
-    },
-    "./android-adb": {
-      "types": "./dist/src/android-adb.d.ts",
-      "import": "./dist/src/android-adb.js"
-    },
     "./contracts": {
       "types": "./dist/src/contracts.d.ts",
       "import": "./dist/src/contracts.js"
@@ -57,14 +29,6 @@
     "./selectors": {
       "types": "./dist/src/selectors.d.ts",
       "import": "./dist/src/selectors.js"
-    },
-    "./finders": {
-      "types": "./dist/src/finders.d.ts",
-      "import": "./dist/src/finders.js"
-    },
-    "./ai-sdk": {
-      "types": "./dist/src/ai-sdk.d.ts",
-      "import": "./dist/src/ai-sdk.js"
     },
     "./plugins": {
       "types": "./dist/src/plugins.d.ts",

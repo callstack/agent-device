@@ -24,8 +24,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import { centerOfRect, defaultHintForCode, normalizeError, type DaemonError } from './contracts.ts';
+import { defaultHintForCode } from './contracts.ts';
+import { centerOfRect, normalizeError } from '@agent-device/kernel/contracts';
 import { AppError } from './index.ts';
+import type { DaemonError } from '@agent-device/kernel/errors';
 
 const invalidArgsCode = 'INVALID_ARGS' satisfies AppErrorCode;
 const rect = { x: 1, y: 2, width: 3, height: 4 } satisfies Rect;

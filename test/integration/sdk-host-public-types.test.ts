@@ -10,7 +10,7 @@ const TSC_BIN = path.join(repoRoot, 'node_modules/.bin/tsc');
 const COMMAND_TIMEOUT_MS = 120_000;
 
 function ensureBuiltPackage(): void {
-  const declarationPath = path.join(repoRoot, 'dist', 'src', 'android-adb.d.ts');
+  const declarationPath = path.join(repoRoot, 'dist', 'src', 'index.d.ts');
   if (fs.existsSync(declarationPath)) return;
 
   runCmdSync('pnpm', ['build'], {
@@ -19,7 +19,7 @@ function ensureBuiltPackage(): void {
   });
 }
 
-test('compiled SDK subpaths require explicit hosts', () => {
+test('internal helper types require explicit hosts', () => {
   ensureBuiltPackage();
 
   // Keep the fixture under the package root so TypeScript resolves the
@@ -33,6 +33,8 @@ test('compiled SDK subpaths require explicit hosts', () => {
           compilerOptions: {
             module: 'NodeNext',
             moduleResolution: 'NodeNext',
+            allowImportingTsExtensions: true,
+            skipLibCheck: true,
             noEmit: true,
             strict: true,
             types: ['node'],
@@ -45,11 +47,11 @@ test('compiled SDK subpaths require explicit hosts', () => {
     );
     fs.writeFileSync(
       path.join(tempRoot, 'fixture.ts'),
-      `import { runAndroidShell, runAndroidExecOut } from 'agent-device/android-adb';
-import { resolveAndroidArchivePackageName } from 'agent-device/artifacts';
-import { prepareMetroRuntime } from 'agent-device/metro';
-import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
-import { createLocalArtifactAdapter, type LocalArtifactAdapterOptions } from 'agent-device/io';
+      `import { runAndroidShell, runAndroidExecOut } from '../src/sdk/android-adb.ts';
+import { resolveAndroidArchivePackageName } from '../src/sdk/artifacts.ts';
+import { prepareMetroRuntime } from '../src/sdk/metro.ts';
+import { resolveRemoteConfigProfile } from '../src/sdk/remote-config.ts';
+import { createLocalArtifactAdapter, type LocalArtifactAdapterOptions } from '../src/sdk/io.ts';
 
 const host = { env: {}, cwd: '/workspace' };
 declare const device: Parameters<typeof runAndroidShell>[0];

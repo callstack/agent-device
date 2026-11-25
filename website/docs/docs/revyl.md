@@ -155,48 +155,16 @@ which is what a local fake of the API is for.
 
 ## Use it from JavaScript
 
-Install the plugin package as a dependency of your host and pass it to a host you start yourself.
-`startAgentDevice()` runs the daemon in your process and registers the plugin objects you hand it, so
-no `plugins add` step and no `REVYL_API_KEY` in the environment are needed:
+Install and connect the plugin as described above, then start a local daemon before creating the client:
 
 ```ts
-import { createAgentDeviceClient, startAgentDevice } from 'agent-device';
-import revyl from '@agent-device/revyl';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
-const host = await startAgentDevice({
-  stateDir: './.my-app/agent-device-state',
-  plugins: [revyl({ apiKey: 'your-api-key', apiUrl: 'https://backend.example.com' })],
-});
-
-const scope = {
-  session: 'checkout-ios',
-  tenant: 'revyl',
-  runId: process.env.GITHUB_RUN_ID ?? 'local-run',
-  leaseBackend: 'ios-instance',
-  leaseProvider: 'revyl',
-} as const;
-
-const lease = await host.client.leases.allocate({
-  ...scope,
-  platform: 'ios',
-  providerApp: 'https://apps.example.com/MyApp-simulator.zip',
-});
-const client = createAgentDeviceClient({ ...host.clientConfig, ...scope, leaseId: lease.leaseId });
-
-try {
-  await client.apps.open({ app: 'com.example.app' });
-  await client.capture.snapshot({ interactiveOnly: true });
-  await client.interactions.click({ selector: 'label="Continue"' });
-} finally {
-  // Releasing the lease ends the Revyl session, so a failure cannot leave a device rented.
-  // The inner finally closes the host even when the release itself fails; otherwise the embedded
-  // daemon stays alive and nothing retries the release.
-  try {
-    await host.client.leases.release({ ...scope, leaseId: lease.leaseId });
-  } finally {
-    await host.close();
-  }
-}
+const stateDir = './.my-app/agent-device-state';
+await ensureDaemon({ stateDir });
+const client = createAgentDeviceClient({ stateDir, session: 'checkout-ios' });
+const devices = await client.devices.list({ platform: 'ios' });
+console.log(devices);
 ```
 
 `apiUrl` is optional and only needed for a staging or private Revyl backend. Leaving both out makes

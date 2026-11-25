@@ -45,7 +45,7 @@ agent-device plugins add @agent-device/replay
 
 Finish your sessions and restart that daemon, then retry the original invocation with all its arguments. Native `.ad` scripts keep their syntax, variables, target verification, resume and repair behavior. Ordinary script recording stays in core.
 
-A remote daemon needs its own installation. A local plugin store does not make an engine available remotely. An embedded host imports the factory from `@agent-device/replay/agent-device` and supplies `plugins: [replay()]` to `startAgentDevice`. Supplied plugins are authoritative; the embedded runtime does not read the store.
+A remote daemon needs its own installation. A local plugin store does not make an engine available remotely.
 
 Maestro YAML replay requires `@agent-device/maestro` on both client and daemon hosts. Maestro suites also need `@agent-device/replay` on the daemon host. `replay export` needs the Maestro plugin on the client only.
 

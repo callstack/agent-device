@@ -6,19 +6,10 @@
     "tsBuildInfoFile": "../../.tmp/examples-sdk.tsbuildinfo",
     "paths": {
       "agent-device": ["../../src/sdk/index.ts"],
-      "agent-device/io": ["../../src/sdk/io.ts"],
-      "agent-device/artifacts": ["../../src/sdk/artifacts.ts"],
-      "agent-device/metro": ["../../src/sdk/metro.ts"],
-      "agent-device/batch": ["../../src/sdk/batch.ts"],
-      "agent-device/remote-config": ["../../src/sdk/remote-config.ts"],
-      "agent-device/install-source": ["../../src/sdk/install-source.ts"],
-      "agent-device/android-adb": ["../../src/sdk/android-adb.ts"],
       "agent-device/plugins": ["../../src/sdk/plugins.ts"],
       "agent-device/plugins/device-host": ["../../src/sdk/plugin-device-host.ts"],
       "agent-device/contracts": ["../../src/sdk/contracts.ts"],
-      "agent-device/finders": ["../../src/sdk/finders.ts"],
-      "agent-device/selectors": ["../../src/sdk/selectors.ts"],
-      "agent-device/ai-sdk": ["../../src/ai-sdk/index.ts"]
+      "agent-device/selectors": ["../../src/sdk/selectors.ts"]
     }
   },
   // Scoped to this directory only: these examples import `agent-device/...`

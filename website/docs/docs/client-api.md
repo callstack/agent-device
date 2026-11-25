@@ -6,54 +6,12 @@ This page is for developers who drive devices from their own Node.js code. Use `
 
 Building an agent? Start with the dedicated [AI SDK](/docs/ai-sdk) or [Eve](/docs/eve) integration. Building a bridge, remote daemon, or device-cloud backend that owns device access or command dispatch? See [Build an integration](/docs/build-an-integration).
 
-## Runnable examples
-
-The repository includes [runnable, typechecked Node.js examples](https://github.com/callstack/agent-device/tree/main/examples/sdk). They import the same published `agent-device/*` entry points your code uses:
-
-| Example | Demonstrates |
-| --- | --- |
-| [`client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts) | Open, snapshot, interact, handle typed errors, and always close the session |
-| [`contracts-result.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/contracts-result.ts) | Consume snapshot results with helpers from [`agent-device/contracts`](/docs/build-an-integration#api-reference) |
-
-Examples for custom transports and Metro are on [Build an integration](/docs/build-an-integration#runnable-examples).
-
-Each example typechecks against the SDK through its own [`tsconfig.json`](https://github.com/callstack/agent-device/blob/main/examples/sdk/tsconfig.json). Build the package with `pnpm build`, then run an example with Node:
-
-```bash
-node --experimental-strip-types examples/sdk/client-session.ts
-```
-
 ## API reference
 
-Entry points for driving devices from Node.js:
-
 - `agent-device`
-  - `createAgentDeviceClient(options?)`
-  - `startAgentDevice(options)`
-  - types: `AgentDeviceHost`, `StartAgentDeviceOptions`
-  - `ensureDaemon(options?)`
-  - `createLocalArtifactAdapter({ cwd, rootDir?, tempDir? })`
+  - `createAgentDeviceClient(options?)`, `ensureDaemon(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
-  - `isUnreadableCaptureContentError(error)`: true when an Android helper capture found no readable
-    app content yet (`empty-helper-output`, `system-window-only`, `content-poor-app-window`), for
-    example while the app is still loading. Polling callers may keep polling. False for every other
-    platform, backend, and mechanism failure.
-  - `centerOfRect(rect)`
-  - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
-  - types: `DaemonBinding`, `DaemonLifecycle`, `EnsureDaemonOptions`, `DaemonConnection`, `DaemonIdentity`
-  - types: every option and result type of the client's methods, among them `AppOpenOptions`,
-    `AppOpenResult`, `CaptureSnapshotOptions`, `CaptureSnapshotResult`, `CaptureScreenshotResult`,
-    `PressOptions`
-  - types: `SnapshotNode`, `RawSnapshotNode`, `SnapshotState`, `Rect`, `Point`
-  - types: `NormalizedError`, `AppErrorCode`, `KnownAppErrorCode`, `AppErrorDetails`, `ErrorCause`
-- `agent-device/io`
-  - `createLocalArtifactAdapter({ cwd, rootDir?, tempDir? })`
-  - types: `ArtifactAdapter`, `ArtifactDescriptor`, `CreateTempFileOptions`, `FileInputRef`,
-    `FileOutputRef`, `LocalArtifactAdapterOptions`, `OutputVisibility`, `ReserveOutputOptions`,
-    `ReservedOutputFile`, `ResolveInputOptions`, `ResolvedInputFile`, `TemporaryFile`
-- `agent-device/ai-sdk`
-  - `createAgentDeviceTools(options)`
-  - types: `AgentDeviceToolSet`, `AgentDeviceTools`, `CreateAgentDeviceToolsOptions`
+  - types: `AgentDeviceClient`, `CaptureScreenshotResult`, `CaptureSnapshotResult`, `DeviceBootOptions`, `LeaseAllocateOptions`, `LeaseScopedOptions`, `PressOptions`, `SnapshotNode`
 
 ## Basic usage
 
@@ -92,9 +50,9 @@ if ('cloudArtifacts' in result) {
 
 Client calls attach to the local daemon for their state directory without starting, replacing or stopping it, including after a timeout. This includes `client.replay.run()` and `client.replay.test()`. Only CLI/MCP one-shot replay/test operations start and clean up a private daemon. A missing daemon reports `daemon-not-running`; an incompatible daemon reports `daemon-incompatible`.
 
-To migrate from `daemonLifecycle: 'managed'`, remove that option and call `ensureDaemon({ stateDir })` with the same `stateDir` as the client before creating it, including clients used only for replay/test. To own the daemon in your process instead, use `startAgentDevice()` as shown below. CLI and MCP commands continue to ensure the local daemon when needed.
+To migrate from `daemonLifecycle: 'managed'`, remove that option and call `ensureDaemon({ stateDir })` with the same `stateDir` as the client before creating it, including clients used only for replay/test. The in-process `startAgentDevice()` SDK export was removed in 0.22. CLI and MCP commands continue to ensure the local daemon when needed.
 
-Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses a live embedded runtime with `daemon-owner-embedded`. If the recorded host lifetime has provably exited, it retires the abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`.
+Close an embedded runtime in the process that owns it. `agent-device daemon stop --state-dir <path>` refuses a live embedded runtime with `daemon-owner-embedded`. If the recorded host lifetime has provably exited, it retires the abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`.
 
 ```ts
 import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
@@ -123,37 +81,6 @@ These failures carry a typed `error.details.reason`:
 | `daemon-binding-mismatch` | A client pinned to one daemon instance reached another one instead. `details.mismatch` says which: `replaced`, `absent`, or `unaddressable`. Nothing was dispatched, started, or signaled. Take a fresh config from the host that owns the daemon, or start a host of your own. |
 
 `ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` connects to the remote daemon and does not start or stop a local daemon.
-
-## Running the daemon inside your process
-
-`startAgentDevice()` starts the daemon inside your own process and returns a client for it. Use it when you want the daemon's lifetime to be exactly your process's, or when you import plugin objects you already have.
-
-```ts
-import { startAgentDevice } from 'agent-device';
-
-const host = await startAgentDevice({
-  stateDir: './.my-app/agent-device-state',
-});
-
-const devices = await host.client.devices.list();
-await host.close();
-```
-
-`stateDir` is required. If another daemon owns it, startup refuses with `daemon_registration_refused`; choose a separate directory or close its owner first. Pass imported plugin objects in `plugins`. They register after the built-ins without reading the plugin store, so `plugin add` does not change a running host. Plugin failures appear in `agent-device daemon status --state-dir <path>`. `close()` reports unfinished teardown. Its `platformOwners` field is `closed` after successful shutdown, `pending` when the shutdown budget expires, or `failed` when an owner rejects. Repeated calls share one close and never exit your process.
-
-The runtime stays alive until you call `close()` in its host process; idle reaping is disabled. `daemon stop` refuses live embedded runtimes with `daemon-owner-embedded`. `daemon stop --clean` is refused because cleanup must stay within this runtime. If the shutdown report lists abandoned requests or unfinished cleanup, inspect those outcomes before reusing the state directory: the runtime may retain its registration to protect work still in progress.
-
-`host.clientConfig` is serializable JSON: pass it to another process or worker and build an attach client from it. The client must pass normal version and code compatibility checks, then match the pinned instance. An incompatible or replacement daemon is refused:
-
-```ts
-import { createAgentDeviceClient, startAgentDevice } from 'agent-device';
-
-const host = await startAgentDevice({ stateDir: './.my-app/agent-device-state' });
-// Hand the config to a worker or another process: it is plain JSON, no build step.
-const client = createAgentDeviceClient(host.clientConfig);
-```
-
-A client can also pin one instance on its own with `daemonBinding: { token, pid, processStartTime }`. Every request then goes to that instance and authenticates with its token. The client never starts, replaces, retires or redirects a daemon to satisfy the pin, so a state directory that registers any other instance is refused with `details.reason: 'daemon-binding-mismatch'`, and so is one that registers none or holds a record it cannot read as an address. The pin holds the daemon's token, so treat it as a credential: share it only with trusted processes that should control this runtime.
 
 ## Device cloud sessions
 

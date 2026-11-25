@@ -17,17 +17,6 @@ If the CLI prints an install command in a missing-plugin error, use that command
 
 After installing or changing a plugin, finish sessions and run `agent-device daemon stop --state-dir <path>` for the matching detached daemon, then retry the command.
 
-For an embedded runtime, import the factory and pass it to `startAgentDevice`. The embedded runtime does not read the CLI plugin store. After changing plugins, close and recreate the runtime.
-
-```ts
-import { startAgentDevice } from "agent-device";
-import limrun from "@agent-device/limrun/agent-device";
-
-const runtime = await startAgentDevice({ stateDir: "./.agent-device-state", plugins: [limrun()] });
-// Close the runtime when its owner is finished.
-await runtime.close();
-```
-
 The plugin installs the Limrun SDK (`@limrun/api`) as its own dependency. Run `agent-device plugins update @agent-device/limrun` to pick up SDK fixes.
 
 ## Set credentials and connect

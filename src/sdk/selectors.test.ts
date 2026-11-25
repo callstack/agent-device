@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildNodes } from '@agent-device/test-kit';
-import {
-  findSelectorChainMatch,
-  listSelectorChainMatches,
-  parseSelectorChain,
-  resolveSelectorChain,
-} from './selectors.ts';
+import { listSelectorChainMatches, parseSelectorChain } from './selectors.ts';
+import { findSelectorChainMatch, resolveSelectorChain } from '@agent-device/selectors/ast';
 
 // Public-entry contract (#3180), through `./selectors.ts` rather than a deep
 // import: every node the winning alternative matches, on the same snapshot a

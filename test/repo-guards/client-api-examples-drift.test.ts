@@ -36,10 +36,6 @@ type SubpathManifest = ReadonlyMap<string, ReadonlySet<string>>;
 // Each must be imported by at least one file in examples/sdk/.
 const REQUIRED_EXAMPLE_SYMBOLS: readonly { subpath: string; symbol: string }[] = [
   { subpath: 'agent-device', symbol: 'createAgentDeviceClient' },
-  { subpath: 'agent-device/metro', symbol: 'normalizeBaseUrl' },
-  { subpath: 'agent-device/metro', symbol: 'resolveRuntimeTransport' },
-  { subpath: 'agent-device/contracts', symbol: 'centerOfRect' },
-  { subpath: 'agent-device/batch', symbol: 'runBatch' },
 ];
 
 // Parses the "API reference" bullet list: a top-level `- \`agent-device...\``
