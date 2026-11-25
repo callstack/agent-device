@@ -3,11 +3,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { parseSelectorChain } from './parse.ts';
-import {
-  findSelectorChainMatch,
-  listSelectorChainMatches,
-  resolveSelectorChain,
-} from './resolve.ts';
+import { listSelectorChainMatches, resolveSelectorChain } from './resolve.ts';
 import { loginFormNodes } from './__tests__/login-form-nodes.ts';
 import { formatRole } from '@agent-device/kernel/snapshot';
 
@@ -355,21 +351,21 @@ test('appName selector matches nodes with appName field', () => {
 
   // Match by appName — should disambiguate two OK buttons
   const chain1 = parseSelectorChain('label=OK appname=Calculator');
-  const match1 = findSelectorChainMatch(desktopNodes, chain1, { platform: 'linux' });
+  const match1 = listSelectorChainMatches(desktopNodes, chain1, { platform: 'linux' });
   assert.ok(match1);
-  assert.equal(match1.matches, 1);
+  assert.equal(match1.matchedNodes.length, 1);
 
   // Match by windowTitle
   const chain2 = parseSelectorChain('windowtitle=Untitled');
-  const match2 = findSelectorChainMatch(desktopNodes, chain2, { platform: 'linux' });
+  const match2 = listSelectorChainMatches(desktopNodes, chain2, { platform: 'linux' });
   assert.ok(match2);
-  assert.equal(match2.matches, 1);
+  assert.equal(match2.matchedNodes.length, 1);
 
   // Case-insensitive key (appName vs appname) and value
   const chain3 = parseSelectorChain('appName=calculator');
-  const match3 = findSelectorChainMatch(desktopNodes, chain3, { platform: 'linux' });
+  const match3 = listSelectorChainMatches(desktopNodes, chain3, { platform: 'linux' });
   assert.ok(match3);
-  assert.equal(match3.matches, 1);
+  assert.equal(match3.matchedNodes.length, 1);
 });
 
 // iOS `back` lists a dismiss control with a role-scoped selector after the runner checked that no

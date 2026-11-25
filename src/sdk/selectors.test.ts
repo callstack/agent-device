@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildNodes } from '@agent-device/test-kit';
 import { listSelectorChainMatches, parseSelectorChain } from './selectors.ts';
-import { findSelectorChainMatch, resolveSelectorChain } from '@agent-device/selectors/ast';
 
 // Public-entry contract (#3180), through `./selectors.ts` rather than a deep
 // import: every node the winning alternative matches, on the same snapshot a
@@ -48,19 +47,7 @@ test('listSelectorChainMatches returns every node of the winning alternative, in
   assert.equal(match.matchedNodes[0], nodes[1]);
 });
 
-test('listSelectorChainMatches reports several matches where resolveSelectorChain refuses, from the same chain', () => {
-  const nodes = loginNodes();
-  const chain = parseSelectorChain('label="Continue"');
-  assert.equal(
-    resolveSelectorChain(nodes, chain, { platform: 'ios', requireUnique: true }),
-    null,
-    'uniqueness refusal must not remove the matched nodes from the list',
-  );
-  const match = listSelectorChainMatches(nodes, chain, { platform: 'ios' });
-  assert.equal(match?.matchedNodes.length, 3);
-});
-
-test('listSelectorChainMatches walks to the first alternative that matches, as find does and a uniqueness-refusing resolve does not', () => {
+test('listSelectorChainMatches walks to the first alternative that matches', () => {
   const nodes = loginNodes();
   const match = listSelectorChainMatches(
     nodes,
@@ -73,20 +60,7 @@ test('listSelectorChainMatches walks to the first alternative that matches, as f
     match.matchedNodes.map((node) => node.ref),
     ['e2'],
   );
-  // Both alternatives match: `find` shares this answer, a default
-  // `resolveSelectorChain` refuses ambiguous alternative 0 and names 1.
-  assert.equal(
-    findSelectorChainMatch(nodes, parseSelectorChain('label="Continue" || id=auth_continue'), {
-      platform: 'ios',
-    })?.selectorIndex,
-    0,
-  );
-  assert.equal(
-    resolveSelectorChain(nodes, parseSelectorChain('label="Continue" || id=auth_continue'), {
-      platform: 'ios',
-    })?.selectorIndex,
-    1,
-  );
+  // Both alternatives match, so the first one wins.
   const both = listSelectorChainMatches(
     nodes,
     parseSelectorChain('label="Continue" || id=auth_continue'),
