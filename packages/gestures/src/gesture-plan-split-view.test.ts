@@ -22,13 +22,32 @@ test.each([
   expect([samples[1]!.point, samples[2]!.point]).toEqual([middle, middle]);
 });
 
-test('a Split View preset off iOS is refused before planning a touch', () => {
-  expect(() =>
-    buildGesturePlan({ intent: 'fling', preset: 'split-view-left' }, viewport, 'android'),
-  ).toThrow(
-    expect.objectContaining({
-      code: 'UNSUPPORTED_OPERATION',
-      details: expect.objectContaining({ reason: 'split_view_unavailable', dispatched: 'no' }),
-    }),
-  );
+test('split-view-exit drags the divider from the center to the left edge', () => {
+  const display = { ...viewport, x: 20, y: 10 };
+  const plan = buildGesturePlan({ intent: 'fling', preset: 'split-view-exit' }, display, 'ios');
+  expect(plan).toMatchObject({
+    topology: 'single',
+    executionProfile: 'timed-pan',
+    contactOrigin: 'split-view-divider',
+    pointers: [
+      {
+        samples: [
+          { offsetMs: 0, point: { x: 495.5, y: 344.5 } },
+          { offsetMs: 700, point: { x: 21, y: 344.5 } },
+        ],
+      },
+    ],
+  });
 });
+
+test.each(['split-view-left', 'split-view-exit'] as const)(
+  '%s off iOS is refused before planning a touch',
+  (preset) => {
+    expect(() => buildGesturePlan({ intent: 'fling', preset }, viewport, 'android')).toThrow(
+      expect.objectContaining({
+        code: 'UNSUPPORTED_OPERATION',
+        details: expect.objectContaining({ reason: 'split_view_unavailable', dispatched: 'no' }),
+      }),
+    );
+  },
+);

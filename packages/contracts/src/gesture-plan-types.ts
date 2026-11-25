@@ -102,10 +102,12 @@ export type SinglePointerTrajectory = {
 /**
  * Where a contact starts. `screen-edge` asks the platform to deliver the contact as a screen-edge
  * touch, which edge gesture recognizers require. `split-view-edge` is a screen-edge touch that
- * starts the system Split View gesture; only a foldable iOS simulator with its inner panel lit
- * executes it.
+ * starts the system Split View gesture. `split-view-divider` starts an ordinary drag on the system
+ * divider. Only a foldable iOS simulator with its inner panel lit executes Split View gestures.
  */
-export type GestureContactOrigin = 'screen-edge' | 'split-view-edge';
+export type GestureContactOrigin = 'screen-edge' | 'split-view-edge' | 'split-view-divider';
+
+export type GestureViewportScope = 'including-keyboard' | 'display';
 
 export type SinglePointerGesturePlan = {
   topology: 'single';

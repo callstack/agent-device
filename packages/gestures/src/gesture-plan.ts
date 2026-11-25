@@ -61,6 +61,7 @@ const GESTURE_VIEWPORT_INSET_PX = 1;
 const DEFAULT_PAN_DURATION_MS = 500;
 export const GESTURE_FLING_DURATION_MS = 100;
 const SPLIT_VIEW_DURATION_MS = 2100;
+const SPLIT_VIEW_EXIT_DURATION_MS = 700;
 const SPLIT_VIEW_EDGE_INSET_PX = 1;
 const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
@@ -274,11 +275,6 @@ function buildFlingPlan(
   );
 }
 
-/**
- * The system Split View drag: up from the bottom edge to the middle, a hold that lifts the app
- * window, then sideways toward the requested half. The sideways end stays short of the vertical
- * travel, so the edge touch keeps its upward swipe direction.
- */
 function buildSplitViewPlan(
   preset: SplitViewSwipePreset,
   viewport: Rect,
@@ -289,6 +285,18 @@ function buildSplitViewPlan(
   }
   const centerX = viewport.x + viewport.width / 2;
   const middleY = viewport.y + viewport.height / 2;
+  if (preset === 'split-view-exit') {
+    const plan = buildSinglePointerPlan(
+      'fling',
+      { x: centerX, y: middleY },
+      { x: viewport.x + SPLIT_VIEW_EDGE_INSET_PX, y: middleY },
+      SPLIT_VIEW_EXIT_DURATION_MS,
+      viewport,
+      'timed-pan',
+    );
+    return { ...plan, contactOrigin: 'split-view-divider' };
+  }
+  // The sideways travel stays shorter than the initial lift so the edge touch stays upward.
   const endX = viewport.x + viewport.width * (preset === 'split-view-left' ? 0.2 : 0.8);
   const samples: SinglePointerTrajectory['samples'] = [
     {

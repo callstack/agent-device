@@ -355,7 +355,7 @@ test('iosRunnerOverrides reads and validates the fresh gesture viewport', async 
     command: 'gestureViewport',
     appBundleId: 'com.example.App',
   });
-  await overrides.gestureViewport(true);
+  await overrides.gestureViewport('including-keyboard');
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[1]?.[1], {
     command: 'gestureViewport',
     appBundleId: 'com.example.App',

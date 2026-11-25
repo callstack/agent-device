@@ -1,5 +1,9 @@
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
-import type { GestureCommandInput, GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type {
+  GestureCommandInput,
+  GesturePlan,
+  GestureViewportScope,
+} from '@agent-device/contracts/gesture-plan-types';
 import type {
   GesturePlanInput,
   GestureRuntimeOperations,
@@ -122,16 +126,29 @@ export async function resolveBoundGestureRuntime(
   });
   if (admitted.type === 'response') return { ok: false, response: admitted.response };
   // One bind, with the exactly-typed use the tier selected (ADR 0019 §9).
-  const includesKeyboard =
-    params.input.intent === 'pan' &&
-    (params.input.pointerCount ?? 1) === 1 &&
-    params.input.executionProfile !== 'endpoint-hold'
-      ? true
-      : undefined;
   return {
     ok: true,
-    gestures: await bindGestureTier(admitted.bind, params.device, plan, includesKeyboard),
+    gestures: await bindGestureTier(
+      admitted.bind,
+      params.device,
+      plan,
+      gestureViewportScope(params.input),
+    ),
   };
+}
+
+function gestureViewportScope(input: GestureCommandInput): GestureViewportScope | undefined {
+  if (input.intent === 'fling' && 'preset' in input && input.preset === 'split-view-exit') {
+    return 'display';
+  }
+  if (
+    input.intent === 'pan' &&
+    (input.pointerCount ?? 1) === 1 &&
+    input.executionProfile !== 'endpoint-hold'
+  ) {
+    return 'including-keyboard';
+  }
+  return undefined;
 }
 
 /**
@@ -146,7 +163,7 @@ async function bindGestureTier(
   bind: Extract<Awaited<ReturnType<typeof admitRuntimeOperations>>, { type: 'admitted' }>['bind'],
   device: DeviceInfo,
   plan: GestureRuntimePlan,
-  includesKeyboard?: true,
+  scope?: GestureViewportScope,
 ): Promise<BoundGestureExecutor> {
   switch (plan.tier) {
     case 'plan': {
@@ -154,7 +171,7 @@ async function bindGestureTier(
       return {
         performPlan: async (gesturePlan, context) =>
           await runtime.operations.performGesturePlan(gesturePlanInput(gesturePlan, context)),
-        ...selectGestureFrame(runtime, includesKeyboard),
+        ...selectGestureFrame(runtime, scope),
         ...(runtime.operations.querySelector
           ? { querySelector: runtime.operations.querySelector }
           : {}),
@@ -194,7 +211,7 @@ async function bindGestureTier(
             gesturePlanInput(gesturePlan, context),
           ),
         // A held pan reaches this tier too, and a pan's frame read includes the keyboard.
-        ...selectGestureFrame(runtime, includesKeyboard),
+        ...selectGestureFrame(runtime, scope),
         ...(runtime.operations.querySelector
           ? { querySelector: runtime.operations.querySelector }
           : {}),
@@ -218,7 +235,7 @@ function selectGestureFrame(
       gestureViewport?: GestureRuntimeOperations['gestureViewport'];
     }>;
   }>,
-  includesKeyboard?: true,
+  scope?: GestureViewportScope,
 ): Pick<BoundGestureExecutor, 'captureSnapshot' | 'gestureViewport'>;
 function selectGestureFrame(
   runtime: Readonly<{
@@ -227,7 +244,7 @@ function selectGestureFrame(
       gestureViewport?: GestureRuntimeOperations['gestureViewport'];
     }>;
   }>,
-  includesKeyboard?: true,
+  scope?: GestureViewportScope,
 ): Partial<Pick<BoundGestureExecutor, 'captureSnapshot' | 'gestureViewport'>> {
   const { gestureViewport } = runtime.operations;
   const selectedCapture = runtime.operations.captureSnapshot
@@ -244,9 +261,7 @@ function selectGestureFrame(
     ...(selected
       ? {
           gestureViewport: async (context: DaemonCommandContext) =>
-            await selected.operations.gestureViewport(
-              gestureViewportInput(context, includesKeyboard),
-            ),
+            await selected.operations.gestureViewport(gestureViewportInput(context, scope)),
         }
       : {}),
   });
@@ -261,9 +276,9 @@ function gesturePlanInput(plan: GesturePlan, context: DaemonCommandContext): Ges
   };
 }
 
-function gestureViewportInput(context: DaemonCommandContext, includesKeyboard?: true) {
+function gestureViewportInput(context: DaemonCommandContext, scope?: GestureViewportScope) {
   return {
-    ...(includesKeyboard ? { includesKeyboard } : {}),
+    ...(scope ? { scope } : {}),
     ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
     execution: runtimeExecutionFromContext(context),
   };

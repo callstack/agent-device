@@ -7,6 +7,7 @@ vi.mock('../core/runner-client.ts', () => ({
 }));
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { SplitViewSwipePreset } from '@agent-device/contracts/scroll-gesture';
 import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
@@ -22,7 +23,6 @@ bindTestCommandHost();
 
 const mockRunner = vi.mocked(runAppleRunnerCommand);
 const viewport = { x: 0, y: 0, width: 951, height: 669 };
-const splitPlan = buildGesturePlan({ intent: 'fling', preset: 'split-view-left' }, viewport, 'ios');
 
 beforeEach(() => {
   mockRunner.mockClear();
@@ -35,7 +35,11 @@ function simulator(): DeviceInfo {
   return { ...IOS_SIMULATOR, id: `${IOS_SIMULATOR.id}-split-${simulatorCount}` };
 }
 
-async function performSplit(device: DeviceInfo, panels: object) {
+async function performSplit(
+  device: DeviceInfo,
+  panels: object,
+  preset: SplitViewSwipePreset = 'split-view-left',
+) {
   const provider = createLocalAppleToolProvider({
     runCommand: async (_command, args) => {
       if (args.slice(0, 4).join(' ') === 'devicectl device info displays') {
@@ -44,8 +48,9 @@ async function performSplit(device: DeviceInfo, panels: object) {
       return { stdout: '', stderr: '', exitCode: 0 };
     },
   });
+  const plan = buildGesturePlan({ intent: 'fling', preset }, viewport, 'ios');
   await withAppleToolProvider(provider, () =>
-    createAppleInteractor(device, {}, createLiveTestHostEnvironment()).performGesture!(splitPlan),
+    createAppleInteractor(device, {}, createLiveTestHostEnvironment()).performGesture!(plan),
   );
 }
 
@@ -61,12 +66,22 @@ test('an open foldable simulator sends the Split View drag as a screen-edge touc
   );
 });
 
+test('an open foldable simulator sends the divider drag as an ordinary timed pan', async () => {
+  await performSplit(simulator(), IPHONE_DUO_OPEN, 'split-view-exit');
+  const command = mockRunner.mock.calls[0]?.[1];
+  expect(command).toMatchObject({
+    command: 'gesture',
+    gesturePlan: { executionProfile: 'timed-pan' },
+  });
+  expect(command?.gesturePlan).not.toHaveProperty('contactOrigin');
+});
+
 test.each([
-  ['a closed foldable simulator', simulator(), IPHONE_DUO_CLOSED],
-  ['a single-panel simulator', simulator(), IPHONE_17_SINGLE_PANEL],
-  ['a physical iPhone', IOS_DEVICE, IPHONE_DUO_OPEN],
-] as const)('%s refuses Split View before any touch', async (_name, device, panels) => {
-  await expect(performSplit(device, panels)).rejects.toMatchObject({
+  ['a closed foldable simulator', simulator(), IPHONE_DUO_CLOSED, 'split-view-exit'],
+  ['a single-panel simulator', simulator(), IPHONE_17_SINGLE_PANEL, 'split-view-left'],
+  ['a physical iPhone', IOS_DEVICE, IPHONE_DUO_OPEN, 'split-view-left'],
+] as const)('%s refuses Split View before any touch', async (_name, device, panels, preset) => {
+  await expect(performSplit(device, panels, preset)).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: { reason: 'split_view_unavailable', dispatched: 'no' },
   });

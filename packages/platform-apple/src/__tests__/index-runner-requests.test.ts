@@ -101,7 +101,7 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
   'ios-simulator.interactions-gesture-viewport.read': [IOS_SIMULATOR, (i) => i.gestureViewport!()],
   'ios-simulator.interactions-gesture-viewport.include-keyboard': [
     IOS_SIMULATOR,
-    (i) => i.gestureViewport!(true),
+    (i) => i.gestureViewport!('including-keyboard'),
   ],
   'ios-simulator.interactions-press-series.tap': [
     IOS_SIMULATOR,

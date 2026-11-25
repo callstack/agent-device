@@ -1,4 +1,5 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import type { GestureContactOrigin } from './gesture-plan-types.ts';
 import { SCROLL_REASONS } from './scroll-reasons.ts';
 import { defineStringEnum } from './string-enum.ts';
 import { isViewportRootNode } from './snapshot-visibility.ts';
@@ -28,12 +29,18 @@ export const SWIPE_PRESETS = [
   'right-edge',
   'split-view-left',
   'split-view-right',
+  'split-view-exit',
 ] as const;
 export type SwipePreset = (typeof SWIPE_PRESETS)[number];
-/** Presets that move a full-screen app into one half of Split View on a foldable iOS simulator. */
+/** Presets that enter or leave Split View on a foldable iOS simulator. */
 export type SplitViewSwipePreset = Extract<SwipePreset, `split-view-${string}`>;
 export function isSplitViewSwipePreset(preset: SwipePreset): preset is SplitViewSwipePreset {
-  return preset === 'split-view-left' || preset === 'split-view-right';
+  return preset.startsWith('split-view-');
+}
+export function isSplitViewContactOrigin(
+  origin: GestureContactOrigin | undefined,
+): origin is 'split-view-edge' | 'split-view-divider' {
+  return origin === 'split-view-edge' || origin === 'split-view-divider';
 }
 /** Why a Split View swipe preset was refused before any touch went down. */
 const SPLIT_VIEW_GESTURE_REASONS = {
@@ -49,7 +56,7 @@ export function splitViewUnavailableError(
     ...details,
     reason: SPLIT_VIEW_GESTURE_REASONS.unavailable.reason,
     dispatched: 'no',
-    hint: 'Use an iPhone Duo simulator with its inner panel lit (not closed), open the app full screen, then swipe again.',
+    hint: 'Use an iPhone Duo simulator with its inner panel lit.',
   });
 }
 const SCREEN_EDGE_SWIPE_PRESETS: ReadonlySet<SwipePreset> = new Set(['left-edge', 'right-edge']);
