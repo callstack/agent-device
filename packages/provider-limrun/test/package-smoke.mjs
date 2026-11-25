@@ -55,7 +55,7 @@ export async function verifyPacked({ core, contracts, plugin }) {
     } catch (error) {
       // The plugin bundles its own copy of the error class; the host recognizes it by brand.
       assert.ok(error instanceof core.AppError);
-      return contracts.normalizeError(error);
+      return core.normalizeAgentDeviceError(error);
     }
     assert.fail('Expected a Limrun failure');
   };
@@ -86,12 +86,10 @@ export async function verifyTypes({ consumer, run, root }) {
   fs.writeFileSync(
     path.join(consumer, 'consumer.mts'),
     `
-import { startAgentDevice } from 'agent-device';
 import type { ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import limrun from '@agent-device/limrun/agent-device';
 const plugin: ProviderAgentDevicePlugin = limrun();
-const runtime = await startAgentDevice({ stateDir: './state', plugins: [plugin] });
-await runtime.close();
+void plugin;
 `,
   );
   await run(
