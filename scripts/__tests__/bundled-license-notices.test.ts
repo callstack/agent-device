@@ -9,7 +9,7 @@ import { mkdtempForTest } from '@agent-device/test-kit';
 
 const execFileAsync = promisify(execFile);
 
-test('Maestro emits JPEG attribution with its production bundle', async () => {
+test('Maestro bundles only the JPEG decoder and emits its attribution', async () => {
   const output = await mkdtempForTest('maestro-notices-');
   const root = fileURLToPath(new URL('../../', import.meta.url));
   await execFileAsync(
@@ -21,9 +21,22 @@ test('Maestro emits JPEG attribution with its production bundle', async () => {
       '--out-dir',
       output,
       '--no-dts',
+      '--sourcemap',
     ],
     { cwd: path.join(root, 'packages/maestro') },
   );
+  const mapFiles = (await fs.readdir(output)).filter((file) => file.endsWith('.mjs.map'));
+  const jpegModules = new Set<string>();
+  for (const file of mapFiles) {
+    const map = JSON.parse(await fs.readFile(path.join(output, file), 'utf8')) as {
+      sources: string[];
+    };
+    for (const source of map.sources) {
+      const module = source.replaceAll('\\', '/').split('/jpeg-js/lib/')[1];
+      if (module) jpegModules.add(module);
+    }
+  }
+  assert.deepEqual([...jpegModules], ['decoder.js']);
   const notices = await fs.readFile(path.join(output, 'THIRD_PARTY_NOTICES.txt'), 'utf8');
   assert.match(notices, /jpeg-js@0\.4\.4/);
   assert.match(notices, /jpeg-js 0\.4\.4 source-file notices/);
