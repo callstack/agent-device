@@ -7,7 +7,7 @@ export const gestureHelpTopic = {
   summary: 'Full multi-touch gesture shapes and platform quirks',
   body: `agent-device help gestures
 
-Full command shapes and platform quirks for touch/pointer gestures beyond scroll/swipe. Read this when a task needs multi-touch, a repeated gesture series, or exact per-platform verification.
+Full command shapes and platform quirks for touch/pointer gestures beyond scroll/swipe. Pull to refresh is agent-device scroll refresh. Read this when a task needs multi-touch, a repeated gesture series, or exact per-platform verification.
 
 Shapes:
   agent-device longpress 300 500 800

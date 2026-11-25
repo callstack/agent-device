@@ -25,13 +25,31 @@ type CommandAliasSuggestion = {
   command: string;
   /** Full example invocation shown to the user. */
   example: string;
+  /**
+   * Second shape for a guess that covers two intents: restarting the app versus
+   * loading new JavaScript. Printed in parentheses after `example`, so it must
+   * parse on its own as a valid invocation.
+   */
+  alternative?: string;
 };
 
 const OPEN_RELAUNCH_EXAMPLE = 'open <app> --relaunch';
+const METRO_RELOAD_EXAMPLE = 'metro reload';
 
 const COMMAND_ALIAS_SUGGESTIONS: Record<string, CommandAliasSuggestion> = {
   start: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
-  restart: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
+  restart: {
+    command: 'open',
+    example: OPEN_RELAUNCH_EXAMPLE,
+    alternative: METRO_RELOAD_EXAMPLE,
+  },
+  // `reload` is the name agents reach for to restart an app or pick up new JS, and
+  // the nearest-name fallback answers it with the unrelated `record`.
+  reload: {
+    command: 'open',
+    example: OPEN_RELAUNCH_EXAMPLE,
+    alternative: METRO_RELOAD_EXAMPLE,
+  },
   touch: { command: 'press', example: 'press' },
   input: { command: 'fill', example: 'fill' },
   settext: { command: 'fill', example: 'fill' },
@@ -140,12 +158,26 @@ function levenshteinDistance(a: string, b: string): number {
  */
 export function suggestCommandFor(command: string): string | undefined {
   const normalized = command.toLowerCase();
-  const curated = COMMAND_ALIAS_SUGGESTIONS[normalized]?.example;
-  if (curated) return curated;
+  const curated = COMMAND_ALIAS_SUGGESTIONS[normalized];
+  if (curated) {
+    return curated.alternative ? `${curated.example} (or ${curated.alternative})` : curated.example;
+  }
   const nearest = getNearestCommandNames(normalized);
   if (nearest.length === 0) return undefined;
   if (nearest.length === 1) return nearest[0];
   return `one of: ${nearest.join(', ')}`;
+}
+
+/**
+ * True when an unknown command has one answer: a curated alias or a single nearest
+ * name. A multi-candidate guess or no guess is not one; the root card shows the shapes.
+ */
+export function hasSingleCommandSuggestion(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return (
+    Object.hasOwn(COMMAND_ALIAS_SUGGESTIONS, normalized) ||
+    getNearestCommandNames(normalized).length === 1
+  );
 }
 
 // Unknown flag names that read like an app/bundle identity concept. `open` (and
@@ -240,6 +272,24 @@ function listSupportedFlagNames(command: string | null): string[] {
 
 function stripFlagDashes(token: string): string {
   return token.replace(/^--?/, '');
+}
+
+/**
+ * The one-line read printed instead of the root decision card when an unknown
+ * command already got a confident suggestion, so the whole answer stays shorter
+ * than a help read.
+ */
+export const UNKNOWN_COMMAND_POINTER = 'Run agent-device --help for commands and topics.\n';
+
+/**
+ * Builds the error message for an unknown CLI command name, carrying the
+ * "Did you mean ...?" hint when the suggestion maps have a confident answer.
+ */
+export function formatUnknownCommandMessage(command: string): string {
+  const hint = suggestCommandFor(command);
+  return hint
+    ? `Unknown command: ${command}. Did you mean ${hint}?`
+    : `Unknown command: ${command}`;
 }
 
 export function formatUnknownFlagMessage(token: string, command: string | null): string {
