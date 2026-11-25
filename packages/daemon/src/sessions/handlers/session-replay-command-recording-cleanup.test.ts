@@ -137,7 +137,14 @@ test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
           expect(output).toBeUndefined();
           expect(data.recordingArtifacts).toBeUndefined();
           expect(archiveRecording).toBeUndefined();
-          expect(data.failures).toMatchObject([{ error: { details: { reason: 'timeout' } } }]);
+          expect(data.failures).toMatchObject([
+            {
+              error: { details: { reason: 'timeout' } },
+              warnings: [
+                'Could not include the recording in the suite archive. Check the daemon host for the recording files.',
+              ],
+            },
+          ]);
           expect(
             (data.failures as Array<{ infrastructure?: true }>)[0]!.infrastructure,
           ).toBeUndefined();

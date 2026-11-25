@@ -272,8 +272,9 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
           );
         }
       };
+      let warnings: readonly string[] = [];
       try {
-        return await closeWithRetry();
+        warnings = await closeWithRetry();
       } finally {
         // Detached cleanup can close the session after the archive has already been published.
         if (
@@ -284,12 +285,20 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
           (req.internal?.publicNetworkOnly || req.meta?.clientArtifactPaths?.artifactsDir)
         ) {
           const { collectSuiteRecordingOutputs } = await import('../recording-outputs.ts');
-          for (const output of await collectSuiteRecordingOutputs(sessionStore, closingRef)) {
+          const outputs = await collectSuiteRecordingOutputs(sessionStore, closingRef);
+          if (outputs === null) {
+            warnings = [
+              ...warnings,
+              'Could not include the recording in the suite archive. Check the daemon host for the recording files.',
+            ];
+          }
+          for (const output of outputs ?? []) {
             if (output.path) artifactPaths.add(output.path);
             recordingOutputs.set(output.artifactId ?? output.path!, output);
           }
         }
       }
+      return warnings;
     },
     ...(video ? { video, recordingOutputs: () => [...recordingOutputs.values()] } : {}),
   });

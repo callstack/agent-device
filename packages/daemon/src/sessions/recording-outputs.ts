@@ -116,7 +116,7 @@ function publishVerifiedRecording(
 export async function collectSuiteRecordingOutputs(
   store: SessionStore,
   ref: SessionRef,
-): Promise<ReplaySuiteRecordingArtifact[]> {
+): Promise<ReplaySuiteRecordingArtifact[] | null> {
   const copied: string[] = [];
   try {
     const record = screenRecordingResourceStore.read(
@@ -164,7 +164,7 @@ export async function collectSuiteRecordingOutputs(
       phase: 'suite_recording_collection_failed',
       data: { session: ref.address, error: errorMessage(error) },
     });
-    return [];
+    return null;
   }
 }
 
