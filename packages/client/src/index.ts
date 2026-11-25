@@ -642,7 +642,7 @@ function readDaemonLifecycle(value: unknown): DaemonLifecycle | undefined {
       : "daemonLifecycle must be 'attach'.",
     {
       daemonLifecycle: value,
-      hint: "Drop daemonLifecycle, or set it to 'attach'. To start or replace a detached daemon, call ensureDaemon({ stateDir }). To own one in this process, call startAgentDevice({ stateDir }) from 'agent-device'.",
+      hint: "Drop daemonLifecycle, or set it to 'attach'. To start or replace a detached daemon, call ensureDaemon({ stateDir }).",
     },
   );
 }

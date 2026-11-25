@@ -24,7 +24,7 @@ export default defineConfig({
   deps: {
     // The declaration references the host's published contract types, as the Maestro entry does.
     // Inlining them here declares a second, unrelated copy of `AppError` and the snapshot types,
-    // and a host could not pass this plugin to `startAgentDevice`.
+    // which would make the plugin types incompatible with the host contract.
     neverBundle: ['agent-device/plugins'],
     alwaysBundle: [/^@agent-device\//],
   },

@@ -370,7 +370,7 @@ test.each([
     true,
     JSON.stringify({ pid: 555, processStartTime: 'start', ownership: 'embedded' }),
     'daemon-clean-not-detached',
-    /owned by host process 555\. Close it there with the handle returned by startAgentDevice\(\)\..*only when the recorded host lifetime has provably exited/,
+    /owned by host process 555\. Close it in that process\..*only when the recorded host lifetime has provably exited/,
   ],
   [
     'unknown',

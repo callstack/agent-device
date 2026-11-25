@@ -20,23 +20,14 @@ After you add or update the plugin, close your sessions and run `agent-device da
 
 ## Use it from JavaScript
 
-The package default-exports a plugin factory. Pass credentials as options, or leave them out to read `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` from the environment:
+Install and connect the plugin with the commands above. Start the local daemon
+before creating the client. Use the same state directory and session as your
+CLI connection, and make `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` available to the daemon.
 
 ```js
-import { startAgentDevice } from 'agent-device';
-import browserstack from '@agent-device/browserstack';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
-const host = await startAgentDevice({
-  stateDir: './.my-app/agent-device-state',
-  plugins: [
-    browserstack({ credentials: { username: 'your-username', accessKey: 'your-access-key' } }),
-  ],
-});
-try {
-  console.log(await host.client.sessions.list());
-} finally {
-  await host.close();
-}
+await ensureDaemon();
+const client = createAgentDeviceClient({ session: 'checkout-android' });
+console.log(await client.sessions.list());
 ```
-
-Each credential key passed as an option replaces its environment variable. A key left out uses the environment, and only that environment key participates in the credential fingerprint.

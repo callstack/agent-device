@@ -19,7 +19,7 @@
 
 Let your coding agent verify its changes in the running app. `agent-device` lets agents inspect, control, debug, and verify apps on iOS, Android, and HarmonyOS (simulators, emulators, and physical devices), plus tvOS, Android TV, Fire TV (Fire OS), Amazon Vega OS TV (Vega Virtual Device), web, macOS, and Linux. Agents read token-efficient accessibility snapshots instead of reasoning over screenshots alone, act through refs and selectors, and save evidence for review. It also coordinates device access across parallel agent worktrees and connects to remote device clouds.
 
-Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP, or as the runtime under agents you build with the [AI SDK](https://agent-device.dev/docs/ai-sdk) or [Eve](https://agent-device.dev/docs/eve). Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
+Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP, or as the runtime under agents you build with the [Node.js API](https://agent-device.dev/docs/client-api) or [Eve](https://agent-device.dev/docs/eve). Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
 
 <p>
   agent-device powers mobile automation in
@@ -116,7 +116,7 @@ try {
 }
 ```
 
-See the [Node.js API](https://agent-device.dev/docs/client-api), the [runnable examples](https://github.com/callstack/agent-device/tree/main/examples/sdk), and the [AI SDK](https://agent-device.dev/docs/ai-sdk) and [Eve](https://agent-device.dev/docs/eve) integration guides.
+See the [Node.js API](https://agent-device.dev/docs/client-api), the [runnable examples](https://github.com/callstack/agent-device/tree/main/examples/sdk), and the [Eve integration guide](https://agent-device.dev/docs/eve).
 
 ## What agents can do
 
@@ -185,7 +185,7 @@ The MCP server is one entry point to the same runtime used by the CLI and typed 
 
 ### Can I build my own agent or QA product on agent-device?
 
-Yes. The typed Node.js client is a public surface over that same runtime, so an agent you build inherits everything above. Start from the [Node.js API](https://agent-device.dev/docs/client-api), [AI SDK](https://agent-device.dev/docs/ai-sdk), or [Eve](https://agent-device.dev/docs/eve) guides.
+Yes. The typed Node.js client is a public surface over that same runtime, so an agent you build inherits everything above. Start from the [Node.js API](https://agent-device.dev/docs/client-api) or [Eve](https://agent-device.dev/docs/eve) guide.
 
 ### How is it different from Appium, Detox, or Maestro?
 

@@ -339,7 +339,7 @@ test('an outside stop refuses and the host keeps serving until its owner closes 
     ).rejects.toMatchObject({
       details: {
         reason: 'daemon-owner-embedded',
-        hint: `The runtime is owned by host process ${process.pid}. Close it there with the handle returned by startAgentDevice(). Recovery with daemon stop or ensureDaemon() for this state directory retires the abandoned registration only when the recorded host lifetime has provably exited.`,
+        hint: `The runtime is owned by host process ${process.pid}. Close it in that process. Recovery with daemon stop or ensureDaemon() for this state directory retires the abandoned registration only when the recorded host lifetime has provably exited.`,
       },
     });
     expect(hostSignals(signals)).toEqual([]);

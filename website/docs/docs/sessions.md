@@ -83,7 +83,7 @@ Setting `AGENT_DEVICE_SESSION` turns on the lock in `reject` mode by default. Ch
 AGENT_DEVICE_SESSION=qa-ios AGENT_DEVICE_SESSION_LOCK=strip agent-device snapshot --platform android
 ```
 
-The MCP server and the AI SDK tools apply the same lock. They read `AGENT_DEVICE_SESSION`,
+The MCP server applies the same lock. It reads `AGENT_DEVICE_SESSION`,
 `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_PLATFORM`, and the `sessionLock` config key from the process
 that serves the tools. A session or platform named in a tool call does not turn on the lock.
 

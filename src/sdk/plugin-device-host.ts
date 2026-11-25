@@ -141,7 +141,7 @@ export type ProviderHostCapabilities = Readonly<{
 }>;
 
 /**
- * The host a provider `setup` receives from the daemon or `startAgentDevice`: the plugin host plus
+ * The host a provider `setup` receives from the daemon: the plugin host plus
  * the device capabilities. A `connect` callback's host carries none of them, so each is optional.
  */
 export type DeviceProviderPluginHost = ProviderPluginHost & Partial<ProviderHostCapabilities>;

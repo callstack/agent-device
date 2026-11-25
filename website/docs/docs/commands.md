@@ -41,7 +41,7 @@ In text mode, every command prints each response warning as a `Warning:` line af
 `value=$(agent-device get text …)` captures only the value. With `--json`, warnings stay in
 `data.warnings` and no `Warning:` line is printed.
 
-Text from a device or a remote daemon, such as a label or a file path, can hold control characters. The CLI prints them as JSON escapes such as `\u001b`, so printed JSON still parses back to the exact values. MCP and AI SDK structured content keeps the exact values.
+Text from a device or a remote daemon, such as a label or a file path, can hold control characters. The CLI prints them as JSON escapes such as `\u001b`, so printed JSON still parses back to the exact values. MCP structured content keeps the exact values.
 
 ## Navigation
 

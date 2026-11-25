@@ -22,24 +22,19 @@ The plugin contributes native `.ad` replay and test execution as a version 3 `re
 
 Installing locally does not install anything on a remote daemon. Run `plugins add` on each host that needs the package.
 
-For an embedded daemon, supply the factory explicitly:
+## Run replay from JavaScript
+
+Install the plugin with the command above. Start a detached daemon before
+creating the client, and use the same state directory for both:
 
 ```js
-import { startAgentDevice } from 'agent-device';
-import replay from '@agent-device/replay/agent-device';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
-const runtime = await startAgentDevice({
-  stateDir: '/tmp/checkout-agent',
-  plugins: [replay()],
-});
-try {
-  await runtime.client.replay.run({ path: './checkout.ad' });
-} finally {
-  await runtime.close();
-}
+const stateDir = './.my-app/agent-device-state';
+await ensureDaemon({ stateDir });
+const client = createAgentDeviceClient({ stateDir });
+await client.replay.run({ path: './checkout.ad' });
 ```
-
-An embedded runtime uses its supplied plugins, including an empty list. It does not borrow a conflicting plugin store. Its host must close and recreate it to change that set.
 
 ## Recover from an unavailable plugin
 
