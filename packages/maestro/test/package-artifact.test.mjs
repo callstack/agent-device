@@ -28,6 +28,7 @@ test('packed managed plugin contains its factory and runs real script children w
       'png-worker.mjs',
       'run-script-child.mjs',
       'run-script-http-child.mjs',
+      'THIRD_PARTY_NOTICES.txt',
     ])
       assert.ok(fs.existsSync(path.join(plugin, 'dist', entry)), entry);
     await assertPackagedRunScriptChildren(plugin, scratch);
