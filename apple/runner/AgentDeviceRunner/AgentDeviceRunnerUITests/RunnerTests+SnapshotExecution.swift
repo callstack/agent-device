@@ -33,6 +33,9 @@ extension RunnerTests {
           )
         target.litPanelSurface = self.litPanelState.surface
         target.refusesSystemAlertSubstitution = context.observation != nil
+#if os(iOS)
+        target.soleScreenSize = self.soleDisplayPortraitSize() ?? .zero
+#endif
         return .capture(
           target,
           systemSurface: context.systemSurface,

@@ -17,6 +17,10 @@ struct SnapshotCaptureTarget {
   /// Set on an observe-only capture, whose answer asserts app provenance: the system-alert tier then
   /// refuses the capture instead of answering with the SpringBoard tree (#3348).
   var refusesSystemAlertSubstitution = false
+  /// The device's only screen in portrait points, read on main because `XCUIScreen` is main-actor
+  /// isolated. The off-main private-AX tier proves a full-screen root against it. `.zero` when the read
+  /// failed or the platform has no such screen.
+  var soleScreenSize: CGSize = .zero
 }
 
 /// The system-alert tier would have answered a capture that must come from the app.

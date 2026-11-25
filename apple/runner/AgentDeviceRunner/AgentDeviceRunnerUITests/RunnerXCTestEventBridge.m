@@ -505,12 +505,17 @@ static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application
   return RunnerProbeApplicationFillsScreenFrame(application, NULL);
 }
 
-CGRect RunnerFullScreenApplicationFrame(id application) {
+CGRect RunnerFullScreenApplicationFrame(
+  id application,
+  CGSize (^NS_NOESCAPE soleScreenSize)(void)
+) {
   CGRect screen = CGRectNull;
   RunnerFullScreenEvidence evidence = RunnerProbeApplicationFillsScreenFrame(application, &screen);
-  CGSize soleScreenSize =
-    evidence == RunnerFullScreenEvidenceUnknown ? RunnerSoleScreenSize() : CGSizeZero;
-  return RunnerFullScreenProofFrame(evidence, screen, soleScreenSize);
+  return RunnerFullScreenProofFrame(
+    evidence,
+    screen,
+    evidence == RunnerFullScreenEvidenceUnknown ? soleScreenSize() : CGSizeZero
+  );
 }
 
 #endif

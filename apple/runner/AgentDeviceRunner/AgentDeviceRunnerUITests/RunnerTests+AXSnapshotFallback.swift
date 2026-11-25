@@ -220,6 +220,7 @@ extension RunnerTests {
       let viewport = privateAXSnapshotViewport(
         app: app,
         bundleId: target.bundleId,
+        soleScreenSize: target.soleScreenSize,
         rootFrame: rootFrame
       )
       let nodes = privateAXAcquisition(
@@ -279,10 +280,11 @@ extension RunnerTests {
   private func privateAXSnapshotViewport(
     app: XCUIApplication,
     bundleId: String?,
+    soleScreenSize: CGSize,
     rootFrame: CGRect
   ) -> SnapshotViewport {
     let fallback = {
-      let fullScreenFrame = Self.fullScreenFrame(of: app)
+      let fullScreenFrame = Self.fullScreenFrame(of: app, soleScreenSize: { soleScreenSize })
       let viewport = Self.privateAXRootViewport(rootFrame: rootFrame, fullScreenFrame: fullScreenFrame)
       let kind: String
       switch viewport {
@@ -320,12 +322,22 @@ extension RunnerTests {
   }
 
   /// The frame `app`'s root must equal, at the origin, to prove that the app fills the screen, else
-  /// `.null` (`RunnerFullScreenProofFrame`).
-  static func fullScreenFrame(of app: XCUIApplication) -> CGRect {
+  /// `.null` (`RunnerFullScreenProofFrame`). `soleScreenSize` is read only when the AXRuntime probe
+  /// proves nothing.
+  static func fullScreenFrame(of app: XCUIApplication, soleScreenSize: () -> CGSize) -> CGRect {
     #if os(iOS)
-      return RunnerFullScreenApplicationFrame(app)
+      return RunnerFullScreenApplicationFrame(app, soleScreenSize)
     #else
       return .null
+    #endif
+  }
+
+  /// The sole XCTest screen read now, for a caller on the main thread.
+  static func liveSoleScreenSize() -> CGSize {
+    #if os(iOS)
+      return RunnerSoleScreenSize()
+    #else
+      return .zero
     #endif
   }
 

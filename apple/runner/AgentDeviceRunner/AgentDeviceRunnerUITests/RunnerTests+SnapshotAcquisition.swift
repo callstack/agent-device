@@ -145,7 +145,7 @@ extension RunnerTests {
     if requestLitPanel == nil,
       let frame = Self.fullScreenWindowFrame(
         windowFrames: rootSnapshot.children.filter { $0.elementType == .window }.map(\.frame),
-        fullScreenFrame: Self.fullScreenFrame(of: app)
+        fullScreenFrame: Self.fullScreenFrame(of: app, soleScreenSize: Self.liveSoleScreenSize)
       )
     {
       return .reported(box: frame, interfaceOrientation: capturedInterfaceOrientation(app: app))

@@ -145,10 +145,14 @@ FOUNDATION_EXPORT CGRect RunnerFullScreenProofFrame(
 );
 
 // The frame `RunnerFullScreenProofFrame` decides for `application`, from the AXRuntime probe and,
-// only when that probe proves nothing, the sole XCTest screen. Neither read walks the app's tree, so
-// it answers while XCTest's accessibility channel is penalized.
+// only when that probe proves nothing, `soleScreenSize`. Neither read walks the app's tree, so it
+// answers while XCTest's accessibility channel is penalized. `XCUIScreen` is main-actor isolated, so
+// a caller off the main thread supplies a size that was read on main.
 #if TARGET_OS_IOS
-FOUNDATION_EXPORT CGRect RunnerFullScreenApplicationFrame(id application);
+FOUNDATION_EXPORT CGRect RunnerFullScreenApplicationFrame(
+  id application,
+  CGSize (^NS_NOESCAPE soleScreenSize)(void)
+);
 #endif
 
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(
