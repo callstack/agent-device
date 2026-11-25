@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import type { DaemonTransport } from '@agent-device/daemon-client';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -14,8 +13,8 @@ import { parseCloudAttachment, type CloudAttachment } from './cloud-session-api.
 import {
   admitCloudCredentialDirectory,
   CLOUD_CONNECTION_REASONS,
-  assertCloudCredentialFile,
   cloudAttachmentPath,
+  readCloudCredentialJson,
   withCloudConnectionOwner,
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
@@ -44,16 +43,8 @@ function resolveCloudAttachment(
 ): CloudAttachment {
   let attachment: CloudAttachment | undefined;
   try {
-    const fd = admitCloudCredentialDirectory(location)
-      ? openVerifiedFileForRead(cloudAttachmentPath(location))
-      : undefined;
-    if (fd !== undefined) {
-      try {
-        assertCloudCredentialFile(fs.fstatSync(fd));
-        attachment = parseCloudAttachment(JSON.parse(fs.readFileSync(fd, 'utf8')));
-      } finally {
-        fs.closeSync(fd);
-      }
+    if (admitCloudCredentialDirectory(location)) {
+      attachment = parseCloudAttachment(readCloudCredentialJson(cloudAttachmentPath(location)));
     }
   } catch (error) {
     if (
