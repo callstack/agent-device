@@ -54,6 +54,7 @@ const CONNECT_SUPPORTED_FLAGS = [
   'daemonAuthToken',
   'session',
   'platform',
+  'target',
   'device',
   ...METRO_PREPARE_FLAGS,
   ...CONNECT_METRO_HINT_FLAGS,

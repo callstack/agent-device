@@ -26,6 +26,9 @@ importers:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:packages/ad-script
+      '@agent-device/adc':
+        specifier: workspace:*
+        version: link:packages/provider-adc
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:packages/apple-runner
@@ -943,6 +946,39 @@ importers:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
+
+  packages/provider-adc:
+    devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/platform-android':
+        specifier: workspace:*
+        version: link:../platform-android
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:../provision-kit
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.2
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
 
   packages/provider-aws-device-farm:
     devDependencies:
@@ -3255,6 +3291,9 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@types/yauzl@3.4.0':
     resolution: {integrity: sha512-NRPn5w6h8dhcnmx3YIRQcqMywY/+nND/uOkJessedcrowO3C0AssHp3tMJpxKAwOhFOo0OV1y9VtsC5hbKKBAw==}
@@ -6079,12 +6118,15 @@ packages:
 
   yuku-ast@0.8.7:
     resolution: {integrity: sha512-h6+4bDfyootiMB9vckk5uKo5r5j0GHrkr17FQTDNfEsFT3DWlN9uu1HJwQwc64pgmLCI945fWM3lbTIqxjT3GQ==}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   yuku-codegen@0.8.7:
     resolution: {integrity: sha512-adwDZSh8oVDzhE6Du9PwVWxcOxeV0e2EVhUuMKWfhSY4wkrDq9eqixlxFF3l/XGUV1E7UFzhpz9393MUumkyNw==}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   yuku-parser@0.8.7:
     resolution: {integrity: sha512-vRD9nwt4L3aYpxNqeSC4WqLv58xrXef0Ong1Mc45CTXTIpvLafx7JO05sczmQZwdLEZvywrLOGdNC5+Rp5N1BQ==}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
@@ -7710,6 +7752,10 @@ snapshots:
   '@types/unist@2.0.11': {}
 
   '@types/unist@3.0.3': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 22.20.1
 
   '@types/yauzl@3.4.0':
     dependencies:

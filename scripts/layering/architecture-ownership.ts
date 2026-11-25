@@ -310,6 +310,7 @@ export const ARCHITECTURE_OWNERSHIP = {
         'packages/platform-web/',
         'packages/provider-aws-device-farm/',
         'packages/provider-browserstack/',
+        'packages/provider-adc/',
         'packages/provider-limrun/',
         'packages/provider-revyl/',
         'packages/provider-testmu/',

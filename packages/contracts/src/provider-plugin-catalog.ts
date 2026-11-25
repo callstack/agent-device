@@ -56,6 +56,22 @@ export const LIMRUN: ProviderPluginDeclaration = {
 };
 
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
+  {
+    provider: 'adc',
+    package: '@agent-device/adc',
+    label: 'ADC',
+    admission: 'provider',
+    connectionCapabilities: {
+      leaseKind: 'direct-device-provider',
+      requiresAppAttachment: false,
+      requiresRemoteDaemon: false,
+      supportsArtifacts: false,
+      supportsDeferredAppSelection: false,
+      supportsDirectPortReverse: false,
+      usesCloudWebDriverLease: false,
+      holdsCloudDevice: true,
+    },
+  },
   AWS_DEVICE_FARM,
   BROWSERSTACK,
   LIMRUN,

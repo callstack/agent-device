@@ -1,3 +1,4 @@
+import { bindProviderInteractionOperations } from '@agent-device/contracts/provider-interaction';
 import { testIosRunner } from './ios-runner.fixtures.ts';
 import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import {
@@ -9,11 +10,7 @@ import { bindAdmittedProviderInteractorOperations } from '@agent-device/contract
 import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
-import {
-  bindLimrunInteractionOperations,
-  limrunAndroidSettingsFacts,
-  limrunAppleSettingsFacts,
-} from './interaction-operations.ts';
+import { limrunAndroidSettingsFacts, limrunAppleSettingsFacts } from './interaction-operations.ts';
 import {
   limrunAppLogFacts,
   limrunAppLogRecoveryFacts,
@@ -274,7 +271,8 @@ test('long press is admitted on both direct-session legs and closed with a dead 
 
 test('a provider iOS capture refuses an explicit runner request instead of returning a provider screenshot', async () => {
   const screenshot = vi.fn(async () => ({}));
-  const operations = bindLimrunInteractionOperations({
+  const operations = bindProviderInteractionOperations({
+    screenshotHint: 'Limrun captures through its provider endpoint',
     device: iosDevice,
     signal: new AbortController().signal,
     getInteractor: () => ({ screenshot }) as unknown as Interactor,

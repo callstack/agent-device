@@ -1,0 +1,42 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo",
+    "rootDir": ".",
+    "paths": {
+      "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"],
+      "agent-device/plugins/device-host": [
+        "./node_modules/agent-device/src/sdk/plugin-device-host.ts"
+      ]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../provision-kit"
+    },
+    {
+      "path": "../test-kit"
+    },
+    {
+      "path": "../build-config"
+    },
+    {
+      "path": "../platform-android"
+    },
+    {
+      "path": "../host-kit"
+    }
+  ]
+}

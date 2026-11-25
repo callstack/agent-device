@@ -2,7 +2,7 @@
 title: Plugins
 ---
 
-Provider plugins add device providers that agent-device does not bundle, such as [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [Limrun](/docs/limrun), [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
+Provider plugins add device providers that agent-device does not bundle, such as [ADC](/docs/adc), [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [Limrun](/docs/limrun), [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
 
 ```bash
 agent-device plugins add @example/agent-device-provider

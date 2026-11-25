@@ -318,6 +318,7 @@
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/host-swift": "workspace:*",
     "@agent-device/kernel": "workspace:*",
+    "@agent-device/adc": "workspace:*",
     "@agent-device/limrun": "workspace:*",
     "@agent-device/platform-android": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",

@@ -1,10 +1,10 @@
+import { bindProviderInteractionOperations } from '@agent-device/contracts/provider-interaction';
 import { createLimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunIosRunner } from './runtime-dependencies.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { bindLimrunInteractionOperations } from './interaction-operations.ts';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
 import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
@@ -181,7 +181,8 @@ function bindLimrunAppLogs(
     if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
     return interactor;
   };
-  const interaction = bindLimrunInteractionOperations({
+  const interaction = bindProviderInteractionOperations({
+    screenshotHint: 'Limrun captures through its provider endpoint',
     device,
     signal,
     getInteractor: requireLimrunInteractor,

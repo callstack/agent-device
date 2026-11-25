@@ -13,6 +13,8 @@ export {
   androidAdbSerialTarget,
   lowerAndroidAdbInvocation,
   parseAndroidAdbArgv,
+  requireManagedAndroidAdbCommand,
+  requireManagedAndroidAdbSerial,
   serializeAndroidAdbInvocation,
   type AndroidAdbInvocation,
 } from './adb-transport.ts';
