@@ -21,7 +21,6 @@ import {
   GESTURE_TAP_MIN_CONTACTS,
 } from '@agent-device/contracts/gesture-plan-types';
 import type {
-  GestureContactOrigin,
   GesturePlan,
   GestureExecutionProfile,
   GestureSemanticInput,
@@ -91,12 +90,6 @@ const GESTURE_PLATFORM_PROFILES = {
   linux: DEFAULT_GESTURE_PLATFORM_PROFILE,
   web: DEFAULT_GESTURE_PLATFORM_PROFILE,
 } satisfies Record<PublicPlatform, GesturePlatformProfile>;
-
-export function isSplitViewContactOrigin(
-  origin: GestureContactOrigin | undefined,
-): origin is 'split-view-edge' | 'split-view-divider' {
-  return origin === 'split-view-edge' || origin === 'split-view-divider';
-}
 
 /** Plans one physical gesture. Public aliases must be normalized before this boundary. */
 export function buildGesturePlan(

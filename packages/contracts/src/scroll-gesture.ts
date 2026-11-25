@@ -1,4 +1,5 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import type { GestureContactOrigin } from './gesture-plan-types.ts';
 import { SCROLL_REASONS } from './scroll-reasons.ts';
 import { defineStringEnum } from './string-enum.ts';
 import { isViewportRootNode } from './snapshot-visibility.ts';
@@ -35,6 +36,11 @@ export type SwipePreset = (typeof SWIPE_PRESETS)[number];
 export type SplitViewSwipePreset = Extract<SwipePreset, `split-view-${string}`>;
 export function isSplitViewSwipePreset(preset: SwipePreset): preset is SplitViewSwipePreset {
   return preset.startsWith('split-view-');
+}
+export function isSplitViewContactOrigin(
+  origin: GestureContactOrigin | undefined,
+): origin is 'split-view-edge' | 'split-view-divider' {
+  return origin === 'split-view-edge' || origin === 'split-view-divider';
 }
 /** Why a Split View swipe preset was refused before any touch went down. */
 const SPLIT_VIEW_GESTURE_REASONS = {

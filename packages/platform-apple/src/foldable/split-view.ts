@@ -1,7 +1,9 @@
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import { isSplitViewContactOrigin } from '@agent-device/gestures/gesture-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { splitViewUnavailableError } from '@agent-device/contracts/scroll-gesture';
+import {
+  isSplitViewContactOrigin,
+  splitViewUnavailableError,
+} from '@agent-device/contracts/scroll-gesture';
 import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS } from '../core/config.ts';
 import { readFoldablePanelTable } from './orientation.ts';
 
