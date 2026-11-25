@@ -45,7 +45,9 @@ test('lsof field output yields each listening socket once, ordered by port', () 
 test('lsof keeps the address family it reports, brackets and all', () => {
   // Metro bound to IPv6 loopback only is unreachable on 127.0.0.1, so this is the address it must be
   // dialled at; a wildcard listener is kept as loopback, which reaches every address of this host.
-  const sockets = parseLsofListeningSockets('n[::1]:8096\nn127.0.0.1:8096\nn*:8097\nn[2001:db8::1]:8098\n');
+  const sockets = parseLsofListeningSockets(
+    'n[::1]:8096\nn127.0.0.1:8096\nn*:8097\nn[2001:db8::1]:8098\n',
+  );
   assert.deepEqual(sockets, [
     { host: '127.0.0.1', port: 8096 },
     { host: '::1', port: 8096 },

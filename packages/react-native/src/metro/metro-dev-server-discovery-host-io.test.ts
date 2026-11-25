@@ -150,7 +150,8 @@ test('ports fall back to netstat on a host without lsof', async () => {
       spawned.push(command);
       if (command === 'lsof') return Promise.reject(new Error('lsof ENOENT'));
       return Promise.resolve({
-        stdout: 'tcp4 0 0 127.0.0.1.8081 *.* LISTEN\ntcp6 0 0 ::1.8096 *.* LISTEN\ntcp4 0 0 127.0.0.1.9999 *.* ESTABLISHED\n',
+        stdout:
+          'tcp4 0 0 127.0.0.1.8081 *.* LISTEN\ntcp6 0 0 ::1.8096 *.* LISTEN\ntcp4 0 0 127.0.0.1.9999 *.* ESTABLISHED\n',
         stderr: '',
         exitCode: 0,
       });

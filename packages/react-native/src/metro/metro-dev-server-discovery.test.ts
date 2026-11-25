@@ -48,7 +48,7 @@ function probeReturning(
         recorded.portsRead += 1;
         return servers.map((server) => ({
           // What a host lister names: an IPv6 address arrives without URL brackets.
-          host: server.serverUrl.hostname.replace(/[[\]]/g, ''),
+          host: server.serverUrl.hostname.replaceAll(/[[\]]/g, ''),
           port: Number(server.serverUrl.port),
         }));
       },
@@ -173,7 +173,7 @@ test('an app-reported address off this host is confirmed the same way as one on 
   assert.equal(resolved.serverUrl.origin, 'http://10.0.0.5:19000');
 });
 
-test("an app-reported address off this host is refused when its server serves another project", async () => {
+test('an app-reported address off this host is refused when its server serves another project', async () => {
   const probe = probeReturning([serverAtHost('10.0.0.5', 19000, '/other/project')]);
   await assert.rejects(
     () =>
