@@ -132,10 +132,32 @@ test('a version mismatch is decided without asking the client transport', async 
       return silent;
     },
     onAnyAdvertisedTransport: async () => silent,
+    refusedByHost: async () => undefined,
   });
 
   assert.equal(decision.kind, 'replace');
   assert.equal(asked, false);
+});
+
+// The guard a replacement asks for is a PERMISSION question, not a liveness one: it must be a bare
+// connect, so it costs no health request, no retry and no wait step. Reaching for the reachability
+// probe here would put a `/health` request and the probe's retries on every mismatched-daemon takeover.
+test('the guard before a replacement asks only whether the host refuses the connect', async () => {
+  let probedLiveness = 0;
+  const decision = await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), {
+    onClientTransport: async () => {
+      probedLiveness += 1;
+      return silent;
+    },
+    onAnyAdvertisedTransport: async () => {
+      probedLiveness += 1;
+      return silent;
+    },
+    refusedByHost: async () => undefined,
+  });
+
+  assert.equal(decision.kind, 'replace');
+  assert.equal(probedLiveness, 0, 'a version mismatch is replaced without a reachability probe');
 });
 
 test('a newer daemon alive only on a transport the client does not prefer is still refused', async () => {
@@ -216,15 +238,24 @@ function reachable(): DaemonReachability {
   return {
     onClientTransport: async () => answered,
     onAnyAdvertisedTransport: async () => answered,
+    refusedByHost: async () => undefined,
   };
 }
 
 function unreachable(): DaemonReachability {
-  return { onClientTransport: async () => silent, onAnyAdvertisedTransport: async () => silent };
+  return {
+    onClientTransport: async () => silent,
+    onAnyAdvertisedTransport: async () => silent,
+    refusedByHost: async () => undefined,
+  };
 }
 
 function onlyOnAnotherTransport(): DaemonReachability {
-  return { onClientTransport: async () => silent, onAnyAdvertisedTransport: async () => answered };
+  return {
+    onClientTransport: async () => silent,
+    onAnyAdvertisedTransport: async () => answered,
+    refusedByHost: async () => undefined,
+  };
 }
 
 /** The host refused every endpoint this client tried, as its sandbox does. */
@@ -232,6 +263,7 @@ function denied(): DaemonReachability {
   return {
     onClientTransport: async () => ({ reachable: false, denial: DENIAL }),
     onAnyAdvertisedTransport: async () => ({ reachable: false, denial: DENIAL }),
+    refusedByHost: async () => DENIAL,
   };
 }
 

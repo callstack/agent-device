@@ -13,7 +13,7 @@ import {
   computeDaemonCodeSignature,
   resolveDaemonCodeOrigin,
 } from '@agent-device/host-kit/code-signature';
-import type { DaemonProbeVerdict } from './daemon-client-loopback-probe.ts';
+import type { DaemonProbeVerdict, LoopbackConnectDenial } from './daemon-client-loopback-probe.ts';
 import type { DaemonInfo, DaemonTakeoverDecision } from './daemon-client-metadata.ts';
 
 type DaemonLaunchSpec = {
@@ -120,6 +120,13 @@ export type DaemonReachability = {
   /** Asked last, only once version and code identity leave the decision to it. */
   onClientTransport: () => Promise<DaemonProbeVerdict>;
   onAnyAdvertisedTransport: () => Promise<DaemonProbeVerdict>;
+  /**
+   * Asked before any answer that RETIRES the daemon: whether the host refuses this client's connects
+   * to its advertised ports. Cheaper than a reachability probe by design — one bare connect per
+   * advertised port, no health request, no retries and no waits — because the question is about this
+   * client's permission to reach the endpoint, not about whether the daemon answers there.
+   */
+  refusedByHost: () => Promise<LoopbackConnectDenial | undefined>;
 };
 
 /**
@@ -142,14 +149,19 @@ export async function resolveDaemonTakeover(
   const clientVersion = readVersion();
   if (info.version !== clientVersion) {
     // A replacement retires a live process, so no branch of the ladder answers it on the record
-    // alone: the advertised endpoints are probed first, and a connect the HOST refused answers
-    // `connectDenied` instead of a death verdict. This is where the probe used to happen only for a
-    // NEWER daemon; an older or mismatched one was replaced unprobed, which let a client whose
-    // sandbox refuses the connect kill a daemon it never saw.
-    const advertised = await reachability.onAnyAdvertisedTransport();
-    if (advertised.denial) return { kind: 'connectDenied', denial: advertised.denial };
-    if (info.version && isNewerVersion(info.version, clientVersion) && advertised.reachable)
+    // alone: whether the host even lets this client reach the daemon's ports is asked first, and a
+    // refusal answers `connectDenied` instead of a death verdict. This is where the question used to
+    // be asked only for a NEWER daemon; an older or mismatched one was replaced unprobed, which let a
+    // client whose sandbox refuses the connect kill a daemon it never saw.
+    const refusal = await reachability.refusedByHost();
+    if (refusal) return { kind: 'connectDenied', denial: refusal };
+    if (
+      info.version &&
+      isNewerVersion(info.version, clientVersion) &&
+      (await reachability.onAnyAdvertisedTransport()).reachable
+    ) {
       return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
+    }
     return {
       kind: 'replace',
       reason: `version mismatch (client v${clientVersion})`,
@@ -159,8 +171,8 @@ export async function resolveDaemonTakeover(
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
   if (codeMismatch) {
-    const advertised = await reachability.onAnyAdvertisedTransport();
-    if (advertised.denial) return { kind: 'connectDenied', denial: advertised.denial };
+    const refusal = await reachability.refusedByHost();
+    if (refusal) return { kind: 'connectDenied', denial: refusal };
     return { kind: 'replace', reason: codeMismatch, cause: 'code' };
   }
   const probe = await reachability.onClientTransport();

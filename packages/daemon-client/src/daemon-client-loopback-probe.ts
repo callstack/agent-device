@@ -91,6 +91,41 @@ export function probeLoopbackPort(
 }
 
 /**
+ * Whether the HOST refuses this client's connects to the endpoints one registration advertises.
+ *
+ * The question a retirement asks, and it is narrower than reachability: whether this client is allowed
+ * to reach that endpoint at all, not whether the daemon answers there. So each advertised port gets ONE
+ * bare loopback connect — no health request, no retries, no waits. A sandbox that blocks local ports
+ * refuses the connect itself (EPERM or EACCES), which is what this answers; a daemon that is merely busy
+ * or hung answers with silence, and silence is not evidence about the host.
+ *
+ * A remote registration is answered `undefined` without a connect: a refusal to reach a remote host is
+ * not the loopback denial this verdict names.
+ */
+export async function readAdvertisedConnectDenial(
+  advertised: Readonly<{
+    port?: number;
+    httpPort?: number;
+    remote: boolean;
+  }>,
+): Promise<LoopbackConnectDenial | undefined> {
+  if (advertised.remote) return undefined;
+  const endpoints: ReadonlyArray<readonly [number | undefined, LoopbackTransport]> = [
+    [advertised.port, 'socket'],
+    [advertised.httpPort, 'http'],
+  ];
+  // Both connects run at once: a guard a takeover waits on costs ONE connect window, not one per
+  // advertised port, whatever the host does to a connect it neither allows nor answers.
+  const verdicts = await Promise.all(
+    endpoints.map(([port, transport]) => (port ? probeLoopbackPort(port, transport) : undefined)),
+  );
+  // The first refusal in endpoint order is the whole answer: this client cannot read the other
+  // endpoint's silence as permission to retire what it cannot see.
+  for (const verdict of verdicts) if (verdict?.denial) return verdict.denial;
+  return undefined;
+}
+
+/**
  * One health request to one advertised endpoint, as a reachability verdict.
  *
  * The request is made on a FRESH connection: `agent: false` is load-bearing, not hygiene. Since Node

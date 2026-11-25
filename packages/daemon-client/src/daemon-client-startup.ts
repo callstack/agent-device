@@ -41,7 +41,7 @@ import {
   isDaemonTransportUnavailableError,
   probeDaemonReachability,
 } from './daemon-client-transport.ts';
-import type { DaemonProbeVerdict } from './daemon-client-loopback-probe.ts';
+import type { DaemonProbeVerdict, LoopbackConnectDenial } from './daemon-client-loopback-probe.ts';
 import {
   DAEMON_LOOPBACK_DENIED_HINT,
   DAEMON_UNAVAILABLE_REASONS,
@@ -122,8 +122,26 @@ export async function observeLocalDaemon(
   const decision = await resolveDaemonTakeover(existing, {
     onClientTransport: () => probeReusableDaemon(existing, settings.transportPreference, deadline),
     onAnyAdvertisedTransport: () => probeReusableDaemon(existing, 'auto', deadline),
+    refusedByHost: () => readRefusedAdvertisedConnect(existing),
   });
   return { info: existing, decision: await refineReplacement(existing, decision, options) };
+}
+
+/**
+ * Whether the host refuses this client's connects to the registered daemon's advertised ports — the
+ * guard a retirement takes out before it acts. One bare connect per advertised port, so it adds no
+ * health request and no wait step to a takeover. Loaded here, never at module scope: the CLI's eager
+ * closure must not pay for a verdict only a probe reads.
+ */
+async function readRefusedAdvertisedConnect(
+  info: DaemonInfo,
+): Promise<LoopbackConnectDenial | undefined> {
+  const { readAdvertisedConnectDenial } = await import('./daemon-client-loopback-probe.ts');
+  return await readAdvertisedConnectDenial({
+    port: info.port,
+    httpPort: info.httpPort,
+    remote: Boolean(info.baseUrl),
+  });
 }
 
 async function refineReplacement(

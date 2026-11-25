@@ -52,8 +52,9 @@ export const DAEMON_UNAVAILABLE_REASONS = {
   // The daemon process ended because the host refused its loopback listen, as a sandbox around the
   // launching command does.
   startupListenDenied: { reason: 'startup-listen-denied' },
-  // The host refused this client's loopback connect to the registered daemon, as a sandbox around it
-  // does; `details.daemon` names the daemon left alone.
+  // The host refused this client's loopback connect to the registered daemon with `EPERM` or `EACCES`,
+  // as a sandbox around it does; `details.daemon` names the daemon left alone. A connect that failed
+  // with another errno is ordinary unreachability.
   connectDenied: { reason: 'daemon-connect-denied' },
   // The daemon stayed registered and reachable but never reported the startup phase that follows.
   startupStalled: { reason: 'startup-stalled' },

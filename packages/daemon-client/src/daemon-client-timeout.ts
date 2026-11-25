@@ -7,6 +7,7 @@ import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/regi
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
+import type { DaemonProbeVerdict } from './daemon-client-loopback-probe.ts';
 
 // Recovery for a timed-out request is scoped to that request or to nothing. The daemon owns
 // request-scoped recovery (#3177): destroying the timed-out connection cancels exactly that
@@ -41,46 +42,86 @@ export async function handleRequestTimeout(
     requestSent: boolean;
   }>,
 ): Promise<AppError> {
-  const {
-    info,
-    statePaths,
-    remote,
-    retireUnresponsive,
-    timeoutMs,
-    requestId,
-    command,
-    platform,
-    session,
-    action,
-    requestSent,
-  } = params;
+  const { info, statePaths, remote, retireUnresponsive, timeoutMs, requestId, command, session } =
+    params;
   // The command's declared policy (`timeoutPolicy.onTimeout`, ADR 0008) decides whether a local
   // timed-out request is RESET-ELIGIBLE; the liveness probe decides whether the eligibility runs.
   // A remote client cannot reach the host's process table or the daemon's state dir, so a remote
   // timeout stays purely declarative here.
   const resetEligible = !remote && shouldResetDaemonAfterRequestTimeout(command);
-  // A daemon that answers the probe is busy or slow, not gone: the request-scoped cancel its
-  // transport performed when this client's connection died is the recovery that request needed,
-  // and sibling sessions survive. Only a daemon answering neither endpoint in the probe window is
-  // the hung daemon a reset was designed for.
-  const liveness = resetEligible
-    ? await (
-        await import('./daemon-client-liveness-probe.ts')
-      ).answersLivenessProbe(info, {
-        session,
-      })
-    : undefined;
-  // A probe the HOST refused is neither an answer nor an unresponsive verdict: this client holds no
-  // evidence about the daemon, so a reset-eligible timeout does not retire it.
+  const liveness = resetEligible ? await probeDaemonLiveness(info, session) : undefined;
+  const recovery = await recoverFromTimeout({ info, statePaths, liveness, retireUnresponsive });
+  emitTimeoutDiagnostic({ timeoutMs, requestId, command, remote, info, liveness, recovery });
+  return await timeoutFailure({ params, statePaths, liveness, recovery });
+}
+
+/**
+ * Asks the registered daemon whether it is alive, over the endpoints a reset would have retired it
+ * from. Loaded here and not at the module's top: a timeout is the only path that asks, and the CLI's
+ * eager closure must not pay for the probe.
+ */
+async function probeDaemonLiveness(
+  info: DaemonInfo,
+  session: string | undefined,
+): Promise<DaemonProbeVerdict> {
+  const { answersLivenessProbe } = await import('./daemon-client-liveness-probe.ts');
+  return await answersLivenessProbe(info, { session });
+}
+
+/** What one timeout's liveness verdict authorized this caller to do about the daemon. */
+type TimeoutRecovery = Readonly<{
+  /** Set when the daemon is unresponsive AND this caller may retire it. */
+  mayRetire: boolean;
+  /** Set when the daemon answered nothing and this caller must be told to stop it by hand instead. */
+  stopCommand: string | undefined;
+  /** The teardown this caller performed, when it performed one. */
+  retirement: DaemonRetirementResult | undefined;
+}>;
+
+/**
+ * A daemon that answers the probe is busy or slow, not gone: the request-scoped cancel its transport
+ * performed when this client's connection died is the recovery that request needed, and sibling
+ * sessions survive. Only a daemon answering neither endpoint in the probe window is the hung daemon a
+ * reset was designed for, and only a caller that owns the daemon's lifecycle may perform it.
+ *
+ * A probe the HOST refused is neither an answer nor an unresponsive verdict: this client holds no
+ * evidence about the daemon, so a reset-eligible timeout does not retire it.
+ */
+async function recoverFromTimeout(
+  params: Readonly<{
+    info: DaemonInfo;
+    statePaths: DaemonPaths;
+    /** Absent when the command's policy declares no reset, or the client is remote. */
+    liveness: DaemonProbeVerdict | undefined;
+    retireUnresponsive: boolean;
+  }>,
+): Promise<TimeoutRecovery> {
+  const { info, statePaths, liveness, retireUnresponsive } = params;
   const unresponsive = liveness !== undefined && !liveness.reachable && !liveness.denial;
   const mayRetire = unresponsive && retireUnresponsive;
-  // Loaded only here: a timeout is the one place that needs it, and the CLI's eager closure must
-  // not pay for it.
+  // Loaded only on the branch that names it: the same eager-closure rule as the probe above.
   const stopCommand =
     unresponsive && !retireUnresponsive
       ? (await import('./daemon-lifecycle-errors.ts')).daemonStopCommand(statePaths.baseDir)
       : undefined;
   const retirement = mayRetire ? await forceRetireDaemon(info, statePaths) : undefined;
+  return { mayRetire, stopCommand, retirement };
+}
+
+/** One diagnostic for one timed-out request: what was asked, what was found, what was done. */
+function emitTimeoutDiagnostic(
+  params: Readonly<{
+    timeoutMs: number;
+    requestId: string | undefined;
+    command: string | undefined;
+    remote: boolean;
+    info: DaemonInfo;
+    liveness: DaemonProbeVerdict | undefined;
+    recovery: TimeoutRecovery;
+  }>,
+): void {
+  const { timeoutMs, requestId, command, remote, info, liveness, recovery } = params;
+  const { retirement } = recovery;
   const resetDaemon = retirement?.status === 'retired';
   const preserved =
     retirement?.status === 'retained' && retirement.termination?.status !== 'exited';
@@ -94,30 +135,74 @@ export async function handleRequestTimeout(
       daemonPidReset: resetDaemon ? info.pid : undefined,
       daemonPidForceKilled: resetDaemon ? daemonWasForceKilled(retirement) : undefined,
       daemonRetirement: retirement,
-      daemonPreservedAfterTimeout: preserved || (!remote && !mayRetire),
+      daemonPreservedAfterTimeout: preserved || (!remote && !recovery.mayRetire),
       daemonLivenessProbeAnswered: liveness?.reachable,
       daemonLivenessConnectDenied: liveness?.denial,
       daemonBaseUrl: info.baseUrl,
     },
   });
+}
+
+/**
+ * The failure a timed-out request answers with.
+ *
+ * A probe the HOST refused answers `daemon-connect-denied` and not a timeout: this client learned
+ * nothing about the daemon, so the timeout's own hints would describe a session the caller cannot
+ * reach rather than the sandbox that refused the connect. The daemon is left running either way.
+ */
+async function timeoutFailure(
+  params: Readonly<{
+    params: Parameters<typeof handleRequestTimeout>[0];
+    statePaths: DaemonPaths;
+    liveness: DaemonProbeVerdict | undefined;
+    recovery: TimeoutRecovery;
+  }>,
+): Promise<AppError> {
+  const { params: request, statePaths, liveness, recovery } = params;
+  const { timeoutMs, requestId, requestSent } = request;
+  const { retirement } = recovery;
+  if (liveness?.denial) {
+    const { daemonConnectDeniedError } = await import('./daemon-lifecycle-errors.ts');
+    return daemonConnectDeniedError({
+      info: request.info,
+      denial: liveness.denial,
+      stateDir: statePaths.baseDir,
+    });
+  }
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     timeoutMs,
     requestId,
     reason: DAEMON_TRANSPORT_REASONS.timeout.reason,
     daemonRequestSent: requestSent,
     ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
-    hint:
-      retirement?.status === 'retained'
-        ? `The daemon could not be safely retired. State was retained at ${statePaths.baseDir}. ${retirement.error?.hint ?? 'Read the request log and daemon.log in that directory before you retry.'}`
-        : resolveRequestTimeoutHint({
-            remote,
-            resetDaemon: resetDaemon,
-            stopCommand,
-            command,
-            applePlatformDeclared: isAffirmativelyApplePlatform(platform),
-            session,
-            action,
-          }),
+    hint: resolveTimeoutHint({ request, recovery, stateDir: statePaths.baseDir }),
+  });
+}
+
+/**
+ * Either the notice that a teardown kept the daemon's state on disk, or the recovery hint for this
+ * request. Split from the error above so the hint's own branches stay readable.
+ */
+function resolveTimeoutHint(
+  params: Readonly<{
+    request: Parameters<typeof handleRequestTimeout>[0];
+    recovery: TimeoutRecovery;
+    stateDir: string;
+  }>,
+): string {
+  const { request, recovery, stateDir } = params;
+  const { retirement } = recovery;
+  if (retirement?.status === 'retained') {
+    return `The daemon could not be safely retired. State was retained at ${stateDir}. ${retirement.error?.hint ?? 'Read the request log and daemon.log in that directory before you retry.'}`;
+  }
+  return resolveRequestTimeoutHint({
+    remote: request.remote,
+    resetDaemon: retirement?.status === 'retired',
+    stopCommand: recovery.stopCommand,
+    command: request.command,
+    applePlatformDeclared: isAffirmativelyApplePlatform(request.platform),
+    session: request.session,
+    action: request.action,
   });
 }
 

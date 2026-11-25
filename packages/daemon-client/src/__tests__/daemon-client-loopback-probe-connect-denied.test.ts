@@ -20,7 +20,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { sendToDaemon } from '../index.ts';
-import { probeLoopbackPort } from '../daemon-client-loopback-probe.ts';
+import { probeLoopbackPort, readAdvertisedConnectDenial } from '../daemon-client-loopback-probe.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
 
 // A loopback connect the HOST refused (EPERM under a macOS Seatbelt sandbox around this client) is
@@ -266,3 +266,53 @@ test.for(['EPERM', 'EACCES', 'ECONNREFUSED', 'ECONNRESET'] as const)(
     }
   },
 );
+
+// The guard a replacement takes out is a permission question, so it must not ask anything a daemon
+// could answer: no health request, and no wait step. These assertions hold it to that.
+test('the pre-replacement guard asks one bare connect per advertised port and nothing else', async () => {
+  const connected: Array<{ port: number }> = [];
+  const refused = Object.assign(new EventEmitter(), {
+    destroy: () => {},
+    setTimeout: () => refused,
+  });
+  const createConnection = vi.spyOn(net, 'createConnection').mockImplementation(((
+    options: { port: number },
+    _listener?: () => void,
+  ) => {
+    // Records the port only: one entry per advertised endpoint is the whole claim, and the socket port
+    // is asked first, so the refusal this returns names that endpoint.
+    connected.push({ port: options.port });
+    setImmediate(() =>
+      refused.emit('error', Object.assign(new Error('EACCES'), { code: 'EACCES' })),
+    );
+    return refused;
+  }) as unknown as typeof net.createConnection);
+  try {
+    const denial = await readAdvertisedConnectDenial({
+      port: 65_540,
+      httpPort: 65_541,
+      remote: false,
+    });
+
+    assert.deepEqual(denial, { errno: 'EACCES', transport: 'socket', port: 65_540 });
+    assert.deepEqual(connected, [{ port: 65_540 }, { port: 65_541 }]);
+  } finally {
+    createConnection.mockRestore();
+  }
+});
+
+// A remote registration is out of scope: a refusal to reach a remote host is not the loopback denial
+// this verdict names, and connecting to it would send a request the guard has no business making.
+test('the pre-replacement guard asks nothing of a remote registration', async () => {
+  const createConnection = vi.spyOn(net, 'createConnection').mockImplementation(() => {
+    throw new Error('a remote registration is not probed');
+  });
+  try {
+    assert.equal(
+      await readAdvertisedConnectDenial({ port: 65_540, httpPort: 65_541, remote: true }),
+      undefined,
+    );
+  } finally {
+    createConnection.mockRestore();
+  }
+});
