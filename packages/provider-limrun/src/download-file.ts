@@ -18,7 +18,7 @@ const LIMRUN_DOWNLOAD_REASONS = {
   httpError: { reason: 'limrun_download_http_error' },
   // The transfer's own deadline passed before the file reached disk.
   timeout: { reason: 'limrun_download_timeout' },
-  // The transfer failed before it could ask the instance for the file.
+  // The request or transfer failed, including when an authenticated endpoint redirects.
   failed: { reason: 'limrun_download_failed' },
   // An authenticated download requires HTTPS on the instance origin.
   endpointBlocked: { reason: 'limrun_download_endpoint_blocked' },
