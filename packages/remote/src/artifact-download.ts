@@ -1,7 +1,9 @@
+import { once } from 'node:events';
 import fs from 'node:fs';
 // Type-only: a runtime `node:http` import would load it eagerly for every CLI command. The actual
 // HTTP stack loads through `loadNodeHttpRequester` only when a remote daemon returns an artifact.
 import type http from 'node:http';
+import type { Socket } from 'node:net';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -31,7 +33,7 @@ export type RemoteArtifactRequest = {
   token: string;
   artifactId: string;
   requestScope: DaemonRequestMeta | undefined;
-  /** Admits the synchronous start of a credential-bearing request. */
+  /** Holds admission through the credential-bearing write. */
   downloadHandoff?: <T>(start: () => Promise<T>) => Promise<T>;
   timeoutMs?: number;
 };
@@ -163,119 +165,163 @@ async function requestRemoteArtifact<T>(
 ): Promise<T> {
   const transport = await loadNodeHttpRequester(params.artifactUrl.protocol);
   await destination.prepare();
-  return await (params.downloadHandoff?.(start) ?? start());
-
-  function start(): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      let settled = false;
-      let materializationStarted = false;
-      let timeoutError: AppError | undefined;
-      const operation = new AbortController();
-      const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
-      const settleOnce = (): boolean => {
-        if (settled) return false;
-        settled = true;
-        clearTimeout(timeoutHandle);
-        return true;
-      };
-      const succeed = (result: T) => {
-        if (settleOnce()) resolve(result);
-      };
-      const fail = (error: Error) => {
-        if (!settleOnce()) return;
-        // A cleanup that fails is reported on its own; the caller still receives the download's own error.
-        void destination
-          .cleanupOnError()
-          .catch((cleanupError: unknown) =>
-            emitDiagnostic({
-              level: 'warn',
-              phase: 'remote_artifact_cleanup_failed',
-              data: { artifactId: params.artifactId, error: String(cleanupError) },
-            }),
-          )
-          .finally(() => reject(error));
-      };
-      const request = transport.request(
-        {
-          protocol: params.artifactUrl.protocol,
-          host: params.artifactUrl.hostname,
-          port: params.artifactUrl.port,
-          method: 'GET',
-          path: params.artifactUrl.pathname + params.artifactUrl.search,
-          headers: {
-            ...buildDaemonHttpAuthHeaders(params.token),
-            ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
-            ...buildDaemonHttpLeaseHeaders(params.requestScope?.leaseId),
-          },
-        },
-        (res) => {
-          if (res.statusCode !== 200) {
-            let body = '';
-            res.setEncoding('utf8');
-            const failWithStatus = () => {
-              fail(
-                new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
-                  artifactId: params.artifactId,
-                  statusCode: res.statusCode,
-                  requestId: params.requestScope?.requestId,
-                  body,
-                }),
-              );
-            };
-            res.on('data', (chunk: string) => {
-              body += chunk.slice(0, MAX_ERROR_BODY_CHARS - body.length);
-              if (body.length < MAX_ERROR_BODY_CHARS) return;
-              // The diagnostic is full: the rest of an error answer is never read.
-              failWithStatus();
-              res.destroy();
-            });
-            res.on('end', failWithStatus);
-            res.on('error', failWithStatus);
-            res.on('aborted', failWithStatus);
-            return;
-          }
-          materializationStarted = true;
-          void destination.materialize(res, operation.signal).then(
-            (materializedPath) => succeed(materializedPath),
-            (error: unknown) =>
-              fail(timeoutError ?? (error instanceof Error ? error : new Error(String(error)))),
-          );
-        },
-      );
-      const timeoutHandle = setTimeout(() => {
-        timeoutError = new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
-          artifactId: params.artifactId,
-          requestId: params.requestScope?.requestId,
-          timeoutMs,
-        });
-        operation.abort(timeoutError);
-        request.destroy(timeoutError);
-        // The abort-aware materializer cleans its staging area. Do not reject before it finishes,
-        // or extraction could keep writing after the caller observes the timeout.
-        if (!materializationStarted) fail(timeoutError);
-      }, timeoutMs);
-      request.on('error', (error) => {
-        if (materializationStarted) return;
-        if (error instanceof AppError) {
-          fail(timeoutError ?? error);
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let materializationStarted = false;
+    let timeoutError: AppError | undefined;
+    const operation = new AbortController();
+    const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
+    const settleOnce = (): boolean => {
+      if (settled) return false;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      return true;
+    };
+    const succeed = (result: T) => {
+      if (settleOnce()) resolve(result);
+    };
+    const fail = (error: Error) => {
+      if (!settleOnce()) return;
+      // A cleanup that fails is reported on its own; the caller still receives the download's own error.
+      void destination
+        .cleanupOnError()
+        .catch((cleanupError: unknown) =>
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'remote_artifact_cleanup_failed',
+            data: { artifactId: params.artifactId, error: String(cleanupError) },
+          }),
+        )
+        .finally(() => reject(error));
+    };
+    const headers = {
+      ...buildDaemonHttpAuthHeaders(params.token),
+      ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
+      ...buildDaemonHttpLeaseHeaders(params.requestScope?.leaseId),
+    };
+    const request = transport.request(
+      {
+        protocol: params.artifactUrl.protocol,
+        host: params.artifactUrl.hostname,
+        port: params.artifactUrl.port,
+        method: 'GET',
+        path: params.artifactUrl.pathname + params.artifactUrl.search,
+        headers: params.downloadHandoff ? undefined : headers,
+      },
+      (res) => {
+        if (res.statusCode !== 200) {
+          let body = '';
+          res.setEncoding('utf8');
+          const failWithStatus = () => {
+            fail(
+              new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
+                artifactId: params.artifactId,
+                statusCode: res.statusCode,
+                requestId: params.requestScope?.requestId,
+                body,
+              }),
+            );
+          };
+          res.on('data', (chunk: string) => {
+            body += chunk.slice(0, MAX_ERROR_BODY_CHARS - body.length);
+            if (body.length < MAX_ERROR_BODY_CHARS) return;
+            // The diagnostic is full: the rest of an error answer is never read.
+            failWithStatus();
+            res.destroy();
+          });
+          res.on('end', failWithStatus);
+          res.on('error', failWithStatus);
+          res.on('aborted', failWithStatus);
           return;
         }
-        fail(
-          new AppError(
-            'COMMAND_FAILED',
-            'Failed to download remote artifact',
-            {
-              artifactId: params.artifactId,
-              requestId: params.requestScope?.requestId,
-              timeoutMs,
-            },
-            error instanceof Error ? error : undefined,
-          ),
+        materializationStarted = true;
+        void destination.materialize(res, operation.signal).then(
+          (materializedPath) => succeed(materializedPath),
+          (error: unknown) =>
+            fail(timeoutError ?? (error instanceof Error ? error : new Error(String(error)))),
         );
+      },
+    );
+    const timeoutHandle = setTimeout(() => {
+      timeoutError = new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
+        artifactId: params.artifactId,
+        requestId: params.requestScope?.requestId,
+        timeoutMs,
       });
-      request.end();
+      operation.abort(timeoutError);
+      request.destroy(timeoutError);
+      // The abort-aware materializer cleans its staging area. Do not reject before it finishes,
+      // or extraction could keep writing after the caller observes the timeout.
+      if (!materializationStarted) fail(timeoutError);
+    }, timeoutMs);
+    request.on('error', (error) => {
+      if (!request.writableFinished) operation.abort(error);
+      if (materializationStarted) return;
+      if (error instanceof AppError) {
+        fail(timeoutError ?? error);
+        return;
+      }
+      fail(
+        new AppError(
+          'COMMAND_FAILED',
+          'Failed to download remote artifact',
+          {
+            artifactId: params.artifactId,
+            requestId: params.requestScope?.requestId,
+            timeoutMs,
+          },
+          error instanceof Error ? error : undefined,
+        ),
+      );
     });
+    if (!params.downloadHandoff) {
+      request.end();
+      return;
+    }
+    request.once('close', () => {
+      if (!request.writableFinished)
+        operation.abort(new Error('Artifact request closed before writing.'));
+    });
+    void writeAdmittedArtifactRequest(
+      request,
+      headers,
+      params.downloadHandoff,
+      operation.signal,
+    ).catch((error: unknown) => {
+      request.destroy();
+      fail(error instanceof Error ? error : new Error(String(error)));
+    });
+  });
+}
+
+async function writeAdmittedArtifactRequest(
+  request: http.ClientRequest,
+  headers: http.OutgoingHttpHeaders,
+  handoff: NonNullable<RemoteArtifactRequest['downloadHandoff']>,
+  signal: AbortSignal,
+): Promise<void> {
+  const socket = (request.socket ?? (await once(request, 'socket', { signal }))[0]) as Socket & {
+    encrypted?: boolean;
+    secureConnecting?: boolean;
+  };
+  if (socket.connecting || socket.secureConnecting) {
+    await once(socket, socket.encrypted ? 'secureConnect' : 'connect', { signal });
   }
+  signal.throwIfAborted();
+  await handoff(async () => {
+    signal.throwIfAborted();
+    for (const [name, value] of Object.entries(headers)) {
+      if (value !== undefined) request.setHeader(name, value);
+    }
+    const written = once(request, 'finish', { signal });
+    try {
+      request.end();
+    } catch (error) {
+      void written.catch(() => {});
+      throw error;
+    }
+    await written;
+  });
 }
 
 /** Safely extracts one directory and atomically publishes it under the caller-owned root. */

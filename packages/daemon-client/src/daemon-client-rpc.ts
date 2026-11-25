@@ -45,12 +45,7 @@ export function handleDaemonHttpResponseBody(
     const endpoint: DaemonArtifactEndpoint = {
       baseUrl: info.baseUrl,
       token: info.token,
-      downloadHandoff: dispatch
-        ? async (start) => {
-            const { dispatchDaemonRequest } = await import('./daemon-client-request.ts');
-            return await dispatchDaemonRequest(dispatch, start);
-          }
-        : undefined,
+      downloadHandoff: dispatch,
     };
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {

@@ -398,3 +398,108 @@ test('a cleanup that fails after a failed download keeps the download error and 
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+test.for(['disconnect', 'expiry', 'write completion'] as const)(
+  'artifact admission handles %s during a delayed socket assignment',
+  async (scenario, t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'artifact admission socket coverage')) return;
+    const authorizations: unknown[] = [];
+    const server = http.createServer((req, res) => {
+      authorizations.push(req.headers.authorization);
+      res.end('artifact');
+    });
+    const port = await listenOnLoopback(server);
+    const assign = deferred<void>();
+    const created = deferred<http.ClientRequest>();
+    const reachedEnd = deferred<void>();
+    const finishWrite = deferred<void>();
+    const nativeRequest = http.request;
+    const controlled = vi.spyOn(http, 'request').mockImplementation(((
+      options: http.RequestOptions,
+      callback: (response: http.IncomingMessage) => void,
+    ) => {
+      const req = nativeRequest(
+        {
+          ...options,
+          createConnection: (_options, complete) => {
+            void assign.promise.then(() => {
+              const socket = net.connect(port, '127.0.0.1');
+              complete?.(null, socket);
+            });
+            return undefined;
+          },
+        },
+        callback,
+      );
+      if (scenario === 'write completion') {
+        const end = req.end.bind(req);
+        req.end = (() => {
+          reachedEnd.resolve();
+          void finishWrite.promise.then(() => end());
+          return req;
+        }) as typeof req.end;
+      }
+      created.resolve(req);
+      return req;
+    }) as typeof http.request);
+    const refusal = new Error(scenario === 'expiry' ? 'lease expired' : 'lease disconnected');
+    let denied = false;
+    let admitted = false;
+    let admissionCount = 0;
+    const result = fetchRemoteArtifactFromUrl({
+      artifactUrl: new URL(`http://127.0.0.1:${port}/artifacts/artifact`),
+      token: 'remote-secret',
+      artifactId: 'artifact',
+      requestScope: undefined,
+      maxBytes: 64,
+      timeoutMs: 1_000,
+      downloadHandoff: async (send) => {
+        admissionCount++;
+        if (denied) throw refusal;
+        admitted = true;
+        try {
+          return await send();
+        } finally {
+          admitted = false;
+        }
+      },
+    }).then(
+      (bytes) => ({ bytes }),
+      (error: unknown) => ({ error }),
+    );
+    try {
+      const req = await created.promise;
+      assert.equal(admissionCount, 0);
+      assert.equal(req.getHeader('authorization'), undefined);
+      denied = scenario !== 'write completion';
+      assign.resolve();
+      if (denied) {
+        assert.deepEqual(await result, { error: refusal });
+        assert.equal(req.destroyed, true);
+        assert.deepEqual(authorizations, []);
+        return;
+      }
+      await reachedEnd.promise;
+      assert.equal(admitted, true);
+      assert.deepEqual(authorizations, []);
+      finishWrite.resolve();
+      assert.deepEqual(await result, { bytes: Buffer.from('artifact') });
+      assert.equal(admitted, false);
+      assert.deepEqual(authorizations, ['Bearer remote-secret']);
+    } finally {
+      assign.resolve();
+      finishWrite.resolve();
+      await result;
+      controlled.mockRestore();
+      await closeLoopbackServer(server);
+    }
+  },
+);
