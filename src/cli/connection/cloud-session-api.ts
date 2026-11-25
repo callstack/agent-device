@@ -290,7 +290,7 @@ async function readCreateResponse(
   const { status } = response;
   if (status === 502 && url.pathname === PRELOADED_SESSIONS_PATH) {
     const body = asCloudRecord(await response.json().catch(() => undefined));
-    if (body?.error === 'app_preload_failed') {
+    if (body?.error === CLOUD_SESSION_API_REASONS.appPreloadFailed.reason) {
       throw new AppError(
         'COMMAND_FAILED',
         'The cloud provider could not preload the app from --app-url.',
@@ -344,9 +344,9 @@ export function isDefinitiveCloudCreateRejection(error: unknown): boolean {
     status === 402 ||
     status === 422 ||
     status === 429 ||
-    reason === 'budget_cap_unsupported' ||
-    reason === 'app_source_unsupported' ||
-    reason === 'app_preload_failed' ||
+    reason === CLOUD_SESSION_API_REASONS.budgetUnsupported.reason ||
+    reason === CLOUD_SESSION_API_REASONS.appSourceUnsupported.reason ||
+    reason === CLOUD_SESSION_API_REASONS.appPreloadFailed.reason ||
     (status === 409 && reason === 'session_not_running')
   );
 }
@@ -400,8 +400,9 @@ function appSourceUnsupported(status: 400 | 404 | 405): AppError {
 function requestRejection(body: Record<string, unknown> | undefined): AppError {
   const status = 400;
   const reason = body?.error;
-  if (reason === 'app_source_unsupported') return appSourceUnsupported(status);
-  if (reason === 'invalid_app_source') {
+  if (reason === CLOUD_SESSION_API_REASONS.appSourceUnsupported.reason)
+    return appSourceUnsupported(status);
+  if (reason === CLOUD_SESSION_API_REASONS.invalidAppSource.reason) {
     return new AppError(
       'INVALID_ARGS',
       'The cloud service rejected --app-url. Check the archive requirements for the offering.',
