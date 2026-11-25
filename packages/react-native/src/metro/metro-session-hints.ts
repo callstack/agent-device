@@ -245,34 +245,50 @@ export function recordOpenedMetroSession(
 ): void {
   try {
     const scope = resolveMetroSessionScope(options);
+    const stored = readMetroSessionRecord(scope);
+    const app = input.app ? keepProvenHost(input.app, stored?.app) : undefined;
     const url = runtimeServerUrl(input.runtime);
     if (url) {
       const binding = input.explicitRuntime ? undefined : readMetroSessionHints(scope);
-      if (binding && (input.sessionReused || binding.deviceBaseUrls?.includes(url))) return;
+      if (binding && (input.sessionReused || binding.deviceBaseUrls?.includes(url))) {
+        if (app) writeMetroSessionHints({ ...scope, hints: { ...binding, app } });
+        return;
+      }
       writeMetroSessionHints({
         ...scope,
-        hints: { controlBaseUrl: url, ...(input.app ? { app: input.app } : {}) },
+        hints: { controlBaseUrl: url, ...(app ? { app } : {}) },
       });
       return;
     }
     // No dev-server hint came with the open, so no address is bound. What is recorded is the app this
     // open launched: a later reload looks that app's own address up from it. A reused session can
-    // open a different app, so a recorded app always replaces the previous one; an open that reports
-    // no app keeps what a reused session already had, and clears a stale record on a fresh session.
-    if (input.app) {
-      const binding = readMetroSessionHints(scope);
+    // open a different app, so a recorded app always replaces the previous one, and it keeps whatever
+    // address the session already bound. An open that reports no app leaves a reused session's record
+    // alone and clears a stale one on a fresh session.
+    if (app) {
       writeMetroSessionHints({
         ...scope,
         hints: {
-          ...(binding?.controlBaseUrl ? { controlBaseUrl: binding.controlBaseUrl } : {}),
-          ...(binding?.deviceBaseUrls ? { deviceBaseUrls: binding.deviceBaseUrls } : {}),
-          app: input.app,
+          ...(stored?.controlBaseUrl ? { controlBaseUrl: stored.controlBaseUrl } : {}),
+          ...(stored?.deviceBaseUrls ? { deviceBaseUrls: stored.deviceBaseUrls } : {}),
+          app,
         },
       });
       return;
     }
     if (!input.sessionReused) clearMetroSessionHints(scope);
   } catch {}
+}
+
+/**
+ * Keeps the host trait an earlier open proved for the same device. An open that resolves the device
+ * from the session rather than from an inventory reports nothing about where it runs, and that silence
+ * must not erase what was already proven about this device.
+ */
+function keepProvenHost(app: MetroAppTarget, stored: MetroAppTarget | undefined): MetroAppTarget {
+  if (app.hostedLocally !== undefined) return app;
+  if (!stored || stored.deviceId !== app.deviceId) return app;
+  return stored.hostedLocally === undefined ? app : { ...app, hostedLocally: stored.hostedLocally };
 }
 
 export function clearMetroSessionHintsQuietly(options: MetroSessionOptions): void {

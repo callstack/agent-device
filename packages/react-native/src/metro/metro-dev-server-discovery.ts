@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isLoopbackHostname } from '@agent-device/daemon-contracts/daemon-resolution';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -57,7 +58,10 @@ export const METRO_RELOAD_REASONS = {
 
 const SIMULATOR_DEVICES_ROOT = 'Library/Developer/CoreSimulator/Devices';
 const METRO_PROJECT_ROOT_HEADER = 'x-react-native-project-root';
-const HOST_READ_TIMEOUT_MS = 1_500;
+// A live machine answers these reads slowly: `lsof` walks every process's descriptors and took over
+// 1.5 s on a developer Mac with simulators running. The budget has to be the slow machine's, because
+// a timeout here is indistinguishable from "this machine listens on nothing".
+const HOST_READ_TIMEOUT_MS = 4_000;
 const STATUS_PROBE_TIMEOUT_MS = 800;
 const MAX_CONCURRENT_STATUS_PROBES = 32;
 
@@ -92,10 +96,10 @@ export type ResolveMetroReloadServerInput = MetroReloadTargetInput &
  *    live server at that address still has to serve this project to count.
  * 3. A local dev server that serves the current project.
  *
- * Only a session whose app runs on a simulator or emulator reaches steps 2 and 3: a physical device's
- * host is not this machine, so its sessions keep their existing behavior, including the default
- * address. With no signal at all, this fails typed rather than calling `localhost:8081`, which in an
- * unbound session belongs to whichever project happens to own that port.
+ * Only a session whose device `open` proved is this daemon's own local device reaches steps 2 and 3:
+ * a provider device's host is not this machine, so its sessions keep their existing behavior, the
+ * default address included. With no signal at all, this fails typed rather than calling
+ * `localhost:8081`, which in an unbound session belongs to whichever project owns that port.
  */
 export async function resolveMetroReloadServerUrl(
   input: ResolveMetroReloadServerInput,
@@ -139,13 +143,12 @@ export async function resolveMetroReloadServerUrl(
 
 /**
  * Whether reload may look for a dev server on this machine for a session's app. It may, only when
- * `open` recorded the app as hosted here: a provider-hosted or physical device runs somewhere else,
- * so its dev server is not one of this machine's ports, and probing here would answer a question
+ * `open` recorded the app's device as this daemon's own local device. A provider device runs somewhere
+ * else, so its dev server is not one of this machine's ports, and probing here would answer a question
  * nobody asked.
  */
 export function canDiscoverForApp(app: MetroAppTarget | undefined): boolean {
-  if (!app || app.hostedLocally !== true) return false;
-  return app.deviceKind === 'simulator' || app.deviceKind === 'emulator';
+  return app?.hostedLocally === true;
 }
 
 /**
@@ -158,7 +161,7 @@ async function servesProjectRoot(
   projectRoots: string[],
   probe: MetroDevServerProbe,
 ): Promise<boolean> {
-  if (!isLoopbackUrl(serverUrl)) return true;
+  if (!isLoopbackHostname(serverUrl.hostname)) return true;
   const probeServer = probe.probeServer ?? probeLocalMetroServer;
   const running = await probeServer(serverUrl, STATUS_PROBE_TIMEOUT_MS).catch(() => undefined);
   // The app named this address itself, so a server that answers and names no root stays what it
@@ -324,10 +327,6 @@ export function metroDevServerUnresolvedError(): AppError {
         'or run metro prepare, or open with --metro-host/--metro-port so the session keeps the binding.',
     },
   );
-}
-
-function isLoopbackUrl(url: URL): boolean {
-  return ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'].includes(url.hostname);
 }
 
 function candidateProjectRoots(projectRoots: string[]): string[] {

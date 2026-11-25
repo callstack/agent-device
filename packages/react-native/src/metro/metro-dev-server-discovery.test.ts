@@ -280,11 +280,11 @@ test('nothing found fails typed and names the address the fallback would have us
 });
 
 test('an app whose host is not proven local keeps the previous address instead of probing', async () => {
+  // A provider-hosted device, a device inherited from an earlier request that reported nothing, and
+  // an app-less session all leave the trait unproven.
   for (const app of [
     { ...simulatorApp, hostedLocally: false },
     { ...simulatorApp, hostedLocally: undefined },
-    { ...simulatorApp, deviceKind: 'device' as const },
-    { ...simulatorApp, deviceKind: undefined },
     undefined,
   ]) {
     const probe = probeReturning([serverAt(8096, '/app/project')]);
@@ -295,10 +295,10 @@ test('an app whose host is not proven local keeps the previous address instead o
   }
 });
 
-test('discovery is allowed only for an app proven to be hosted here on a virtual target', () => {
+test('discovery is allowed only for an app open proved to sit on this machine', () => {
   assert.equal(canDiscoverForApp(simulatorApp), true);
   assert.equal(canDiscoverForApp({ ...simulatorApp, deviceKind: 'emulator' }), true);
-  assert.equal(canDiscoverForApp({ ...simulatorApp, deviceKind: 'device' }), false);
+  assert.equal(canDiscoverForApp({ ...simulatorApp, deviceKind: 'device' }), true);
   assert.equal(canDiscoverForApp({ ...simulatorApp, hostedLocally: false }), false);
   assert.equal(canDiscoverForApp({ ...simulatorApp, hostedLocally: undefined }), false);
   assert.equal(canDiscoverForApp(undefined), false);

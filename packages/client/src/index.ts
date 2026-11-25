@@ -599,16 +599,19 @@ function daemonIsLocal(config: AgentDeviceClientConfig, host: HostEnvironment): 
 
 /**
  * Whether `open` proved the session's device runs on this machine: the daemon answers here, and it
- * resolved the device from this host's own inventory. A provider device, a device inherited from an
- * earlier request, or a daemon on another machine leaves it unproven, and reload then skips the local
- * lookups instead of reading unrelated state.
+ * resolved the device from its own local inventory. A provider device, a device carried over from an
+ * earlier request, or a daemon on another machine leaves it unproven — `undefined`, not `false` — and
+ * the record keeps whatever an earlier open proved for the same device.
  */
 function appHostedLocally(
   config: AgentDeviceClientConfig,
   host: HostEnvironment,
   selection: DeviceSelectionMetadata | undefined,
-): boolean {
-  return daemonIsLocal(config, host) && selection?.source === 'local';
+): boolean | undefined {
+  if (!daemonIsLocal(config, host)) return false;
+  if (selection?.source === 'local') return true;
+  if (selection?.source === 'provider') return false;
+  return undefined;
 }
 
 /**
@@ -619,7 +622,7 @@ function appHostedLocally(
 function metroAppTargetFromOpen(
   device: ReturnType<typeof normalizeOpenDevice>,
   appBundleId: string | undefined,
-  hostedLocally: boolean,
+  hostedLocally: boolean | undefined,
 ): MetroAppTarget | undefined {
   if (!device || !appBundleId) return undefined;
   if (device.platform !== 'ios' && device.platform !== 'android') return undefined;
@@ -628,7 +631,7 @@ function metroAppTargetFromOpen(
     deviceId: device.id,
     ...(device.kind ? { deviceKind: device.kind } : {}),
     appId: appBundleId,
-    ...(hostedLocally ? { hostedLocally: true } : {}),
+    ...(hostedLocally === undefined ? {} : { hostedLocally }),
   };
 }
 
