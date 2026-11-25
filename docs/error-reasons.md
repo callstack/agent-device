@@ -577,7 +577,8 @@ These reasons can come from more than one command.
 | `remote_daemon_unavailable` | The health probe that gates a remote send found no daemon to hand the request to, so `details.dispatched` is `no` and a resend is safe. |
 | `daemon-binding-mismatch` | A client pinned to one daemon instance reached a state directory registering another one, or none it can read as an address; `details.bound` and `details.registered` hold both. |
 | `DAEMON_POLICY_MISMATCH` | The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names. |
-| `startup-exited` | The daemon process ended before it registered a reachable endpoint. |
+| `startup-exited` | The daemon process ended before it registered a reachable endpoint, for a cause other than a denied loopback listen. |
+| `startup-listen-denied` | The daemon process ended because the host refused its loopback listen, as a sandbox around the launching command does. |
 | `startup-stalled` | The daemon stayed registered and reachable but never reported the startup phase that follows. |
 | `startup-ceiling` | Startup passed the ceiling its own startup budget allows, so this client stopped waiting. |
 | `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer "which daemon" two different ways. |
@@ -596,6 +597,7 @@ These reasons can come from more than one command.
 | `daemon_exit_unconfirmed` | The stop could not confirm the daemon exited: the process stayed alive after the signal, the signal failed, or its start time or identity could not be verified. |
 | `repair_evidence_invalid` | The repair tombstone file exists but does not parse into a valid marker. |
 | `daemon_registration_refused` | Another daemon holds this state directory, or its registration could not be proven free, so this daemon did not start; `details.status` says which. |
+| `daemon_listen_denied` | The host refused the daemon's loopback listen with EPERM or EACCES, as a sandbox around the launching command does; `details.code` holds the errno code. |
 | `daemon-clean-not-detached` | The record does not prove the process is a daemon of its own, so its process tree may be someone else's work. |
 
 ### Daemon policy
