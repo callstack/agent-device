@@ -21,6 +21,10 @@ import {
 } from '@agent-device/test-kit';
 import { sendToDaemon } from '../index.ts';
 import { probeLoopbackPort, readAdvertisedConnectDenial } from '../daemon-client-loopback-probe.ts';
+import {
+  finishRegisteredDaemonFixture,
+  planRegisteredDaemonLaunches,
+} from './registered-daemon-fixture.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
 
 // A loopback connect the HOST refused (EPERM under a macOS Seatbelt sandbox around this client) is
@@ -198,6 +202,54 @@ test.for([
     });
   },
 );
+
+// A daemon the CLIENT launched, whose registration its own startup watch then read: the readiness
+// probe is the first connect after publication. When the host refuses that connect, readiness cannot
+// be judged, and the stalled and ceiling routes would signal a daemon this client cannot see. The
+// launch seam starts a real registration-owning child, so the client owns this lifetime.
+test('a launched daemon whose readiness connect the host refused is left running', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const stateDir = mkdtempForTestSync('agent-device-launch-denied-');
+  const paths = resolveDaemonPaths(stateDir);
+  const server = net.createServer((socket) => socket.on('error', () => {}));
+  const httpPort = await listenOnLoopback(server);
+  mockSpawnDaemon.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: {
+          httpPort,
+          token: 'local-secret',
+          version: readVersion(),
+          codeOrigin: 'checkout',
+          codeSignature: currentDaemonCodeSignature(),
+        },
+      },
+    ]),
+  );
+  mockProbeAnswers.push(denied(DENIED_ERRNO, 'http'));
+
+  try {
+    const failure = await rejection(sendDevices(stateDir, 'http'));
+
+    assert.equal(failure.details?.reason, 'daemon-connect-denied');
+    assert.equal(failure.details?.errno, DENIED_ERRNO);
+    assert.equal(failure.details?.transport, 'http');
+    // The client is pinned to HTTP, so the readiness probe reports that leg's advertised port.
+    assert.equal(failure.details?.port, httpPort);
+    const launched = failure.details?.daemon as { pid?: number } | undefined;
+    assert.ok(
+      launched?.pid !== undefined && isProcessAlive(launched.pid),
+      'the daemon the client launched keeps running',
+    );
+    assert.ok(fs.existsSync(paths.infoPath), 'its registration is left in place');
+  } finally {
+    await finishRegisteredDaemonFixture(stateDir);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    await closeLoopbackServer(server);
+  }
+});
 
 // An attach client starts and replaces nothing anyway, so its only wrong answer would read as "no
 // daemon is running" and send the caller to start one it cannot reach either.

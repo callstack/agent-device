@@ -545,6 +545,11 @@ test('a timeout whose liveness probe the host refused reports the refusal, not a
     assert.equal(error.details?.reason, 'daemon-connect-denied');
     assert.equal(error.details?.errno, 'EPERM');
     assert.equal(error.details?.port, daemon.port);
+    // The refusal replaces the timeout's REASON, not its facts: this request had already been written,
+    // so the error still says the daemon may have run it. Without `daemonRequestSent` the disclosure
+    // seam would call a request that dispatched `no`, and a retrying caller would run it twice.
+    assert.equal(error.details?.daemonRequestSent, true);
+    assert.equal(error.details?.dispatched, 'unknown');
     assert.ok(
       !/kept alive|survive/i.test(String(error.details?.hint)),
       'the hint claims no session this client could not have reached',

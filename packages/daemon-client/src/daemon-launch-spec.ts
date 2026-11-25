@@ -177,7 +177,16 @@ export async function resolveDaemonTakeover(
   }
   const probe = await reachability.onClientTransport();
   if (probe.denial) return { kind: 'connectDenied', denial: probe.denial };
-  if (!probe.reachable) return { kind: 'replace', reason: 'unreachable', cause: 'unreachable' };
+  if (!probe.reachable) {
+    // A managed client retires a daemon it cannot reach on its own transport, so the permission
+    // question is asked here too, whatever the client's transport preference happened to try: a
+    // preference for an endpoint the daemon does not serve, or a sandbox that answers this leg with
+    // silence and would refuse the other outright, both end in a retirement of a daemon this client
+    // was never allowed to see.
+    const refusal = await reachability.refusedByHost();
+    if (refusal) return { kind: 'connectDenied', denial: refusal };
+    return { kind: 'replace', reason: 'unreachable', cause: 'unreachable' };
+  }
   return { kind: 'reuse' };
 }
 

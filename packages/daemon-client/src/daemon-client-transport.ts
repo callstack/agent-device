@@ -449,6 +449,10 @@ async function recoverFromTimeout(
  * One of the transport's own failures, with whether it happened after the request left this
  * process (the daemon may have run it). A lost connection or a timeout records
  * `daemonRequestSent`; a reply that could not be read or parsed was always sent.
+ *
+ * A `daemon-connect-denied` is usually a pre-send finding and is left alone. Only the one a timeout
+ * produced carries `daemonRequestSent`, and that one has to reach the disclosure seam too: the request
+ * was written before the host refused the probe, so the caller must still be told it may have run.
  */
 function classifyTransportFailure(
   error: unknown,
@@ -462,7 +466,9 @@ function classifyTransportFailure(
     case DAEMON_TRANSPORT_REASONS.replyInvalid.reason:
       return { failure: error, sent: true };
     default:
-      return undefined;
+      // A refusal this module did not produce, from the timeout route, states for itself that the
+      // request left this process. It gets the same disclosure: the daemon may have run it.
+      return error.details?.daemonRequestSent === true ? { failure: error, sent: true } : undefined;
   }
 }
 

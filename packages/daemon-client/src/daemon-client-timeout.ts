@@ -163,11 +163,17 @@ async function timeoutFailure(
   const { retirement } = recovery;
   if (liveness?.denial) {
     const { daemonConnectDeniedError } = await import('./daemon-lifecycle-errors.ts');
-    return daemonConnectDeniedError({
+    const denied = daemonConnectDeniedError({
       info: request.info,
       denial: liveness.denial,
       stateDir: statePaths.baseDir,
     });
+    // A refusal found AFTER the request left this process replaces the timeout's REASON, not the
+    // timeout's facts: the daemon may still have run this request, and a caller that retries on a
+    // failure that dispatched nothing would run it twice. `daemonRequestSent` travels with the denial
+    // so the send path can disclose dispatch for it, exactly as it does for a timeout.
+    if (requestSent) denied.details = { ...denied.details, daemonRequestSent: true };
+    return denied;
   }
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     timeoutMs,

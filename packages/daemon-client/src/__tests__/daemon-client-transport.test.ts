@@ -77,6 +77,96 @@ test('auto health probing reserves time for a healthy fallback when HTTP hangs',
   }
 });
 
+// Two shapes of a reachability probe that a boolean "unreachable" would report wrongly, both of which
+// a caller reads before it retires a daemon: a fallback leg that answers AFTER the deadline must not
+// bury the refusal the first leg already proved, and a refusal of a fresh connect must not be answered
+// around by a keep-alive socket an earlier command left in the pool.
+test('a fallback leg answering past the deadline still reports the first leg as a denial', async () => {
+  const probe = await import('../daemon-client-loopback-probe.ts');
+  const denial = { errno: 'EPERM', transport: 'socket', port: 41_234 } as const;
+  // A clock the two legs move on, so "late" is settled rather than raced: the socket leg is refused
+  // at once, the HTTP leg answers, and the answer lands after the probe's deadline.
+  let now = 1_000;
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+  const socketLeg = vi
+    .spyOn(probe, 'probeLoopbackPort')
+    .mockResolvedValue({ reachable: false, denial });
+  const httpLeg = vi.spyOn(probe, 'probeHttpEndpoint').mockImplementation(async () => {
+    now += 500;
+    return { reachable: true };
+  });
+  try {
+    assert.deepEqual(
+      await probeDaemonReachability(
+        { token: 'secret', pid: 1, transport: 'dual', port: 41_234, httpPort: 41_235 },
+        'auto',
+        100,
+      ),
+      { reachable: false, denial },
+    );
+  } finally {
+    clock.mockRestore();
+    socketLeg.mockRestore();
+    httpLeg.mockRestore();
+  }
+});
+
+test('a fresh connect the host refused is not answered around by a pooled socket', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // The pool the probe must not ride, primed the way an earlier command primes it: one keep-alive
+  // health request whose socket returns to the global agent. Discriminator: every NEW connect is
+  // refused from here on, so a verdict of `reachable` could only come from the pooled socket, and a
+  // denial that arrives with the daemon having seen nothing but the prime is the whole claim.
+  if (!(await poolPrimesUnderTestAgent())) return;
+  const askedUrls: string[] = [];
+  const server = http.createServer((req, res) => {
+    askedUrls.push(String(req.url));
+    res.end('{}');
+  });
+  const port = await listenOnLoopback(server);
+  // Prime with the SAME module object the probe loads, or the pool holds no candidate and the test
+  // proves nothing.
+  const requester = await hostTransport.loadNodeHttpRequester('http:');
+  await new Promise<void>((resolve, reject) => {
+    const request = requester.request(
+      { host: '127.0.0.1', port, path: '/health', method: 'GET' },
+      (res) => {
+        res.resume();
+        res.on('end', resolve);
+      },
+    );
+    request.on('error', reject);
+    request.end();
+  });
+  // A host that refuses a connect answers it immediately, with no round trip: the socket ends with
+  // the errno and never carries a request.
+  const connect = vi
+    .spyOn(net.Socket.prototype, 'connect')
+    .mockImplementation(function (this: net.Socket) {
+      this.destroy(Object.assign(new Error('EPERM'), { code: 'EPERM' }));
+      return this;
+    });
+  try {
+    assert.deepEqual(
+      await probeDaemonReachability({ token: 'secret', pid: 1, httpPort: port }, 'http'),
+      {
+        reachable: false,
+        denial: { errno: 'EPERM', transport: 'http', port },
+      },
+    );
+    assert.deepEqual(askedUrls, ['/health'], 'only the prime reached the daemon');
+  } finally {
+    connect.mockRestore();
+    await closeLoopbackServer(server);
+  }
+});
+
+/** Whether this Node keeps sockets alive on the global agent, which is what makes a pool exist. */
+async function poolPrimesUnderTestAgent(): Promise<boolean> {
+  const { globalAgent } = await import('node:http');
+  return Boolean((globalAgent as { keepAlive?: boolean }).keepAlive);
+}
+
 test('the health deadline includes requester loading and forbids a late request', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   let requests = 0;

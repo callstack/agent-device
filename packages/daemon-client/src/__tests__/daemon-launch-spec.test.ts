@@ -188,6 +188,21 @@ test('a same-version daemon the host refused to connect to is not judged unreach
   );
 });
 
+// The unreachable branch retires too, so it asks the same permission question even when the client's
+// own transport leg answered only silence: a managed client pinned to a leg the daemon does not serve
+// would otherwise replace a daemon it was never allowed to reach.
+test('a daemon unreachable on the client transport but refused by the host is not replaced', async () => {
+  useClientTree(false);
+
+  assert.deepEqual(
+    await resolveDaemonTakeover(
+      runningDaemon({ codeOrigin: 'installed' }),
+      silentButRefusedOnTheGuard(),
+    ),
+    { kind: 'connectDenied', denial: DENIAL },
+  );
+});
+
 // A replacement retires a live process, so no branch of the ladder may answer it on the record alone.
 // Before this, only a NEWER daemon was probed: an older or code-mismatched one was replaced without
 // ever being seen, which let a client whose sandbox refuses the connect kill a healthy daemon.
@@ -255,6 +270,18 @@ function onlyOnAnotherTransport(): DaemonReachability {
     onClientTransport: async () => silent,
     onAnyAdvertisedTransport: async () => answered,
     refusedByHost: async () => undefined,
+  };
+}
+
+/**
+ * The client's own transport answers nothing and the guard's connects are refused, while the ports
+ * themselves answer nothing: what a sandbox that silences one leg and refuses the other produces.
+ */
+function silentButRefusedOnTheGuard(): DaemonReachability {
+  return {
+    onClientTransport: async () => silent,
+    onAnyAdvertisedTransport: async () => silent,
+    refusedByHost: async () => DENIAL,
   };
 }
 
