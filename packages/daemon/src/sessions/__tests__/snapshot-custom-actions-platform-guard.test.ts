@@ -77,7 +77,8 @@ const nonSimulatorTargets: DeviceInfo[] = [
   { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
   { platform: 'android', id: 'ABC123', name: 'Pixel 9', kind: 'device' },
   { platform: 'apple', id: 'mac', name: 'Mac', kind: 'device', appleOs: 'macos' },
-  // An iOS PHYSICAL device is the subtle one: iOS family, but no private-AX backend.
+  // An iOS PHYSICAL device is the subtle one: its runner reads private AX, but custom actions are
+  // admitted on Simulators only.
   { platform: 'apple', id: 'udid', name: 'iPhone', kind: 'device', appleOs: 'ios' },
   { platform: 'linux', id: 'local', name: 'Linux', kind: 'device' },
   { platform: 'web', id: 'chrome', name: 'Chrome', kind: 'device' },
