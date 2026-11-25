@@ -2559,7 +2559,7 @@ Exact behavior: `agent-device help audit`.
 * On iOS 17+ with the XCTest runner, `audit` also runs Apple’s native accessibility checks. Other targets run the heuristic checks only. Apple’s Dynamic Type and clipped-text checks are not run; `agent-device help accessibility` describes the large text check to use instead.
 * A system alert over the app stops Apple’s checks with `native_audit_blocked_by_alert`. Run `agent-device alert accept` or `agent-device alert dismiss`, then run `audit` again. A runner answer the CLI cannot read fails with `native-audit-invalid-result`.
 * When a native finding matches a captured element, it includes its ref. Otherwise, match its `rect` against a new snapshot before you act. A finding without a rect names no element, so report it without acting.
-* Like `find`, `audit` returns pinned refs such as `@eN~s<refsGeneration>`; press those. Take a new snapshot before you use other refs.
+* Like `find`, `audit` returns pinned refs such as `@eN-s<refsGeneration>`; press those. Take a new snapshot before you use other refs.
 
 ## Wait and alerts
 
@@ -2695,7 +2695,7 @@ agent-device gesture pan 200 420 0 -80 500
 agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
 agent-device gesture fling right 200 420 180
 agent-device gesture drag 'id="drag-source"' 'id="drop-target"'
-agent-device gesture drag @e4~s12 'label="Archive"' 700 600 200
+agent-device gesture drag @e4-s12 'label="Archive"' 700 600 200
 agent-device longpress 300 500 800
 agent-device hover @e12 --settle       # Web only: move the pointer without pressing
 agent-device scroll down 0.5
@@ -8397,7 +8397,7 @@ For Android pixel units and density, see [Android node metadata](#android-node-m
 
 The answer describes the screen, not the view of it you asked for, so `--raw`, `-i`, `-d`, and `--scope` all report the same value for one screen. Use `-i` or a `--scope` to keep the output small and still trust the answer.
 
-With `--scope`, the text output prints every ref pinned to its ref generation, such as `@e12~s42`, under one `Refs generation: 42` line. Paste the ref as printed into the next command. `--json` and `--raw` keep plain refs.
+With `--scope`, the text output prints every ref pinned to its ref generation, such as `@e12-s42`, under one `Refs generation: 42` line. Paste the ref as printed into the next command. `--json` and `--raw` keep plain refs.
 
 ## iOS capture behavior
 
