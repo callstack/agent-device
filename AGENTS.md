@@ -1,6 +1,7 @@
 # AGENTS.md
 
-The daemon owns sessions. The registry routes commands to platform runtimes.
+`agent-device` is a CLI and daemon that automates devices and web targets.
+The daemon owns sessions. Registry declarations route commands to platform runtimes.
 
 ## Worker handoff
 

@@ -48,6 +48,9 @@ Keep #4050's full-unit fallback until source-read ownership is complete.
 
 ## Diagnose a gate failure as a maintainer
 
+Separate cause from validation status.
+Never call a failing gate passed.
+
 | Evidence | Required action |
 | --- | --- |
 | Failure from the change | Fix its owner and rerun. |
@@ -60,5 +63,6 @@ Match failures by check, location, diagnostic code, and assertion.
 
 The coordinator owns diagnosis until a named owner or issue accepts it.
 Do not widen timeouts. Do not mask exit codes.
+Do not report a CI result as a local pass.
 If CI shows an infrastructure fault, rerun it once.
 If the same failure occurs twice, treat it as a finding.
