@@ -1,5 +1,5 @@
-import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
-import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
+import { parseRawArgs, usage, usageForCommand, usageForUnknownCommand } from './cli/parser/args.ts';
+import { formatUnknownCommandMessage } from './cli/parser/command-suggestions.ts';
 import {
   asAppError,
   AppError,
@@ -295,8 +295,8 @@ async function parseCliInputOrExit(
       writeStdout(commandHelp);
       return exitAfterFlush(0);
     }
-    await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
-    writeStdout(`${await usage()}\n`);
+    await printHumanError(new AppError('INVALID_ARGS', formatUnknownCommandMessage(helpTarget)));
+    writeStdout(await usageForUnknownCommand(helpTarget));
     return exitAfterFlush(1);
   }
 
@@ -715,13 +715,6 @@ function isDebugRequested(argv: string[]): boolean {
   } catch {
     return argv.includes('--debug') || argv.includes('-v') || argv.includes('--verbose');
   }
-}
-
-function formatUnknownHelpTargetMessage(helpTarget: string): string {
-  const hint = suggestCommandFor(helpTarget);
-  return hint
-    ? `Unknown command: ${helpTarget}. Did you mean ${hint}?`
-    : `Unknown command: ${helpTarget}`;
 }
 
 function formatUnhandledCommandMessage(command: string): string {

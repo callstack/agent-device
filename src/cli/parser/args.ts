@@ -19,7 +19,12 @@ import {
   normalizeCliCommandAlias,
   retiredCliCommandMessage,
 } from '@agent-device/command-registry/cli-command-aliases';
-import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
+import {
+  formatUnknownCommandMessage,
+  formatUnknownFlagMessage,
+  suggestCommandFor,
+  UNKNOWN_COMMAND_POINTER,
+} from './command-suggestions.ts';
 
 type ParsedArgs = {
   command: string | null;
@@ -178,11 +183,7 @@ export function finalizeParsedArgs(
   // This ensures "Unknown command" errors take precedence over flag validation errors
   // However, skip this check if --help is provided, since cli.ts will handle it gracefully
   if (parsed.command && !isKnownCliCommandName(parsed.command) && !flags.help) {
-    const hint = suggestCommandFor(parsed.command);
-    const message = hint
-      ? `Unknown command: ${parsed.command}. Did you mean ${hint}?`
-      : `Unknown command: ${parsed.command}`;
-    throw new AppError('INVALID_ARGS', message);
+    throw new AppError('INVALID_ARGS', formatUnknownCommandMessage(parsed.command));
   }
 
   const disallowed = parsed.providedFlags.filter(
@@ -519,6 +520,17 @@ export async function usage(): Promise<string> {
 export async function usageForCommand(command: string): Promise<string | null> {
   const { buildCommandUsageText } = await import('../../commands/schema/cli-help.ts');
   return buildCommandUsageText(normalizeCommandAlias(command));
+}
+
+/**
+ * What a help read for an unknown name prints after its error line: the short
+ * pointer when the suggestion maps already answered the question, the root
+ * decision card otherwise. A confident suggestion makes the card another read on
+ * the way back to a command.
+ */
+export async function usageForUnknownCommand(command: string): Promise<string> {
+  if (suggestCommandFor(command)) return UNKNOWN_COMMAND_POINTER;
+  return `${await usage()}\n`;
 }
 
 /** The one-line synopsis of a command or alias, or `null` for an unknown or retired name. */

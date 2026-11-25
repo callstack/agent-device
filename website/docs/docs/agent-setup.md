@@ -41,6 +41,7 @@ For React Native JavaScript heap growth, heap snapshots, allocation hotspots, or
 For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to profiling or debugging evidence, read `agent-device help react-native`.
 
 Use MCP tools or the CLI in the integrated terminal.
+Run each agent-device call as its own command. When your host allows `agent-device` by command name, do not chain it with `;`, `&&`, or `|`, and do not quote its binary path; the host then runs the call sandboxed and it cannot reach the daemon or the device.
 If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the command the same way the user would from a normal terminal session and run that absolute path instead. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`.
 Do not silently fall back to `npx -y agent-device@latest`; ask or use an exact version.
 MCP exposes structured tools backed by the agent-device client; it does not expose generic shell execution.

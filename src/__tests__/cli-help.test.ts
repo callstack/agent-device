@@ -217,6 +217,22 @@ test('help gestures prints the multi-touch topic and skips daemon dispatch', asy
   assert.match(result.stdout, /agent-device gesture transform 200 420 80 -40 2 35 700/);
 });
 
+// Reading `help gestures` to find the pull-to-refresh command costed a 7 KB read in every run:
+// the answer was in the last half of the topic. It must lead, and `help scroll` must answer it.
+test('help gestures names scroll refresh as pull to refresh in its first lines', async () => {
+  const result = await runCliCapture(['help', 'gestures']);
+  const firstLines = result.stdout.split('\n').slice(0, 5).join('\n');
+  assert.match(firstLines, /Pull to refresh is agent-device scroll refresh/);
+});
+
+test('help scroll names pull to refresh in its first lines', async () => {
+  const result = await runCliCapture(['help', 'scroll']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  const firstLines = result.stdout.split('\n').slice(0, 5).join('\n');
+  assert.match(firstLines, /refresh is pull-to-refresh/);
+});
+
 test('help unknown command prints error plus root decision card and skips daemon dispatch', async () => {
   const result = await runCliCapture(['help', 'not-a-command']);
   assert.equal(result.code, 1);
@@ -225,6 +241,37 @@ test('help unknown command prints error plus root decision card and skips daemon
   assert.match(result.stdout, /All \d+ commands: agent-device help commands/);
   assert.match(result.stdout, /When starting a task with a known app/);
   assert.doesNotMatch(result.stdout, /Global Flags:/);
+});
+
+// The measured waste: `agent-device reload --help` printed an unrelated suggestion plus the whole
+// root help, about 3 KB per hit. A confident suggestion replaces the dump with one pointer line.
+for (const argv of [
+  ['help', 'reload'],
+  ['reload', '--help'],
+  ['help', 'restart'],
+]) {
+  test(`${argv.join(' ')} answers with the relaunch and metro reload shapes in a short read`, async () => {
+    const result = await runCliCapture(argv);
+    assert.equal(result.code, 1);
+    assert.equal(result.calls.length, 0);
+    assert.match(
+      result.stderr,
+      /Unknown command: (reload|restart)\. Did you mean open <app> --relaunch \(or metro reload\)\?/,
+    );
+    assert.doesNotMatch(result.stderr, /record/);
+    assert.doesNotMatch(result.stdout, /All \d+ commands: agent-device help commands/);
+    assert.match(result.stdout, /agent-device --help/);
+    const bytes = Buffer.byteLength(`${result.stdout}${result.stderr}`);
+    assert.ok(bytes <= 400, `expected at most 400 bytes of output, got ${bytes}`);
+  });
+}
+
+test('the bare reload command fails in the parser with the same short hint', async () => {
+  const result = await runCliCapture(['reload']);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Did you mean open <app> --relaunch \(or metro reload\)\?/);
+  assert.doesNotMatch(result.stdout, /All \d+ commands:/);
 });
 
 test('unknown command --help prints error plus root decision card and skips daemon dispatch', async () => {

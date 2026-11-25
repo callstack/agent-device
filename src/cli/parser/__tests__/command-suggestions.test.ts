@@ -30,17 +30,21 @@ test('every curated alias suggestion target resolves to a registered command', (
 });
 
 // Guards the full example shapes, not just the leading command token: every
-// example must parse as a valid invocation (placeholders substituted), so a
-// renamed flag (e.g. open --relaunch) or a dropped subcommand fails here.
+// example and alternative must parse as a valid invocation (placeholders
+// substituted), so a renamed flag (e.g. open --relaunch) or a dropped
+// subcommand fails here.
 test('every curated alias suggestion example parses as a valid invocation', () => {
   for (const [guess, suggestion] of listCommandAliasSuggestionEntries()) {
-    const tokens = suggestion.example
-      .split(' ')
-      .map((token) => (token.startsWith('<') ? 'com.example.app' : token));
-    assert.doesNotThrow(
-      () => parseArgs(tokens, { strictFlags: true }),
-      `alias suggestion example for "${guess}" ("${suggestion.example}") no longer parses`,
-    );
+    for (const shape of [suggestion.example, suggestion.alternative]) {
+      if (shape === undefined) continue;
+      const tokens = shape
+        .split(' ')
+        .map((token) => (token.startsWith('<') ? 'com.example.app' : token));
+      assert.doesNotThrow(
+        () => parseArgs(tokens, { strictFlags: true }),
+        `alias suggestion for "${guess}" ("${shape}") no longer parses`,
+      );
+    }
   }
 });
 
@@ -66,10 +70,36 @@ for (const guess of ['start', 'restart']) {
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'INVALID_ARGS' &&
-        error.message.includes('Did you mean open <app> --relaunch?'),
+        error.message.includes('open <app> --relaunch'),
     );
   });
 }
+
+// `reload` and `restart` are the names an agent reaches for when the app must
+// restart or pick up new JavaScript. Both intents are printed in one short hint,
+// and `reload` must never fall through to the nearest-name `record` suggestion.
+for (const guess of ['reload', 'restart']) {
+  test(`${guess} names open --relaunch and metro reload, never an unrelated command`, () => {
+    assert.throws(
+      () => parseArgs([guess]),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message ===
+          `Unknown command: ${guess}. Did you mean open <app> --relaunch (or metro reload)?`,
+    );
+  });
+}
+
+test('a curated two-shape suggestion stays shorter than a help read', () => {
+  const suggestion = suggestCommandFor('reload');
+  assert.ok(suggestion);
+  assert.ok(
+    Buffer.byteLength(`Unknown command: reload. Did you mean ${suggestion}?`) <= 400,
+    `suggestion message must stay under 400 bytes, got ${Buffer.byteLength(suggestion!)}`,
+  );
+  assert.doesNotMatch(suggestion!, /record/);
+});
 
 for (const guess of ['pinch', 'zoom']) {
   test(`${guess} suggests gesture pinch on an element`, () => {
@@ -160,8 +190,8 @@ test('screencap and capture suggest screenshot', () => {
 });
 
 test('curated suggestions are case-insensitive', () => {
-  assert.equal(suggestCommandFor('RESTART'), 'open <app> --relaunch');
-  assert.equal(suggestCommandFor('Restart'), 'open <app> --relaunch');
+  assert.equal(suggestCommandFor('RESTART'), 'open <app> --relaunch (or metro reload)');
+  assert.equal(suggestCommandFor('Restart'), 'open <app> --relaunch (or metro reload)');
   assert.equal(suggestCommandFor('Touch'), 'press');
   assert.equal(suggestCommandFor('DISMISS'), 'keyboard dismiss');
 });
