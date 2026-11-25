@@ -27,7 +27,7 @@ A provider iOS Simulator uses the same reader through the runner's `snapshotBrid
 tvOS and visionOS Simulators, the macOS host, physical devices, custom-action captures, and interactions do not use the host AX bridge.
 This amendment changes the scope for iOS physical devices: they still do not use the host AX bridge, but they now use the runner's private-AX tier. Other physical devices get a non-XCTest semantic backend only if Apple exposes a supported channel.
 On an iOS physical device, the runner's private-AX tier is the recovery for a tree that XCTest's recursive snapshot rejects, as it is for a runner-read iOS Simulator.
-It asks XCTest's own AX client for depth-capped snapshots and continues from the frontier nodes, so it needs no other channel. The AX server's depth limit is per request.
+It asks XCTest's own AX client for depth-capped snapshots and continues from the frontier nodes, so it needs no other channel. The AX server's depth limit is per request. A request that names an explicit raw depth gets that depth only, with no continuation.
 An observe-only capture skips the route and uses the provider's capture, because it must not activate the app or start work.
 
 **Fallback.** If bridge acquisition fails without cancellation, or presentation fails, use one typed XCTest fallback with explicit source residue.
