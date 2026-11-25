@@ -1,4 +1,5 @@
 import net from 'node:net';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 
 // One reachability probe of one daemon endpoint, and the verdict it answers with. The transport owns
@@ -132,7 +133,9 @@ export async function readAdvertisedConnectDenial(
  * 19 the global agent keeps sockets alive, so a pooled request would ride an idle socket from an
  * earlier command rather than proving that a connect to this daemon is allowed NOW — which is the only
  * thing that can tell a refused endpoint from a silent one. The time budget is ABSOLUTE and covers
- * loading the requester, so a late loader never opens a request the probe already gave up on.
+ * loading the requester, so a late loader never opens a request the probe already gave up on. That
+ * wait goes through `settleWithin`, the one deadline primitive: it clears its own timer on every settle
+ * path, so a probe that never asks a question leaves no timer behind.
  *
  * A response answers the probe. Only a connect the HOST refused to a LOOPBACK endpoint carries a
  * denial: a refusal is not an answer from the daemon, and a refusal on a remote endpoint is not the
@@ -143,25 +146,23 @@ export async function probeHttpEndpoint(probe: HttpEndpointProbe): Promise<Daemo
   const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
   const port = Number(url.port) || (url.protocol === 'https:' ? 443 : 80);
   if (probe.timeoutMs <= 0) return { reachable: false };
-  const deadline = performance.now() + probe.timeoutMs;
-  const timeoutSignal = AbortSignal.timeout(Math.ceil(probe.timeoutMs));
-  const requester = await Promise.race([
-    loadNodeHttpRequester(url.protocol),
-    new Promise<null>((resolve) => {
-      timeoutSignal.addEventListener('abort', () => resolve(null), { once: true });
-    }),
-  ]);
-  if (!requester || timeoutSignal.aborted || performance.now() >= deadline)
-    return { reachable: false };
+  const deadlineAtMs = performance.now() + probe.timeoutMs;
+  const loaded = await settleWithin(() => loadNodeHttpRequester(url.protocol), probe.timeoutMs);
+  if (loaded.kind === 'deadline') return { reachable: false };
+  // What the loader spent is gone from the request's window: the budget belongs to the probe, not to
+  // each step inside it.
+  const requestTimeoutMs = deadlineAtMs - performance.now();
+  if (requestTimeoutMs <= 0) return { reachable: false };
+  const timeoutSignal = AbortSignal.timeout(Math.ceil(requestTimeoutMs));
   return await new Promise((resolve) => {
-    const request = requester.request(
+    const request = loaded.value.request(
       {
         protocol: url.protocol,
         host: url.hostname,
         port: url.port,
         path: url.pathname + url.search,
         method: 'GET',
-        timeout: probe.timeoutMs,
+        timeout: requestTimeoutMs,
         agent: false,
         signal: timeoutSignal,
         headers: probe.headers,
