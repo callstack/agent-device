@@ -71,6 +71,7 @@ export async function runReplayTestAttempt(
     parentAttemptId: parentRequestId,
   });
   const artifactPaths = new Set<string>();
+  const cleanupArtifactPaths = new Set<string>();
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
   let replaySettled = false;
@@ -171,7 +172,7 @@ export async function runReplayTestAttempt(
         ts: new Date().toISOString(),
         session: sessionName,
       });
-      const cleanupWarnings = await cleanupSession(sessionName, artifactPaths);
+      const cleanupWarnings = await cleanupSession(sessionName, cleanupArtifactPaths);
       if (outcome && cleanupWarnings)
         for (const warning of cleanupWarnings) outcome = appendReplayTestWarning(outcome, warning);
       appendReplayTestTimingEvent(tracePath, {
@@ -202,27 +203,32 @@ export async function runReplayTestAttempt(
       outcome = markReplayTestCleanupFailure(outcome, appErr, artifactPaths);
     }
   }
-  return finishReplayTestAttempt(outcome, timedOut, artifactPaths);
+  for (const file of cleanupArtifactPaths) artifactPaths.add(file);
+  return finishReplayTestAttempt(outcome, timedOut, artifactPaths, cleanupArtifactPaths);
 }
 
 function finishReplayTestAttempt(
   outcome: ReplayTestAttemptOutcome | undefined,
   timedOut: boolean,
   artifactPaths: Set<string>,
+  cleanupArtifactPaths: Set<string>,
 ): ReplayTestAttemptOutcome {
-  if (outcome) {
-    const paths = [...new Set([...outcome.artifactPaths, ...artifactPaths])];
-    if (timedOut && outcome.status === 'failed') {
-      return {
-        ...outcome,
-        artifactPaths: paths,
-        error: {
-          ...outcome.error,
-          details: { ...outcome.error.details, artifactPaths: paths },
-        },
-      };
-    }
-    return { ...outcome, artifactPaths: paths };
+  if (timedOut && outcome?.status === 'failed') {
+    const paths = [...artifactPaths];
+    return {
+      ...outcome,
+      artifactPaths: paths,
+      error: {
+        ...outcome.error,
+        details: { ...outcome.error.details, artifactPaths: paths },
+      },
+    };
+  }
+  if (outcome && cleanupArtifactPaths.size > 0) {
+    return {
+      ...outcome,
+      artifactPaths: [...new Set([...outcome.artifactPaths, ...cleanupArtifactPaths])],
+    };
   }
   return (
     outcome ??

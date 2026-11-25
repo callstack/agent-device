@@ -157,6 +157,24 @@ test('runReplayTestAttempt keeps a passing replay passed when finalization fails
   expect(cleanupSession).toHaveBeenCalledWith('default:test:pass', expect.any(Set));
 });
 
+test('attempt results add recording paths from cleanup only', async () => {
+  const result = await runReplayTestAttempt({
+    filePath: '01-pass.ad',
+    sessionName: 'default:test:pass',
+    requestId: 'req-pass',
+    runReplay: async ({ artifactPaths }) => {
+      if (!artifactPaths) throw new Error('Expected the attempt artifact set');
+      artifactPaths.add('attempt-timing.ndjson');
+      return { ...PASSED, artifactPaths: ['existing.mp4'] };
+    },
+    cleanupSession: async (_name, artifactPaths) => {
+      artifactPaths?.add('cleanup-recording.mp4');
+    },
+    ...trackCancellation(),
+  });
+  expect(result.artifactPaths).toEqual(['existing.mp4', 'cleanup-recording.mp4']);
+});
+
 test('runReplayTestAttempt marks a failed cleanup as infrastructure so the scheduler cannot retry into its session', async () => {
   const cleanupSession = vi.fn(async () => {
     throw new Error('macOS session still owns host-macos-local');

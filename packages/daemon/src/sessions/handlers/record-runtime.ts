@@ -511,7 +511,10 @@ function readStopEnvelope(params: RecordRuntimeHandlerParams) {
     screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
   );
   if (record.status === 'unreattachable') throw leasedOutputRefusal('Recording');
-  return record.status === 'decoded' ? record.envelope : undefined;
+  if (record.status !== 'decoded') return undefined;
+  if (record.envelope.metadata?.suiteRecordingArchivePath && !params.suiteRecording)
+    throw leasedOutputRefusal('Recording');
+  return record.envelope;
 }
 
 function sameRecordingFence(
@@ -554,8 +557,6 @@ function assertRequestMayStopRecording(
   const { metadata, lifecycle } = envelope;
   const remote = metadata?.remoteCaptureOutput === true;
   const owner = recordingOutputLeaseVerifier(metadata);
-  if (metadata?.suiteRecordingArchivePath && !params.suiteRecording)
-    throw leasedOutputRefusal('Recording');
   const admitted = params.req.internal?.admittedLease;
   if (isRemoteRecordingRequest(params) && (owner === undefined || !remote))
     throw leasedOutputRefusal('Recording');
