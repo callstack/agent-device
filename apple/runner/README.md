@@ -135,13 +135,16 @@ Thus, if a viewport read takes too long, the plan skips the sweep instead of que
 The tree tier reads the viewport after the root snapshot.
 A live window read resolves `app.windows` again, and each resolution snapshots the whole app.
 On a heavy web view, the list, `exists`, and `frame` reads took 7.4 s together.
-Thus, when AXRuntime reports the target as the primary app that fills the screen, the viewport is the root snapshot's first usable window, if that window is exactly the screen frame at the origin.
+Thus, the viewport is the root snapshot's first usable window, if that window is exactly the full-screen proof frame at the origin (`RunnerFullScreenProofFrame`).
+That frame is the screen AXRuntime reports the target filling or, when the AXRuntime probe proves nothing, the sole XCTest screen.
 Any other window keeps the live read, because a snapshot frame is in window content space (see Screen space).
 
 Private-AX fallback keeps the viewport authority it acquired.
 When a penalty suppresses the XCTest viewport read, its root-derived box does not establish a screen origin.
 Exception: AXRuntime can report the target as the primary app that fills the screen. If the root is that screen frame at the origin, the box is `reported`.
 This probe reads two frames. It adds no XCTest tree read and does not change the channel budget.
+When the probe proves nothing, the screen frame is the sole XCTest screen in native portrait points (`RunnerFullScreenProofFrame`). On a physical device, the probe always proves nothing, because AXRuntime reports no app to the runner.
+A windowed or not-primary result never uses the sole screen. No window smaller than the screen can equal that frame.
 The payload carries any remaining uncertainty.
 In landscape, the root is in interface space and the screen frame is in native portrait space, so the root stays `derived`.
 

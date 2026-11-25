@@ -275,7 +275,7 @@ extension RunnerTests {
 
   /// The app's reported viewport when XCTest can read it, else the bridge's own root frame. That root
   /// is `.derived`, which cannot establish a screen origin or anchor a rotation, so its local
-  /// coordinates cannot authorize input (#4399), unless AXRuntime proves the app fills the screen.
+  /// coordinates cannot authorize input (#4399), unless the root is the full-screen proof frame.
   private func privateAXSnapshotViewport(
     app: XCUIApplication,
     bundleId: String?,
@@ -319,7 +319,8 @@ extension RunnerTests {
     }
   }
 
-  /// The screen's frame when AXRuntime reports `app` as the primary app filling it, else `.null`.
+  /// The frame `app`'s root must equal, at the origin, to prove that the app fills the screen, else
+  /// `.null` (`RunnerFullScreenProofFrame`).
   static func fullScreenFrame(of app: XCUIApplication) -> CGRect {
     #if os(iOS)
       return RunnerFullScreenApplicationFrame(app)
@@ -328,10 +329,10 @@ extension RunnerTests {
     #endif
   }
 
-  /// The viewport a private AX root establishes without XCTest. A root that is exactly the screen
-  /// AXRuntime reports the app filling, at the origin, is `.reported`: two independent reads agree
-  /// that window space is screen space, as on every iPhone app. Any other root stays `.derived`,
-  /// including a placed iPad window's local root (#4399) and a root that is the screen rotated.
+  /// The viewport a private AX root establishes without XCTest. A root that is exactly the
+  /// full-screen proof frame, at the origin, is `.reported`: two independent reads agree that window
+  /// space is screen space, as on every iPhone app. Any other root stays `.derived`, including a
+  /// placed iPad window's local root (#4399) and a root that is the screen rotated.
   static func privateAXRootViewport(rootFrame: CGRect, fullScreenFrame: CGRect) -> SnapshotViewport {
     // CONSERVATIVE: orientation is unknown here, so a landscape root (the portrait screen with width
     // and height swapped) stays `.derived` rather than guess which way to rotate it.
@@ -341,9 +342,9 @@ extension RunnerTests {
     return .reported(box: rootFrame, interfaceOrientation: RunnerInterfaceOrientation.unknown)
   }
 
-  /// True when `frame` is exactly the screen AXRuntime reports the app filling, at the origin: the one
-  /// case where window space is screen space without a live XCTest read. `fullScreenFrame` is `.null`
-  /// when the app does not fill the screen.
+  /// True when `frame` is exactly the full-screen proof frame, at the origin: the one case where
+  /// window space is screen space without a live XCTest read. `fullScreenFrame` is `.null` when no
+  /// read proves that the app fills the screen.
   static func isFullScreenAtOrigin(_ frame: CGRect, fullScreenFrame: CGRect) -> Bool {
     !fullScreenFrame.isNull && frame.origin == .zero && frame == fullScreenFrame
   }
