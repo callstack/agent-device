@@ -71,6 +71,28 @@ test.each([404, 405])(
 );
 
 test.each([
+  { status: 404, body: null },
+  { status: 405, body: null },
+  { status: 400, body: { error: 'app_source_unsupported' } },
+])('preload refusal $status leaves no pending connection', async ({ status, body }) => {
+  const env = cloudEnv();
+  const fetchMock = stubCloudApi();
+  fetchMock.mockResolvedValueOnce(
+    body ? Response.json(body, { status }) : new Response(null, { status }),
+  );
+  const refused = await runCliCapture(
+    [...cappedArgs, '--app-url', 'https://artifacts.example/app.zip'],
+    { env },
+  );
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe('app_source_unsupported');
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(fetchMock.mock.calls[0]![0].pathname).toBe('/v1/sessions/preloaded');
+  expect(fetchMock.mock.calls[0]![1].method).toBe('POST');
+  expect(readCloudConnection(locationOf(env))).toBeNull();
+  expect(readRemoteConnectionState(locationOf(env))).toBeNull();
+});
+
+test.each([
   {
     status: 402,
     body: {
