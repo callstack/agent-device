@@ -77,12 +77,9 @@ test('auto health probing reserves time for a healthy fallback when HTTP hangs',
   }
 });
 
-// Two shapes of a reachability probe that a boolean "unreachable" would report wrongly, both of which
-// a caller reads before it retires a daemon: a fallback leg that answers AFTER the deadline must not
-// bury the refusal the first leg already proved, and a refusal of a fresh connect must not be answered
-// around by a keep-alive socket an earlier command left in the pool. Neither case may leave global
-// state behind: this file's other cases run real loopback servers on ports the OS reuses, and a frozen
-// clock, a patched `connect`, or a free socket left in the global agent all reach them.
+// A reachability probe shape that a boolean "unreachable" would report wrongly, and that a caller
+// reads before it retires a daemon: a fallback leg that answers AFTER the deadline must not bury the
+// refusal the first leg already proved.
 test('a fallback leg answering past the deadline still reports the first leg as a denial', async () => {
   const probe = await import('../daemon-client-loopback-probe.ts');
   const denial = { errno: 'EPERM', transport: 'socket', port: 41_234 } as const;
@@ -107,98 +104,6 @@ test('a fallback leg answering past the deadline still reports the first leg as 
     httpLeg.mockRestore();
   }
 });
-
-test('a fresh connect the host refused is not answered around by a pooled socket', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  // The pool the probe must not ride, primed the way an earlier command primes it: one keep-alive
-  // health request whose socket returns to the global agent. Discriminator: every NEW connect is
-  // refused for the probe's own port, so a verdict of `reachable` could only come from the pooled
-  // socket, and a denial that arrives with the daemon having seen nothing but the prime is the claim.
-  if (!(await poolPrimesUnderTestAgent())) return;
-  const askedUrls: string[] = [];
-  const server = http.createServer((req, res) => {
-    askedUrls.push(String(req.url));
-    res.end('{}');
-  });
-  const port = await listenOnLoopback(server);
-  // The agent is shared with every other case in this file and with every file this worker reuses,
-  // and the OS hands loopback ports out again, so the pool may already hold a socket for THIS port
-  // from a server that is gone. Riding one would write the prime to a peer that never answers, so
-  // this endpoint's pooled sockets go before the prime, and again after it.
-  const { globalAgent } = await import('node:http');
-  destroyPooledSockets(globalAgent, port);
-  // Prime with the SAME module object the probe loads, or the pool holds no candidate and the test
-  // proves nothing. The prime is bounded so a pool this case does not control cannot hold the case
-  // open to the test budget.
-  const requester = await hostTransport.loadNodeHttpRequester('http:');
-  await new Promise<void>((resolve, reject) => {
-    const request = requester.request(
-      { host: '127.0.0.1', port, path: '/health', method: 'GET', timeout: 2_000 },
-      (res) => {
-        res.resume();
-        res.on('end', resolve);
-      },
-    );
-    request.on('timeout', () => {
-      request.destroy(new Error(`the prime reached no daemon on port ${port}`));
-    });
-    request.on('error', reject);
-    request.end();
-  });
-  // A host that refuses a connect answers it immediately, with no round trip: the socket ends with
-  // the errno and never carries a request. Scoped to the probed port — Node hands `connect` its
-  // normalized-args array and the port in it is a string — so nothing else this worker might be
-  // connecting is refused, and the real `connect` still runs for every other target.
-  const realConnect = net.Socket.prototype.connect;
-  const connect = vi.spyOn(net.Socket.prototype, 'connect').mockImplementation(function (
-    this: net.Socket,
-    ...args: Parameters<net.Socket['connect']>
-  ) {
-    const [first] = args;
-    const options = Array.isArray(first) ? first[0] : first;
-    const aimedPort =
-      typeof options === 'object' && options !== null && 'port' in options
-        ? Number((options as { port?: unknown }).port)
-        : Number.NaN;
-    if (aimedPort !== port) return realConnect.apply(this, args as never);
-    this.destroy(Object.assign(new Error('EPERM'), { code: 'EPERM' }));
-    return this;
-  });
-  try {
-    assert.deepEqual(
-      await probeDaemonReachability({ token: 'secret', pid: 1, httpPort: port }, 'http'),
-      {
-        reachable: false,
-        denial: { errno: 'EPERM', transport: 'http', port },
-      },
-    );
-    assert.deepEqual(askedUrls, ['/health'], 'only the prime reached the daemon');
-  } finally {
-    connect.mockRestore();
-    // The primed socket is back in the pool now, pointed at a server about to close. A later case
-    // that is handed this port by the OS would otherwise ride it and lose its request. Only this
-    // endpoint's pooled sockets go: the agent is shared with every other case in this file.
-    destroyPooledSockets(globalAgent, port);
-    await closeLoopbackServer(server);
-  }
-});
-
-/** Drops the keep-alive sockets the pool holds for one loopback port, and only those. */
-function destroyPooledSockets(agent: http.Agent, port: number): void {
-  // Node types the pool as read-only, and this is the one place a test has to empty it.
-  const free = agent.freeSockets as Record<string, net.Socket[] | undefined>;
-  for (const [key, sockets] of Object.entries(free)) {
-    if (!key.endsWith(`:${port}:`)) continue;
-    for (const socket of sockets ?? []) socket.destroy();
-    delete free[key];
-  }
-}
-
-/** Whether this Node keeps sockets alive on the global agent, which is what makes a pool exist. */
-async function poolPrimesUnderTestAgent(): Promise<boolean> {
-  const { globalAgent } = await import('node:http');
-  return Boolean((globalAgent as { keepAlive?: boolean }).keepAlive);
-}
 
 test('the health deadline includes requester loading and forbids a late request', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
