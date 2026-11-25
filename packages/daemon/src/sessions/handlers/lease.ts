@@ -214,7 +214,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
       const lease = leaseRegistry.getLease(releaseRequest, true);
       assertTenantMayRelease(lease);
-      if (!lease) return { ok: true, data: { released: false } };
+      if (!lease) {
+        const ending = leaseRegistry.isLeaseEndPending(releaseRequest.leaseId);
+        return { ok: true, data: { released: false, ...(!ending ? { absent: true } : {}) } };
+      }
       const options = { sessionsSettled: !endSessionsForLease, requestRelease: 'release' } as const;
       await leaseRegistry.runDeviceMutation(
         leaseRegistry.inspectActiveLease(lease.leaseId),

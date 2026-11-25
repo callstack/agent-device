@@ -594,13 +594,8 @@ async function disconnectLegacyCloud(
   state: RemoteConnectionState,
 ): Promise<void> {
   const token = requireLegacyTeardownCredential(state, flags);
-  try {
-    if (!(await releaseRemoteConnectionLease(client, state, token)).released) {
-      throw new AppError('COMMAND_FAILED', 'The saved daemon did not confirm lease release.');
-    }
-  } catch (error) {
-    if (!isInactiveLeaseError(error)) throw error;
-  }
+  if (state.leaseId) await releaseLegacyCloudLease(client, state, token);
+  await stopMetroCleanup(state.metro);
   removeRemoteConnectionState({ stateDir, session: state.session });
   removeGeneratedRemoteConfigIfUnused({ stateDir, remoteConfigPath: state.remoteConfigPath });
   await writeCommandOutput(
@@ -608,6 +603,21 @@ async function disconnectLegacyCloud(
     { connected: false, session: state.session, released: true },
     () => `Ended cloud session "${state.session}".`,
   );
+}
+
+async function releaseLegacyCloudLease(
+  client: ConnectionCommandParams['client'],
+  state: RemoteConnectionState,
+  token: string,
+): Promise<void> {
+  try {
+    const { released, absent } = await releaseRemoteConnectionLease(client, state, token);
+    if (!released && !absent) {
+      throw new AppError('COMMAND_FAILED', 'The saved daemon did not confirm lease release.');
+    }
+  } catch (error) {
+    if (!isInactiveLeaseError(error)) throw error;
+  }
 }
 
 async function disconnectCloud(connection: CloudConnection, flags: CliFlags): Promise<boolean> {

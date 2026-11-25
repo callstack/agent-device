@@ -33,6 +33,7 @@ export function createLeaseClient(
       const data = await execute(INTERNAL_COMMANDS.leaseRelease, [], options);
       return {
         released: data.released === true,
+        ...(data.absent === true ? { absent: true } : {}),
         provider: isRecord(data.provider) ? data.provider : undefined,
       };
     },

@@ -43,6 +43,7 @@ function tempDir(prefix: string): string {
  */
 async function withRemoteDaemon(
   run: (baseUrl: string, seen: SeenRequest[]) => Promise<void>,
+  observeRequest?: (route: string) => void,
 ): Promise<void> {
   const seen: SeenRequest[] = [];
   const server = http.createServer((req, res) => {
@@ -50,6 +51,7 @@ async function withRemoteDaemon(
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
       const route = `${req.method} ${req.url}`;
+      observeRequest?.(route);
       if (req.url === '/health') {
         res.statusCode = 200;
         res.end();
@@ -130,6 +132,7 @@ async function sendRemote(
   },
   leaseId: string | undefined,
   skipRemoteDiagnostics?: boolean,
+  dispatch?: NonNullable<Parameters<typeof sendToDaemon>[1]>['dispatch'],
 ): Promise<void> {
   await sendToDaemon(
     {
@@ -147,7 +150,7 @@ async function sendRemote(
         ...(leaseId ? { leaseId } : {}),
       },
     } as Parameters<typeof sendToDaemon>[0],
-    { authToken: DAEMON_TOKEN, skipRemoteDiagnostics },
+    { authToken: DAEMON_TOKEN, skipRemoteDiagnostics, dispatch },
   ).catch((error: unknown) => {
     // `clipboard` fails on purpose; only its diagnostics fetch is under test.
     if (request.command !== 'clipboard') throw error;
@@ -191,6 +194,43 @@ test('a remote upload, artifact download and diagnostics fetch name the held lea
       leaseHeader: 'lease-1',
     },
   ]);
+});
+
+test('remote install admits each request without holding admission through upload', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let held = 0;
+  let handoffs = 0;
+  const observed: Array<[string, number]> = [];
+  const dispatch = async <T>(start: () => Promise<T>): Promise<T> => {
+    held++;
+    handoffs++;
+    try {
+      return await start();
+    } finally {
+      held--;
+    }
+  };
+  await withRemoteDaemon(
+    async (baseUrl) => {
+      const apkPath = path.join(tempDir('agent-device-upload-admission-'), 'app.apk');
+      fs.writeFileSync(apkPath, 'apk-bytes');
+      await sendRemote(
+        baseUrl,
+        { command: 'install', positionals: [apkPath] },
+        undefined,
+        true,
+        dispatch,
+      );
+    },
+    (route) => observed.push([route, held]),
+  );
+  assert.deepEqual(observed, [
+    ['GET /health', 0],
+    ['POST /upload/preflight', 0],
+    ['POST /upload', 0],
+    ['POST /rpc', 0],
+  ]);
+  assert.equal(handoffs, observed.length);
 });
 
 test('a remote upload, artifact download and diagnostics fetch send no lease header without a lease', async (t) => {

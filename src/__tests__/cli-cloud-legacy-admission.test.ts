@@ -3,7 +3,10 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import * as hostFiles from '@agent-device/host-kit/file';
-import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+import {
+  readRemoteConnectionState,
+  type RemoteConnectionState,
+} from '@agent-device/remote/remote-connection-state';
 import { writeCliSession } from '../cli/auth-session.ts';
 import { resolveCloudAdmission } from '../cli/connection/active-connection.ts';
 import {
@@ -14,6 +17,7 @@ import {
 } from '../cli/connection/cloud-connection-record.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { seedConnectionState } from './remote-connection.fixtures.ts';
+import * as connectionMetro from '../cli/commands/connection-metro-runtime.ts';
 
 test('a selected direct route rechecks ownership before handing off a request', async () => {
   const stateDir = mkdtempForTestSync('cloud-handoff-contention-');
@@ -172,7 +176,7 @@ test('disconnect waits for the lock on a committed cloud session', async () => {
   }
 });
 
-test('legacy hosted profiles do not refresh credentials or dispatch device commands', async () => {
+function seedLegacyConnection(leaseId?: string, metro?: RemoteConnectionState['metro']) {
   const stateDir = mkdtempForTestSync('cloud-legacy-admission-');
   const session = 'legacy-fixture';
   const daemonBaseUrl = 'https://daemon.example';
@@ -187,10 +191,17 @@ test('legacy hosted profiles do not refresh credentials or dispatch device comma
     state: {
       ...scope,
       remoteConfigPath,
-      leaseId: 'fixture-legacy-lease',
+      leaseId,
+      metro,
       daemon: { baseUrl: daemonBaseUrl },
     },
   });
+  return { stateDir, session, daemonBaseUrl, cloudBaseUrl };
+}
+
+test('legacy hosted profiles do not refresh credentials or dispatch device commands', async () => {
+  const { stateDir, session, daemonBaseUrl, cloudBaseUrl } =
+    seedLegacyConnection('fixture-legacy-lease');
   writeCliSession({
     stateDir,
     session: {
@@ -231,18 +242,30 @@ test('legacy hosted profiles do not refresh credentials or dispatch device comma
       AGENT_DEVICE_DAEMON_BASE_URL: daemonBaseUrl,
       AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'fixture-key',
     };
-    const failed = await runCliCapture(args, {
+    const failed = await runCliCapture([...args, '--daemon-auth-token', 'explicit-fixture-token'], {
       env: teardownEnv,
-      sendToDaemon: async () => ({
-        ok: false,
-        error: { code: 'COMMAND_FAILED', message: 'fixture failure' },
-      }),
+      sendToDaemon: async (_req, options) => {
+        expect(options?.authToken).toBe('explicit-fixture-token');
+        expect(options?.skipRemoteDiagnostics).toBe(true);
+        return {
+          ok: false,
+          error: { code: 'COMMAND_FAILED', message: 'echoed explicit-fixture-token' },
+        };
+      },
     });
     expect(failed.code).toBe(1);
+    expect(failed.stdout).toContain('returned an invalid response');
+    expect(failed.stdout + failed.stderr).not.toContain('explicit-fixture-token');
+    expect(readRemoteConnectionState({ stateDir, session })?.leaseId).toBe('fixture-legacy-lease');
+    const pending = await runCliCapture(args, {
+      env: teardownEnv,
+      sendToDaemon: async () => ({ ok: true, data: { released: false } }),
+    });
+    expect(pending.code).toBe(1);
     expect(readRemoteConnectionState({ stateDir, session })?.leaseId).toBe('fixture-legacy-lease');
     const released = await runCliCapture(args, {
       env: teardownEnv,
-      sendToDaemon: async () => ({ ok: true, data: { released: true } }),
+      sendToDaemon: async () => ({ ok: true, data: { released: false, absent: true } }),
     });
     expect(released.code, released.stdout + released.stderr).toBeNull();
     expect(released.calls.map((call) => call.command)).toEqual(['lease_release']);
@@ -250,6 +273,76 @@ test('legacy hosted profiles do not refresh credentials or dispatch device comma
     expect(fetchMock).not.toHaveBeenCalled();
   } finally {
     vi.unstubAllGlobals();
+  }
+});
+
+test('a pending hosted session takes teardown precedence over a legacy profile', async () => {
+  const { stateDir, session, cloudBaseUrl } = seedLegacyConnection('fixture-legacy-lease');
+  const location = { stateDir, session };
+  const record = prepareCloudConnection(
+    session,
+    {
+      platform: 'ios',
+      vendor: undefined,
+      maxMinutes: undefined,
+      accepts: ['agent-device-daemon'],
+    },
+    cloudBaseUrl,
+    null,
+  );
+  record.id = '00000000-0000-4000-8000-000000000001';
+  writeCloudConnection(location, record);
+  const fetchMock = vi.fn(
+    async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const disconnected = await runCliCapture(['disconnect', '--json'], {
+      env: {
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_SESSION: session,
+        AGENT_DEVICE_CLOUD_BASE_URL: cloudBaseUrl,
+        AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: cloudBaseUrl,
+        AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-key',
+      },
+    });
+    expect(disconnected.code, disconnected.stdout).toBeNull();
+    expect(disconnected.calls).toEqual([]);
+    expect(fetchMock.mock.calls.map(([url, init]) => [url.pathname, init.method])).toEqual([
+      [`/v1/sessions/${record.id}`, 'DELETE'],
+    ]);
+    expect(readCloudConnection(location)).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test('a credential-bound legacy record without a lease clears locally', async () => {
+  const metro = {
+    projectRoot: mkdtempForTestSync('cloud-legacy-metro-'),
+    profileKey: 'fixture-profile',
+    consumerKey: 'legacy-fixture',
+  };
+  const { stateDir, session, daemonBaseUrl } = seedLegacyConnection(undefined, metro);
+  const location = { stateDir, session };
+  const stopMetro = vi.spyOn(connectionMetro, 'stopMetroCleanup').mockImplementation(async () => {
+    expect(readRemoteConnectionState(location)?.metro).toEqual(metro);
+  });
+  try {
+    const result = await runCliCapture(['disconnect', '--json'], {
+      env: {
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_SESSION: session,
+        AGENT_DEVICE_DAEMON_BASE_URL: daemonBaseUrl,
+        AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'fixture-key',
+      },
+    });
+    expect(result.code, result.stdout).toBeNull();
+    expect(result.calls).toEqual([]);
+    expect(stopMetro).toHaveBeenCalledExactlyOnceWith(metro);
+    expect(readRemoteConnectionState(location)).toBeNull();
+  } finally {
+    stopMetro.mockRestore();
   }
 });
 

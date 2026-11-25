@@ -16,7 +16,6 @@ import { AppError, asAppError, errorMessage, type ReasonTable } from '@agent-dev
 import { leaseBackendForPlatform, type LeaseBackend } from '@agent-device/kernel/contracts';
 import type { Lease } from '@agent-device/contracts/client';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import {
@@ -309,7 +308,7 @@ export async function releaseRemoteConnectionLease(
   // The daemon bearer token is never persisted on `state` (ADR 0007); callers
   // pass the token already resolved via the flag/env/CLI-session chain.
   daemonAuthToken?: string,
-): Promise<{ released: boolean; provider?: CloudProviderSessionResult }> {
+): ReturnType<AgentDeviceClient['leases']['release']> {
   if (!state.leaseId || isHostAllocatedLease(state)) return { released: false };
   const result = await client.leases.release({
     tenant: state.tenant,

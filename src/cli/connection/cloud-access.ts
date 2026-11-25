@@ -32,10 +32,7 @@ export async function resolveHostedCloudAccess(options: {
     return { accessToken: key, cloudBaseUrl };
   }
   const flags = { json: false, help: false, version: false };
-  const access = await readHostedLogin(
-    { env: authEnv, stateDir, flags },
-    !!(savedOrigin || options.flags),
-  );
+  const access = await readHostedLogin({ env: authEnv, stateDir, flags });
   if (access) return { ...access, cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl) };
   if (
     !options.interactive ||
@@ -70,19 +67,15 @@ function resolveHostedOrigin(env: EnvMap, savedOrigin: string | undefined) {
   };
 }
 
-async function readHostedLogin(
-  options: Parameters<typeof resolveCliSessionAccess>[0],
-  pinned: boolean,
-) {
+async function readHostedLogin(options: Parameters<typeof resolveCliSessionAccess>[0]) {
   try {
     return await resolveCliSessionAccess(options);
   } catch (error) {
-    if (
-      pinned &&
-      error instanceof AppError &&
-      error.details?.reason === 'cloud_login_origin_mismatch'
-    ) {
-      throw cloudApiKeyRequired();
+    if (error instanceof AppError && error.code === 'UNAUTHORIZED') {
+      throw new AppError(error.code, error.message, {
+        ...error.details,
+        hint: cloudApiKeyRequired().details?.hint,
+      });
     }
     throw error;
   }

@@ -204,13 +204,10 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         });
         await applySavedCloudAttachment(ctx);
         let transport = resolveRunTransport(deps, ctx.host, ctx.admitConnection);
-        if (ctx.cloudSession && ctx.effectiveFlags.daemonAuthToken) {
-          const { protectHostedDaemonTransport } =
+        if (ctx.effectiveFlags.daemonAuthToken) {
+          const { protectConnectionTransport } =
             await import('./cli/connection/cloud-attachment.ts');
-          transport = await protectHostedDaemonTransport(
-            transport,
-            ctx.effectiveFlags.daemonAuthToken,
-          );
+          transport = await protectConnectionTransport(ctx, transport);
         }
         await resolveRemoteContext(ctx, transport);
         if (ctx.effectiveFlags.daemonAuthToken)

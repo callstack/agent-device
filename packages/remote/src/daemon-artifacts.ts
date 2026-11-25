@@ -22,7 +22,7 @@ import {
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
 import type { SessionScriptDelivery } from './session-script-destination.ts';
 import { uploadArtifact } from './upload-client.ts';
-import { withUploadPreparationDeadline } from './upload-stream.ts';
+import { withUploadPreparationDeadline, type UploadHandoff } from './upload-stream.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
 // Mirrors `DEFAULT_TEST_ARTIFACTS_ROOT` in `packages/replay-test/src/internal/session-test-artifacts.ts`
@@ -36,6 +36,8 @@ export type DaemonArtifactEndpoint = {
   token: string;
 };
 
+type UploadEndpoint = DaemonArtifactEndpoint & { uploadHandoff?: UploadHandoff };
+
 export type PreparedRemoteRequest = {
   positionals: string[];
   flags?: DaemonWireRequest['flags'];
@@ -46,7 +48,7 @@ export type PreparedRemoteRequest = {
 
 export async function prepareRemoteRequestArtifacts(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
   onProgress?: RequestProgressSink,
@@ -69,7 +71,7 @@ export async function prepareRemoteRequestArtifacts(
 
 async function prepareRemoteRequestArtifactsWithinBudget(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
   onProgress: RequestProgressSink | undefined,
@@ -164,7 +166,7 @@ function prepareRemoteScriptOutput(
 
 async function prepareRemoteInstallPackage(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   positionals: string[],
   onProgress: UploadProgressSink | undefined,
   signal: AbortSignal,
@@ -186,6 +188,7 @@ async function prepareRemoteInstallPackage(
     localPath,
     baseUrl: info.baseUrl!,
     token: info.token,
+    handoff: info.uploadHandoff,
     platform: req.flags?.platform,
     leaseId: leaseScopeFromRequest(req).leaseId,
     onProgress,
@@ -248,7 +251,7 @@ function createPreparedRemoteRequest(
 
 async function prepareRemoteInstallSource(
   req: Omit<DaemonWireRequest, 'token'>,
-  info: DaemonArtifactEndpoint,
+  info: UploadEndpoint,
   onProgress: UploadProgressSink | undefined,
   signal: AbortSignal,
   host: HostEnvironment,
@@ -291,6 +294,7 @@ async function prepareRemoteInstallSource(
     localPath,
     baseUrl: info.baseUrl!,
     token: info.token,
+    handoff: info.uploadHandoff,
     platform: req.flags?.platform,
     leaseId: leaseScopeFromRequest(req).leaseId,
     onProgress,

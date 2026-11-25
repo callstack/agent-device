@@ -187,7 +187,7 @@ export type AgentDeviceClient = {
     heartbeat: (options: LeaseScopedOptions) => Promise<Lease>;
     release: (
       options: LeaseScopedOptions,
-    ) => Promise<{ released: boolean; provider?: CloudProviderSessionResult }>;
+    ) => Promise<{ released: boolean; absent?: true; provider?: CloudProviderSessionResult }>;
     humanControl: {
       list: (options?: AgentDeviceRequestOverrides) => Promise<HumanControlHold[]>;
       put: (

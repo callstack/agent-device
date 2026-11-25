@@ -72,7 +72,7 @@ export function requireLegacyTeardownCredential(
     'UNAUTHORIZED',
     'Disconnecting a legacy cloud connection requires a credential for its saved daemon endpoint.',
     {
-      hint: 'Set AGENT_DEVICE_DAEMON_BASE_URL and AGENT_DEVICE_DAEMON_AUTH_TOKEN for the saved daemon, then retry disconnect.',
+      hint: 'Set AGENT_DEVICE_DAEMON_BASE_URL for the saved daemon and provide its token with --daemon-auth-token or AGENT_DEVICE_DAEMON_AUTH_TOKEN.',
     },
   );
 }

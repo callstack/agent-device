@@ -5,7 +5,11 @@ import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
+import type {
+  CloudSessionBinding,
+  RemoteConnectionState,
+} from '@agent-device/remote/remote-connection-state';
+import { isLegacyCloudProfile } from './active-connection.ts';
 import { parseCloudAttachment, type CloudAttachment } from './cloud-session-api.ts';
 import {
   admitCloudCredentialDirectory,
@@ -111,10 +115,18 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
   };
 }
 
-export async function protectHostedDaemonTransport(
+export async function protectConnectionTransport(
+  context: {
+    command: string;
+    effectiveFlags: Pick<CliFlags, 'daemonAuthToken'>;
+    cloudSession?: CloudSessionBinding;
+    claimedConnection?: RemoteConnectionState | null;
+    daemonPaths: { baseDir: string };
+  },
   transport: DaemonTransport,
-  token: string,
 ): Promise<DaemonTransport> {
+  const token = context.effectiveFlags.daemonAuthToken;
+  if (!token || (!context.cloudSession && !isLegacyDisconnect(context))) return transport;
   const { containsCloudCredential } = await import('../cloud-response.ts');
   const { normalizeError } = await import('@agent-device/kernel/errors');
   const safe = (value: unknown) => !containsCloudCredential(value, [token]);
@@ -137,4 +149,11 @@ export async function protectHostedDaemonTransport(
     if (!safe(response)) throw rejectEcho();
     return response;
   };
+}
+
+function isLegacyDisconnect(context: Parameters<typeof protectConnectionTransport>[0]): boolean {
+  return (
+    context.command === 'disconnect' &&
+    isLegacyCloudProfile(context.daemonPaths.baseDir, context.claimedConnection?.remoteConfigPath)
+  );
 }

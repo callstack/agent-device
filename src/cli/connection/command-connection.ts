@@ -18,7 +18,7 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { profileToCliFlags } from '../remote-config-flags.ts';
-import { isLegacyCloudProfile, requireLegacyTeardownCredential } from './active-connection.ts';
+import { isLegacyCloudProfile } from './active-connection.ts';
 
 export type CommandConnection = {
   stateDir: string;
@@ -53,7 +53,7 @@ export function resolveCommandConnection(
   if (options.claimForDisconnect) {
     const defaults = claimRemoteConnectionDefaults({ ...request, stateDir: paths.baseDir });
     const merged = mergeConnectionFlags(flags, defaults.flags, explicitFlagKeys);
-    const effectiveFlags = legacyDisconnectFlags(defaults.claimed, paths.baseDir, merged, host.env);
+    const effectiveFlags = legacyDisconnectFlags(defaults.claimed, paths.baseDir, merged, options);
     return {
       daemonPaths: paths,
       effectiveFlags,
@@ -85,16 +85,17 @@ function legacyDisconnectFlags(
   state: RemoteConnectionState | null | undefined,
   stateDir: string,
   flags: CliFlags,
-  env: HostEnvironment['env'],
+  { host: { env }, flags: input, explicitFlagKeys }: CommandConnectionOptions,
 ): CliFlags {
   if (!state || state.cloudSession || !isLegacyCloudProfile(stateDir, state.remoteConfigPath))
     return flags;
-  const credential = {
+  return {
+    ...flags,
     daemonBaseUrl: env.AGENT_DEVICE_DAEMON_BASE_URL,
-    daemonAuthToken: env.AGENT_DEVICE_DAEMON_AUTH_TOKEN,
+    daemonAuthToken: explicitFlagKeys.has('daemonAuthToken')
+      ? input.daemonAuthToken
+      : env.AGENT_DEVICE_DAEMON_AUTH_TOKEN,
   };
-  requireLegacyTeardownCredential(state, credential);
-  return { ...flags, ...credential };
 }
 
 function resolveMaterializingConnection(

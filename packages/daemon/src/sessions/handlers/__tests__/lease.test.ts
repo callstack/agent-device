@@ -305,8 +305,10 @@ test('lease_release ends the sessions opened under the released lease', async ()
 
   assert.equal((await release(lease.leaseId))?.ok, true);
   assert.deepEqual(ended, [lease.leaseId]);
-  // A release that releases nothing has no session to end.
-  assert.equal((await release(lease.leaseId))?.ok, true);
+  assert.deepEqual(await release(lease.leaseId), {
+    ok: true,
+    data: { released: false, absent: true },
+  });
   assert.deepEqual(ended, [lease.leaseId]);
 });
 

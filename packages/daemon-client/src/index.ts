@@ -134,21 +134,8 @@ async function sendToDaemonOnHost(
     );
   });
   const info = daemon.info;
-  const prepare = () =>
-    protectArtifactUploadWithLeaseBeats(
-      info,
-      settings,
-      requestWithoutAuthFlag,
-      options.signal,
-      options.onProgress,
-    );
   const preparedRemoteRequest = await cancellation.guard(() =>
-    options.dispatch && info.baseUrl && isInstallLikeCommand(req.command)
-      ? options.dispatch(async () => {
-          cancellation.refuseIfAborted();
-          return await prepare();
-        })
-      : prepare(),
+    protectArtifactUploadWithLeaseBeats(info, settings, requestWithoutAuthFlag, options),
   );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
 
@@ -420,14 +407,22 @@ async function protectArtifactUploadWithLeaseBeats(
   info: DaemonInfo,
   settings: DaemonClientSettings,
   request: Omit<DaemonRequest, 'token'>,
-  callerSignal: AbortSignal | undefined,
-  onProgress: DaemonTransportOptions['onProgress'],
+  { dispatch, onProgress, signal: callerSignal }: DaemonTransportOptions,
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
+  const endpoint = dispatch
+    ? {
+        ...info,
+        uploadHandoff: async <T>(start: () => Promise<T>) => {
+          const { dispatchDaemonRequest } = await import('./daemon-client-request.ts');
+          return await dispatchDaemonRequest(dispatch, start);
+        },
+      }
+    : info;
   if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
     return await prepareRemoteRequestArtifacts(
       request,
-      info,
+      endpoint,
       callerSignal ?? new AbortController().signal,
       settings.host,
       onProgress,
@@ -436,13 +431,13 @@ async function protectArtifactUploadWithLeaseBeats(
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
     await import('./daemon-client-lease-beat.ts');
   return await runProtectedLeaseWork({
-    heartbeat: buildUploadLeaseHeartbeat(info, settings, request),
+    heartbeat: buildUploadLeaseHeartbeat(info, settings, request, dispatch),
     // The upload stops for either owner of its signal: the lease beat finding the lease gone, or
     // the caller aborting this one call.
     task: (leaseSignal) =>
       prepareRemoteRequestArtifacts(
         request,
-        info,
+        endpoint,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
         settings.host,
         onProgress,

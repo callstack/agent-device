@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { resolveHostedCloudAccess } from '../connection/cloud-access.ts';
 import {
   loginWithDeviceAuth,
   readCliSession,
@@ -93,6 +94,45 @@ function writeRawSession(stateDir: string, record: Record<string, unknown>): voi
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(record));
 }
+
+test.each([
+  ['unverified', 'cli_session_issuer_unverified'],
+  ['revoked', 'cli_session_revoked'],
+  ['tokenless', 'cli_session_refresh_unanswered'],
+])('hosted login reports its own credential hint for a %s session', async (kind, reason) => {
+  const stateDir = mkdtempForTestSync('agent-device-hosted-auth-hint-');
+  const cloudBaseUrl = 'https://cloud.example';
+  const session = {
+    id: 'fixture-id',
+    refreshCredential: 'fixture-refresh',
+    createdAt: new Date().toISOString(),
+  };
+  if (kind === 'unverified') writeRawSession(stateDir, { ...session, version: 1 });
+  else writeCliSession({ stateDir, session: { ...session, version: 2, cloudBaseUrl } });
+  const fetchMock = vi.fn(async () =>
+    Response.json(kind === 'revoked' ? { status: 'revoked' } : {}),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    await assert.rejects(
+      resolveHostedCloudAccess({
+        stateDir,
+        env: { CI: '1', AGENT_DEVICE_CLOUD_BASE_URL: cloudBaseUrl },
+      }),
+      (error: unknown) => {
+        const normalized = normalizeError(error);
+        assert.equal(normalized.code, 'UNAUTHORIZED');
+        assert.equal(normalized.details?.reason, reason);
+        assert.match(normalized.hint ?? '', /AGENT_DEVICE_CLOUD_API_KEY_ORIGIN/);
+        assert.doesNotMatch(normalized.hint ?? '', /AGENT_DEVICE_DAEMON_AUTH_TOKEN/);
+        return true;
+      },
+    );
+    assert.equal(fetchMock.mock.calls.length, kind === 'unverified' ? 0 : 1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 const isIssuerUnverified = (error: unknown) => {
   const normalized = normalizeError(error);

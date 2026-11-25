@@ -278,7 +278,7 @@ test('requires an explicit API key before contacting a custom origin with a stor
     expect(refused.code).toBe(1);
     expect(JSON.parse(refused.stdout).error).toMatchObject({
       code: 'UNAUTHORIZED',
-      details: { reason: 'cloud_api_key_required' },
+      details: { reason: 'cloud_login_origin_mismatch' },
     });
   }
   expect(fetchMock).not.toHaveBeenCalled();
@@ -292,7 +292,7 @@ test('requires an explicit API key before contacting a custom origin with a stor
   const refused = await runCliCapture(['disconnect', '--json'], { env: withoutKey });
   expect(JSON.parse(refused.stdout).error).toMatchObject({
     code: 'UNAUTHORIZED',
-    details: { reason: 'cloud_api_key_required' },
+    details: { reason: 'cloud_login_origin_mismatch' },
   });
   expect(fetchMock).toHaveBeenCalledOnce();
 });
@@ -795,7 +795,7 @@ test('rolls back a malformed allocation whose ID was observed', async () => {
 
 test.each([
   ['http://unsafe.example', 'cloud_invalid_origin'],
-  ['https://other.example', 'cloud_api_key_required'],
+  ['https://other.example', 'cloud_login_origin_mismatch'],
 ])('disconnect refuses saved login issuer %s before any auth request', async (issuer, reason) => {
   const env = cloudEnv();
   const fetchMock = stubCloudApi();
