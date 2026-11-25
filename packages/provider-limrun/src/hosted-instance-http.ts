@@ -1,7 +1,10 @@
 const hostedBearers = new Set<ReadonlySet<string>>();
 let policy: { baseFetch: typeof fetch; wrappedFetch: typeof fetch } | undefined;
 
-/** The pinned SDK uses global fetch from its private proxy transport and has no fetch option. */
+/**
+ * The pinned SDK uses global fetch from its private proxy transport and has no fetch option.
+ * The hosted daemon must leave this wrapper installed for the lifetime of the attachment.
+ */
 export function refuseHostedInstanceRedirects(tokens: readonly string[]): () => void {
   const bearers = new Set(tokens.map((token) => `Bearer ${token}`));
   hostedBearers.add(bearers);

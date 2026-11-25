@@ -23,6 +23,7 @@ export type LimrunPluginOptions = Readonly<{
 const ATTACHMENT_REASONS = {
   // The hosted attachment deadline passed or could not be validated.
   expired: { reason: 'limrun_hosted_attachment_expired' },
+  invalidDeadline: { reason: 'limrun_hosted_attachment_invalid_deadline' },
   // A hosted attachment cannot run with an ambient Limrun account key.
   accountKeyConflict: { reason: 'limrun_hosted_attachment_account_key_conflict' },
 } as const satisfies ReasonTable<'limrun provider'>;
@@ -116,10 +117,16 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
 
 function hostedAttachmentDormancy(expiresAt: number | undefined, hasAccountKey: boolean) {
   if (expiresAt === undefined) return undefined;
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+  if (!Number.isFinite(expiresAt)) {
+    return {
+      reason: ATTACHMENT_REASONS.invalidDeadline.reason,
+      message: 'The scoped Limrun attachment deadline could not be parsed.',
+    };
+  }
+  if (expiresAt <= Date.now()) {
     return {
       reason: ATTACHMENT_REASONS.expired.reason,
-      message: 'The scoped Limrun attachment has no usable deadline.',
+      message: 'The scoped Limrun attachment deadline has passed.',
     };
   }
   if (hasAccountKey) {

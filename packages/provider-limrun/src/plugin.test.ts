@@ -268,7 +268,7 @@ test('setup refuses a partial instance set naming the variable it still needs', 
 test.each([
   [60_000, 'limrun_hosted_attachment_account_key_conflict'],
   [-1_000, 'limrun_hosted_attachment_expired'],
-  ['invalid', 'limrun_hosted_attachment_expired'],
+  ['invalid', 'limrun_hosted_attachment_invalid_deadline'],
 ])('hosted setup refuses deadline %s with %s before registering', async (deadline, reason) => {
   const createDependencies = vi.fn(() => stubDependencies());
   const setup = await providerOf(limrunPlugin({ createDependencies })).setup(
