@@ -11,7 +11,10 @@ import {
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+import {
+  readRemoteConnectionState,
+  type RemoteConnectionState,
+} from '@agent-device/remote/remote-connection-state';
 import type { CloudSessionRequest } from './cloud-session-api.ts';
 
 export const CLOUD_CONNECTION_REASONS = {
@@ -23,6 +26,8 @@ export const CLOUD_CONNECTION_REASONS = {
   sessionMismatch: { reason: 'cloud_connection_session_mismatch' },
   // A pending cloud request must finish or end before its options change.
   pendingConflict: { reason: 'cloud_connect_pending_conflict' },
+  // A connection operation is in progress for the session.
+  busy: { reason: 'connection_busy', commands: ['connect', 'disconnect'] },
   // The named session is owned by a cloud connection.
   ownsSession: { reason: 'cloud_connection_owns_session' },
   // The named cloud connection changed before the operation could complete.
@@ -72,13 +77,28 @@ export async function withConnectionLock<T>(
   });
 }
 
-export function refuseContendedCloudAllocation(location: ConnectionLocation): void {
-  if (readCloudConnection(location)?.phase !== 'pending') return;
-  throw new AppError('COMMAND_FAILED', 'The cloud session is still allocating.', {
-    reason: CLOUD_CONNECTION_REASONS.ownsSession.reason,
+export function refuseContendedConnection(
+  location: ConnectionLocation,
+  command: 'connect' | 'disconnect',
+  claimedConnection?: RemoteConnectionState | null,
+): void {
+  const record = readCloudConnection(location);
+  const allocating = record?.phase === 'pending';
+  if (!allocating && (record || claimedConnection || readRemoteConnectionState(location))) return;
+  const reason = allocating
+    ? cloudAllocationContentionReason(command)
+    : CLOUD_CONNECTION_REASONS.busy.reason;
+  throw new AppError('COMMAND_FAILED', 'A connection operation is in progress for this session.', {
+    reason,
     retriable: true,
-    hint: 'Retry disconnect when connect cloud finishes.',
+    hint: `Retry ${command} after the other connection operation finishes.`,
   });
+}
+
+function cloudAllocationContentionReason(command: 'connect' | 'disconnect') {
+  return command === 'connect'
+    ? CLOUD_CONNECTION_REASONS.pendingConflict.reason
+    : CLOUD_CONNECTION_REASONS.ownsSession.reason;
 }
 
 function connectionLockOptions({ stateDir, session }: ConnectionLocation) {

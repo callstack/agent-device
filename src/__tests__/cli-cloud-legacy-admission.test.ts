@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import * as hostFiles from '@agent-device/host-kit/file';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { writeCliSession } from '../cli/auth-session.ts';
 import { resolveCloudAdmission } from '../cli/connection/active-connection.ts';
@@ -44,7 +45,7 @@ test('a selected direct route rechecks ownership before handing off a request', 
   expect(send).not.toHaveBeenCalled();
 });
 
-test('disconnect refuses a contended allocation and recovers it after the lock is free', async () => {
+test('connection commands refuse lock contention before and during allocation', async () => {
   const location = { stateDir: mkdtempForTestSync('cloud-disconnect-contention-'), session: 'qa' };
   const origin = 'https://cloud.example';
   const id = '00000000-0000-4000-8000-000000000001';
@@ -70,18 +71,41 @@ test('disconnect refuses a contended allocation and recovers it after the lock i
   };
   const disconnect = () =>
     runCliCapture(['disconnect', '--session', location.session, '--json'], { env });
+  const connect = () =>
+    runCliCapture(
+      ['connect', 'cloud', '--platform', 'ios', '--session', location.session, '--json'],
+      {
+        env,
+      },
+    );
   const fetchMock = vi.fn(
     async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
+  const acquire = hostFiles.acquireProcessLock;
+  const acquireSpy = vi
+    .spyOn(hostFiles, 'acquireProcessLock')
+    .mockImplementation((options) => acquire({ ...options, timeoutMs: 0 }));
   try {
     await withConnectionLock(location.stateDir, location.session, async () => {
+      for (const command of [disconnect, connect]) {
+        const blocked = await command();
+        expect(JSON.parse(blocked.stdout).error).toMatchObject({
+          retriable: true,
+          details: { reason: 'connection_busy' },
+        });
+      }
       writeCloudConnection(location, pending);
       const blocked = await disconnect();
       expect(JSON.parse(blocked.stdout).error).toMatchObject({
         code: 'COMMAND_FAILED',
         retriable: true,
         details: { reason: 'cloud_connection_owns_session' },
+      });
+      const duplicate = await connect();
+      expect(JSON.parse(duplicate.stdout).error).toMatchObject({
+        retriable: true,
+        details: { reason: 'cloud_connect_pending_conflict' },
       });
       expect(fetchMock).not.toHaveBeenCalled();
       expect(readCloudConnection(location)).toEqual(pending);
@@ -90,6 +114,60 @@ test('disconnect refuses a contended allocation and recovers it after the lock i
     expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['DELETE']);
     expect(readCloudConnection(location)).toBeNull();
   } finally {
+    acquireSpy.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});
+
+test('disconnect waits for the lock on a committed cloud session', async () => {
+  const location = { stateDir: mkdtempForTestSync('cloud-committed-contention-'), session: 'qa' };
+  const origin = 'https://cloud.example';
+  const env = {
+    AGENT_DEVICE_STATE_DIR: location.stateDir,
+    AGENT_DEVICE_CLOUD_BASE_URL: origin,
+    AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: origin,
+    AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-api-key',
+  };
+  const record = prepareCloudConnection(
+    location.session,
+    { platform: 'ios', accepts: ['agent-device-daemon'], vendor: undefined, maxMinutes: undefined },
+    origin,
+    null,
+  );
+  writeCloudConnection(location, {
+    ...record,
+    phase: 'committed',
+    id: '00000000-0000-4000-8000-000000000001',
+  });
+  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetchMock);
+  let observedContention!: () => void;
+  const contention = new Promise<void>((resolve) => {
+    observedContention = resolve;
+  });
+  const acquire = hostFiles.acquireProcessLock;
+  const acquireSpy = vi.spyOn(hostFiles, 'acquireProcessLock').mockImplementation((options) =>
+    acquire({
+      ...options,
+      onContention: () => {
+        observedContention();
+        options.onContention?.();
+      },
+    }),
+  );
+  try {
+    const disconnect = await withConnectionLock(location.stateDir, location.session, async () => {
+      const result = runCliCapture(['disconnect', '--session', location.session, '--json'], {
+        env,
+      });
+      await contention;
+      return { result };
+    });
+    expect(JSON.parse((await disconnect.result).stdout).data.released).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readCloudConnection(location)).toBeNull();
+  } finally {
+    acquireSpy.mockRestore();
     vi.unstubAllGlobals();
   }
 });

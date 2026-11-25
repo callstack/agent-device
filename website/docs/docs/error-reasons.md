@@ -98,10 +98,17 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `cloud_origin_mismatch` | A hosted connection already records the API origin that owns its lease. |
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cloud_catalog_key_origin_mismatch` | The catalog key and selected cloud API specify different origins. |
+| `connection_busy` | A connection operation is in progress for the session. |
 | `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
 | `insufficient_balance` | The account balance cannot cover the cost to start the session. |
 | `cloud_transport_unsupported` | The cloud session uses an attachment transport this CLI cannot drive. |
 | `cloud_session_invalid` | The cloud API returned an invalid session response. |
+
+### `disconnect`
+
+| Reason | Meaning |
+| --- | --- |
+| `connection_busy` | A connection operation is in progress for the session. |
 
 ### `events`
 
@@ -635,6 +642,7 @@ These reasons can come from more than one command.
 | `cloud_connection_record_unreadable` | The saved cloud connection record cannot be read safely. |
 | `cloud_connection_session_mismatch` | The saved cloud connection belongs to another named session. |
 | `cloud_connect_pending_conflict` | A pending cloud request must finish or end before its options change. |
+| `connection_busy` | A connection operation is in progress for the session. |
 | `cloud_connection_owns_session` | The named session is owned by a cloud connection. |
 | `cloud_connection_changed` | The named cloud connection changed before the operation could complete. |
 | `cloud_connection_expired` | The cloud session passed its deadline. |

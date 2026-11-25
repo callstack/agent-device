@@ -9,7 +9,7 @@ import {
   cloudConnectionUnavailable,
   CLOUD_CONNECTION_REASONS,
   readCloudConnection,
-  refuseContendedCloudAllocation,
+  refuseContendedConnection,
   removeCloudConnection,
   withConnectionLock,
 } from '../connection/cloud-connection-record.ts';
@@ -105,32 +105,37 @@ export const connectCommand: ClientCommandHandler = async (params) => {
   }
 
   const location = { stateDir, session: flags.session ?? 'default' };
-  return await withConnectionLock(stateDir, location.session, async () => {
-    const previous = readRemoteConnectionState(location);
-    const record = readCloudConnection(location);
-    if (flags.session === undefined && (cloud || record || previous?.cloudSession)) {
-      throw remoteSessionRequiredError(undefined);
-    }
-    const pending = record?.phase === 'pending' ? record : null;
-    if (pending && !cloud)
-      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.pendingConflict.reason);
-    if (previous && (previous.cloudSession || cloud) && !pending && !flags.force) {
-      throw activeConnectionConflict(previous);
-    }
-    if (record && !pending && !flags.force) {
-      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.pendingConflict.reason);
-    }
-    const connection = {
-      location,
-      record,
-      state: previous,
-      host,
-    };
-    if (cloud) {
-      return await connectCloudProfile(params, connection, pending);
-    }
-    return await connectDirectProfile(params, stateDir, provider, connection);
-  });
+  return await withConnectionLock(
+    stateDir,
+    location.session,
+    async () => {
+      const previous = readRemoteConnectionState(location);
+      const record = readCloudConnection(location);
+      if (flags.session === undefined && (cloud || record || previous?.cloudSession)) {
+        throw remoteSessionRequiredError(undefined);
+      }
+      const pending = record?.phase === 'pending' ? record : null;
+      if (pending && !cloud)
+        throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.pendingConflict.reason);
+      if (previous && (previous.cloudSession || cloud) && !pending && !flags.force) {
+        throw activeConnectionConflict(previous);
+      }
+      if (record && !pending && !flags.force) {
+        throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.pendingConflict.reason);
+      }
+      const connection = {
+        location,
+        record,
+        state: previous,
+        host,
+      };
+      if (cloud) {
+        return await connectCloudProfile(params, connection, pending);
+      }
+      return await connectDirectProfile(params, stateDir, provider, connection);
+    },
+    cloud ? () => refuseContendedConnection(location, 'connect') : undefined,
+  );
 };
 
 type CloudConnection = Parameters<typeof releaseCloudConnection>[0];
@@ -578,7 +583,7 @@ export const disconnectCommand: ClientCommandHandler = async ({
       }
       return await disconnectProvider(flags, client, stateDir, state);
     },
-    () => refuseContendedCloudAllocation(location),
+    () => refuseContendedConnection(location, 'disconnect', claimedConnection),
   );
 };
 
