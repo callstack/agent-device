@@ -18,7 +18,7 @@ If the two-hour wait ends, report the printed owner and lock state.
 Do not add lock wrappers or remove the lock manually.
 Focused tests do not lock.
 Avoid subprocess-heavy tests beside a broad gate.
-Before you run the layering scan, stage new modules.
+Stage new modules before the layering scan.
 
 For a plan, run `pnpm check:affected`.
 For reasons, add `--verbose`.
@@ -48,7 +48,6 @@ Keep #4050's full-unit fallback until source-read ownership is complete.
 
 ## Diagnose a gate failure as a maintainer
 
-Separate cause from validation status.
 Never call a failing gate passed.
 
 | Evidence | Required action |
@@ -63,6 +62,5 @@ Match failures by check, location, diagnostic code, and assertion.
 
 The coordinator owns diagnosis until a named owner or issue accepts it.
 Do not widen timeouts. Do not mask exit codes.
-Do not report a CI result as a local pass.
 If CI shows an infrastructure fault, rerun it once.
 If the same failure occurs twice, treat it as a finding.

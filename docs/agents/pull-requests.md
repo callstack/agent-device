@@ -12,7 +12,7 @@ For each review round, push once.
 Each push restarts CI. Drafts skip device lanes.
 
 If the task includes manual device verification, follow the [device guide](device-verification.md).
-If a device or command blocks that run, report it.
+Report a blocked device run.
 
 - Published: the branch is pushed, the PR is open, and validation status is recorded at a named commit.
 - Merge-ready: required checks pass at the head, with live evidence for device-facing changes.
