@@ -138,7 +138,7 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   activateCompleteRefFrame(session);
   sessionStore.publish(sessionName, session);
 
-  const stale = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s2', 'hello']);
+  const stale = await runInteraction(sessionStore, sessionName, 'fill', ['@e1-s2', 'hello']);
   expect(stale?.ok).toBe(false);
   if (stale && !stale.ok) {
     expect(stale.error.code).toBe('COMMAND_FAILED');
@@ -150,7 +150,7 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   }
   expect(mockFillPoint).not.toHaveBeenCalled();
 
-  const current = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s3', 'hello']);
+  const current = await runInteraction(sessionStore, sessionName, 'fill', ['@e1-s3', 'hello']);
   expect(current?.ok).toBe(true);
   if (current?.ok) {
     expect(current.data?.warning).toBeUndefined();

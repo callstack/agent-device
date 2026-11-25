@@ -628,7 +628,7 @@ function optionalSnapshotResponseFields(
       ? { fallbackScreenshotPath: data.fallbackScreenshotPath }
       : {}),
     // ADR 0014: keep the response-level ref-frame generation on Node.js results
-    // so callers can pin refs (`@e12~s<refsGeneration>`) before a mutation.
+    // so callers can pin refs (`@e12-s<refsGeneration>`) before a mutation.
     ...(typeof data.refsGeneration === 'number' ? { refsGeneration: data.refsGeneration } : {}),
   };
 }

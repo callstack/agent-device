@@ -721,11 +721,11 @@ test('replay parsing strips versioned-ref pins from recorded refs (#1076)', () =
   // session, so pins are stripped and IGNORED rather than re-validated.
   const script = [
     'context platform=android device=Pixel',
-    'press @e2~s3 Continue',
-    'fill @e4~s3 Email hello@example.com',
-    'get text @e5~s3 Title',
-    'wait @e2~s3 5000',
-    'longpress @e2~s3 800',
+    'press @e2-s3 Continue',
+    'fill @e4-s3 Email hello@example.com',
+    'get text @e5-s3 Title',
+    'wait @e2-s3 5000',
+    'longpress @e2-s3 800',
   ].join('\n');
 
   const { actions } = parseReplayScriptDetailed(script);

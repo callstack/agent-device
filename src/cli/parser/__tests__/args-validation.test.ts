@@ -289,10 +289,10 @@ test('negative numeric positionals are accepted without -- separator', () => {
 });
 
 test('get accepts a snapshot ref with a multiword label', () => {
-  const parsed = parseArgs(['get', 'text', '@e5~s3', 'World', 'Clock'], { strictFlags: true });
+  const parsed = parseArgs(['get', 'text', '@e5-s3', 'World', 'Clock'], { strictFlags: true });
 
   assert.equal(parsed.command, 'get');
-  assert.deepEqual(parsed.positionals, ['text', '@e5~s3', 'World', 'Clock']);
+  assert.deepEqual(parsed.positionals, ['text', '@e5-s3', 'World', 'Clock']);
 });
 
 test('bounded commands reject excess positionals from their CLI schema', () => {

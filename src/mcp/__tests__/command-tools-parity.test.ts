@@ -254,7 +254,7 @@ const UI_TARGETS = [
   { name: 'ref with label', argv: ['@e6', 'Products'], input: { ref: '@e6', label: 'Products' } },
   { name: 'selector', argv: ['id="home/products"'], input: { selector: 'id="home/products"' } },
   { name: 'point', argv: ['201', '160'], input: { x: 201, y: 160 } },
-  { name: 'pinned ref', argv: ['@e6~s4'], input: { ref: '@e6~s4' } },
+  { name: 'pinned ref', argv: ['@e6-s4'], input: { ref: '@e6-s4' } },
 ] as const;
 
 const TARGETED_COMMANDS = [

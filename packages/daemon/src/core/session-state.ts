@@ -184,7 +184,7 @@ export type SessionState = {
    * the `setSessionSnapshot` choke point and in the snapshot/diff command path
    * (`buildNextSnapshotSession`). Ref-issuing responses (snapshot command, find
    * ref outputs) report it once as the additive `refsGeneration` field;
-   * consumers may pin refs as `@e12~s3` and get a precise staleness diagnostic
+   * consumers may pin refs as `@e12-s3` and get a precise staleness diagnostic
    * when the pinned generation no longer matches the stored tree. Plain number
    * with per-session lifetime — no persistence. The first bump of a lifetime
    * seeds at a random 6-digit base (`nextSnapshotGeneration`), so a pin from a

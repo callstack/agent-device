@@ -18,10 +18,10 @@ export const SETTLE_TAIL_SAMPLE = {
 settled after 540ms: +0 -1 (~15 unchanged)
 - @e50 [text] "Suggested for you"
 unchanged interactive (4):
-= @e64~s5 [text-field] "Search"
-= @e65~s5 [text] "Recent searches"
-= @e12~s5 [tab] "Home"
-= @e40~s5 [tab] "Profile"`,
+= @e64-s5 [text-field] "Search"
+= @e65-s5 [text] "Recent searches"
+= @e12-s5 [tab] "Home"
+= @e40-s5 [tab] "Profile"`,
 };
 
 // Settled fill whose diff exposes the next target directly.
@@ -100,10 +100,10 @@ export const DEVICE_CLAIM_IN_USE_SAMPLE = {
 // ADR 0014 mutation rejection from
 // packages/daemon/src/execution/interaction/index.ts: a pinned ref minted from a
 // superseded generation is rejected before dispatch. The daemon strips the
-// `~s5` pin at the boundary (interaction-touch-targets.ts), so the message
+// `-s5` pin at the boundary (interaction-touch-targets.ts), so the message
 // names the plain ref; the hint is the precise resolveRefStalenessWarning.
 export const STALE_REF_SAMPLE = {
-  command: 'agent-device press @e2~s5',
+  command: 'agent-device press @e2-s5',
   output: `Error (COMMAND_FAILED): Ref @e2 was minted from a superseded snapshot generation. Not dispatched. Next: Ref @e2 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
 };
 

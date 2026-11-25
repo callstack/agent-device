@@ -86,9 +86,9 @@ test('planPreDispatchTargetVerification: no recorded token means nothing to veri
 test('planPreDispatchTargetVerification: a @ref token skips the parse gate entirely', () => {
   const plan = planPreDispatchTargetVerification({
     recorded: recorded(),
-    token: '@e1~s0',
+    token: '@e1-s0',
   });
-  assert.deepEqual(plan, { kind: 'verify', token: '@e1~s0' });
+  assert.deepEqual(plan, { kind: 'verify', token: '@e1-s0' });
 });
 
 test("planPreDispatchTargetVerification: a parseable non-@ token proceeds to 'verify' (or 'recorded-unverifiable')", () => {

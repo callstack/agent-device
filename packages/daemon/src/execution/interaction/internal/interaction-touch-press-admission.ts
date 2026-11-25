@@ -168,7 +168,7 @@ function clickButtonValidationResponse(
  * Staleness relative to what the client knew when it sent this @ref — read
  * BEFORE any internal recapture (Android freshness refresh, --verify) advances
  * the generation as a side effect of this same command. Pinned refs
- * (`@e12~s3`) get a precise generation-mismatch warning; a plain ref warns
+ * (`@e12-s3`) get a precise generation-mismatch warning; a plain ref warns
  * while the frame is expired. A mutating `find`'s internal dispatch supplies a
  * locator-minted ref (`internal.findResolvedTarget`), so it carries no
  * user-facing staleness — the caller never consumed a `@ref` (ADR 0014).

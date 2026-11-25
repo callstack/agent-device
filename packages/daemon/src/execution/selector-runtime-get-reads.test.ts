@@ -462,7 +462,7 @@ test('get text with a pinned stale ref gets the precise warning', async () => {
     new Error('dispatch should not be called for snapshot-derived get text'),
   );
 
-  const response = await runInteraction(sessionStore, sessionName, 'get', ['text', '@e1~s2']);
+  const response = await runInteraction(sessionStore, sessionName, 'get', ['text', '@e1-s2']);
   expect(response?.ok).toBe(true);
   if (response?.ok) {
     expect(response.data?.warning).toBe(

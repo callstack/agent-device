@@ -181,7 +181,7 @@ test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) unti
   if (bare && !bare.ok) expect(bare.error.details?.reason).toBe('ref_frame_expired');
 
   // A pin at the same epoch also rejects — expiry is evaluated before the pin.
-  const pinned = await runInteraction(sessionStore, sessionName, 'press', ['@e2~s500']);
+  const pinned = await runInteraction(sessionStore, sessionName, 'press', ['@e2-s500']);
   expect(pinned?.ok).toBe(false);
   if (pinned && !pinned.ok) expect(pinned.error.details?.reason).toBe('ref_frame_expired');
 
@@ -244,7 +244,7 @@ test('press with a pinned ref matching the current frame epoch is clean', async 
   session.snapshotGeneration = 5;
   sessionStore.publish(sessionName, session);
 
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s5']);
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1-s5']);
   expect(response?.ok).toBe(true);
   if (response?.ok) {
     expect(response.data?.warning).toBeUndefined();
@@ -259,7 +259,7 @@ test('press with a pinned ref from an older generation rejects with the precise 
   sessionStore.publish(sessionName, session);
   mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale iOS ref'));
 
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s12']);
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1-s12']);
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
@@ -309,7 +309,7 @@ test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', 
 
   for (const [command, positionals] of [
     ['press', ['@e1~x3']],
-    ['fill', ['@e1~s', 'text']],
+    ['fill', ['@e1-s', 'text']],
     ['get', ['text', '@e1~3']],
   ] as const) {
     const response = await runInteraction(sessionStore, sessionName, command, [...positionals]);
@@ -317,7 +317,7 @@ test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', 
     if (response && !response.ok) {
       expect(response.error.code).toBe('INVALID_ARGS');
       expect(response.error.message).toContain('malformed generation suffix');
-      expect(String(response.error.details?.hint)).toContain('@e12~s3');
+      expect(String(response.error.details?.hint)).toContain('@e12-s3');
     }
   }
 });
@@ -341,7 +341,7 @@ test('after a session reopen, a pin from the previous lifetime rejects (reseeded
   mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'press', [
-    `@e1~s${oldGeneration}`,
+    `@e1-s${oldGeneration}`,
   ]);
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
@@ -365,7 +365,7 @@ test('a plan one member cannot authorize refuses whole and leaves the frame unto
 
   // Member 2 pins an epoch the active frame never issued: the whole plan
   // refuses before the first dispatch, and the frame keeps its state.
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1,@e2~s12']);
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1,@e2-s12']);
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
@@ -412,7 +412,7 @@ test('a plan with distinct stale pins joins its warnings in dispatch order', asy
   sessionStore.publish(sessionName, session);
   mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale plan'));
 
-  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s11,@e2~s12']);
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1-s11,@e2-s12']);
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     // The refusal carries the typed admission details beside the joined hint:

@@ -1,4 +1,4 @@
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { REF_PIN_SEPARATOR, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 
 /**
@@ -20,7 +20,7 @@ import fc from 'fast-check';
 export const PROPERTY_RUNS_SMALL = 40;
 
 // ---------------------------------------------------------------------------
-// Refs (`@eN~sM`)
+// Refs (`@eN-sM`)
 // ---------------------------------------------------------------------------
 
 export type GeneratedRef = { base: string; generation?: number };
@@ -36,9 +36,11 @@ export const refArb: fc.Arbitrary<GeneratedRef> = fc
     ...(generation === undefined ? {} : { generation }),
   }));
 
-/** The `@eN~sM` spelling of a split ref; the inverse of `splitRefGenerationSuffix`. */
+/** The `@eN-sM` spelling of a split ref; the inverse of `splitRefGenerationSuffix`. */
 export function formatRef(ref: GeneratedRef): string {
-  return ref.generation === undefined ? ref.base : `${ref.base}~s${ref.generation}`;
+  return ref.generation === undefined
+    ? ref.base
+    : `${ref.base}${REF_PIN_SEPARATOR}${ref.generation}`;
 }
 
 // ---------------------------------------------------------------------------

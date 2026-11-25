@@ -23,6 +23,7 @@ import {
 import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   REF_GRAMMAR_HINT,
+  retiredRefPinRefusal,
   splitRefGenerationSuffix,
   type Point,
 } from '@agent-device/kernel/snapshot';
@@ -407,6 +408,9 @@ function prepareGestureCommandInput(
 
 function prepareGestureTarget(target: string, session: SessionState): string {
   if (!target.startsWith('@')) return target;
+  // A pin spelled with the retired separator is refused with the current one named.
+  const retired = retiredRefPinRefusal(target);
+  if (retired) throw new AppError('INVALID_ARGS', retired, { hint: REF_GRAMMAR_HINT });
   const split = splitRefGenerationSuffix(target);
   if (!split) {
     throw new AppError('INVALID_ARGS', `Invalid ref "${target}" — malformed generation suffix.`, {

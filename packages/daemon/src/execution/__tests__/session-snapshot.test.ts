@@ -162,7 +162,7 @@ test('markSessionPartialRefsIssued: an empty result leaves all frame state untou
 
   // A non-empty result supersedes with exactly its bodies.
   session.snapshotGeneration = 9;
-  markSessionPartialRefsIssued(session, ['@e5~s7', 'e6']);
+  markSessionPartialRefsIssued(session, ['@e5-s7', 'e6']);
   expect(refFrameScope(session)).toEqual(new Set(['e5', 'e6']));
   expect(refFrame(session).generation).toBe(9);
 });
@@ -200,7 +200,7 @@ test('a ref pinned before a diff keeps resolving: the diff advances the counter,
   expect(
     resolveRefStalenessWarning({
       session: afterDiff,
-      ref: `@e1~s${issuedAt}`,
+      ref: `@e1-s${issuedAt}`,
       mintedGeneration: issuedAt,
     }),
   ).toBeUndefined();
@@ -209,7 +209,7 @@ test('a ref pinned before a diff keeps resolving: the diff advances the counter,
   expect(
     resolveRefStalenessWarning({
       session: afterDiff,
-      ref: '@e1~s1',
+      ref: '@e1-s1',
       mintedGeneration: 1,
     }),
   ).toBeDefined();

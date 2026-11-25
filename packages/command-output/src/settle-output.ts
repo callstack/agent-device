@@ -96,7 +96,7 @@ function formatSettleDiffLines(view: SettleTextView): string[] {
  * ADR 0014: a settled diff publishes a PARTIAL frame, which admits only the
  * pinned form of the refs it issued — so a CLI caller who copies a bare `@eN`
  * out of the diff gets `plain_ref_requires_complete_frame`. Render the added
- * line's ref in the same paste-ready `@eN~s<gen>` form the tail already uses.
+ * line's ref in the same paste-ready `@eN-s<gen>` form the tail already uses.
  * Only added lines carry a ref (`SettleDiffLine`); removed lines render
  * verbatim, since nothing there is a target. An added line whose text lost its ref prefix gets the
  * pinned ref in front.

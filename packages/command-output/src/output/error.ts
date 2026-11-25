@@ -10,7 +10,7 @@ import {
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
-import { collapseWarningText } from '../output-common.ts';
+import { collapseWarningText, pinnedRefText } from '../output-common.ts';
 
 /**
  * A failure as the CLI prints it on stderr. `summary` is one line that carries the code, the
@@ -187,11 +187,26 @@ function readInlineCandidates(views: ErrorCandidateView[]): string[] | undefined
   );
   // Candidates that read the same without their ref give the reader nothing to choose by, so
   // naming them as the step would invite a guess; the hint (narrow the query) stays the step.
-  const descriptions = new Set(lines.map((line) => line.replace(CANDIDATE_REF_PREFIX, '')));
+  const descriptions = new Set(lines.map(stripCandidateRef));
   return descriptions.size === lines.length ? lines : undefined;
 }
 
-const CANDIDATE_REF_PREFIX = /^@e\d+(?:~s\d+)?\s*/;
+/**
+ * The printed ref at the head of a candidate line, pin included; group 1 is the plain
+ * body. The kernel owns this grammar (`splitRefGenerationSuffix` and `formatPinnedRef`,
+ * `@agent-device/kernel/snapshot`); it is spelled here because this module sits in the
+ * CLI façade's eager module closure, which the gate in
+ * `scripts/__tests__/eager-closure-budgets.test.ts` holds to no growth. `error.test.ts`
+ * binds the two spellings, the same way `output-common.test.ts` binds `pinnedRefText`.
+ * The lookahead leaves a prefix that is not a whole token (`@e12-sales`) untouched, as
+ * the owner does.
+ */
+export const CANDIDATE_REF_PREFIX = /^@(e\d+)(?:-s\d+)?(?=\s|$)/;
+
+function stripCandidateRef(line: string): string {
+  const matched = CANDIDATE_REF_PREFIX.exec(line);
+  return matched ? line.slice(matched[0].length).trimStart() : line;
+}
 
 function oneLine(text: string): string {
   return text.replaceAll(/\s+/g, ' ').trim();
@@ -240,5 +255,7 @@ function bootStateMarker(device: { booted?: boolean }): string {
  */
 function pinCandidateLine(candidate: string, generation: number | undefined): string {
   if (generation === undefined) return candidate;
-  return candidate.replace(/^@(e\d+)(?:~s\d+)?(?=\s|$)/, `@$1~s${generation}`);
+  const matched = CANDIDATE_REF_PREFIX.exec(candidate);
+  if (!matched) return candidate;
+  return pinnedRefText(matched[1]!, generation) + candidate.slice(matched[0].length);
 }

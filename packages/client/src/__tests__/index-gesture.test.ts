@@ -38,11 +38,11 @@ describe('gesture command transport', () => {
       },
     },
     {
-      argv: ['drag', 'id="drag-source"', '@e2~s42', '700', '600', '200'],
+      argv: ['drag', 'id="drag-source"', '@e2-s42', '700', '600', '200'],
       input: {
         kind: 'drag',
         source: 'id="drag-source"',
-        destination: '@e2~s42',
+        destination: '@e2-s42',
         sourceHoldMs: 700,
         moveMs: 600,
         destinationHoldMs: 200,

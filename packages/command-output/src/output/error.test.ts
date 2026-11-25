@@ -1,7 +1,39 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { formatHumanError, type HumanErrorOptions } from './error.ts';
+import { formatPinnedRef, REF_PIN_SEPARATOR } from '@agent-device/kernel/snapshot';
+import { CANDIDATE_REF_PREFIX, formatHumanError, type HumanErrorOptions } from './error.ts';
+
+// `CANDIDATE_REF_PREFIX` reads the printed ref at the head of an ambiguity candidate
+// line. It spells the kernel's pin grammar instead of importing it, because this module
+// sits in the CLI façade's eager module closure (see `error.ts`). This test makes that
+// freedom safe, the way `output-common.test.ts` binds `pinnedRefText`: the pattern must
+// consume exactly what the kernel writer emits, and nothing else.
+test('CANDIDATE_REF_PREFIX matches exactly the kernel owner form', () => {
+  const pin = formatPinnedRef('@e4', 434592);
+  assert.equal(CANDIDATE_REF_PREFIX.exec(pin)?.[1], 'e4');
+  assert.equal(CANDIDATE_REF_PREFIX.exec(`${pin}  button "Submit"`)?.[1], 'e4');
+  assert.equal(CANDIDATE_REF_PREFIX.exec('@e4  button "Submit"')?.[1], 'e4');
+  // Text that is not a whole ref token keeps its description: `@e12-sales` names no ref.
+  assert.equal(CANDIDATE_REF_PREFIX.test('@e12-sales'), false);
+  assert.equal(CANDIDATE_REF_PREFIX.test('button @e4'), false);
+  // A separator change must fail here, not silently stop matching.
+  assert.ok(pin.includes(REF_PIN_SEPARATOR));
+});
+
+test('stripCandidateRef leaves an unref line intact and trims the ref away', () => {
+  // Candidates whose text is identical after the ref leave nothing to choose by;
+  // that refusal path is covered below through formatHumanError. A pin must not
+  // survive the comparison, so these two read the same and are not named as a step.
+  const err = new AppError('AMBIGUOUS_MATCH', 'Multiple candidates matched.', {
+    candidates: ['@e2-s7 [button] "Follow"', '@e5 [button] "Follow"'],
+    matches: 2,
+    refsGeneration: 7,
+  });
+  const { summary, body } = formatHumanError(err);
+  assert.match(summary, /Next: Multiple candidates matched\. Narrow the query/);
+  assert.match(body.join('\n'), /Candidates:/);
+});
 
 test('formatHumanError renders a structured cause unconditionally', () => {
   const err = new AppError(
@@ -103,7 +135,7 @@ test('formatHumanError puts two or three distinguishable ambiguous candidates on
   // A reader that keeps one line (tail -1, head -1) still gets every ref it can act on.
   assert.match(
     summary,
-    /Next: Act on one ref .*: @e2~s7 \[button\] "Save"; @e5~s7 \[button\] "Save draft"; @e9~s7 \[link\] "Save as"$/,
+    /Next: Act on one ref .*: @e2-s7 \[button\] "Save"; @e5-s7 \[button\] "Save draft"; @e9-s7 \[link\] "Save as"$/,
   );
   assert.equal(body.join('\n').includes('Candidates:'), false);
 });
@@ -165,12 +197,12 @@ test('formatHumanError re-pins a candidate born stamped at an earlier epoch', ()
   const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements: text~="Save"', {
     matches: 2,
     refsGeneration: 750596,
-    candidates: ['@e2~s750595 [button] "Save"', '@e5 [button] "Save draft"'],
+    candidates: ['@e2-s750595 [button] "Save"', '@e5 [button] "Save draft"'],
   });
 
   const { summary } = formatHumanError(err);
 
-  assert.match(summary, /@e2~s750596 \[button\] "Save"; @e5~s750596 \[button\] "Save draft"$/);
+  assert.match(summary, /@e2-s750596 \[button\] "Save"; @e5-s750596 \[button\] "Save draft"$/);
 });
 
 // A tie can span booted and shut-down devices, and an id picked without the

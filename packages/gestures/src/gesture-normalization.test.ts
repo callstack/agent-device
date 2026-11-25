@@ -97,7 +97,7 @@ test('gesture recording codec round-trips selector-authored drag timings', () =>
   const payload = {
     kind: 'drag' as const,
     source: 'id="drag-source"',
-    destination: '@e2~s42',
+    destination: '@e2-s42',
     sourceHoldMs: 800,
     moveMs: 700,
     destinationHoldMs: 250,

@@ -19,8 +19,8 @@ test('a plain ref emitted by the current partial frame suggests its exact pinned
   if (response && !response.ok) {
     expect(response.error.details).toMatchObject({
       reason: 'plain_ref_requires_complete_frame',
-      suggestedRef: '@e19~s531735',
-      hint: 'Retry with the exact emitted ref @e19~s531735.',
+      suggestedRef: '@e19-s531735',
+      hint: 'Retry with the exact emitted ref @e19-s531735.',
     });
   }
 });
@@ -75,8 +75,8 @@ test('a settled-diff frame names the diff as the replacement and lists its issue
       reason: 'plain_ref_requires_complete_frame',
       currentGeneration: 531_735,
       replacedBy: 'settle-diff',
-      replacementRefs: ['@e34~s531735', '@e7~s531735'],
-      hint: 'Retry with one of the refs the settled diff issued: @e34~s531735, @e7~s531735 — or capture a fresh interactive snapshot (snapshot -i).',
+      replacementRefs: ['@e34-s531735', '@e7-s531735'],
+      hint: 'Retry with one of the refs the settled diff issued: @e34-s531735, @e7-s531735 — or capture a fresh interactive snapshot (snapshot -i).',
     });
   }
 });
@@ -96,8 +96,8 @@ test('a settled-diff frame keeps the exact-emitted suggestion when the refused b
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.details).toMatchObject({
-      suggestedRef: '@e34~s531735',
-      hint: 'Retry with the exact emitted ref @e34~s531735.',
+      suggestedRef: '@e34-s531735',
+      hint: 'Retry with the exact emitted ref @e34-s531735.',
     });
     expect(response.error.details?.replacementRefs).toBeUndefined();
   }

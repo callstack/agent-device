@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   FillCommandResult,
   InteractionRequestTarget,
@@ -10,6 +10,7 @@ import {
   stripAtPrefix,
   type DecodedFillTarget,
 } from '@agent-device/selectors/interaction-positionals';
+import { isRefToken, retiredRefPinRefusal } from '@agent-device/kernel/snapshot';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
@@ -55,26 +56,8 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
       }
       return parseTouchRefSequence(positionals);
     }
-    const spaceSeparatedRef = positionals[1];
-    if (
-      SEQUENCE_TOUCH_COMMANDS.has(commandLabel) &&
-      spaceSeparatedRef !== undefined &&
-      /^@e\d+(~s?\d*)?$/.test(spaceSeparatedRef.trim())
-    ) {
-      // `press @e13 @e14` is a comma-separated plan typed with spaces. On the
-      // single-ref path the extra positional would become a fallback label and
-      // every key after the first would be lost to a silent success — the
-      // exact failure class the sequence form exists to remove.
-      return {
-        ok: false,
-        response: errorResponse(
-          'INVALID_ARGS',
-          `"${spaceSeparatedRef.trim()}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
-          undefined,
-          { hint: REF_SEQUENCE_HINT },
-        ),
-      };
-    }
+    const secondKey = parseSpaceSeparatedSecondKey(positionals[1], commandLabel);
+    if (secondKey) return { ok: false, response: secondKey };
     const versioned = parseVersionedRefPositional(first);
     if (!versioned.ok) return { ok: false, response: versioned.response };
     return {
@@ -98,6 +81,32 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
     };
   }
   return { ok: true, target: { kind: 'selector', selector } };
+}
+
+/**
+ * The refusal for `press @e13 @e14` — a comma-separated plan typed with spaces. On the
+ * single-ref path the extra positional would become a fallback label and every key after
+ * the first would be lost to a silent success, the exact failure class the sequence form
+ * exists to remove. A key pinned with the retired separator is the same mistake and its
+ * refusal names the current spelling, because the caller is holding a pin. Undefined
+ * means the second positional is not a ref: outside the tap family, absent, or text that
+ * reads as a fallback label there.
+ */
+function parseSpaceSeparatedSecondKey(
+  second: string | undefined,
+  commandLabel: string,
+): DaemonFailureResponse | undefined {
+  if (!SEQUENCE_TOUCH_COMMANDS.has(commandLabel) || second === undefined) return undefined;
+  if (!isRefToken(second)) return undefined;
+  const key = second.trim();
+  const retired = retiredRefPinRefusal(key);
+  if (retired) return errorResponse('INVALID_ARGS', retired, { hint: REF_SEQUENCE_HINT });
+  return errorResponse(
+    'INVALID_ARGS',
+    `"${key}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
+    undefined,
+    { hint: REF_SEQUENCE_HINT },
+  );
 }
 
 const TOUCH_SEQUENCE_MAX_REFS = 16;
