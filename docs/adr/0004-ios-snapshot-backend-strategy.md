@@ -62,6 +62,7 @@ A private-AX root is `reported` only when it is exactly the full-screen proof fr
 When AXRuntime reports the target as the primary app that fills the screen, the proof frame is that screen frame.
 When AXRuntime reports the target windowed or not primary, there is no proof frame.
 When the AXRuntime probe proves nothing, the proof frame is the sole XCTest screen in native portrait points. That is always the case on a physical device, where AXRuntime reports no app to the runner. No window smaller than the screen can equal that frame.
+When the sole screen cannot be measured, or it is wider than it is tall, there is no proof frame, so the origin stays unknown.
 Element mutations, mutating find, Maestro selector geometry, and snapshot-derived gesture bounds refuse an unknown origin with `window-origin-unknown` and `dispatched: no` before input.
 Independent native queries and authored screen coordinates retain their own authorities.
 
