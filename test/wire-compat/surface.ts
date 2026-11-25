@@ -384,6 +384,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         REMOTE_REQUEST_DIAGNOSTICS,
         'RemoteDiagnosticsEndpoint',
+        'DiagnosticsHandoff',
         'RemoteDaemonErrorPayload',
         'localizeRemoteDaemonError',
         'fetchRemoteRequestDiagnostics',
