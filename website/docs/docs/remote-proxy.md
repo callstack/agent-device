@@ -105,6 +105,11 @@ list the artifact and the download fails with `UNAUTHORIZED` and reason `LEASE_O
 The same header is required to read the diagnostics record of a request on a leased session.
 This holds after the session closes, for as long as the daemon keeps the file.
 
+Download finished remote recordings before restarting or upgrading the daemon.
+The download IDs expire when the daemon stops.
+If a recording finishes during recovery and remote `record stop` returns `LEASE_OUTPUT_MISMATCH`,
+check the daemon host for the finished files.
+
 By default, artifacts leave the inventory after download or after 15 minutes.
 `AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress
 can finish before their files are removed, including overlapping downloads of a directory archive.

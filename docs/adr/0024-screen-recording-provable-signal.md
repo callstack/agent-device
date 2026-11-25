@@ -287,12 +287,16 @@ Artifact cleanup is a separate, explicit decision (rule 6).
 Session teardown and failed-start rollback dispose through the backend under the fence.
 They do this only after the manifest records that no recoverable export is lost.
 
-A leased session's teardown that commits an export at a remote temp path registers it, and its telemetry, as downloadable artifacts of that lease (rule 1, #2281).
-Only a request that sends the id of the ended lease lists or downloads them (ADR 0007).
-The inventory names the session, and the usual delete-after-download and 15-minute expiry apply.
-A later `record stop` replay of that manifest serves the same artifact ids.
-If registration fails, teardown deletes the files.
-A failed teardown finish still runs forced cleanup (disposal intent) and registers nothing.
+A remote recording reserves a daemon path and records its producing lifetime, tenant, and lease.
+A live producer records the file identities in the same manifest write as the completed recording.
+Startup recovery can settle a completed native recording without granting download access.
+If teardown cannot record file identities, it completes the recording and leaves the files on the host.
+
+The daemon registers verified outputs when an authorized stop or teardown finishes.
+Only a request with the producing lease ID can list or download leased output (ADR 0007).
+The artifact registry owns expiry and download consumption.
+A stop retry can return the IDs that the current daemon still holds.
+A new daemon cannot restore remote download IDs from the manifest alone.
 
 ### 2.6 Native markers
 

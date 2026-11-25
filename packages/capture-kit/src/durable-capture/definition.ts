@@ -56,7 +56,11 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   resourceKind: K;
   displayName: string;
   store: DurableCaptureResourceStore<K>;
-  completionMetadata(result: C): JsonObject;
+  completionMetadata(
+    result: C,
+    metadata: DurableResourceEnvelope<K>['metadata'],
+    producer?: DurableCaptureFinishIntent,
+  ): JsonObject;
   /**
    * The completion this kind stored in a record that is already committed, or nothing it can serve.
    *

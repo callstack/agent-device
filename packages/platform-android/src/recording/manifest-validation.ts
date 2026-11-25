@@ -5,7 +5,7 @@ import type {
   ScreenRecordingChunk,
   ScreenRecordingCompletion,
 } from '@agent-device/contracts/screen-recording-runtime';
-import { chunkPathAt } from './chunk-path.ts';
+import { chunkPathAt } from '@agent-device/capture-kit/recording-output-path';
 import type { AndroidRecordingDescriptor, NativeChunk, NativeManifest } from './manifest.ts';
 
 const nativeRecordingPath =

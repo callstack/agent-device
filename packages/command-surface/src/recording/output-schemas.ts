@@ -46,7 +46,7 @@ export const RECORDING_COMMAND_OUTPUT_SCHEMAS = {
           activeSessionApp: looseObjectSchema(),
           showTouches: booleanSchema(),
         },
-        ['recording', 'outPath', 'sessionStateDir', 'showTouches'],
+        ['recording', 'outPath', 'showTouches'],
       ),
       objectSchema(
         {

@@ -11,7 +11,7 @@ export type RecordingAppIdentity = {
 export type RecordingStartCommandResult = {
   recording: 'started';
   outPath: string;
-  sessionStateDir: string;
+  sessionStateDir?: string;
   recordingBackend?: string;
   recordingScope?: RecordingScope;
   recordOnlySession?: boolean;

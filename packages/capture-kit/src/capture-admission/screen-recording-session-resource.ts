@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { outputFileIdentity } from '@agent-device/host-kit/file';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -18,6 +22,8 @@ import type {
   DurableCaptureRecoveryControl,
   DurableCaptureSessionBinding,
 } from '../durable-capture/index.ts';
+import { chunkPathAt } from '../recording/output-path.ts';
+import { deriveRecordingTelemetryPath } from '../recording/telemetry.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
@@ -34,7 +40,7 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   resourceKind: 'screen-recording',
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
-  completionMetadata: encodeScreenRecordingCompletionMetadata,
+  completionMetadata: recordingCompletionMetadata,
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
   // record is served the same export the first stop was answered with. That answer is a cold path: the
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
@@ -70,6 +76,49 @@ export function finishLiveScreenRecording(params: {
   confirmedMissing?: () => boolean;
 }): Promise<ScreenRecordingCompletion> {
   return screenRecordingDurableResource.finishLive(params);
+}
+
+function recordingCompletionMetadata(
+  result: ScreenRecordingCompletion,
+  metadata: JsonObject | undefined,
+  producer?: DurableCaptureFinishIntent,
+): JsonObject {
+  const completion = encodeScreenRecordingCompletionMetadata(result);
+  const reservedPath = metadata?.remoteCapturePath;
+  if (!producer || typeof reservedPath !== 'string') return completion;
+  try {
+    if (
+      result.outPath !== reservedPath ||
+      result.chunks?.some(
+        (chunk, offset) =>
+          chunk.index !== offset + 1 || chunk.path !== chunkPathAt(reservedPath, chunk.index),
+      ) ||
+      (result.telemetryPath !== undefined &&
+        result.telemetryPath !== deriveRecordingTelemetryPath(reservedPath))
+    )
+      throw new Error('Recording export does not match its reservation.');
+    const files = [
+      reservedPath,
+      ...(result.chunks?.slice(1).map(({ path }) => path) ?? []),
+      ...(result.telemetryPath ? [result.telemetryPath] : []),
+    ];
+    const identities = files.map((file) => {
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile()) throw new Error('Recording export is not a regular file.');
+      return outputFileIdentity(stat);
+    });
+    return { ...completion, remoteCaptureExport: { completedAt: Date.now(), identities } };
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'screen_recording_export_proof_failed',
+      data: { error: errorMessage(error) },
+    });
+    if (producer === 'disposal') return completion;
+    throw new AppError('COMMAND_FAILED', 'Recording export proof could not be recorded.', {
+      retriable: true,
+    });
+  }
 }
 
 export function encodeScreenRecordingCompletionMetadata(

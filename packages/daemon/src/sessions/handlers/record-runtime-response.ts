@@ -8,7 +8,6 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
 import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
-import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 
 export const UNLEASED_CAPTURE = 'unleased';
 
@@ -22,24 +21,19 @@ export function recordingOutputLeaseVerifier(
   return undefined;
 }
 
-export function isLegacyRemoteRecordingOutput(completion: ScreenRecordingCompletion): boolean {
-  return (
-    completion.clientOutPath !== undefined &&
-    isRemoteTempArtifactPath(completion.outPath, 'recording', path.extname(completion.outPath))
-  );
-}
-
 export function buildRecordingStartResponse(
   snapshot: ScreenRecordingLiveSnapshot,
   sessionStateDir: string,
   requestedOutPath: string,
+  remote = false,
 ): DaemonResponse {
   return {
     ok: true,
     data: {
       recording: 'started',
-      outPath: snapshot.clientOutPath ?? requestedOutPath,
-      sessionStateDir,
+      outPath:
+        snapshot.clientOutPath ?? (remote ? path.basename(requestedOutPath) : requestedOutPath),
+      ...(!remote ? { sessionStateDir } : {}),
       recordingBackend: snapshot.backend,
       recordingScope: snapshot.scope,
       recordOnlySession: snapshot.recordOnlySession,
@@ -73,14 +67,23 @@ export function buildRecordingUnsupportedResponse(
   };
 }
 
-export function buildRecordingStopResponse(completion: ScreenRecordingCompletion): DaemonResponse {
+export function buildRecordingStopResponse(
+  completion: ScreenRecordingCompletion,
+  artifacts = recordingStopArtifacts(completion),
+  remote = false,
+): DaemonResponse {
   return {
     ok: true,
     data: {
       recording: 'stopped',
-      outPath: completion.outPath,
-      telemetryPath: completion.telemetryPath,
-      artifacts: recordingStopArtifacts(completion),
+      outPath: remote
+        ? (artifacts[0]?.localPath ?? path.basename(completion.outPath))
+        : completion.outPath,
+      telemetryPath: remote
+        ? (artifacts.find(({ field }) => field === 'telemetryPath')?.localPath ??
+          (completion.telemetryPath ? path.basename(completion.telemetryPath) : undefined))
+        : completion.telemetryPath,
+      artifacts,
       recordingBackend: completion.backend,
       recordingScope: completion.scope,
       recordOnlySession: completion.recordOnlySession,
@@ -102,7 +105,7 @@ export function buildRecordingStopResponse(completion: ScreenRecordingCompletion
       overlayWarning: completion.overlayWarning,
       chunks: completion.chunks?.map((chunk) => ({
         index: chunk.index,
-        path: chunk.clientOutPath ?? chunk.path,
+        path: chunk.clientOutPath ?? (remote ? path.basename(chunk.path) : chunk.path),
       })),
     } satisfies RecordingCommandResult,
   };

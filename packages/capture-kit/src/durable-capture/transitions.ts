@@ -44,6 +44,7 @@ export async function finishLiveDurableCapture<
       fence: active.envelope.fence,
       resourcePath,
       intent: params.intent,
+      producer: true,
       confirmedMissing: params.confirmedMissing,
       onCleanupPending: () => {
         cleanupPending = true;
@@ -75,6 +76,7 @@ export async function finishDurableCaptureHandle<
     fence: ResourceOwnershipFence;
     resourcePath: string;
     intent: DurableCaptureFinishIntent;
+    producer?: true;
     confirmedMissing?: () => boolean;
     onCleanupPending?(outcome: Extract<CleanupOutcome, { status: 'cleanup-pending' }>): void;
   },
@@ -132,7 +134,12 @@ export async function finishDurableCaptureHandle<
         throw finishError;
       }
       if (finishOutcome.status === 'completed') {
-        transitionFinishOutcome(definition, lease, finishOutcome);
+        transitionFinishOutcome(
+          definition,
+          lease,
+          finishOutcome,
+          params.producer ? params.intent : undefined,
+        );
         return finishOutcome.result;
       }
       transitionFinishOutcome(definition, lease, finishOutcome);
@@ -350,12 +357,13 @@ export function transitionFinishOutcome<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureOpenResourceFenceLease<K>,
   outcome: FinishOutcome<C>,
+  producer?: DurableCaptureFinishIntent,
 ): void {
   if (outcome.status === 'completed') {
     lease.transition('completed', {
       metadata: {
         ...(lease.envelope.metadata ?? {}),
-        ...definition.completionMetadata(outcome.result),
+        ...definition.completionMetadata(outcome.result, lease.envelope.metadata, producer),
         phase: 'completed',
       },
     });

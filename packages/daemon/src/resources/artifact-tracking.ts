@@ -1,3 +1,4 @@
+import { outputFileIdentity } from '@agent-device/host-kit/file';
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -177,7 +178,7 @@ type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
   leaseVerifier?: string;
-  reservation?: Readonly<{ directory: string; lifetimeId: string }>;
+  reservation?: Readonly<{ directory?: string; lifetimeId: string }>;
   /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
   output: string | undefined;
   artifactType: DaemonArtifactType | undefined;
@@ -306,7 +307,7 @@ export function reserveFileOutput(
           fileName: delivery.fileName,
           displayRotation,
         },
-        outputIdentity(stat),
+        outputFileIdentity(stat),
         { remainingEntries: 1, deleteAfterDownload: true },
         { directory, lifetimeId },
       );
@@ -321,6 +322,50 @@ export function reserveFileOutput(
       return artifact;
     },
   };
+}
+
+type RecordingFile = DaemonArtifact & { path: string; artifactId: string; sourceIdentity: string };
+
+/** Registers the producer's identities. A replay can only reference entries this daemon retains. */
+export function commitRecordingFileOutputs(
+  files: readonly RecordingFile[],
+  producer: FileOutputProducer,
+  sessionName: string,
+  completedAt: number,
+  publish: boolean,
+): DaemonArtifact[] {
+  const artifacts = pendingArtifacts();
+  for (const { artifactId } of files) {
+    const entry = artifacts.get(artifactId);
+    if (
+      completedAt + ARTIFACT_CLEANUP_TIMEOUT_MS <= Date.now() ||
+      entry?.cleanupRequested ||
+      (!publish && !entry)
+    ) {
+      throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+    }
+  }
+  return files.map(({ path: artifactPath, sourceIdentity, artifactId, ...delivery }) => {
+    if (!artifacts.has(artifactId)) {
+      addArtifactEntry(
+        artifacts,
+        artifactId,
+        {
+          artifactPath,
+          artifactType: delivery.artifactType,
+          fileName: delivery.fileName,
+          tenantId: producer.tenantId,
+          leaseVerifier: producer.leaseVerifier ?? undefined,
+          sessionName,
+        },
+        sourceIdentity,
+        { remainingEntries: 1, deleteAfterDownload: true },
+        { lifetimeId: producer.lifetimeId },
+        completedAt,
+      );
+    }
+    return { ...delivery, artifactId };
+  });
 }
 
 /** What a request presents to list or download artifacts. */
@@ -368,12 +413,15 @@ function addArtifactEntry(
   output: string | undefined,
   sourceCleanup: ArtifactSourceCleanup,
   reservation?: ArtifactEntry['reservation'],
+  createdAt = Date.now(),
 ): void {
-  const createdAt = Date.now();
-  const timer = setTimeout(() => {
-    const entry = artifacts.get(artifactId);
-    if (entry) requestArtifactCleanup(artifacts, artifactId, entry);
-  }, ARTIFACT_CLEANUP_TIMEOUT_MS);
+  const timer = setTimeout(
+    () => {
+      const entry = artifacts.get(artifactId);
+      if (entry) requestArtifactCleanup(artifacts, artifactId, entry);
+    },
+    Math.max(0, createdAt + ARTIFACT_CLEANUP_TIMEOUT_MS - Date.now()),
+  );
   timer.unref();
   artifacts.set(artifactId, {
     artifactPath: params.artifactPath,
@@ -388,7 +436,7 @@ function addArtifactEntry(
     sourceCleanup,
     activeDownloads: new Set(),
     cleanupRequested: false,
-    awaitingDelivery: reservation !== undefined,
+    awaitingDelivery: reservation?.directory !== undefined,
     createdAt,
     timer,
   });
@@ -424,15 +472,9 @@ function findArtifactSourceCleanup(
   return undefined;
 }
 
-/** What tells one output at a path from the next one written there. A directory keeps its identity while its entries change. */
-function outputIdentity(stat: fs.Stats): string {
-  const inode = `${stat.dev}:${stat.ino}`;
-  return stat.isDirectory() ? inode : `${inode}:${stat.size}:${stat.mtimeMs}`;
-}
-
 function readOutputIdentity(artifactPath: string, noFollow = false): string | undefined {
   try {
-    return outputIdentity(noFollow ? fs.lstatSync(artifactPath) : fs.statSync(artifactPath));
+    return outputFileIdentity(noFollow ? fs.lstatSync(artifactPath) : fs.statSync(artifactPath));
   } catch {
     return undefined;
   }
@@ -443,7 +485,7 @@ export function retainPerfReportSource(source: string, leaseVerifier: string | n
   const canonical = fs.realpathSync(source);
   const stat = fs.statSync(canonical);
   artifactTracking().retainedPerformanceSources.set(canonical, {
-    output: outputIdentity(stat),
+    output: outputFileIdentity(stat),
     birthtimeMs: stat.birthtimeMs,
     leaseVerifier,
   });
@@ -455,7 +497,7 @@ export function assertTrackedPerformanceSourceLease(
   source: fs.Stats,
   caller: string | null,
 ): void {
-  const identity = outputIdentity(source);
+  const identity = outputFileIdentity(source);
   const state = artifactTracking();
   for (const [retainedPath, entry] of state.retainedPerformanceSources) {
     if (
@@ -542,7 +584,7 @@ function openRegisteredFile(artifactId: string, entry: ArtifactEntry): fs.ReadSt
   );
   try {
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || outputIdentity(stat) !== entry.output) {
+    if (!stat.isFile() || outputFileIdentity(stat) !== entry.output) {
       cleanupDownloadableArtifact(artifactId);
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }
@@ -597,7 +639,7 @@ export async function listDownloadableArtifacts(
 function statRegisteredOutput(artifactId: string, entry: ArtifactEntry): fs.Stats | undefined {
   try {
     const stat = statArtifactPath(entry);
-    if (outputIdentity(stat) === entry.output) return stat;
+    if (outputFileIdentity(stat) === entry.output) return stat;
   } catch {
     // A missing output is cleaned up like a replaced one.
   }
@@ -646,7 +688,7 @@ function readDownloadableArtifactEntry(
     cleanupDownloadableArtifact(artifactId);
     throw new AppError('COMMAND_FAILED', `Artifact file is missing: ${entry.artifactPath}`);
   }
-  if (outputIdentity(stat) !== entry.output) {
+  if (outputFileIdentity(stat) !== entry.output) {
     cleanupDownloadableArtifact(artifactId);
     throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   }
@@ -838,7 +880,7 @@ function requestArtifactCleanup(
   ) {
     removeBestEffort(entry.artifactPath);
   }
-  if (entry.reservation) {
+  if (entry.reservation?.directory) {
     try {
       fs.rmdirSync(entry.reservation.directory);
     } catch {

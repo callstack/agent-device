@@ -18,8 +18,10 @@ import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-run
 import { screenshotCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
 import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
-import { finalizeDaemonResponse } from '../request-finalization.ts';
+import {
+  settleCommittedFileOutputs,
+  trackDownloadableArtifact,
+} from '../../resources/artifact-tracking.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
 import { successfulData, withHttp } from './http-output.fixtures.ts';
 
@@ -276,14 +278,26 @@ test('direct HTTP recording replay requires known remote output provenance', asy
   const { remoteCaptureLease: _owner, ...metadata } = record.envelope.metadata ?? {};
   screenRecordingResourceStore.write(resourcePath, { ...record.envelope, metadata });
   await withHttp(
-    async (request) =>
-      finalizeDaemonResponse(
-        request,
-        await harness.run(request.positionals, request.meta, request.flags, request.internal),
-        trackDownloadableArtifact,
-      ),
+    async (request) => {
+      const response = await harness.run(
+        request.positionals,
+        request.meta,
+        request.flags,
+        request.internal,
+      );
+      if (response.ok) settleCommittedFileOutputs(response.data?.artifacts, true);
+      return response;
+    },
     async (post, base) => {
       const replay = async () => await post({ command: 'record', positionals: ['stop'] }, false);
+      expect((await replay()).error?.data?.details).toMatchObject({
+        reason: 'LEASE_OUTPUT_MISMATCH',
+      });
+      const { remoteCaptureReservation: _reservation, ...unreserved } = metadata;
+      screenRecordingResourceStore.write(resourcePath, {
+        ...record.envelope,
+        metadata: { ...unreserved, remoteCaptureLease: 'unleased' },
+      });
       expect((await replay()).error?.data?.details).toMatchObject({
         reason: 'LEASE_OUTPUT_MISMATCH',
       });
@@ -318,6 +332,7 @@ test('direct HTTP recording replay requires known remote output provenance', asy
       const data = successfulData(await replay());
       expect(data.artifacts?.[0]?.localPath).toBe(clientPath);
       const id = data.artifacts?.[0]?.artifactId;
+      expect(id).toBe(`${record.envelope.fence.token}-1`);
       const download = await fetch(`${base}/artifacts/${id}`, {
         headers: { authorization: 'Bearer test-token' },
       });
