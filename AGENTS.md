@@ -7,11 +7,10 @@ The daemon owns sessions. Registry declarations route commands to platform runti
 
 For a delegated task, CI owns validation.
 Do not run local gates, check scripts, coverage, or project-wide tests.
-To write a test, run only that test file.
-Push the change.
+If you write a test, run only that test file.
+If the task asks you to publish a change, push it.
 Report the head SHA with checks pending.
 Do not wait for CI.
-The coordinator relays CI results and review.
 
 ## Task routing
 
@@ -34,7 +33,7 @@ For each question that remains, use the matching row.
 | A PR to open or update | `docs/agents/pull-requests.md` |
 | A change to review | `docs/agents/review.md` |
 | Trust boundaries, untrusted paths, security review | `docs/agents/security.md` |
-| Manual device verification | `docs/agents/device-verification.md` |
+| Apple runner or device-facing changes | `docs/agents/device-verification.md` |
 | Issues, PRDs, or triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 

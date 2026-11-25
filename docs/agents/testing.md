@@ -1,26 +1,28 @@
 # Validate a change
 
+If the task is delegated, follow the worker handoff in AGENTS.md.
+
 ## Run checks
 
 1. During edits, run the focused test or `pnpm check:quick`.
-2. A maintainer commits, then runs `pnpm check:affected --run --head <commit>`.
-3. For a broad refactor or an explicitly requested full gate, run `pnpm check`.
+2. If the task is not delegated, commit before you push.
+   Then run `pnpm check:affected --run --head <commit>`.
+3. For a broad refactor or a requested full gate, run `pnpm check`.
 
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
-An unknown lock owner blocks; report it.
-Do not add lock wrappers.
+Wait for a live owner to finish.
+An unknown owner blocks; report it.
+Do not add lock wrappers. Do not remove the lock manually.
 A wait ends after two hours.
 Focused tests do not lock.
 Avoid subprocess-heavy tests beside a broad gate.
 
-The runner stops at failure.
-Its receipt records refs, checkout state, commands, exits, skips, and results.
+The runner stops at failure and writes a receipt.
 
 For a plan, run `pnpm check:affected`.
 For reasons, add `--verbose`.
 For JSON, run `pnpm --silent check:affected --json`.
-With `--run --json`, stdout contains the receipt and stderr contains progress.
 When head is `HEAD`, planning and execution include working-tree changes.
 
 `pnpm check` runs every `localRunnable` catalog check except `vitest-related`.
@@ -54,8 +56,8 @@ Never call a failing gate passed.
 
 | Evidence | Required action |
 | --- | --- |
-| Failure caused by this change | Fix its owner and rerun. Until a run passes, report failed validation. |
-| Suspected host or infrastructure fault | Save the log; compare the same command on the unchanged base without competing tests. Until compared, report cause unproven. |
+| Failure from this change | Fix its owner and rerun. Until a run passes, report failed validation. |
+| Suspected infrastructure fault | Save the log; compare the same command on the unchanged base without competing tests. Until compared, report cause unproven. |
 | Matching failure on unchanged base | Report Base-blocked with SHAs, command, and logs. Name the blocker and owner or issue. For authorized publication, use a draft with remaining checks. Do not mark merge-ready. |
 | Unavailable or inconclusive base comparison | Record the missing evidence and next action. Report blocked with cause unproven. |
 | Repaired fault or upstream fix | Rerun the failed check and affected gate at head. Require new evidence to change blocked status. |
