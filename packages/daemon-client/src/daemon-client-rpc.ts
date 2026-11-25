@@ -11,13 +11,14 @@ import {
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
+  type DaemonArtifactEndpoint,
   fetchRemoteArtifact,
   materializeRemoteArtifacts,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import type { DaemonDispatch } from './daemon-client-request.ts';
+import { dispatchDaemonRequest, type DaemonDispatch } from './daemon-client-request.ts';
 import {
   DAEMON_REQUEST_MAX_BYTES,
   DAEMON_RPC_PROTOCOL_VERSION,
@@ -41,9 +42,14 @@ export function handleDaemonHttpResponseBody(
 ): void {
   const { info, req, stateDir, host, dispatch, resolve, reject } = options;
   try {
+    const endpoint: DaemonArtifactEndpoint = {
+      baseUrl: info.baseUrl,
+      token: info.token,
+      downloadHandoff: (start) => dispatchDaemonRequest(dispatch, start),
+    };
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, options);
+      void rejectDaemonHttpRpcError(parsed.error, { ...options, info: endpoint });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -55,14 +61,7 @@ export function handleDaemonHttpResponseBody(
       );
       return;
     }
-    void resolveDaemonHttpResult(
-      info,
-      req,
-      parsed.result,
-      { host, stateDir, dispatch },
-      resolve,
-      reject,
-    );
+    void resolveDaemonHttpResult(endpoint, req, parsed.result, { host, stateDir }, resolve, reject);
   } catch (err) {
     reject(
       new AppError(
@@ -98,7 +97,7 @@ function parseDaemonHttpResponseBody(body: string): {
 async function rejectDaemonHttpRpcError(
   error: { message?: string; data?: Record<string, unknown> },
   options: {
-    info: DaemonInfo;
+    info: DaemonArtifactEndpoint;
     req: DaemonWireRequest;
     stateDir: string;
     dispatch?: DaemonDispatch;
@@ -131,10 +130,7 @@ async function rejectDaemonHttpRpcError(
         requestId,
         handoff: dispatch,
       });
-  const deliver = () => settleFailedDeliveryReceipt(info, req, stateDir, localized);
-  const report =
-    dispatch && payload.details?.scriptDeliveryReceipt ? () => dispatch(deliver) : deliver;
-  const errorToReport = await report().catch(() => ({ ...localized, logPath: undefined }));
+  const errorToReport = await settleFailedDeliveryReceipt(info, req, stateDir, localized);
   reject(appErrorFromDaemonError(errorToReport, requestId));
 }
 
@@ -144,7 +140,7 @@ async function rejectDaemonHttpRpcError(
  * caller receives. Never throws, so a receipt that cannot settle still leaves the original failure.
  */
 async function settleFailedDeliveryReceipt(
-  info: DaemonInfo,
+  info: DaemonArtifactEndpoint,
   req: DaemonWireRequest,
   stateDir: string,
   error: DaemonError,
@@ -152,7 +148,7 @@ async function settleFailedDeliveryReceipt(
   if (!info.baseUrl) return error;
   try {
     return await settleScriptDeliveryReceiptOfFailure(
-      { baseUrl: info.baseUrl, token: info.token },
+      { ...info, baseUrl: info.baseUrl },
       req,
       error,
       stateDir,
@@ -210,10 +206,10 @@ function appErrorFromDaemonError(error: DaemonError, requestId: string | undefin
 }
 
 async function resolveDaemonHttpResult(
-  info: DaemonInfo,
+  info: DaemonArtifactEndpoint,
   req: DaemonWireRequest,
   result: DaemonResponse,
-  client: { host: HostEnvironment; stateDir: string; dispatch?: DaemonDispatch },
+  client: { host: HostEnvironment; stateDir: string },
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
@@ -222,16 +218,7 @@ async function resolveDaemonHttpResult(
       resolve(result);
       return;
     }
-    const { data } = result;
-    const mayDownload =
-      data?.artifacts !== undefined ||
-      data?.scriptPublicationId !== undefined ||
-      data?.scriptDeliveryReceipt !== undefined;
-    const materialize = () =>
-      materializeRemoteArtifacts(info, req, result, client.host, client.stateDir);
-    resolve(
-      client.dispatch && mayDownload ? await client.dispatch(materialize) : await materialize(),
-    );
+    resolve(await materializeRemoteArtifacts(info, req, result, client.host, client.stateDir));
   } catch (error) {
     // The daemon answered, so the request ran; only bringing its artifacts here failed.
     reject(await discloseAnsweredRequestFailure(error, req));

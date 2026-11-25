@@ -460,6 +460,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         REMOTE_ARTIFACTS,
         'DaemonArtifactEndpoint',
+        'RemoteDaemonArtifactEndpoint',
         'buildDaemonArtifactUrl',
         'isRemoteDaemon',
         'DownloadRemoteArtifactParams',
