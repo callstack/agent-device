@@ -1,6 +1,5 @@
 export {
   ARCHIVE_EXTENSIONS,
-  isTrustedInstallSourceUrl,
   validateDownloadSourceUrl,
 } from '@agent-device/provision-kit/install-source';
 

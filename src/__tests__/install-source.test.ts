@@ -10,7 +10,6 @@ import { Readable } from 'node:stream';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   ARCHIVE_EXTENSIONS,
-  isTrustedInstallSourceUrl,
   materializeInstallablePath,
   validateDownloadSourceUrl,
 } from '@agent-device/provision-kit/install-source';
@@ -24,7 +23,6 @@ import {
   withAppleToolProvider,
 } from '@agent-device/platform-apple/tool-provider';
 import { prepareIosInstallArtifact } from '@agent-device/platform-apple/install-artifact';
-import { AppError } from '@agent-device/kernel/errors';
 import '../platform-runtime-android-adb-host.ts';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
@@ -76,42 +74,6 @@ test('validateDownloadSourceUrl fails closed when DNS returns no public address'
   } finally {
     lookupMock.mockRestore();
   }
-});
-
-test('isTrustedInstallSourceUrl recognizes supported artifact services', () => {
-  assert.equal(
-    isTrustedInstallSourceUrl('https://api.github.com/repos/acme/app/actions/artifacts/1/zip'),
-    true,
-  );
-  assert.equal(
-    isTrustedInstallSourceUrl('https://github.com/acme/app/actions/runs/123/artifacts/456'),
-    true,
-  );
-  assert.equal(
-    isTrustedInstallSourceUrl('https://github.com/acme/app/suites/789/artifacts/456'),
-    true,
-  );
-  assert.equal(
-    isTrustedInstallSourceUrl('https://expo.dev/accounts/acme/projects/app/builds/123'),
-    true,
-  );
-  assert.equal(
-    isTrustedInstallSourceUrl('https://download.expo.dev/artifacts/eas/build-123/app.apk'),
-    true,
-  );
-  assert.equal(isTrustedInstallSourceUrl('https://example.com/app.zip'), false);
-  assert.equal(
-    isTrustedInstallSourceUrl('https://github.com/acme/app/archive/refs/heads/main.zip'),
-    false,
-  );
-  assert.equal(isTrustedInstallSourceUrl('https://expo.dev/pricing'), false);
-  assert.throws(
-    () => isTrustedInstallSourceUrl('/abs/path/app.zip'),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      error.message === 'Invalid source URL',
-  );
 });
 
 test(

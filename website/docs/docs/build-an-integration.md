@@ -70,7 +70,6 @@ Entry points for integrations:
   - types: `FindMatchOptions`
 - `agent-device/install-source`
   - `ARCHIVE_EXTENSIONS`
-  - `isTrustedInstallSourceUrl(sourceUrl)` (deprecated; install sources are not gated on it)
   - `validateDownloadSourceUrl(url)`
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
@@ -79,6 +78,8 @@ Entry points for integrations:
   - experimental plugin contract: `AgentDevicePluginFactory` and `ProviderPluginHost`; see [provider plugins](./plugins.md).
 
 ## Migrate SDK hosts to 0.22
+
+The deprecated `isTrustedInstallSourceUrl` export was removed. Install sources are not gated on artifact service classification. Use `validateDownloadSourceUrl` to validate a download URL.
 
 In 0.22, Android host ADB helpers, archive inspection, and Metro preparation require an explicit `{ env, cwd }` host. `resolveRemoteConfigProfile` requires `env`, and `createLocalArtifactAdapter` requires `cwd`. Capture these values in your application's entry point and pass the same host to its operations:
 
