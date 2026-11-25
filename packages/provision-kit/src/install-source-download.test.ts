@@ -13,7 +13,6 @@ import {
 } from '@agent-device/host-kit/transport';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { downloadInstallSource } from './install-source-download.ts';
-import { isTrustedInstallSourceUrl } from './install-source.ts';
 import * as networkTransport from './install-source-network-transport.ts';
 
 test('download redirects revalidate destinations and strip sensitive cross-origin headers', async () => {
@@ -478,7 +477,7 @@ test('redirect hops rearm phase timers on one shared aggregate signal', async ()
   }
 });
 
-test('download and the trusted-source check refuse an unparsable source alike', async () => {
+test('download refuses an unparsable source', async () => {
   const source = '/abs/path/app.zip';
   const expected = { code: 'INVALID_ARGS', message: 'Invalid source URL' };
   await assert.rejects(
@@ -490,7 +489,6 @@ test('download and the trusted-source check refuse an unparsable source alike', 
     }),
     expected,
   );
-  assert.throws(() => isTrustedInstallSourceUrl(source), expected);
 });
 
 test('download keeps the INVALID_ARGS refusal and hint when the source host does not resolve', async () => {

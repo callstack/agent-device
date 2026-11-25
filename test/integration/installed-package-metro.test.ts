@@ -663,7 +663,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           },
           './contracts': (mod) => mod.centerOfRect({ x: 2, y: 2, width: 6, height: 6 }),
           './finders': (mod) => mod.findBestMatchesByLocator([], 'text', 'anything').matches.length,
-          './install-source': (mod) => typeof mod.isTrustedInstallSourceUrl('https://example.test/app.apk'),
+          './install-source': (mod) => !('isTrustedInstallSourceUrl' in mod) && Array.isArray(mod.ARCHIVE_EXTENSIONS) && typeof mod.validateDownloadSourceUrl === 'function',
           './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
           './plugins': (mod) => Object.keys(mod).length === 1 && typeof mod.addPluginArtifact === 'function',
@@ -745,7 +745,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
       './batch': 'INVALID_ARGS',
       './contracts': { x: 5, y: 5 },
       './finders': 0,
-      './install-source': 'boolean',
+      './install-source': true,
       './io': 'function',
       './plugins': true,
       // Type-only subpath: resolving the module from the packed exports map is

@@ -16,7 +16,7 @@ import {
   noteInstallArtifactArchiveDepth,
 } from './install-artifact-archive-context.ts';
 import { approveDownloadSourceUrl } from './install-source-network.ts';
-import { downloadInstallSource, invalidSourceUrlError } from './install-source-download.ts';
+import { downloadInstallSource } from './install-source-download.ts';
 
 export type MaterializeInstallableOptions = {
   source: DaemonInstallSource;
@@ -237,40 +237,6 @@ async function classifyMaterializationError(
 
 export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {
   await approveDownloadSourceUrl(parsedUrl);
-}
-
-/**
- * @deprecated agent-device does not gate install sources on this check: URL sources from any
- * public host may point at an installable or an archive containing one. This only classifies
- * whether a URL names a GitHub Actions or EAS artifact, which says nothing about who built it.
- */
-export function isTrustedInstallSourceUrl(sourceUrl: string | URL): boolean {
-  const parsed = sourceUrl instanceof URL ? sourceUrl : URL.parse(sourceUrl);
-  if (!parsed) throw invalidSourceUrlError();
-  const hostname = parsed.hostname.toLowerCase();
-  if (!hostname) return false;
-  const pathname = parsed.pathname;
-  return (
-    isTrustedGithubActionsArtifactUrl(hostname, pathname) ||
-    isTrustedEasArtifactUrl(hostname, pathname)
-  );
-}
-
-function isTrustedGithubActionsArtifactUrl(hostname: string, pathname: string): boolean {
-  if (hostname === 'api.github.com') {
-    return /^\/repos\/[^/]+\/[^/]+\/actions\/artifacts\/\d+\/zip$/i.test(pathname);
-  }
-  if (hostname !== 'github.com') return false;
-  return /^\/[^/]+\/[^/]+\/(?:actions\/runs\/\d+\/artifacts\/\d+|suites\/\d+\/artifacts\/\d+)$/i.test(
-    pathname,
-  );
-}
-
-function isTrustedEasArtifactUrl(hostname: string, pathname: string): boolean {
-  if (hostname !== 'expo.dev' && !hostname.endsWith('.expo.dev')) {
-    return false;
-  }
-  return /^\/(?:artifacts\/eas\/|accounts\/[^/]+\/projects\/[^/]+\/builds\/)/i.test(pathname);
 }
 
 async function runCleanupTasks(tasks: Array<() => Promise<void>>): Promise<void> {

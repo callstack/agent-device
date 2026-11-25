@@ -70,7 +70,6 @@ Entry points for integrations:
   - types: `FindMatchOptions`
 - `agent-device/install-source`
   - `ARCHIVE_EXTENSIONS`
-  - `isTrustedInstallSourceUrl(sourceUrl)` (deprecated; install sources are not gated on it)
   - `validateDownloadSourceUrl(url)`
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
@@ -79,6 +78,22 @@ Entry points for integrations:
   - experimental plugin contract: `AgentDevicePluginFactory` and `ProviderPluginHost`; see [provider plugins](./plugins.md).
 
 ## Migrate SDK hosts to 0.22
+
+The deprecated `isTrustedInstallSourceUrl` export was removed. To validate a download URL, await `validateDownloadSourceUrl`. It resolves with no value on success and rejects if the URL fails validation. Continue with the download only after it resolves.
+
+```ts
+import { validateDownloadSourceUrl } from 'agent-device/install-source';
+
+async function validateAppDownload(input: string): Promise<URL> {
+  try {
+    const url = new URL(input);
+    await validateDownloadSourceUrl(url);
+    return url;
+  } catch (cause) {
+    throw new Error('Invalid app download URL', { cause });
+  }
+}
+```
 
 In 0.22, Android host ADB helpers, archive inspection, and Metro preparation require an explicit `{ env, cwd }` host. `resolveRemoteConfigProfile` requires `env`, and `createLocalArtifactAdapter` requires `cwd`. Capture these values in your application's entry point and pass the same host to its operations:
 
