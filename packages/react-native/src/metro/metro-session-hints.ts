@@ -277,10 +277,10 @@ function recordOpenedBinding(
 }
 
 /**
- * Records an open that bound no address. What is left is the app this open launched: a later reload
- * looks that app's own dev-server address up from it. A reused session can open a different app, so a
- * recorded app always replaces the previous one and keeps the address the session already had. An open
- * that reports no app leaves a reused session's record alone and clears a stale one on a fresh session.
+ * Records an open that bound no address. A fresh session keeps nothing a previous one left behind: an
+ * address bound by an earlier run belongs to the project that bound it, so a flagless open of a
+ * different project must not inherit it, and the record holds only the app this open launched. A
+ * reused session keeps the address it bound, and only swaps the app, which may be another one.
  */
 function recordOpenedApp(
   scope: MetroSessionScope,
@@ -292,15 +292,29 @@ function recordOpenedApp(
     if (!sessionReused) clearMetroSessionHints(scope);
     return;
   }
-  writeMetroSessionHints({ ...scope, hints: { ...bindingFields(stored), app } });
+  writeMetroSessionHints({
+    ...scope,
+    hints: { ...(sessionReused ? bindingFields(stored) : {}), app },
+  });
 }
 
-/** The address fields of a stored record, apart from the app recorded beside them. */
+/**
+ * The address fields of a stored record, apart from the app recorded beside them. A record written
+ * before the control address existed names its address as runtime hints instead, so the projection
+ * resolves those to the same field the reader reads: one field set, never a binding that only one of
+ * the two understands.
+ */
 function bindingFields(stored: MetroSessionRecord | undefined): MetroSessionHints {
+  const controlBaseUrl = stored?.controlBaseUrl ?? storedBindingUrl(stored);
   return {
-    ...(stored?.controlBaseUrl ? { controlBaseUrl: stored.controlBaseUrl } : {}),
+    ...(controlBaseUrl ? { controlBaseUrl } : {}),
     ...(stored?.deviceBaseUrls ? { deviceBaseUrls: stored.deviceBaseUrls } : {}),
   };
+}
+
+function storedBindingUrl(stored: MetroSessionRecord | undefined): string | undefined {
+  if (!stored || !hasStoredRuntimeHints(stored.raw)) return undefined;
+  return resolveMetroServerUrl({ runtime: readStoredRuntimeHints(stored.raw) }).toString();
 }
 
 /**

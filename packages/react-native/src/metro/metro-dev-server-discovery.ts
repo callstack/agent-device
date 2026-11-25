@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isLoopbackHostname } from '@agent-device/daemon-contracts/daemon-resolution';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -14,10 +13,12 @@ import {
 import {
   isMetroStatusBody,
   parseAppReportedServerUrl,
-  parseLsofListeningPorts,
+  parseLsofListeningSockets,
   parseMetroProjectRootHeader,
-  parseNetstatListeningPorts,
+  parseNetstatListeningSockets,
   projectRootsOverlap,
+  socketUrl,
+  type ListeningSocket,
 } from './metro-dev-server-parsing.ts';
 
 /**
@@ -67,8 +68,8 @@ const MAX_CONCURRENT_STATUS_PROBES = 32;
 
 /** The host reads a reload can make, injectable so the resolution order is testable without a host. */
 export type MetroDevServerProbe = Readonly<{
-  /** Ports a local process is listening on. */
-  listListeningPorts?: () => Promise<number[]>;
+  /** Listening sockets a local process is dialled on, each with the address the host reported. */
+  listListeningSockets?: () => Promise<ListeningSocket[]>;
   /** The dev server at an address, when one answers there. */
   probeServer?: (serverUrl: URL, timeoutMs: number) => Promise<LocalMetroServer | undefined>;
   /** What the session's app itself stored as its dev-server address. */
@@ -123,16 +124,17 @@ export async function resolveMetroReloadServerUrl(
     host,
   ).catch(() => undefined);
   if (reported && (await servesProjectRoot(reported, projectRoots, probe))) {
-    // The app cannot be wrong about the server it loads from, but its stored address can outlive
-    // that server, and somebody else's Metro can take the port. On loopback, where this host can
-    // answer for it, one bounded probe settles both questions.
+    // The app cannot be wrong about the server it loads from, but its stored address can outlive that
+    // server, and something else can take the host or port since. One bounded `/status` read settles
+    // both questions, wherever the address points: a LAN host left by `open --metro-host` is a host
+    // this reload is about to call anyway.
     return { serverUrl: reported, resolvedBy: 'app-reported' };
   }
 
   const discovered = await discoverLocalMetroServer({
     projectRoots,
-    listListeningPorts: probe.listListeningPorts ?? listLocalListeningPorts,
-    probeServer: probe.probeServer ?? probeLocalMetroServer,
+    listListeningSockets: probe.listListeningSockets ?? listLocalListeningSockets,
+    probeServer: probe.probeServer ?? probeMetroServerStatus,
   });
   if (discovered) {
     return { serverUrl: discovered.serverUrl, resolvedBy: 'local-project-root' };
@@ -152,20 +154,21 @@ export function canDiscoverForApp(app: MetroAppTarget | undefined): boolean {
 }
 
 /**
- * Confirms an app-reported address against the project it must serve. A server that is not running,
- * or one that names a project unrelated to this session, is refused. A server that reports no root at
- * all is accepted: the app named this address itself, and older dev servers send no root header.
+ * Confirms an app-reported address against the project it must serve. A server that does not answer,
+ * or one that names a project unrelated to this session, is refused. A server that answers and reports
+ * no root at all is accepted: the app named this address itself, and older dev servers send no root
+ * header. The read is bounded and makes no assumptions about where the address points, so an address
+ * that leaves this machine is confirmed the same way as one that stays on it.
  */
 async function servesProjectRoot(
   serverUrl: URL,
   projectRoots: string[],
   probe: MetroDevServerProbe,
 ): Promise<boolean> {
-  if (!isLoopbackHostname(serverUrl.hostname)) return true;
-  const probeServer = probe.probeServer ?? probeLocalMetroServer;
+  const probeServer = probe.probeServer ?? probeMetroServerStatus;
   const running = await probeServer(serverUrl, STATUS_PROBE_TIMEOUT_MS).catch(() => undefined);
   // The app named this address itself, so a server that answers and names no root stays what it
-  // reported. Only a root that names a different project refuses it.
+  // reported. Only a server that is gone, or one that names a different project, refuses it.
   if (!running) return false;
   return running.projectRoot === undefined || matchesProjectRoot(running, projectRoots);
 }
@@ -211,9 +214,9 @@ async function readSimulatorAppPreferences(
 }
 
 /**
- * The local dev server that serves this project: a listening port whose `/status` answers
+ * The local dev server that serves this project: a listening socket whose `/status` answers
  * `packager-status:running` and whose `X-React-Native-Project-Root` is one of the project roots or a
- * parent or child of one (a monorepo server serves from the repo root). Ports come from what a local
+ * parent or child of one (a monorepo server serves from the repo root). Sockets come from what a local
  * process actually listens on, each probe is short, and they run bounded in parallel, so a miss costs
  * one bounded sweep rather than a reload timeout. A project-root match always wins, and a server that
  * names a different project never counts, so another project's Metro is not reloaded by accident.
@@ -221,29 +224,33 @@ async function readSimulatorAppPreferences(
 export async function discoverLocalMetroServer(
   input: Readonly<{
     projectRoots: string[];
-    listListeningPorts: () => Promise<number[]>;
+    listListeningSockets: () => Promise<ListeningSocket[]>;
     probeServer: (serverUrl: URL, timeoutMs: number) => Promise<LocalMetroServer | undefined>;
     probeTimeoutMs?: number;
   }>,
 ): Promise<LocalMetroServer | undefined> {
-  const ports = await input.listListeningPorts().catch(() => [] as number[]);
+  const sockets = await input.listListeningSockets().catch(() => [] as ListeningSocket[]);
   const timeoutMs = input.probeTimeoutMs ?? STATUS_PROBE_TIMEOUT_MS;
-  const servers = await probePorts(ports, input.probeServer, timeoutMs);
+  const servers = await probeListeningSockets(sockets, input.probeServer, timeoutMs);
   const roots = candidateProjectRoots(input.projectRoots);
   return servers.find((candidate) => matchesProjectRoot(candidate, roots));
 }
 
-/** Probes every port, at most MAX_CONCURRENT_STATUS_PROBES at a time, keeping probe failures quiet. */
-async function probePorts(
-  ports: number[],
+/**
+ * Probes every socket, at most MAX_CONCURRENT_STATUS_PROBES at a time, keeping probe failures quiet.
+ * Each is dialled at the address the host reported it on: a process bound to one address family is
+ * unreachable over the other, so an IPv6-only dev server is met at its IPv6 address.
+ */
+async function probeListeningSockets(
+  sockets: ListeningSocket[],
   probeServer: (serverUrl: URL, timeoutMs: number) => Promise<LocalMetroServer | undefined>,
   timeoutMs: number,
 ): Promise<LocalMetroServer[]> {
   const servers: LocalMetroServer[] = [];
-  for (let start = 0; start < ports.length; start += MAX_CONCURRENT_STATUS_PROBES) {
-    const batch = ports
+  for (let start = 0; start < sockets.length; start += MAX_CONCURRENT_STATUS_PROBES) {
+    const batch = sockets
       .slice(start, start + MAX_CONCURRENT_STATUS_PROBES)
-      .map((port) => probeServer(new URL(`http://127.0.0.1:${port}`), timeoutMs));
+      .map((socket) => probeServer(socketUrl(socket), timeoutMs));
     for (const settled of await Promise.allSettled(batch)) {
       if (settled.status === 'fulfilled' && settled.value) servers.push(settled.value);
     }
@@ -266,18 +273,18 @@ function normalizeRealPath(input: string): string {
 }
 
 /**
- * The ports this host's processes listen on: what `lsof` reports, or, where `lsof` is not installed,
- * what `netstat` reports. A host with neither tool yields no ports, and reload answers with the typed
+ * The sockets this host's processes listen on: what `lsof` reports, or, where `lsof` is not installed,
+ * what `netstat` reports. A host with neither tool yields no sockets, and reload answers with the typed
  * failure rather than a crash or a guess.
  */
-export async function listLocalListeningPorts(): Promise<number[]> {
+export async function listLocalListeningSockets(): Promise<ListeningSocket[]> {
   const lsof = await runHostCommand('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fn']);
   if (lsof !== undefined) {
-    const ports = parseLsofListeningPorts(lsof);
-    if (ports.length > 0) return ports;
+    const sockets = parseLsofListeningSockets(lsof);
+    if (sockets.length > 0) return sockets;
   }
   const netstat = await runHostCommand('netstat', ['-an', '-p', 'tcp']);
-  return netstat === undefined ? [] : parseNetstatListeningPorts(netstat);
+  return netstat === undefined ? [] : parseNetstatListeningSockets(netstat);
 }
 
 /** A host command's stdout, or undefined when it is missing, fails, or times out. */
@@ -289,8 +296,8 @@ async function runHostCommand(command: string, args: string[]): Promise<string |
   return result && result.exitCode === 0 ? result.stdout : undefined;
 }
 
-/** One bounded `/status` read of a loopback address: running dev server, plus its project root. */
-export async function probeLocalMetroServer(
+/** One bounded `/status` read of an address: running dev server, plus its project root. */
+export async function probeMetroServerStatus(
   serverUrl: URL,
   timeoutMs: number,
 ): Promise<LocalMetroServer | undefined> {

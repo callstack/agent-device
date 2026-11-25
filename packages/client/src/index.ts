@@ -598,10 +598,11 @@ function daemonIsLocal(config: AgentDeviceClientConfig, host: HostEnvironment): 
 }
 
 /**
- * Whether `open` proved the session's device runs on this machine: the daemon answers here, and it
- * resolved the device from its own local inventory. A provider device, a device carried over from an
- * earlier request, or a daemon on another machine leaves it unproven — `undefined`, not `false` — and
- * the record keeps whatever an earlier open proved for the same device.
+ * Whether `open` proved where the session's device runs. A daemon on another machine proves the device
+ * is not on this one: the record is written here, so nothing here can read that device's state, and the
+ * answer is `false`. On a local daemon the device's origin decides: `true` when the daemon resolved it
+ * from its own inventory, `false` when it came from a provider, and `undefined` when the answer says
+ * nothing, which keeps whatever an earlier open proved for the same device.
  */
 function appHostedLocally(
   config: AgentDeviceClientConfig,

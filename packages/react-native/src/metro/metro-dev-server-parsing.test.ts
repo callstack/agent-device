@@ -4,11 +4,11 @@ import path from 'node:path';
 import {
   isMetroStatusBody,
   parseAppReportedServerUrl,
-  parseLsofListeningPorts,
+  parseLsofListeningSockets,
   parseMetroProjectRootHeader,
-  parseNetstatListeningPorts,
-  parsePortFromSocketName,
+  parseNetstatListeningSockets,
   projectRootsOverlap,
+  socketUrl,
 } from './metro-dev-server-parsing.ts';
 
 test('a /status body counts as a running dev server only when it names the packager', () => {
@@ -31,21 +31,47 @@ test('the project-root header is kept plain, percent-decoded, or dropped when em
   assert.equal(parseMetroProjectRootHeader(null), undefined);
 });
 
-test('lsof field output yields each listening port once, ascending', () => {
+test('lsof field output yields each listening socket once, ordered by port', () => {
   assert.deepEqual(
-    parseLsofListeningPorts('p956\nf9\nn*:7000\nn127.0.0.1:8081\np12\nn[::1]:8081\n'),
-    [7000, 8081],
+    parseLsofListeningSockets('p956\nf9\nn*:7000\nn127.0.0.1:8081\np12\nn[::1]:8081\n'),
+    [
+      { host: '127.0.0.1', port: 7000 },
+      { host: '127.0.0.1', port: 8081 },
+      { host: '::1', port: 8081 },
+    ],
+  );
+});
+
+test('lsof keeps the address family it reports, brackets and all', () => {
+  // Metro bound to IPv6 loopback only is unreachable on 127.0.0.1, so this is the address it must be
+  // dialled at; a wildcard listener is kept as loopback, which reaches every address of this host.
+  const sockets = parseLsofListeningSockets('n[::1]:8096\nn127.0.0.1:8096\nn*:8097\nn[2001:db8::1]:8098\n');
+  assert.deepEqual(sockets, [
+    { host: '127.0.0.1', port: 8096 },
+    { host: '::1', port: 8096 },
+    { host: '127.0.0.1', port: 8097 },
+    { host: '2001:db8::1', port: 8098 },
+  ]);
+  assert.deepEqual(
+    sockets.map((socket) => socketUrl(socket).toString()),
+    [
+      'http://127.0.0.1:8096/',
+      'http://[::1]:8096/',
+      'http://127.0.0.1:8097/',
+      'http://[2001:db8::1]:8098/',
+    ],
   );
 });
 
 test('lsof lines that name no socket or no numeric port are skipped', () => {
-  assert.deepEqual(parseLsofListeningPorts('p956\nf9\ncTCP\n'), []);
-  assert.deepEqual(parseLsofListeningPorts('nlocalhost:http-alt\nn:8081\nn127.0.0.1:0\n'), []);
+  assert.deepEqual(parseLsofListeningSockets('p956\nf9\ncTCP\n'), []);
+  assert.deepEqual(parseLsofListeningSockets('nlocalhost:http-alt\nn:8081\nn127.0.0.1:0\n'), []);
+  assert.deepEqual(parseLsofListeningSockets('n127.0.0.1:8081junk\nn]:8081\n'), []);
 });
 
-test('netstat output yields only tcp rows in LISTEN state, deduplicated and ascending', () => {
+test('netstat output yields only tcp rows in LISTEN state, deduplicated and ordered', () => {
   assert.deepEqual(
-    parseNetstatListeningPorts(
+    parseNetstatListeningSockets(
       [
         'tcp4 0 0 127.0.0.1.8081 *.* LISTEN',
         'tcp4 0 0 127.0.0.1.8081 127.0.0.1.55121 ESTABLISHED',
@@ -54,25 +80,30 @@ test('netstat output yields only tcp rows in LISTEN state, deduplicated and asce
         'udp4 0 0 127.0.0.1.5353 *.*',
       ].join('\n'),
     ),
-    [8081, 8096],
+    [
+      { host: '127.0.0.1', port: 8081 },
+      { host: '::1', port: 8096 },
+    ],
   );
 });
 
-test('both netstat address spellings name their port, and a wildcard still names none', () => {
-  // Linux prints `127.0.0.1:8081`; macOS prints `127.0.0.1.8081`.
-  assert.deepEqual(parseNetstatListeningPorts('tcp4 0 0 127.0.0.1:8081 0.0.0.0:* LISTEN'), [8081]);
-  assert.deepEqual(parseNetstatListeningPorts('tcp4 0 0 *.8081 *.* LISTEN'), [8081]);
-  assert.deepEqual(parseNetstatListeningPorts('tcp4 0 0 *.*.* LISTEN'), []);
-});
-
-test('the port a socket name ends with is read only when it is a real port', () => {
-  assert.equal(parsePortFromSocketName('127.0.0.1:8081'), 8081);
-  assert.equal(parsePortFromSocketName('[::1]:8096'), 8096);
-  assert.equal(parsePortFromSocketName('127.0.0.1:8081junk'), undefined);
-  assert.equal(parsePortFromSocketName('127.0.0.1:70000'), undefined);
-  assert.equal(parsePortFromSocketName('127.0.0.1:0'), undefined);
-  assert.equal(parsePortFromSocketName('8081'), undefined);
-  assert.equal(parsePortFromSocketName(':8081'), undefined);
+test('both netstat address spellings name their host and port, and a wildcard names loopback', () => {
+  // Linux prints `127.0.0.1:8081` and `[::1]:8096`; macOS prints `127.0.0.1.8081` and `::1.8096`.
+  assert.deepEqual(parseNetstatListeningSockets('tcp4 0 0 127.0.0.1:8081 0.0.0.0:* LISTEN'), [
+    { host: '127.0.0.1', port: 8081 },
+  ]);
+  assert.deepEqual(parseNetstatListeningSockets('tcp4 0 0 *.8081 *.* LISTEN'), [
+    { host: '127.0.0.1', port: 8081 },
+  ]);
+  assert.deepEqual(parseNetstatListeningSockets('tcp6 0 0 [::1]:8096 0.0.0.0:* LISTEN'), [
+    { host: '::1', port: 8096 },
+  ]);
+  assert.deepEqual(parseNetstatListeningSockets('tcp6 0 0 *.8096 *.* LISTEN'), [
+    { host: '127.0.0.1', port: 8096 },
+  ]);
+  // No host before the separator is no address to dial.
+  assert.deepEqual(parseNetstatListeningSockets('tcp4 0 0 *.*.* LISTEN'), []);
+  assert.deepEqual(parseNetstatListeningSockets('tcp4 0 0 127.0.0.1.8081 *.* TIME_WAIT'), []);
 });
 
 test('the app-reported server URL is what RCT_jsLocation names, with the stored scheme', () => {

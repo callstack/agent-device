@@ -7,8 +7,8 @@ import path from 'node:path';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
-  listLocalListeningPorts,
-  probeLocalMetroServer,
+  listLocalListeningSockets,
+  probeMetroServerStatus,
   readAppReportedMetroServerUrl,
   type MetroAppTarget,
 } from './metro-dev-server-discovery.ts';
@@ -124,50 +124,56 @@ test('an app reports nothing when its preferences, HOME, or the converter is una
 
 test('ports come from lsof when it is installed', async () => {
   const spawned: string[] = [];
-  const ports = await withCommandExecutorOverride(
+  const sockets = await withCommandExecutorOverride(
     (command) => {
       spawned.push(command);
       return Promise.resolve({
-        stdout: command === 'lsof' ? 'p1\nn127.0.0.1:8081\nn*:8096\n' : '',
+        stdout: command === 'lsof' ? 'p1\nn127.0.0.1:8081\nn[::1]:8096\n' : '',
         stderr: '',
         exitCode: 0,
       });
     },
-    async () => await listLocalListeningPorts(),
+    async () => await listLocalListeningSockets(),
   );
-  assert.deepEqual(ports, [8081, 8096]);
+  assert.deepEqual(sockets, [
+    { host: '127.0.0.1', port: 8081 },
+    { host: '::1', port: 8096 },
+  ]);
   // netstat is only asked where lsof could not answer.
   assert.deepEqual(spawned, ['lsof']);
 });
 
 test('ports fall back to netstat on a host without lsof', async () => {
   const spawned: string[] = [];
-  const ports = await withCommandExecutorOverride(
+  const sockets = await withCommandExecutorOverride(
     (command) => {
       spawned.push(command);
       if (command === 'lsof') return Promise.reject(new Error('lsof ENOENT'));
       return Promise.resolve({
-        stdout: 'tcp4 0 0 127.0.0.1.8081 *.* LISTEN\ntcp4 0 0 127.0.0.1.9999 *.* ESTABLISHED\n',
+        stdout: 'tcp4 0 0 127.0.0.1.8081 *.* LISTEN\ntcp6 0 0 ::1.8096 *.* LISTEN\ntcp4 0 0 127.0.0.1.9999 *.* ESTABLISHED\n',
         stderr: '',
         exitCode: 0,
       });
     },
-    async () => await listLocalListeningPorts(),
+    async () => await listLocalListeningSockets(),
   );
-  assert.deepEqual(ports, [8081]);
+  assert.deepEqual(sockets, [
+    { host: '127.0.0.1', port: 8081 },
+    { host: '::1', port: 8096 },
+  ]);
   assert.deepEqual(spawned, ['lsof', 'netstat']);
 });
 
 test('a host with neither lsof nor netstat reports no ports instead of failing', async () => {
-  const ports = await withCommandExecutorOverride(
+  const sockets = await withCommandExecutorOverride(
     (command) => Promise.reject(new Error(`${command} ENOENT`)),
-    async () => await listLocalListeningPorts(),
+    async () => await listLocalListeningSockets(),
   );
-  assert.deepEqual(ports, []);
+  assert.deepEqual(sockets, []);
 });
 
 test('a tool that answers with an empty success still lets the other tool answer', async () => {
-  const ports = await withCommandExecutorOverride(
+  const sockets = await withCommandExecutorOverride(
     (command) =>
       command === 'lsof'
         ? Promise.resolve({ stdout: '', stderr: '', exitCode: 0 })
@@ -176,9 +182,9 @@ test('a tool that answers with an empty success still lets the other tool answer
             stderr: '',
             exitCode: 0,
           }),
-    async () => await listLocalListeningPorts(),
+    async () => await listLocalListeningSockets(),
   );
-  assert.deepEqual(ports, [8081]);
+  assert.deepEqual(sockets, [{ host: '127.0.0.1', port: 8081 }]);
 });
 
 test('a /status that says the packager is running reports the server and its project root', async () => {
@@ -188,7 +194,7 @@ test('a /status that says the packager is running reports the server and its pro
   });
   const port = await listenOnLoopback(server);
   try {
-    const running = await probeLocalMetroServer(new URL(`http://127.0.0.1:${port}`), 2_000);
+    const running = await probeMetroServerStatus(new URL(`http://127.0.0.1:${port}`), 2_000);
     assert.equal(running?.serverUrl.port, String(port));
     assert.equal(running?.projectRoot, '/app/project');
   } finally {
@@ -200,7 +206,7 @@ test('a server without a project-root header is reported without one', async () 
   const server = answerStatusServer({ body: 'packager-status:running' });
   const port = await listenOnLoopback(server);
   try {
-    const running = await probeLocalMetroServer(new URL(`http://127.0.0.1:${port}`), 2_000);
+    const running = await probeMetroServerStatus(new URL(`http://127.0.0.1:${port}`), 2_000);
     assert.equal(running?.projectRoot, undefined);
   } finally {
     await closeLoopbackServer(server);
@@ -217,15 +223,15 @@ test('a /status that is not Metro, or is not there at all, reports no server', a
   const unavailablePort = await listenOnLoopback(unavailable);
   try {
     assert.equal(
-      await probeLocalMetroServer(new URL(`http://127.0.0.1:${notMetroPort}`), 2_000),
+      await probeMetroServerStatus(new URL(`http://127.0.0.1:${notMetroPort}`), 2_000),
       undefined,
     );
     assert.equal(
-      await probeLocalMetroServer(new URL(`http://127.0.0.1:${unavailablePort}`), 2_000),
+      await probeMetroServerStatus(new URL(`http://127.0.0.1:${unavailablePort}`), 2_000),
       undefined,
     );
     // A port nothing listens on: a connection error, not a crash.
-    assert.equal(await probeLocalMetroServer(new URL('http://127.0.0.1:1'), 500), undefined);
+    assert.equal(await probeMetroServerStatus(new URL('http://127.0.0.1:1'), 500), undefined);
   } finally {
     await closeLoopbackServer(notMetro);
     await closeLoopbackServer(unavailable);

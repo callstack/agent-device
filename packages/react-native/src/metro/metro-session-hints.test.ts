@@ -225,6 +225,60 @@ test('re-recording the app keeps a binding the session already had', () => {
   }
 });
 
+test('a fresh open with no metro flags drops a binding a previous run left behind', () => {
+  const stateDir = tempStateDir();
+  try {
+    const options = { stateDir, session: 'stale', host: hostFor(stateDir) };
+    // Project A bound this session name to its own dev server in an earlier run.
+    recordPreparedMetroSession(options, {
+      statusUrl: 'http://127.0.0.1:8081/status',
+      iosRuntime: { metroHost: '127.0.0.1', metroPort: 8081 },
+      androidRuntime: { metroHost: '127.0.0.1', metroPort: 8081, platform: 'android' },
+    });
+    // A fresh open of project B, with no --metro-host/--metro-port, must not inherit that address.
+    recordOpenedMetroSession(options, {
+      runtime: undefined,
+      explicitRuntime: false,
+      sessionReused: false,
+      app: iosApp,
+    });
+
+    assert.equal(readMetroSessionHints({ stateDir, session: 'stale' }), undefined);
+    assert.deepEqual(readMetroSessionAppTarget({ ...options }), iosApp);
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('re-recording the app keeps a binding written in the older runtime-hint shape', () => {
+  const stateDir = tempStateDir();
+  try {
+    const options = { stateDir, session: 'legacy', host: hostFor(stateDir) };
+    // A record from before the control address existed: the reader resolves a binding from it.
+    const file = path.join(stateDir, 'metro-sessions', 'legacy.json');
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ metroHost: '127.0.0.1', metroPort: 8096 }));
+    assert.deepEqual(readMetroSessionHints({ stateDir, session: 'legacy' }), {
+      controlBaseUrl: 'http://127.0.0.1:8096/',
+    });
+
+    recordOpenedMetroSession(options, {
+      runtime: undefined,
+      explicitRuntime: false,
+      sessionReused: true,
+      app: iosApp,
+    });
+
+    // Rewriting the record must not drop the binding it only had as runtime hints.
+    assert.deepEqual(readMetroSessionHints({ stateDir, session: 'legacy' }), {
+      controlBaseUrl: 'http://127.0.0.1:8096/',
+      app: iosApp,
+    });
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('an open that reports no app leaves a reused session record alone and clears a fresh one', () => {
   const stateDir = tempStateDir();
   try {
