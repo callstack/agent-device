@@ -375,9 +375,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason: 'Target-authored drag has replay identity evidence but does not expose --verify.',
       },
       settleObservation: {
-        kind: 'inapplicable',
-        reason:
-          'Target-authored drag does not expose --settle; callers can wait on the destination state.',
+        kind: 'runtime',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/settle.ts#settleObservationCommand',
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -390,7 +389,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       outcomeObservation: {
         kind: 'waived',
         reason:
-          'gap: target-authored drag has no --settle/--verify observation of the destination; the tap-shaped runtime paths are the only ones with an opt-in evidence route today.',
+          'gap: target-authored drag reports dispatch by default. Opt-in --settle observes the resulting tree; the caller still checks the intended destination state.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       targetStability: {

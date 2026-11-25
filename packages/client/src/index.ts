@@ -475,29 +475,45 @@ export function createAgentDeviceClient(
         await executeCommand<CommandResult<'audit'>>('audit', options ?? {}),
     },
     interactions: {
-      gesture: async (options) => await executeCommand('gesture', options),
+      gesture: async (options) =>
+        await executeCommand<CommandResult<'gesture'>>('gesture', options),
       click: async (options) => await executeCommand('click', options),
       press: async (options) => await executeCommand('press', options),
       longPress: async (options) => await executeCommand('longpress', options),
       hover: async (options) => await executeCommand('hover', options),
-      swipe: async (options) => await executeCommand('swipe', options),
+      swipe: async (options) => await executeCommand<CommandResult<'swipe'>>('swipe', options),
       pan: async (options) =>
-        await executeCommand('gesture', translatedGestureInput('pan', options)),
-      drag: async (options) => await executeCommand('gesture', { ...options, kind: 'drag' }),
-      fling: async (options) => await executeCommand('gesture', flingGestureInput(options)),
+        await executeCommand<CommandResult<'gesture'>>(
+          'gesture',
+          translatedGestureInput('pan', options),
+        ),
+      drag: async (options) =>
+        await executeCommand<CommandResult<'gesture'>>('gesture', { ...options, kind: 'drag' }),
+      fling: async (options) =>
+        await executeCommand<CommandResult<'gesture'>>('gesture', flingGestureInput(options)),
       swipeGesture: async (options) =>
-        await executeCommand('gesture', { ...options, kind: 'swipe' }),
+        await executeCommand<CommandResult<'gesture'>>('gesture', { ...options, kind: 'swipe' }),
       focus: async (options) => await executeCommand('focus', options),
       type: async (options) => await executeCommand('type', options),
       fill: async (options) => await executeCommand('fill', options),
       scroll: async (options) => await executeCommand('scroll', options),
       pinch: async (options) =>
-        await executeCommand('gesture', centeredGestureInput('pinch', options)),
+        await executeCommand<CommandResult<'gesture'>>(
+          'gesture',
+          centeredGestureInput('pinch', options),
+        ),
       rotateGesture: async (options) =>
-        await executeCommand('gesture', centeredGestureInput('rotate', options)),
+        await executeCommand<CommandResult<'gesture'>>(
+          'gesture',
+          centeredGestureInput('rotate', options),
+        ),
       transformGesture: async (options) =>
-        await executeCommand('gesture', translatedGestureInput('transform', options)),
-      tapGesture: async (options) => await executeCommand('gesture', { ...options, kind: 'tap' }),
+        await executeCommand<CommandResult<'gesture'>>(
+          'gesture',
+          translatedGestureInput('transform', options),
+        ),
+      tapGesture: async (options) =>
+        await executeCommand<CommandResult<'gesture'>>('gesture', { ...options, kind: 'tap' }),
       get: async (options) => await executeCommand('get', options),
       is: async (options) => await executeCommand('is', options),
       find: async (options) => await executeCommand('find', options),

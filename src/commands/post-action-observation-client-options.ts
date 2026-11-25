@@ -3,9 +3,11 @@ import type {
   ClickOptions,
   FillOptions,
   HoverOptions,
+  GestureOptions,
   LongPressOptions,
   PressOptions,
   ScrollOptions,
+  SwipeOptions,
   SettleCommandOptions,
 } from '@agent-device/contracts/client';
 import type { PostActionObservationCommandName } from '@agent-device/command-registry/post-action-observation';
@@ -28,6 +30,8 @@ const SETTLE_CAPABLE_CLIENT_OPTION_TYPES = {
   hover: {} as HoverOptions,
   fill: {} as FillOptions,
   scroll: {} as ScrollOptions,
+  swipe: {} as SwipeOptions,
+  gesture: {} as GestureOptions,
   back: {} as BackCommandOptions,
 } as const satisfies Record<PostActionObservationCommandName, SettleCommandOptions>;
 

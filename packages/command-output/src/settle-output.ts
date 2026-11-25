@@ -34,10 +34,8 @@ function messageWithSettledNotes(formatter: CliOutputFormatter): CliOutputFormat
 }
 
 function withSettledNotes(output: CliOutput): CliOutput {
-  return {
-    data: output.data,
-    text: appendResponseNotes(output.text, output.data as Record<string, unknown>),
-  };
+  const notes = formatSettleText((output.data as Record<string, unknown>)?.settle);
+  return notes ? { ...output, text: `${output.text ?? ''}${notes}` } : output;
 }
 
 /**
@@ -57,17 +55,6 @@ export function withSettleCapableNotes<Formatters extends Record<string, CliOutp
     derived[command] = messageWithSettledNotes(formatter);
   }
   return derived as Formatters;
-}
-
-/**
- * The settled diff only: response warnings are appended once by `formatCliOutput`, routed by the
- * command's descriptor (#2682), so this wrapper cannot be the place a warning appears twice.
- */
-function appendResponseNotes(
-  text: string | null | undefined,
-  data: Record<string, unknown>,
-): string {
-  return `${text ?? ''}${formatSettleText(data.settle)}`;
 }
 
 function formatSettleText(settle: unknown): string {

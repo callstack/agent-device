@@ -15,6 +15,8 @@ const POST_ACTION_OBSERVATION_BY_COMMAND = {
   // settled diff is the observation; nothing to re-digest into --verify.
   hover: 'settle',
   scroll: 'settle',
+  swipe: 'settle',
+  gesture: 'settle',
   back: 'settle',
 } as const satisfies Record<string, PostActionObservationSupport>;
 

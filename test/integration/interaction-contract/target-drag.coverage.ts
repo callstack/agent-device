@@ -14,6 +14,8 @@ export const TARGET_DRAG_COVERAGE = definePathCoverage('target-drag', {
   responseConstruction:
     'target-drag responseConstruction: daemon response carries the canonical dual-target gesture shape',
   responseIdentity: DUAL_ENDPOINT_SUCCESS,
+  settleObservation:
+    'target-drag settleObservation: the routed drag returns fresh refs from the settled tree',
   errorTaxonomy:
     'target-drag errorTaxonomy: a missing destination carries shared selector diagnostics',
   resolutionDisclosure: DUAL_ENDPOINT_SUCCESS,

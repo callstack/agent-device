@@ -35,12 +35,14 @@ import {
   pointArrayField,
   pointField,
   postGestureStabilizationFields,
+  readFieldInput,
   readTargetedInput,
   repeatedFields,
   requiredField,
   selectorSnapshotFields,
   stringField,
   type CommandFieldMap,
+  type InferCommandInput,
   type TargetedInput,
 } from '../command-input.ts';
 import { readCommonInput, type CommonCommandInput } from '../common-input-fields.ts';
@@ -71,7 +73,7 @@ const interactionCommandDescriptions = {
   hover:
     'Move the pointer over a UI target by snapshot ref, selector, or coordinates without pressing, to reveal hover-gated UI such as row toolbars or menus. Web only; touch platforms have no hover state. The settle option returns the UI diff revealed by the hover.',
   swipe:
-    'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point.',
+    'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point. Settle observes the UI once after the last swipe and compares with the last observed tree.',
   focus:
     'Move input focus to explicit screen coordinates without entering text. This command changes focus only and does not enter or replace text.',
   type: 'Append text to the currently focused input. This requires an active input and preserves its existing text.',
@@ -81,7 +83,7 @@ const interactionCommandDescriptions = {
   is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, checked, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. This command checks the current condition without polling.',
   find: 'Find by text/label/value/role/id and run action; the action defaults to click. The role locator matches snapshot kind vocabulary (button, text, text-field, switch, ...); pre-reconciliation leaf spellings (statictext, edittext, textview) stay accepted on the nodes that carried them during a deprecation window. The focus and type actions aim at a text field: the match or the field holding it, even beside other fields, or else the one enabled on-screen field inside the match. Several enabled on-screen fields inside the match refuse with AMBIGUOUS_MATCH and the field candidates, and a disabled target refuses with reason target_disabled. Web text boxes are not recognized as text fields.',
   gesture:
-    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition. A drag takes a source and a destination ref or selector and holds the source down for 800 ms by default before carrying it over, which is how a list item changes position or a drop target is hit.',
+    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition. A drag takes a source and a destination ref or selector and holds the source down for 800 ms by default before carrying it over, which is how a list item changes position or a drop target is hit. Settle observes the UI once after the last repetition and compares with the last observed tree.',
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
@@ -144,6 +146,7 @@ const swipeFields = {
   count: integerField('Number of swipe repetitions.', { min: 1, max: SWIPE_REPETITION_MAX }),
   pauseMs: integerField('Pause between repeated swipes.', { min: 0, max: SWIPE_PAUSE_MAX_MS }),
   pattern: enumField(SWIPE_PATTERNS),
+  ...postActionObservationFields('swipe'),
   ...postGestureStabilizationFields(),
 };
 
@@ -223,8 +226,11 @@ const findFields = {
   ...recordControlFields(),
 };
 
+const gestureSettleFields = postActionObservationFields('gesture');
+
 const gestureFields = {
   kind: requiredField(enumField(GESTURE_KINDS, 'Gesture variant.')),
+  ...gestureSettleFields,
   direction: enumField(SCROLL_DIRECTIONS, 'Fling direction.'),
   preset: enumField(SWIPE_PRESETS, 'Swipe preset.'),
   ...postGestureStabilizationFields(),
@@ -277,7 +283,8 @@ export type GetInput = TargetedInput<typeof getFields, ElementTarget>;
 export type GestureInput = CommonCommandInput & GesturePayload;
 
 /** What `gesture` reads from a caller: the daemon's input, plus the opt-out a swipe may carry. */
-export type GestureCommandInput = GestureInput & { postGestureStabilization?: boolean };
+export type GestureCommandInput = GestureInput &
+  InferCommandInput<typeof gestureSettleFields> & { postGestureStabilization?: boolean };
 
 export const interactionCommandMetadata = [
   defineTargetedCommandMetadata('click', clickFields),
@@ -312,7 +319,13 @@ export function readGestureInput(input: unknown): GestureInput {
 /** Only a swipe stabilizes by default, so any other kind has nothing to opt out of and drops it. */
 function readGestureCommandInput(input: unknown): GestureCommandInput {
   const record = readInputRecord(input);
-  const gesture = readGestureInput(record);
+  const payload = readGestureInput(record);
+  const gesture =
+    record.settle === undefined &&
+    record.settleQuietMs === undefined &&
+    record.timeoutMs === undefined
+      ? payload
+      : { ...payload, ...readFieldInput(record, gestureSettleFields) };
   return gesture.kind === 'swipe' && optionalBoolean(record, 'postGestureStabilization') === false
     ? { ...gesture, postGestureStabilization: false }
     : gesture;

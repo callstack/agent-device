@@ -28,7 +28,12 @@ import {
   type Point,
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
+import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
+import {
+  postActionBaseline,
+  surfaceScopedNodes,
+} from '@agent-device/capture-kit/snapshot-baseline';
+import { issueSettleRefs, publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
 import {
   resolveBoundGestureRuntime,
   type BoundGestureExecutor,
@@ -40,7 +45,7 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../../android-system-dialog.ts';
-import { readRefMutationFrame } from '../../../core/ref-frame.ts';
+import { readRefMutationFrame, refFrameTree } from '../../../core/ref-frame.ts';
 import { thrownBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
@@ -56,6 +61,7 @@ import type { RecordedTargetCapture } from '@agent-device/selectors/target-evide
 import { gestureResponseData } from './interaction-gesture-response.ts';
 import { recordTouchVisualizationEvent } from '../../../core/recording-gestures.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
+import { readSettleRequest, settleFlagGuardResponse } from './interaction-flags.ts';
 
 type GestureHandlerParams = InteractionRouteInput & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -63,6 +69,8 @@ type GestureHandlerParams = InteractionRouteInput & {
 
 type GestureRuntime = Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>;
 type GestureRuntimeResult = Awaited<ReturnType<GestureRuntime['interactions']['gesture']>>;
+
+type GestureCapture = { state?: SnapshotState; settleRuntime?: GestureRuntime };
 
 type GestureInteractionOutcome = {
   positionals: string[];
@@ -101,7 +109,7 @@ async function runGestureInteraction(
   params: GestureHandlerParams,
   session: SessionState,
   readiness: AndroidBlockingDialogReadinessResult,
-  consumedCapture: { state?: SnapshotState },
+  consumedCapture: GestureCapture,
 ): Promise<GestureInteractionResult> {
   const input = readGesturePayload(params.req.input);
   const gesture = prepareGestureCommandInput(input, session, readiness);
@@ -285,9 +293,9 @@ function swipeResponseData(
 function createGestureRuntime(
   params: GestureHandlerParams,
   gestures: BoundGestureExecutor,
-  consumedCapture: { state?: SnapshotState },
+  consumedCapture: GestureCapture,
 ): Promise<GestureRuntime> {
-  return createInteractionRuntimeForRoute({
+  const runtime = createInteractionRuntimeForRoute({
     ...params,
     gestures,
     // The ambiguity-issuance seam reads the tree THIS request consumed: a drag
@@ -295,6 +303,11 @@ function createGestureRuntime(
     // touch routes give (#2870 review).
     consumedCapture,
     pairedGestureViewport: params.req.internal?.gestureViewport,
+  });
+  if (params.req.flags?.settle !== true) return runtime;
+  return runtime.then((boundRuntime) => {
+    consumedCapture.settleRuntime = boundRuntime;
+    return boundRuntime;
   });
 }
 
@@ -304,13 +317,19 @@ async function dispatchGestureInteraction(
   run: (
     session: SessionState,
     readiness: AndroidBlockingDialogReadinessResult,
-    consumedCapture: { state?: SnapshotState },
+    consumedCapture: GestureCapture,
   ) => Promise<GestureInteractionResult>,
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return noActiveSessionError();
+  if (params.req.flags?.settleQuietMs !== undefined) {
+    const invalidSettleFlags = settleFlagGuardResponse(command, params.req.flags);
+    if (invalidSettleFlags) return invalidSettleFlags;
+  }
+  const settle = readSettleRequest(params.req.flags);
+  const baseline = settle ? await lastObservedGestureBaseline(session) : undefined;
   const actionStartedAt = Date.now();
-  const consumedCapture: { state?: SnapshotState } = {};
+  const consumedCapture: GestureCapture = {};
   try {
     const providerDevice = isActiveProviderDevice(session.device);
     const readiness = providerDevice
@@ -339,7 +358,7 @@ async function dispatchGestureInteraction(
       responseData.warning = `${existingWarning}${readiness.warning}`;
     }
     getRequestSignal(params.req.meta?.requestId)?.throwIfAborted();
-    return finalizeTouchInteraction({
+    const response = finalizeTouchInteraction({
       ref: params.sessionRef!,
       sessionStore: params.sessionStore,
       command,
@@ -353,6 +372,14 @@ async function dispatchGestureInteraction(
       actionStartedAt,
       actionFinishedAt: Date.now(),
     });
+    if (!response.ok || !settle || !baseline || !consumedCapture.settleRuntime) return response;
+    const observation = await observeGestureSettle(
+      params,
+      consumedCapture.settleRuntime,
+      settle,
+      baseline,
+    );
+    return { ok: true, data: { ...response.data, settle: observation } };
   } catch (error) {
     // The same ambiguity-issuance rule the touch routes run: a refusal that
     // prints candidate refs must issue them on the frame that lists them, or
@@ -365,6 +392,65 @@ async function dispatchGestureInteraction(
     );
     return { ok: false, error: normalizeError(appError) };
   }
+}
+
+async function lastObservedGestureBaseline(session: SessionState) {
+  const frameTree = refFrameTree(session);
+  const snapshotTree = session.snapshot;
+  const { presentedSurface: _unverifiedFrame, ...frame } = surfaceScopedNodes(frameTree);
+  const { presentedSurface: _unverifiedSnapshot, ...snapshot } = surfaceScopedNodes(snapshotTree);
+  const baseline = await postActionBaseline({ frame, candidates: [snapshot] });
+  const tree = baseline === frame ? frameTree : snapshotTree;
+  return { baseline, androidOverlay: tree?.systemSurface?.kind === 'android-system-overlay' };
+}
+
+async function observeGestureSettle(
+  params: GestureHandlerParams,
+  runtime: GestureRuntime,
+  settle: SettleParams,
+  { baseline, androidOverlay }: Awaited<ReturnType<typeof lastObservedGestureBaseline>>,
+): Promise<SettleObservation> {
+  const requestId = params.req.meta?.requestId;
+  const observation = await runtime.interactions.settleObservation({
+    ...settle,
+    baseline,
+    session: params.sessionName,
+    requestId,
+  });
+  const { settled, waitedMs, captures, quietMs, timeoutMs } = observation;
+  const verdict = { settled, waitedMs, captures, quietMs, timeoutMs };
+  if (getRequestSignal(requestId)?.aborted) {
+    return {
+      ...verdict,
+      settled: false,
+      hint: 'Settle was canceled. Run snapshot -i to refresh the screen.',
+    };
+  }
+  const session = params.sessionStore.resolveCurrent(params.sessionRef!);
+  if (!session) {
+    return {
+      ...verdict,
+      settled: false,
+      hint: 'The session ended during settle. Open a session and take a fresh snapshot.',
+    };
+  }
+  if (!observation.diff) return observation;
+  if (androidOverlay || session.snapshot?.systemSurface?.kind === 'android-system-overlay') {
+    return {
+      ...verdict,
+      hint: 'The comparison included an Android system overlay. Run snapshot -i to read the current surface.',
+    };
+  }
+
+  const baselineHint = baseline.nodes.length
+    ? 'Compared with the last observed tree.'
+    : 'No prior tree was available for comparison.';
+  const refsGeneration = issueSettleRefs(params.sessionRef, params.sessionStore, observation);
+  return {
+    ...observation,
+    hint: observation.hint ? `${baselineHint} ${observation.hint}` : baselineHint,
+    ...(refsGeneration === undefined ? {} : { refsGeneration }),
+  };
 }
 
 function resolveExecutionProfile(

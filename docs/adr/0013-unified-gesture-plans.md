@@ -17,6 +17,7 @@ Completed process history is in git history.
   The planner does not clamp points, cache the viewport, or distort the requested components.
 - Android touch execution never falls back to `adb input swipe`.
 - On Android, gestures do not stop or restart the snapshot session.
+- If `--settle` is set, observe after the final repetition succeeds. Use the action binding for capture. Compare with the last observed tree. Keep the action result if the observation fails. Apply [ADR 0014](0014-session-ref-frame-lifetime.md) to the returned refs.
 - Keep the positional `.ad` codec. One `PUBLIC_GESTURE_SYNTAX` table defines argument arity for the CLI argv parse and the `.ad` line parse.
 - For repeated coordinate swipes, the combined planned gesture and pause schedule must fit within 60 seconds.
 - `gesture tap` holds 2 to 5 stationary contacts; the motion intents keep exactly two (amended 2026-10).

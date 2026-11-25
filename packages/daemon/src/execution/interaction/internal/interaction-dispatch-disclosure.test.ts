@@ -199,7 +199,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
       session: session.name,
       command: 'swipe',
       positionals: [],
-      flags: {},
+      flags: { settle: true },
       input: { from: { x: 100, y: 600 }, to: { x: 100, y: 200 }, count: 2 },
     },
     sessionName: session.name,
@@ -215,6 +215,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
     2,
   );
   assert.equal(response.error.details?.dispatchedSteps, 1);
+  assert.equal(gestures.captureSnapshot.mock.calls.length, 0);
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
