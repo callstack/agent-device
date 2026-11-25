@@ -70,7 +70,7 @@ test.each([
               observe(options);
               expect(dispatches).toHaveBeenCalledTimes(2);
               expect(session.actions).toHaveLength(1);
-              expect(pendingSurfaceStabilization(session)).toBeDefined();
+              expect(pendingSurfaceStabilization(session) !== undefined).toBe(command === 'swipe');
               expect(refFrameState(session)).toBe('expired');
               await config.backend.captureSnapshot?.({ session: sessionName });
               if (retired) sessionStore.retire(ref);
