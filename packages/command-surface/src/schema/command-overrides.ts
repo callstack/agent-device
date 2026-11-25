@@ -139,6 +139,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     positionalArgs: ['provider?|list'],
     allowedFlags: CONNECT_ALLOWED_FLAGS,
     supportedFlags: [...CONNECT_SUPPORTED_FLAGS, 'live'],
+    explicitOnlyFlags: ['target'],
   },
   connection: {
     text: {

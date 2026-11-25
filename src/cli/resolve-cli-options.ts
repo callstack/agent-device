@@ -5,7 +5,7 @@ import {
   resolveConfigDefaults,
 } from '@agent-device/command-surface';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
-import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';
+import { connectEnvironment, resolveRemoteConfigDefaults } from './remote-config-flags.ts';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
 export type ResolvedCliOptions = ReturnType<typeof finalizeParsedArgs> & {
@@ -24,12 +24,12 @@ export function resolveCliOptions(
   },
 ): ResolvedCliOptions {
   const rawParsed = parseRawArgs(argv);
-  const { env, cwd } = options;
+  const { cwd, env } = options;
   const remoteConfig = shouldApplyRemoteConfigDefaults(rawParsed.command)
     ? resolveRemoteConfigDefaults({
         remoteConfig: rawParsed.flags.remoteConfig,
         cwd,
-        env,
+        env: rawParsed.command === 'connect' ? connectEnvironment(env) : env,
       })
     : { flags: {} };
   const configDefaults = resolveConfigDefaults({

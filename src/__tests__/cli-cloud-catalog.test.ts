@@ -44,6 +44,7 @@ test.each([DEFAULT_CLOUD_BASE_URL, 'https://issuer.example'])(
         AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_DAEMON_BASE_URL: 'https://daemon.example',
         AGENT_DEVICE_SESSION: 'other-session',
+        AGENT_DEVICE_TARGET: 'tablet',
       },
     });
     expect(result.code).toBeNull();

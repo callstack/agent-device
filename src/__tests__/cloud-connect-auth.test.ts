@@ -4,6 +4,7 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
+import { runCliCapture } from './cli-capture.ts';
 import { resolveHostedCloudAccess } from '../cli/connection/cloud-access.ts';
 import { readActiveConnectionState } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
@@ -36,6 +37,28 @@ test('non-interactive hosted access names the hosted key and custom issuer', asy
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+test('refuses a typed TV target before authenticating or creating a hosted mobile session', async () => {
+  const fetchMock = mockCloudSessionCreate();
+  const result = await runCliCapture(
+    [
+      'connect',
+      'cloud',
+      '--platform',
+      'ios',
+      '--target',
+      'tv',
+      '--session',
+      'ci',
+      '--no-login',
+      '--json',
+    ],
+    { stateDirPrefix: 'agent-device-hosted-target-' },
+  );
+  const response = JSON.parse(result.stdout);
+  assert.equal(response.error?.code, 'INVALID_ARGS', result.stdout);
+  assert.equal(fetchMock.mock.calls.length, 0);
 });
 
 test('cloud connect reuses explicit env auth when login is disabled', async () => {
