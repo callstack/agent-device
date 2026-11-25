@@ -11,7 +11,10 @@ import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { createAdbProvider } from './adb.ts';
 import { matchesPlatformSelector, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { createProviderLeaseTable } from '@agent-device/provision-kit/provider-lease-table';
+import {
+  createProviderLeaseTable,
+  type ProviderLeaseStartControl,
+} from '@agent-device/provision-kit/provider-lease-table';
 import { adcClient, type Credentials } from './client.ts';
 import { connectAdb } from './tunnel.ts';
 import { formFactor } from './target.ts';
@@ -40,6 +43,41 @@ export function createRegistration(
   let attachedOwner: string | undefined;
   const endedTunnels = new Set<string>();
   const submitted = new Set<string>();
+  async function rent(
+    handle: Handle,
+    tv: boolean,
+    rental: Allocation['rental'],
+    control: ProviderLeaseStartControl<Handle>,
+  ) {
+    const { signal } = control;
+    if (!client) throw new Error('Missing ADC client');
+    const key = reconciliationKey(handle.leaseId);
+    rental?.beforeCreate(key);
+    submitted.add(handle.leaseId);
+    let record;
+    try {
+      record = await client.create(key, tv, signal);
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        [400, 401, 402, 403, 422, 429].includes(Number(error.details?.httpStatus))
+      ) {
+        submitted.delete(handle.leaseId);
+      }
+      throw error;
+    }
+    const id = record.id;
+    handle.adcId = id;
+    control.rented(handle);
+    rental?.rented(id);
+    while (record.status === 'queued') {
+      await delay(500, undefined, { signal });
+      record = await client.get(id, signal);
+    }
+    if (record.status !== 'active')
+      throw new AppError('COMMAND_FAILED', 'The ADC booking is no longer active.');
+    return await client.access(id, signal);
+  }
   const table = createProviderLeaseTable<Session, Handle, Allocation>({
     startTimeoutMs: 180_000,
     stopTimeoutMs: 25_000,
@@ -47,42 +85,17 @@ export function createRegistration(
       const { leaseId } = lease;
       const { signal } = control;
       const handle: Handle = { leaseId };
-      const key = reconciliationKey(leaseId);
       let access;
       if (config.kind === 'attached') {
         if (attachedOwner !== undefined && attachedOwner !== leaseId)
           throw new AppError('DEVICE_IN_USE', 'This attached ADC lease already has a session.');
         attachedOwner = leaseId;
         control.rented(handle);
+        const key = reconciliationKey(leaseId);
         rental?.beforeCreate(key);
         access = config.access;
       } else {
-        if (!client) throw new Error('Missing ADC client');
-        rental?.beforeCreate(key);
-        submitted.add(leaseId);
-        let record;
-        try {
-          record = await client.create(key, tv, signal);
-        } catch (error) {
-          if (
-            error instanceof AppError &&
-            [400, 401, 402, 403, 422, 429].includes(Number(error.details?.httpStatus))
-          ) {
-            submitted.delete(leaseId);
-          }
-          throw error;
-        }
-        const id = record.id;
-        handle.adcId = id;
-        control.rented(handle);
-        rental?.rented(id);
-        while (record.status === 'queued') {
-          await delay(500, undefined, { signal });
-          record = await client.get(id, signal);
-        }
-        if (record.status !== 'active')
-          throw new AppError('COMMAND_FAILED', 'The ADC booking is no longer active.');
-        access = await client.access(id, signal);
+        access = await rent(handle, tv, rental, control);
       }
       const tunnel = await connectAdb(access, env, signal);
       if (signal.aborted) {
