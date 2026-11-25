@@ -3,7 +3,7 @@
 `CHECK_CATALOG` in `scripts/check-affected/checks.ts` owns checks and commands.
 CI declares ownership through the shared `run-gate` action with a literal gate id.
 For a new check, update the catalog and executable model.
-When a maintainer verifies ownership and reachability locally, run `pnpm check:gate-manifest`.
+To verify ownership and reachability, run `pnpm check:gate-manifest`.
 
 For parser and geometry changes, extend shared fast-check arbitraries and properties.
 Use `PROPERTY_RUNS` budgets. Keep examples for past bugs or named decisions.
@@ -17,7 +17,7 @@ Dispatch with `--with-dependencies` adds `LANE_DEPENDENCIES`.
 Scores are advisory. Incomplete sweeps fail.
 Before a pilot, read `pnpm mutation:run --help`.
 Concurrency torture uses production lock decisions.
-When a maintainer runs concurrency torture locally, use `pnpm test:concurrency-torture`.
+Run `pnpm test:concurrency-torture`.
 To replay, use the printed `TORTURE_SEED`.
 
 Do not commit output stamped with a run or commit under `scripts/`.

@@ -5,13 +5,11 @@ The daemon owns sessions. Registry declarations route commands to platform runti
 
 ## Worker handoff
 
-A worker is an agent with a delegated task.
-For worker changes, CI owns validation.
-Do not run local gates, check scripts, lint or typecheck sweeps, coverage, or project-wide test runs.
-If you need local feedback to write a test, run only the test file you changed.
-If authorized, push the change and report the head SHA with checks pending.
-Do not wait for CI.
-The coordinator reads CI, assigns fixes, and arranges review.
+For a delegated task, CI owns validation.
+Do not run local gates, check scripts, coverage, or project-wide tests.
+To write a test, run only that test file.
+Push, report the head SHA with checks pending, and stop.
+The coordinator relays CI results and review.
 
 ## Task routing
 
@@ -38,6 +36,8 @@ For each question that remains, use the matching row.
 | Issues, PRDs, or triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
+A device-facing change affects dispatch, capture, interaction, app lifecycle, or native execution.
+
 The versioned CLI help owns command semantics. To drive an app, start with the skill's routing card.
 
 ## Working rules
@@ -58,6 +58,7 @@ The versioned CLI help owns command semantics. To drive an app, start with the s
 - Do not change other worktrees, devices, sessions, dirty files, or experiments. Do not use `git stash`; all worktrees share it.
 - Do not copy `.env` into a worktree. For host credentials, source the main checkout's file by absolute path.
 - Give each parallel worker different files and devices.
+- The layering scan reads only tracked files. Stage new modules before you trust its result.
 - When you rename a file, move its Fallow baseline entry. Do not regenerate unrelated baselines.
 
 ## Agent docs
