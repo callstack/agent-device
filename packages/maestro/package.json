@@ -43,7 +43,8 @@
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provision-kit": "workspace:*",
     "@agent-device/selectors": "workspace:*",
-    "agent-device": "workspace:*"
+    "agent-device": "workspace:*",
+    "@agent-device/plugins": "workspace:*"
   },
   "scripts": {
     "build": "tsdown --config tsdown.config.ts",

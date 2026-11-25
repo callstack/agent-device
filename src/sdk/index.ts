@@ -5,7 +5,7 @@ export {
   isAgentDeviceError,
   normalizeAgentDeviceError,
 } from '@agent-device/kernel/errors';
-export type { AgentDeviceClient } from '@agent-device/command-surface';
+export type { AgentDeviceClient } from '../client/client-types.ts';
 export type {
   CaptureScreenshotResult,
   CaptureSnapshotResult,
