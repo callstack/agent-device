@@ -24,8 +24,8 @@ If an interactive snapshot has only the application root or another sparse shape
 **Acquisition.** XCTest stays the iOS automation runner.
 Route eligible local iPhone and iPad Simulator snapshots through the host AX bridge.
 A provider iOS Simulator uses the same reader through the runner's `snapshotBridge` command.
-tvOS and visionOS Simulators, the macOS host, physical devices, custom-action captures, and interactions keep their existing owners.
-This amendment changes the scope for iOS physical devices: they now use the runner's private-AX tier. Other physical devices get a non-XCTest semantic backend only if Apple exposes a supported channel.
+tvOS and visionOS Simulators, the macOS host, physical devices, custom-action captures, and interactions do not use the host AX bridge.
+This amendment changes the scope for iOS physical devices: they still do not use the host AX bridge, but they now use the runner's private-AX tier. Other physical devices get a non-XCTest semantic backend only if Apple exposes a supported channel.
 On an iOS physical device, the runner's private-AX tier is the recovery for a tree that XCTest's recursive snapshot rejects, as it is for a runner-read iOS Simulator.
 It asks XCTest's own AX client for depth-capped snapshots and continues from the frontier nodes, so it needs no other channel. The AX server's depth limit is per request.
 An observe-only capture skips the route and uses the provider's capture, because it must not activate the app or start work.
@@ -58,8 +58,10 @@ A placed iPad window publishes screen space in points, because its viewport, its
 The acquisition's `reported`, `derived`, or `missing` viewport evidence survives the runner boundary and capture transformations.
 Only `reported` establishes the screen origin for capture-derived input.
 A root-derived validation box preserves readable fallback trees but cannot upgrade unknown origin evidence.
-A private-AX root is `reported` only when it is exactly the screen frame at the origin and AXRuntime reports the target as the primary app that fills that screen.
-When the AXRuntime probe proves nothing, the screen frame is the sole XCTest screen in native portrait points instead. That is always the case on a physical device, where AXRuntime reports no app to the runner. No window smaller than the screen can equal that frame.
+A private-AX root is `reported` only when it is exactly the full-screen proof frame at the origin.
+When AXRuntime reports the target as the primary app that fills the screen, the proof frame is that screen frame.
+When AXRuntime reports the target windowed or not primary, there is no proof frame.
+When the AXRuntime probe proves nothing, the proof frame is the sole XCTest screen in native portrait points. That is always the case on a physical device, where AXRuntime reports no app to the runner. No window smaller than the screen can equal that frame.
 Element mutations, mutating find, Maestro selector geometry, and snapshot-derived gesture bounds refuse an unknown origin with `window-origin-unknown` and `dispatched: no` before input.
 Independent native queries and authored screen coordinates retain their own authorities.
 

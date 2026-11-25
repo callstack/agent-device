@@ -141,10 +141,10 @@ Any other window keeps the live read, because a snapshot frame is in window cont
 
 Private-AX fallback keeps the viewport authority it acquired.
 When a penalty suppresses the XCTest viewport read, its root-derived box does not establish a screen origin.
-Exception: AXRuntime can report the target as the primary app that fills the screen. If the root is that screen frame at the origin, the box is `reported`.
-This probe reads two frames. It adds no XCTest tree read and does not change the channel budget.
-When the probe proves nothing, the screen frame is the sole XCTest screen in native portrait points (`RunnerFullScreenProofFrame`). On a physical device, the probe always proves nothing, because AXRuntime reports no app to the runner.
-A windowed or not-primary result never uses the sole screen. No window smaller than the screen can equal that frame.
+Exception: if the root is exactly the full-screen proof frame at the origin, the box is `reported` (`RunnerFullScreenProofFrame`).
+The proof frame comes from the AXRuntime probe. The probe reads two frames. It adds no XCTest tree read and does not change the channel budget.
+When AXRuntime reports the target as the primary app that fills the screen, the proof frame is that screen frame. A windowed or not-primary result gives no proof frame.
+When the probe proves nothing, the proof frame is the sole XCTest screen in native portrait points. On a physical device, the probe always proves nothing, because AXRuntime reports no app to the runner. No window smaller than the screen can equal that frame.
 The payload carries any remaining uncertainty.
 In landscape, the root is in interface space and the screen frame is in native portrait space, so the root stays `derived`.
 
