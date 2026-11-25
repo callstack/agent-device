@@ -397,6 +397,7 @@ Exact behavior: `agent-device help fold`.
 - Take a new snapshot after every fold, even a failed one. Refs and coordinates from before it are stale.
 - On iOS, `fold` needs an Xcode with foldable HID support. The first fold on a host or Xcode builds a helper and takes longer. The response's panel size is not the next snapshot's viewport, so do not use it to place a tap.
 - On a foldable iOS simulator, `home` and `app-switcher` press the Home button through the same helper, because the XCUITest Home press does not reach the home screen there. The first press on a host or Xcode builds the helper and takes longer.
+- On an unfolded iPhone Duo simulator, with the inner panel lit, `gesture swipe split-view-left` or `gesture swipe split-view-right` moves the full-screen app into that half of Split View. Then `open <bundle>` launches a second app into the other half, and `open` switches between them. Other devices, a closed Duo, and WebDriver providers refuse with `split_view_unavailable` before any touch.
 - `--keyframes` plays a timed hinge trajectory on iOS only, for example `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":5000,"angle":180}]'`.
 - For failure reasons, see [error reasons](/docs/error-reasons). For panels and poses, see `agent-device help foldable`.
 

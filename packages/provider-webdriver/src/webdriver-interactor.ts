@@ -13,6 +13,7 @@ import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
+  splitViewUnavailableError,
 } from '@agent-device/contracts/scroll-gesture';
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
@@ -279,6 +280,9 @@ class WebDriverInteractor implements Interactor {
   }
 
   async performGesture(plan: GesturePlan): Promise<Record<string, unknown>> {
+    if (plan.topology === 'single' && plan.contactOrigin === 'split-view-edge') {
+      throw splitViewUnavailableError('WebDriver providers do not support Split View');
+    }
     this.requireSupport(webDriverOperationForGesture(plan));
     await this.client.performActions(
       plan.pointers.map((pointer) =>

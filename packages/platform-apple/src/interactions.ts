@@ -22,6 +22,7 @@ import {
   assertScrollGestureInput,
 } from '@agent-device/contracts/scroll-gesture';
 import { assertAppleMultiTouchSupported } from './multitouch-support.ts';
+import { appleSplitViewRunnerPlan } from './foldable/split-view.ts';
 import {
   isMacOs,
   isTvOsDevice,
@@ -364,8 +365,9 @@ export async function performGestureApple(
   device: DeviceInfo,
   ctx: RunnerContext,
   runnerOpts: RunnerOpts,
-  plan: GesturePlan,
+  requestedPlan: GesturePlan,
 ): Promise<Record<string, unknown>> {
+  const plan = await appleSplitViewRunnerPlan(device, requestedPlan, runnerOpts.signal);
   if (plan.topology !== 'single') assertAppleMultiTouchSupported(device, plan.intent);
   if (plan.topology === 'single' && isMacOs(device)) {
     const { start: first, end: last } = singlePointerPlanEndpoints(plan);

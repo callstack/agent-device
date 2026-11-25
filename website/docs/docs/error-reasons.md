@@ -142,6 +142,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `split_view_unavailable` | Split View presets need an iOS simulator with more than one panel and its inner panel lit. |
 | `drag_endpoint_is_coordinates` | A gesture drag endpoint is a number or an "x y" point; drag takes a ref or a selector. |
 | `GESTURE_TAP_DUPLICATE_POINT` | Two tap contacts share coordinates, so one contact would press where another already rests. |
 | `GESTURE_PATH_TOO_SHORT` | The gesture path has fewer usable samples than any recognizable motion needs. |

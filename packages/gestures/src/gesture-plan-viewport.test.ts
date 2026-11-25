@@ -192,7 +192,8 @@ describe('viewport-aware multi-touch geometry', () => {
 
 // Property, not another example: the planner's whole job is that a synthesized
 // point never leaves the active viewport. It either plans in bounds or refuses
-// with a structured INVALID_ARGS — never a silently out-of-bounds path. The
+// with a structured INVALID_ARGS (UNSUPPORTED_OPERATION for a platform without
+// the gesture) — never a silently out-of-bounds path. The
 // generator enumerates every gesture kind from GESTURE_KINDS, so a new kind
 // inherits the guarantee instead of needing its own pinned viewport case.
 describe('gesture planning never synthesizes an out-of-bounds point', () => {
@@ -207,6 +208,11 @@ describe('gesture planning never synthesizes an out-of-bounds point', () => {
             plan = buildGesturePlan(normalizePublicGesture(gesture).gesture, viewport, platform);
           } catch (error) {
             assert.ok(error instanceof AppError, `unexpected error type: ${String(error)}`);
+            // A Split View preset off iOS is refused for the platform, before any geometry.
+            if (error.details?.reason === 'split_view_unavailable') {
+              assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+              return;
+            }
             assert.equal(error.code, 'INVALID_ARGS');
             return;
           }
