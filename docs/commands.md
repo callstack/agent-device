@@ -2195,7 +2195,7 @@ agent-device metro reload --bundle-url "http://localhost:8081/index.bundle?platf
 ```
 
 - `metro reload` asks connected React Native dev builds to reload JavaScript without restarting the native process, like pressing `r` in the Metro terminal.
-- Without flags, it reloads the dev server the session bound through `metro prepare` or `open`'s Metro hints, then `localhost:8081`. A reused session name never reloads a previous project's server.
+- Without flags, it reloads the dev server the session bound through `metro prepare` or `open`'s Metro hints. When no session bound one, and the daemon that answered `open` reported the session's device as one of its own local devices, it next uses the dev-server address the app itself stored (an iOS simulator only) when a dev server there serves this project, then a local dev server whose reported project root is this directory or a parent or child of it. Run it from the project's own directory, or pass `--metro-port`, because a local search matches the working directory. If neither local lookup resolves, it fails with `details.reason: 'metro_dev_server_unresolved'`; a provider device, a device inherited from an earlier request, or an app-less session retains the existing `localhost:8081` default. A reused session name never reloads a previous project's server.
 - Use `open <app> --relaunch` instead when the app is not connected to Metro, the reload fails, or the native process must restart. See `agent-device help metro` for the binding rules.
 
 ## Media and logs
