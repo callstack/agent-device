@@ -41,3 +41,21 @@ list the public imports for 0.22. The methods on `AgentDeviceClient` remain avai
 When a removed type describes a client method's options or result, derive it from
 `AgentDeviceClient` with TypeScript's `Parameters` or `Awaited<ReturnType<…>>`.
 For example, `Parameters<AgentDeviceClient['batch']['run']>[0]` gives the batch options.
+
+### Names removed from retained entries
+
+| Previous import | What to use in 0.22 |
+| --- | --- |
+| `normalizeError` from `agent-device/contracts` | Import `normalizeAgentDeviceError` from `agent-device`. |
+| `centerOfRect` from `agent-device` or `agent-device/contracts` | Calculate the center locally. Round `x + width / 2` and `y + height / 2` if you need the previous integer coordinates. |
+| `isUnreadableCaptureContentError` from `agent-device` | Inspect the normalized error details. Android capture reports `details.androidSnapshotHelperFailureReason` when it has a helper failure reason. |
+| `createLocalArtifactAdapter` from `agent-device` | Keep file I/O in your integration, or use the client method for the artifact operation you need. |
+| `findSelectorChainMatch` or `resolveSelectorChain` from `agent-device/selectors` | Use `listSelectorChainMatches()` for the first alternative with matches. Apply your own uniqueness rule if you need one match. |
+| `tryParseSelectorChain`, `isSelectorToken`, or `formatSelectorFailure` from `agent-device/selectors` | Parse with `parseSelectorChain()`, catch parse errors, and format your integration's diagnostics. |
+| `isNodeEditable` or `isNodeVisible` from `agent-device/selectors` | Apply your integration's own checks to the snapshot node. These helpers have no public replacement. |
+| `AgentDeviceClientConfig` or `EnsureDaemonOptions` from `agent-device` | Derive the options with `NonNullable<Parameters<typeof createAgentDeviceClient>[0]>` or `NonNullable<Parameters<typeof ensureDaemon>[0]>`. |
+| `AgentDeviceDevice` from `agent-device` | Derive the result item with `Awaited<ReturnType<AgentDeviceClient['devices']['list']>>[number]`. |
+| `AppErrorCode` from `agent-device` | Derive the code type with `ConstructorParameters<typeof AppError>[0]`. |
+| `DaemonBinding`, `AgentDeviceHost`, or `StartAgentDeviceOptions` from `agent-device` | Use the detached lifecycle above. The SDK no longer exposes embedded-host creation or its binding types. |
+| `SelectorChain` from `agent-device/selectors` | Use `ReturnType<typeof parseSelectorChain>`. |
+| Other removed types from `agent-device/contracts`, `agent-device/selectors`, or `agent-device/plugins` | Use types inferred from retained APIs where applicable. The [API reference](#api-reference) lists the supported plugin types. Internal wire and selector-diagnostic types have no direct replacement. |

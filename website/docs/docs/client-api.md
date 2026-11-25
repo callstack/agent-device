@@ -52,7 +52,7 @@ Client calls attach to the local daemon for their state directory without starti
 
 To migrate from `daemonLifecycle: 'managed'`, remove that option and call `ensureDaemon({ stateDir })` with the same `stateDir` as the client before creating it, including clients used only for replay/test. The in-process `startAgentDevice()` SDK export was removed in 0.22. CLI and MCP commands continue to ensure the local daemon when needed.
 
-Close an embedded runtime in the process that owns it. `agent-device daemon stop --state-dir <path>` refuses a live embedded runtime with `daemon-owner-embedded`. If the recorded host lifetime has provably exited, it retires the abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`.
+The public SDK starts detached daemons. Embedded runtimes are created through an internal entry. `agent-device daemon stop --state-dir <path>` refuses a live embedded runtime with `daemon-owner-embedded`. If the recorded host lifetime has provably exited, it retires the abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`.
 
 ```ts
 import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
@@ -73,10 +73,10 @@ These failures carry a typed `error.details.reason`:
 | Reason | Meaning |
 | --- | --- |
 | `daemon-not-running` | A client found no daemon to connect to. Call `ensureDaemon({ stateDir })` for the client's state directory. |
-| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For an embedded runtime, close it in its host process. For a detached daemon, use `agent-device daemon stop --state-dir <path>`. Then call `ensureDaemon({ stateDir })` for that directory. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
+| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For a detached daemon, run `agent-device daemon stop --state-dir <path>`, then call `ensureDaemon({ stateDir })` for that directory. For live embedded ownership, ask the host operator to shut it down. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
 | `daemon-busy` | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry. |
 | `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be force-retired, either because it still answers or because its process cannot be proven to be a detached daemon. It was not signaled. Retry once it has exited, or stop it with `agent-device daemon stop --state-dir <path>`. |
-| `daemon-owner-embedded` | A live host process owns the daemon on `stateDir`, so this client neither replaced it nor retired it, and signaled nothing. A daemon that matches the client is still usable. Close the runtime in its host process with its `close()` handle. |
+| `daemon-owner-embedded` | A live host process owns the daemon on `stateDir`, so this client neither replaced it nor retired it, and signaled nothing. A daemon that matches the client is still usable. Ask the host operator to shut down the runtime, or choose another state directory for your detached daemon. |
 | `daemon-owner-unrecognized` | The record on `stateDir` states an owner this version cannot read, so this client replaced nothing and signaled nothing. Update agent-device if the record comes from a newer build. Otherwise check what owns that process: a host that started it closes it with its own close, and otherwise remove `daemon.json` once that process is gone. |
 | `daemon-binding-mismatch` | A client pinned to one daemon instance reached another one instead. `details.mismatch` says which: `replaced`, `absent`, or `unaddressable`. Nothing was dispatched, started, or signaled. Take a fresh config from the host that owns the daemon, or start a host of your own. |
 

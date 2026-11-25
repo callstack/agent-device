@@ -298,26 +298,32 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     const managedHome = path.join(consumerRoot, 'managed-plugin-home');
     const replayArchive = path.join(consumerRoot, 'replay.tgz');
     const expectedIntegrity = `sha512-${crypto.createHash('sha512').update(fs.readFileSync(replayArchive)).digest('base64')}`;
-    const selection = await runNodeModuleJson(
-      consumerRoot,
-      ['--experimental-strip-types', '--input-type=module', '-e'],
-      `import { addPluginArtifact } from ${JSON.stringify(pathToFileURL(path.join(repoRoot, 'packages/plugins/src/store.ts')).href)};
-       const selected = await addPluginArtifact(${JSON.stringify(replayArchive)}, {
-         cwd: process.cwd(),
-         env: { ...process.env, HOME: ${JSON.stringify(managedHome)}, AGENT_DEVICE_HOME: ${JSON.stringify(managedHome)} },
-       });
-       console.log(JSON.stringify(selected));`,
+    const cli = path.join(installedPackageRoot, 'bin/agent-device.mjs');
+    const pluginCommandOptions = {
+      cwd: consumerRoot,
+      env: {
+        ...process.env,
+        HOME: managedHome,
+        AGENT_DEVICE_HOME: managedHome,
+        AGENT_DEVICE_STATE_DIR: path.join(managedHome, 'state'),
+      },
+      timeoutMs: SUBPROCESS_TIMEOUT_MS,
+    };
+    const added = await runCmd(
+      process.execPath,
+      [cli, 'plugins', 'add', replayArchive, '--json'],
+      pluginCommandOptions,
     );
+    const receipt = readJson(added.stdout);
+    assert.equal(receipt.success, true);
+    const selection = receipt.data.artifact;
     assert.equal(selection.name, '@agent-device/replay');
     assert.equal(selection.integrity, expectedIntegrity);
+    assert.equal(selection.compatibility, 'unchecked');
     const inventory = await runCmd(
       process.execPath,
-      [path.join(installedPackageRoot, 'bin/agent-device.mjs'), 'plugins', 'list', '--json'],
-      {
-        cwd: consumerRoot,
-        env: { ...process.env, HOME: managedHome, AGENT_DEVICE_HOME: managedHome },
-        timeoutMs: SUBPROCESS_TIMEOUT_MS,
-      },
+      [cli, 'plugins', 'list', '--json'],
+      pluginCommandOptions,
     );
     const selectedPlugin = readJson(inventory.stdout).data.plugins.find(
       (plugin: { name?: string }) => plugin.name === '@agent-device/replay',
@@ -327,9 +333,106 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     assert.equal(selectedPlugin?.version, selection.version);
     assert.equal(selectedPlugin?.backend, 'ad');
     assert.equal(selectedPlugin?.compatible, true);
+    metroPort = await listenOnLoopback(metroServer);
+    t.after(async () => {
+      await closeLoopbackServer(metroServer);
+    });
+
+    bridgeServer.on('upgrade', (req, socket) => {
+      if (req.url !== '/bridge') {
+        socket.destroy();
+        return;
+      }
+      const key = req.headers['sec-websocket-key'];
+      if (typeof key !== 'string') {
+        socket.destroy();
+        return;
+      }
+      bridgeSocketRef = socket;
+      acceptWebSocket(socket, key);
+    });
+    bridgePort = await listenOnLoopback(bridgeServer);
+    t.after(async () => {
+      destroySocket(bridgeSocketRef);
+      await closeLoopbackServer(bridgeServer);
+    });
+
+    remoteConfigPath = path.join(configDir, 'demo.remote.json');
     fs.writeFileSync(
-      path.join(consumerRoot, 'fixture-plugin.mjs'),
-      String.raw`
+      remoteConfigPath,
+      JSON.stringify({
+        platform: 'ios',
+        metroProjectRoot: projectRoot,
+        metroProxyBaseUrl: `http://127.0.0.1:${bridgePort}`,
+        metroBearerToken: bridgeToken,
+        tenant: 'tenant-1',
+        runId: 'run-1',
+        leaseId: 'lease-1',
+        metroPreparePort: metroPort,
+        metroStatusHost: '127.0.0.1',
+      }),
+      'utf8',
+    );
+
+    const imports = await runNodeModuleJson(
+      consumerRoot,
+      ['--input-type=module', '-e'],
+      `
+      const entries = ['agent-device', 'agent-device/contracts', 'agent-device/selectors', 'agent-device/plugins'];
+      const exports = await Promise.all(entries.map(async (entry) => Object.keys(await import(entry)).sort()));
+      const removed = ['ai-sdk', 'android-adb', 'artifacts', 'batch', 'finders', 'install-source', 'io', 'metro', 'remote-config'];
+      const denied = await Promise.all(removed.map(async (entry) => {
+        try { await import('agent-device/' + entry); return false; }
+        catch (error) { return error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'; }
+      }));
+      console.log(JSON.stringify({ exports, denied }));
+    `,
+    );
+    assert.deepEqual(imports.exports, [
+      [
+        'AppError',
+        'createAgentDeviceClient',
+        'ensureDaemon',
+        'isAgentDeviceError',
+        'normalizeAgentDeviceError',
+      ],
+      ['defaultHintForCode'],
+      ['listSelectorChainMatches', 'parseSelectorChain'],
+      [],
+    ]);
+    assert.ok(imports.denied.every(Boolean));
+    const cliStdout = await execFileText(
+      process.execPath,
+      [
+        path.join(installedPackageRoot, 'bin', 'agent-device.mjs'),
+        'metro',
+        'prepare',
+        '--remote-config',
+        remoteConfigPath,
+        '--json',
+      ],
+      { cwd: consumerRoot },
+    );
+    const cliResult = readJson(cliStdout);
+    assert.equal(cliResult.success, true);
+    assert.equal(cliResult.data.reused, true);
+    assert.equal(cliResult.data.bridge.enabled, true);
+    assert.equal(bridgeRegistered, true);
+    assert.equal(bridgeRequestCount >= 2, true);
+  } finally {
+    destroySocket(bridgeSocketRef);
+    await closeLoopbackServer(bridgeServer);
+    await closeLoopbackServer(metroServer);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('private source host isolates embedded runtimes, attachment, and shutdown', async (t) => {
+  const consumerRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-source-host-'));
+  t.after(() => fs.rmSync(consumerRoot, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(consumerRoot, 'fixture-plugin.mjs'),
+    String.raw`
 export const disposed = [];
 export const setups = [];
 export function fixture(provider, setupOverride) {
@@ -365,15 +468,15 @@ export function fixture(provider, setupOverride) {
   };
 }
 `,
-    );
-    const hosted = readJson(
-      await execFileText(
-        process.execPath,
-        [
-          '--experimental-strip-types',
-          '--input-type=module',
-          '-e',
-          String.raw`
+  );
+  const hosted = readJson(
+    await execFileText(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        '--input-type=module',
+        '-e',
+        String.raw`
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -536,102 +639,10 @@ assert.deepEqual(disposed, [
 assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
 
 `,
-        ],
-        { cwd: consumerRoot },
-      ),
-    );
-    assert.equal(hosted.attachedFromChild, true);
-    assert.equal(hosted.replacementRefused, true);
-    metroPort = await listenOnLoopback(metroServer);
-    t.after(async () => {
-      await closeLoopbackServer(metroServer);
-    });
-
-    bridgeServer.on('upgrade', (req, socket) => {
-      if (req.url !== '/bridge') {
-        socket.destroy();
-        return;
-      }
-      const key = req.headers['sec-websocket-key'];
-      if (typeof key !== 'string') {
-        socket.destroy();
-        return;
-      }
-      bridgeSocketRef = socket;
-      acceptWebSocket(socket, key);
-    });
-    bridgePort = await listenOnLoopback(bridgeServer);
-    t.after(async () => {
-      destroySocket(bridgeSocketRef);
-      await closeLoopbackServer(bridgeServer);
-    });
-
-    remoteConfigPath = path.join(configDir, 'demo.remote.json');
-    fs.writeFileSync(
-      remoteConfigPath,
-      JSON.stringify({
-        platform: 'ios',
-        metroProjectRoot: projectRoot,
-        metroProxyBaseUrl: `http://127.0.0.1:${bridgePort}`,
-        metroBearerToken: bridgeToken,
-        tenant: 'tenant-1',
-        runId: 'run-1',
-        leaseId: 'lease-1',
-        metroPreparePort: metroPort,
-        metroStatusHost: '127.0.0.1',
-      }),
-      'utf8',
-    );
-
-    const imports = await runNodeModuleJson(
-      consumerRoot,
-      ['--input-type=module', '-e'],
-      `
-      const entries = ['agent-device', 'agent-device/contracts', 'agent-device/selectors', 'agent-device/plugins'];
-      const exports = await Promise.all(entries.map(async (entry) => Object.keys(await import(entry)).sort()));
-      const removed = ['ai-sdk', 'android-adb', 'artifacts', 'batch', 'finders', 'install-source', 'io', 'metro', 'remote-config'];
-      const denied = await Promise.all(removed.map(async (entry) => {
-        try { await import('agent-device/' + entry); return false; }
-        catch (error) { return error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'; }
-      }));
-      console.log(JSON.stringify({ exports, denied }));
-    `,
-    );
-    assert.deepEqual(imports.exports, [
-      [
-        'AppError',
-        'createAgentDeviceClient',
-        'ensureDaemon',
-        'isAgentDeviceError',
-        'normalizeAgentDeviceError',
-      ],
-      ['defaultHintForCode'],
-      ['listSelectorChainMatches', 'parseSelectorChain'],
-      [],
-    ]);
-    assert.ok(imports.denied.every(Boolean));
-    const cliStdout = await execFileText(
-      process.execPath,
-      [
-        path.join(installedPackageRoot, 'bin', 'agent-device.mjs'),
-        'metro',
-        'prepare',
-        '--remote-config',
-        remoteConfigPath,
-        '--json',
       ],
       { cwd: consumerRoot },
-    );
-    const cliResult = readJson(cliStdout);
-    assert.equal(cliResult.success, true);
-    assert.equal(cliResult.data.reused, true);
-    assert.equal(cliResult.data.bridge.enabled, true);
-    assert.equal(bridgeRegistered, true);
-    assert.equal(bridgeRequestCount >= 2, true);
-  } finally {
-    destroySocket(bridgeSocketRef);
-    await closeLoopbackServer(bridgeServer);
-    await closeLoopbackServer(metroServer);
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+    ),
+  );
+  assert.equal(hosted.attachedFromChild, true);
+  assert.equal(hosted.replacementRefused, true);
 });
