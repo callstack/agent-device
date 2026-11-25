@@ -502,13 +502,9 @@ async function snapshotPlanUnavailableResponse(
 function snapshotCustomActionsUnavailableResponse(
   params: SnapshotPlanUnavailableParams,
 ): DaemonResponse {
-  const unavailableMessage =
-    params.command === 'diff'
-      ? `--actions requires an iOS simulator: custom actions are read through the private accessibility snapshot backend, which ${params.device.platform}/${params.device.kind} targets do not have.`
-      : `--actions requires an iOS simulator: custom actions are unavailable on this ${params.device.platform}/${params.device.kind} target.`;
   return errorResponse(
     'UNSUPPORTED_OPERATION',
-    unavailableMessage,
+    `--actions requires an iOS simulator: custom actions are unavailable on this ${params.device.platform}/${params.device.kind} target.`,
     { reason: params.fact.available ? undefined : params.fact.reason },
     {
       hint:

@@ -174,7 +174,7 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
     refusal: {
       code: 'UNSUPPORTED_OPERATION',
       message:
-        '--actions requires an iOS simulator: custom actions are read through the private accessibility snapshot backend, which android/emulator targets do not have.',
+        '--actions requires an iOS simulator: custom actions are unavailable on this android/emulator target.',
       hint: 'Re-run without --actions, or target an iOS simulator.',
       details: { reason: 'owner-capability-missing' },
     },

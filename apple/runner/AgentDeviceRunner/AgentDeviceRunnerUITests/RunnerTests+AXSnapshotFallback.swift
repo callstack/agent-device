@@ -166,7 +166,7 @@ extension RunnerTests {
     hint: CaptureHint,
     deadline: Date = .distantFuture
   ) -> SnapshotAcquisition? {
-    #if os(iOS) && targetEnvironment(simulator)
+    #if os(iOS)
       let app = target.app
       let requestedDepth = hint.rawTraversalDepth ?? 64
       // An explicit --depth request is honored as asked: no accepted-depth
@@ -220,6 +220,7 @@ extension RunnerTests {
       let viewport = privateAXSnapshotViewport(
         app: app,
         bundleId: target.bundleId,
+        soleScreenSize: target.soleScreenSize,
         rootFrame: rootFrame
       )
       let nodes = privateAXAcquisition(
@@ -275,14 +276,15 @@ extension RunnerTests {
 
   /// The app's reported viewport when XCTest can read it, else the bridge's own root frame. That root
   /// is `.derived`, which cannot establish a screen origin or anchor a rotation, so its local
-  /// coordinates cannot authorize input (#4399), unless AXRuntime proves the app fills the screen.
+  /// coordinates cannot authorize input (#4399), unless the root is the full-screen proof frame.
   private func privateAXSnapshotViewport(
     app: XCUIApplication,
     bundleId: String?,
+    soleScreenSize: CGSize,
     rootFrame: CGRect
   ) -> SnapshotViewport {
     let fallback = {
-      let fullScreenFrame = Self.fullScreenFrame(of: app)
+      let fullScreenFrame = Self.fullScreenFrame(of: app, soleScreenSize: { soleScreenSize })
       let viewport = Self.privateAXRootViewport(rootFrame: rootFrame, fullScreenFrame: fullScreenFrame)
       let kind: String
       switch viewport {
@@ -319,19 +321,32 @@ extension RunnerTests {
     }
   }
 
-  /// The screen's frame when AXRuntime reports `app` as the primary app filling it, else `.null`.
-  static func fullScreenFrame(of app: XCUIApplication) -> CGRect {
+  /// The frame `app`'s root must equal, at the origin, to prove that the app fills the screen, else
+  /// `.null` (`RunnerFullScreenProofFrame`). `soleScreenSize` is read only when the AXRuntime probe
+  /// proves nothing.
+  static func fullScreenFrame(of app: XCUIApplication, soleScreenSize: () -> CGSize) -> CGRect {
     #if os(iOS)
-      return RunnerFullScreenApplicationFrame(app)
+      return RunnerFullScreenApplicationFrame(app, soleScreenSize)
     #else
       return .null
     #endif
   }
 
-  /// The viewport a private AX root establishes without XCTest. A root that is exactly the screen
-  /// AXRuntime reports the app filling, at the origin, is `.reported`: two independent reads agree
-  /// that window space is screen space, as on every iPhone app. Any other root stays `.derived`,
-  /// including a placed iPad window's local root (#4399) and a root that is the screen rotated.
+  /// The device's only screen in portrait points, read at most once per command
+  /// (`soleDisplayPortraitSize`). `.zero` when the read fails or the platform has no such screen.
+  @MainActor
+  func commandSoleScreenSize() -> CGSize {
+    #if os(iOS)
+      return soleDisplayPortraitSize() ?? .zero
+    #else
+      return .zero
+    #endif
+  }
+
+  /// The viewport a private AX root establishes without XCTest. A root that is exactly the
+  /// full-screen proof frame, at the origin, is `.reported`: two independent reads agree that window
+  /// space is screen space, as on every iPhone app. Any other root stays `.derived`, including a
+  /// placed iPad window's local root (#4399) and a root that is the screen rotated.
   static func privateAXRootViewport(rootFrame: CGRect, fullScreenFrame: CGRect) -> SnapshotViewport {
     // CONSERVATIVE: orientation is unknown here, so a landscape root (the portrait screen with width
     // and height swapped) stays `.derived` rather than guess which way to rotate it.
@@ -341,9 +356,9 @@ extension RunnerTests {
     return .reported(box: rootFrame, interfaceOrientation: RunnerInterfaceOrientation.unknown)
   }
 
-  /// True when `frame` is exactly the screen AXRuntime reports the app filling, at the origin: the one
-  /// case where window space is screen space without a live XCTest read. `fullScreenFrame` is `.null`
-  /// when the app does not fill the screen.
+  /// True when `frame` is exactly the full-screen proof frame, at the origin: the one case where
+  /// window space is screen space without a live XCTest read. `fullScreenFrame` is `.null` when no
+  /// read proves that the app fills the screen.
   static func isFullScreenAtOrigin(_ frame: CGRect, fullScreenFrame: CGRect) -> Bool {
     !fullScreenFrame.isNull && frame.origin == .zero && frame == fullScreenFrame
   }

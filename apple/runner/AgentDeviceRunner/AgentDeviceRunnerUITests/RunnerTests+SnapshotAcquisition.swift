@@ -145,7 +145,9 @@ extension RunnerTests {
     if requestLitPanel == nil,
       let frame = Self.fullScreenWindowFrame(
         windowFrames: rootSnapshot.children.filter { $0.elementType == .window }.map(\.frame),
-        fullScreenFrame: Self.fullScreenFrame(of: app)
+        fullScreenFrame: Self.fullScreenFrame(of: app) {
+          (try? runOnMainActor { self.commandSoleScreenSize() }.get()) ?? .zero
+        }
       )
     {
       return .reported(box: frame, interfaceOrientation: capturedInterfaceOrientation(app: app))
@@ -154,10 +156,10 @@ extension RunnerTests {
   }
 
   /// The first usable window frame of a snapshot, the window `resolveRunnerWindowElement` resolves,
-  /// when it is exactly the screen AXRuntime reports the app filling, at the origin. Nil keeps the
+  /// when it is exactly the full-screen proof frame, at the origin. Nil keeps the
   /// live read: a placed iPad window (#4399), an offset window, and a landscape window, whose frame
   /// is the portrait screen with width and height swapped.
-  /// `fullScreenFrame` runs its AXRuntime probe only once a usable window is found.
+  /// `fullScreenFrame` runs its probe only once a usable window is found.
   static func fullScreenWindowFrame(windowFrames: [CGRect], fullScreenFrame: @autoclosure () -> CGRect) -> CGRect? {
     guard
       let window = windowFrames.first(where: { !$0.isEmpty }),

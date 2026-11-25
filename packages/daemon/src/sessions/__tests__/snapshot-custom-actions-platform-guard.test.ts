@@ -1,9 +1,10 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 /**
- * Custom actions are read through the private-AX snapshot backend, which only
- * the iOS simulator has. Every other target would accept `--actions`, take an
- * ordinary capture, and return nodes with no `actions` — indistinguishable from
- * "this screen has no custom actions". The guard runs after the session device
+ * Custom actions are read through the private-AX snapshot backend. iOS
+ * physical-device runners read private AX too, but the daemon admits
+ * `--actions` on the iOS simulator only. Every other target would accept
+ * `--actions`, take an ordinary capture, and return nodes with no `actions` —
+ * indistinguishable from "this screen has no custom actions". The guard runs after the session device
  * is resolved but before any device work, so a seeded session exercises it
  * without a real device.
  */
@@ -77,7 +78,8 @@ const nonSimulatorTargets: DeviceInfo[] = [
   { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
   { platform: 'android', id: 'ABC123', name: 'Pixel 9', kind: 'device' },
   { platform: 'apple', id: 'mac', name: 'Mac', kind: 'device', appleOs: 'macos' },
-  // An iOS PHYSICAL device is the subtle one: iOS family, but no private-AX backend.
+  // An iOS PHYSICAL device is the subtle one: its runner reads private AX, but custom actions are
+  // admitted on Simulators only.
   { platform: 'apple', id: 'udid', name: 'iPhone', kind: 'device', appleOs: 'ios' },
   { platform: 'linux', id: 'local', name: 'Linux', kind: 'device' },
   { platform: 'web', id: 'chrome', name: 'Chrome', kind: 'device' },

@@ -89,9 +89,10 @@ iOS snapshots have two explicit public capture modes:
 
 Some iOS apps expose accessibility trees that lower-level AX services can inspect but XCTest cannot
 serialize reliably. In those cases interactive snapshots may return a sparse root quickly, while
-full snapshots preserve the XCTest error. A penalized simulator can recover through private AX;
-physical devices use a short XCTest probe because no non-XCTest semantic backend is available
-there. See
+full snapshots preserve the XCTest error. A penalized iOS Simulator or iOS physical device can
+recover through private AX, which also reads past the AX server's per-request depth limit that
+makes a deep tree fail with `kAXErrorIllegalArgument`. tvOS, visionOS, watchOS, and macOS have no
+non-XCTest semantic backend and do not penalize the channel. See
 [`../../docs/adr/0004-ios-snapshot-backend-strategy.md`](../../docs/adr/0004-ios-snapshot-backend-strategy.md)
 for the backend boundary and future simulator AX-service direction.
 Presentation and geometry contracts are in
@@ -116,12 +117,13 @@ These events penalize the XCTest accessibility channel for that bundle for a bou
 
 Under a penalty, regular plans derive the next step from backend traits (`effectiveSnapshotCapturePlan`).
 If a runnable non-XCTest backend exists, they defer to it.
-If none exists, as on physical iOS devices, they run a short XCTest probe instead of the full tree slice.
+If none exists, they run a short XCTest probe instead of the full tree slice.
+No current runner reaches that state: only iOS runners penalize the channel, and every iOS runner has private AX.
 A recovery probe is due thirty seconds after the penalty starts, and thirty seconds after each probe starts.
 A regular plan with a due probe runs the bounded tree before the independent backend, in the same capture.
 A failed recovery probe does not change the penalty deadline, because its short slice gives no new evidence about the channel.
 A completed tree probe clears the penalty early only when its acquisition fits the probe slice and its quality is accepted.
-Physical-device plans probe on every capture.
+Plans without an independent backend probe on every capture.
 Explicit backend pins and the raw plan keep their order.
 The plan deadline and the abandoned-main-thread-work gate apply to every attempt (#1105, #1156, #2621, #3844).
 
@@ -133,13 +135,17 @@ Thus, if a viewport read takes too long, the plan skips the sweep instead of que
 The tree tier reads the viewport after the root snapshot.
 A live window read resolves `app.windows` again, and each resolution snapshots the whole app.
 On a heavy web view, the list, `exists`, and `frame` reads took 7.4 s together.
-Thus, when AXRuntime reports the target as the primary app that fills the screen, the viewport is the root snapshot's first usable window, if that window is exactly the screen frame at the origin.
+Thus, the viewport is the root snapshot's first usable window, if that window is exactly the full-screen proof frame at the origin (`RunnerFullScreenProofFrame`).
+That frame is the screen AXRuntime reports the target filling or, when the AXRuntime probe proves nothing, the sole XCTest screen.
 Any other window keeps the live read, because a snapshot frame is in window content space (see Screen space).
 
 Private-AX fallback keeps the viewport authority it acquired.
 When a penalty suppresses the XCTest viewport read, its root-derived box does not establish a screen origin.
-Exception: AXRuntime can report the target as the primary app that fills the screen. If the root is that screen frame at the origin, the box is `reported`.
-This probe reads two frames. It adds no XCTest tree read and does not change the channel budget.
+Exception: if the root is exactly the full-screen proof frame at the origin, the box is `reported` (`RunnerFullScreenProofFrame`).
+The proof frame comes from the AXRuntime probe. The probe reads two frames. It adds no XCTest tree read and does not change the channel budget.
+When AXRuntime reports the target as the primary app that fills the screen, the proof frame is that screen frame. A windowed or not-primary result gives no proof frame.
+When the probe proves nothing, the proof frame is the sole XCTest screen in native portrait points. On a physical device, the probe always proves nothing, because AXRuntime reports no app to the runner. No window smaller than the screen can equal that frame.
+`XCUIScreen` is main-actor isolated, so snapshot preparation reads the sole screen on main, once per command (`soleDisplayPortraitSize`), and hands it to the private-AX tier in `SnapshotCaptureTarget`. The tree tier reads its viewport on main and reuses that read. A request that names a lit panel skips the read, because its plan has no private-AX tier.
 The payload carries any remaining uncertainty.
 In landscape, the root is in interface space and the screen frame is in native portrait space, so the root stays `derived`.
 

@@ -375,6 +375,30 @@ RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForeground(
     : RunnerFullScreenEvidenceWindowed;
 }
 
+CGRect RunnerFullScreenProofFrame(
+  RunnerFullScreenEvidence evidence,
+  CGRect probedScreenFrame,
+  CGSize soleScreenSize
+) {
+  switch (evidence) {
+    case RunnerFullScreenEvidenceFillsScreen:
+      return probedScreenFrame;
+    case RunnerFullScreenEvidenceNotPrimaryApp:
+    case RunnerFullScreenEvidenceWindowed:
+      return CGRectNull;
+    case RunnerFullScreenEvidenceUnknown:
+      break;
+  }
+  CGRect soleScreen = CGRectMake(0, 0, soleScreenSize.width, soleScreenSize.height);
+  // CONSERVATIVE: a landscape root is the portrait screen with width and height swapped, and no
+  // read here says which way to rotate it.
+  if (!AgentDeviceForegroundFrameIsMeasurable(soleScreen) ||
+      soleScreenSize.height < soleScreenSize.width) {
+    return CGRectNull;
+  }
+  return soleScreen;
+}
+
 #if TARGET_OS_IOS
 
 // The private AXElement class the shared protocol describes comes from AXRuntime; the bridge guest
@@ -481,12 +505,17 @@ static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application
   return RunnerProbeApplicationFillsScreenFrame(application, NULL);
 }
 
-CGRect RunnerFullScreenApplicationFrame(id application) {
+CGRect RunnerFullScreenApplicationFrame(
+  id application,
+  CGSize (^NS_NOESCAPE soleScreenSize)(void)
+) {
   CGRect screen = CGRectNull;
-  if (RunnerProbeApplicationFillsScreenFrame(application, &screen) != RunnerFullScreenEvidenceFillsScreen) {
-    return CGRectNull;
-  }
-  return screen;
+  RunnerFullScreenEvidence evidence = RunnerProbeApplicationFillsScreenFrame(application, &screen);
+  return RunnerFullScreenProofFrame(
+    evidence,
+    screen,
+    evidence == RunnerFullScreenEvidenceUnknown ? soleScreenSize() : CGSizeZero
+  );
 }
 
 #endif
