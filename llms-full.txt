@@ -8354,7 +8354,7 @@ For Android pixel units and density, see [Android node metadata](#android-node-m
 * `"presented"` means the capture saw the presentation directly — a dimming view, an alert’s own view classes, or an element typed as a sheet, drawer, alert, or dialog.
 * `"absent"` is an earned answer, not a default. The capture checked every window it read and each one held only its own content. This is the answer you can act on, for example to confirm a tap dismissed a sheet.
 * `"unknown"` means the capture could not tell, and it is not a hedge — it says the capture lacks the evidence absence needs. Absence is only reachable from a capture that reads UIKit class names, so a screen served by a backend that publishes none answers `"unknown"` even when nothing is presented. That is the private accessibility backend (`snapshotQuality.backend: "private-ax"`, which `--actions` asks for) and an Appium tree. Never treat `"unknown"` as `"absent"`.
-* A physical iOS device has one capture backend, and it publishes no class names, so there the answer is `"presented"` or `"unknown"` and never `"absent"`.
+* No capture backend on a physical iOS device publishes class names, so there the answer is `"presented"` or `"unknown"` and never `"absent"`.
 * The field is absent entirely when the platform publishes no reading at all: Android, web, Linux, and macOS captures.
 
 The answer describes the screen, not the view of it you asked for, so `--raw`, `-i`, `-d`, and `--scope` all report the same value for one screen. Use `-i` or a `--scope` to keep the output small and still trust the answer.
@@ -8374,14 +8374,14 @@ A regular snapshot that can’t present the screen fails with a typed `details.r
 
 iOS snapshots use XCTest on simulators and physical devices. You can’t pick the capture backend. `--raw` switches between two strategies, and each strategy decides which backends it tries.
 
-* Regular (non-`--raw`) capture starts with the XCTest tree. When that comes back **sparse** for a screen XCTest cannot read, it retries with a query sweep and then, on simulators, a private accessibility backend.
+* Regular (non-`--raw`) capture starts with the XCTest tree. When that comes back **sparse** for a screen XCTest cannot read, it retries with a query sweep and then a private accessibility backend. That backend also reads trees too deep for XCTest.
 * Retries stop when the capture budget runs out, and you get the best result captured so far.
 * A failed or partial capture is reported as such instead of looking like an empty UI. A **recovered** capture warns that it fell back to another backend; you can keep working from it. A **sparse** capture reports that no backend could read the screen and points you to `screenshot` plus coordinate taps. Use `--json` and read `snapshotQuality` for the state, backend, and reason behind **degraded** output.
 * A **sparse** `snapshot` takes that screenshot for you and returns its path as `fallbackScreenshotPath`, so you don’t need a separate `screenshot` command. Remote clients download the image to the local machine before returning that path. When the screen was reachable but published no accessibility content at all, the warning also names it as a likely app accessibility bug — assistive technologies get the same empty tree. Reasons that describe a limit of this tool instead (a refused or budget-exhausted capture) are not attributed to the app.
 * `--raw` starts from the XCTest tree and keeps capture failures strict, so an XCTest accessibility error surfaces as an error instead of an empty tree.
 * `--raw` returns the tree as captured, on whichever backend served it. It keeps the off-screen nodes, decorations, and structural wrappers that the default and `-i` views fold away, so a recovered raw capture shows the same hierarchy as a healthy one.
 * `-d` still applies with `--raw`, where it counts traversal depth. `-i` narrows only the default view, so `--raw -i` returns the same tree as `--raw`.
-* Private-accessibility recovery and `--actions` work on simulators only. Physical iOS devices have no second backend to fall back to.
+* Private-accessibility recovery works on iOS simulators and physical iOS devices. `--actions` works on simulators only.
 
 ## Android capture behavior
 
