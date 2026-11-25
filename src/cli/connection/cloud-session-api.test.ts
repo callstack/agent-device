@@ -611,9 +611,24 @@ test('uses the normalized attachment bearer for both viewer filtering and storag
 });
 
 test.each([
+  ['2026-11-19T16:00:00+01:00', '2026-11-19T15:00:00.000Z'],
+  ['2026-11-19T10:00:00.123456-05:00', '2026-11-19T15:00:00.123Z'],
+])('stores an ISO broker deadline in canonical UTC (%s)', async (deadlineAt, canonical) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ ...response, deadlineAt })),
+  );
+  await expect(createCloudSession(access, request, attempt)).resolves.toMatchObject({
+    binding: { deadlineAt: canonical },
+  });
+});
+
+test.each([
   'Thu, 19 Nov 2026 15:00:00 GMT (instance-token)',
   'Thu, 19 Nov 2026 15:00:00 GMT (test-cloud-key)',
   '2026-02-30T15:00:00Z',
+  '2026-02-30T15:00:00+01:00',
+  '2026-11-19T15:00:00+24:00',
 ])('refuses invalid public deadlines (%s)', async (deadlineAt) => {
   vi.stubGlobal(
     'fetch',

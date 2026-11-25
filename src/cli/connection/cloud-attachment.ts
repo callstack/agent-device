@@ -9,6 +9,7 @@ import type {
   CloudSessionBinding,
   RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
+import type { HostedConnectionLease } from '../commands/connection-lease-policy.ts';
 import { isLegacyCloudProfile } from './active-connection.ts';
 import { cloudLimrunDaemonDir, cloudLimrunEnv, requireHostedLimrunPlugin } from './cloud-limrun.ts';
 import { parseCloudAttachment, type CloudAttachment } from './cloud-session-api.ts';
@@ -98,7 +99,7 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
   flags: CliFlags;
   token: string;
   daemonStateDir?: string;
-  hostedLeaseId?: string;
+  hostedLease?: HostedConnectionLease;
 } {
   const attachment = resolveCloudAttachment(options.location, options.session);
   const env = { ...options.host.env };
@@ -140,7 +141,10 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
       },
       token: attachment.token,
       daemonStateDir: cloudLimrunDaemonDir(location, session),
-      hostedLeaseId,
+      hostedLease: {
+        id: hostedLeaseId,
+        replaceSettled: (id) => replaceHostedLeaseId(location, session.generation, id),
+      },
     };
   }
   return {
@@ -159,6 +163,22 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
       leaseBackend: undefined,
     },
   };
+}
+
+async function replaceHostedLeaseId(
+  location: ConnectionLocation,
+  generation: string,
+  settledId: string,
+): Promise<string> {
+  return await withCloudConnectionOwner(location, generation, () => {
+    const { record } = readCurrentCloudConnection(location, generation);
+    const currentId = record.hostedLeaseId;
+    if (!currentId) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
+    if (currentId !== settledId) return currentId;
+    const hostedLeaseId = randomBytes(16).toString('hex');
+    writeCloudConnection(location, { ...record, hostedLeaseId });
+    return hostedLeaseId;
+  });
 }
 
 export function bindHostedDaemon(host: HostEnvironment, daemonStateDir: string) {
@@ -184,7 +204,9 @@ export function bindHostedDaemon(host: HostEnvironment, daemonStateDir: string) 
   const attachment = resolveCloudAttachment(location, binding);
   if (attachment.kind !== 'limrun') throw refuse();
   const assertCurrent = () => {
-    readCurrentCloudConnection(location, generation);
+    const current = readCurrentCloudConnection(location, generation).record.hostedLeaseId;
+    if (!current) throw refuse();
+    return current;
   };
   assertCurrent();
   return {

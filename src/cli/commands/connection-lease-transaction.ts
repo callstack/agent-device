@@ -21,6 +21,7 @@ import { connectionProviderCapabilities } from '../connection/provider-policy.ts
 import {
   connectionLeasePolicyForState,
   type ConnectionLeasePolicy,
+  type HostedConnectionLease,
 } from './connection-lease-policy.ts';
 import { bindLeaseNamedDevice, CONNECTION_SCOPE_REASONS } from './proxy-lease-device.ts';
 
@@ -121,9 +122,9 @@ export async function acquireConnectionLease(options: {
   positionals?: string[];
   leaseLedger: LeaseLedger;
   env: NodeJS.ProcessEnv;
-  hostedLeaseId?: string;
+  hostedLease?: HostedConnectionLease;
 }): Promise<{ state: RemoteConnectionState; changed: boolean }> {
-  const { command, client, state, nextFlags, leaseLedger, hostedLeaseId } = options;
+  const { command, client, state, nextFlags, leaseLedger, hostedLease } = options;
   const deferredAppSelection = connectionProviderCapabilities(
     state.leaseProvider,
     options.env,
@@ -132,7 +133,9 @@ export async function acquireConnectionLease(options: {
     deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
   if (deferredAppSelection) delete nextFlags.providerApp;
   const policy = connectionLeasePolicyForState(state, options.env);
-  const leasePolicy = hostedLeaseId ? { ...policy, newLeaseId: () => hostedLeaseId } : policy;
+  const leasePolicy = hostedLease
+    ? { ...policy, newLeaseId: () => hostedLease.id, replaceSettled: hostedLease.replaceSettled }
+    : policy;
   let nextState = state;
   let changed = false;
   if (leasePolicy.shouldAllocate(command)) {
@@ -394,7 +397,7 @@ async function allocateOrReuseLease(
   // The spec rides only a by-spec allocate, so it is added below rather than taken from the flags.
   const providerFlags = readLeaseAllocateProviderFlags(flags);
   for (const key of LEASE_DEVICE_SPEC_KEYS) delete providerFlags[key];
-  const lease = await client.leases.allocate({
+  const allocation = {
     tenant: state.tenant,
     runId: state.runId,
     leaseId: policy.newLeaseId?.(),
@@ -407,7 +410,8 @@ async function allocateOrReuseLease(
     target: state.target ?? flags.target,
     ...(allocateBySpec ? requireLeaseDeviceSpec(flags).spec : {}),
     providerApp: initialApp ?? flags.providerApp,
-  });
+  };
+  const lease = await allocateConnectionLease(client, allocation, policy.replaceSettled);
   if (lease.created !== false) {
     leaseLedger.track({
       leaseId: lease.leaseId,
@@ -416,6 +420,25 @@ async function allocateOrReuseLease(
     });
   }
   return { lease, acquired: true };
+}
+
+async function allocateConnectionLease(
+  client: AgentDeviceClient,
+  input: Parameters<AgentDeviceClient['leases']['allocate']>[0],
+  replaceSettled?: HostedConnectionLease['replaceSettled'],
+): Promise<Lease> {
+  try {
+    return await client.leases.allocate(input);
+  } catch (error) {
+    if (
+      !replaceSettled ||
+      !input.leaseId ||
+      asAppError(error, 'COMMAND_FAILED').details?.reason !== 'LEASE_ID_IN_USE'
+    ) {
+      throw error;
+    }
+    return await client.leases.allocate({ ...input, leaseId: await replaceSettled(input.leaseId) });
+  }
 }
 
 /**

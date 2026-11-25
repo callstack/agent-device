@@ -243,6 +243,11 @@ test('hosted daemon ownership precedes credential read and bounds allocation ove
   });
   try {
     const info = await readRegisteredDaemon(paths, { required: true });
+    const admin = await fetch(`http://127.0.0.1:${info.httpPort}/admin/leases`, {
+      headers: { authorization: `Bearer ${runtime.token}` },
+    });
+    expect(admin.status).toBe(404);
+    await admin.body?.cancel();
     const request: DaemonWireRequest = {
       session: location.session,
       token: runtime.token,
@@ -255,7 +260,7 @@ test('hosted daemon ownership precedes credential read and bounds allocation ove
         leaseProvider: 'limrun',
         leaseBackend: state.leaseBackend,
         clientId: state.clientId,
-        leaseId: attached.hostedLeaseId ?? '0'.repeat(32),
+        leaseId: attached.hostedLease?.id ?? '0'.repeat(32),
       },
     };
     const scopeError = { details: { reason: 'LEASE_SESSION_MISMATCH' } };
@@ -277,26 +282,51 @@ test('hosted daemon ownership precedes credential read and bounds allocation ove
       expect(captureAllocate).toHaveBeenCalledTimes(transport === 'http' ? 0 : 1);
       expect(await send(request)).toMatchObject({
         ok: true,
-        data: { lease: { leaseId: attached.hostedLeaseId } },
+        data: { lease: { leaseId: attached.hostedLease?.id } },
       });
     }
     expect(bindAttachment).toHaveBeenCalledOnce();
-    const devices = await runCliCapture(['devices', '--json'], {
-      env,
-      sendToDaemon: async (req) =>
-        req.command === 'lease_allocate'
-          ? await sendDaemonRequest(
-              info,
-              { ...req, token: runtime.token },
-              'socket',
-              paths,
-              3_000,
-              { host },
-            )
-          : { ok: true, data: { devices: [] } },
-    });
+    const listDevices = () =>
+      runCliCapture(['devices', '--json'], {
+        env,
+        sendToDaemon: async (req) =>
+          ['lease_allocate', 'lease_heartbeat'].includes(req.command)
+            ? await sendDaemonRequest(
+                info,
+                { ...req, token: runtime.token },
+                'socket',
+                paths,
+                3_000,
+                { host },
+              )
+            : { ok: true, data: { devices: [] } },
+      });
+    const devices = await listDevices();
     expect(devices.code, devices.stdout).toBeNull();
-    expect(readRemoteConnectionState(location)?.leaseId).toBe(attached.hostedLeaseId);
+    const settledId = attached.hostedLease?.id;
+    expect(readRemoteConnectionState(location)?.leaseId).toBe(settledId);
+    const released = await sendDaemonRequest(
+      info,
+      { ...request, command: 'lease_release' },
+      'socket',
+      paths,
+      3_000,
+      { host },
+    );
+    expect(released).toMatchObject({ ok: true, data: { released: true } });
+    const reopened = await listDevices();
+    expect(reopened.code, reopened.stdout).toBeNull();
+    const replacement = readRemoteConnectionState(location)?.leaseId;
+    expect(replacement).toEqual(expect.any(String));
+    expect(replacement).not.toBe(settledId);
+    expect(readCloudConnection(location)).toMatchObject({
+      hostedLeaseId: replacement,
+      generation: state.cloudSession?.generation,
+    });
+    expect(await sendDaemonRequest(info, request, 'socket', paths, 3_000, { host })).toMatchObject({
+      ok: false,
+      error: scopeError,
+    });
     const releaseMock = stubCloudApi();
     const localOnly = await runCliCapture(['disconnect', '--json'], {
       env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },

@@ -341,7 +341,7 @@ type CliRunContext = {
   cloudSession?: CloudSessionBinding;
   cloudAttachmentToken?: string;
   cloudDaemonStateDir?: string;
-  hostedLeaseId?: string;
+  hostedLease?: import('./cli/commands/connection-lease-policy.ts').HostedConnectionLease;
   admitConnection?: Parameters<typeof resolveRunTransport>[2];
   explicitFlagKeys: Set<FlagKey>;
   effectiveFlags: CliFlags;
@@ -492,7 +492,7 @@ async function applySavedCloudAttachment(ctx: CliRunContext): Promise<void> {
   ctx.host = attachment.host;
   ctx.cloudAttachmentToken = attachment.token;
   ctx.cloudDaemonStateDir = attachment.daemonStateDir;
-  ctx.hostedLeaseId = attachment.hostedLeaseId;
+  ctx.hostedLease = attachment.hostedLease;
   ctx.effectiveFlags = attachment.flags;
   if (session.transport === 'agent-device-daemon') {
     ctx.connectionMetadata = undefined;
@@ -555,7 +555,7 @@ async function resolveRemoteContext(
       batchSteps: ctx.parsedBatchSteps,
       forceRuntimePrepare: hasExplicitMetroRuntimeOverrides(ctx.explicitFlagKeys),
       cloudGeneration: ctx.cloudSession?.generation,
-      hostedLeaseId: ctx.hostedLeaseId,
+      hostedLease: ctx.hostedLease,
     });
     ctx.effectiveFlags = materialized.flags;
     ctx.resolvedRuntime = materialized.runtime;

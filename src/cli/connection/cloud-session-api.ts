@@ -567,12 +567,15 @@ function parseCloudSession(
 
 function canonicalDeadline(value: unknown): string | undefined {
   if (typeof value !== 'string') return;
-  const parts = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
+  const parts = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(
+    value,
+  );
   if (!parts) return;
-  const canonical = `${parts[1]}.${(parts[2] ?? '').padEnd(3, '0')}Z`;
-  const milliseconds = Date.parse(canonical);
-  if (Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === canonical)
-    return canonical;
+  const local = `${parts[1]}.${(parts[2] ?? '').slice(0, 3).padEnd(3, '0')}`;
+  const localMs = Date.parse(`${local}Z`);
+  if (!Number.isFinite(localMs) || new Date(localMs).toISOString() !== `${local}Z`) return;
+  const utc = Date.parse(`${local}${parts[3]}`);
+  if (Number.isFinite(utc)) return new Date(utc).toISOString();
 }
 
 function readFallbackFrom(value: unknown): string[] | undefined {

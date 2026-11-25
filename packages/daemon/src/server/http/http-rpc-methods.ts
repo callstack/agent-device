@@ -215,7 +215,7 @@ const LEASE_LABEL_PARAMS = {
   leaseProvider: ['leaseProvider', 'provider'],
   deviceKey: ['deviceKey'],
   clientId: ['clientId'],
-  leaseBackend: ['leaseBackend', 'backend'],
+  leaseBackend: ['backend', 'leaseBackend'],
 } as const;
 
 /**

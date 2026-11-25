@@ -19,7 +19,12 @@ import {
   connectionProviderCapabilities,
   providerRouteForConnection,
 } from '../connection/provider-policy.ts';
-import { withCloudConnectionOwner } from '../connection/cloud-connection-record.ts';
+import {
+  CLOUD_CONNECTION_REASONS,
+  cloudConnectionUnavailable,
+  readCloudConnection,
+  withCloudConnectionOwner,
+} from '../connection/cloud-connection-record.ts';
 import {
   acquireConnectionLease,
   createLeaseLedger,
@@ -86,7 +91,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   batchSteps?: BatchStep[];
   forceRuntimePrepare?: boolean;
   cloudGeneration?: string;
-  hostedLeaseId?: string;
+  hostedLease?: import('./connection-lease-policy.ts').HostedConnectionLease;
 }): Promise<{
   flags: CliFlags;
   runtime?: SessionRuntimeHints;
@@ -94,7 +99,11 @@ export async function materializeRemoteConnectionForCommand(options: {
   leaseDevice?: LeaseDevice;
 }> {
   const { command, flags, client, host } = options;
-  const { stateDir, state, existing } = options.selection;
+  const { stateDir, state: savedState, existing } = options.selection;
+  const state =
+    options.hostedLease && savedState.leaseId && savedState.leaseId !== options.hostedLease.id
+      ? { ...savedState, leaseId: undefined, endedLeaseId: undefined }
+      : savedState;
   const nextFlags = { ...flags, session: state.session };
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
@@ -112,7 +121,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       positionals: options.positionals,
       leaseLedger,
       env: host.env,
-      hostedLeaseId: options.hostedLeaseId,
+      hostedLease: options.hostedLease,
     });
     nextState = acquired.state;
     changed = changed || acquired.changed;
@@ -137,6 +146,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       state: nextState,
       leaseLedger,
       cloudGeneration: options.cloudGeneration,
+      hosted: options.hostedLease !== undefined,
       preparedMetroCleanupOnFailure: runtimePreparation.preparedMetroCleanupOnFailure,
       metroCleanupToStop: runtimePreparation.metroCleanupToStop,
     });
@@ -165,6 +175,7 @@ async function persistMaterializedConnection(options: {
   state: RemoteConnectionState;
   leaseLedger: LeaseLedger;
   cloudGeneration?: string;
+  hosted: boolean;
   preparedMetroCleanupOnFailure?: RemoteConnectionState['metro'];
   metroCleanupToStop?: RemoteConnectionState['metro'];
 }): Promise<void> {
@@ -173,16 +184,21 @@ async function persistMaterializedConnection(options: {
       // The session record is the durable commit point: the moment it lands, it names the lease and
       // the ledger stops owning it. The active-pointer update that follows is a convenience reader
       // for the default session; its failure leaves the named lease owned by the record, not by us.
-      await withCloudConnectionOwner(
-        { stateDir: options.stateDir, session: options.state.session },
-        options.cloudGeneration,
-        () =>
-          writeRemoteConnectionState({
-            stateDir: options.stateDir,
-            state: options.state,
-            onSessionRecordCommitted: () => options.leaseLedger.transfer(options.state.leaseId),
-          }),
-      );
+      const location = { stateDir: options.stateDir, session: options.state.session };
+      await withCloudConnectionOwner(location, options.cloudGeneration, () => {
+        if (
+          options.hosted &&
+          options.state.leaseId &&
+          readCloudConnection(location)?.hostedLeaseId !== options.state.leaseId
+        ) {
+          throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
+        }
+        writeRemoteConnectionState({
+          stateDir: options.stateDir,
+          state: options.state,
+          onSessionRecordCommitted: () => options.leaseLedger.transfer(options.state.leaseId),
+        });
+      });
     } catch (error) {
       // The caller's rollback ends any lease the record never came to name.
       await stopMetroCleanup(options.preparedMetroCleanupOnFailure);

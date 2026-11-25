@@ -13,17 +13,17 @@ import {
 export type HostedAttachmentScope = {
   session: string;
   lease: SessionLease & { tenantId: string };
-  assertCurrent(): void;
+  assertCurrent(): string;
 };
 
 export function hostedAttachmentAdmission({
   session,
-  lease,
+  lease: attachmentLease,
   assertCurrent,
 }: HostedAttachmentScope) {
-  const address = tenantScopedSessionName(lease.tenantId, session);
+  const address = tenantScopedSessionName(attachmentLease.tenantId, session);
   return (req: DaemonRequest): DaemonRequest => {
-    assertCurrent();
+    const lease = { ...attachmentLease, leaseId: assertCurrent() };
     if ((req.session !== session && req.session !== address) || req.internal?.sessionOmitted)
       refuseScope();
     const scope = resolveLeaseScope(req);
