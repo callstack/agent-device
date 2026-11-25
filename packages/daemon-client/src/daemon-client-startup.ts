@@ -77,8 +77,16 @@ const MINIMUM_DAEMON_TAKEOVER_BUDGET_MS = 5_000;
 
 const DAEMON_STARTUP_TIMEOUT_ENV = 'AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS';
 
+/** Agent directive: a sandboxed agent reads it to ask for host access instead of giving up. */
+const DAEMON_LISTEN_DENIED_HINT =
+  'The host denied the daemon a loopback port on 127.0.0.1 (listen EPERM or EACCES). A sandbox ' +
+  'around this command likely blocks local ports and simulator access. Run agent-device ' +
+  "outside the sandbox: allow the agent-device command in the agent's sandbox rules, or rerun it " +
+  'with host access (escalated permissions).';
+
 type DaemonStartupFailureReason =
   | typeof DAEMON_UNAVAILABLE_REASONS.startupExited.reason
+  | typeof DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason
   | typeof DAEMON_UNAVAILABLE_REASONS.startupStalled.reason
   | typeof DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason;
 
@@ -340,12 +348,26 @@ export async function startLocalDaemon(settings: DaemonClientSettings): Promise<
     ...(phases ? { phases: describeStartupPhaseTimings(phases) } : {}),
     ...(daemonLogTail ? { daemonLogTail } : {}),
     metadataState: state,
-    hint:
-      reason === DAEMON_UNAVAILABLE_REASONS.startupStalled.reason ||
-      reason === DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason
-        ? resolveStartupProgressHint(reason, startupTimeoutMs)
-        : resolveDaemonStartupHint(state, settings.paths),
+    hint: resolveStartupFailureHint(effectiveReason, startupTimeoutMs, () =>
+      resolveDaemonStartupHint(state, settings.paths),
+    ),
   });
+}
+
+function resolveStartupFailureHint(
+  reason: DaemonStartupFailureReason,
+  ceilingMs: number,
+  exitedHint: () => string,
+): string {
+  switch (reason) {
+    case DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason:
+      return DAEMON_LISTEN_DENIED_HINT;
+    case DAEMON_UNAVAILABLE_REASONS.startupStalled.reason:
+    case DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason:
+      return resolveStartupProgressHint(reason, ceilingMs);
+    case DAEMON_UNAVAILABLE_REASONS.startupExited.reason:
+      return exitedHint();
+  }
 }
 
 async function attemptLocalDaemonStartup(
@@ -385,16 +407,21 @@ async function attemptLocalDaemonStartup(
     };
   }
   const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
+  const listenDenied =
+    startup.kind === 'early_exit' &&
+    startup.exit.exitCode === DAEMON_STARTUP_EXIT_CODES.listenDenied;
   const reason: DaemonStartupFailureReason =
     startup.kind === 'stalled'
       ? DAEMON_UNAVAILABLE_REASONS.startupStalled.reason
       : startup.kind === 'ceiling'
         ? DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason
-        : DAEMON_UNAVAILABLE_REASONS.startupExited.reason;
+        : listenDenied
+          ? DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason
+          : DAEMON_UNAVAILABLE_REASONS.startupExited.reason;
   const available = isRegistrationAvailable(inspectProcessLock(settings.paths.lockPath));
   return {
     cleanup,
-    retry: joined && startup.kind === 'early_exit' && available,
+    retry: joined && startup.kind === 'early_exit' && !listenDenied && available,
     reason,
     startError: startup.kind === 'early_exit' ? describeDaemonEarlyExit(startup.exit) : undefined,
     daemonProcess: startup.kind === 'early_exit' ? startup.exit : { pid: launch.pid },

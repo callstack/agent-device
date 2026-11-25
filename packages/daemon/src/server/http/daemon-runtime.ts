@@ -159,8 +159,9 @@ export type DaemonRuntimeController = {
 };
 
 /**
- * Thrown by {@link startDaemonRuntime} when the daemon must not run: its policy is unusable or
- * another daemon owns the state dir. `details.exitCode` is the code the executable exits with.
+ * Thrown by {@link startDaemonRuntime} when the daemon must not run: its policy is unusable,
+ * another daemon owns the state dir, or the host denied its loopback listen. `details.exitCode` is
+ * the code the executable exits with.
  */
 export function daemonStartupExitCode(error: unknown): number {
   const exitCode = asAppError(error).details?.exitCode;
