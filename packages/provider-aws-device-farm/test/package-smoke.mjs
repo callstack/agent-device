@@ -68,7 +68,7 @@ export function environment(endpoint) {
   return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` };
 }
 
-export async function verifyPacked({ core, contracts, plugin }) {
+export async function verifyPacked({ core, plugin }) {
   const flags = {
     platform: 'android',
     awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project',

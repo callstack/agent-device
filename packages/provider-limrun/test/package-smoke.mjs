@@ -24,7 +24,7 @@ export function respond(url, rejectCredentials) {
   return { body: [] };
 }
 
-export async function verifyPacked({ core, contracts, plugin }) {
+export async function verifyPacked({ core, plugin }) {
   const limrun = plugin.default().contributes[0];
   assert.equal(limrun.kind, 'provider');
   assert.equal(limrun.provider, provider);
