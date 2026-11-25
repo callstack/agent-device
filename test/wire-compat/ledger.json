@@ -166,7 +166,7 @@
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
-    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:5ed629637b404551a0a0fbe69ebeaf486c83175ed18d39661cf061ba5597b7f7",
+    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:d3135992646992fc7e5644c72731062fa44ee82187ad703f875f1aa358616b3f",
     "packages/remote/src/remote-request-diagnostics.ts#localizeRemoteDaemonError": "sha256:2c41ead5811875c1bebb644cf2b4e7613dcaee03b3f4d97a2dca3678a65fa384",
     "packages/remote/src/upload-client-artifact.ts#PreparedUploadArtifact": "sha256:5c40027d47feda3c946e836372b9f08ad866ab1612708b0d506551545f931ea4",
     "packages/remote/src/upload-client.ts#ARTIFACT_HASH_ALGORITHM": "sha256:328c135ea5f9d89fd2c142b440d5402a61d19f9044bf0504dfc2c525e58c1909",
@@ -450,8 +450,8 @@
     },
     {
       "declaration": "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics",
-      "digest": "sha256:5ed629637b404551a0a0fbe69ebeaf486c83175ed18d39661cf061ba5597b7f7",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). The client admits the diagnostics GET at send time, then receives and writes its body after release. The HTTP request and error framing are unchanged. The client deadline now bounds admission as well as the request. HTTP messages stay the same."
+      "digest": "sha256:d3135992646992fc7e5644c72731062fa44ee82187ad703f875f1aa358616b3f",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). The client admits the diagnostics GET at send time, then receives and writes its body after release. The HTTP request and error framing are unchanged. The client deadline bounds admission and the request. A timed-out download closes and removes its local file before it reports failure. HTTP messages stay the same."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#uploadDirectArtifact",

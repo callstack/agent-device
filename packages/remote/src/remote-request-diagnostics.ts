@@ -168,7 +168,7 @@ async function fetchRemoteRequestDiagnostics(params: {
           return;
         }
         let settled = false;
-        let sink: fs.WriteStream | undefined;
+        let discard = () => discardDiagnosticDownload(destinationPath);
         const onTimeout = () => settle(timeoutMessage);
         const settle = (reason: string | undefined) => {
           if (settled) return;
@@ -178,7 +178,7 @@ async function fetchRemoteRequestDiagnostics(params: {
             resolve(undefined);
             return;
           }
-          void discardDiagnosticDownload(destinationPath, sink).then(() => resolve(reason));
+          void discard().then(() => resolve(reason));
         };
         const request = transport.request(
           {
@@ -213,7 +213,8 @@ async function fetchRemoteRequestDiagnostics(params: {
               settle(`HTTP ${statusCode}`);
               return;
             }
-            const output = (sink = fs.createWriteStream(destinationPath));
+            const sink = fs.createWriteStream(destinationPath);
+            discard = () => discardDiagnosticDownload(destinationPath, sink);
             res.off('error', settleReadError);
             let bytes = 0;
             res.on('data', (chunk: Buffer) => {
@@ -224,13 +225,13 @@ async function fetchRemoteRequestDiagnostics(params: {
               }
             });
             res.on('error', (error: Error) => settle(error.message));
-            output.on('error', (error: Error) => {
+            sink.on('error', (error: Error) => {
               settle(error.message);
             });
-            output.on('finish', () => {
+            sink.on('finish', () => {
               settle(undefined);
             });
-            res.pipe(output);
+            res.pipe(sink);
           },
         );
         request.on('error', (error: Error) => {
@@ -257,10 +258,7 @@ async function fetchRemoteRequestDiagnostics(params: {
   }
 }
 
-async function discardDiagnosticDownload(
-  destinationPath: string,
-  sink: fs.WriteStream | undefined,
-) {
+async function discardDiagnosticDownload(destinationPath: string, sink?: fs.WriteStream) {
   if (sink && !sink.closed) {
     const closed = new Promise<void>((resolve) => sink.once('close', resolve));
     sink.destroy();
