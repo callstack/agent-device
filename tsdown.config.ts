@@ -39,6 +39,11 @@ const publicSdkChunkGroups = [
   ],
   ['sdk-io', /src[\\/]io\.d\.[cm]?ts$/, /src[\\/]io\.ts$/],
   [
+    'sdk-selectors',
+    /packages[\\/]selectors[\\/]src[\\/](?:ast|internal[\\/](?:parse|resolve))\.d\.[cm]?ts$/,
+    /packages[\\/]selectors[\\/]src[\\/](?:ast|internal[\\/](?:parse|resolve))\.ts$/,
+  ],
+  [
     'sdk-batch',
     /packages[\\/]command-registry[\\/]src[\\/]batch-policy\.d\.[cm]?ts$/,
     /packages[\\/]command-registry[\\/]src[\\/]batch-policy\.ts$/,
@@ -54,7 +59,6 @@ const publicSdkChunkGroups = [
     /packages[\\/]remote[\\/]src[\\/]remote-config-schema\.d\.[cm]?ts$/,
     /packages[\\/]remote[\\/]src[\\/]remote-config-schema\.ts$/,
   ],
-  ['sdk-selectors', /src[\\/]sdk[\\/]selectors\.d\.[cm]?ts$/, /src[\\/]sdk[\\/]selectors\.ts$/],
 ] as const;
 
 export default defineConfig({
