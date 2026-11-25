@@ -13,9 +13,8 @@ import {
 import {
   getOptionalPlatformPluginDeclaration,
   missingOptionalPlatformError,
-  pluginInstallCommand,
   pluginPackageSelector,
-  pluginRepairCommand,
+  pluginInstallCommand,
 } from './plugin-installation.ts';
 
 const CORE_VERSION = '0.22.0';
@@ -84,7 +83,6 @@ test('the optional-family install-hint catalog maps each optional family to its 
     assert.ok(declaration, `declaration for ${family}`);
     assert.equal(declaration.family, family);
     assert.equal(declaration.package, `@agent-device/${family}`);
-    // A release the channel does not pin installs the bare package name.
     assert.equal(
       pluginInstallCommand(declaration, CORE_VERSION),
       `agent-device plugins add @agent-device/${family}`,
@@ -97,29 +95,23 @@ test('the optional-family install-hint catalog maps each optional family to its 
 });
 
 test('an optional family install command names the same release as the provider catalog', () => {
-  // One release-channel rule owns both catalogs (#4781 review): a 0.22 nightly core must name its
-  // own nightly build, and a development checkout must name the branch tag, exactly as the
-  // provider plugin hints do.
+  // Published cores offer a bare install. Source builds need an explicit tag.
   const declaration = getOptionalPlatformPluginDeclaration('vega')!;
   for (const version of ['0.22.0-nightly-0-22.20261118.187', '0.22.0-nightly.20261118.186']) {
     assert.equal(
       pluginInstallCommand(declaration, version),
-      pluginInstallCommand(
-        { package: '@agent-device/browserstack', nightlyTag: 'nightly-0.22' },
-        version,
-      ).replace('@agent-device/browserstack', '@agent-device/vega'),
+      pluginInstallCommand({ package: '@agent-device/browserstack' }, version).replace(
+        '@agent-device/browserstack',
+        '@agent-device/vega',
+      ),
     );
     assert.equal(
       pluginInstallCommand(declaration, version),
-      `agent-device plugins add @agent-device/vega@${version}`,
+      'agent-device plugins add @agent-device/vega',
     );
   }
   assert.equal(
     pluginInstallCommand(declaration, '0.22.0-dev'),
-    'agent-device plugins add @agent-device/vega@nightly-0.22',
-  );
-  assert.equal(
-    pluginRepairCommand(declaration, '0.22.0-dev'),
     'agent-device plugins add @agent-device/vega@nightly-0.22',
   );
   assert.equal(pluginPackageSelector(declaration, '0.22.0'), '@agent-device/vega');

@@ -1,4 +1,7 @@
-import { getReplayPluginInstallation } from '@agent-device/ad-script';
+import {
+  getReplayPluginInstallation,
+  pluginInstallCommand,
+} from '@agent-device/contracts/plugin-installation';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -12,6 +15,7 @@ test('help declares the exact optional package without requiring a working plugi
     getReplayBackendDeclaration(
       getReplayPluginInstallation('maestro'),
       getReplayPluginInstallation('ad'),
+      (installation) => pluginInstallCommand(installation, '0.22.0'),
     ),
   ).toMatchObject({
     id: 'maestro',
@@ -42,7 +46,7 @@ test('client replay absence does not evaluate unrelated provider packages', asyn
     details: {
       reason: 'plugin-not-installed',
       package: '@agent-device/maestro',
-      installCommand: 'agent-device plugins add @agent-device/maestro',
+      installCommand: 'agent-device plugins add @agent-device/maestro@nightly-0.22',
     },
   });
   expect(fs.existsSync(evaluated)).toBe(false);

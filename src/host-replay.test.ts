@@ -309,7 +309,7 @@ test('an embedded client without Maestro preserves the typed optional-plugin err
       details: {
         reason: 'plugin-not-installed',
         package: '@agent-device/maestro',
-        installCommand: 'agent-device plugins add @agent-device/maestro',
+        installCommand: 'agent-device plugins add @agent-device/maestro@nightly-0.22',
       },
     });
   } finally {

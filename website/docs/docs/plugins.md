@@ -25,7 +25,9 @@ A plugin is needed on the host that runs the device. A device command that sends
 configured remote daemon, such as a saved cloud or proxy connection, is answered by that daemon and
 its own plugins, so the host you type on needs no plugin.
 
-Use a full npm package name, optionally with `@version` or `@tag`. `update` keeps valid version constraints and options, including when it repairs a damaged selection. To change a constraint, run `add <package>@<version-or-tag>`; to remove it, run `add <package>` without a suffix.
+Use a full npm package name. For a first-party plugin, a bare name installs the version that matches your CLI. After a CLI upgrade, run `plugins update <package>` to bring an unpinned plugin to that version. Add `@version` or `@tag` to choose a different release. Updates honor that choice until you add the bare package again.
+
+For a source build, pass an explicit selector such as `@nightly-0.22` or install a local `.tgz`. CLIs using the same `AGENT_DEVICE_HOME` share one selection per plugin. Use separate homes and state directories to keep different versions installed side by side.
 
 Each installation lives in an npm project with a lockfile under `AGENT_DEVICE_HOME` (default `~/.agent-device`), and that directory's `config.json` records the selection. Plugin commands leave other settings in `config.json` unchanged. Project config and `--config` cannot select plugins. This home is independent of `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
 

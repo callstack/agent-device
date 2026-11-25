@@ -242,6 +242,8 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `artifact_update_requires_remove` | Updating a local artifact requires removing the existing installation first. |
 | `plugin_cleanup_failed` | The plugin install and its staging cleanup both failed. |
 | `daemon-plugin-set-stale` | The daemon retains a plugin selection that changed on disk. |
+| `plugin_version_unresolved` | A source build or an unknown core version requires an explicit selector. |
+| `plugin_version_resolution_failed` | npm could not resolve the matched release or one of its dependencies. |
 
 ### `prepare`
 

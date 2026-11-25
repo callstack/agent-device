@@ -29,21 +29,18 @@ export const AWS_DEVICE_FARM: ProviderPluginDeclaration = {
   provider: 'aws-device-farm',
   package: '@agent-device/aws-device-farm',
   label: 'AWS Device Farm',
-  nightlyTag: 'nightly-0.22',
 };
 
 export const BROWSERSTACK: ProviderPluginDeclaration = {
   provider: 'browserstack',
   package: '@agent-device/browserstack',
   label: 'BrowserStack',
-  nightlyTag: 'nightly-0.22',
 };
 
 export const LIMRUN: ProviderPluginDeclaration = {
   provider: 'limrun',
   package: '@agent-device/limrun',
   label: 'Limrun',
-  nightlyTag: 'nightly-0.22',
   admission: 'provider',
   connectionCapabilities: {
     leaseKind: 'direct-device-provider',
@@ -62,24 +59,21 @@ const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
   AWS_DEVICE_FARM,
   BROWSERSTACK,
   LIMRUN,
-  { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl', nightlyTag: 'nightly-0.22' },
+  { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
   {
     provider: 'testmu',
     package: '@agent-device/testmu',
     label: 'TestMu AI',
-    nightlyTag: 'nightly-0.22',
   },
   {
     provider: 'webos',
     package: '@agent-device/webos',
     label: 'LG webOS',
-    nightlyTag: 'nightly-0.22',
   },
   {
     provider: 'tizen',
     package: '@agent-device/tizen',
     label: 'Samsung Tizen',
-    nightlyTag: 'nightly-0.22',
   },
 ];
 

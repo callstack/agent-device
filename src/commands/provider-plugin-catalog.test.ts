@@ -17,12 +17,12 @@ function declaration(provider: string) {
 }
 
 test.each([NIGHTLY_0_22, MAIN_NIGHTLY_0_22])(
-  '0.22 nightly core %s names the plugin release built with it',
+  '0.22 nightly core %s suggests a CLI-matched install',
   (coreVersion) => {
     for (const { provider } of providerPluginDeclarations()) {
       assert.equal(
         providerPluginInstallCommand(declaration(provider), coreVersion),
-        `agent-device plugins add @agent-device/${provider}@${coreVersion}`,
+        `agent-device plugins add @agent-device/${provider}`,
       );
     }
   },
@@ -35,7 +35,7 @@ test('a 0.22 source checkout names the nightly tag', () => {
   );
 });
 
-test('a core outside the 0.22 nightlies keeps the plain package selector', () => {
+test('published or unknown cores keep the plain package in help', () => {
   for (const coreVersion of ['0.21.40-nightly.20261118.186', '0.22.0', '0.0.0']) {
     assert.equal(
       providerPluginInstallCommand(declaration('aws-device-farm'), coreVersion),
@@ -81,8 +81,8 @@ test('help gives nightly and stable users the same plugin selectors as recovery'
   const nightly = providerPluginHelp(NIGHTLY_0_22);
   const stable = providerPluginHelp('0.22.0');
   for (const provider of ['browserstack', 'aws-device-farm']) {
-    assert.ok(nightly.includes(`connect ${provider}; @agent-device/${provider}@${NIGHTLY_0_22})`));
+    assert.ok(nightly.includes(`connect ${provider}; @agent-device/${provider})`));
     assert.ok(stable.includes(`connect ${provider}; @agent-device/${provider})`));
   }
-  assert.ok(nightly.includes(`TestMu AI (connect testmu; @agent-device/testmu@${NIGHTLY_0_22})`));
+  assert.ok(nightly.includes(`TestMu AI (connect testmu; @agent-device/testmu)`));
 });

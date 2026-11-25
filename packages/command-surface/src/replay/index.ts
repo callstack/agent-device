@@ -28,7 +28,6 @@ import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '@agent-device/command-registry
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
 import {
   collectReplayShellEnv,
-  getReplayPluginInstallation,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   resolveReplayFormat,
@@ -40,12 +39,8 @@ import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-disc
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';
 
-const replayPluginMcpDetail = (['ad', 'maestro'] as const)
-  .map((id) => {
-    const declaration = getReplayPluginInstallation(id);
-    return `${declaration.summary} (plugin, install separately). ${declaration.installationHint}`;
-  })
-  .join(' ');
+const replayPluginMcpDetail =
+  'Native .ad replay and test suites (plugin, install separately). Install on the daemon host. Maestro YAML (plugin, install separately). Install on the client for source collection or export, and on the daemon host for Maestro execution.';
 
 const REPLAY_SHELL_ENV_PREFIX = 'AD_VAR_';
 

@@ -35,7 +35,7 @@ test.each([undefined, 'declared'] as const)(
             details: {
               reason: 'plugin-not-installed',
               package: '@agent-device/replay',
-              installCommand: 'agent-device plugins add @agent-device/replay',
+              installCommand: 'agent-device plugins add @agent-device/replay@nightly-0.22',
             },
           });
         else expect(result.structuredContent).toBeUndefined();

@@ -61,7 +61,6 @@ export {
 } from './internal/vars.ts';
 
 export {
-  getReplayPluginInstallation,
   isMaestroYamlPath,
   isReplayBackendId,
   maestroBackendRequiredMessage,

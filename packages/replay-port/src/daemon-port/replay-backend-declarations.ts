@@ -1,4 +1,7 @@
-import type { getReplayPluginInstallation, ReplayFormat } from '@agent-device/ad-script';
+import type {
+  getReplayPluginInstallation,
+  ReplayFormat,
+} from '@agent-device/contracts/plugin-installation';
 import type { ReplayBackendDeclaration } from '@agent-device/contracts/replay-backend';
 
 export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
@@ -39,15 +42,16 @@ function formatMaestroCompatibilityReference(): string {
 export function getReplayBackendDeclaration(
   installation: ReturnType<typeof getReplayPluginInstallation>,
   suiteInstallation: ReturnType<typeof getReplayPluginInstallation>,
+  installCommand: (installation: ReturnType<typeof getReplayPluginInstallation>) => string,
 ): ReplayBackendDeclaration<ReplayFormat> {
   const body =
     installation.id === 'ad'
-      ? `Run agent-device plugins add ${installation.package} on the daemon host for native .ad replay and all test suites. Existing scripts and arguments stay the same. Ordinary open/close --save-script recording stays in core. Restart the daemon after changing plugins, then retry the original invocation with all its arguments.`
+      ? `Run ${installCommand(installation)} on the daemon host for native .ad replay and all test suites. Existing scripts and arguments stay the same. Ordinary open/close --save-script recording stays in core. Restart the daemon after changing plugins, then retry the original invocation with all its arguments.`
       : `agent-device help maestro
 
-Install with agent-device plugins add ${installation.package}. ${installation.installationHint}
+Install with ${installCommand(installation)}. ${installation.installationHint}
 
-For test suites, also run agent-device plugins add ${suiteInstallation.package}. ${suiteInstallation.installationHint}
+For test suites, also run ${installCommand(suiteInstallation)}. ${suiteInstallation.installationHint}
 
 Restart the daemon after installing the required plugins.
 
@@ -68,6 +72,7 @@ Focused compatibility request: ${MAESTRO_COMPATIBILITY_ISSUE_URL}`;
 /** Installation guidance uses the same vetted package declaration as missing-plugin errors. */
 export function replayPluginInstallHelp(
   installation: ReturnType<typeof getReplayPluginInstallation>,
+  installCommand: (installation: ReturnType<typeof getReplayPluginInstallation>) => string,
 ): string {
-  return `${installation.summary} (plugin, install separately). Run agent-device plugins add ${installation.package}. ${installation.installationHint}`;
+  return `${installation.summary} (plugin, install separately). Run ${installCommand(installation)}. ${installation.installationHint}`;
 }

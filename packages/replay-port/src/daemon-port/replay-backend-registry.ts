@@ -116,21 +116,29 @@ export async function openReplayBackend(id: ReplayBackendId, host: HostEnvironme
 
 async function missingReplayBackend(id: ReplayFormat): Promise<AppError> {
   const { AppError, PLUGIN_INSTALLATION_REASONS } = await import('@agent-device/kernel/errors');
-  const packageName = await backendPackage(id);
-  const installCommand = `agent-device plugins add ${packageName}`;
+  const [{ getReplayPluginInstallation, pluginInstallationHint }, { readVersion }] =
+    await Promise.all([
+      import('@agent-device/contracts/plugin-installation'),
+      import('@agent-device/host-kit/version'),
+    ]);
+  const installation = getReplayPluginInstallation(id);
+  const packageName = installation.package;
+  const { hint: _hint, ...guidance } = pluginInstallationHint(installation, readVersion());
   return new AppError(
     'INVALID_ARGS',
-    `Replay backend ${id} requires ${packageName}. Run ${installCommand}, then retry the original command with all its arguments.`,
+    `Replay backend ${id} requires ${packageName}. Run ${guidance.installCommand}, then retry the original command with all its arguments.`,
     {
       reason: PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
       backend: id,
       package: packageName,
-      installCommand,
-      hint: `${(await import('@agent-device/ad-script')).getReplayPluginInstallation(id).installationHint} Restart the daemon after changing plugins; retry the original command with all its arguments.`,
+      ...guidance,
+      hint: `${installation.installationHint} Restart the daemon after changing plugins; retry the original command with all its arguments.`,
     },
   );
 }
 
 async function backendPackage(id: ReplayFormat): Promise<string> {
-  return (await import('@agent-device/ad-script')).getReplayPluginInstallation(id).package;
+  return (await import('@agent-device/contracts/plugin-installation')).getReplayPluginInstallation(
+    id,
+  ).package;
 }

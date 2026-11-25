@@ -145,7 +145,7 @@ const devicesCommandFacet = defineCommandFacet({
     // HarmonyOS is the optional family a terminal user is most likely to name here without it, so
     // the install command is answered where the list is asked for, not on the compact card.
     cliDetail:
-      'An absent optional platform answers details.reason plugin-not-installed with its install command; HarmonyOS needs agent-device plugins add @agent-device/harmonyos.',
+      'An absent optional platform answers details.reason plugin-not-installed with its install command. Follow the command it prints.',
   },
   metadata: devicesCommandMetadata,
   run: (client, input) => client.devices.list(input),

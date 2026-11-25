@@ -52,15 +52,15 @@ export function providerRuntimeAdmissionError(
     registeredProviders: [...registeredProviders],
   };
   if (declaration && failures.length === 0) {
-    const { hint, installCommand } = pluginInstallationHint(declaration, readVersion());
+    const guidance = pluginInstallationHint(declaration, readVersion());
     return new AppError(
       'UNSUPPORTED_OPERATION',
       `${declaration.label} requires the ${declaration.package} plugin in this daemon runtime.`,
       {
         ...details,
         package: declaration.package,
-        installCommand,
-        hint: `On the daemon host:\n${hint} For an embedded host, call the plugin factory and pass its result in plugins when you recreate the runtime.`,
+        ...guidance,
+        hint: `On the daemon host:\n${guidance.hint} For an embedded host, call the plugin factory and pass its result in plugins when you recreate the runtime.`,
       },
     );
   }
