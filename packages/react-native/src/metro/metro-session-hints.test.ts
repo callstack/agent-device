@@ -307,6 +307,46 @@ test('an open that reports no app leaves a reused session record alone and clear
   }
 });
 
+test('an open that proves nothing about the device keeps what an earlier open proved', () => {
+  const stateDir = tempStateDir();
+  try {
+    const options = { stateDir, session: 'proven', host: hostFor(stateDir) };
+    recordOpenedMetroSession(options, {
+      runtime: undefined,
+      explicitRuntime: false,
+      sessionReused: false,
+      app: iosApp,
+    });
+    // A later open that resolves the device from the session reports nothing about where it runs, so
+    // it must not erase the proof the first one gave for the same device.
+    const { hostedLocally: _dropped, ...unproven } = iosApp;
+    recordOpenedMetroSession(options, {
+      runtime: undefined,
+      explicitRuntime: false,
+      sessionReused: true,
+      app: { ...unproven, appId: 'com.other.app' },
+    });
+    assert.deepEqual(readMetroSessionAppTarget({ ...options }), {
+      ...iosApp,
+      appId: 'com.other.app',
+    });
+
+    // Another device is a different question: nothing is proven for it, so nothing is inherited.
+    recordOpenedMetroSession(options, {
+      runtime: undefined,
+      explicitRuntime: false,
+      sessionReused: true,
+      app: { ...unproven, deviceId: 'UDID-2' },
+    });
+    assert.deepEqual(readMetroSessionAppTarget({ ...options }), {
+      ...unproven,
+      deviceId: 'UDID-2',
+    });
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('the recorded app is read back only when its record names a real app on a device', () => {
   const stateDir = tempStateDir();
   const options = { stateDir, session: 'stored', host: hostFor(stateDir) };
