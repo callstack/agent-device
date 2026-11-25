@@ -5,7 +5,6 @@ import type {
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
@@ -16,6 +15,7 @@ import {
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
+  isLoopbackHostname,
   resolveDaemonPaths,
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
@@ -71,11 +71,6 @@ export type EnsuredDaemon = {
   info: DaemonInfo;
   startedByClient: boolean;
 };
-
-const LOOPBACK_BLOCK_LIST = new net.BlockList();
-LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
-LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
-LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
 /**
  * Whether a timed-out request may retire the daemon it was waiting on. An attach client never may: the
@@ -544,17 +539,6 @@ function validateRemoteDaemonTrust(
       hint: 'Provide --daemon-auth-token or AGENT_DEVICE_DAEMON_AUTH_TOKEN when using a non-loopback remote daemon URL.',
     },
   );
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname
-    .trim()
-    .toLowerCase()
-    .replace(/^\[(.*)\]$/, '$1');
-  if (normalized === 'localhost') return true;
-  if (net.isIPv4(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv4');
-  if (net.isIPv6(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv6');
-  return false;
 }
 
 export function attachSessionAddressHints(

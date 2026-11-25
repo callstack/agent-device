@@ -52,10 +52,12 @@ import { normalizeBaseUrl } from './base-url.ts';
 import { buildBundleUrl } from './bundle-url.ts';
 import {
   EXPO_VIRTUAL_ENTRY_BUNDLE_PATH,
+  buildMetroReloadEndpoints,
   parsePort,
   resolveMetroReloadEndpoints,
+  type MetroReloadEndpoints,
 } from './metro-reload-endpoints.ts';
-
+import { resolveMetroReloadServerUrl, type MetroAppTarget } from './metro-dev-server-discovery.ts';
 const DEV_SERVER_STATUS_READY_TEXT = 'packager-status:running';
 const METRO_TERM_TIMEOUT_MS = 1_000;
 const METRO_KILL_TIMEOUT_MS = 1_000;
@@ -89,6 +91,12 @@ export type ReloadMetroOptions = {
   bundleUrl?: string;
   runtime?: MetroRuntimeHints;
   timeoutMs?: number | string;
+  /** The host the reload runs on: where a local dev server, or a simulator's app, gets read. */
+  host?: HostEnvironment;
+  /** The session's app, when the caller knows it: the signal a local reload checks first. */
+  app?: MetroAppTarget;
+  /** The project whose dev server a local search matches; defaults to the host's working directory. */
+  projectRoot?: string;
 };
 
 function normalizeOptionalBaseUrl(input: unknown): string {
@@ -1044,9 +1052,29 @@ async function broadcastReloadOverMessageSocket(
   });
 }
 
+/**
+ * Resolves the reload endpoints. With a `host`, an unbound target goes through discovery, which fails
+ * typed rather than calling `localhost:8081`. Without one, this stays the pre-discovery behavior: the
+ * address the flags and runtime hints resolve to, the default included, because a caller that names
+ * no host has named no machine to look a dev server up on.
+ */
+async function resolveReloadEndpoints(input: ReloadMetroOptions): Promise<MetroReloadEndpoints> {
+  if (!input.host) return resolveMetroReloadEndpoints(input);
+  const resolved = await resolveMetroReloadServerUrl({
+    metroHost: input.metroHost,
+    metroPort: input.metroPort,
+    bundleUrl: input.bundleUrl,
+    runtime: input.runtime,
+    app: input.app,
+    host: input.host,
+    projectRoot: input.projectRoot,
+  });
+  return buildMetroReloadEndpoints(resolved.serverUrl);
+}
+
 export async function reloadMetro(input: ReloadMetroOptions = {}): Promise<ReloadMetroResult> {
   const timeoutMs = parseTimeout(input.timeoutMs, 10_000, 1_000);
-  const { reloadUrl, messageSocketUrl } = resolveMetroReloadEndpoints(input);
+  const { reloadUrl, messageSocketUrl } = await resolveReloadEndpoints(input);
   const response = await fetchText(reloadUrl, timeoutMs);
   if (response.ok && !looksLikeHtmlDocumentBody(response.body)) {
     return {
