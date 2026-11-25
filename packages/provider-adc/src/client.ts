@@ -140,7 +140,13 @@ export function adcClient(config: Extract<Credentials, { kind: 'direct' }>) {
       if (!leaseIdPattern.test(id) || id === config.key)
         throw new AppError('INVALID_ARGS', 'Invalid ADC rental identifier.');
       const response = await request('DELETE', '/v2/leases/' + id);
-      await response.body?.cancel();
+      if (response.status === 204) return;
+      if (response.status === 200) {
+        const result = await json(response);
+        const record = lease(result);
+        if (record.id === id && ['released', 'expired', 'failed'].includes(record.status)) return;
+      }
+      throw new AppError('COMMAND_FAILED', 'ADC has not confirmed release of this booking.');
     },
     access: async (id: string, signal: AbortSignal) => {
       const response = await request('POST', '/v2/leases/' + id + '/access', signal);

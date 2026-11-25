@@ -4,7 +4,7 @@ import type { ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import { adcClient, credentials } from './client.ts';
 import { formFactor } from './target.ts';
 
-export default function adc(): ProviderAgentDevicePlugin {
+function adc(): ProviderAgentDevicePlugin {
   return {
     apiVersion: 3,
     contributes: [
@@ -80,3 +80,5 @@ export default function adc(): ProviderAgentDevicePlugin {
     ],
   };
 }
+
+export { adc as default };

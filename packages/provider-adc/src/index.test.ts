@@ -158,3 +158,25 @@ it('keeps upstream response bodies, unknown states and header failures out of er
   fetch.mockRejectedValueOnce(new Error('hidden-key'));
   await expect(client.verify()).rejects.toThrow(/^ADC request did not complete\.$/);
 });
+
+it('keeps release pending until ADC confirms this booking ended', async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const client = adcClient({
+    kind: 'direct',
+    origin: new URL('https://adc.test'),
+    key: 'workspace',
+  });
+  const id = 'a0000000-0000-4000-8000-000000000001';
+  const foreign = 'b0000000-0000-4000-8000-000000000002';
+  for (const response of [
+    new Response(null, { status: 202 }),
+    Response.json({ id, status: 'active' }),
+    Response.json({ id: foreign, status: 'released' }),
+  ]) {
+    fetch.mockResolvedValueOnce(response);
+    await expect(client.end(id)).rejects.toThrow();
+  }
+  fetch.mockResolvedValueOnce(Response.json({ id, status: 'released' }));
+  await expect(client.end(id)).resolves.toBeUndefined();
+});

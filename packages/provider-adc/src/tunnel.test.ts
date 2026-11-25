@@ -1,8 +1,7 @@
 import { createServer } from 'node:https';
-import { readFile } from 'node:fs/promises';
 import { getCACertificates, setDefaultCACertificates } from 'node:tls';
 import { once } from 'node:events';
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import path from 'node:path';

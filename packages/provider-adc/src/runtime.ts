@@ -7,6 +7,7 @@ import {
   providerRuntimeOwner,
   providerRuntimeInstance,
 } from '@agent-device/contracts/platform-runtime';
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { createAdbProvider } from './adb.ts';
 import { matchesPlatformSelector, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -37,6 +38,7 @@ export function createRegistration(
   const tunnels = new Map<string, Awaited<ReturnType<typeof connectAdb>>>();
   const deviceLeases = new Map<string, string>();
   let attachedOwner: string | undefined;
+  const endedTunnels = new Set<string>();
   const submitted = new Set<string>();
   const table = createProviderLeaseTable<Session, Handle, Allocation>({
     startTimeoutMs: 180_000,
@@ -64,7 +66,7 @@ export function createRegistration(
         } catch (error) {
           if (
             error instanceof AppError &&
-            [400, 401, 403, 422].includes(Number(error.details?.httpStatus))
+            [400, 401, 402, 403, 422, 429].includes(Number(error.details?.httpStatus))
           ) {
             submitted.delete(leaseId);
           }
@@ -98,6 +100,7 @@ export function createRegistration(
         target: tv ? 'tv' : 'mobile',
       };
       const terminal = () => {
+        endedTunnels.add(leaseId);
         void table.release(leaseId).catch(() => {});
       };
       tunnel.closed.addEventListener('abort', terminal, { once: true });
@@ -191,10 +194,19 @@ export function createRegistration(
         await client.end(id);
         return true;
       },
+      async heartbeat(lease) {
+        if (lease.leaseProvider !== 'adc' || !endedTunnels.has(lease.leaseId)) return undefined;
+        await table.release(lease.leaseId);
+        endedTunnels.delete(lease.leaseId);
+        throw new AppError('COMMAND_FAILED', 'The ADC device connection ended.', {
+          reason: LEASE_REASONS.instanceEnded.reason,
+        });
+      },
       async release(lease) {
         if (lease.leaseProvider !== 'adc') return undefined;
         try {
           await table.release(lease.leaseId);
+          endedTunnels.delete(lease.leaseId);
           return { release: 'confirmed' };
         } catch (error) {
           return { release: 'unknown', error };

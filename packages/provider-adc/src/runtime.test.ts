@@ -1,3 +1,4 @@
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { adcClient, credentials } from './client.ts';
@@ -71,6 +72,7 @@ it('releases a direct ADC booking when its tunnel fails', async () => {
   const requests: string[] = [];
   vi.stubGlobal('fetch', async (input: URL, init: RequestInit) => {
     requests.push(`${init.method} ${input.pathname}`);
+    if (init.method === 'DELETE') return new Response(null, { status: 204 });
     const body = input.pathname.endsWith('/access')
       ? { token: 'lease', websocket_url: url }
       : { id: 'a0000000-0000-4000-8000-000000000001', status: 'active' };
@@ -149,6 +151,9 @@ it('reserves one broker device before dialing and frees it when the endpoint clo
     leaseId: lease.leaseId,
   });
   expect(devices).toEqual([]);
+  await expect(runtime.leaseLifecycle.heartbeat!(lease)).rejects.toMatchObject({
+    details: { reason: LEASE_REASONS.instanceEnded.reason },
+  });
   await runtime.leaseLifecycle.release!(lease);
   expect(close).toHaveBeenCalledOnce();
 });
@@ -191,3 +196,23 @@ it('keeps an ambiguous create pending and recovers its confirmed ADC booking aft
   expect(fetch.mock.lastCall?.[0].pathname).toBe('/v2/leases/' + id);
   expect(fetch.mock.lastCall?.[1].method).toBe('DELETE');
 });
+
+it.each([402, 429])(
+  'clears a rejected booking (HTTP %i) without trying to recover it',
+  async (status) => {
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status }));
+    vi.stubGlobal('fetch', fetch);
+    const config = credentials({ ADC_API_KEY: 'workspace', ADC_API_URL: 'https://adc.test' });
+    const host = {
+      createLeaseInteractor: vi.fn(),
+      getForegroundApp: vi.fn(),
+      bindDeployment: vi.fn(),
+    };
+    const { runtime } = createRegistration(config, {}, host);
+    await expect(runtime.leaseLifecycle.allocate!(lease)).rejects.toMatchObject({
+      details: { httpStatus: status },
+    });
+    await expect(runtime.leaseLifecycle.release!(lease)).resolves.toEqual({ release: 'confirmed' });
+    expect(fetch).toHaveBeenCalledOnce();
+  },
+);
