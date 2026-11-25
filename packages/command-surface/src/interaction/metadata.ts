@@ -319,13 +319,12 @@ export function readGestureInput(input: unknown): GestureInput {
 /** Only a swipe stabilizes by default, so any other kind has nothing to opt out of and drops it. */
 function readGestureCommandInput(input: unknown): GestureCommandInput {
   const record = readInputRecord(input);
-  const payload = readGestureInput(record);
   const gesture =
     record.settle === undefined &&
     record.settleQuietMs === undefined &&
     record.timeoutMs === undefined
-      ? payload
-      : { ...payload, ...readFieldInput(record, gestureSettleFields) };
+      ? readGestureInput(record)
+      : { ...readFieldInput(record, gestureSettleFields), ...readGesturePayload(record) };
   return gesture.kind === 'swipe' && optionalBoolean(record, 'postGestureStabilization') === false
     ? { ...gesture, postGestureStabilization: false }
     : gesture;

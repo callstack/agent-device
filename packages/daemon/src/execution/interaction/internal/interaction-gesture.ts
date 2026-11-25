@@ -45,7 +45,11 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../../android-system-dialog.ts';
-import { readRefMutationFrame, refFrameTree } from '../../../core/ref-frame.ts';
+import {
+  isOutdatedObservation,
+  readRefMutationFrame,
+  refFrameTree,
+} from '../../../core/ref-frame.ts';
 import { thrownBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
@@ -70,9 +74,10 @@ type GestureHandlerParams = InteractionRouteInput & {
 type GestureRuntime = Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>;
 type GestureRuntimeResult = Awaited<ReturnType<GestureRuntime['interactions']['gesture']>>;
 
-type GestureCapture = { state?: SnapshotState; settleRuntime?: GestureRuntime };
+type GestureCapture = { state?: SnapshotState };
 
 type GestureInteractionOutcome = {
+  runtime: GestureRuntime;
   positionals: string[];
   flags: InteractionRouteInput['req']['flags'];
   responseData: Record<string, unknown>;
@@ -135,6 +140,7 @@ async function runGestureInteraction(
     () => gesture,
     (completed, _index, startedAt, finishedAt) => {
       const outcome = buildGestureOutcome(
+        runtime,
         input.kind === 'tap' ? { ...input, count: 1 } : input,
         gesture,
         completed,
@@ -151,7 +157,7 @@ async function runGestureInteraction(
       );
     },
   );
-  return buildGestureOutcome(input, gesture, result, params.req.flags);
+  return buildGestureOutcome(runtime, input, gesture, result, params.req.flags);
 }
 
 async function runPreparedGesture(
@@ -174,6 +180,7 @@ async function runPreparedGesture(
 }
 
 function buildGestureOutcome(
+  runtime: GestureRuntime,
   input: GesturePayload,
   gesture: GestureCommandInput,
   result: GestureRuntimeResult,
@@ -187,6 +194,7 @@ function buildGestureOutcome(
       ? { ...result, message: `Tapped ${input.points.length} points ${input.count} times` }
       : result;
   return {
+    runtime,
     positionals: recordedGesturePositionals(input, result),
     flags: gestureReplayFlags(input, flags),
     responseData: gestureResponseData(responseResult, {
@@ -262,6 +270,7 @@ export async function dispatchSwipeViaRuntime(
         },
       );
       return {
+        runtime,
         positionals: swipeReplayPositionals(input),
         flags: params.req.flags,
         responseData: swipeResponseData(input, result),
@@ -295,7 +304,7 @@ function createGestureRuntime(
   gestures: BoundGestureExecutor,
   consumedCapture: GestureCapture,
 ): Promise<GestureRuntime> {
-  const runtime = createInteractionRuntimeForRoute({
+  return createInteractionRuntimeForRoute({
     ...params,
     gestures,
     // The ambiguity-issuance seam reads the tree THIS request consumed: a drag
@@ -303,11 +312,6 @@ function createGestureRuntime(
     // touch routes give (#2870 review).
     consumedCapture,
     pairedGestureViewport: params.req.internal?.gestureViewport,
-  });
-  if (params.req.flags?.settle !== true) return runtime;
-  return runtime.then((boundRuntime) => {
-    consumedCapture.settleRuntime = boundRuntime;
-    return boundRuntime;
   });
 }
 
@@ -372,13 +376,8 @@ async function dispatchGestureInteraction(
       actionStartedAt,
       actionFinishedAt: Date.now(),
     });
-    if (!response.ok || !settle || !baseline || !consumedCapture.settleRuntime) return response;
-    const observation = await observeGestureSettle(
-      params,
-      consumedCapture.settleRuntime,
-      settle,
-      baseline,
-    );
+    if (!response.ok || !settle || !baseline) return response;
+    const observation = await observeGestureSettle(params, outcome.runtime, settle, baseline);
     return { ok: true, data: { ...response.data, settle: observation } };
   } catch (error) {
     // The same ambiguity-issuance rule the touch routes run: a refusal that
@@ -398,7 +397,8 @@ async function lastObservedGestureBaseline(session: SessionState) {
   const frameTree = refFrameTree(session);
   const snapshotTree = session.snapshot;
   const { presentedSurface: _unverifiedFrame, ...frame } = surfaceScopedNodes(frameTree);
-  const { presentedSurface: _unverifiedSnapshot, ...snapshot } = surfaceScopedNodes(snapshotTree);
+  const snapshot = surfaceScopedNodes(snapshotTree);
+  if (snapshotTree && isOutdatedObservation(snapshotTree)) delete snapshot.presentedSurface;
   const baseline = await postActionBaseline({ frame, candidates: [snapshot] });
   const tree = baseline === frame ? frameTree : snapshotTree;
   return { baseline, androidOverlay: tree?.systemSurface?.kind === 'android-system-overlay' };

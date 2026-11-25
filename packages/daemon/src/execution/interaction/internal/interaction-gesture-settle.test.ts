@@ -10,7 +10,13 @@ import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { createTouchCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import { pendingSurfaceStabilization } from '../../../core/deferred-interaction-outcome.ts';
-import { activateCompleteRefFrame, refFrameScope, refFrameState } from '../../../core/ref-frame.ts';
+import {
+  activateCompleteRefFrame,
+  markSessionSnapshotOutdated,
+  refFrameScope,
+  refFrameState,
+} from '../../../core/ref-frame.ts';
+import type { SessionState } from '../../../core/session-state.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
 import { handleInteractionCommands } from '../index.ts';
 import { gestureRuntimeBindingsFixture } from './__tests__/gesture-runtime-bindings.fixtures.ts';
@@ -18,6 +24,7 @@ import { gestureRuntimeBindingsFixture } from './__tests__/gesture-runtime-bindi
 test.each([
   { command: 'swipe', settle: false, settled: false, surface: 'app' },
   { command: 'swipe', settle: true, settled: true, surface: 'app' },
+  { command: 'swipe', settle: true, settled: true, surface: 'outdated app' },
   { command: 'gesture', settle: true, settled: false, surface: 'app' },
   { command: 'swipe', settle: true, settled: true, surface: 'android overlay' },
   { command: 'swipe', settle: true, settled: true, surface: 'retired session' },
@@ -31,10 +38,8 @@ test.each([
     const session = makeSession(sessionName, { appBundleId: 'com.example.app' });
     const sessionStore = makeSessionStore();
     const ref = sessionStore.publish(sessionName, session);
-    const before = attachRefs([{ index: 0, type: 'Button', label: 'Before' }]);
+    const baseline = seedGestureBaseline(session, surface === 'outdated app');
     const after = attachRefs([{ index: 0, type: 'Button', label: 'After' }]);
-    setSessionSnapshot(session, { nodes: before, backend: 'xctest', createdAt: 0 });
-    activateCompleteRefFrame(session);
     const gestures = gestureRuntimeBindingsFixture();
     const from = { x: 120, y: 220 };
     const to = { x: 120, y: 320 };
@@ -133,11 +138,12 @@ test.each([
     if (settle) {
       expect(observe).toHaveBeenCalledWith(
         expect.objectContaining({
-          baseline: expect.objectContaining({ nodes: before }),
+          baseline: expect.objectContaining({ nodes: baseline.nodes }),
           quietMs: 25,
           timeoutMs: 100,
         }),
       );
+      expect(observe.mock.calls[0]?.[0].baseline.presentedSurface).toBe(baseline.presentedSurface);
       expect(response.data?.settle).toMatchObject({ settled: settled && !retired, captures: 1 });
     }
     if (settled && !overlay && !retired) {
@@ -151,3 +157,12 @@ test.each([
     }
   },
 );
+
+function seedGestureBaseline(session: SessionState, outdated: boolean) {
+  const nodes = attachRefs([{ index: 0, type: 'Button', label: 'Before' }]);
+  const presentedSurface = 'absent';
+  setSessionSnapshot(session, { nodes, backend: 'xctest', createdAt: 0, presentedSurface });
+  activateCompleteRefFrame(session);
+  if (outdated) markSessionSnapshotOutdated(session);
+  return { nodes, presentedSurface: outdated ? undefined : presentedSurface };
+}
