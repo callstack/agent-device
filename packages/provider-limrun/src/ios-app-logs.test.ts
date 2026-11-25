@@ -77,3 +77,44 @@ test('an unsupported Info.plist read for log metadata surfaces as COMMAND_FAILED
     await reader[Symbol.asyncDispose]();
   }
 });
+
+test('plaintext iOS log attachments keep console and bundle-ID system logs', async () => {
+  const consoleStream = Object.assign(new EventEmitter(), { stop: vi.fn() });
+  const systemStream = Object.assign(new EventEmitter(), { stop: vi.fn() });
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const reader = createLimrunIosAppLogReader(
+    {
+      apiUrl: 'http://127.0.0.1:8080/api',
+      token: 'syntheticInstanceCredential',
+      client: {
+        appLogTail: async () => 'retained console',
+        streamAppLog: () => consoleStream,
+        streamSyslog: () => systemStream,
+      },
+    } as unknown as Parameters<typeof createLimrunIosAppLogReader>[0],
+    async () => () => ({}),
+  );
+  const signal = new AbortController().signal;
+  const app = 'com.example.app';
+  const matching = '2026-11-22 12:00:00.000 Info Example[123] (com.example.app) matching';
+  try {
+    expect(await reader.readLogs(app, 20, signal)).toBe('retained console');
+    consoleStream.emit('line', 'live console');
+    systemStream.emit('line', matching);
+    systemStream.emit(
+      'line',
+      '2026-11-22 12:00:00.000 Info Other[124] (com.example.other) excluded',
+    );
+    await vi.waitFor(async () => {
+      expect(await reader.readLogs(app, 20, signal)).toBe(
+        `retained console\nlive console\n${matching}`,
+      );
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(consoleStream.stop).not.toHaveBeenCalled();
+    expect(systemStream.stop).not.toHaveBeenCalled();
+  } finally {
+    await reader[Symbol.asyncDispose]();
+  }
+});
