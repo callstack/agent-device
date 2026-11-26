@@ -30,6 +30,7 @@ import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-
 import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
 import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import type { AndroidDialogTapTarget } from '../../android-system-dialog.ts';
+import { refFrameTree } from '../../../core/ref-frame.ts';
 
 /**
  * How an admitted targeted `press`/`click`/`longpress`/`hover` executes: the direct-iOS
@@ -110,7 +111,13 @@ function buildTargetedRuntimeOptions(
     androidFreshnessBaseline: admitted.androidFreshnessBaseline,
     refContext: admitted.refContext,
     ...(admitsAndroidDialogButtonTap(session, command, admitted.refs, req.flags)
-      ? { androidDialogTapTarget: readAndroidDialogTapTarget(session, target) }
+      ? {
+          androidDialogTapTarget: readAndroidDialogTapTarget(
+            session,
+            target,
+            req.internal?.findResolvedTarget,
+          ),
+        }
       : {}),
     iosTapCorroboration: { target, extra: targetedExtra },
     run: async (runtime) =>
@@ -186,15 +193,22 @@ function admitsAndroidDialogButtonTap(
   );
 }
 
-/** The ref's node in the session snapshot, or the raw point; a selector is never admitted. */
+/**
+ * The node the runtime will tap, or the raw point; a selector is never admitted. A `find` match
+ * taps its own node. A ref taps its node in the authorized frame (ADR 0014), not in a newer
+ * observation such as a screenshot's, so the check must read the same tree.
+ */
 function readAndroidDialogTapTarget(
   session: AdmittedTargetedTouch['session'],
   target: AdmittedTargetedTouch['target'],
+  preresolved: PreresolvedInteractionTarget | undefined,
 ): AndroidDialogTapTarget {
   if (target.kind === 'point') return { kind: 'point', point: { x: target.x, y: target.y } };
   if (target.kind === 'selector') return { kind: 'selector' };
+  if (preresolved) return { kind: 'ref', node: preresolved.node };
   const ref = normalizeRef(target.ref);
-  const node = ref && session.snapshot ? findNodeByRef(session.snapshot.nodes, ref) : null;
+  const tree = refFrameTree(session) ?? session.snapshot;
+  const node = ref && tree ? findNodeByRef(tree.nodes, ref) : null;
   return { kind: 'ref', node: node ?? undefined };
 }
 

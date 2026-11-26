@@ -2,7 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import { expireRefFrame } from '../../../core/ref-frame.ts';
+import { activateCompleteRefFrame, expireRefFrame } from '../../../core/ref-frame.ts';
 import {
   installInteractorSnapshotResolution,
   mockInteractorSnapshot,
@@ -445,6 +445,8 @@ async function pressWithSystemUiAnr(
     command?: 'press' | 'click';
     /** The session's stored snapshot, when it was taken before the dialog appeared. */
     sessionNodes?: ReturnType<typeof attachRefs>;
+    /** The tree an earlier `snapshot` issued the refs from, when a later read replaced it. */
+    frameNodes?: ReturnType<typeof attachRefs>;
   } = {},
 ) {
   const sessionStore = makeSessionStore();
@@ -452,6 +454,10 @@ async function pressWithSystemUiAnr(
   const session = makeAndroidSession(sessionName);
   session.appBundleId = 'com.example.app';
   const nodes = systemUiAnrScreen();
+  if (setup.frameNodes) {
+    session.snapshot = { nodes: setup.frameNodes, createdAt: Date.now(), backend: 'android' };
+    activateCompleteRefFrame(session);
+  }
   session.snapshot = {
     nodes: setup.sessionNodes ?? nodes,
     createdAt: Date.now(),
@@ -576,6 +582,32 @@ test('a ref from a snapshot taken before the ANR dialog is not retargeted to the
       details: SYSTEM_UI_ANR_REFUSAL,
     },
   });
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+test('a ref is checked in the tree that issued it, not in a later read of the dialog', async () => {
+  // `snapshot` issued @e2 on the app screen; a screenshot after the dialog appeared replaced the
+  // session snapshot, where @e2 is Close app. The press would tap the app's button, unchecked.
+  const appScreen = attachRefs([
+    {
+      index: 0,
+      type: 'android.widget.TextView',
+      label: 'Checkout',
+      rect: { x: 50, y: 100, width: 500, height: 80 },
+    },
+    {
+      index: 1,
+      type: 'android.widget.Button',
+      label: 'Submit order',
+      identifier: 'com.example.app:id/submit',
+      rect: { x: 60, y: 1200, width: 300, height: 100 },
+      enabled: true,
+      hittable: true,
+    },
+  ]);
+  const response = await pressWithSystemUiAnr(['@e2'], {}, { frameNodes: appScreen });
+
+  expect(response).toMatchObject({ ok: false, error: { details: SYSTEM_UI_ANR_REFUSAL } });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
