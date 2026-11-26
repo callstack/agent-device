@@ -59,6 +59,7 @@ export const ANDROID_SETTINGS = [
   'appearance',
   'text-size',
   'timezone',
+  'locale',
   'fingerprint',
   'clear-app-state',
   'permission',
@@ -233,6 +234,10 @@ export async function setAndroidSetting(
     case 'timezone': {
       const { setAndroidTimeZone } = await import('./settings-timezone.ts');
       return await setAndroidTimeZone(device, state);
+    }
+    case 'locale': {
+      const { setAndroidLocale } = await import('./settings-locale.ts');
+      return await setAndroidLocale(device, state, signal);
     }
     default:
       return normalized satisfies never;

@@ -198,6 +198,7 @@ export function limrunAndroidSettingsFacts(
       appearance: available,
       'text-size': available,
       timezone: available,
+      locale: available,
       fingerprint: available,
       'clear-app-state': available,
       permission: available,

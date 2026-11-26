@@ -145,6 +145,7 @@ test('iOS inherits shared settings except keychain reset, locale and time zone',
   const android = limrunAndroidSettingsFacts();
   expect(runtimeSubjectFact(android.setSetting, 'animations').available).toBe(true);
   expect(runtimeSubjectFact(android.setSetting, 'timezone').available).toBe(true);
+  expect(runtimeSubjectFact(android.setSetting, 'locale').available).toBe(true);
   const ios = limrunAppleSettingsFacts(testIosRunner.facts);
   for (const setting of [
     'appearance',
