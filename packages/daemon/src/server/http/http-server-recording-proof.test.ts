@@ -274,3 +274,48 @@ test.each(['missing lookup', 'missing open', 'symlink open'] as const)(
     });
   },
 );
+
+test.each(['EMFILE', 'EACCES', 'EIO'])(
+  'a recording download can retry after an inspection error (%s)',
+  async (code) => {
+    await withRecording(async (_harness, post, base, capturePath) => {
+      const { artifacts } = successfulData(await post(STOP));
+      const id = artifacts?.[0]?.artifactId;
+      expect(id).toBeTypeOf('string');
+      const open = fs.openSync;
+      const fstat = fs.fstatSync;
+      const failure = Object.assign(new Error(`Cannot read ${capturePath}`), { code });
+      let captureFd: number | undefined;
+      const mockOpen = vi.spyOn(fs, 'openSync').mockImplementation((file, flags, mode) => {
+        if (file !== capturePath) return open(file, flags, mode);
+        if (code !== 'EIO') throw failure;
+        captureFd = open(file, flags, mode);
+        return captureFd;
+      });
+      const mockFstat = vi.spyOn(fs, 'fstatSync').mockImplementation((fd, options) => {
+        if (fd === captureFd) throw failure;
+        return fstat(fd, options);
+      });
+      const download = () => fetch(`${base}/artifacts/${id}`, { headers: HEADERS });
+      try {
+        try {
+          const response = await download();
+          expect(response.status).toBe(500);
+          expect(await response.text()).not.toContain(capturePath);
+        } finally {
+          mockOpen.mockRestore();
+          mockFstat.mockRestore();
+        }
+        const fd = captureFd;
+        if (fd !== undefined)
+          expect(() => fstat(fd)).toThrow(expect.objectContaining({ code: 'EBADF' }));
+        expect(fs.readFileSync(capturePath, 'utf8')).toBe('producer-video');
+        const retried = await download();
+        expect(retried.status).toBe(200);
+        expect(await retried.text()).toBe('producer-video');
+      } finally {
+        if (id) cleanupDownloadableArtifact(id);
+      }
+    });
+  },
+);

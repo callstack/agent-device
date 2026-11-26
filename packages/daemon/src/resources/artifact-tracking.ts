@@ -591,8 +591,14 @@ function openRegisteredFile(artifactId: string, entry: ArtifactEntry): fs.ReadSt
     const stat = fs.fstatSync(fd);
     if (stat.isFile() && outputFileIdentity(stat) === entry.output)
       return fs.createReadStream(entry.artifactPath, { fd });
-  } catch {
-    // The file is no longer readable through the registered identity.
+  } catch (error) {
+    if (fd !== undefined) fs.closeSync(fd);
+    const code = (error as NodeJS.ErrnoException).code;
+    const outputGone =
+      code === 'ENOENT' || code === 'ENOTDIR' || (entry.reservation && code === 'ELOOP');
+    if (fd !== undefined || !outputGone) {
+      throw new AppError('COMMAND_FAILED', 'Could not read the artifact file', undefined, error);
+    }
   }
   if (fd !== undefined) fs.closeSync(fd);
   cleanupDownloadableArtifact(artifactId);
