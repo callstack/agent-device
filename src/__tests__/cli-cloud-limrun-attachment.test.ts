@@ -545,12 +545,19 @@ test('a failed local retirement still ends the hosted lease and preserves a fenc
   expect(JSON.parse(refused.stdout).error.details.reason).toBe('cloud_connection_changed');
   expect(refused.calls).toEqual([]);
 
-  const recovered = await runCliCapture(['disconnect', '--json'], {
-    env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
-  });
+  const retryOptions = { env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined } };
+  stop.mockRejectedValueOnce(new Error('private retirement failure'));
+  const stillClosing = await runCliCapture(['disconnect', '--json'], retryOptions);
+  expect(JSON.parse(stillClosing.stdout).error.details.reason).toBe(
+    'cloud_attachment_daemon_stop_unconfirmed',
+  );
+  expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', brokerReleased: true });
+  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
+
+  const recovered = await runCliCapture(['disconnect', '--json'], retryOptions);
   expect(JSON.parse(recovered.stdout).data.released).toBe(true);
   expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
-  expect(stop).toHaveBeenCalledTimes(2);
+  expect(stop).toHaveBeenCalledTimes(3);
   expect(readCloudConnection(location)).toBeNull();
 });
 
