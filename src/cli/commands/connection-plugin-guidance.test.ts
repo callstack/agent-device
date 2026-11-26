@@ -115,7 +115,10 @@ test('connect reports a failed selected plugin even when its error text describe
   assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
   assert.equal(error.details.installCommand, undefined);
   assert.match(error.hint, /plugins list --json/);
-  assert.match(error.hint, /plugins update @agent-device\/testmu/);
+  assert.match(
+    error.hint,
+    /If you installed it from a registry, run agent-device plugins update @agent-device\/testmu/,
+  );
 });
 
 test('connect does not call a selected plugin missing when it has no connection callbacks', async () => {

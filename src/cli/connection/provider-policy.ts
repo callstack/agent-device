@@ -181,15 +181,15 @@ function unavailableConnectPluginError(
   );
   if (selected || failures.length > 0) {
     const repair =
-      selected?.package === declaration.package
-        ? ` or run agent-device plugins update ${declaration.package}`
+      selected?.source === 'store' && selected.package === declaration.package
+        ? ` If you installed it from a registry, run agent-device plugins update ${declaration.package} to keep its version selector.`
         : '';
     return new AppError('UNSUPPORTED_OPERATION', `${declaration.label} plugin is unavailable.`, {
       reason: PLUGIN_INSTALLATION_REASONS.unavailable.reason,
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration${repair}, then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin and fix its configuration.${repair} Then retry your original command.`,
     });
   }
   return new AppError(
