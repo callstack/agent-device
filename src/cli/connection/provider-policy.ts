@@ -7,7 +7,12 @@ import {
   pluginConnectionNames,
   primePluginConnections,
 } from '@agent-device/plugins/connection';
-import { pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
+import {
+  firstPartyPluginVersion,
+  pluginInstallCommand,
+  pluginInstallationHint,
+} from '@agent-device/contracts/plugin-installation';
+import { readRegistryPluginSelection } from '@agent-device/plugins/store';
 import { readVersion } from '@agent-device/host-kit/version';
 import { AppError, PLUGIN_INSTALLATION_REASONS } from '@agent-device/kernel/errors';
 import {
@@ -180,16 +185,26 @@ function unavailableConnectPluginError(
     (entry) => entry === selected || entry.package === undefined,
   );
   if (selected || failures.length > 0) {
-    const repair =
+    const registrySelection =
       selected?.source === 'store' && selected.package === declaration.package
-        ? ` If you installed it from a registry, run agent-device plugins update ${declaration.package} to keep its version selector.`
+        ? readRegistryPluginSelection(env, declaration.package)
+        : undefined;
+    const repair = registrySelection
+      ? ` Reinstall it with agent-device plugins update ${declaration.package} to keep its version selector.`
+      : '';
+    const matchedVersion = registrySelection?.version
+      ? firstPartyPluginVersion(readVersion())
+      : undefined;
+    const replace =
+      matchedVersion && registrySelection?.version !== matchedVersion
+        ? ` To replace its selector with the CLI-matched release (${matchedVersion}), run ${pluginInstallCommand(declaration, matchedVersion)}.`
         : '';
     return new AppError('UNSUPPORTED_OPERATION', `${declaration.label} plugin is unavailable.`, {
       reason: PLUGIN_INSTALLATION_REASONS.unavailable.reason,
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin and fix its configuration.${repair} Then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin and fix its configuration.${repair}${replace} Then retry your original command.`,
     });
   }
   return new AppError(

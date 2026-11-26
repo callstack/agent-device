@@ -71,6 +71,21 @@ function validatePluginSelection(name: string, selection: PluginSelection): void
   }
 }
 
+/** Read the selection policy for a repair command without loading plugin code. */
+export function readRegistryPluginSelection(
+  env: NodeJS.ProcessEnv,
+  name: string,
+): Readonly<Pick<PluginSelection, 'version'>> | undefined {
+  try {
+    const selection = readPluginConfig(env).plugins?.[name];
+    if (!selection) return undefined;
+    validatePluginSelection(name, selection);
+    return selection.artifact === undefined ? { version: selection.version } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function selectionStamp(selection: PluginSelection | undefined): string {
   return crypto
     .createHash('sha256')

@@ -115,10 +115,31 @@ test('connect reports a failed selected plugin even when its error text describe
   assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
   assert.equal(error.details.installCommand, undefined);
   assert.match(error.hint, /plugins list --json/);
-  assert.match(
-    error.hint,
-    /If you installed it from a registry, run agent-device plugins update @agent-device\/testmu/,
-  );
+  assert.match(error.hint, /Reinstall it with agent-device plugins update @agent-device\/testmu/);
+});
+
+test('connect keeps configuration guidance for an unavailable local plugin archive', async () => {
+  const { home, env } = pluginHome();
+  selectPlugin(home, '@agent-device/testmu', 'throw new Error("Plugin failed to load.");');
+  const configPath = path.join(home, 'config.json');
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  config.plugins['@agent-device/testmu'].artifact = {
+    integrity: `sha512-${'A'.repeat(86)}==`,
+    version: '2.0.0',
+  };
+  fs.writeFileSync(configPath, JSON.stringify(config));
+
+  const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
+    cwd: home,
+    env,
+    stateDirPrefix: 'connect-broken-plugin-archive-',
+  });
+  assert.equal(result.code, 1);
+  assert.deepEqual(result.calls, []);
+  const { error } = JSON.parse(result.stdout);
+  assert.equal(error.details.reason, 'plugin-unavailable');
+  assert.match(error.hint, /plugins list --json/);
+  assert.doesNotMatch(error.hint, /plugins (?:update|add)/);
 });
 
 test('connect does not call a selected plugin missing when it has no connection callbacks', async () => {
@@ -177,8 +198,16 @@ test('connect recommends a pin-preserving repair for a failed BrowserStack selec
   assert.deepEqual(result.calls, []);
   const { error } = JSON.parse(result.stdout);
   assert.equal(error.details.reason, 'plugin-unavailable');
-  assert.match(error.hint, /plugins update @agent-device\/browserstack/);
-  assert.doesNotMatch(error.hint, /plugins add/);
+  assert.ok(
+    error.hint.includes(
+      'Reinstall it with agent-device plugins update @agent-device/browserstack to keep its version selector.',
+    ),
+  );
+  assert.ok(
+    error.hint.includes(
+      'To replace its selector with the CLI-matched release (0.22.0-nightly.20261118.186), run agent-device plugins add @agent-device/browserstack.',
+    ),
+  );
 });
 
 test('a stable core prescribes the plain package for the same plugin', async () => {
