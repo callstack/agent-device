@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { InputOptions } from 'rolldown';
+import type { InputOptions, Plugin } from 'rolldown';
 
 export const strictBundlerInputOptions: InputOptions = {
   onLog(level, log, handler) {
@@ -17,9 +17,21 @@ export const providerPluginBuildConfig = {
   minify: true,
   dts: false,
   hash: false,
-  deps: { alwaysBundle: [/^@agent-device\//], neverBundle: ['agent-device/plugins'] },
+  deps: { alwaysBundle: [/^@agent-device\//], neverBundle: [/^agent-device\/plugins(?:\/|$)/] },
   inputOptions: strictBundlerInputOptions,
 };
+
+/** Bundle selected third-party packages with their notices, keeping the core plugin contract external. */
+export function providerPluginWithBundledDependencies(
+  onlyBundle: string[],
+  licenseNotices: Plugin,
+) {
+  return {
+    ...providerPluginBuildConfig,
+    deps: { ...providerPluginBuildConfig.deps, onlyBundle },
+    plugins: [licenseNotices],
+  };
+}
 
 /**
  * The bundler options every managed platform plugin package builds with: its own `agent-device`

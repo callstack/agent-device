@@ -17,7 +17,6 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../build-config" },
     { "path": "../capture-kit" },
     { "path": "../contracts" },
     { "path": "../host-kit" },

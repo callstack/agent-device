@@ -14,8 +14,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown --config tsdown.config.ts",
-    "prepack": "pnpm build"
+    "build": "tsdown --config ../../bundler/limrun/tsdown.config.ts",
+    "prepack": "node check-runtime-dependencies.mjs && pnpm build"
   },
   "exports": {
     ".": {
@@ -37,10 +37,16 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@limrun/api": "^0.69.1"
+    "@limrun/xdelta3-wasm": "0.2.0",
+    "eventsource-client": "^1.2.0",
+    "https-proxy-agent": "7.0.6",
+    "ignore": "^7.0.5",
+    "proxy-from-env": "^2.1.0",
+    "undici": "7.30.1",
+    "ws": "^8.21.1",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
-    "@agent-device/build-config": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
@@ -49,6 +55,7 @@
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
     "@agent-device/xml": "workspace:*",
+    "@limrun/api": "0.69.1",
     "agent-device": "workspace:*"
   },
   "publishConfig": {

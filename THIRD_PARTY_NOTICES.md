@@ -6,7 +6,8 @@ replace the licenses listed here.
 ## Bundled JavaScript dependencies
 
 The `agent-device` package includes `dist/src/THIRD_PARTY_NOTICES.txt`. The
-`@agent-device/maestro` package includes `dist/THIRD_PARTY_NOTICES.txt`. Each file
+`@agent-device/maestro` and `@agent-device/limrun` packages each include
+`dist/THIRD_PARTY_NOTICES.txt`. Each file
 contains the bundled dependencies' license texts and applicable NOTICE
 contents. Dependencies resolved at runtime retain the license files in their
 own packages.

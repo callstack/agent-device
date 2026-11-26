@@ -8,8 +8,16 @@ export const primaryExport = {
   import: './dist/agent-device.mjs',
 };
 export const additionalExports = { './package.json': './package.json' };
-// The Limrun SDK is the plugin's own dependency, so a user can update it without a core release.
-export const dependencies = { '@limrun/api': '^0.69.1' };
+export const dependencies = {
+  '@limrun/xdelta3-wasm': '0.2.0',
+  'eventsource-client': '^1.2.0',
+  'https-proxy-agent': '7.0.6',
+  ignore: '^7.0.5',
+  'proxy-from-env': '^2.1.0',
+  undici: '7.30.1',
+  ws: '^8.21.1',
+  yauzl: '^3.4.0',
+};
 export const args = ['--platform', 'android'];
 export const fetchRedirects = ['https://api.limrun.com'];
 
