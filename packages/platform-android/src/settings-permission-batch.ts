@@ -143,6 +143,8 @@ export type AndroidPmBatchRecord = Readonly<{
 export type AndroidPmBatchParseResult = Readonly<{
   records: readonly AndroidPmBatchRecord[];
   partialStdout: string;
+  /** `pm` stderr of the incomplete record, when its stream started before the output stopped. */
+  partialStderr: string;
 }>;
 
 function skipLineEnding(text: string, pos: number): number | undefined {
@@ -167,28 +169,28 @@ export function parseAndroidPmBatchOutput(
     const outTag = `${marker}:OUT:${index}`;
     const outPos = stdout.indexOf(outTag, cursor);
     if (outPos === -1) {
-      return { records, partialStdout: stdout.slice(cursor) };
+      return { records, partialStdout: stdout.slice(cursor), partialStderr: '' };
     }
     const contentStart = skipLineEnding(stdout, outPos + outTag.length);
     if (contentStart === undefined) {
-      return { records, partialStdout: stdout.slice(cursor) };
+      return { records, partialStdout: stdout.slice(cursor), partialStderr: '' };
     }
 
     const errPrefix = `${marker}:ERR:${index}:`;
     const errPos = stdout.indexOf(errPrefix, contentStart);
     if (errPos === -1) {
-      return { records, partialStdout: stdout.slice(contentStart) };
+      return { records, partialStdout: stdout.slice(contentStart), partialStderr: '' };
     }
     const cmdStdout = stdout.slice(contentStart, errPos);
 
     const rcStart = errPos + errPrefix.length;
     const rcLineEnd = stdout.indexOf('\n', rcStart);
     if (rcLineEnd === -1) {
-      return { records, partialStdout: cmdStdout };
+      return { records, partialStdout: cmdStdout, partialStderr: '' };
     }
     const rcText = stdout.slice(rcStart, rcLineEnd).replace(/\r$/, '');
     if (!/^\d+$/.test(rcText)) {
-      return { records, partialStdout: cmdStdout };
+      return { records, partialStdout: cmdStdout, partialStderr: '' };
     }
     const exitCode = Number.parseInt(rcText, 10);
 
@@ -196,7 +198,7 @@ export function parseAndroidPmBatchOutput(
     const endTag = `${marker}:END:${index}`;
     const endPos = stdout.indexOf(endTag, errStart);
     if (endPos === -1) {
-      return { records, partialStdout: cmdStdout };
+      return { records, partialStdout: cmdStdout, partialStderr: stdout.slice(errStart) };
     }
     const cmdStderr = stdout.slice(errStart, endPos);
 
@@ -205,5 +207,5 @@ export function parseAndroidPmBatchOutput(
     cursor = skipLineEnding(stdout, afterEnd) ?? afterEnd;
   }
 
-  return { records, partialStdout: '' };
+  return { records, partialStdout: '', partialStderr: '' };
 }

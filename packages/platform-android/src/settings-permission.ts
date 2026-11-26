@@ -383,7 +383,7 @@ async function applyAllPmBatchChunk(
     allowFailure: true,
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
-  const { records, partialStdout } = batch.parseAndroidPmBatchOutput(
+  const { records, partialStdout, partialStderr } = batch.parseAndroidPmBatchOutput(
     batchResult.stdout,
     marker,
     chunk.length,
@@ -405,7 +405,7 @@ async function applyAllPmBatchChunk(
       {
         exitCode: batchResult.exitCode !== 0 ? batchResult.exitCode : 1,
         stdout: partialStdout,
-        stderr: batchResult.stderr,
+        stderr: partialStderr + batchResult.stderr,
       },
       { appPackage, permission: failedPermission },
     );

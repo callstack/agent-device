@@ -74,3 +74,34 @@ export function runFakeAndroidPmBatchInSh(
 export function isAndroidPmBatchShellArgs(args: readonly string[]): boolean {
   return args[0] === 'shell' && args.length === 2 && args[1]!.includes('__AD_PM_BATCH_');
 }
+
+/**
+ * A fake adb script for `settings permission ... all`: batched `pm` scripts run through
+ * {@link runFakeAndroidPmBatchInSh}, single `shell pm ...` calls answer from the same
+ * `pmReplies`, and both land in `pmCalls`. Everything else goes to `fallback`.
+ */
+export function createFakeAndroidPmAdb(
+  fallback: (args: string[]) => FakeAdbResponse | undefined,
+  pmReplies: Readonly<Record<string, FakePmReply>> = {},
+) {
+  const pmCalls: string[][] = [];
+  const batchOptions: Array<{ timeoutMs?: number }> = [];
+  const script = (args: string[], options?: { timeoutMs?: number }) => {
+    if (isAndroidPmBatchShellArgs(args)) {
+      batchOptions.push({ timeoutMs: options?.timeoutMs });
+      return runFakeAndroidPmBatchInSh(args[1]!, pmReplies, pmCalls);
+    }
+    if (args[0] === 'shell' && args[1] === 'pm') {
+      pmCalls.push(args.slice(2));
+      const reply = pmReplies[args.join(' ')];
+      if (reply) return { stdout: '', stderr: '', exitCode: 0, ...reply };
+    }
+    return fallback(args);
+  };
+  return {
+    script,
+    pmCalls,
+    batchOptions,
+    flatPmCalls: () => pmCalls.map((argv) => ['shell', 'pm', ...argv].join(' ')),
+  };
+}

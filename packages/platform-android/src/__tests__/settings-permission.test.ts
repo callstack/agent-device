@@ -10,11 +10,7 @@ import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
-import {
-  isAndroidPmBatchShellArgs,
-  runFakeAndroidPmBatchInSh,
-  type FakePmReply,
-} from './test-utils/fake-android-pm-shell.ts';
+import { createFakeAndroidPmAdb, type FakePmReply } from './test-utils/fake-android-pm-shell.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 
@@ -562,15 +558,7 @@ function fakeAllAdb(
   baseScript: (flat: string) => FakeAdbReply,
   pmReplies: Readonly<Record<string, FakePmReply>> = {},
 ) {
-  const pmCalls: string[][] = [];
-  const script = (args: string[]) => {
-    if (isAndroidPmBatchShellArgs(args)) {
-      return runFakeAndroidPmBatchInSh(args[1]!, pmReplies, pmCalls);
-    }
-    return baseScript(args.join(' '));
-  };
-  const flatPmCalls = () => pmCalls.map((argv) => ['shell', 'pm', ...argv].join(' '));
-  return { script, pmCalls, flatPmCalls };
+  return createFakeAndroidPmAdb((args) => baseScript(args.join(' ')), pmReplies);
 }
 
 // `all` intersects the declared set before issuing anything: INTERNET is declared
@@ -610,6 +598,47 @@ test('setAndroidPermission grant all applies the declared changeable ids', async
       warnings: [
         "Skipped android.permission.INTERNET for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: INTERNET is not a changeable permission type",
         'Skipped com.example.app.CUSTOM_PERMISSION for com.example.app: SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
+      ],
+    });
+  });
+});
+
+// A lone declared id skips the batch and runs one plain `shell pm` call; its refusal is
+// classified the same way and skipped with the reason.
+test('setAndroidPermission grant all skips a lone unchangeable id on the single-call path', async () => {
+  const requested = [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    '      android.permission.INTERNET',
+    'Queries:',
+  ].join('\n');
+  const fake = fakeAllAdb(
+    (flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      return undefined;
+    },
+    {
+      'shell pm grant --user 0 com.example.app android.permission.INTERNET': {
+        stderr: 'SecurityException: INTERNET is not a changeable permission type',
+        exitCode: 1,
+      },
+    },
+  );
+  await withFakeAdb(fake.script, async ({ device }) => {
+    const result = await setPermission(device, 'grant', 'com.example.app', {
+      permissionTarget: 'all',
+    });
+    assert.deepEqual(fake.batchOptions, []);
+    assert.deepEqual(fake.flatPmCalls(), [
+      'shell pm grant --user 0 com.example.app android.permission.INTERNET',
+    ]);
+    assert.deepEqual(result, {
+      permission: 'all',
+      permissions: [],
+      warnings: [
+        'Skipped android.permission.INTERNET for com.example.app: SecurityException: INTERNET is not a changeable permission type',
       ],
     });
   });

@@ -17,6 +17,7 @@ import { bindAndroidAdbTestHost } from './test-utils/android-host-test-setup.ts'
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import {
+  createFakeAndroidPmAdb,
   isAndroidPmBatchShellArgs,
   runFakeAndroidPmBatchInSh,
   type FakePmReply,
@@ -41,33 +42,13 @@ function makeDumpsys(
   ].join('\n');
 }
 
-function makeBatchFake(
-  dumpsys: string,
-  pmReplies: Readonly<Record<string, FakePmReply>> = {},
-  extra?: (args: string[], options?: { timeoutMs?: number }) => unknown,
-) {
-  const pmCalls: string[][] = [];
-  const batchOptions: Array<{ timeoutMs?: number }> = [];
-  const script = (args: string[], options?: { timeoutMs?: number }) => {
-    if (extra) {
-      const override = extra(args, options);
-      if (override !== undefined) return override as never;
-    }
-    if (isAndroidPmBatchShellArgs(args)) {
-      batchOptions.push({ timeoutMs: options?.timeoutMs });
-      return runFakeAndroidPmBatchInSh(args[1]!, pmReplies, pmCalls);
-    }
+function makeBatchFake(dumpsys: string, pmReplies: Readonly<Record<string, FakePmReply>> = {}) {
+  return createFakeAndroidPmAdb((args) => {
     const flat = args.join(' ');
     if (flat === DUMPSYS) return dumpsys;
     if (flat === 'shell getprop ro.build.version.sdk') return '36';
     return undefined;
-  };
-  return {
-    script,
-    pmCalls,
-    batchOptions,
-    flatPmCalls: () => pmCalls.map((argv) => ['shell', 'pm', ...argv].join(' ')),
-  };
+  }, pmReplies);
 }
 
 test('grant all batches contiguous pm units into one adb shell call and preserves order and warnings', async () => {
@@ -172,7 +153,7 @@ test('reset all clears user-set and user-fixed flags inside the batch only for a
   });
 });
 
-test('deny all and reset all interleave photos and notifications in exact declared order', async () => {
+test('deny all interleaves photos and notifications in exact declared order', async () => {
   const requested = [
     'android.permission.INTERNET',
     'android.permission.CAMERA',
@@ -373,9 +354,49 @@ test('host adb refusal or mid-batch transport truncation surfaces classified err
       );
     },
   );
+
+  // Truncated after the exit code: the `pm` stderr that already arrived stays in the error.
+  await withFakeAdb(
+    (args) => {
+      if (args.join(' ') === DUMPSYS) return makeDumpsys(requested);
+      if (isAndroidPmBatchShellArgs(args)) {
+        const match = /'(__AD_PM_BATCH_[0-9a-f]+__):OUT:'/.exec(args[1]!);
+        assert.ok(match?.[1]);
+        const marker = match[1];
+        return {
+          stdout: `${marker}:OUT:0\nout\n${marker}:ERR:0:1\nFailure: permission service crashed\n`,
+          stderr: "adb: protocol fault (couldn't read status)",
+          exitCode: 1,
+        };
+      }
+      return undefined;
+    },
+    async ({ device }) => {
+      await assert.rejects(
+        () =>
+          setAndroidPermission(
+            device,
+            'com.example.app',
+            parseAndroidPermissionRequest('grant', { permissionTarget: 'all' }),
+            0,
+          ),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.permission, 'android.permission.CAMERA');
+          assert.equal(error.details?.stdout, 'out\n');
+          assert.equal(
+            error.details?.stderr,
+            "Failure: permission service crashed\nadb: protocol fault (couldn't read status)",
+          );
+          assert.equal(error.details?.adbFailure, 'connection_dropped');
+          return true;
+        },
+      );
+    },
+  );
 });
 
-test('host adb passes no batch timeout while scoped remote providers receive a capped batch timeout', async () => {
+test('batch timeout caps at 90 s and host adb passes none', async () => {
   assert.equal(androidPmBatchTimeoutMs(1, false), 30_500);
   assert.equal(androidPmBatchTimeoutMs(55, false), 57_500);
   assert.equal(androidPmBatchTimeoutMs(55, true), 90_000);
