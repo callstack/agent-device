@@ -105,7 +105,11 @@ test('status refuses a dump without a keyguard state instead of reporting unlock
   mockShell.mockResolvedValue({ stdout: 'WINDOW MANAGER POLICY STATE\n', stderr: '', exitCode: 0 });
   await expect(readAndroidLockScreenState(ANDROID_EMULATOR, undefined)).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason: 'lock-screen-state-unreadable', dispatched: 'no' },
+    details: {
+      reason: 'lock-screen-state-unreadable',
+      dispatched: 'no',
+      hint: expect.stringContaining('isKeyguardShowing'),
+    },
   });
   expect(mockPress).not.toHaveBeenCalled();
 });
