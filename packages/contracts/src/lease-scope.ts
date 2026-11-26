@@ -7,7 +7,7 @@ import type { DaemonWireRequest } from './daemon-wire-request.ts';
 import type { EndedLease, LeaseDevice, LeaseDeviceSpec } from './client-lease.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
-export const CLOUD_LEASE_PROVIDER = 'cloud';
+const CLOUD_LEASE_PROVIDER = 'cloud';
 
 /**
  * Lease providers that name a logical routing identity rather than a provider runtime. Any other

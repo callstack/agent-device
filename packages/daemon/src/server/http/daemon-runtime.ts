@@ -207,6 +207,16 @@ export async function startDaemonRuntime(
   );
 }
 
+async function resolveHostedAttachmentAdmission(attachment?: HostedAttachmentScope) {
+  if (!attachment) return {};
+  const { hostedAttachmentAdmission, hostedAuxiliaryAdmission } =
+    await import('../hosted-attachment-admission.ts');
+  return {
+    admitAttachment: hostedAttachmentAdmission(attachment),
+    admitAuxiliary: hostedAuxiliaryAdmission(attachment),
+  };
+}
+
 async function startDaemonRuntimeOnHost(
   options: DaemonRuntimeOptions & {
     codeIdentity: NonNullable<DaemonRuntimeOptions['codeIdentity']>;
@@ -241,10 +251,7 @@ async function startDaemonRuntimeOnHost(
   const attachment = await options.bindAttachment?.(baseDir);
   const host = attachment?.host ?? initialHost;
   const { env } = host;
-  const hostedAdmission = attachment
-    ? await import('../hosted-attachment-admission.ts')
-    : undefined;
-  const admitAttachment = attachment && hostedAdmission?.hostedAttachmentAdmission(attachment);
+  const { admitAttachment, admitAuxiliary } = await resolveHostedAttachmentAdmission(attachment);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
@@ -703,7 +710,7 @@ async function startDaemonRuntimeOnHost(
       handleRequest,
       startupRecovered,
       hostAdminEnabled: !attachment,
-      admitAuxiliary: attachment && hostedAdmission?.hostedAuxiliaryAdmission(attachment),
+      admitAuxiliary,
       leaseLifecycleProvider: deps.leaseLifecycleProvider,
       leaseRegistry,
       endSessionsForLease: async (leaseId) => await endSessionsForLease(leaseId, 'LEASE_RELEASED'),

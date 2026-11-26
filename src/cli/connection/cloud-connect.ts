@@ -132,35 +132,19 @@ export async function releaseCloudConnection(options: {
     () => undefined,
     (error: unknown) => error,
   );
-  let id = record?.id;
-  let released = false;
-  try {
-    const access = record?.brokerReleased
-      ? undefined
-      : await resolveHostedCloudAccess({
-          env: host.env,
-          stateDir: location.stateDir,
-          interactive: false,
-          savedOrigin: record?.origin ?? binding?.baseUrl,
-        });
-    if (access) {
-      id = await cloudSessionIdForRelease(access, location, record, binding?.id);
-      if (id) {
-        await deleteCloudSession(access, id);
-        released = true;
-      }
-    }
-  } catch (error) {
-    if (!retirementFailure) throw error;
-    const retirement = asAppError(retirementFailure, 'COMMAND_FAILED');
-    const broker = asAppError(error, 'COMMAND_FAILED');
-    throw new AppError(retirement.code, retirement.message, {
-      ...retirement.details,
-      brokerReleaseReason: broker.details?.reason ?? broker.code,
-    });
-  }
+  const releasedId = await releaseBrokerSession({ location, record, host, binding }).catch(
+    (error: unknown) => {
+      if (!retirementFailure) throw error;
+      const retirement = asAppError(retirementFailure, 'COMMAND_FAILED');
+      const broker = asAppError(error, 'COMMAND_FAILED');
+      throw new AppError(retirement.code, retirement.message, {
+        ...retirement.details,
+        brokerReleaseReason: broker.details?.reason ?? broker.code,
+      });
+    },
+  );
   if (retirementFailure) {
-    if (released && record) {
+    if (releasedId && record) {
       record.brokerReleased = true;
       writeCloudConnection(location, record);
     }
@@ -168,6 +152,25 @@ export async function releaseCloudConnection(options: {
   }
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudState(location, state, record);
+  return releasedId ?? record?.id;
+}
+
+async function releaseBrokerSession(options: {
+  location: ConnectionLocation;
+  record: CloudConnectionRecord | null;
+  host: HostEnvironment;
+  binding?: CloudSessionBinding;
+}): Promise<string | undefined> {
+  const { location, record, host, binding } = options;
+  if (record?.brokerReleased) return undefined;
+  const access = await resolveHostedCloudAccess({
+    env: host.env,
+    stateDir: location.stateDir,
+    interactive: false,
+    savedOrigin: record?.origin ?? binding?.baseUrl,
+  });
+  const id = await cloudSessionIdForRelease(access, location, record, binding?.id);
+  if (id) await deleteCloudSession(access, id);
   return id;
 }
 

@@ -179,7 +179,6 @@ async function authorizeAuxiliaryHttpRequest(params: {
   authHook: HttpAuthHook | null;
   expectedToken?: string;
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
-  admitAttachment?: HostedAuxiliaryAdmission;
   /** The request's own cancellation: the hook gets it, and a late result is not applied. */
   signal?: AbortSignal;
   /**
@@ -232,21 +231,6 @@ async function authorizeAuxiliaryHttpRequest(params: {
   }
 
   const trustedTenant = tenantTrust.tenantId;
-  if (params.admitAttachment) {
-    try {
-      return params.admitAttachment({
-        session:
-          daemonRequest.command === 'request_diagnostics'
-            ? daemonRequest.positionals[0]
-            : undefined,
-        tenantId: trustedTenant,
-        leaseId: req.headers[DAEMON_HTTP_LEASE_HEADER],
-      });
-    } catch (error) {
-      commit(() => sendRestJsonError(res, normalizeError(error)));
-      return null;
-    }
-  }
   return {
     tenantId: trustedTenant,
     ...(trustedTenant
@@ -268,6 +252,45 @@ async function authorizeDiagnosticsHttpRequest(
     return null;
   }
   return auth;
+}
+
+export function createAuxiliaryHttpAuthorizer(options: {
+  authHook: HttpAuthHook | null;
+  expectedToken?: string;
+  admitAttachment?: HostedAuxiliaryAdmission;
+}) {
+  const { authHook, expectedToken, admitAttachment } = options;
+  return async (
+    request: Omit<
+      Parameters<typeof authorizeAuxiliaryHttpRequest>[0],
+      'authHook' | 'expectedToken'
+    >,
+    leaseRegistry?: LeaseRegistry,
+  ) => {
+    const auth = await authorizeDiagnosticsHttpRequest({
+      ...request,
+      authHook,
+      expectedToken,
+      leaseRegistry,
+    });
+    if (!auth || !admitAttachment) return auth;
+    const { daemonRequest, req, res, commit } = request;
+    try {
+      return admitAttachment({
+        session:
+          daemonRequest.command === 'request_diagnostics'
+            ? daemonRequest.positionals[0]
+            : undefined,
+        tenantId: auth.tenantId,
+        leaseId: req.headers[DAEMON_HTTP_LEASE_HEADER],
+      });
+    } catch (error) {
+      const reply = () => sendRestJsonError(res, normalizeError(error));
+      if (commit) commit(reply);
+      else reply();
+      return null;
+    }
+  };
 }
 
 /**
@@ -306,8 +329,6 @@ function enforceDaemonToken(
 }
 
 export {
-  authorizeAuxiliaryHttpRequest,
-  authorizeDiagnosticsHttpRequest,
   enforceDaemonToken,
   loadHttpAuthHook,
   restrictRemoteHttpRequest,

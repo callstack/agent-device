@@ -100,28 +100,8 @@ export async function materializeRemoteConnectionForCommand(options: {
 }> {
   const { command, flags, client, host } = options;
   const { stateDir, state: savedState, existing } = options.selection;
-  const hostedLeaseId = options.hostedLease?.id;
-  const staleActiveLease =
-    hostedLeaseId !== undefined &&
-    savedState.leaseId !== undefined &&
-    savedState.leaseId !== hostedLeaseId;
-  const staleEndedLease =
-    hostedLeaseId !== undefined &&
-    savedState.endedLeaseId !== undefined &&
-    savedState.endedLeaseId !== hostedLeaseId;
-  const leaseChanged = staleActiveLease || staleEndedLease;
-  const state = leaseChanged
-    ? {
-        ...savedState,
-        leaseId: staleActiveLease ? undefined : savedState.leaseId,
-        endedLeaseId: staleEndedLease ? undefined : savedState.endedLeaseId,
-      }
-    : savedState;
-  const nextFlags = {
-    ...flags,
-    session: state.session,
-    ...(hostedLeaseId === undefined ? {} : { leaseId: state.leaseId }),
-  };
+  const nextFlags = { ...flags, session: savedState.session };
+  const state = reconcileHostedLease(savedState, nextFlags, options.hostedLease?.id);
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
   let changed = !existing;
@@ -183,6 +163,20 @@ export async function materializeRemoteConnectionForCommand(options: {
     runtime: nextRuntime,
     connection: buildRemoteConnectionRequestMetadata(nextState),
     leaseDevice: grantedLeaseDevice(nextState),
+  };
+}
+
+function reconcileHostedLease(
+  state: RemoteConnectionState,
+  flags: CliFlags,
+  hostedLeaseId: string | undefined,
+): RemoteConnectionState {
+  if (hostedLeaseId === undefined) return state;
+  flags.leaseId = state.leaseId === hostedLeaseId ? hostedLeaseId : undefined;
+  return {
+    ...state,
+    leaseId: flags.leaseId,
+    endedLeaseId: state.endedLeaseId === hostedLeaseId ? hostedLeaseId : undefined,
   };
 }
 

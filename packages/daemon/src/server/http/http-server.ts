@@ -56,8 +56,7 @@ import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-htt
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
-  authorizeAuxiliaryHttpRequest,
-  authorizeDiagnosticsHttpRequest,
+  createAuxiliaryHttpAuthorizer,
   enforceDaemonToken,
   loadHttpAuthHook,
   restrictRemoteHttpRequest,
@@ -140,6 +139,11 @@ export async function createDaemonHttpServer(options: {
   );
   const environment = options.env;
   const authHook = await loadHttpAuthHook(environment, options.cwd);
+  const authorizeAuxiliary = createAuxiliaryHttpAuthorizer({
+    authHook,
+    expectedToken: options.token,
+    admitAttachment: options.admitAuxiliary,
+  });
   const {
     handleRequest,
     token,
@@ -193,17 +197,7 @@ export async function createDaemonHttpServer(options: {
         res,
         token: resolveToken({}, req.headers),
         origin: publicOrigin ?? ingressUrl.origin,
-        authorize: async (request) =>
-          await authorizeAuxiliaryHttpRequest({
-            req: request.req,
-            res: request.res,
-            authHook,
-            expectedToken: token,
-            admitAttachment: options.admitAuxiliary,
-            daemonRequest: request.daemonRequest,
-            signal: request.signal,
-            commit: request.commit,
-          }),
+        authorize: authorizeAuxiliary,
       })
     ) {
       return;
@@ -215,15 +209,7 @@ export async function createDaemonHttpServer(options: {
         res,
         retainArtifacts,
         hostEnv: environment,
-        authorize: async (request) =>
-          await authorizeAuxiliaryHttpRequest({
-            req: request.req,
-            res: request.res,
-            authHook,
-            expectedToken: token,
-            admitAttachment: options.admitAuxiliary,
-            daemonRequest: request.daemonRequest,
-          }),
+        authorize: authorizeAuxiliary,
       })
     ) {
       return;
@@ -235,14 +221,7 @@ export async function createDaemonHttpServer(options: {
         req,
         res,
         resolveRecordPath: resolveRequestDiagnosticsPath,
-        authorize: async (request) =>
-          await authorizeDiagnosticsHttpRequest({
-            ...request,
-            authHook,
-            expectedToken: token,
-            admitAttachment: options.admitAuxiliary,
-            leaseRegistry: options.leaseRegistry,
-          }),
+        authorize: async (request) => await authorizeAuxiliary(request, options.leaseRegistry),
       })
     ) {
       return;
