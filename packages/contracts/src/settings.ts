@@ -432,17 +432,12 @@ function parseSettingValue(setting: SettingName, value: string): string {
 const TIME_ZONE_NAME_PATTERN = /^[A-Za-z][\w+-]*(\/[\w+-]+)*$/;
 
 /**
- * An IANA time zone name the host's time zone data knows. A name `Intl.supportedValuesOf` lists
- * is normalized to its listed casing; an alias it does not list, such as `Asia/Kolkata`, is kept
- * as written and checked by the target device on read-back. Offsets such as `+05:30` are refused
- * because neither owner takes one.
+ * An IANA time zone name the host's time zone data knows, kept as written; the target device
+ * checks it on read-back. Offsets such as `+05:30` are refused because neither owner takes one.
  */
 export function parseTimeZoneId(value: string): string {
   const name = value.trim();
-  if (TIME_ZONE_NAME_PATTERN.test(name) && isKnownTimeZone(name)) {
-    const lower = name.toLowerCase();
-    return Intl.supportedValuesOf('timeZone').find((zone) => zone.toLowerCase() === lower) ?? name;
-  }
+  if (TIME_ZONE_NAME_PATTERN.test(name) && isKnownTimeZone(name)) return name;
   throw new AppError(
     'INVALID_ARGS',
     `Invalid time zone: ${value}. Use an IANA time zone name, such as Asia/Kolkata or America/New_York.`,

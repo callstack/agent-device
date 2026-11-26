@@ -25,7 +25,9 @@ export async function setIosTimeZone(
     timeZone: timeZone ?? null,
     previousTimeZone,
     warnings: [
-      'Running apps keep the old time zone until they relaunch (run open <app> --relaunch), and the override is lost when the simulator reboots.',
+      timeZone === undefined
+        ? 'Running apps keep the old time zone until they relaunch (run open <app> --relaunch).'
+        : 'Running apps keep the old time zone until they relaunch (run open <app> --relaunch), and the override is lost when the simulator reboots.',
     ],
   };
 }

@@ -692,7 +692,7 @@ test('settings iOS location set refuses a named app before reaching the owner', 
 
 test.each([
   {
-    positionals: ['timezone', 'america/new_york'],
+    positionals: ['timezone', 'America/New_York'],
     state: 'America/New_York',
     message: 'Time zone set to America/New_York',
   },

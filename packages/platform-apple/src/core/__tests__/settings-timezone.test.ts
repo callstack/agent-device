@@ -42,9 +42,11 @@ test('settings timezone sets TZ in the simulator launchd and reset unsets it', a
       previousTimeZone: null,
       warnings: [expect.stringContaining('relaunch')],
     });
+    // Reset leaves no override, so there is nothing for a reboot to lose.
     expect(await set('reset')).toMatchObject({
       timeZone: null,
       previousTimeZone: 'Asia/Kolkata',
+      warnings: [expect.not.stringContaining('reboot')],
     });
     expect(spawnedWrites(calls)).toEqual([
       'launchctl setenv TZ Asia/Kolkata',

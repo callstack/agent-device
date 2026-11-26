@@ -232,16 +232,13 @@ describe('text-size', () => {
 });
 
 describe('timezone', () => {
-  test('a time zone the host lists is normalized to the host casing', () => {
+  test('a time zone Intl knows passes through as written so device read-back decides', () => {
     expect(parseSettingsMutation(['Timezone', 'Asia/Kolkata'])).toEqual({
       setting: 'timezone',
       state: 'Asia/Kolkata',
     });
-    expect(parseTimeZoneId('america/new_york')).toBe('America/New_York');
+    expect(parseTimeZoneId('america/new_york')).toBe('america/new_york');
     expect(parseTimeZoneId(' Etc/GMT+5 ')).toBe('Etc/GMT+5');
-  });
-
-  test('an alias Intl knows passes through regardless of casing so device read-back decides', () => {
     expect(parseTimeZoneId('Asia/Kolkata')).toBe('Asia/Kolkata');
     expect(parseTimeZoneId('asia/kolkata')).toBe('asia/kolkata');
     expect(parseTimeZoneId('US/Pacific')).toBe('US/Pacific');
