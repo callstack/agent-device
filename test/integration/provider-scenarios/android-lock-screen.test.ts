@@ -6,6 +6,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { assertRpcError } from './assertions.ts';
 import { createAndroidSettingsWorld } from './android-world.ts';
+import { androidSystemDialogXml } from './android-dialog-fixtures.ts';
 
 const SETTINGS_FOCUS = 'mCurrentFocus=Window{42 u0 com.android.settings/.Settings}\n';
 const KEYCODE_SLEEP = '223';
@@ -171,6 +172,35 @@ test('Provider-backed integration Android lock-screen status reads the keyguard 
     assert.deepEqual(
       actions.map((action) => action.positionals),
       [['status'], ['lock'], ['status'], ['unlock'], ['status']],
+    );
+  } finally {
+    await world.close();
+  }
+});
+
+test('Provider-backed integration Android lock-screen status reads past an app ANR without closing or relaunching the app', async () => {
+  const world = await createAndroidSettingsWorld({
+    snapshotXml: androidSystemDialogXml,
+    dumpsysWindow: () =>
+      'mCurrentFocus=Window{7f8 u0 Application Not Responding: com.example.demo}\n' +
+      '    isKeyguardShowing=false\n',
+  });
+
+  try {
+    const client = world.daemon.client();
+    await client.apps.open({ app: 'com.example.demo', ...world.selection });
+    world.adbCalls.splice(0);
+
+    assert.deepEqual(await client.command.lockScreen({ action: 'status', ...world.selection }), {
+      action: 'lock-screen',
+      state: 'unlocked',
+      message: 'The screen is unlocked',
+    });
+    const sent = world.adbCalls.map((call) => call.join(' '));
+    assert.deepEqual(
+      sent.filter((call) => call.startsWith('shell input') || call.startsWith('shell am start')),
+      [],
+      JSON.stringify(sent),
     );
   } finally {
     await world.close();

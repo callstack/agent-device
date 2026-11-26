@@ -85,7 +85,7 @@ export async function dispatchGenericCommand(params: {
   if ('response' in settlePlan) return settlePlan.response;
   const preflightReadiness = await ensureNoAndroidBlockingDialogReady(
     session,
-    platformCommand,
+    req,
     params.androidObservation,
   );
   if ('response' in preflightReadiness) return preflightReadiness.response;
@@ -159,7 +159,7 @@ async function finalizeGenericCommand(params: {
   const { req, ref, sessionStore, command } = params;
   const postflightReadiness = await ensureNoAndroidBlockingDialogReady(
     sessionStore.requireCurrent(ref),
-    command,
+    req,
     params.androidObservation,
     'after-command',
   );
@@ -266,11 +266,12 @@ type GenericCommandReadiness = {
 
 async function ensureNoAndroidBlockingDialogReady(
   session: SessionState,
-  platformCommand: string,
+  req: DaemonRequest,
   observation: AndroidObservationAdapter | undefined,
   phase: 'before-command' | 'after-command' = 'before-command',
 ): Promise<AndroidDialogReadiness> {
-  if (session.device.platform !== 'android' || !shouldGuardAndroidBlockingDialog(platformCommand)) {
+  const platformCommand = req.command;
+  if (session.device.platform !== 'android' || !shouldGuardAndroidBlockingDialog(req)) {
     return { status: 'clear' };
   }
   if (isActiveProviderDevice(session.device)) {

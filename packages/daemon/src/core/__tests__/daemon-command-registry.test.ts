@@ -167,11 +167,28 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
     PUBLIC_COMMANDS.swipe,
     PUBLIC_COMMANDS.type,
   ]) {
-    assert.equal(shouldGuardAndroidBlockingDialog(command), true, `${command} Android guard`);
+    assert.equal(
+      shouldGuardAndroidBlockingDialog(makeRequest(command)),
+      true,
+      `${command} Android guard`,
+    );
   }
 
-  assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.get), false);
-  assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.telephony), false);
+  assert.equal(shouldGuardAndroidBlockingDialog(makeRequest(PUBLIC_COMMANDS.get)), false);
+  assert.equal(shouldGuardAndroidBlockingDialog(makeRequest(PUBLIC_COMMANDS.telephony)), false);
+  // lock-screen status only reads the lock state, so it never taps a dialog or relaunches the app.
+  for (const action of ['lock', 'unlock']) {
+    assert.equal(
+      shouldGuardAndroidBlockingDialog(makeRequest(PUBLIC_COMMANDS.lockScreen, [action])),
+      true,
+    );
+  }
+  for (const action of ['status', 'STATUS']) {
+    assert.equal(
+      shouldGuardAndroidBlockingDialog(makeRequest(PUBLIC_COMMANDS.lockScreen, [action])),
+      false,
+    );
+  }
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.apps), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.capabilities), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.devices), true);
