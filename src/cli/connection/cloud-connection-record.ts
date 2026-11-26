@@ -363,7 +363,7 @@ export async function cleanExpiredCloudAttachments(
       try {
         current = readCloudConnection(location);
         if (!current || !isExpired(current)) return;
-        kind = asCloudRecord(readCloudCredentialJson(cloudAttachmentPath(location)))?.kind;
+        kind = readExpiredAttachmentKind(location, current);
       } catch {
         return;
       }
@@ -376,6 +376,19 @@ export async function cleanExpiredCloudAttachments(
         );
       }
     });
+  }
+}
+
+/** A connect can die while it writes a pending attachment. No daemon admits a pending record. */
+function readExpiredAttachmentKind(
+  location: ConnectionLocation,
+  record: CloudConnectionRecord,
+): unknown {
+  try {
+    return asCloudRecord(readCloudCredentialJson(cloudAttachmentPath(location)))?.kind;
+  } catch {
+    if (record.phase === 'pending') removeCloudAttachment(location);
+    return undefined;
   }
 }
 

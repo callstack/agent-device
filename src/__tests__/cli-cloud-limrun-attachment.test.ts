@@ -217,6 +217,34 @@ test('expires remote daemon credentials without trying to stop a local daemon', 
   expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
 });
 
+test('expiry removes a partially written pending attachment', async () => {
+  const env = cloudEnv();
+  const expired = locationOf(env);
+  const liveEnv = { ...env, AGENT_DEVICE_SESSION: 'still-running' };
+  const broker = stubCloudApi();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  expect((await runCliCapture(connectArgs, { env: liveEnv })).code).toBeNull();
+  const record = readCloudConnection(expired)!;
+  writeCloudConnection(expired, {
+    ...record,
+    phase: 'pending',
+    deadlineAt: new Date(0).toISOString(),
+  });
+  removeRemoteConnectionState(expired);
+  fs.writeFileSync(
+    cloudAttachmentPath(expired),
+    '{"kind":"agent-device-daemon","daemonAuthToken":"partial-fixture-token',
+  );
+
+  const run = await runCliCapture(['connection', 'status', '--json'], { env: liveEnv });
+
+  expect(run.code).toBeNull();
+  expect(run.stdout + run.stderr).not.toContain('partial-fixture-token');
+  expect(fs.existsSync(cloudAttachmentPath(expired))).toBe(false);
+  expect(fs.existsSync(cloudAttachmentPath(locationOf(liveEnv)))).toBe(true);
+  expect(broker).toHaveBeenCalledTimes(2);
+});
+
 test('expired attachments without a saved binding retire their generation before removing credentials', async () => {
   const env = limrunEnv('current');
   const location = locationOf(env);
