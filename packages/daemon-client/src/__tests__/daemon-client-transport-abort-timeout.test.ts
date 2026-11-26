@@ -32,7 +32,9 @@ const { handleRequestTimeoutCalls } = vi.hoisted(() => ({
   handleRequestTimeoutCalls: [] as unknown[],
 }));
 
-vi.mock('../daemon-client-timeout.ts', () => ({
+// Only the timeout seam is stubbed; the request guard in the same module stays real.
+vi.mock('../daemon-client-timeout.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../daemon-client-timeout.ts')>()),
   handleRequestTimeout: async (params: unknown) => {
     handleRequestTimeoutCalls.push(params);
     return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
