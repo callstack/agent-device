@@ -70,11 +70,11 @@ extension RunnerTests {
 #endif
   }
 
-  /// Reads SpringBoard's lock state and changes nothing. A screen SpringBoard has blanked while
-  /// unlocked is still unlocked: only the lock state decides the answer.
+  /// Reads SpringBoard's lock state and changes nothing. Only the lock state decides the answer, so
+  /// a screen SpringBoard has blanked while unlocked is unlocked.
   func executeLockScreenStatusCommand() -> Response {
 #if os(iOS) && targetEnvironment(simulator)
-    return lockScreenStatusResponse(springboardLockState())
+    return lockScreenStatusResponse(springboardNotifyState(Self.springboardLockStateNotification))
 #else
     return Response(ok: false, error: ErrorPayload(
       code: RunnerWireErrorCode.hardwareControlUnavailable,
@@ -84,17 +84,16 @@ extension RunnerTests {
 #endif
   }
 
-  /// The `lockScreenStatus` answer for one read. An unreadable state is an error, never unlocked.
-  func lockScreenStatusResponse(_ state: LockScreenStateRead) -> Response {
-    switch state {
-    case .locked:
-      return Response(ok: true, data: DataPayload(message: "lockScreenStatus", locked: true))
-    case .unlocked, .unlockedScreenOff:
-      return Response(ok: true, data: DataPayload(message: "lockScreenStatus", locked: false))
-    case .unreadable(let message):
+  /// The `lockScreenStatus` answer for one read of `com.apple.springboard.lockstate`: any nonzero
+  /// state is locked. An unreadable state is an error, never unlocked.
+  func lockScreenStatusResponse(_ lockState: Result<UInt64, LockScreenNotifyError>) -> Response {
+    switch lockState {
+    case .success(let locked):
+      return Response(ok: true, data: DataPayload(message: "lockScreenStatus", locked: locked != 0))
+    case .failure(let error):
       return Response(ok: false, error: ErrorPayload(
         code: RunnerWireErrorCode.observationUnavailable,
-        message: message,
+        message: error.message,
         hint: "Take a screenshot to see whether the lock screen is up."
       ))
     }
@@ -275,15 +274,6 @@ extension RunnerTests {
     switch springboardNotifyState(Self.springboardBlankedScreenNotification) {
     case .failure(let error): return .unreadable(error.message)
     case .success(let blanked): return blanked != 0 ? .unlockedScreenOff : .unlocked
-    }
-  }
-
-  /// SpringBoard's lock state alone. The status read does not need the blanked-screen state, so a
-  /// failure to read that state does not fail the read.
-  private func springboardLockState() -> LockScreenStateRead {
-    switch springboardNotifyState(Self.springboardLockStateNotification) {
-    case .failure(let error): return .unreadable(error.message)
-    case .success(let locked): return locked != 0 ? .locked : .unlocked
     }
   }
 

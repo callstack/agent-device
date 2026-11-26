@@ -46,23 +46,24 @@ private final class LockScreenScript {
 }
 
 extension RunnerTests {
-  func testLockScreenStatusReportsTheLockState() {
-    let locked = lockScreenStatusResponse(.locked)
-    XCTAssertTrue(locked.ok)
-    XCTAssertEqual(locked.data?.locked, true)
-    let unlocked = lockScreenStatusResponse(.unlocked)
-    XCTAssertTrue(unlocked.ok)
-    XCTAssertEqual(unlocked.data?.locked, false)
+  func testLockScreenStatusReadsAnyNonzeroLockStateAsLocked() {
+    for state: UInt64 in [1, 2] {
+      let response = lockScreenStatusResponse(.success(state))
+      XCTAssertTrue(response.ok)
+      XCTAssertEqual(response.data?.locked, true)
+    }
   }
 
-  func testLockScreenStatusReportsABlankedUnlockedScreenAsUnlocked() {
-    let response = lockScreenStatusResponse(.unlockedScreenOff)
+  func testLockScreenStatusReadsAZeroLockStateAsUnlocked() {
+    let response = lockScreenStatusResponse(.success(0))
     XCTAssertTrue(response.ok)
     XCTAssertEqual(response.data?.locked, false)
   }
 
   func testLockScreenStatusRefusesAnUnreadableState() {
-    let response = lockScreenStatusResponse(.unreadable("Unable to read com.apple.springboard.lockstate"))
+    let response = lockScreenStatusResponse(
+      .failure(LockScreenNotifyError("Unable to read com.apple.springboard.lockstate"))
+    )
     XCTAssertFalse(response.ok)
     XCTAssertNil(response.data?.locked)
     XCTAssertEqual(response.error?.code, RunnerWireErrorCode.observationUnavailable)
