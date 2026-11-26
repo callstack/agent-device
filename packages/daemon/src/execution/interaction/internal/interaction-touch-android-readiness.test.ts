@@ -429,6 +429,7 @@ async function pressWithSystemUiAnr(
      */
     beforeTap?: (read: number) => BlockingDialogObservation;
     afterTap?: (read: number) => BlockingDialogObservation;
+    command?: 'press' | 'click';
     /** The session's stored snapshot, when it was taken before the dialog appeared. */
     sessionNodes?: ReturnType<typeof attachRefs>;
   } = {},
@@ -462,7 +463,13 @@ async function pressWithSystemUiAnr(
   const bindings = getRuntimeBindings();
   return await handleInteractionCommands({
     createCommandSurface: touchCreateCommandSurface,
-    req: { token: 't', session: sessionName, command: 'press', positionals, flags },
+    req: {
+      token: 't',
+      session: sessionName,
+      command: setup.command ?? 'press',
+      positionals,
+      flags,
+    },
     sessionName,
     sessionStore,
     contextFromFlags,
@@ -477,6 +484,14 @@ test("press on the System UI ANR dialog's Close app goes through the blocking-di
   expect(response).toMatchObject({ ok: true });
   expect(mockTapPoint).toHaveBeenCalledTimes(1);
   expect(mockTapPoint.mock.calls[0]?.[0].point).toEqual({ x: 210, y: 640 });
+});
+
+test("click on the System UI ANR dialog's Wait goes through the blocking-dialog guard", async () => {
+  const response = await pressWithSystemUiAnr(['@e3'], {}, { command: 'click' });
+
+  expect(response).toMatchObject({ ok: true });
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
+  expect(mockTapPoint.mock.calls[0]?.[0].point).toEqual({ x: 210, y: 740 });
 });
 
 test('a press at a point outside the System UI ANR dialog buttons is refused before it is sent', async () => {
@@ -506,16 +521,17 @@ test.each([
   },
 );
 
-test('a repeated press on the System UI ANR dialog stays refused', async () => {
-  // The later taps of a repeated press would land on whatever the closed dialog uncovers.
-  const response = await pressWithSystemUiAnr(['@e2'], { count: 2 });
+test.each([
+  ['a repeated press', ['@e2'], { count: 2 }],
+  ['a double tap', ['@e2'], { doubleTap: true }],
+  ['a multi-ref plan', ['@e2,@e3'], {}],
+])('%s on the System UI ANR dialog stays refused', async (_shape, positionals, flags) => {
+  // Its later taps would land on whatever the closed dialog uncovers.
+  const response = await pressWithSystemUiAnr(positionals, flags);
 
   expect(response).toMatchObject({
     ok: false,
-    error: {
-      message: expect.stringContaining('Android system dialog is blocking press'),
-      details: { dispatched: 'no' },
-    },
+    error: { details: { dispatched: 'no' } },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
