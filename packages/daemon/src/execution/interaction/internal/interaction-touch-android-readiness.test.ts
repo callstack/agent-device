@@ -486,6 +486,19 @@ test('a press at a point outside the System UI ANR dialog buttons is refused bef
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
+test.each([
+  ['the right edge', ['320', '640']],
+  ['the bottom edge', ['210', '680']],
+])(
+  "a press on %s of a System UI ANR dialog button is refused: Android's hit test excludes it",
+  async (_edge, positionals) => {
+    const response = await pressWithSystemUiAnr(positionals);
+
+    expect(response).toMatchObject({ ok: false, error: { details: { dispatched: 'no' } } });
+    expect(mockTapPoint).not.toHaveBeenCalled();
+  },
+);
+
 test('a repeated press on the System UI ANR dialog stays refused', async () => {
   // The later taps of a repeated press would land on whatever the closed dialog uncovers.
   const response = await pressWithSystemUiAnr(['@e2'], { count: 2 });

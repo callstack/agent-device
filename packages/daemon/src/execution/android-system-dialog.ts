@@ -10,7 +10,6 @@ import {
   normalizeError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { containsPoint } from '@agent-device/kernel/rect';
 import {
   centerOfRect,
   type Point,
@@ -281,12 +280,22 @@ function isSameAndroidBlockingDialogFocus(
   return a.package === b.package && a.focusedWindow === b.focusedWindow;
 }
 
-/** True when the tap point falls on one of the dialog's own buttons. */
+/**
+ * True when the tap point falls on one of the dialog's own buttons. Android's view hit test excludes
+ * the right and bottom edges, so a point on them reaches the dialog around the button, not the
+ * button.
+ */
 export function isAndroidBlockingDialogButtonPoint(
   admission: AndroidBlockingDialogButtonAdmission,
   point: Point,
 ): boolean {
-  return admission.buttons.some((rect) => containsPoint(rect, point.x, point.y));
+  return admission.buttons.some(
+    (rect) =>
+      point.x >= rect.x &&
+      point.x < rect.x + rect.width &&
+      point.y >= rect.y &&
+      point.y < rect.y + rect.height,
+  );
 }
 
 /**
