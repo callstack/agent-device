@@ -380,14 +380,18 @@ async function readAndroidBlockingSystemDialogReadiness(params: {
   return {
     status: 'foreign-dialog',
     focus,
-    refusal: () =>
-      androidBlockingDialogError({
+    refusal: () => {
+      const error = androidBlockingDialogError({
         session,
         command,
         focus,
         message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
         hint: ANDROID_FOREIGN_DIALOG_HINT,
-      }),
+      });
+      // ADR 0039: before the command, the refusal sends nothing. After it, the command's own
+      // dispatch ledger discloses what was sent.
+      return params.phase === 'before-command' ? discloseDispatch(error, 'no') : error;
+    },
   };
 }
 

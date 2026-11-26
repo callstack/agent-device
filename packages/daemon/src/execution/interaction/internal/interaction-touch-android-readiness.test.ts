@@ -505,7 +505,10 @@ test('a repeated press on the System UI ANR dialog stays refused', async () => {
 
   expect(response).toMatchObject({
     ok: false,
-    error: { message: expect.stringContaining('Android system dialog is blocking press') },
+    error: {
+      message: expect.stringContaining('Android system dialog is blocking press'),
+      details: { dispatched: 'no' },
+    },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });

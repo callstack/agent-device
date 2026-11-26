@@ -1,5 +1,4 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { discloseDispatch } from '@agent-device/kernel/errors';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
   ensureAndroidBlockingSystemDialogReady,
@@ -55,7 +54,7 @@ export function createAndroidDialogTapGate(): AndroidDialogTapGate {
     admitTap: async (point) => {
       if (!admission) return;
       if (admittedTaps > 0 || !point || !isAndroidBlockingDialogButtonPoint(admission, point)) {
-        throw discloseDispatch(admission.refusal(), 'no');
+        throw admission.refusal();
       }
       await admission.confirmFocus();
       admittedTaps += 1;

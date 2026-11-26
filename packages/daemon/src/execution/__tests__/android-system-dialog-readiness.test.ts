@@ -337,6 +337,7 @@ test('a tap stays refused when the foreign dialog shows no framework buttons', a
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: expect.stringContaining('Android system dialog is blocking press'),
+    details: { dispatched: 'no' },
   });
 });
 
