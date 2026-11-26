@@ -436,6 +436,23 @@ test('a tap stays refused when a surface covers the foreign dialog', async () =>
   ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { dispatched: 'no' } });
 });
 
+test('a non-press command refused by a foreign dialog gets the recovery hint', async () => {
+  // Only a press can reach the dialog's buttons, so other commands are not sent to them.
+  const session = makeAndroidSession('readiness-system-swipe');
+  const { observation } = makeObservation(systemDialogFocus);
+
+  await expect(
+    ensureAndroidBlockingSystemDialogReady({
+      session,
+      command: 'swipe',
+      phase: 'before-command',
+      observation,
+    }),
+  ).rejects.toMatchObject({
+    details: { dispatched: 'no', hint: expect.stringContaining('reboot the emulator') },
+  });
+});
+
 test('the session app ANR is still recovered before a tap, not admitted', async () => {
   const session = makeAndroidSession('readiness-anr-tap', { appBundleId: APP });
   const { observation, calls } = makeObservation(anrFocus);
