@@ -18,6 +18,8 @@ import { snapshotBackendForPlatform } from './runtime-helpers.ts';
 import { releaseOnFailure } from './webdriver-utils.ts';
 import type {
   CloudWebDriverBaseSession,
+  CloudWebDriverCreatedSession,
+  CloudWebDriverListArtifacts,
   CloudWebDriverPreparedSession,
   CloudWebDriverRuntimeOptions,
 } from './runtime.ts';
@@ -128,7 +130,18 @@ const DEFAULT_PROVIDER_CALLBACK_TIMEOUT_MS = 30_000;
 export class WebDriverSessionManager {
   private readonly entriesByLeaseId = new Map<string, WebDriverLeaseEntry>();
   private readonly ownedDeviceIds = new Set<string>();
-  private readonly releasedProviderSessionIdsByLeaseId = new Map<string, string>();
+  /**
+   * The session each released lease ended, with the lookup its preparation bound, so an artifact
+   * query after release asks the same provider endpoint the session ran against.
+   */
+  private readonly releasedSessionsByLeaseId = new Map<
+    string,
+    Readonly<{
+      providerSessionId: string;
+      webDriverSessionId: string;
+      listArtifacts?: CloudWebDriverListArtifacts;
+    }>
+  >();
   private readonly options: CloudWebDriverRuntimeOptions;
   /** Whether this manager has shut down; it can then hold nothing, so it must create nothing. */
   private shutDown = false;
@@ -232,11 +245,14 @@ export class WebDriverSessionManager {
   private async listReleasedCloudArtifacts(
     query: CloudArtifactsQuery,
   ): Promise<CloudArtifactsResult | undefined> {
-    const providerSessionId = this.releasedProviderSessionIdsByLeaseId.get(query.leaseId ?? '');
-    if (!providerSessionId || !this.options.listArtifacts) return undefined;
+    const released = this.releasedSessionsByLeaseId.get(query.leaseId ?? '');
+    const listArtifacts = released?.listArtifacts ?? this.options.listArtifacts;
+    if (!released || !listArtifacts) return undefined;
+    const { providerSessionId, webDriverSessionId } = released;
     if (query.providerSessionId && query.providerSessionId !== providerSessionId) return undefined;
-    return await this.options.listArtifacts({
+    return await listArtifacts({
       provider: this.options.provider,
+      webDriverSessionId,
       providerSessionId,
     });
   }
@@ -316,7 +332,29 @@ export class WebDriverSessionManager {
       requestPolicy: this.options.requestPolicy,
     });
     const session = await this.createSessionWithPreparedCleanup(client, prepared, lease, req);
-    const device = this.deviceForLease(lease, prepared, session.capabilities);
+    try {
+      return this.providerSessionFor(lease, client, prepared, session);
+    } catch (error) {
+      // The hub rented a session that no entry will ever hold, so no release or shutdown can end it.
+      await releaseOnFailure(error, () => client.deleteSession());
+      await releaseOnFailure(error, () =>
+        this.providerCallback(`${this.options.provider} cleanup for lease ${lease.leaseId}`, () =>
+          prepared.cleanup?.(),
+        ),
+      );
+      throw error;
+    }
+  }
+
+  /** The session record for a hub session that exists; anything thrown here must end that session. */
+  private providerSessionFor(
+    lease: DeviceLease,
+    client: WebDriverClient,
+    prepared: CloudWebDriverPreparedSession,
+    session: WebDriverSession,
+  ): WebDriverProviderSession {
+    const described = prepared.describeCreatedSession?.(session.capabilities) ?? {};
+    const device = this.deviceForLease(lease, prepared, session.capabilities, described);
     const capabilities = createCloudWebDriverCapabilities({
       provider: this.options.provider,
       platform: prepared.platform,
@@ -329,7 +367,10 @@ export class WebDriverSessionManager {
       prepared,
       capabilities,
       webDriverSessionId: session.sessionId,
-      providerSessionId: prepared.providerSessionId ?? session.sessionId,
+      providerSessionId:
+        nonEmpty(prepared.providerSessionId) ??
+        nonEmpty(described.providerSessionId) ??
+        session.sessionId,
       interactor: createWebDriverInteractor({
         client,
         backend: snapshotBackendForPlatform(prepared.platform),
@@ -400,7 +441,11 @@ export class WebDriverSessionManager {
     const session = entry.session ?? (await entry.creation.catch(() => undefined));
     entry.session = session;
     if (session === undefined) return { cleanup: 'none', session: undefined, warnings: [] };
-    this.releasedProviderSessionIdsByLeaseId.set(entry.lease.leaseId, session.providerSessionId);
+    this.releasedSessionsByLeaseId.set(entry.lease.leaseId, {
+      providerSessionId: session.providerSessionId,
+      webDriverSessionId: session.webDriverSessionId,
+      listArtifacts: session.prepared.listArtifacts,
+    });
     const warnings: CloudWebDriverReleaseWarning[] = [];
     let cleanupPayload: Record<string, unknown> | undefined;
     try {
@@ -568,7 +613,9 @@ export class WebDriverSessionManager {
     lease: DeviceLease,
     prepared: CloudWebDriverPreparedSession,
     capabilities: Record<string, unknown>,
+    described: CloudWebDriverCreatedSession,
   ): DeviceInfo {
+    const model = nonEmpty(described.model);
     return {
       ...deviceFieldsFromPublicPlatform(prepared.platform),
       ...(prepared.platform === 'ios' ? { appleOs: 'ios' as const } : {}),
@@ -579,6 +626,7 @@ export class WebDriverSessionManager {
       name: prepared.deviceName,
       kind: 'device',
       target: 'mobile',
+      ...(model ? { model } : {}),
       ...deviceDescriptionFromWebDriverCapabilities(capabilities),
       booted: true,
     };
@@ -828,4 +876,8 @@ function shutdownLeftSessionsRunning(
       hint: `${provider} did not stop these sessions and they keep billing. Stop the session ids above on ${provider}.`,
     },
   );
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+  return value?.trim() ? value : undefined;
 }
