@@ -22,6 +22,9 @@ const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
   'Wait for Android to recover, close the dialog, restart the app, or reboot the emulator, then retry.';
+/** `alert` is not stopped by this guard, and it presses the ANR dialog's buttons by their ids. */
+const ANDROID_FOREIGN_ANR_HINT =
+  'Run alert dismiss to close the app that is not responding, or alert accept to wait for it, then retry.';
 const ANDROID_BLOCKING_DIALOG_INSPECTION_WARNING =
   'Android blocking-dialog readiness could not be inspected; the command continued.';
 const ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT = 240;
@@ -236,7 +239,7 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
     command,
     focus,
     message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
-    hint: ANDROID_BLOCKING_DIALOG_HINT,
+    hint: ANDROID_FOREIGN_ANR_HINT,
   });
 }
 

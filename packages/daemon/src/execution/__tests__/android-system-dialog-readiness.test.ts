@@ -234,7 +234,12 @@ test('a system dialog that surfaces between two commands blocks the next command
       phase: 'before-command',
       observation,
     }),
-  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      hint: 'Run alert dismiss to close the app that is not responding, or alert accept to wait for it, then retry.',
+    },
+  });
 });
 
 test('an ANR the command itself provoked still fails that command', async () => {
