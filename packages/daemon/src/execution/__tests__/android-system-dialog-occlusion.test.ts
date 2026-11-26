@@ -80,9 +80,23 @@ test('recovery taps the reachable Close app, not a covered one that comes first'
     hittable: true,
     rect: { x: 40, y: 1800, width: 200, height: 80 },
   };
+  const visibleWait = {
+    index: 4,
+    type: 'Button',
+    label: 'Wait',
+    identifier: 'android:id/aerr_wait',
+    hittable: true,
+    rect: { x: 40, y: 1900, width: 200, height: 80 },
+  };
   vi.mocked(snapshotAndroid)
     .mockResolvedValueOnce(
-      makeAndroidSnapshotCapture([staleCloseApp, sheet, dialog, visibleCloseApp]) as never,
+      makeAndroidSnapshotCapture([
+        staleCloseApp,
+        sheet,
+        dialog,
+        visibleCloseApp,
+        visibleWait,
+      ]) as never,
     )
     .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
@@ -112,8 +126,21 @@ test('a fully covered dialog does not trigger recovery', async () => {
     hittable: true,
     rect: { x: 40, y: 300, width: 200, height: 80 },
   };
+  const staleWait = {
+    index: 2,
+    type: 'Button',
+    label: 'Wait',
+    identifier: 'android:id/aerr_wait',
+    hittable: true,
+    rect: { x: 40, y: 400, width: 200, height: 80 },
+  };
   vi.mocked(snapshotAndroid).mockResolvedValue(
-    makeAndroidSnapshotCapture([staleDialog, staleCloseApp, foregroundSheet(2)]) as never,
+    makeAndroidSnapshotCapture([
+      staleDialog,
+      staleCloseApp,
+      staleWait,
+      foregroundSheet(3),
+    ]) as never,
   );
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
@@ -189,6 +216,66 @@ test('collectively covered Close app is neither selected nor tapped', async () =
 
   const result = await recoverAndroidBlockingSystemDialog({
     session: recordingSession('anr-collectively-covered-button'),
+  });
+
+  expect(result.status).toBe('absent');
+  expect(tappedPoints()).toEqual([]);
+});
+
+test('an ANR dialog in another language is found and closed by its button ids', async () => {
+  vi.mocked(runAndroidAdb).mockReset();
+  vi.mocked(snapshotAndroid)
+    .mockResolvedValueOnce(
+      makeAndroidSnapshotCapture([
+        { index: 0, type: 'TextView', label: 'Demo reagiert nicht', rect: SCREEN },
+        {
+          index: 1,
+          type: 'Button',
+          label: 'App schließen',
+          identifier: 'android:id/aerr_close',
+          hittable: true,
+          rect: { x: 40, y: 1800, width: 200, height: 80 },
+        },
+        {
+          index: 2,
+          type: 'Button',
+          label: 'Warten',
+          identifier: 'android:id/aerr_wait',
+          hittable: true,
+          rect: { x: 40, y: 1900, width: 200, height: 80 },
+        },
+      ]) as never,
+    )
+    .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
+  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
+
+  const result = await recoverAndroidBlockingSystemDialog({
+    session: recordingSession('anr-localized'),
+  });
+
+  expect(result.status).toBe('recovered');
+  expect(tappedPoints()).toEqual([{ x: 140, y: 1840 }]);
+});
+
+test('a crash dialog, which has Close app but no Wait, is not treated as an ANR', async () => {
+  vi.mocked(runAndroidAdb).mockReset();
+  vi.mocked(snapshotAndroid).mockResolvedValue(
+    makeAndroidSnapshotCapture([
+      { index: 0, type: 'TextView', label: 'Demo keeps stopping', rect: SCREEN },
+      {
+        index: 1,
+        type: 'Button',
+        label: 'Close app',
+        identifier: 'android:id/aerr_close',
+        hittable: true,
+        rect: { x: 40, y: 1800, width: 200, height: 80 },
+      },
+    ]) as never,
+  );
+  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
+
+  const result = await recoverAndroidBlockingSystemDialog({
+    session: recordingSession('crash-dialog'),
   });
 
   expect(result.status).toBe('absent');

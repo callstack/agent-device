@@ -74,6 +74,13 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
             identifier: 'android:id/aerr_close',
             rect: { x: 100, y: 600, width: 220, height: 80 },
           },
+          {
+            index: 2,
+            type: 'android.widget.Button',
+            label: 'Wait',
+            identifier: 'android:id/aerr_wait',
+            rect: { x: 100, y: 700, width: 220, height: 80 },
+          },
         ]);
       }
       return capture([]);

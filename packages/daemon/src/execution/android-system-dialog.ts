@@ -12,9 +12,12 @@ import { expireRefFrame } from '../core/ref-frame.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
-const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;
-/** The framework id of the ANR dialog's Close app button. It does not depend on the device language. */
+/**
+ * The framework ids of the ANR dialog's Close app and Wait buttons. They do not depend on the
+ * device language, and only the ANR dialog has Wait: the crash dialog also has Close app.
+ */
 const ANDROID_ANR_CLOSE_BUTTON_ID = 'android:id/aerr_close';
+const ANDROID_ANR_WAIT_BUTTON_ID = 'android:id/aerr_wait';
 const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
@@ -445,31 +448,6 @@ function isProviderOwnedSession(session: SessionState): boolean {
   return Boolean(session.lease?.leaseProvider) || isActiveProviderDevice(session.device);
 }
 
-function readNodeText(node: {
-  label?: string;
-  value?: string | number | boolean | null;
-  identifier?: string;
-}): string {
-  return readNodeTextParts(node).join(' ').trim();
-}
-
-function readNodeTextParts(node: {
-  label?: string;
-  value?: string | number | boolean | null;
-  identifier?: string;
-}): string[] {
-  const parts = [node.label, node.identifier];
-  if (typeof node.value === 'string' && node.value.trim().length > 0) {
-    parts.push(node.value);
-  }
-  return parts
-    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
-    .map((part) => part.trim());
-}
-
 function containsBlockingDialog(nodes: SnapshotNode[]): boolean {
-  return nodes.filter(isTouchableDialogNode).some((node) => {
-    const text = readNodeText(node);
-    return text.length > 0 && ANDROID_BLOCKING_MODAL_PATTERN.test(text);
-  });
+  return findTouchableDialogButton(nodes, ANDROID_ANR_WAIT_BUTTON_ID) !== undefined;
 }

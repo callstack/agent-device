@@ -34,10 +34,18 @@ test('android blocking-dialog recovery expires the ref frame before its recovery
     hittable: true,
     rect: { x: 20, y: 200, width: 120, height: 44 },
   };
+  const wait = {
+    index: 2,
+    type: 'Button',
+    label: 'Wait',
+    identifier: 'android:id/aerr_wait',
+    hittable: true,
+    rect: { x: 20, y: 260, width: 120, height: 44 },
+  };
   // First read: the blocking dialog is present (drives recovery). Post-tap poll:
   // the dialog is gone, so recovery completes without sleeping through retries.
   vi.mocked(snapshotAndroid)
-    .mockResolvedValueOnce(makeAndroidSnapshotCapture([dialog, closeApp]) as never)
+    .mockResolvedValueOnce(makeAndroidSnapshotCapture([dialog, closeApp, wait]) as never)
     .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
