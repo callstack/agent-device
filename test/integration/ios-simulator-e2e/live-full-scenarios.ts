@@ -101,10 +101,11 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   await runStep(context, 'restore light appearance', ['settings', 'appearance', 'light']);
   await assertElementText(context, 'id="automation-appearance"', 'light');
   await assertTimeZoneRoundTrip(context);
+  await assertLocaleRoundTrip(context);
   verifyCommand(
     context,
     C.settings,
-    'permission reset/deny/grant, appearance dark/light, and time zone set/reset all produce durable evidence',
+    'permission reset/deny/grant, appearance dark/light, time zone set/reset, and locale set/reset all produce durable evidence',
   );
 
   // XCUIDevice models physical device orientation, which is intentionally not
@@ -357,4 +358,13 @@ async function assertTimeZoneRoundTrip(context: LiveContext): Promise<void> {
     'Asia/Kolkata',
     JSON.stringify(zoneReset.json),
   );
+}
+
+/** Each write reports what it set, and reset reports what it cleared. */
+async function assertLocaleRoundTrip(context: LiveContext): Promise<void> {
+  const locale = await runStep(context, 'set en_IN locale', ['settings', 'locale', 'en_IN']);
+  assert.equal(locale.json?.data?.locale, 'en-IN', JSON.stringify(locale.json));
+  const localeReset = await runStep(context, 'reset locale', ['settings', 'locale', 'reset']);
+  assert.equal(localeReset.json?.data?.locale, null, JSON.stringify(localeReset.json));
+  assert.equal(localeReset.json?.data?.previousLocale, 'en-IN', JSON.stringify(localeReset.json));
 }
