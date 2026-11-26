@@ -416,7 +416,20 @@ function systemUiAnrScreen() {
   ]);
 }
 
-async function pressWithSystemUiAnr(positionals: string[], flags: Record<string, unknown> = {}) {
+type BlockingDialogObservation = typeof SYSTEM_UI_ANR | { status: 'clear' };
+
+async function pressWithSystemUiAnr(
+  positionals: string[],
+  flags: Record<string, unknown> = {},
+  /**
+   * The focus read number `read` (from 0) returns, before and after the tap. By default the dialog
+   * holds the focus until a tap reaches the device.
+   */
+  focus: {
+    beforeTap?: (read: number) => BlockingDialogObservation;
+    afterTap?: (read: number) => BlockingDialogObservation;
+  } = {},
+) {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-system-ui-anr';
   const session = makeAndroidSession(sessionName);
@@ -425,15 +438,20 @@ async function pressWithSystemUiAnr(positionals: string[], flags: Record<string,
   session.snapshot = { nodes, createdAt: Date.now(), backend: 'android' };
   sessionStore.publish(sessionName, session);
 
-  // The dialog holds the focus until a tap reaches the device.
+  const beforeTap = focus.beforeTap ?? (() => SYSTEM_UI_ANR);
+  const afterTap = focus.afterTap ?? (() => ({ status: 'clear' }) as const);
   let tapped = false;
+  let reads = 0;
   mockTapPoint.mockImplementation(async (input) => {
     tapped = true;
+    reads = 0;
     return { x: input.point.x, y: input.point.y };
   });
-  mockGetAndroidBlockingDialogObservation.mockImplementation(async () =>
-    tapped ? { status: 'clear' } : SYSTEM_UI_ANR,
-  );
+  mockGetAndroidBlockingDialogObservation.mockImplementation(async () => {
+    const read = reads;
+    reads += 1;
+    return tapped ? afterTap(read) : beforeTap(read);
+  });
   const bindings = getRuntimeBindings();
   return await handleInteractionCommands({
     createCommandSurface: touchCreateCommandSurface,
@@ -475,6 +493,28 @@ test('a repeated press on the System UI ANR dialog stays refused', async () => {
   expect(response).toMatchObject({
     ok: false,
     error: { message: expect.stringContaining('Android system dialog is blocking press') },
+  });
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+test('a press on a System UI ANR dialog button is refused when the dialog loses focus before the send', async () => {
+  // Readiness reads the dialog; by the read just before the send, Android has removed it, so the
+  // button points now belong to the screen underneath.
+  const response = await pressWithSystemUiAnr(
+    ['@e2'],
+    {},
+    {
+      beforeTap: (read) => (read === 0 ? SYSTEM_UI_ANR : { status: 'clear' }),
+    },
+  );
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining('Android system dialog lost focus before press was sent'),
+      details: { dispatched: 'no' },
+    },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });

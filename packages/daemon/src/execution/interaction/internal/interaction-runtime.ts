@@ -296,10 +296,10 @@ function touchBackendMembers(
   };
   return {
     tap: tapPoint
-      ? (_context, point, options) => {
-          admitTap?.(point);
+      ? async (_context, point, options) => {
+          await admitTap?.(point);
           const evidence = textInputEvidence?.(point, options?.pointObservation);
-          return run(() =>
+          return await run(() =>
             tapPoint(point, {
               ...flags,
               ...(evidence ? { coordinateTapTextInputEvidence: evidence } : {}),
@@ -308,9 +308,9 @@ function touchBackendMembers(
         }
       : undefined,
     tapTarget: tapRef
-      ? (_context, target) => {
-          admitTap?.(undefined);
-          return run(() => tapRef(target.ref));
+      ? async (_context, target) => {
+          await admitTap?.(undefined);
+          return await run(() => tapRef(target.ref));
         }
       : undefined,
     fill: fillPoint

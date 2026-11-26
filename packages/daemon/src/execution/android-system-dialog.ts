@@ -4,7 +4,12 @@ import type {
 } from '@agent-device/contracts/android-observation';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
-import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  discloseDispatch,
+  normalizeError,
+  type NormalizedError,
+} from '@agent-device/kernel/errors';
 import { containsPoint } from '@agent-device/kernel/rect';
 import {
   centerOfRect,
@@ -58,6 +63,12 @@ export type AndroidBlockingDialogButtonAdmission = Readonly<{
   focus: AndroidBlockingDialogFocus;
   buttons: readonly Rect[];
   refusal: () => AppError;
+  /**
+   * Reads the focus again immediately before the tap is sent. Throws, with nothing sent, when the
+   * dialog no longer has focus: the buttons were read from an earlier frame, so a tap at their
+   * points could reach what the dialog uncovered.
+   */
+  confirmFocus: () => Promise<void>;
 }>;
 
 export type AndroidBlockingDialogTapReadinessResult =
@@ -235,10 +246,39 @@ export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
     throw readiness.refusal();
   }
   if (buttons.length === 0) throw readiness.refusal();
+  const { session, command } = params;
+  const { focus, refusal } = readiness;
   return {
     status: 'dialog-buttons',
-    admission: { focus: readiness.focus, buttons, refusal: readiness.refusal },
+    admission: {
+      focus,
+      buttons,
+      refusal,
+      confirmFocus: async () => {
+        const current = await observation.readBlockingDialog(session.device);
+        if (current.status !== 'dialog') {
+          throw discloseDispatch(
+            androidBlockingDialogError({
+              session,
+              command,
+              focus,
+              message: `Android system dialog lost focus before ${command} was sent: ${formatAndroidBlockingDialogFocus(focus)}.`,
+              hint: 'Nothing was sent. Take a new snapshot, then retry the command.',
+            }),
+            'no',
+          );
+        }
+        if (!isSameAndroidBlockingDialogFocus(current.focus, focus)) throw refusal();
+      },
+    },
   };
+}
+
+function isSameAndroidBlockingDialogFocus(
+  a: AndroidBlockingDialogFocus,
+  b: AndroidBlockingDialogFocus,
+): boolean {
+  return a.package === b.package && a.focusedWindow === b.focusedWindow;
 }
 
 /** True when the tap point falls on one of the dialog's own buttons. */

@@ -137,7 +137,7 @@ export type InteractionRuntimeInput = {
    * Runs immediately before a tap is sent, before the ref frame expires: a throw refuses the tap
    * with nothing dispatched. `undefined` is a native-ref tap, which has no point to check.
    */
-  admitTap?: (point: Point | undefined) => void;
+  admitTap?: (point: Point | undefined) => Promise<void>;
   gestures?: BoundGestureExecutor;
   /**
    * The capture every observation on this request reads the screen through: the action binding's

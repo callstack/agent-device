@@ -37,12 +37,12 @@ export type ReadinessOutcome<TResult> =
 /**
  * The per-request gate of a single tap while a foreign app-error dialog has focus. Readiness opens
  * it with the dialog's buttons; the backend calls `admitTap` immediately before it sends the tap
- * (and before the ref frame expires). Only one tap, on one of the dialog's buttons, passes. Any
- * other tap is refused with the guard's own error and `dispatched: no`.
+ * (and before the ref frame expires). Only one tap, on one of the dialog's buttons, passes, and only
+ * while the dialog still has focus. Any other tap is refused with `dispatched: no`.
  */
 export type AndroidDialogTapGate = Readonly<{
   open(admission: AndroidBlockingDialogButtonAdmission): void;
-  admitTap(point: Point | undefined): void;
+  admitTap(point: Point | undefined): Promise<void>;
 }>;
 
 export function createAndroidDialogTapGate(): AndroidDialogTapGate {
@@ -52,11 +52,12 @@ export function createAndroidDialogTapGate(): AndroidDialogTapGate {
     open: (next) => {
       admission = next;
     },
-    admitTap: (point) => {
+    admitTap: async (point) => {
       if (!admission) return;
       if (admittedTaps > 0 || !point || !isAndroidBlockingDialogButtonPoint(admission, point)) {
         throw discloseDispatch(admission.refusal(), 'no');
       }
+      await admission.confirmFocus();
       admittedTaps += 1;
     },
   };
