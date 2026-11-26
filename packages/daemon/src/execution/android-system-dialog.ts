@@ -19,6 +19,7 @@ import {
 
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import { expireRefFrame } from '../core/ref-frame.ts';
+import { thrownBeforeDispatch } from './request-dispatch-disclosure.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
@@ -254,20 +255,29 @@ export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
       buttons,
       refusal,
       confirmFocus: async () => {
-        const current = await observation.readBlockingDialog(session.device);
-        if (current.status !== 'dialog') {
-          throw discloseDispatch(
-            androidBlockingDialogError({
-              session,
-              command,
-              focus,
-              message: `Android system dialog lost focus before ${command} was sent: ${formatAndroidBlockingDialogFocus(focus)}.`,
-              hint: 'Nothing was sent. Take a new snapshot, then retry the command.',
-            }),
-            'no',
-          );
+        const current = await observation
+          .readBlockingDialog(session.device)
+          .catch((error: unknown) => {
+            throw thrownBeforeDispatch(error);
+          });
+        if (current.status === 'dialog') {
+          if (!isSameAndroidBlockingDialogFocus(current.focus, focus)) throw refusal();
+          return;
         }
-        if (!isSameAndroidBlockingDialogFocus(current.focus, focus)) throw refusal();
+        const dialog = formatAndroidBlockingDialogFocus(focus);
+        throw discloseDispatch(
+          androidBlockingDialogError({
+            session,
+            command,
+            focus,
+            message:
+              current.status === 'unknown'
+                ? `Android focus could not be read to confirm that the system dialog still has focus before ${command} was sent: ${dialog}.`
+                : `Android system dialog lost focus before ${command} was sent: ${dialog}.`,
+            hint: 'Nothing was sent. Take a new snapshot, then retry the command.',
+          }),
+          'no',
+        );
       },
     },
   };

@@ -1,5 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import {
@@ -416,7 +417,7 @@ function systemUiAnrScreen() {
   ]);
 }
 
-type BlockingDialogObservation = typeof SYSTEM_UI_ANR | { status: 'clear' };
+type BlockingDialogObservation = Awaited<ReturnType<typeof getAndroidBlockingDialogObservation>>;
 
 async function pressWithSystemUiAnr(
   positionals: string[],
@@ -563,6 +564,64 @@ test('a press on a System UI ANR dialog button is refused when the dialog loses 
       message: expect.stringContaining('Android system dialog lost focus before press was sent'),
       details: { dispatched: 'no' },
     },
+  });
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+test.each([
+  [
+    'the focus read answers nothing',
+    { status: 'unknown' } as const,
+    'Android focus could not be read to confirm',
+  ],
+  [
+    'another dialog has the focus',
+    {
+      status: 'dialog',
+      focus: {
+        package: 'com.example.other',
+        focusedWindow: 'Application Not Responding: com.example.other',
+        raw: 'mCurrentFocus=Window{aabbcc u0 Application Not Responding: com.example.other}',
+      },
+    } as const,
+    'Android system dialog is blocking press',
+  ],
+])(
+  'a press on a System UI ANR dialog button is refused when, before the send, %s',
+  async (_case, beforeSend, message) => {
+    const response = await pressWithSystemUiAnr(
+      ['@e2'],
+      {},
+      {
+        beforeTap: (read) => (read === 0 ? SYSTEM_UI_ANR : beforeSend),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining(message), details: { dispatched: 'no' } },
+    });
+    expect(mockTapPoint).not.toHaveBeenCalled();
+  },
+);
+
+test('a press on a System UI ANR dialog button is refused with nothing sent when the focus read fails', async () => {
+  let reads = 0;
+  const response = await pressWithSystemUiAnr(
+    ['@e2'],
+    {},
+    {
+      beforeTap: () => {
+        reads += 1;
+        if (reads > 1) throw new AppError('COMMAND_FAILED', 'adb: device offline');
+        return SYSTEM_UI_ANR;
+      },
+    },
+  );
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { message: 'adb: device offline', details: { dispatched: 'no' } },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
