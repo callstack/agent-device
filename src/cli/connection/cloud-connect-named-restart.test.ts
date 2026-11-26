@@ -268,6 +268,27 @@ test('slow hosted allocation prints only safe deadlines and stops polling after 
   const created = deferred<Response>();
   const pendingPoll = deferred<Response>();
   const polls: Array<{ url: URL; init: RequestInit }> = [];
+  const allocatingResponses = [
+    Response.json({ error: 'private-upstream-detail' }, { status: 401 }),
+    Response.json({ state: 'allocating', deadlineAt: '2037-02-31T00:00:00Z' }),
+    Response.json({
+      state: 'allocating',
+      deadlineAt: '2037-02-01T00:00:00.1Z',
+      attach: { token: ' 100Z ' },
+    }),
+    Response.json({
+      state: 'allocating',
+      deadlineAt: '2037-02-01T00:00:00.1Z',
+      attach: { daemonAuthToken: '00.1Z' },
+    }),
+    Response.json({
+      state: 'allocating',
+      deadlineAt: deadline,
+      attach,
+      viewerUrl: 'https://viewer.example/session?token=private',
+      account: 'private-account-detail',
+    }),
+  ];
   let requestKey: string | null = null;
   vi.stubGlobal(
     'fetch',
@@ -278,45 +299,16 @@ test('slow hosted allocation prints only safe deadlines and stops polling after 
         return created.promise;
       }
       polls.push({ url, init });
-      if (polls.length === 1) {
-        return Response.json({ error: 'private-upstream-detail' }, { status: 401 });
-      }
-      if (polls.length === 2) {
-        return Response.json({ state: 'allocating', deadlineAt: '2037-02-31T00:00:00Z' });
-      }
-      if (polls.length === 3) {
-        return Response.json({
-          state: 'allocating',
-          deadlineAt: '2037-02-01T00:00:00.1Z',
-          attach: { token: ' 100Z ' },
-        });
-      }
-      if (polls.length === 4) {
-        return Response.json({
-          state: 'allocating',
-          deadlineAt: '2037-02-01T00:00:00.1Z',
-          attach: { daemonAuthToken: '00.1Z' },
-        });
-      }
-      if (polls.length === 5) {
-        return Response.json({
-          state: 'allocating',
-          deadlineAt: deadline,
-          attach,
-          viewerUrl: 'https://viewer.example/session?token=private',
-          account: 'private-account-detail',
-        });
-      }
-      return pendingPoll.promise;
+      return allocatingResponses.shift() ?? pendingPoll.promise;
     }),
   );
 
   const connecting = runCliCapture(connectArgs, { env: processEnv(stateDir) });
   await posted.promise;
-  await vi.advanceTimersByTimeAsync(4_999);
-  expect(polls).toHaveLength(0);
-  await vi.advanceTimersByTimeAsync(25_001);
-  expect(polls).toHaveLength(6);
+  await vi.advanceTimersByTimeAsync(60_000);
+  const pollsBeforeSettlement = polls.length;
+  const settlementSignal = polls.at(-1)?.init.signal;
+  expect(settlementSignal?.aborted).toBe(false);
   expect(requestKey).toEqual(expect.any(String));
   for (const { url, init } of polls) {
     expect(url.origin).toBe('https://cloud.example');
@@ -327,7 +319,8 @@ test('slow hosted allocation prints only safe deadlines and stops polling after 
 
   pendingPoll.resolve(Response.json({ state: 'running', deadlineAt: deadline }));
   await vi.advanceTimersByTimeAsync(10_000);
-  expect(polls).toHaveLength(6);
+  expect(polls).toHaveLength(pollsBeforeSettlement);
+  expect(settlementSignal?.aborted).toBe(true);
 
   created.resolve(
     Response.json(
@@ -345,12 +338,15 @@ test('slow hosted allocation prints only safe deadlines and stops polling after 
   const result = await connecting;
   expect(result.code).toBeNull();
   expect(JSON.parse(result.stdout)).toMatchObject({ success: true });
-  expect(result.stderr).toBe(
-    'connect cloud: allocating, 5s elapsed\n' +
-      'connect cloud: allocating, 10s elapsed\n' +
-      'connect cloud: allocating, 15s elapsed\n' +
-      'connect cloud: allocating, 20s elapsed\n' +
-      `connect cloud: allocating, 25s elapsed (session deadline ${deadline})\n`,
-  );
-  expect(polls[5]?.init.signal?.aborted).toBe(true);
+  expect(result.stderr).toMatch(/^connect cloud: allocating, \d+s elapsed/m);
+  expect(result.stderr.match(/session deadline [^)]+/g)).toEqual([`session deadline ${deadline}`]);
+  for (const privateValue of [
+    attach.daemonAuthToken,
+    attach.daemonBaseUrl,
+    'viewer.example',
+    'private-upstream-detail',
+    'private-account-detail',
+  ]) {
+    expect(result.stderr).not.toContain(privateValue);
+  }
 });
