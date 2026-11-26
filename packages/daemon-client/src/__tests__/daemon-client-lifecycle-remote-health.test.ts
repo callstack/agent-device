@@ -9,6 +9,7 @@ import { test } from 'vitest';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
@@ -152,6 +153,7 @@ test('a remote press whose health probe answers 4xx is sent and is not the unava
 async function slowHealthyRemote(delayMs: number): Promise<{
   handler: http.Server;
   info: { baseUrl: string; token: string; pid: number };
+  stateDir: string;
   probes: () => number;
 }> {
   let probes = 0;
@@ -165,7 +167,8 @@ async function slowHealthyRemote(delayMs: number): Promise<{
   });
   const port = await listenOnLoopback(handler);
   const info = { baseUrl: `http://127.0.0.1:${port}`, token: `probe-${port}`, pid: 0 };
-  return { handler, info, probes: () => probes };
+  const stateDir = mkdtempForTestSync('agent-device-remote-health-');
+  return { handler, info, stateDir, probes: () => probes };
 }
 
 // Each caller probes under its own bound; only a settled, usable answer is shared through the cache,
@@ -174,15 +177,18 @@ test('a health caller probes on its own bound, and a settled answer is cached', 
   if (await skipWhenLoopbackUnavailable(t)) return;
   const remote = await slowHealthyRemote(300);
   try {
-    const unbounded = cachedRemoteDaemonHealth(remote.info);
-    const bounded = await cachedRemoteDaemonHealth(remote.info, 50);
+    const unbounded = cachedRemoteDaemonHealth(remote.info, remote.stateDir);
+    const bounded = await cachedRemoteDaemonHealth(remote.info, remote.stateDir, 50);
 
     assert.equal(bounded.reachable, false);
     assert.equal(bounded.timedOut, true);
     assert.equal((await unbounded).reachable, true);
     assert.equal(remote.probes(), 2, 'each caller sent its own probe');
     // The settled answer is cached, so a later bounded caller reads it without probing.
-    assert.equal((await cachedRemoteDaemonHealth(remote.info, 50)).reachable, true);
+    assert.equal(
+      (await cachedRemoteDaemonHealth(remote.info, remote.stateDir, 50)).reachable,
+      true,
+    );
     assert.equal(remote.probes(), 2);
   } finally {
     await closeLoopbackServer(remote.handler);
@@ -194,9 +200,13 @@ test('an aborted or budgetless health caller sends no probe', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const remote = await slowHealthyRemote(0);
   try {
-    assert.equal((await cachedRemoteDaemonHealth(remote.info, 0)).reachable, false);
     assert.equal(
-      (await cachedRemoteDaemonHealth(remote.info, undefined, AbortSignal.abort())).reachable,
+      (await cachedRemoteDaemonHealth(remote.info, remote.stateDir, 0)).reachable,
+      false,
+    );
+    assert.equal(
+      (await cachedRemoteDaemonHealth(remote.info, remote.stateDir, undefined, AbortSignal.abort()))
+        .reachable,
       false,
     );
     assert.equal(remote.probes(), 0);

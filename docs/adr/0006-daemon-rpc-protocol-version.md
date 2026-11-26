@@ -9,7 +9,9 @@ Accepted
 - Before remote JSON-RPC requests, compare the daemon's `rpcProtocolVersion` from `/health`.
 - Package `version` is diagnostic only and must not be used as a compatibility gate.
 - Allow a missing `rpcProtocolVersion` unless a later security or protocol decision explicitly retires legacy compatibility.
-- A persistent client may cache a successful probe if `/health` advertises an instance ID for the daemon endpoint and, for a proxy, for its upstream daemon.
+- A client may cache a successful probe if `/health` advertises an instance ID for the daemon endpoint and, for a proxy, for its upstream daemon.
+- The cache may outlive the client process in the state directory. Name the entry by a digest of the client version, base URL, and token. Do not write the token or the URL.
+- If a cached RPC fails before it leaves the client, probe `/health` as on first contact. Then send the RPC once more.
 - Send those instance IDs as conditional headers on every cached RPC. Peers without complete instance IDs retain per-command probes.
 - After a stale-instance refusal, clear the cache and probe `/health` again. Retry the refused RPC once, and only if the new peer's protocol is compatible.
 - A peer that advertises an instance ID must continue to honor the conditional RPC headers in future versions.
@@ -39,7 +41,11 @@ Package `version` is diagnostic only and must not be used as a compatibility gat
 A missing `rpcProtocolVersion` is treated as a legacy remote daemon.
 A legacy remote daemon is allowed unless a later security or protocol decision explicitly retires legacy compatibility.
 
-A persistent client may cache a successful probe if `/health` advertises an instance ID for both the daemon endpoint and, if proxied, its upstream daemon.
+A client may cache a successful probe if `/health` advertises an instance ID for both the daemon endpoint and, if proxied, its upstream daemon.
+The CLI starts a new process for each command, so the cache also persists in the state directory.
+Without it, each remote command pays one extra network round trip for `/health`.
+The persisted entry is named by a digest of the client version, base URL, and token, and holds neither the token nor the URL.
+A different token, URL, or client version reads as a miss, so a client upgrade always probes again.
 The client sends those IDs as conditional headers on every cached RPC.
 Before dispatch, a daemon refuses a stale instance with a typed HTTP 409 response.
 Before it forwards a request, a proxy refuses its own stale instance.
@@ -47,6 +53,9 @@ The proxy passes the expected upstream instance to the daemon, which makes the s
 On a mismatch, the client clears the cache and probes `/health` again.
 The client then retries the refused RPC once, and only if the new peer's protocol is compatible.
 Peers without complete instance IDs retain per-command probes.
+A cached RPC that fails before it leaves the client proves that nothing was dispatched.
+The client then clears the cache and probes `/health` as on first contact, with the same recovery budget and typed refusal, and sends the RPC once more.
+A cached RPC that fails after it was sent is not resent. The client clears the cache, so the next command probes `/health` first.
 A peer that advertises an instance ID must continue to honor the conditional RPC headers in future versions.
 The reason is that older clients may hold a cached identity across a restart.
 Such clients must receive a pre-dispatch refusal before they retry a mutating command.
@@ -76,6 +85,8 @@ This preference does not apply if the change also affects the shared transport c
   It also makes proxy use brittle across frequent releases.
 - **Do not check compatibility.** This maximizes compatibility.
   However, it fails later, after the client has sent an RPC payload that a remote daemon may parse incorrectly.
+- **Send `/rpc` without a probe on first contact.** This saves the round trip without a cache.
+  However, the client then cannot refuse an incompatible protocol before it sends the payload.
 - **Negotiate full schemas.** This is more precise, but it is too much machinery for the current JSON-RPC boundary.
 
 ## Consequences

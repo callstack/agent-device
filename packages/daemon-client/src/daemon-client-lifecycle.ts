@@ -31,7 +31,11 @@ import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-co
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
 import { isRemoteDaemon, observedDaemonIdentityOf } from './daemon-client-metadata.ts';
-import { cachedRemoteDaemonHealth } from './daemon-client-transport.ts';
+import { applyRemoteDaemonHealth } from './daemon-client-health-record.ts';
+import {
+  cachedRemoteDaemonHealth,
+  readCachedRemoteDaemonHealth,
+} from './daemon-client-transport.ts';
 import {
   assertDaemonPolicyMatches,
   readReusableLocalDaemon,
@@ -273,10 +277,31 @@ async function ensureRemoteDaemon(
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
+  const stateDir = settings.paths.baseDir;
+  const cached = await readCachedRemoteDaemonHealth(remoteInfo, stateDir);
+  if (cached) {
+    applyRemoteDaemonHealth(remoteInfo, cached);
+    remoteInfo.remoteHealthCached = true;
+  } else {
+    await openRemoteHealthGate(remoteInfo, stateDir, healthRecovery);
+  }
+  return { info: remoteInfo, startedByClient: false };
+}
+
+/**
+ * Probes a remote daemon's `/health` before anything is sent to it, re-probing a daemon that is there
+ * but not ready for the recovery budget, and points `info` at the daemon that answered.
+ */
+export async function openRemoteHealthGate(
+  info: DaemonInfo,
+  stateDir: string,
+  healthRecovery: RemoteHealthRecovery | undefined,
+): Promise<void> {
   // The command's budget starts with the first probe, which already runs under it and its signal.
   const deadline = performance.now() + (healthRecovery?.budgetMs ?? 0);
   let health = await cachedRemoteDaemonHealth(
-    remoteInfo,
+    info,
+    stateDir,
     healthRecovery?.budgetMs,
     healthRecovery?.signal,
   );
@@ -284,17 +309,15 @@ async function ensureRemoteDaemon(
     // Loaded on the refusal: this module is not part of what every CLI start pays for.
     const { recoverRemoteDaemonHealth } = await import('./daemon-client-remote-health-recovery.ts');
     health = await recoverRemoteDaemonHealth({
-      info: remoteInfo,
+      info,
+      stateDir,
       failedProbe: health,
       recovery: healthRecovery,
       deadline,
       hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
     });
   }
-  remoteInfo.capabilities = (health.upstream ?? health).capabilities;
-  remoteInfo.remoteInstanceId = health.instanceId;
-  remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
-  return { info: remoteInfo, startedByClient: false };
+  applyRemoteDaemonHealth(info, health);
 }
 
 /**

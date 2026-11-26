@@ -201,13 +201,14 @@ test('persistent remote client caches health and retries a refused stale instanc
   try {
     const port = await listenOnLoopback(server);
     const baseUrl = `http://127.0.0.1:${port}`;
+    const stateDir = mkdtempForTestSync('agent-device-remote-health-cache-');
     const request = (token: string, url = baseUrl) =>
       sendToDaemon(
         {
           command: 'remote-smoke',
           session: 'default',
           positionals: ['ping'],
-          flags: { daemonBaseUrl: url },
+          flags: { daemonBaseUrl: url, stateDir },
           meta: { requestId: 'request' },
         },
         { authToken: token },
@@ -470,13 +471,14 @@ test('proxy forwards cached upstream identity and rejects a restarted upstream b
   });
   try {
     const proxyPort = await listenOnLoopback(proxy);
+    const stateDir = mkdtempForTestSync('agent-device-remote-proxy-health-');
     const request = () =>
       sendToDaemon(
         {
           command: 'remote-smoke',
           session: 'default',
           positionals: ['ping'],
-          flags: { daemonBaseUrl: `http://127.0.0.1:${proxyPort}/agent-device/` },
+          flags: { daemonBaseUrl: `http://127.0.0.1:${proxyPort}/agent-device/`, stateDir },
           meta: { requestId: 'request' },
         },
         { authToken: 'client-secret' },
@@ -664,6 +666,95 @@ test.for(['timeout', 'reset'] as const)(
     }
   },
 );
+
+/** A remote daemon that answers /health with `instanceId()` and refuses a stale instance with 409. */
+async function instanceCheckingRemote(instanceId: () => string) {
+  const paths: string[] = [];
+  const server = http.createServer((req, res) => {
+    paths.push(`${req.method} ${req.url}`);
+    res.setHeader('content-type', 'application/json');
+    if (req.url?.endsWith('/health')) {
+      res.end(
+        JSON.stringify({ ok: true, service: 'agent-device-daemon', instanceId: instanceId() }),
+      );
+      return;
+    }
+    const expected = req.headers[DAEMON_HTTP_INSTANCE_HEADER];
+    if (typeof expected === 'string' && expected !== instanceId()) {
+      res.statusCode = 409;
+      res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: 'request', error: { code: -32001 } }));
+      return;
+    }
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: 'request', result: { ok: true, data: {} } }));
+  });
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const stateDir = mkdtempForTestSync('agent-device-remote-health-persisted-');
+  const request = () =>
+    sendToDaemon(
+      {
+        command: 'remote-smoke',
+        session: 'default',
+        positionals: ['ping'],
+        flags: { daemonBaseUrl: baseUrl, stateDir },
+        meta: { requestId: 'request' },
+      },
+      { authToken: 'persisted-secret' },
+    );
+  // What a new CLI process starts with: no health cached in memory, only what the state dir holds.
+  const forgetInMemory = () =>
+    invalidateRemoteDaemonHealth({ baseUrl, token: 'persisted-secret', pid: 0 });
+  const cacheFile = path.join(stateDir, 'remote-daemon-health.json');
+  return { server, paths, baseUrl, request, forgetInMemory, cacheFile };
+}
+
+// Each CLI call is a new process, so the health a first call probed is kept in the state dir and a
+// later process sends straight to /rpc. The instance precondition still catches a replaced daemon.
+test('a later process reuses persisted remote health and still catches a replaced daemon', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let instanceId = 'persisted-one';
+  const remote = await instanceCheckingRemote(() => instanceId);
+  try {
+    assert.equal((await remote.request()).ok, true);
+    remote.forgetInMemory();
+    assert.equal((await remote.request()).ok, true);
+    assert.deepEqual(remote.paths, ['GET /health', 'POST /rpc', 'POST /rpc']);
+
+    const persisted = fs.readFileSync(remote.cacheFile, 'utf8');
+    assert.equal(persisted.includes('persisted-secret'), false, 'the token is never written');
+    assert.equal(persisted.includes(remote.baseUrl), false, 'the URL is never written');
+    assert.equal(fs.statSync(remote.cacheFile).mode & 0o077, 0, 'only the owner reads it');
+
+    instanceId = 'persisted-two';
+    remote.forgetInMemory();
+    assert.equal((await remote.request()).ok, true);
+    assert.deepEqual(remote.paths.slice(3), ['POST /rpc', 'GET /health', 'POST /rpc']);
+    remote.forgetInMemory();
+    assert.equal((await remote.request()).ok, true);
+    assert.deepEqual(remote.paths.slice(6), ['POST /rpc'], 'the replacement was persisted');
+  } finally {
+    await closeLoopbackServer(remote.server);
+  }
+});
+
+// A send from cached health that never left the process proves nothing reached the daemon, so it
+// gets the gate a first contact gets, with the same typed refusal, instead of a bare transport error.
+test('an unsent request from cached remote health opens the health gate', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const remote = await instanceCheckingRemote(() => 'gone-soon');
+  assert.equal((await remote.request()).ok, true);
+  await closeLoopbackServer(remote.server);
+  // Lets the client drop its pooled connection, as a new CLI process has none.
+  await sleep(20);
+  remote.forgetInMemory();
+  await assert.rejects(remote.request(), (error: unknown) => {
+    assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
+    assert.equal(error.details?.reason, DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason);
+    assert.equal(error.details?.dispatched, 'no');
+    return true;
+  });
+  assert.equal(fs.existsSync(remote.cacheFile), false, 'the unreachable daemon is forgotten');
+});
 
 // A transport failure drops the cached health of a remote daemon only: a local daemon has no cached
 // health, so its failed request neither invalidates nor loads the remote health cache.

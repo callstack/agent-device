@@ -7,7 +7,6 @@ import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/h
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   assertScriptArtifactsCapability,
-  readDaemonCapabilities,
   type DaemonPaths,
   type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -24,9 +23,14 @@ import {
   DAEMON_INSTANCE_REASONS,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
-  type DaemonHealthPayload,
 } from '@agent-device/contracts/daemon-http';
 import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
+import {
+  applyRemoteDaemonHealth,
+  readHealthPayload,
+  type RemoteDaemonHealth,
+  type RemoteDaemonHealthLink,
+} from './daemon-client-health-record.ts';
 import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
@@ -169,26 +173,6 @@ function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): App
     { reason: DAEMON_TRANSPORT_REASONS.endpointUnavailable.reason, transport },
   );
 }
-
-export type RemoteDaemonHealth = {
-  reachable: boolean;
-  statusCode?: number;
-  service?: string;
-  version?: string;
-  rpcProtocolVersion?: number;
-  instanceId?: string;
-  hostArch?: string;
-  capabilities?: DaemonInfo['capabilities'];
-  /** The daemon behind a proxy, as the proxy's health reported it. */
-  upstream?: RemoteDaemonHealthLink;
-  /** The probe ran out of its time budget before an answer, rather than failing outright. */
-  timedOut?: true;
-};
-
-type RemoteDaemonHealthLink = Pick<
-  RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'capabilities'
->;
 
 export async function probeDaemonReachability(
   info: DaemonInfo,
@@ -350,57 +334,6 @@ function healthProbeExpired(signal: AbortSignal, deadline: number): boolean {
   return signal.aborted || performance.now() >= deadline;
 }
 
-function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' | 'statusCode'> {
-  try {
-    const parsed = JSON.parse(body) as { upstream?: unknown };
-    const upstream =
-      parsed.upstream && typeof parsed.upstream === 'object'
-        ? readHealthLink(parsed.upstream as Record<string, unknown>)
-        : undefined;
-    return {
-      ...readHealthLink(parsed as Record<string, unknown>),
-      ...(upstream ? { upstream } : {}),
-    };
-  } catch {
-    return {};
-  }
-}
-
-function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
-  return {
-    service: isHealthService(parsed.service) ? parsed.service : undefined,
-    version: readHealthVersion(parsed.version),
-    rpcProtocolVersion:
-      typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
-    ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
-    ...(typeof parsed.hostArch === 'string' ? { hostArch: parsed.hostArch } : {}),
-    ...(parsed.capabilities === undefined
-      ? {}
-      : { capabilities: readDaemonCapabilities(parsed.capabilities) }),
-  };
-}
-
-// The remote picks what /health says and agents read the refusal built from it, so only a service
-// the contract names and a version-shaped string are kept; anything else reads as absent.
-const HEALTH_SERVICES: Readonly<Record<DaemonHealthPayload['service'], true>> = {
-  'agent-device-daemon': true,
-  'agent-device-proxy': true,
-};
-const HEALTH_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const HEALTH_VERSION_MAX_LENGTH = 64;
-
-function isHealthService(value: unknown): value is DaemonHealthPayload['service'] {
-  return typeof value === 'string' && Object.hasOwn(HEALTH_SERVICES, value);
-}
-
-function readHealthVersion(value: unknown): string | undefined {
-  return typeof value === 'string' &&
-    value.length <= HEALTH_VERSION_MAX_LENGTH &&
-    HEALTH_VERSION.test(value)
-    ? value
-    : undefined;
-}
-
 export async function sendRequest(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -507,7 +440,19 @@ async function sendRequestWithFallback(
         options,
       );
     }
-    if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
+    if (isRemoteTransportFailure(error)) {
+      await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
+    }
+    if (info.baseUrl && info.remoteHealthCached && isUnsentTransportFailure(error)) {
+      return await resendAfterRemoteHealthGate(
+        info,
+        req,
+        statePaths,
+        timeoutMs,
+        transport,
+        options,
+      );
+    }
     const fallback = chooseAutoFallbackTransport(info, preference, transport);
     if (!fallback || !isSafeAutoTransportFallbackError(error, transport)) throw error;
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, fallback, options);
@@ -523,7 +468,7 @@ async function retryAfterRemoteInstanceMismatch(
   transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  await invalidateRemoteDaemonHealth(info);
+  await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
   const probeTimeoutMs = remainingRemoteRequestTimeoutMs(req, timeoutMs, deadline);
   const health = await readRemoteDaemonHealth(info, probeTimeoutMs, options.signal);
   refuseAbortedRequest(options.signal, req.meta?.requestId);
@@ -537,18 +482,61 @@ async function retryAfterRemoteInstanceMismatch(
     const { remoteDaemonUnavailableError } = await import('./daemon-lifecycle-errors.ts');
     throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts: 1 });
   }
-  info.remoteInstanceId = health.instanceId;
-  info.remoteUpstreamInstanceId = health.upstream?.instanceId;
-  info.capabilities = (health.upstream ?? health).capabilities;
-  (await loadRemoteHealthCache()).cacheRemoteDaemonHealth(info, health);
+  applyRemoteDaemonHealth(info, health);
+  (await loadRemoteHealthCache()).cacheRemoteDaemonHealth(info, health, statePaths.baseDir);
+  return await resendAfterFreshRemoteHealth(info, req, statePaths, remainingMs, transport, options);
+}
+
+/**
+ * A send from a cached `/health` answer that never left this process (refused, reset, no such host)
+ * proves nothing reached the daemon, so it gets the gate the cache skipped: the same probe, re-probe
+ * budget and typed refusal as a first contact, then one resend under the command's full budget.
+ */
+async function resendAfterRemoteHealthGate(
+  info: DaemonInfo,
+  req: DaemonWireRequest,
+  statePaths: DaemonPaths,
+  timeoutMs: number | undefined,
+  transport: ResolvedDaemonTransport,
+  options: SendRequestOptions,
+): Promise<DaemonResponse> {
+  info.remoteHealthCached = undefined;
+  const { openRemoteHealthGate } = await import('./daemon-client-lifecycle.ts');
+  await openRemoteHealthGate(
+    info,
+    statePaths.baseDir,
+    timeoutMs === undefined ? undefined : { budgetMs: timeoutMs, signal: options.signal },
+  );
+  refuseAbortedRequest(options.signal, req.meta?.requestId);
+  return await resendAfterFreshRemoteHealth(info, req, statePaths, timeoutMs, transport, options);
+}
+
+async function resendAfterFreshRemoteHealth(
+  info: DaemonInfo,
+  req: DaemonWireRequest,
+  statePaths: DaemonPaths,
+  timeoutMs: number | undefined,
+  transport: ResolvedDaemonTransport,
+  options: SendRequestOptions,
+): Promise<DaemonResponse> {
   // A replacement daemon must still deliver the script that a remote recording asks for.
   if (req.meta?.scriptPublicationId) assertScriptArtifactsCapability(info.capabilities);
   try {
-    return await sendRequestWithTransport(info, req, statePaths, remainingMs, transport, options);
+    return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
   } catch (error) {
-    if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
+    if (isRemoteTransportFailure(error)) {
+      await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
+    }
     throw error;
   }
+}
+
+function isUnsentTransportFailure(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason &&
+    error.details.daemonRequestSent === false
+  );
 }
 
 function remainingRemoteRequestTimeoutMs(
@@ -575,12 +563,15 @@ function isRemoteInstanceMismatch(error: unknown): boolean {
   );
 }
 
+// A reply that is not the daemon's JSON-RPC came from something else on the path, such as a gateway
+// answering 5xx while the daemon is away, so the next command probes `/health` again.
 function isRemoteTransportFailure(error: unknown): boolean {
   return (
     error instanceof AppError &&
     (error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason ||
       error.details?.reason === DAEMON_TRANSPORT_REASONS.timeout.reason ||
-      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyUnreadable.reason)
+      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyUnreadable.reason ||
+      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyInvalid.reason)
   );
 }
 
@@ -640,12 +631,7 @@ function isSafeAutoTransportFallbackError(
   error: unknown,
   attempted: ResolvedDaemonTransport,
 ): boolean {
-  return (
-    attempted === 'socket' &&
-    error instanceof AppError &&
-    error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason &&
-    error.details.daemonRequestSent === false
-  );
+  return attempted === 'socket' && isUnsentTransportFailure(error);
 }
 
 function requireDaemonTransport(
@@ -971,19 +957,30 @@ async function sendHttpRequest(
 const loadRemoteHealthCache = () => import('./daemon-client-remote-health-cache.ts');
 
 /** Drops a remote daemon's cached health; a local daemon has none, so its failure loads nothing. */
-async function invalidateRemoteDaemonHealth(info: DaemonInfo): Promise<void> {
+async function invalidateRemoteDaemonHealth(info: DaemonInfo, stateDir: string): Promise<void> {
   if (!info.baseUrl) return;
-  (await loadRemoteHealthCache()).invalidateRemoteDaemonHealth(info);
+  (await loadRemoteHealthCache()).invalidateRemoteDaemonHealth(info, stateDir);
 }
 
-/** The remote `/health` answer within this caller's bound, through the process cache. */
+/** A remote daemon's cached `/health` answer, from this process or the state directory, if any. */
+export async function readCachedRemoteDaemonHealth(
+  info: DaemonInfo,
+  stateDir: string,
+): Promise<RemoteDaemonHealth | undefined> {
+  return (await loadRemoteHealthCache()).readCachedRemoteHealth(info, stateDir);
+}
+
+/** The remote `/health` answer within this caller's bound, through the cache. */
 export async function cachedRemoteDaemonHealth(
   info: DaemonInfo,
+  stateDir: string,
   probeTimeoutMs?: number,
   callerSignal?: AbortSignal,
 ): Promise<RemoteDaemonHealth> {
   const { cachedRemoteHealth } = await loadRemoteHealthCache();
-  return await cachedRemoteHealth(info, () =>
-    readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
+  return await cachedRemoteHealth(
+    info,
+    () => readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
+    stateDir,
   );
 }

@@ -1,7 +1,8 @@
 import { sleep } from '@agent-device/host-kit/retry';
 import type { RemoteHealthRecovery } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import { cachedRemoteDaemonHealth, type RemoteDaemonHealth } from './daemon-client-transport.ts';
+import type { RemoteDaemonHealth } from './daemon-client-health-record.ts';
+import { cachedRemoteDaemonHealth } from './daemon-client-transport.ts';
 import { remoteDaemonUnavailableError } from './daemon-lifecycle-errors.ts';
 
 /** The pause between `/health` probes while a remote daemon is unavailable. */
@@ -26,13 +27,15 @@ function isTransientHealthFailure(health: RemoteDaemonHealth): boolean {
  */
 export async function recoverRemoteDaemonHealth(params: {
   info: DaemonInfo;
+  /** Where a recovered answer is cached for later commands. */
+  stateDir: string;
   failedProbe: RemoteDaemonHealth;
   recovery: RemoteHealthRecovery | undefined;
   /** When the command's budget ends, on the `performance.now()` clock: it started with the first probe. */
   deadline: number;
   hint: string;
 }): Promise<RemoteDaemonHealth> {
-  const { info, recovery, deadline, hint } = params;
+  const { info, stateDir, recovery, deadline, hint } = params;
   let attempts = 1;
   let probe = params.failedProbe;
   while (recovery && isTransientHealthFailure(probe) && !recovery.signal?.aborted) {
@@ -49,7 +52,7 @@ export async function recoverRemoteDaemonHealth(params: {
     const probeMs = deadline - performance.now();
     if (probeMs <= 0 || recovery.signal?.aborted) continue;
     attempts += 1;
-    probe = await cachedRemoteDaemonHealth(info, probeMs, recovery.signal);
+    probe = await cachedRemoteDaemonHealth(info, stateDir, probeMs, recovery.signal);
     if (probe.reachable) return probe;
   }
   throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts, hint });

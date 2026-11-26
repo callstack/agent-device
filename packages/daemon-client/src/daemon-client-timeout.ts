@@ -8,7 +8,7 @@ import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resoluti
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { DaemonProbeVerdict } from './daemon-client-loopback-probe.ts';
-import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
+import type { RemoteDaemonHealth } from './daemon-client-health-record.ts';
 
 // Recovery for a timed-out request is scoped to that request or to nothing. The daemon owns
 // request-scoped recovery (#3177): destroying the timed-out connection cancels exactly that
