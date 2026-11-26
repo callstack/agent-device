@@ -1,6 +1,7 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { sleep } from '@agent-device/host-kit/retry';
+import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
@@ -18,6 +19,14 @@ import {
   readCloudJsonResponse,
 } from '../cloud-response.ts';
 const CLOUD_SESSION_API_REASONS = {
+  // The app URL is not a valid HTTPS archive reference.
+  appUrlFormat: { reason: 'cloud_invalid_app_url', commands: ['connect'] },
+  // The cloud API or offering cannot preload an app from a URL.
+  appSourceUnsupported: { reason: 'app_source_unsupported', commands: ['connect'] },
+  // The cloud refused the app URL for the selected offering.
+  invalidAppSource: { reason: 'invalid_app_source', commands: ['connect'] },
+  // The cloud provider could not preload the app before the session started.
+  appPreloadFailed: { reason: 'app_preload_failed', commands: ['connect'] },
   // The spend cap is not a positive decimal in micro-USD precision.
   budgetFormat: { reason: 'cloud_invalid_max_usd', commands: ['connect'] },
   // The cloud did not finish allocating a session before the connect deadline.
@@ -44,6 +53,7 @@ export type CreatedCloudSession = {
 };
 
 const SESSIONS_PATH = '/v1/sessions';
+const PRELOADED_SESSIONS_PATH = '/v1/sessions/preloaded';
 const BOUNDED_SESSIONS_PATH = '/v1/sessions/bounded';
 const MAX_USD_WHOLE_DIGITS = 13;
 const USD_FRACTION_DIGITS = 6;
@@ -91,10 +101,30 @@ export function readCloudSessionRequest(
     accepts,
     maxMinutes: flags.maxMinutes,
     ...(flags.maxUsd !== undefined ? { maxUsdMicros: parseMaxUsdMicros(flags.maxUsd) } : {}),
+    ...(flags.appUrl !== undefined ? { app: parseCloudAppSource(flags.appUrl) } : {}),
     ...(needs ? { needs } : {}),
     ...(device ? { device } : {}),
     ...(os ? { os: qualifyCloudOs(os, flags.platform) } : {}),
   };
+}
+
+function parseCloudAppSource(value: string): { url: string } {
+  const maxLength = 2048;
+  const url =
+    value.length <= maxLength &&
+    /^https:\/\/[^/@]+(?:\/|$)/i.test(value) &&
+    /^[!-~]+$/.test(value) &&
+    !/[\\?#]/.test(value)
+      ? URL.parse(value)
+      : null;
+  if (!url || url.href.length > maxLength || url.username || url.password) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--app-url requires an HTTPS archive URL of at most 2048 ASCII characters without spaces, backslashes, credentials, a query, or a fragment.',
+      { reason: CLOUD_SESSION_API_REASONS.appUrlFormat.reason },
+    );
+  }
+  return { url: url.href };
 }
 
 // A positive plain decimal of at most six fractional digits, as integer micro-USD in a string.
@@ -130,8 +160,21 @@ export async function createCloudSession(
   request: CloudSessionRequest,
   attempt: CloudCreateAttempt,
 ): Promise<CreatedCloudSession> {
+  const archiveUrl = request.app?.url;
+  if (archiveUrl) {
+    registerDiagnosticSensitiveValue(archiveUrl);
+    registerDiagnosticSensitiveValue(encodeURIComponent(archiveUrl));
+  }
   const record = await postCloudSession(access, request, attempt);
-  return parseCloudSession(record.body, record.id, access, request);
+  const session = parseCloudSession(record.body, record.id, access, request);
+  if (
+    archiveUrl &&
+    (containsCloudCredential(session, [archiveUrl]) ||
+      exposesAttachmentCredential(session.attachment, archiveUrl) ||
+      (session.viewerUrl && cloudUrlContainsCredential(session.viewerUrl, [archiveUrl])))
+  )
+    throw invalidSession();
+  return session;
 }
 
 export async function lookupCloudSession(
@@ -185,7 +228,11 @@ async function postCloudSession(
   request: CloudSessionRequest,
   attempt: CloudCreateAttempt,
 ): Promise<CreatedResponse> {
-  const route = request.maxUsdMicros === undefined ? SESSIONS_PATH : BOUNDED_SESSIONS_PATH;
+  const route = request.app
+    ? PRELOADED_SESSIONS_PATH
+    : request.maxUsdMicros === undefined
+      ? SESSIONS_PATH
+      : BOUNDED_SESSIONS_PATH;
   const url = new URL(route, access.cloudBaseUrl);
   const headers = {
     authorization: `Bearer ${access.accessToken}`,
@@ -205,7 +252,9 @@ async function postCloudSession(
         signal: AbortSignal.timeout(Math.min(remaining, CREATE_REQUEST_TIMEOUT_MS)),
       },
       request.needs,
-      access.accessToken,
+      request.app
+        ? [access.accessToken, request.app.url, encodeURIComponent(request.app.url)]
+        : [access.accessToken],
     );
     if (value !== RETRY_CREATION) {
       observeCloudAllocation(value, access.accessToken, attempt);
@@ -239,13 +288,13 @@ async function requestCreateResponse(
   url: URL,
   init: RequestInit,
   needs: string[] | undefined,
-  brokerToken: string,
+  credentials: readonly string[],
 ): Promise<CreateResponse | typeof RETRY_CREATION> {
   try {
     return await readCreateResponse(await fetch(url, init), needs, url);
   } catch (error) {
     if (!(error instanceof AppError)) return RETRY_CREATION;
-    if (containsCloudCredential([error.message, error.details], [brokerToken])) {
+    if (containsCloudCredential([error.message, error.details], credentials)) {
       throw invalidSession();
     }
     throw error;
@@ -258,13 +307,29 @@ async function readCreateResponse(
   url: URL,
 ): Promise<CreateResponse | typeof RETRY_CREATION> {
   const { status } = response;
+  if (status === 502 && url.pathname === PRELOADED_SESSIONS_PATH) {
+    const body = asCloudRecord(await response.json().catch(() => undefined));
+    if (body?.error === CLOUD_SESSION_API_REASONS.appPreloadFailed.reason) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'The cloud provider could not preload the app from --app-url.',
+        {
+          status,
+          reason: CLOUD_SESSION_API_REASONS.appPreloadFailed.reason,
+        },
+      );
+    }
+    return RETRY_CREATION;
+  }
   if (status >= 500) {
     await response.body?.cancel();
     return RETRY_CREATION;
   }
-  if (url.pathname === BOUNDED_SESSIONS_PATH && (status === 404 || status === 405)) {
+  if (url.pathname !== SESSIONS_PATH && (status === 404 || status === 405)) {
     await response.body?.cancel();
-    throw budgetCapUnsupported(status);
+    throw url.pathname === PRELOADED_SESSIONS_PATH
+      ? appSourceUnsupported(status)
+      : budgetCapUnsupported(status);
   }
   if (isCreateRejectionStatus(status))
     return readCreateRefusal(response, status, needs, url.origin);
@@ -298,7 +363,9 @@ export function isDefinitiveCloudCreateRejection(error: unknown): boolean {
     status === 402 ||
     status === 422 ||
     status === 429 ||
-    reason === 'budget_cap_unsupported' ||
+    reason === CLOUD_SESSION_API_REASONS.budgetUnsupported.reason ||
+    reason === CLOUD_SESSION_API_REASONS.appSourceUnsupported.reason ||
+    reason === CLOUD_SESSION_API_REASONS.appPreloadFailed.reason ||
     (status === 409 && reason === 'session_not_running')
   );
 }
@@ -341,9 +408,29 @@ function genericCreateRejection(status: number, reason?: 'invalid_request'): App
   });
 }
 
+function appSourceUnsupported(status: 400 | 404 | 405): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'The cloud API or offering cannot start a session with --app-url.',
+    { status, reason: CLOUD_SESSION_API_REASONS.appSourceUnsupported.reason },
+  );
+}
+
 function requestRejection(body: Record<string, unknown> | undefined): AppError {
   const status = 400;
   const reason = body?.error;
+  if (reason === CLOUD_SESSION_API_REASONS.appSourceUnsupported.reason)
+    return appSourceUnsupported(status);
+  if (reason === CLOUD_SESSION_API_REASONS.invalidAppSource.reason) {
+    return new AppError(
+      'INVALID_ARGS',
+      'The cloud service rejected --app-url. Check the archive requirements for the offering.',
+      {
+        status,
+        reason: CLOUD_SESSION_API_REASONS.invalidAppSource.reason,
+      },
+    );
+  }
   if (reason !== 'invalid_request') return genericCreateRejection(status);
   const field = body?.field;
   if (field !== 'device' && field !== 'os') return genericCreateRejection(status, reason);
@@ -605,7 +692,7 @@ function readSafeCloudViewer(
   const scopedToken = attachment.kind === 'limrun' ? attachment.token : attachment.daemonAuthToken;
   const credentials = [brokerToken, scopedToken];
   if (
-    exposesBrokerCredential(attachment, brokerToken) ||
+    exposesAttachmentCredential(attachment, brokerToken) ||
     containsCloudCredential(
       [display.vendor, display.fallbackFrom, display.deadlineAt, display.receivedDeadline],
       credentials,
@@ -618,8 +705,8 @@ function readSafeCloudViewer(
     : undefined;
 }
 
-function exposesBrokerCredential(attachment: CloudAttachment, brokerToken: string): boolean {
-  const credentials = [brokerToken];
+function exposesAttachmentCredential(attachment: CloudAttachment, credential: string): boolean {
+  const credentials = [credential];
   const endpoints =
     attachment.kind === 'agent-device-daemon'
       ? [attachment.daemonBaseUrl]

@@ -468,6 +468,15 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'appUrl',
+    names: ['--app-url'],
+    type: 'string',
+    usageLabel: '--app-url <url>',
+    usageDescription: 'Connect cloud: preload an app from an HTTPS archive',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'needs',
     names: ['--needs'],
     type: 'string',

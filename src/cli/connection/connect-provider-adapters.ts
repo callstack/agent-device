@@ -98,12 +98,13 @@ export function selectCloudSessionPath(
     (flags.vendor !== undefined ||
       flags.maxMinutes !== undefined ||
       flags.maxUsd !== undefined ||
+      flags.appUrl !== undefined ||
       flags.needs !== undefined ||
       flags.showViewer)
   ) {
     throw new AppError(
       'INVALID_ARGS',
-      '--vendor, --max-minutes, --max-usd, --needs and --show-viewer require connect cloud.',
+      '--vendor, --max-minutes, --max-usd, --app-url, --needs and --show-viewer require connect cloud.',
     );
   }
   return cloud;
