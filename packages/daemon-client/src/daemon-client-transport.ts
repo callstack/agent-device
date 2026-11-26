@@ -27,14 +27,17 @@ import {
   type DaemonHealthPayload,
 } from '@agent-device/contracts/daemon-http';
 import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
-import { abortedRequestError, refuseAbortedRequest } from './daemon-client-request-guard.ts';
 import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
   incompatibleRemoteProtocolError,
   refuseOversizedDaemonRequest,
 } from './daemon-client-rpc.ts';
-import { handleRequestTimeout } from './daemon-client-timeout.ts';
+import {
+  abortedRequestError,
+  handleRequestTimeout,
+  refuseAbortedRequest,
+} from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {

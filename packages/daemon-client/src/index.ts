@@ -20,7 +20,7 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
-import { createRequestGuard } from './daemon-client-request-guard.ts';
+import { createRequestGuard } from './daemon-client-timeout.ts';
 import { sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, readRegisteredDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
