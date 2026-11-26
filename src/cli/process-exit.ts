@@ -1,3 +1,4 @@
+import type { Writable } from 'node:stream';
 import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
@@ -40,6 +41,61 @@ export function writeStdout(text: string): void {
 
 export function writeStderr(text: string): void {
   process.stderr.write(escapeTerminalText(text));
+}
+
+type OptionalStderr = Pick<Writable, 'write'> &
+  Partial<
+    Pick<Writable, 'once' | 'prependOnceListener' | 'removeListener' | 'listenerCount' | 'writable'>
+  >;
+type StderrWriteBatch = {
+  count: number;
+  failedWrites: Set<Error>;
+  cleanup: () => void;
+};
+const pendingStderrWrites = new WeakMap<OptionalStderr, StderrWriteBatch>();
+
+/** Keep failures from optional writes from interrupting the command. */
+export function writeStderrBestEffort(text: string, stream: OptionalStderr = process.stderr): void {
+  if (stream.writable === false) return;
+  const finish = observeStderrWrite(stream);
+  try {
+    if (finish) {
+      stream.write(escapeTerminalText(text), finish);
+    } else {
+      stream.write(escapeTerminalText(text));
+    }
+  } catch {
+    finish?.();
+  }
+}
+
+function observeStderrWrite(stream: OptionalStderr): ((error?: Error | null) => void) | undefined {
+  if (!stream.once || !stream.prependOnceListener || !stream.removeListener) return undefined;
+  let pending = pendingStderrWrites.get(stream);
+  if (!pending) {
+    const failedWrites = new Set<Error>();
+    const cleanup = () => {
+      pendingStderrWrites.delete(stream);
+      stream.removeListener?.('error', onError);
+      stream.removeListener?.('close', cleanup);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      if (!failedWrites.has(error) && !stream.listenerCount?.('error')) throw error;
+    };
+    pending = { count: 0, failedWrites, cleanup };
+    pendingStderrWrites.set(stream, pending);
+    stream.prependOnceListener('error', onError);
+    stream.once('close', cleanup);
+  }
+  const batch = pending;
+  batch.count++;
+  return (error) => {
+    if (pendingStderrWrites.get(stream) !== batch) return;
+    // A failed Writable invokes the write callback before emitting error or close.
+    if (error) batch.failedWrites.add(error);
+    else if (--batch.count === 0) batch.cleanup();
+  };
 }
 
 export function writeStdoutRaw(text: string): void {

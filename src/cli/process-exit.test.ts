@@ -1,6 +1,7 @@
+import { Writable } from 'node:stream';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { exitAfterFlush } from './process-exit.ts';
+import { exitAfterFlush, writeStderrBestEffort } from './process-exit.ts';
 
 const FLUSH_TIMEOUT_MS = 2000;
 
@@ -110,4 +111,60 @@ test('exitAfterFlush still exits when a stream never drains', async () => {
   }
 
   assert.deepEqual(exitSpy.calls, [3]);
+});
+
+test('best-effort stderr absorbs an asynchronous write error', async () => {
+  let attempted = '';
+  const stream = new Writable({
+    write(chunk, _encoding, done) {
+      attempted = String(chunk);
+      queueMicrotask(() => done(Object.assign(new Error('closed pipe'), { code: 'EPIPE' })));
+    },
+  });
+  const closed = new Promise<void>((resolve) => stream.once('close', resolve));
+
+  writeStderrBestEffort('allocation progress\n', stream);
+  await closed;
+  assert.equal(attempted, 'allocation progress\n');
+  assert.equal(stream.listenerCount('error'), 0);
+});
+
+test('a completed best-effort stderr write does not absorb later stream errors', async () => {
+  const stream = new Writable({ write: (_chunk, _encoding, done) => done() });
+  writeStderrBestEffort('allocation progress\n', stream);
+  writeStderrBestEffort('more allocation progress\n', stream);
+  assert.equal(stream.listenerCount('error'), 1);
+  await new Promise<void>((resolve, reject) => {
+    stream.write('ordinary diagnostic\n', (error) => (error ? reject(error) : resolve()));
+  });
+
+  const failure = new Error('unrelated stderr failure');
+  assert.throws(
+    () => stream.emit('error', failure),
+    (error) => error === failure,
+  );
+});
+
+test('a stalled best-effort stderr write does not absorb an unrelated error', () => {
+  const stream = new Writable({ write: () => {} });
+  const failure = new Error('unrelated stderr failure');
+  writeStderrBestEffort('allocation progress\n', stream);
+
+  assert.throws(
+    () => stream.emit('error', failure),
+    (error) => error === failure,
+  );
+  assert.equal(stream.listenerCount('error'), 0);
+});
+
+test('a stalled best-effort stderr write leaves existing error handlers in charge', () => {
+  const stream = new Writable({ write: () => {} });
+  const handle = vi.fn();
+  stream.once('error', handle);
+  writeStderrBestEffort('allocation progress\n', stream);
+
+  const failure = new Error('unrelated stderr failure');
+  stream.emit('error', failure);
+  assert.deepEqual(handle.mock.calls, [[failure]]);
+  assert.equal(stream.listenerCount('error'), 0);
 });

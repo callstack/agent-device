@@ -91,6 +91,7 @@ function stubBroker() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -249,4 +250,103 @@ test('connect on a named session that is already bound conflicts, and --force en
     phase: 'committed',
     id: '00000000-0000-4000-8000-000000000002',
   });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+test('slow hosted allocation prints only safe deadlines and stops polling after allocation', async () => {
+  vi.useFakeTimers();
+  const stateDir = freshStateDir();
+  const deadline = new Date(Date.now() + 3600_000).toISOString();
+  const posted = deferred<void>();
+  const created = deferred<Response>();
+  const pendingPoll = deferred<Response>();
+  const polls: Array<{ url: URL; init: RequestInit }> = [];
+  const allocatingResponses = [
+    Response.json({ error: 'private-upstream-detail' }, { status: 401 }),
+    Response.json({ state: 'allocating', deadlineAt: '2037-02-31T00:00:00Z' }),
+    Response.json({
+      state: 'allocating',
+      deadlineAt: '2037-02-01T00:00:00.1Z',
+      attach: { token: ' 100Z ' },
+    }),
+    Response.json({
+      state: 'allocating',
+      deadlineAt: '2037-02-01T00:00:00.1Z',
+      attach: { daemonAuthToken: '00.1Z' },
+    }),
+    Response.json({
+      state: 'allocating',
+      deadlineAt: deadline,
+      attach,
+      viewerUrl: 'https://viewer.example/session?token=private',
+      account: 'private-account-detail',
+    }),
+  ];
+  let requestKey: string | null = null;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: URL, init: RequestInit) => {
+      if (init.method === 'POST') {
+        requestKey = new Headers(init.headers).get('Idempotency-Key');
+        posted.resolve();
+        return created.promise;
+      }
+      polls.push({ url, init });
+      return allocatingResponses.shift() ?? pendingPoll.promise;
+    }),
+  );
+
+  const connecting = runCliCapture(connectArgs, { env: processEnv(stateDir) });
+  await posted.promise;
+  await vi.advanceTimersByTimeAsync(60_000);
+  const pollsBeforeSettlement = polls.length;
+  const settlementSignal = polls.at(-1)?.init.signal;
+  expect(settlementSignal?.aborted).toBe(false);
+  expect(requestKey).toEqual(expect.any(String));
+  for (const { url, init } of polls) {
+    expect(url.origin).toBe('https://cloud.example');
+    expect(url.pathname).toBe('/v1/sessions');
+    expect([...url.searchParams]).toEqual([['idempotencyKey', requestKey]]);
+    expect(init).toMatchObject({ method: 'GET', redirect: 'error' });
+  }
+
+  pendingPoll.resolve(Response.json({ state: 'running', deadlineAt: deadline }));
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(polls).toHaveLength(pollsBeforeSettlement);
+  expect(settlementSignal?.aborted).toBe(true);
+
+  created.resolve(
+    Response.json(
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        vendor: 'provider-a',
+        transport: 'agent-device-daemon',
+        platform: 'ios',
+        deadlineAt: deadline,
+        attach,
+      },
+      { status: 201 },
+    ),
+  );
+  const result = await connecting;
+  expect(result.code).toBeNull();
+  expect(JSON.parse(result.stdout)).toMatchObject({ success: true });
+  expect(result.stderr).toMatch(/^connect cloud: allocating, \d+s elapsed/m);
+  expect(result.stderr.match(/session deadline [^)]+/g)).toEqual([`session deadline ${deadline}`]);
+  for (const privateValue of [
+    attach.daemonAuthToken,
+    attach.daemonBaseUrl,
+    'viewer.example',
+    'private-upstream-detail',
+    'private-account-detail',
+  ]) {
+    expect(result.stderr).not.toContain(privateValue);
+  }
 });

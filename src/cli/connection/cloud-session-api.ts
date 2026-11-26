@@ -3,6 +3,10 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
+import {
+  startCloudConnectProgress,
+  type CloudAllocationProgress,
+} from './cloud-connect-progress.ts';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
   isCredentialEndpoint,
@@ -73,6 +77,7 @@ const CONNECT_TIMEOUT_MS = 240_000;
 // Give the provider its two-minute allocation window and leave time to recover a lost response.
 const CREATE_REQUEST_TIMEOUT_MS = 125_000;
 const CREATE_RETRY_INTERVAL_MS = 2_000;
+const PROGRESS_REQUEST_TIMEOUT_MS = 1_500;
 const RETRY_CREATION = Symbol('retry cloud session creation');
 const CREATE_RESPONSE_MESSAGES = {
   invalidJsonMessage: 'Cloud session API returned invalid JSON.',
@@ -165,7 +170,10 @@ export async function createCloudSession(
     registerDiagnosticSensitiveValue(archiveUrl);
     registerDiagnosticSensitiveValue(encodeURIComponent(archiveUrl));
   }
-  const record = await postCloudSession(access, request, attempt);
+  const stop = startCloudConnectProgress(CONNECT_TIMEOUT_MS, (signal) =>
+    readCloudAllocationProgress(access, attempt.key, signal),
+  );
+  const record = await postCloudSession(access, request, attempt).finally(stop);
   const session = parseCloudSession(record.body, record.id, access, request);
   if (
     archiveUrl &&
@@ -181,12 +189,7 @@ export async function lookupCloudSession(
   access: CloudAccess,
   key: string,
 ): Promise<{ id: string; active: boolean } | undefined> {
-  const query = new URLSearchParams({ idempotencyKey: key });
-  const response = await fetchCloudApi(new URL(`${SESSIONS_PATH}?${query}`, access.cloudBaseUrl), {
-    method: 'GET',
-    headers: { authorization: `Bearer ${access.accessToken}` },
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await fetchCloudSessionStatus(access, key, AbortSignal.timeout(30_000));
   if (response.status === 404) {
     const body = asCloudRecord(
       await response
@@ -219,6 +222,54 @@ export async function lookupCloudSession(
     default:
       throw invalidSession();
   }
+}
+
+function fetchCloudSessionStatus(access: CloudAccess, key: string, signal: AbortSignal) {
+  const query = new URLSearchParams({ idempotencyKey: key });
+  return fetchCloudApi(new URL(`${SESSIONS_PATH}?${query}`, access.cloudBaseUrl), {
+    method: 'GET',
+    headers: { authorization: `Bearer ${access.accessToken}` },
+    signal,
+  });
+}
+
+async function readCloudAllocationProgress(
+  access: CloudAccess,
+  key: string,
+  signal: AbortSignal,
+): Promise<CloudAllocationProgress | undefined> {
+  const response = await fetchCloudSessionStatus(
+    access,
+    key,
+    AbortSignal.any([signal, AbortSignal.timeout(PROGRESS_REQUEST_TIMEOUT_MS)]),
+  );
+  if (!response.ok) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  const body = asCloudRecord(await response.json());
+  switch (body?.state) {
+    case 'running':
+    case 'ending':
+    case 'failed':
+    case 'settled':
+      return { kind: 'settled' };
+    case 'allocating':
+      return { kind: 'allocating', deadlineAt: readSafeProgressDeadline(body, access.accessToken) };
+    default:
+      return undefined;
+  }
+}
+
+function readSafeProgressDeadline(body: Record<string, unknown>, accessToken: string) {
+  const deadline = canonicalDeadline(body.deadlineAt);
+  if (!deadline) return;
+  const credentials = [
+    accessToken,
+    readScopedToken(body.attach, true),
+    readScopedToken(body.attach, false),
+  ].filter((token): token is string => Boolean(token));
+  if (!containsCloudCredential([body.deadlineAt, deadline], credentials)) return deadline;
 }
 
 type CreatedResponse = { kind: 'created'; id: string; body: Record<string, unknown> };

@@ -10,6 +10,7 @@ import {
   parseCliSessionRecord,
   type CliSessionRecord,
 } from './cli-session-format.ts';
+import { writeStderrBestEffort } from './process-exit.ts';
 
 // The transport loads when a request is made, so a command that reads no cloud auth stays off it.
 const postCloudAuthJson: typeof import('./cloud-auth-request.ts').postCloudAuthJson = async (o) =>
@@ -279,10 +280,10 @@ export async function loginWithDeviceAuth(options: {
         // and succeeds. An exchange that stored anything returned rather than threw, so the record
         // the file holds is still the approved one written above.
         if (options.requiresLiveToken || isCliSessionRevoked(error)) throw error;
-        warnBestEffort(
-          options.io,
+        writeStderrBestEffort(
           'Warning: the saved CLI session could not be exchanged for a live access token. ' +
             'The next command will refresh it.\n',
+          options.io?.stderr,
         );
         // The approved pair, without the expiry of a token whose exchange never answered.
         return { accessToken: approvedToken, session };
@@ -370,9 +371,9 @@ async function withCliSessionLock<Result>(
     throw error;
   }
   await release().catch(() => {
-    warnBestEffort(
-      options.io,
+    writeStderrBestEffort(
       'Warning: the CLI session file lock could not be released cleanly.\n',
+      options.io?.stderr,
     );
   });
   return result;
@@ -401,9 +402,9 @@ async function acquireCliSessionLock(
       const fault = unwritableSessionStore(error, authDir);
       if (fault) throw fault;
       if (!options.keepWaiting || !isProcessLockTimeout(error)) throw error;
-      warnBestEffort(
-        io,
+      writeStderrBestEffort(
         'Waiting for another agent-device process to release the CLI session file...\n',
+        io?.stderr,
       );
     }
   }
@@ -639,10 +640,10 @@ function storeRotatedCredential(options: {
       return { asked: replaced, saved: replaced };
     }
   } catch {
-    warnBestEffort(
-      options.io,
+    writeStderrBestEffort(
       'Warning: the renewed CLI session could not be saved. ' +
         'If the next command is not authenticated, run agent-device auth login.\n',
+      options.io?.stderr,
     );
     // The file is still the record this command read, and the save of the next rotation is compared
     // to it, so a later save is tried again rather than skipped.
@@ -897,28 +898,6 @@ async function openBrowser(url: string, io?: AuthIo): Promise<void> {
   const { openUrlInBrowser } = await import('./browser-launch.ts');
   if (!(await openUrlInBrowser(url))) {
     writeStderr(io, `Open this URL on your machine:\n${url}\n`);
-  }
-}
-
-/** Streams that already carry the listener that absorbs a late write error. */
-const errorAbsorbingStreams = new WeakSet<object>();
-
-/**
- * Writes a warning that must not change the result of a change that already took effect. A
- * closed stderr fails the write synchronously, or later with an EPIPE `error` event; both are
- * dropped. Each stream gets one absorbing listener, because the event fires after the write callback.
- */
-function warnBestEffort(io: AuthIo | undefined, text: string): void {
-  const stream = io?.stderr ?? process.stderr;
-  const emitter = stream as Partial<NodeJS.WriteStream>;
-  if (emitter.on && !errorAbsorbingStreams.has(stream)) {
-    emitter.on('error', () => {});
-    errorAbsorbingStreams.add(stream);
-  }
-  try {
-    stream.write(text);
-  } catch {
-    // A warning is optional output.
   }
 }
 
