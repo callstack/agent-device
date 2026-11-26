@@ -11,7 +11,10 @@ Accepted
 - Allow a missing `rpcProtocolVersion` unless a later security or protocol decision explicitly retires legacy compatibility.
 - A client may cache a successful probe if `/health` advertises an instance ID for the daemon endpoint and, for a proxy, for its upstream daemon.
 - The cache may outlive the client process in the state directory. Name the entry by a digest of the client version, base URL, and token. Do not write the token or the URL.
-- If a cached RPC fails before it leaves the client, probe `/health` as on first contact. Then send the RPC once more.
+- Read a persisted entry only from a bounded regular file that the current user owns and that nobody else can write. Otherwise, probe `/health`.
+- If a cached RPC fails before its connection opens, probe `/health` as on first contact, within the command's remaining budget. Then send the RPC once more. Take this evidence only from the client's own transport, never from a reply.
+- Clear the cache on a remote HTTP 5xx. Do not resend the RPC.
+- Before you refuse a command for a capability that only the cache lacks, probe `/health` again.
 - Send those instance IDs as conditional headers on every cached RPC. Peers without complete instance IDs retain per-command probes.
 - After a stale-instance refusal, clear the cache and probe `/health` again. Retry the refused RPC once, and only if the new peer's protocol is compatible.
 - A peer that advertises an instance ID must continue to honor the conditional RPC headers in future versions.
@@ -53,9 +56,14 @@ The proxy passes the expected upstream instance to the daemon, which makes the s
 On a mismatch, the client clears the cache and probes `/health` again.
 The client then retries the refused RPC once, and only if the new peer's protocol is compatible.
 Peers without complete instance IDs retain per-command probes.
-A cached RPC that fails before it leaves the client proves that nothing was dispatched.
-The client then clears the cache and probes `/health` as on first contact, with the same recovery budget and typed refusal, and sends the RPC once more.
-A cached RPC that fails after it was sent is not resent. The client clears the cache, so the next command probes `/health` first.
+The state directory can be shared, so a persisted entry counts only when it is a bounded regular file that the current user owns and that nobody else can write.
+A cached RPC whose connection never opened proves that nothing was dispatched.
+Only the client's own transport supplies that evidence; a reply can carry the same error details after the command ran.
+The client then clears the cache and probes `/health` as on first contact, with the recovery and typed refusal of that path, and sends the RPC once more, all within the command's remaining budget.
+A cached RPC that fails after its connection opened is not resent.
+A remote HTTP 5xx clears the cache, whatever its framing, because a proxy answers that way while its upstream daemon restarts.
+A timeout leaves the decision to the timeout route, which clears the cache only when its `/health` probe finds the daemon gone or replaced.
+A capability that only the cached answer lacks is checked against a fresh probe before the client refuses the command, because the daemon may have been upgraded.
 A peer that advertises an instance ID must continue to honor the conditional RPC headers in future versions.
 The reason is that older clients may hold a cached identity across a restart.
 Such clients must receive a pre-dispatch refusal before they retry a mutating command.

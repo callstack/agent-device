@@ -16,7 +16,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { DAEMON_UNAVAILABLE_REASONS } from '../daemon-lifecycle-errors.ts';
 import { sendToDaemon } from '../index.ts';
-import { cachedRemoteDaemonHealth } from '../daemon-client-transport.ts';
+import { cachedRemoteDaemonHealth } from '../daemon-client-remote-health-gate.ts';
 
 // A press, so the refusal states the fact a caller needs before resending a mutating command.
 function remotePress(baseUrl: string) {

@@ -1,10 +1,16 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { openVerifiedFileForRead, publishFileSync } from '@agent-device/host-kit/file';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import { readRemoteHealthRecord, type RemoteDaemonHealth } from './daemon-client-health-record.ts';
+import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
+
+/** Where a cached answer persists, and the `/health` contract reader a persisted record passes. */
+type PersistedHealthStore = {
+  stateDir: string;
+  readRecord: (record: unknown) => Partial<RemoteDaemonHealth>;
+};
 
 /** A settled `/health` answer for one daemon identity. Only usable answers are cached. */
 type RemoteHealthCacheEntry = {
@@ -26,6 +32,7 @@ let remoteHealthGeneration = 0;
  * token, so it never holds the token or URL, and a client upgrade or token change reads as a miss.
  */
 const PERSISTED_HEALTH_FILE = 'remote-daemon-health.json';
+const PERSISTED_HEALTH_MAX_BYTES = 16 * 1024;
 
 function matchesRemoteIdentity(entry: RemoteHealthCacheEntry, info: DaemonInfo): boolean {
   return entry.baseUrl === info.baseUrl && entry.token === info.token && entry.pid === info.pid;
@@ -48,31 +55,64 @@ function persistedHealthPath(stateDir: string): string {
   return path.join(stateDir, PERSISTED_HEALTH_FILE);
 }
 
+/**
+ * The state directory may be shared, so the entry counts only when it is a bounded regular file this
+ * user owns and nobody else can write. A link, FIFO or other special file reads as a miss without
+ * blocking, and the caller probes `/health` instead.
+ */
 function readPersistedEntry(stateDir: string): { identity: unknown; health: unknown } | null {
   try {
-    const parsed: unknown = JSON.parse(fs.readFileSync(persistedHealthPath(stateDir), 'utf8'));
-    return parsed && typeof parsed === 'object'
-      ? (parsed as { identity: unknown; health: unknown })
-      : null;
+    const descriptor = openVerifiedFileForRead(persistedHealthPath(stateDir));
+    if (descriptor === undefined) return null;
+    try {
+      const stats = fs.fstatSync(descriptor);
+      if (!isPrivateOwnedFile(stats)) return null;
+      const buffer = Buffer.alloc(stats.size);
+      const length = fs.readSync(descriptor, buffer, 0, stats.size, 0);
+      const parsed: unknown = JSON.parse(buffer.subarray(0, length).toString('utf8'));
+      return parsed && typeof parsed === 'object'
+        ? (parsed as { identity: unknown; health: unknown })
+        : null;
+    } finally {
+      fs.closeSync(descriptor);
+    }
   } catch {
     return null;
   }
 }
 
-function readPersistedHealth(info: DaemonInfo, stateDir: string): RemoteDaemonHealth | undefined {
-  const persisted = readPersistedEntry(stateDir);
+// Windows has no POSIX owner or mode bits; its ACLs are out of scope (docs/agents/security.md).
+function isPrivateOwnedFile(stats: fs.Stats): boolean {
+  if (!stats.isFile() || stats.size > PERSISTED_HEALTH_MAX_BYTES) return false;
+  const uid = process.getuid?.();
+  return uid === undefined || (stats.uid === uid && (stats.mode & 0o022) === 0);
+}
+
+function readPersistedHealth(
+  info: DaemonInfo,
+  store: PersistedHealthStore,
+): RemoteDaemonHealth | undefined {
+  const persisted = readPersistedEntry(store.stateDir);
   if (!persisted || persisted.identity !== persistedIdentity(info)) return undefined;
-  const health: RemoteDaemonHealth = {
-    reachable: true,
-    ...readRemoteHealthRecord(persisted.health),
-  };
+  const health: RemoteDaemonHealth = { reachable: true, ...store.readRecord(persisted.health) };
   return isCacheableRemoteHealth(health) ? health : undefined;
 }
 
 // The cache only saves a round trip, so a state directory it cannot write or remove from leaves the
 // command to the next probe rather than failing it.
 function persistHealth(info: DaemonInfo, health: RemoteDaemonHealth, stateDir: string): void {
-  const entry = { identity: persistedIdentity(info), health: readRemoteHealthRecord(health) };
+  const { service, version, rpcProtocolVersion, instanceId, hostArch, capabilities, upstream } =
+    health;
+  const record = {
+    service,
+    version,
+    rpcProtocolVersion,
+    instanceId,
+    hostArch,
+    capabilities,
+    upstream,
+  };
+  const entry = { identity: persistedIdentity(info), health: record };
   try {
     fs.mkdirSync(stateDir, { recursive: true });
     publishFileSync({
@@ -116,12 +156,12 @@ export function invalidateRemoteDaemonHealth(info: DaemonInfo, stateDir?: string
 /** The cached answer for this daemon, from this process or from `stateDir`, without probing. */
 export function readCachedRemoteHealth(
   info: DaemonInfo,
-  stateDir?: string,
+  store?: PersistedHealthStore,
 ): RemoteDaemonHealth | undefined {
   if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
     return remoteHealthCache.health;
   }
-  const persisted = stateDir ? readPersistedHealth(info, stateDir) : undefined;
+  const persisted = store ? readPersistedHealth(info, store) : undefined;
   if (persisted) cacheRemoteDaemonHealth(info, persisted);
   return persisted;
 }
@@ -133,12 +173,14 @@ export function readCachedRemoteHealth(
 export async function cachedRemoteHealth(
   info: DaemonInfo,
   probe: () => Promise<RemoteDaemonHealth>,
-  stateDir?: string,
+  store?: PersistedHealthStore,
 ): Promise<RemoteDaemonHealth> {
-  const cached = readCachedRemoteHealth(info, stateDir);
+  const cached = readCachedRemoteHealth(info, store);
   if (cached) return cached;
   const generation = remoteHealthGeneration;
   const health = await probe();
-  if (generation === remoteHealthGeneration) cacheRemoteDaemonHealth(info, health, stateDir);
+  if (generation === remoteHealthGeneration) {
+    cacheRemoteDaemonHealth(info, health, store?.stateDir);
+  }
   return health;
 }

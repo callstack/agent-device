@@ -2,11 +2,12 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   assertScriptArtifactsCapability,
+  readDaemonCapabilities,
   type DaemonPaths,
   type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -23,14 +24,10 @@ import {
   DAEMON_INSTANCE_REASONS,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
+  type DaemonHealthPayload,
 } from '@agent-device/contracts/daemon-http';
 import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
-import {
-  applyRemoteDaemonHealth,
-  readHealthPayload,
-  type RemoteDaemonHealth,
-  type RemoteDaemonHealthLink,
-} from './daemon-client-health-record.ts';
+import { abortedRequestError, refuseAbortedRequest } from './daemon-client-request-guard.ts';
 import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
@@ -64,94 +61,9 @@ type SendRequestOptions = {
    * how an attach client and the quiesce request itself time out.
    */
   timeoutRecovery?: 'retire-unresponsive' | 'none';
+  /** Re-probes a daemon whose `/health` answer was cached, before an unsent request is resent. */
+  remoteHealthGate?: (budgetMs: number | undefined) => Promise<void>;
 };
-
-/**
- * The requester-side half of a per-call `AbortSignal` (#3178), kept beside the transport that
- * enforces it so cancellation has one owner across both halves. The transport half closes the
- * request's connection (which is what makes the daemon mark the request canceled); this half
- * answers for the cases a transport cannot observe:
- *
- * - a signal already aborted before anything is sent — nothing may leave the process, so the refusal
- *   carries `details.dispatched: 'no'`;
- * - an abort during a phase with no connection to close, or a custom transport that ignores the
- *   signal — the caller's promise still settles, with `details.dispatched: 'unknown'` because the
- *   request may already have been written.
- *
- * Both reject with the typed canceled-request error (`details.reason: 'request_canceled'`) whatever
- * reason the caller aborted with, so every layer dispatches on the same reason and never on the
- * caller's arbitrary abort reason or on error text. An abort is never a timeout: nothing here reads
- * or extends a request deadline, and no timeout path may produce this rejection.
- */
-
-/**
- * The typed canceled-request error for a caller's own abort. The reason the caller aborted with
- * survives unchanged as the cause — `AbortController.abort()` accepts any value — while the
- * rejection itself dispatches on `reason: 'request_canceled'` with the delivery evidence the
- * aborting layer can prove. A built-in transport rejects every abort through this, so a caller's
- * arbitrary abort reason never escapes as the outcome of a daemon request.
- */
-function abortedRequestError(
-  signal: AbortSignal,
-  dispatched: 'no' | 'unknown',
-  requestId?: string,
-): AppError {
-  return createRequestCanceledError({ requestId, dispatched }, signal.reason);
-}
-
-/**
- * Refuses a send attempt that starts while the caller's signal is already aborted: nothing may leave
- * the process, so this never touches a connection and the refusal carries `details.dispatched: 'no'`.
- */
-function refuseAbortedRequest(signal: AbortSignal | undefined, requestId?: string): void {
-  if (!signal?.aborted) return;
-  throw abortedRequestError(signal, 'no', requestId);
-}
-
-type RequestGuard = {
-  /** Refuses an already-aborted call before anything is sent. No-op without a signal. */
-  refuseIfAborted(): void;
-  /** Settles `send`'s outcome against the signal, winning with the typed canceled error on abort. */
-  guard<T>(send: () => Promise<T>): Promise<T>;
-};
-
-const NO_REQUEST_GUARD: RequestGuard = {
-  refuseIfAborted: () => {},
-  guard: async <T>(send: () => Promise<T>) => await send(),
-};
-
-export function createRequestGuard(params: {
-  signal: AbortSignal | undefined;
-  requestId?: string;
-}): RequestGuard {
-  const { signal, requestId } = params;
-  if (!signal) return NO_REQUEST_GUARD;
-  return {
-    refuseIfAborted() {
-      if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
-    },
-    guard: async <T>(send: () => Promise<T>): Promise<T> => {
-      // Checked before `send` runs, so nothing has been dispatched yet — the honest evidence is
-      // 'no'. An abort listener attached to an already-aborted signal never fires, so this check is
-      // what keeps a late `guard` call rejecting rather than pending forever.
-      if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
-      return await new Promise<T>((resolve, reject) => {
-        const onAbort = (): void => reject(abortedRequestError(signal, 'unknown', requestId));
-        signal.addEventListener('abort', onAbort, { once: true });
-        void send().then(
-          (value) => {
-            signal.removeEventListener('abort', onAbort);
-            resolve(value);
-          },
-          (error: unknown) => {
-            signal.removeEventListener('abort', onAbort);
-            reject(error);
-          },
-        );
-      });
-    },
-  };
-}
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
 const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
@@ -173,6 +85,26 @@ function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): App
     { reason: DAEMON_TRANSPORT_REASONS.endpointUnavailable.reason, transport },
   );
 }
+
+export type RemoteDaemonHealth = {
+  reachable: boolean;
+  statusCode?: number;
+  service?: string;
+  version?: string;
+  rpcProtocolVersion?: number;
+  instanceId?: string;
+  hostArch?: string;
+  capabilities?: DaemonInfo['capabilities'];
+  /** The daemon behind a proxy, as the proxy's health reported it. */
+  upstream?: RemoteDaemonHealthLink;
+  /** The probe ran out of its time budget before an answer, rather than failing outright. */
+  timedOut?: true;
+};
+
+type RemoteDaemonHealthLink = Pick<
+  RemoteDaemonHealth,
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'capabilities'
+>;
 
 export async function probeDaemonReachability(
   info: DaemonInfo,
@@ -334,6 +266,57 @@ function healthProbeExpired(signal: AbortSignal, deadline: number): boolean {
   return signal.aborted || performance.now() >= deadline;
 }
 
+function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' | 'statusCode'> {
+  try {
+    const parsed = JSON.parse(body) as { upstream?: unknown };
+    const upstream =
+      parsed.upstream && typeof parsed.upstream === 'object'
+        ? readHealthLink(parsed.upstream as Record<string, unknown>)
+        : undefined;
+    return {
+      ...readHealthLink(parsed as Record<string, unknown>),
+      ...(upstream ? { upstream } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
+  return {
+    service: isHealthService(parsed.service) ? parsed.service : undefined,
+    version: readHealthVersion(parsed.version),
+    rpcProtocolVersion:
+      typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
+    ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
+    ...(typeof parsed.hostArch === 'string' ? { hostArch: parsed.hostArch } : {}),
+    ...(parsed.capabilities === undefined
+      ? {}
+      : { capabilities: readDaemonCapabilities(parsed.capabilities) }),
+  };
+}
+
+// The remote picks what /health says and agents read the refusal built from it, so only a service
+// the contract names and a version-shaped string are kept; anything else reads as absent.
+const HEALTH_SERVICES: Readonly<Record<DaemonHealthPayload['service'], true>> = {
+  'agent-device-daemon': true,
+  'agent-device-proxy': true,
+};
+const HEALTH_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const HEALTH_VERSION_MAX_LENGTH = 64;
+
+function isHealthService(value: unknown): value is DaemonHealthPayload['service'] {
+  return typeof value === 'string' && Object.hasOwn(HEALTH_SERVICES, value);
+}
+
+function readHealthVersion(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    value.length <= HEALTH_VERSION_MAX_LENGTH &&
+    HEALTH_VERSION.test(value)
+    ? value
+    : undefined;
+}
+
 export async function sendRequest(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -382,7 +365,13 @@ async function recoverFromTimeout(
     action: req.positionals?.[0],
     requestSent: error.details.daemonRequestSent !== false,
     responseStarted: error.details.remoteResponseStarted === true,
-    readRemoteHealth: (budgetMs) => readDaemonHttpHealth(info, budgetMs, options.signal),
+    readRemoteHealth: async (budgetMs) => {
+      const health = await readDaemonHttpHealth(info, budgetMs, options.signal);
+      if (!health.reachable || health.instanceId !== info.remoteInstanceId) {
+        await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
+      }
+      return health;
+    },
   });
 }
 
@@ -440,15 +429,22 @@ async function sendRequestWithFallback(
         options,
       );
     }
-    if (isRemoteTransportFailure(error)) {
+    if (dropsCachedRemoteHealth(error)) {
       await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
     }
-    if (info.baseUrl && info.remoteHealthCached && isUnsentTransportFailure(error)) {
+    if (
+      info.baseUrl &&
+      options.remoteHealthGate &&
+      error instanceof AppError &&
+      PROVEN_UNSENT.has(error)
+    ) {
       return await resendAfterRemoteHealthGate(
+        options.remoteHealthGate,
         info,
         req,
         statePaths,
         timeoutMs,
+        deadline,
         transport,
         options,
       );
@@ -488,27 +484,37 @@ async function retryAfterRemoteInstanceMismatch(
 }
 
 /**
- * A send from a cached `/health` answer that never left this process (refused, reset, no such host)
- * proves nothing reached the daemon, so it gets the gate the cache skipped: the same probe, re-probe
- * budget and typed refusal as a first contact, then one resend under the command's full budget.
+ * Only a send whose connection never opened proves nothing reached the daemon. It gets the gate the
+ * cache skipped, then one resend, both within what is left of the command's budget.
  */
 async function resendAfterRemoteHealthGate(
+  gate: (budgetMs: number | undefined) => Promise<void>,
   info: DaemonInfo,
   req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
+  deadline: number | undefined,
   transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  info.remoteHealthCached = undefined;
-  const { openRemoteHealthGate } = await import('./daemon-client-lifecycle.ts');
-  await openRemoteHealthGate(
+  const requestId = req.meta?.requestId;
+  const gateBudgetMs = remainingRemoteRequestTimeoutMs(req, timeoutMs, deadline);
+  try {
+    await gate(gateBudgetMs);
+  } catch (error) {
+    refuseAbortedRequest(options.signal, requestId);
+    throw error;
+  }
+  refuseAbortedRequest(options.signal, requestId);
+  const resendOptions = { ...options, remoteHealthGate: undefined };
+  return await resendAfterFreshRemoteHealth(
     info,
-    statePaths.baseDir,
-    timeoutMs === undefined ? undefined : { budgetMs: timeoutMs, signal: options.signal },
+    req,
+    statePaths,
+    remainingRemoteRequestTimeoutMs(req, timeoutMs, deadline),
+    transport,
+    resendOptions,
   );
-  refuseAbortedRequest(options.signal, req.meta?.requestId);
-  return await resendAfterFreshRemoteHealth(info, req, statePaths, timeoutMs, transport, options);
 }
 
 async function resendAfterFreshRemoteHealth(
@@ -524,20 +530,22 @@ async function resendAfterFreshRemoteHealth(
   try {
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
   } catch (error) {
-    if (isRemoteTransportFailure(error)) {
+    if (dropsCachedRemoteHealth(error)) {
       await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
     }
     throw error;
   }
 }
 
-function isUnsentTransportFailure(error: unknown): boolean {
-  return (
-    error instanceof AppError &&
-    error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason &&
-    error.details.daemonRequestSent === false
-  );
+/** Points `info` at the daemon a `/health` answer describes: its instances and capabilities. */
+export function applyRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHealth): void {
+  info.remoteInstanceId = health.instanceId;
+  info.remoteUpstreamInstanceId = health.upstream?.instanceId;
+  info.capabilities = (health.upstream ?? health).capabilities;
 }
+
+/** Failures raised here before the connection opened; a daemon error can carry the same details. */
+const PROVEN_UNSENT = new WeakSet<AppError>();
 
 function remainingRemoteRequestTimeoutMs(
   req: DaemonWireRequest,
@@ -563,15 +571,13 @@ function isRemoteInstanceMismatch(error: unknown): boolean {
   );
 }
 
-// A reply that is not the daemon's JSON-RPC came from something else on the path, such as a gateway
-// answering 5xx while the daemon is away, so the next command probes `/health` again.
-function isRemoteTransportFailure(error: unknown): boolean {
+// A timeout is left to the timeout route, which drops the cache only when its probe shows the
+// daemon gone or replaced.
+function dropsCachedRemoteHealth(error: unknown): boolean {
   return (
     error instanceof AppError &&
     (error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason ||
-      error.details?.reason === DAEMON_TRANSPORT_REASONS.timeout.reason ||
-      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyUnreadable.reason ||
-      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyInvalid.reason)
+      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyUnreadable.reason)
   );
 }
 
@@ -631,7 +637,12 @@ function isSafeAutoTransportFallbackError(
   error: unknown,
   attempted: ResolvedDaemonTransport,
 ): boolean {
-  return attempted === 'socket' && isUnsentTransportFailure(error);
+  return (
+    attempted === 'socket' &&
+    error instanceof AppError &&
+    error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason &&
+    error.details.daemonRequestSent === false
+  );
 }
 
 function requireDaemonTransport(
@@ -816,171 +827,170 @@ async function sendHttpRequest(
   const transport = await loadNodeHttpRequester(rpcUrl.protocol);
   const callerSignal = options.signal;
   refuseAbortedRequest(callerSignal, req.meta?.requestId);
-
-  return await new Promise((resolve, reject) => {
-    let settled = false;
-    // Set when the request was handed to the OS (`finish`), never for a connection that failed first.
-    let requestSent = false;
-    // Set when a 2xx progress stream opened on `/rpc`, proving the remote URL and auth token.
-    let responseStarted = false;
-    const detachCallerAbort = (): void => {
-      if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
-    };
-    const resolveOnce = (response: DaemonResponse | PromiseLike<DaemonResponse>): void => {
-      if (settled) return;
-      settled = true;
-      detachCallerAbort();
-      resolve(response);
-    };
-    const rejectOnce = (error: unknown): void => {
-      if (settled) return;
-      settled = true;
-      detachCallerAbort();
-      reject(error);
-    };
-    const handleBody = (body: string): void => {
-      handleDaemonHttpResponseBody(body, {
-        info,
-        req,
-        stateDir: statePaths.baseDir,
-        host: options.host,
-        resolve: resolveOnce,
-        reject: rejectOnce,
-      });
-    };
-    const request = transport.request(
-      {
-        protocol: rpcUrl.protocol,
-        host: rpcUrl.hostname,
-        port: rpcUrl.port,
-        method: 'POST',
-        path: rpcUrl.pathname + rpcUrl.search,
-        headers,
-      },
-      (res) => {
-        if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
-          res.resume();
-          if (timeoutHandle) clearTimeout(timeoutHandle);
-          rejectOnce(
-            new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
-              reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
-              daemonBaseUrl: info.baseUrl,
-            }),
-          );
-          return;
-        }
-        if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
-          if (res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 300) {
-            responseStarted = true;
-          }
-          readDaemonHttpProgressResponse(res, {
-            req,
-            onProgress: options.onProgress,
-            reject: rejectOnce,
-            clearTimeout: () => {
-              if (timeoutHandle) clearTimeout(timeoutHandle);
-            },
-            handleResponseBody: handleBody,
-          });
-          return;
-        }
-        const responseBody = readNodeHttpResponseBody(res).catch((error: unknown) => {
-          throw new AppError(
-            'COMMAND_FAILED',
-            'Failed to read daemon response',
-            {
-              requestId: req.meta?.requestId,
-              reason: DAEMON_TRANSPORT_REASONS.replyUnreadable.reason,
-            },
-            error instanceof Error ? error : undefined,
-          );
+  // A remote 5xx means the daemon or a hop before it failed, so the next command probes again.
+  let serverError = false;
+  try {
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      // Set once a connection opened; a reused pooled socket is already open.
+      let connected = false;
+      // Set when the request was handed to the OS (`finish`), never for a connection that failed first.
+      let requestSent = false;
+      // Set when a 2xx progress stream opened on `/rpc`, proving the remote URL and auth token.
+      let responseStarted = false;
+      const detachCallerAbort = (): void => {
+        if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
+      };
+      const resolveOnce = (response: DaemonResponse | PromiseLike<DaemonResponse>): void => {
+        if (settled) return;
+        settled = true;
+        detachCallerAbort();
+        resolve(response);
+      };
+      const rejectOnce = (error: unknown): void => {
+        if (settled) return;
+        settled = true;
+        detachCallerAbort();
+        reject(error);
+      };
+      const handleBody = (body: string): void => {
+        handleDaemonHttpResponseBody(body, {
+          info,
+          req,
+          stateDir: statePaths.baseDir,
+          host: options.host,
+          resolve: resolveOnce,
+          reject: rejectOnce,
         });
-        void responseBody
-          .then((body) => {
+      };
+      const request = transport.request(
+        {
+          protocol: rpcUrl.protocol,
+          host: rpcUrl.hostname,
+          port: rpcUrl.port,
+          method: 'POST',
+          path: rpcUrl.pathname + rpcUrl.search,
+          headers,
+        },
+        (res) => {
+          if (info.baseUrl && (res.statusCode ?? 0) >= 500) serverError = true;
+          if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
+            res.resume();
             if (timeoutHandle) clearTimeout(timeoutHandle);
-            handleBody(body);
-          })
-          .catch((error: unknown) => {
-            if (timeoutHandle) clearTimeout(timeoutHandle);
-            rejectOnce(error);
-          });
-      },
-    );
-
-    const remote = isRemoteDaemon(info);
-    const timeoutHandle =
-      typeof timeoutMs === 'number'
-        ? setTimeout(() => {
             rejectOnce(
-              requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent, responseStarted),
+              new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
+                reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
+                daemonBaseUrl: info.baseUrl,
+              }),
             );
-            request.destroy();
-          }, timeoutMs)
-        : undefined;
-
-    // Destroying the request closes this one connection, which is what makes the daemon mark the
-    // request canceled. The timeout timer is cleared because an abort is never a timeout: nothing
-    // may run the timeout's runner sweep or daemon reset after the caller canceled. The settle goes
-    // first so the `error` the destroy surfaces arrives after `settled` and cannot rewrite the
-    // typed cancellation into a transport failure.
-    const onCallerAbort = (): void => {
-      if (settled) return;
-      if (timeoutHandle) clearTimeout(timeoutHandle);
-      rejectOnce(
-        abortedRequestError(callerSignal!, requestSent ? 'unknown' : 'no', req.meta?.requestId),
+            return;
+          }
+          if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
+            if (res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 300) {
+              responseStarted = true;
+            }
+            readDaemonHttpProgressResponse(res, {
+              req,
+              onProgress: options.onProgress,
+              reject: rejectOnce,
+              clearTimeout: () => {
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+              },
+              handleResponseBody: handleBody,
+            });
+            return;
+          }
+          const responseBody = readNodeHttpResponseBody(res).catch((error: unknown) => {
+            throw new AppError(
+              'COMMAND_FAILED',
+              'Failed to read daemon response',
+              {
+                requestId: req.meta?.requestId,
+                reason: DAEMON_TRANSPORT_REASONS.replyUnreadable.reason,
+              },
+              error instanceof Error ? error : undefined,
+            );
+          });
+          void responseBody
+            .then((body) => {
+              if (timeoutHandle) clearTimeout(timeoutHandle);
+              handleBody(body);
+            })
+            .catch((error: unknown) => {
+              if (timeoutHandle) clearTimeout(timeoutHandle);
+              rejectOnce(error);
+            });
+        },
       );
-      request.destroy();
-    };
-    if (callerSignal) {
-      callerSignal.addEventListener('abort', onCallerAbort, { once: true });
-    }
 
-    request.on('error', (err) => {
-      if (timeoutHandle) clearTimeout(timeoutHandle);
-      // `request.destroy()` surfaces an `error` after an intentional abort or timeout has already
-      // settled this promise. Returning before `handleTransportError` keeps that expected teardown
-      // from emitting a `daemon_request_socket_error` diagnostic; a genuine transport error still
-      // arrives before the settle and rejects.
-      if (settled) return;
-      rejectOnce(handleTransportError(err, req.meta?.requestId, remote, requestSent));
-    });
+      const remote = isRemoteDaemon(info);
+      const timeoutHandle =
+        typeof timeoutMs === 'number'
+          ? setTimeout(() => {
+              rejectOnce(
+                requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent, responseStarted),
+              );
+              request.destroy();
+            }, timeoutMs)
+          : undefined;
 
-    request.on('finish', () => {
-      requestSent = true;
+      // Destroying the request closes this one connection, which is what makes the daemon mark the
+      // request canceled. The timeout timer is cleared because an abort is never a timeout: nothing
+      // may run the timeout's runner sweep or daemon reset after the caller canceled. The settle goes
+      // first so the `error` the destroy surfaces arrives after `settled` and cannot rewrite the
+      // typed cancellation into a transport failure.
+      const onCallerAbort = (): void => {
+        if (settled) return;
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        rejectOnce(
+          abortedRequestError(callerSignal!, requestSent ? 'unknown' : 'no', req.meta?.requestId),
+        );
+        request.destroy();
+      };
+      if (callerSignal) {
+        callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+      }
+
+      request.on('error', (err) => {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        // `request.destroy()` surfaces an `error` after an intentional abort or timeout has already
+        // settled this promise. Returning before `handleTransportError` keeps that expected teardown
+        // from emitting a `daemon_request_socket_error` diagnostic; a genuine transport error still
+        // arrives before the settle and rejects.
+        if (settled) return;
+        const failure = handleTransportError(err, req.meta?.requestId, remote, requestSent);
+        if (!connected) PROVEN_UNSENT.add(failure);
+        rejectOnce(failure);
+      });
+
+      request.on('socket', (socket) => {
+        if (!socket.connecting) connected = true;
+        else socket.once('connect', () => (connected = true));
+      });
+      request.on('finish', () => {
+        requestSent = true;
+      });
+      request.write(rpcPayload);
+      request.end();
     });
-    request.write(rpcPayload);
-    request.end();
-  });
+  } finally {
+    if (serverError) await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
+  }
 }
 
 // Loaded on the remote path only: a local daemon request never pays for the remote health cache.
 const loadRemoteHealthCache = () => import('./daemon-client-remote-health-cache.ts');
 
 /** Drops a remote daemon's cached health; a local daemon has none, so its failure loads nothing. */
-async function invalidateRemoteDaemonHealth(info: DaemonInfo, stateDir: string): Promise<void> {
+export async function invalidateRemoteDaemonHealth(
+  info: DaemonInfo,
+  stateDir: string,
+): Promise<void> {
   if (!info.baseUrl) return;
   (await loadRemoteHealthCache()).invalidateRemoteDaemonHealth(info, stateDir);
 }
 
-/** A remote daemon's cached `/health` answer, from this process or the state directory, if any. */
-export async function readCachedRemoteDaemonHealth(
-  info: DaemonInfo,
-  stateDir: string,
-): Promise<RemoteDaemonHealth | undefined> {
-  return (await loadRemoteHealthCache()).readCachedRemoteHealth(info, stateDir);
-}
-
-/** The remote `/health` answer within this caller's bound, through the cache. */
-export async function cachedRemoteDaemonHealth(
-  info: DaemonInfo,
-  stateDir: string,
-  probeTimeoutMs?: number,
-  callerSignal?: AbortSignal,
-): Promise<RemoteDaemonHealth> {
-  const { cachedRemoteHealth } = await loadRemoteHealthCache();
-  return await cachedRemoteHealth(
-    info,
-    () => readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
-    stateDir,
-  );
+/** A cached `/health` record, read with the same contract checks as a live answer. */
+export function readCachedRemoteHealthRecord(record: unknown): Partial<RemoteDaemonHealth> {
+  return readHealthPayload(JSON.stringify(record ?? null));
 }

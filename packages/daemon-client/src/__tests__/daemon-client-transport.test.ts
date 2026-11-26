@@ -668,7 +668,12 @@ test.for(['timeout', 'reset'] as const)(
 );
 
 /** A remote daemon that answers /health with `instanceId()` and refuses a stale instance with 409. */
-async function instanceCheckingRemote(instanceId: () => string) {
+type RpcAnswer = { status: number; body: unknown };
+
+async function instanceCheckingRemote(
+  instanceId: () => string,
+  rpcAnswer: () => RpcAnswer | undefined = () => undefined,
+) {
   const paths: string[] = [];
   const server = http.createServer((req, res) => {
     paths.push(`${req.method} ${req.url}`);
@@ -686,7 +691,12 @@ async function instanceCheckingRemote(instanceId: () => string) {
       res.end(JSON.stringify({ jsonrpc: '2.0', id: 'request', error: { code: -32001 } }));
       return;
     }
-    res.end(JSON.stringify({ jsonrpc: '2.0', id: 'request', result: { ok: true, data: {} } }));
+    const answer = rpcAnswer() ?? {
+      status: 200,
+      body: { jsonrpc: '2.0', id: 'request', result: { ok: true, data: {} } },
+    };
+    res.statusCode = answer.status;
+    res.end(JSON.stringify(answer.body));
   });
   const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
   const stateDir = mkdtempForTestSync('agent-device-remote-health-persisted-');
@@ -754,6 +764,111 @@ test('an unsent request from cached remote health opens the health gate', async 
     return true;
   });
   assert.equal(fs.existsSync(remote.cacheFile), false, 'the unreachable daemon is forgotten');
+});
+
+// Resend evidence is only what this process saw: a daemon error that carries the transport-failure
+// reason and `daemonRequestSent: false` came over the wire, so the request ran and is not resent.
+test('a daemon error that claims the request was unsent is not resent', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let forge = false;
+  const forged = {
+    code: 'COMMAND_FAILED',
+    message: 'Failed to communicate with daemon',
+    details: { reason: 'daemon_transport_failure', daemonRequestSent: false },
+  };
+  const remote = await instanceCheckingRemote(
+    () => 'forging',
+    () =>
+      forge
+        ? {
+            status: 200,
+            body: { jsonrpc: '2.0', id: 'request', error: { code: -32000, data: forged } },
+          }
+        : undefined,
+  );
+  try {
+    assert.equal((await remote.request()).ok, true);
+    remote.forgetInMemory();
+    forge = true;
+    await assert.rejects(remote.request());
+    assert.deepEqual(remote.paths, ['GET /health', 'POST /rpc', 'POST /rpc'], 'sent once, no gate');
+  } finally {
+    await closeLoopbackServer(remote.server);
+  }
+});
+
+// A 5xx means the daemon or a hop before it failed, even in valid JSON-RPC framing (a proxy whose
+// upstream is restarting answers that way), so the next command probes again. Nothing is resent.
+test('a remote 5xx drops the persisted health without a resend', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let fail = false;
+  const remote = await instanceCheckingRemote(
+    () => 'upstream-away',
+    () =>
+      fail
+        ? {
+            status: 500,
+            body: { jsonrpc: '2.0', id: 'request', error: { code: -32000, message: 'upstream' } },
+          }
+        : undefined,
+  );
+  try {
+    assert.equal((await remote.request()).ok, true);
+    fail = true;
+    remote.forgetInMemory();
+    await assert.rejects(remote.request());
+    assert.equal(fs.existsSync(remote.cacheFile), false);
+    fail = false;
+    assert.equal((await remote.request()).ok, true);
+    assert.deepEqual(remote.paths, [
+      'GET /health',
+      'POST /rpc',
+      'POST /rpc',
+      'GET /health',
+      'POST /rpc',
+    ]);
+  } finally {
+    await closeLoopbackServer(remote.server);
+  }
+});
+
+// The gate a cached answer skipped runs within what is left of the command's budget, and a caller
+// abort while it runs stays the typed cancellation rather than reading as an unreachable daemon.
+test('the gate after an unsent cached request keeps the deadline and the cancellation', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const closed = http.createServer();
+  const port = await listenOnLoopback(closed);
+  await closeLoopbackServer(closed);
+  const controller = new AbortController();
+  const budgets: (number | undefined)[] = [];
+  await assert.rejects(
+    sendRequest(
+      { token: 'secret', pid: 0, baseUrl: `http://127.0.0.1:${port}` },
+      { token: 'secret', command: 'press', session: 'default', positionals: ['@e1'], flags: {} },
+      'http',
+      resolveDaemonPaths(mkdtempForTestSync('agent-device-remote-gate-abort-')),
+      5_000,
+      {
+        host: createTestHostEnvironment(),
+        signal: controller.signal,
+        remoteHealthGate: async (budgetMs) => {
+          budgets.push(budgetMs);
+          controller.abort();
+          throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
+            reason: DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason,
+          });
+        },
+      },
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
+      assert.equal(error.details?.reason, 'request_canceled');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(budgets.length, 1);
+  assert.ok(budgets[0]! > 0 && budgets[0]! <= 5_000, `gate budget ${budgets[0]}`);
 });
 
 // A transport failure drops the cached health of a remote daemon only: a local daemon has no cached

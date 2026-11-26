@@ -20,7 +20,8 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
-import { createRequestGuard, sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
+import { createRequestGuard } from './daemon-client-request-guard.ts';
+import { sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, readRegisteredDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 import type {
@@ -120,6 +121,17 @@ async function sendToDaemonOnHost(
     );
   });
   const info = daemon.info;
+  // A cached `/health` answer skipped the probe; this runs it when the command needs a fresh one.
+  const remoteHealthGate = daemon.remoteHealthCached
+    ? async (budgetMs: number | undefined) => {
+        const { refreshRemoteDaemonHealth } = await import('./daemon-client-remote-health-gate.ts');
+        await refreshRemoteDaemonHealth(
+          info,
+          settings.paths.baseDir,
+          budgetMs === undefined ? undefined : { budgetMs, signal: options.signal },
+        );
+      }
+    : undefined;
   const preparedRemoteRequest = await cancellation.guard(
     async () =>
       await protectArtifactUploadWithLeaseBeats(
@@ -170,10 +182,15 @@ async function sendToDaemonOnHost(
                 onProgress: options.onProgress,
                 signal: options.signal,
                 timeoutRecovery: resolveTimeoutRecovery(settings),
+                remoteHealthGate,
               },
             );
           if (!info.baseUrl || !request.meta?.clientArtifactPaths?.savedScript)
             return await send(request);
+          // A capability missing only from a cached answer may have arrived with a daemon upgrade.
+          if (remoteHealthGate && !info.capabilities?.includes('script-artifacts')) {
+            await cancellation.guard(() => remoteHealthGate(requestTimeoutMs));
+          }
           return await sendRemoteScriptOpen(info, request, settings.paths.baseDir, send);
         },
         { requestId, command: req.command },

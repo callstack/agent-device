@@ -101,3 +101,43 @@ test('a remote recording is not resent to a replacement daemon that cannot deliv
     await closeLoopbackServer(server);
   }
 });
+
+// A cached answer can predate a daemon upgrade, so a capability it lacks is checked against a fresh
+// `/health` before the recording is refused. The open is sent once, to the upgraded daemon.
+test('a capability missing only from cached health is refreshed before refusal', async () => {
+  let upgraded = false;
+  const paths: string[] = [];
+  const server = http.createServer((req, res) => {
+    paths.push(`${req.method} ${req.url}`);
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/health') {
+      const health = upgraded
+        ? { instanceId: 'upgraded', capabilities: ['script-artifacts'] }
+        : { instanceId: 'legacy' };
+      res.end(JSON.stringify({ ok: true, ...health }));
+      return;
+    }
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: 'test', result: { ok: true, data: {} } }));
+  });
+  const root = mkdtempForTestSync('script-capability-refresh-');
+  try {
+    const daemonBaseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+    const stateDir = path.join(root, 'state');
+    const open = (saveScript?: string) =>
+      sendToDaemon(
+        {
+          command: 'open',
+          session: 'owned',
+          positionals: ['Demo'],
+          flags: { daemonBaseUrl, stateDir, ...(saveScript ? { saveScript } : {}) },
+        },
+        { authToken: 'test' },
+      );
+    await expect(open()).resolves.toMatchObject({ ok: true });
+    upgraded = true;
+    await expect(open(path.join(root, 'journey.ad'))).resolves.toMatchObject({ ok: true });
+    expect(paths).toEqual(['GET /health', 'POST /rpc', 'GET /health', 'POST /rpc']);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

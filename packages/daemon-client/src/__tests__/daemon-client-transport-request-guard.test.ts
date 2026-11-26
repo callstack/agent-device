@@ -9,7 +9,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
-import { createRequestGuard } from '../daemon-client-transport.ts';
+import { createRequestGuard } from '../daemon-client-request-guard.ts';
 
 function canceledOutcome(promise: Promise<unknown>): Promise<unknown> {
   return promise.then(

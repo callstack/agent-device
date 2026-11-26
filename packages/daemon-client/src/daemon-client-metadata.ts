@@ -40,11 +40,6 @@ export type DaemonInfo = {
   baseUrl?: string;
   remoteInstanceId?: string;
   remoteUpstreamInstanceId?: string;
-  /**
-   * The remote fields above came from a cached `/health` answer, so no probe ran for this command. A
-   * send that fails before it leaves this process then opens the `/health` gate and resends once.
-   */
-  remoteHealthCached?: true;
 };
 
 /** Why a daemon is not the one this client would use. `transport` means alive but not on the
