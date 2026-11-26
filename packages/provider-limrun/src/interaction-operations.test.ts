@@ -144,6 +144,7 @@ test('app-event delivery is admitted on both direct-session legs', () => {
 test('iOS inherits shared settings except keychain reset and time zone', () => {
   const android = limrunAndroidSettingsFacts();
   expect(runtimeSubjectFact(android.setSetting, 'animations').available).toBe(true);
+  expect(runtimeSubjectFact(android.setSetting, 'timezone').available).toBe(true);
   const ios = limrunAppleSettingsFacts(testIosRunner.facts);
   for (const setting of [
     'appearance',

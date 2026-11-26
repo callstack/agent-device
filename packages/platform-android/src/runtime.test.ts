@@ -416,12 +416,13 @@ test('admits both clipboard halves and the app switcher on every real Android ki
     // R57: the deep link opens through `am start` on the same cell.
     expect(binding.facts.operations.triggerAppEvent).toEqual({ available: true });
     expect(binding.operations.triggerAppEvent).toBeTypeOf('function');
-    // R58: settings run over adb (`appops`, `settings put`, `pm clear`, …) on that cell too, and
-    // so does the read leg (`settings get system font_scale`), which every Android kind can answer.
+    // R58: settings run over adb (`appops`, `settings put`, `pm clear`, `cmd alarm`, …) on both
+    // emulators and physical devices, and so does the read leg (`settings get system font_scale`).
     const { setSetting, readSetting } = binding.facts.operations;
     for (const setting of ANDROID_SETTINGS) {
       expect(runtimeSubjectFact(setSetting, setting)).toEqual({ available: true });
     }
+    expect(runtimeSubjectFact(setSetting, 'timezone')).toEqual({ available: true });
     expect(runtimeSubjectFact(setSetting, 'reset-keychain')).toMatchObject({
       available: false,
       reason: 'unsupported-platform-leaf',

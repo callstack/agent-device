@@ -410,6 +410,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             animations: available,
             appearance: available,
             'text-size': available,
+            timezone: available,
             fingerprint: available,
             'clear-app-state': available,
             permission: available,
