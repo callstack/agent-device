@@ -39,6 +39,7 @@ Entry points for driving devices from Node.js:
     example while the app is still loading. Polling callers may keep polling. False for every other
     platform, backend, and mechanism failure.
   - `centerOfRect(rect)`
+  - `formatPinnedRef(ref, generation)`: pair a plain capture ref with its `refsGeneration` before an interaction.
   - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
   - types: `DaemonBinding`, `DaemonLifecycle`, `EnsureDaemonOptions`, `DaemonConnection`, `DaemonIdentity`
   - types: every option and result type of the client's methods, among them `AppOpenOptions`,
@@ -63,6 +64,21 @@ This example opens an app, takes a snapshot, interacts, handles typed errors, an
 ```
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
+
+Use `formatPinnedRef` from the same installed `agent-device` package as your client. It formats a capture's plain ref and generation for that version's live-ref grammar, so your integration does not construct the pin separator itself:
+
+```ts
+import { createAgentDeviceClient, formatPinnedRef } from 'agent-device';
+
+const client = createAgentDeviceClient();
+const snapshot = await client.capture.snapshot({ interactiveOnly: true });
+const node = snapshot.nodes?.find((node) => node.label === 'Continue');
+if (node?.ref && snapshot.refsGeneration !== undefined) {
+  await client.interactions.press({ ref: formatPinnedRef(node.ref, snapshot.refsGeneration) });
+}
+```
+
+A pin does not refresh a stale ref. After another capture replaces its generation, take a new snapshot and use its ref and generation.
 
 When the daemon can name the attached host device, `client.apps.open()` answers with it under `device`. Its `kind` (`simulator`, `emulator`, or `device`), `model` and `osVersion` are each optional and present only when the host or provider reported them, the same fields `client.sessions.list()` reports per session. A target that reports no OS leaves `osVersion` unset; nothing infers one.
 
