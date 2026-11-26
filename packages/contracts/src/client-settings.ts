@@ -7,6 +7,7 @@ import type {
   PermissionAction,
   PermissionMode,
   SETTINGS,
+  SETTING_RESET_STATE,
   SettingName,
 } from './settings-catalog.ts';
 
@@ -19,7 +20,9 @@ type FormState<Form> = Form extends { kind: 'on-off' }
   ? 'on' | 'off'
   : Form extends { kind: 'choice'; states: readonly (infer State)[] }
     ? State
-    : never;
+    : Form extends { kind: 'value' }
+      ? typeof SETTING_RESET_STATE | (string & {})
+      : never;
 
 type SettingState<Name extends SettingName> = FormState<(typeof SETTINGS)[Name]['forms'][number]>;
 
@@ -36,7 +39,10 @@ type StateOnlySettingOptions = {
       : { setting: Name; state: SettingState<Name> });
 }[StateOnlySetting];
 
-/** Switches that change the whole Android device; naming an app is refused with `setting_app_not_consumed`. */
+/**
+ * Settings that change the whole device on Android and wherever else they run; naming an app is
+ * refused with `setting_app_not_consumed`.
+ */
 type DeviceLevelToggleSetting = {
   [Name in SettingName]: (typeof SETTINGS)[Name] extends {
     app: 'input';

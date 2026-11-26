@@ -11,6 +11,7 @@ import {
   SETTINGS,
   settingDefinition,
   SETTING_NAMES,
+  SETTING_RESET_STATE,
   TEXT_SIZE_CATEGORIES,
   type AppearanceAction,
   type MobilePermissionTarget,
@@ -218,6 +219,8 @@ function formUsage(form: SettingForm, readable: boolean): string {
     }
     case 'app-id':
       return '[app-id]';
+    case 'value':
+      return `<${form.placeholder}|${SETTING_RESET_STATE}>`;
   }
 }
 
@@ -300,6 +303,9 @@ function parseFormPositionals(
     case 'on-off':
       if (positionals.length !== 2) throw invalidSettingsArgs();
       return { setting, state: readSettingState(state) ? 'on' : 'off' };
+    case 'value':
+      if (positionals.length !== 2) throw invalidSettingsArgs();
+      return { setting, state: parseSettingValue(setting, positionals[1] ?? '') };
     default:
       if (positionals.length !== 2) throw invalidSettingsArgs();
       return { setting, state };
@@ -392,8 +398,28 @@ function formAcceptsState(form: SettingForm, state: string | undefined): boolean
     case 'permission':
       return findVocabularyName(form.actions, state) !== undefined;
     case 'app-id':
+    case 'value':
       return true;
   }
+}
+
+/** The settings whose form is a `value`: each one validates its own value before dispatch. */
+type ValueSetting = {
+  [Name in SettingName]: Extract<
+    (typeof SETTINGS)[Name]['forms'][number],
+    { kind: 'value' }
+  > extends never
+    ? never
+    : Name;
+}[SettingName];
+
+const VALUE_PARSERS = {} as const satisfies Record<ValueSetting, (value: string) => string>;
+
+/** The value as the owners write it, or `reset`, so no device is handed a value it cannot read. */
+function parseSettingValue(setting: SettingName, value: string): string {
+  if (normalizeName(value) === SETTING_RESET_STATE) return SETTING_RESET_STATE;
+  const parser: (raw: string) => string = VALUE_PARSERS[setting as ValueSetting];
+  return parser(value);
 }
 
 function normalizeName(value: string | undefined): string | undefined {

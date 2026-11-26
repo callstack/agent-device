@@ -52,6 +52,9 @@ export const TEXT_SIZE_CATEGORIES = [
 
 export const APPEARANCE_ACTIONS = ['light', 'dark', 'toggle'] as const;
 
+/** The state a `value` setting takes to hand the value back to the device's own default. */
+export const SETTING_RESET_STATE = 'reset';
+
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 export type MobilePermissionTarget = (typeof MOBILE_PERMISSION_TARGETS)[number];
@@ -81,6 +84,8 @@ export type SettingForm = Readonly<
       modes?: readonly PermissionMode[];
     }
   | { kind: 'app-id' }
+  /** One value the setting validates itself, or {@link SETTING_RESET_STATE}. */
+  | { kind: 'value'; placeholder: string }
 >;
 
 export type SettingDefinition = Readonly<{
