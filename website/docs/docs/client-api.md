@@ -65,7 +65,13 @@ This example opens an app, takes a snapshot, interacts, handles typed errors, an
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
 
-Use `formatPinnedRef` from the same installed `agent-device` package as your client. It formats a capture's plain ref and generation for that version's live-ref grammar, so your integration does not construct the pin separator itself:
+`formatPinnedRef` requires a build containing the public formatter export; releases through **0.21.43 do not export it**. Check your installed package before adding the named import:
+
+```sh
+node --input-type=module -e "import * as sdk from 'agent-device'; console.log(typeof sdk.formatPinnedRef)"
+```
+
+The command must print `function`. Use `formatPinnedRef` from the same installed `agent-device` package as your client. It formats a capture's plain ref and generation for that version, so your integration does not construct the pin separator itself:
 
 ```ts
 import { createAgentDeviceClient, formatPinnedRef } from 'agent-device';
