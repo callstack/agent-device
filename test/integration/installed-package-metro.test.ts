@@ -680,6 +680,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
         console.log(JSON.stringify({
           bundleUrl: buildBundleUrl('https://public.example.test', 'ios'),
           rootExports: Object.keys(agentDeviceRoot).sort(),
+          pinnedRef: agentDeviceRoot.formatPinnedRef('@e4', 7),
           rootClientSnapshot: typeof client.capture.snapshot,
           rootArtifactAdapter: typeof agentDeviceRoot.createLocalArtifactAdapter({
             cwd: process.cwd(),
@@ -704,12 +705,14 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
       'createAgentDeviceClient',
       'createLocalArtifactAdapter',
       'ensureDaemon',
+      'formatPinnedRef',
       'isAgentDeviceError',
       'isUnreadableCaptureContentError',
       'normalizeAgentDeviceError',
       'startAgentDevice',
     ]);
     assert.equal(imports.rootClientSnapshot, 'function');
+    assert.equal(imports.pinnedRef, '@e4-s7');
     assert.equal(imports.rootArtifactAdapter, 'function');
     assert.equal(imports.ioArtifactAdapter, 'function');
     assert.equal(imports.removedSubpathsBlocked, true);

@@ -15,7 +15,7 @@ export {
   isAgentDeviceError,
   normalizeAgentDeviceError,
 } from '@agent-device/kernel/errors';
-export { centerOfRect } from '@agent-device/kernel/snapshot';
+export { centerOfRect, formatPinnedRef } from '@agent-device/kernel/snapshot';
 export { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 
 export type * from '../client/client-types.ts';
