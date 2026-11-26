@@ -78,7 +78,7 @@ export function assertAndroidReleaseFixture({ serial, appId, adb = resolveAdb() 
     const reason = error instanceof Error ? error.message.split('\n').filter(Boolean).pop() : '';
     throw new Error(
       `Android fixture preflight: could not read the installed package on ${serial}: ${reason}. ` +
-        `Check that adb runs and ${serial} is online, then install the Release fixture: pnpm test-app:android:fixture --serial ${serial}`,
+        `Check that adb runs and ${serial} is online.`,
     );
   }
   const problem = androidReleaseFixtureProblem(parseAndroidPackageFacts(dumpsys), {
