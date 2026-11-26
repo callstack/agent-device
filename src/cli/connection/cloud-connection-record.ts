@@ -159,10 +159,6 @@ function admitCloudStateRoot(stateDir: string): boolean {
   return true;
 }
 
-export function assertCloudCredentialFile(status: fs.Stats): void {
-  assertOwnedEntry(status, status.isFile(), 0o077);
-}
-
 function assertOwnedEntry(status: fs.Stats, correctKind: boolean, exposure: number): void {
   if (!correctKind || !isOwnedEntry(status, exposure)) {
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
@@ -178,15 +174,20 @@ function recordPath(location: ConnectionLocation): string {
   return path.join(cloudConnectionDir(location), 'record.json');
 }
 
-function readRecordFile(file: string): CloudConnectionRecord | null {
+export function readCloudCredentialJson(file: string): unknown {
   const fd = openVerifiedFileForRead(file);
-  if (fd === undefined) return null;
+  if (fd === undefined) return undefined;
   try {
-    assertCloudCredentialFile(fs.fstatSync(fd));
-    return JSON.parse(fs.readFileSync(fd, 'utf8')) as CloudConnectionRecord;
+    const status = fs.fstatSync(fd);
+    assertOwnedEntry(status, status.isFile(), 0o077);
+    return JSON.parse(fs.readFileSync(fd, 'utf8')) as unknown;
   } finally {
     fs.closeSync(fd);
   }
+}
+
+function readRecordFile(file: string): CloudConnectionRecord | null {
+  return (readCloudCredentialJson(file) ?? null) as CloudConnectionRecord | null;
 }
 
 export function readCloudConnection(location: ConnectionLocation): CloudConnectionRecord | null {
