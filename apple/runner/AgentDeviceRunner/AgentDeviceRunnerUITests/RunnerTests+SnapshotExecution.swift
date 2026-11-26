@@ -173,7 +173,7 @@ extension RunnerTests {
         timeout: 1,
         timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
-        self.mainOwned.needsPostSnapshotInteractionDelay = true
+        self.beginPostSnapshotInteractionStabilization()
       }
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_FAILED=%@", String(describing: error))

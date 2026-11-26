@@ -8,7 +8,7 @@ extension RunnerTests {
     defer {
       abandonedMainThreadWorkCount = 0
       MainActor.assumeIsolated {
-        mainOwned.needsPostSnapshotInteractionDelay = false
+        mainOwned.postSnapshotInteractionReadyUptime = nil
       }
     }
 
@@ -24,7 +24,35 @@ extension RunnerTests {
     mainThreadWorkLock.unlock()
     XCTAssertEqual(abandonedWorkCount, 1, "the skipped mark must not add an abandoned unit")
     MainActor.assumeIsolated {
-      XCTAssertFalse(mainOwned.needsPostSnapshotInteractionDelay)
+      XCTAssertNil(mainOwned.postSnapshotInteractionReadyUptime)
+    }
+  }
+
+  func testPostSnapshotDelayMarkStampsReadyUptimeOnMainWhenIdle() {
+    MainActor.assumeIsolated {
+      mainOwned.postSnapshotInteractionReadyUptime = nil
+    }
+    defer {
+      MainActor.assumeIsolated {
+        mainOwned.postSnapshotInteractionReadyUptime = nil
+      }
+    }
+
+    let beforeMark = ProcessInfo.processInfo.systemUptime
+    let finished = expectation(description: "off-main delay mark finished")
+    DispatchQueue(label: "agent-device.runner.tests.post-snapshot-delay-idle").async {
+      self.setNeedsPostSnapshotInteractionDelay()
+      finished.fulfill()
+    }
+
+    wait(for: [finished], timeout: 1)
+    let afterMark = ProcessInfo.processInfo.systemUptime
+    MainActor.assumeIsolated {
+      guard let readyUptime = mainOwned.postSnapshotInteractionReadyUptime else {
+        return XCTFail("expected postSnapshotInteractionReadyUptime to be stamped")
+      }
+      XCTAssertGreaterThanOrEqual(readyUptime, beforeMark + postSnapshotInteractionDelay)
+      XCTAssertLessThanOrEqual(readyUptime, afterMark + postSnapshotInteractionDelay)
     }
   }
 
