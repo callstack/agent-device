@@ -99,7 +99,10 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `cloud_api_key_required` | The configured cloud origin needs its own API key or CLI login. |
 | `cloud_catalog_key_origin_mismatch` | The API key and selected cloud endpoint specify different origins. |
 | `connection_busy` | A connection operation is in progress for the session. |
+| `cloud_invalid_max_usd` | The spend cap is not a positive decimal in micro-USD precision. |
 | `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
+| `budget_cap_unsupported` | The cloud API has no route that can enforce a spend cap. |
+| `budget_exceeded` | The requested spend cap cannot cover the cost to start the session. |
 | `insufficient_balance` | The account balance cannot cover the cost to start the session. |
 | `cloud_transport_unsupported` | The cloud session uses an attachment transport this CLI cannot drive. |
 | `cloud_session_invalid` | The cloud API returned an invalid session response. |
@@ -650,7 +653,10 @@ These reasons can come from more than one command.
 | `cloud_connection_expired` | The cloud session passed its deadline. |
 | `cloud_connect_rollback_failed` | The cloud did not confirm cleanup after attachment failed. |
 | `cloud_session_id_changed` | The cloud returned a different session ID for the same request. |
+| `cloud_invalid_max_usd` | The spend cap is not a positive decimal in micro-USD precision. |
 | `cloud_session_connect_timeout` | The cloud did not finish allocating a session before the connect deadline. |
+| `budget_cap_unsupported` | The cloud API has no route that can enforce a spend cap. |
+| `budget_exceeded` | The requested spend cap cannot cover the cost to start the session. |
 | `insufficient_balance` | The account balance cannot cover the cost to start the session. |
 | `cloud_transport_unsupported` | The cloud session uses an attachment transport this CLI cannot drive. |
 | `cloud_session_invalid` | The cloud API returned an invalid session response. |

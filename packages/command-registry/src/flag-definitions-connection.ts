@@ -459,6 +459,15 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   },
 
   {
+    key: 'maxUsd',
+    names: ['--max-usd'],
+    type: 'string',
+    usageLabel: '--max-usd <decimal>',
+    usageDescription: 'Connect cloud: cap the charge for this session in USD, for example 0.50',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'needs',
     names: ['--needs'],
     type: 'string',

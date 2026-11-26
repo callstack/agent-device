@@ -269,6 +269,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'sessionLock',
         'vendor',
         'maxMinutes',
+        'maxUsd',
         'needs',
         'showViewer',
         'live',

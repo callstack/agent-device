@@ -6,6 +6,7 @@ import {
   createCloudSession,
   deleteCloudSession,
   isDefinitiveCloudCreateRejection,
+  parseMaxUsdMicros,
 } from './cloud-session-api.ts';
 
 const access = { cloudBaseUrl: 'https://cloud.example', accessToken: 'test-cloud-key' };
@@ -273,6 +274,122 @@ test('accepts loopback plaintext for the cloud API and daemon', async () => {
   expect(fetchMock.mock.calls[0]?.[0].origin).toBe('http://localhost:3000');
 });
 
+const baseFlags = { help: false, json: false, version: false, platform: 'android' } as const;
+const cappedRequest = readCloudSessionRequest({ ...baseFlags, maxUsd: '0.50' });
+
+test.each([
+  ['0.5', '500000'],
+  ['0.50', '500000'],
+  ['1', '1000000'],
+  ['0.000001', '1'],
+  ['12.345678', '12345678'],
+  ['1000', '1000000000'],
+  ['1000.000000', '1000000000'],
+])('parses --max-usd %s as %s micro-USD', (input, micros) => {
+  expect(parseMaxUsdMicros(input)).toBe(micros);
+  expect(readCloudSessionRequest({ ...baseFlags, maxUsd: input }).maxUsdMicros).toBe(micros);
+});
+
+test.each([
+  '',
+  '0',
+  '0.0',
+  '0.000000',
+  '0.0000001',
+  '1.2345678',
+  '-1',
+  '+1',
+  '1e2',
+  '1E-1',
+  '.5',
+  '1.',
+  '00.5',
+  '1,5',
+  ' 1',
+  '1 ',
+  '0x10',
+  'abc',
+  '99999999999999999999',
+])('rejects --max-usd %j', (input) => {
+  expect(() => parseMaxUsdMicros(input)).toThrow(
+    expect.objectContaining({
+      code: 'INVALID_ARGS',
+      details: { reason: 'cloud_invalid_max_usd' },
+    }),
+  );
+});
+
+test('leaves the cap out of an uncapped request', () => {
+  expect(readCloudSessionRequest(baseFlags)).not.toHaveProperty('maxUsdMicros');
+});
+
+test('POSTs a capped request to the bounded route with the cap as a string', async () => {
+  const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) =>
+    Response.json({ ...response, reservedUsdMicros: '200000' }, { status: 201 }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  await createCloudSession(access, cappedRequest, attempt);
+  expect(fetchMock).toHaveBeenCalledOnce();
+  const [url, init] = fetchMock.mock.calls[0]!;
+  expect(url.href).toBe('https://cloud.example/v1/sessions/bounded');
+  expect(JSON.parse(String(init.body))).toEqual({
+    platform: 'android',
+    accepts: ['agent-device-daemon'],
+    maxUsdMicros: '500000',
+  });
+  expect(new Headers(init.headers).get('Idempotency-Key')).toBe('cloud-key');
+});
+
+test('keeps retrying a capped request on the bounded route only', async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(null, { status: 503 }))
+    .mockRejectedValueOnce(new TypeError('fetch failed'))
+    .mockResolvedValueOnce(Response.json(response, { status: 201 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const created = createCloudSession(access, cappedRequest, attempt);
+  await vi.advanceTimersByTimeAsync(4000);
+  await expect(created).resolves.toMatchObject({ binding: { id: response.id } });
+  expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
+    Array(3).fill('https://cloud.example/v1/sessions/bounded'),
+  );
+});
+
+test.each([404, 405])(
+  'treats HTTP %i from the bounded route as budget_cap_unsupported without a second POST',
+  async (status) => {
+    const fetchMock = vi.fn(
+      async (_url: URL, _init: RequestInit) => new Response(null, { status }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const observeId = vi.fn();
+    const refused = await createCloudSession(access, cappedRequest, {
+      ...attempt,
+      observeId,
+    }).catch((error: unknown) => error);
+    expect(refused).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { status, reason: 'budget_cap_unsupported' },
+    });
+    expect(isDefinitiveCloudCreateRejection(refused)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('https://cloud.example/v1/sessions/bounded');
+    expect(observeId).not.toHaveBeenCalled();
+  },
+);
+
+test('does not report an ordinary-route 404 as an unsupported cap', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ error: 'not_found' }, { status: 404 })),
+  );
+  const refused = await createCloudSession(access, request, attempt).catch(
+    (error: unknown) => error,
+  );
+  expect(refused).not.toMatchObject({ details: { reason: 'budget_cap_unsupported' } });
+});
+
 async function refusal(status: number, body: unknown, req: object = request) {
   vi.stubGlobal(
     'fetch',
@@ -370,6 +487,24 @@ test('drops malformed amounts and accepts a legacy bare 402', async () => {
     hint: 'Top up the balance.',
   });
   expect(legacy.message).toContain('balance is too low');
+});
+
+test('maps 422 budget_exceeded to the cap and the minimum', async () => {
+  const error = await refusal(422, {
+    error: 'budget_exceeded',
+    maxUsdMicros: '100000',
+    minimumUsdMicros: '200000',
+  });
+  expect(error.code).toBe('INVALID_ARGS');
+  expect(error.details).toEqual({
+    status: 422,
+    reason: 'budget_exceeded',
+    hint: 'Raise --max-usd to at least $0.20 or choose a cheaper device.',
+    maxUsdMicros: '100000',
+    minimumUsdMicros: '200000',
+  });
+  expect(error.message).toContain('at least $0.20');
+  expect(error.message).toContain('cap of $0.10');
 });
 
 test.each([

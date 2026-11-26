@@ -26,6 +26,17 @@ import { runCliCapture } from './cli-capture.ts';
 import { startRegisteredHttpDaemon } from './test-utils/registered-http-daemon.ts';
 import * as daemonArtifacts from '@agent-device/remote/daemon-artifacts';
 
+import {
+  cloudEnv,
+  connectArgs,
+  hostedDevice,
+  locationOf,
+  postKey,
+  stubCloudApi,
+  timeOutNextCreate,
+  sessionName,
+} from './cli-cloud-session.fixtures.ts';
+
 vi.mock('@agent-device/plugins/store', async (importOriginal) => {
   const original = await importOriginal<typeof import('@agent-device/plugins/store')>();
   const { limrunPluginCandidate } = await import('./test-utils/limrun-plugin-store.ts');
@@ -35,41 +46,6 @@ vi.mock('@agent-device/plugins/store', async (importOriginal) => {
       env.TEST_CLOUD_PLUGIN ? [limrunPluginCandidate()] : original.storePluginCandidates(env),
   };
 });
-
-const sessionName = 'cloud-qa';
-const hostedDevice = {
-  id: '00000000-0000-4000-8000-000000000001',
-  vendor: 'provider-a',
-  transport: 'agent-device-daemon',
-  platform: 'ios',
-  deadlineAt: new Date(Date.now() + 3600_000).toISOString(),
-  viewerUrl: 'https://viewer.example/session?token=private',
-  attach: {
-    kind: 'agent-device-daemon',
-    daemonBaseUrl: 'https://daemon.example/device',
-    daemonAuthToken: 'scoped-daemon-token',
-  },
-};
-
-function cloudEnv() {
-  return {
-    AGENT_DEVICE_SESSION: sessionName,
-    AGENT_DEVICE_STATE_DIR: mkdtempForTestSync('agent-device-cloud-session-'),
-    AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example',
-    AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: 'https://cloud.example',
-    AGENT_DEVICE_CLOUD_API_KEY: 'cloud-api-test-key',
-  };
-}
-
-function stubCloudApi(response: typeof hostedDevice & { fallbackFrom?: string[] } = hostedDevice) {
-  const fetchMock = vi.fn(async (_url: URL, init: RequestInit) => {
-    if (init.method === 'POST') return Response.json(response, { status: 201 });
-    if (init.method === 'GET') return Response.json({ id: response.id, state: 'running' });
-    return new Response(null, { status: 204 });
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -238,8 +214,6 @@ test('shows the viewer only by request and preserves the connection after a fail
   expect(readRemoteConnectionState({ stateDir, session: sessionName })).toBeNull();
 });
 
-const connectArgs = ['connect', 'cloud', '--platform', 'ios', '--json'];
-
 test('connect and status report when there is no viewer', async () => {
   const env = cloudEnv();
   stubCloudApi().mockResolvedValueOnce(Response.json({ ...hostedDevice, viewerUrl: undefined }));
@@ -249,10 +223,6 @@ test('connect and status report when there is no viewer', async () => {
     );
   }
 });
-
-function locationOf(env: ReturnType<typeof cloudEnv>) {
-  return { stateDir: env.AGENT_DEVICE_STATE_DIR, session: env.AGENT_DEVICE_SESSION };
-}
 
 test('requires an explicit API key before contacting a custom origin with a stored login', async () => {
   const env = cloudEnv();
@@ -297,24 +267,6 @@ test('requires an explicit API key before contacting a custom origin with a stor
   });
   expect(fetchMock).toHaveBeenCalledOnce();
 });
-
-function timeOutNextCreate(
-  fetchMock: ReturnType<typeof stubCloudApi>,
-  response?: Response,
-  beforeReply?: () => void,
-): void {
-  const clock = vi.spyOn(Date, 'now');
-  fetchMock.mockImplementationOnce(async () => {
-    beforeReply?.();
-    clock.mockReturnValue(Date.now() + 240_001);
-    if (response) return response;
-    throw new DOMException('request timed out', 'TimeoutError');
-  });
-}
-
-function postKey(init: RequestInit): string | null {
-  return new Headers(init.headers).get('Idempotency-Key');
-}
 
 test('persists intent before POST and reuses its key after a timed-out connect', async () => {
   const env = cloudEnv();

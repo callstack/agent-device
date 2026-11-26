@@ -493,7 +493,7 @@ Remote connection providers use the same lifecycle:
   connect -> install/open -> commands -> close -> disconnect
 
 Providers:
-  Cloud: agent-device connect cloud --platform ios|android starts a hosted session. Use --needs to require capabilities, --vendor to select a vendor, --device and --os to select a configuration, and --max-minutes to request a duration. Use connect cloud list for the catalog.
+  Cloud: agent-device connect cloud --platform ios|android starts a hosted session. Use --needs to require capabilities, --vendor to select a vendor, --device and --os to select a configuration, and --max-minutes to request a duration. Use --max-usd <decimal> to cap the session charge. Use connect cloud list for the catalog.
   Remote config: agent-device connect --remote-config ./remote-config.json uses a local profile.
   Direct proxy: agent-device connect proxy --daemon-base-url <proxy-agent-device-url> stores the shared proxy profile and client identity.
   BrowserStack (plugin, install separately): agent-device connect browserstack verifies credentials, the exact device, and a bs:// app reference, then stores a local provider profile. It does not create an App Automate session.

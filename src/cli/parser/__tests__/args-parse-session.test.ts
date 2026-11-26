@@ -974,3 +974,13 @@ test('relaunch passes non-command args through to open validation untouched', ()
   assert.deepEqual(parsed.positionals, ['rne://url']);
   assert.equal(parsed.flags.relaunch, true);
 });
+
+test('parseArgs reads --max-usd as text for connect cloud only', () => {
+  const parsed = parseArgs(['connect', 'cloud', '--platform', 'android', '--max-usd', '0.50'], {
+    strictFlags: true,
+  });
+  assert.equal(parsed.flags.maxUsd, '0.50');
+  assert.throws(() => parseArgs(['snapshot', '--max-usd', '0.50'], { strictFlags: true }), {
+    code: 'INVALID_ARGS',
+  });
+});

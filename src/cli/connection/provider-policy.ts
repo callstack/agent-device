@@ -1,3 +1,4 @@
+import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import {
   pluginConnectionInventory,
@@ -86,6 +87,27 @@ export function isConnectProviderName(
   );
 }
 
+export async function readConnectProvider(
+  positionals: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<ConnectProvider | undefined> {
+  const provider = canonicalLeaseProvider(positionals[0]);
+  if (provider === undefined) return undefined;
+  if (positionals.length > 1) {
+    throw new AppError('INVALID_ARGS', 'connect accepts at most one provider positional.');
+  }
+  await primeProviderConnection(provider, env);
+  if (isConnectProviderName(provider, env)) {
+    return provider;
+  }
+  const pluginError = unavailableConnectPluginError(provider, env);
+  if (pluginError) throw pluginError;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Unknown connect provider: ${provider}. Supported providers: ${connectProviderNamesForError(env)}.`,
+  );
+}
+
 export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.env): string {
   const names = [...ROUTING_PROVIDER_IDENTITIES, ...pluginConnectionNames(env)].join(', ');
   const failures = pluginLoadFailures(env).map(
@@ -145,7 +167,7 @@ export function providerRouteForConnection(options: {
     : 'drives-connection';
 }
 
-export function unavailableConnectPluginError(
+function unavailableConnectPluginError(
   provider: string,
   env: NodeJS.ProcessEnv,
 ): AppError | undefined {

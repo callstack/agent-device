@@ -88,13 +88,13 @@ function hasNamedCloudConnection(location: ConnectionLocation): boolean {
 
 export async function resolveConnectionAuthFlags(options: {
   command: string;
-  provider: string | undefined;
+  positionals: string[];
   flags: CliFlags;
   host: HostEnvironment;
   location: ConnectionLocation;
 }): Promise<CliFlags> {
-  const { command, provider, flags, host, location } = options;
-  if (await usesCloudSessionAuth(command, provider, flags, location)) return flags;
+  const { command, positionals, flags, host, location } = options;
+  if (await usesCloudSessionAuth(command, positionals, flags, host, location)) return flags;
   const resolution = await resolveRemoteAuthForCli({
     command,
     flags,
@@ -106,14 +106,20 @@ export async function resolveConnectionAuthFlags(options: {
 
 async function usesCloudSessionAuth(
   command: string,
-  provider: string | undefined,
+  positionals: string[],
   flags: CliFlags,
+  host: HostEnvironment,
   location: ConnectionLocation,
 ): Promise<boolean> {
   if (command === 'disconnect') return hasNamedCloudConnection(location);
   if (command !== 'connect') return false;
-  if (provider === 'cloud') return true;
-  if (provider !== undefined || flags.platform === undefined) return false;
-  const { usesCloudSessionApi } = await import('./connect-provider-adapters.ts');
-  return usesCloudSessionApi(undefined, flags);
+  const { selectCloudSessionPath } = await import('./connect-provider-adapters.ts');
+  try {
+    return selectCloudSessionPath(positionals[0], flags);
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== 'INVALID_ARGS') throw error;
+    const { readConnectProvider } = await import('./provider-policy.ts');
+    await readConnectProvider(positionals, host.env);
+    throw error;
+  }
 }

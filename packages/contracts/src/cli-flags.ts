@@ -58,6 +58,7 @@ export type CliFlags = CloudProviderProfileFields &
     noLogin?: boolean;
     vendor?: string;
     maxMinutes?: number;
+    maxUsd?: string;
     needs?: string;
     showViewer?: boolean;
     live?: boolean;
