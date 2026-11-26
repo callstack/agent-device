@@ -15,8 +15,6 @@ import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { isSensitiveFillText } from '@agent-device/ad-script';
-import type { CommandFlags } from '@agent-device/contracts/command';
 
 /** What a decoded touch target carries: the target plus optional ref-plan provenance. */
 type ParsedTouchTargetOk = {
@@ -238,15 +236,13 @@ function missingFillTextResponse(place: 'ref' | 'coordinates' | 'selector'): Par
  * see {@link DecodedFillTarget}); this layer adds only what the wire owns: versioned-ref
  * admission, the selector whitespace rule, and the daemon error responses.
  */
-export function parseFillTarget(
-  positionals: string[],
-  flags?: Pick<CommandFlags, 'recordAs' | 'textStdin'>,
-): ParsedFillTarget {
+export function parseFillTarget(positionals: string[]): ParsedFillTarget {
   let decoded: DecodedFillTarget;
   try {
     decoded = readFillTargetFromPositionals(positionals);
   } catch (error) {
-    return { ok: false, response: fillDecodeFailureResponse(error, flags) };
+    if (!(error instanceof AppError)) throw error;
+    return { ok: false, response: { ok: false, error: normalizeError(error) } };
   }
   switch (decoded.kind) {
     case 'ref': {
@@ -285,26 +281,6 @@ export function parseFillTarget(
       };
     }
   }
-}
-
-// A refusal with a typed reason, such as `fill_target_missing`, keeps that reason. Every other
-// decode failure folds into this handler's uniform INVALID_ARGS response.
-function fillDecodeFailureResponse(
-  error: unknown,
-  flags: Pick<CommandFlags, 'recordAs' | 'textStdin'> | undefined,
-): DaemonResponse {
-  if (!(error instanceof AppError) || typeof error.details?.reason !== 'string') {
-    return errorResponse('INVALID_ARGS', 'fill requires x y text, @ref text, or selector text');
-  }
-  // The decoder quotes the positionals, and a sensitive fill's positional may be the text itself.
-  const refusal = isSensitiveFillText(flags)
-    ? new AppError(
-        'INVALID_ARGS',
-        'fill could not read a target before the text. Pass an @ref from snapshot, a selector, or x y coordinates.',
-        { reason: error.details.reason },
-      )
-    : error;
-  return { ok: false, error: normalizeError(refusal) };
 }
 
 export function interactionResultExtra(

@@ -163,7 +163,7 @@ function readFillTarget(
   if (!session) return { response: noActiveSessionError() };
   const unsupportedSurfaceResponse = unsupportedMacOsDesktopSurfaceInteraction(session, 'fill');
   if (unsupportedSurfaceResponse) return { response: unsupportedSurfaceResponse };
-  const parsedTarget = parseFillTarget(params.req.positionals ?? [], params.req.flags);
+  const parsedTarget = parseFillTarget(params.req.positionals ?? []);
   if (!parsedTarget.ok) return { response: parsedTarget.response };
   return { session, parsedTarget };
 }
