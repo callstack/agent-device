@@ -297,11 +297,14 @@ test('an isolated hosted attachment stops its runtime when the deadline passes',
       }),
     );
     assert.ok(!hosted.dormant);
-    await vi.advanceTimersByTimeAsync(499);
-    assert.equal(sdk.shutdown.mock.calls.length, 0);
-    await vi.advanceTimersByTimeAsync(1);
-    assert.equal(sdk.shutdown.mock.calls.length, 1);
-    await hosted.dispose?.();
+    try {
+      await vi.advanceTimersByTimeAsync(499);
+      assert.equal(sdk.shutdown.mock.calls.length, 0);
+      await vi.advanceTimersByTimeAsync(1);
+      assert.equal(sdk.shutdown.mock.calls.length, 1);
+    } finally {
+      await hosted.dispose?.();
+    }
   } finally {
     vi.useRealTimers();
   }

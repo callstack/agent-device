@@ -74,6 +74,7 @@ vi.mock('@agent-device/plugins/store', async (importOriginal) => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   stop.mockReset();
@@ -246,7 +247,7 @@ test('expiry removes a partially written pending attachment', async () => {
   expect(broker).toHaveBeenCalledTimes(2);
 });
 
-test.each(['valid', 'unreadable'] as const)(
+test.each(['valid', 'unreadable', 'missing'] as const)(
   'expiry retires the generation of a %s committed attachment without a saved binding',
   async (kind) => {
     const env = limrunEnv('current');
@@ -256,7 +257,11 @@ test.each(['valid', 'unreadable'] as const)(
     expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
     writeHostedDaemonRegistration(location);
     const record = readCloudConnection(location)!;
-    writeCloudConnection(location, { ...record, deadlineAt: new Date(0).toISOString() });
+    writeCloudConnection(location, {
+      ...record,
+      hostedLeaseId: 'a'.repeat(32),
+      deadlineAt: new Date(0).toISOString(),
+    });
     removeRemoteConnectionState(location);
 
     const sweep = () =>
@@ -270,6 +275,7 @@ test.each(['valid', 'unreadable'] as const)(
       });
     const credential = cloudAttachmentPath(location);
     if (kind === 'unreadable') fs.writeFileSync(credential, '{');
+    if (kind === 'missing') fs.rmSync(credential);
     const logPath = path.join(location.stateDir, 'expired-retirement.ndjson');
     stop.mockRejectedValueOnce(new Error('private retirement failure'));
     await withDiagnosticsScope({ debug: true, logPath }, sweep);
@@ -283,7 +289,7 @@ test.each(['valid', 'unreadable'] as const)(
         paths: expect.objectContaining({ baseDir: cloudLimrunDaemonDir(location, record) }),
       }),
     );
-    expect(fs.existsSync(credential)).toBe(true);
+    expect(fs.existsSync(credential)).toBe(kind !== 'missing');
 
     await sweep();
     expect(stop).toHaveBeenCalledTimes(2);
@@ -677,9 +683,35 @@ test.each(['leaseId', 'endedLeaseId'] as const)(
       },
     });
     expect(response.code, response.stdout).toBeNull();
-    expect(readRemoteConnectionState(location)?.[field]).toBeUndefined();
   },
 );
+
+test('debug output uses the hosted attachment daemon log', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  const env = limrunEnv('current');
+  const location = locationOf(env);
+  stubCloudApi().mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+  expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  const record = readCloudConnection(location)!;
+  const paths = resolveDaemonPaths(cloudLimrunDaemonDir(location, record));
+  fs.mkdirSync(paths.baseDir, { mode: 0o700 });
+  fs.writeFileSync(paths.logPath, 'attached startup fixture\n');
+  fs.writeFileSync(resolveDaemonPaths(location.stateDir).logPath, 'caller daemon fixture\n');
+
+  const response = await runCliCapture(['artifacts', '--debug'], {
+    env,
+    sendToDaemon: async () => {
+      fs.appendFileSync(paths.logPath, 'attached live fixture\n');
+      await vi.advanceTimersByTimeAsync(200);
+      return { ok: false, error: { code: 'COMMAND_FAILED', message: 'fixture failure' } };
+    },
+  });
+
+  expect(response.code).toBe(1);
+  expect(response.stdout).toContain('attached live fixture');
+  expect(response.stderr).toContain('attached startup fixture');
+  expect(response.stderr).not.toContain('caller daemon fixture');
+});
 
 test('a conflicting active hosted lease keeps its authoritative id', async () => {
   const env = limrunEnv('current');

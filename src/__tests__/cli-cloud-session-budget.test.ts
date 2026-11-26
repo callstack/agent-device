@@ -42,6 +42,16 @@ test('connects with --max-usd through the bounded route and resumes with the sam
   expect(readCloudConnection(location)).toMatchObject({ phase: 'committed', id: hostedDevice.id });
 });
 
+test('the hosted auth gate accepts a padded cloud provider with a spend cap', async () => {
+  const fetchMock = stubCloudApi();
+  const connected = await runCliCapture(
+    ['connect', ' cloud ', '--platform', 'ios', '--max-usd', '0.50', '--json'],
+    { env: cloudEnv() },
+  );
+  expect(connected.code, connected.stdout).toBeNull();
+  expect(fetchMock.mock.calls[0]?.[0].pathname).toBe('/v1/sessions/bounded');
+});
+
 test.each([404, 405])(
   'reports budget_cap_unsupported on HTTP %i without another POST and clears pending intent',
   async (status) => {

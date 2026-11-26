@@ -629,9 +629,10 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
 }
 
 function maybeStartDaemonLogTail(ctx: CliRunContext): (() => void) | null {
-  const remoteDaemonBaseUrl = ctx.effectiveFlags.daemonBaseUrl;
-  return ctx.debugOutputEnabled && !ctx.effectiveFlags.json && !remoteDaemonBaseUrl
-    ? startDaemonLogTail(ctx.daemonPaths.logPath)
+  const { daemonBaseUrl, json } = ctx.effectiveFlags;
+  const stateDir = ctx.cloudDaemonStateDir ?? ctx.daemonPaths.baseDir;
+  return ctx.debugOutputEnabled && !json && !daemonBaseUrl
+    ? startDaemonLogTail(resolveDaemonPaths(stateDir).logPath)
     : null;
 }
 
@@ -745,7 +746,7 @@ async function handleRunCliFailure(
       logTail: ctx.debugOutputEnabled
         ? {
             daemonBaseUrl: ctx.effectiveFlags.daemonBaseUrl,
-            daemonPaths: ctx.daemonPaths,
+            daemonPaths: resolveDaemonPaths(ctx.cloudDaemonStateDir ?? ctx.daemonPaths.baseDir),
             record: normalized.diagnosticsRecord,
           }
         : undefined,

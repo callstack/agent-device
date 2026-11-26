@@ -127,7 +127,7 @@ test('remote auth leaves non-cloud remote daemons to existing daemon auth valida
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('remote auth refreshes a stored CLI session into an agent token', async () => {
+test('remote auth trims an agent token refreshed from the stored CLI session', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-refresh-');
   writeCliSession({
     stateDir: tempRoot,
@@ -153,7 +153,10 @@ test('remote auth refreshes a stored CLI session into an agent token', async () 
       now: () => Date.parse('2026-02-01T00:00:00.000Z'),
       fetch: async (_url, init) => {
         bodies.push(JSON.parse(String(init?.body)));
-        return jsonResponse({ accessToken: 'adc_agent_fresh', expiresAt: '2026-02-01T01:00:00Z' });
+        return jsonResponse({
+          accessToken: ' adc_agent_fresh ',
+          expiresAt: '2026-02-01T01:00:00Z',
+        });
       },
     },
   });

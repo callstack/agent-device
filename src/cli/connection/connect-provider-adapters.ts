@@ -3,7 +3,7 @@ import type {
   ProviderConnectionResource,
   ProviderConnectionVerification,
 } from '@agent-device/contracts/remote';
-import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
+import { canonicalLeaseProvider, leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import { type EnvMap, type HostEnvironment } from '@agent-device/kernel/source-value';
@@ -83,9 +83,10 @@ async function providerConnection(
 }
 
 export function selectCloudSessionPath(
-  provider: ConnectProvider | undefined,
+  rawProvider: ConnectProvider | undefined,
   flags: CliFlags,
 ): boolean {
+  const provider = canonicalLeaseProvider(rawProvider);
   const cloud =
     provider === 'cloud' ||
     (!provider &&

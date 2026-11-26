@@ -401,19 +401,19 @@ function readExpiredAttachmentLocation(
   dir: string,
 ): ConnectionLocation | undefined {
   const status = lstatIfPresent(dir);
-  if (
-    !status?.isDirectory() ||
-    !isOwnedEntry(status, 0o077) ||
-    !lstatIfPresent(path.join(dir, 'attachment.json'))
-  )
-    return undefined;
+  if (!status?.isDirectory() || !isOwnedEntry(status, 0o077)) return undefined;
   let record: CloudConnectionRecord | null;
   try {
     record = readRecordFile(path.join(dir, 'record.json'));
   } catch {
     return undefined;
   }
-  if (typeof record?.session !== 'string' || !isExpired(record)) return undefined;
+  if (
+    typeof record?.session !== 'string' ||
+    !isExpired(record) ||
+    (!record.hostedLeaseId && !lstatIfPresent(path.join(dir, 'attachment.json')))
+  )
+    return undefined;
   const location = { stateDir, session: record.session };
   return cloudConnectionDir(location) === dir ? location : undefined;
 }

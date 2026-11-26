@@ -124,7 +124,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   };
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
-  let changed = !existing || leaseChanged;
+  let changed = !existing;
 
   // Unknown creation evidence permits discard before binding, but only confirmed creation permits
   // rollback after a later failure. A committed session record takes over either lease.
