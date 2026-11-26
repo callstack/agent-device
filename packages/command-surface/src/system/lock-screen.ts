@@ -48,7 +48,7 @@ export const lockScreenCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Lock, unlock, or read the lock state of the device screen',
-    searchHint: 'lockscreen screenlock islocked keyguard',
+    searchHint: 'lockscreen screenlock islocked',
     cliDetail:
       'Android phones and tablets, and iPhone and iPad simulators. unlock never enters a PIN, pattern, password, or passcode; it refuses such a lock. status reports locked or unlocked and sends nothing.',
   },
