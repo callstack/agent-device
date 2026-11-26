@@ -147,7 +147,7 @@ test('an allocation naming an issued lease id gets exactly that lease or LEASE_I
   assert.notEqual(first.leaseId, second.leaseId);
   assert.throws(
     () => registry.allocateLease({ ...owner, leaseId: first.leaseId, deviceKey: second.deviceKey }),
-    isLeaseIdInUse,
+    (error: AppError) => isLeaseIdInUse(error) && error.details?.settled === false,
   );
 });
 
@@ -194,7 +194,7 @@ test('an expired provider lease keeps its id and provider session from a caller-
         leaseProvider: 'limrun',
         deviceKey: 'device-1',
       }),
-    isLeaseIdInUse,
+    (error: AppError) => isLeaseIdInUse(error) && error.details?.settled === true,
   );
   assert.equal(
     registry.resolveProviderSession({

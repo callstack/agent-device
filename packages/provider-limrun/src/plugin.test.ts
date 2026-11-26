@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type {
@@ -10,6 +11,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { limrunPlugin } from './plugin.ts';
+import { syncFolder } from '@limrun/api/folder-sync';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   const [contribution] = plugin.contributes;
@@ -18,6 +20,7 @@ function providerOf<P extends AgentDevicePlugin>(plugin: P) {
 }
 
 const sdk = vi.hoisted(() => ({
+  shutdown: vi.fn(async () => undefined),
   runtimeCalls: [] as { options: Record<string, unknown>; mode: unknown }[],
   clients: [] as Array<Record<string, unknown>>,
   androidList: vi.fn(async () => ({ getPaginatedItems: () => [] })),
@@ -33,7 +36,7 @@ vi.mock('./runtime.ts', () => ({
       runtime: {
         provider: 'limrun',
         prepareRentalRecovery: async () => {},
-        shutdown: async () => undefined,
+        shutdown: sdk.shutdown,
         leaseLifecycle: {},
         ownsDevice: () => false,
         getInteractor: () => undefined,
@@ -260,4 +263,127 @@ test('setup refuses a partial instance set naming the variable it still needs', 
     },
   );
   assert.equal(createDependencies.mock.calls.length, 0);
+});
+
+test.each([
+  [60_000, 'limrun_hosted_attachment_account_key_conflict'],
+  [-1_000, 'limrun_hosted_attachment_expired'],
+  ['invalid', 'limrun_hosted_attachment_invalid_deadline'],
+])('hosted setup refuses deadline %s with %s before registering', async (deadline, reason) => {
+  const createDependencies = vi.fn(() => stubDependencies());
+  const setup = await providerOf(limrunPlugin({ createDependencies })).setup(
+    pluginHost({
+      LIMRUN_API_KEY: 'fixture-account-key',
+      LIM_IOS_INSTANCE_URL: 'https://instance.example',
+      LIM_IOS_INSTANCE_TOKEN: 'fixture-instance-token',
+      LIMRUN_HOSTED_ATTACHMENT_DEADLINE:
+        typeof deadline === 'number' ? new Date(Date.now() + deadline).toISOString() : deadline,
+    }),
+  );
+  assert.equal(setup.dormant?.reason, reason);
+  assert.equal(createDependencies.mock.calls.length, 0);
+});
+
+test('an isolated hosted attachment stops its runtime when the deadline passes', async () => {
+  vi.useFakeTimers();
+  const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
+  try {
+    sdk.shutdown.mockClear();
+    const hosted = await providerOf(plugin).setup(
+      pluginHost({
+        LIM_IOS_INSTANCE_URL: 'https://instance.example',
+        LIM_IOS_INSTANCE_TOKEN: 'fixture-token',
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 500).toISOString(),
+      }),
+    );
+    assert.ok(!hosted.dormant);
+    try {
+      await vi.advanceTimersByTimeAsync(499);
+      assert.equal(sdk.shutdown.mock.calls.length, 0);
+      await vi.advanceTimersByTimeAsync(1);
+      assert.equal(sdk.shutdown.mock.calls.length, 1);
+    } finally {
+      await hosted.dispose?.();
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an expired hosted attachment retries unconfirmed runtime shutdown', async () => {
+  vi.useFakeTimers();
+  sdk.shutdown.mockClear().mockRejectedValueOnce(new Error('shutdown unconfirmed'));
+  try {
+    const hosted = await providerOf(limrunPlugin({ createDependencies: stubDependencies })).setup(
+      pluginHost({
+        LIM_IOS_INSTANCE_URL: 'https://instance.example',
+        LIM_IOS_INSTANCE_TOKEN: 'fixture-token',
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 500).toISOString(),
+      }),
+    );
+    assert.ok(!hosted.dormant);
+    try {
+      await vi.advanceTimersByTimeAsync(500);
+      assert.equal(sdk.shutdown.mock.calls.length, 1);
+      await vi.advanceTimersByTimeAsync(5_000);
+      assert.equal(sdk.shutdown.mock.calls.length, 2);
+      await vi.advanceTimersByTimeAsync(5_000);
+      assert.equal(sdk.shutdown.mock.calls.length, 2);
+    } finally {
+      await hosted.dispose?.();
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('the hosted plugin refuses an SDK folder-sync redirect and leaves unrelated requests alone', async () => {
+  const token = 'fixture-instance-bearer';
+  const apiUrl = 'https://instance.example';
+  const app = mkdtempForTestSync('limrun-redirect-app-');
+  fs.writeFileSync(path.join(app, 'fixture.apk'), 'fixture');
+  const redirectRefused = new TypeError('redirect refused');
+  const next = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.redirect === 'error') throw redirectRefused;
+    return Response.json({});
+  });
+  const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
+  vi.stubGlobal('fetch', next);
+  try {
+    const hosted = await providerOf(plugin).setup(
+      pluginHost({
+        LIM_IOS_INSTANCE_URL: apiUrl,
+        LIM_IOS_INSTANCE_TOKEN: token,
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    );
+    assert.ok(!hosted.dormant);
+    try {
+      await assert.rejects(
+        syncFolder(app, {
+          apiUrl,
+          token,
+          udid: 'fixture',
+          basisCacheDir: mkdtempForTestSync('limrun-sync-cache-'),
+          install: true,
+          watch: false,
+          launchMode: 'None',
+          compression: 'identity',
+          log: () => {},
+          ignoreFn: () => false,
+        }),
+        (error) => error === redirectRefused,
+      );
+      assert.equal(next.mock.calls.length, 1);
+      const [, init] = next.mock.calls[0]!;
+      assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${token}`);
+      assert.equal(init?.redirect, 'error');
+      await fetch(apiUrl, { headers: { authorization: 'Bearer unrelated-bearer' } });
+      assert.equal(next.mock.calls[1]?.[1]?.redirect, undefined);
+    } finally {
+      await hosted.dispose?.();
+    }
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

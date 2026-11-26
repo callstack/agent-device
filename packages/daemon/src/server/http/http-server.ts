@@ -56,8 +56,7 @@ import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-htt
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
-  authorizeAuxiliaryHttpRequest,
-  authorizeDiagnosticsHttpRequest,
+  createAuxiliaryHttpAuthorizer,
   enforceDaemonToken,
   loadHttpAuthHook,
   restrictRemoteHttpRequest,
@@ -85,6 +84,7 @@ import {
   type TenantTrustDecision,
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
+import type { HostedAuxiliaryAdmission } from '../hosted-attachment-admission.ts';
 
 /** The capabilities this daemon serves over HTTP: `quiesce` is a local-only `daemon.json` fact. */
 const HTTP_DAEMON_CAPABILITIES: readonly DaemonCapability[] = [
@@ -97,6 +97,8 @@ const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
+  hostAdminEnabled?: boolean;
+  admitAuxiliary?: HostedAuxiliaryAdmission;
   startupRecovered?: Promise<void>;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   endSessionsForLease?: (leaseId: string) => Promise<void>;
@@ -137,6 +139,11 @@ export async function createDaemonHttpServer(options: {
   );
   const environment = options.env;
   const authHook = await loadHttpAuthHook(environment, options.cwd);
+  const authorizeAuxiliary = createAuxiliaryHttpAuthorizer({
+    authHook,
+    expectedToken: options.token,
+    admitAttachment: options.admitAuxiliary,
+  });
   const {
     handleRequest,
     token,
@@ -168,6 +175,7 @@ export async function createDaemonHttpServer(options: {
     }
 
     if (
+      options.hostAdminEnabled !== false &&
       token &&
       options.leaseRegistry &&
       tryHandleHostAdminHttpRoute({
@@ -189,16 +197,7 @@ export async function createDaemonHttpServer(options: {
         res,
         token: resolveToken({}, req.headers),
         origin: publicOrigin ?? ingressUrl.origin,
-        authorize: async (request) =>
-          await authorizeAuxiliaryHttpRequest({
-            req: request.req,
-            res: request.res,
-            authHook,
-            expectedToken: token,
-            daemonRequest: request.daemonRequest,
-            signal: request.signal,
-            commit: request.commit,
-          }),
+        authorize: authorizeAuxiliary,
       })
     ) {
       return;
@@ -210,14 +209,7 @@ export async function createDaemonHttpServer(options: {
         res,
         retainArtifacts,
         hostEnv: environment,
-        authorize: async (request) =>
-          await authorizeAuxiliaryHttpRequest({
-            req: request.req,
-            res: request.res,
-            authHook,
-            expectedToken: token,
-            daemonRequest: request.daemonRequest,
-          }),
+        authorize: authorizeAuxiliary,
       })
     ) {
       return;
@@ -229,13 +221,7 @@ export async function createDaemonHttpServer(options: {
         req,
         res,
         resolveRecordPath: resolveRequestDiagnosticsPath,
-        authorize: async (request) =>
-          await authorizeDiagnosticsHttpRequest({
-            ...request,
-            authHook,
-            expectedToken: token,
-            leaseRegistry: options.leaseRegistry,
-          }),
+        authorize: async (request) => await authorizeAuxiliary(request, options.leaseRegistry),
       })
     ) {
       return;

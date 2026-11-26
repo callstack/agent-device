@@ -50,8 +50,6 @@ import {
 } from './human-control-contract.ts';
 
 const LEASE_REGISTRY_REASONS = {
-  // The requested lease id already names a lease that this daemon issued.
-  idInUse: { reason: 'LEASE_ID_IN_USE' },
   // Every iOS simulator lease slot is taken; retry after another lease is released.
   capacityExceeded: { reason: 'LEASE_CAPACITY_EXCEEDED' },
 } as const satisfies ReasonTable<'leases'>;
@@ -148,7 +146,8 @@ export class LeaseRegistry {
     this.assertNoEndingLease(chosenLeaseId);
     if (chosenLeaseId && this.issuedLeaseIds.has(chosenLeaseId)) {
       throw new AppError('INVALID_ARGS', 'Lease id already names a lease this daemon issued.', {
-        reason: LEASE_REGISTRY_REASONS.idInUse.reason,
+        reason: LEASE_REASONS.idInUse.reason,
+        settled: !this.leases.has(chosenLeaseId),
       });
     }
     if (chosenLeaseId) this.providerRentals?.assertLeaseIdAvailable(chosenLeaseId);

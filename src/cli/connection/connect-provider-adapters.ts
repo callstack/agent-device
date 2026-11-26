@@ -3,7 +3,7 @@ import type {
   ProviderConnectionResource,
   ProviderConnectionVerification,
 } from '@agent-device/contracts/remote';
-import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
+import { canonicalLeaseProvider, leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import { type EnvMap, type HostEnvironment } from '@agent-device/kernel/source-value';
@@ -21,6 +21,7 @@ import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile, requireConnectionTarget } from './generated-config.ts';
+import { cloudLimrunEnv, requireHostedLimrunPlugin } from './cloud-limrun.ts';
 import type { CreatedCloudSession } from './cloud-session-api.ts';
 
 type ConnectProfile = { flags: CliFlags; remoteConfigPath: string };
@@ -82,9 +83,10 @@ async function providerConnection(
 }
 
 export function selectCloudSessionPath(
-  provider: ConnectProvider | undefined,
+  rawProvider: ConnectProvider | undefined,
   flags: CliFlags,
 ): boolean {
+  const provider = canonicalLeaseProvider(rawProvider);
   const cloud =
     provider === 'cloud' ||
     (!provider &&
@@ -111,7 +113,8 @@ export async function resolveCloudSessionProfile(
   context: AdapterContext,
   session: CreatedCloudSession,
 ): Promise<ResolvedConnectProfile> {
-  const { binding } = session;
+  const { binding, attachment } = session;
+  if (attachment.kind === 'limrun') await requireHostedLimrunPlugin(context.env);
   const clientId = buildConnectClientId('cloud', binding.baseUrl, binding.id);
   const flags = {
     ...context.flags,
@@ -124,19 +127,28 @@ export async function resolveCloudSessionProfile(
     runId: `cloud-${clientId}`,
     target: 'mobile' as const,
   };
-  const profile = {
-    tenant: flags.tenant,
-    runId: flags.runId,
-    session: flags.session,
-    platform: flags.platform,
-    target: flags.target,
-  };
+  const profile =
+    attachment.kind === 'limrun'
+      ? (
+          await (
+            await providerConnection('limrun', context)
+          ).resolve({
+            ...context,
+            flags: { ...flags, device: undefined },
+            env: { ...context.env, ...cloudLimrunEnv(attachment) },
+          })
+        ).profile
+      : {
+          runId: flags.runId,
+          platform: flags.platform,
+          target: flags.target,
+        };
   return {
     ...persistAndResolveGeneratedProfile({
       ...context,
       flags,
       provider: 'cloud',
-      profile: { ...profile, clientId },
+      profile: { ...profile, tenant: flags.tenant, session: flags.session, clientId },
     }),
     provider: 'cloud',
   };

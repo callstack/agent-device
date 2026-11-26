@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import type { DaemonTransport } from '@agent-device/daemon-client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
@@ -8,13 +9,18 @@ import type {
   CloudSessionBinding,
   RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
+import type { HostedConnectionLease } from '../commands/connection-lease-policy.ts';
 import { isLegacyCloudProfile } from './active-connection.ts';
+import { cloudLimrunDaemonDir, cloudLimrunEnv, requireHostedLimrunPlugin } from './cloud-limrun.ts';
 import { parseCloudAttachment, type CloudAttachment } from './cloud-attachment-schema.ts';
 import {
   admitCloudCredentialDirectory,
   CLOUD_CONNECTION_REASONS,
   cloudAttachmentPath,
   readCloudCredentialJson,
+  cloudConnectionUnavailable,
+  readCurrentCloudConnection,
+  writeCloudConnection,
   withCloudConnectionOwner,
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
@@ -60,8 +66,16 @@ function resolveCloudAttachment(
       hint: 'Run agent-device disconnect in this session, then reconnect.',
     });
   }
-  registerDiagnosticSensitiveValue(attachment.daemonAuthToken);
-  registerDiagnosticSensitiveValue(attachment.daemonBaseUrl);
+  if (attachment.kind === 'agent-device-daemon') {
+    registerDiagnosticSensitiveValue(attachment.daemonAuthToken);
+    registerDiagnosticSensitiveValue(attachment.daemonBaseUrl);
+  } else {
+    registerDiagnosticSensitiveValue(attachment.token);
+    registerDiagnosticSensitiveValue(attachment.apiUrl);
+    if (attachment.platform === 'android') {
+      registerDiagnosticSensitiveValue(attachment.adbWebSocketUrl);
+    }
+  }
   return attachment;
 }
 
@@ -74,6 +88,7 @@ type CloudAttachmentOptions = {
 
 export async function bindCloudAttachment(options: CloudAttachmentOptions) {
   const { location, session } = options;
+  if (session.transport === 'limrun') await requireHostedLimrunPlugin(options.host.env);
   return await withCloudConnectionOwner(location, session.generation, () =>
     bindAttachmentFlags(options),
   );
@@ -82,6 +97,9 @@ export async function bindCloudAttachment(options: CloudAttachmentOptions) {
 function bindAttachmentFlags(options: CloudAttachmentOptions): {
   host: HostEnvironment;
   flags: CliFlags;
+  token: string;
+  daemonStateDir?: string;
+  hostedLease?: HostedConnectionLease;
 } {
   const attachment = resolveCloudAttachment(options.location, options.session);
   const env = { ...options.host.env };
@@ -89,8 +107,45 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
   delete env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   delete env.AGENT_DEVICE_DAEMON_TRANSPORT;
   delete env.AGENT_DEVICE_DAEMON_SERVER_MODE;
+  if (attachment.kind === 'limrun') {
+    delete env.AGENT_DEVICE_CLOUD_API_KEY;
+    delete env.AGENT_DEVICE_CLOUD_API_KEY_ORIGIN;
+    const { location, session } = options;
+    const { record } = readCurrentCloudConnection(location, session.generation);
+    const hostedLeaseId = record.hostedLeaseId ?? randomBytes(16).toString('hex');
+    if (record.hostedLeaseId === undefined)
+      writeCloudConnection(location, { ...record, hostedLeaseId });
+    return {
+      host: {
+        ...options.host,
+        env: {
+          ...env,
+          ...cloudLimrunEnv(),
+          LIMRUN_HOSTED_ATTACHMENT_DEADLINE: undefined,
+          AGENT_DEVICE_HOSTED_ATTACHMENT: JSON.stringify({
+            ...location,
+            generation: session.generation,
+          }),
+        },
+      },
+      flags: {
+        ...options.flags,
+        daemonBaseUrl: undefined,
+        daemonAuthToken: undefined,
+        daemonTransport: 'auto',
+        daemonServerMode: undefined,
+      },
+      token: attachment.token,
+      daemonStateDir: cloudLimrunDaemonDir(location, session),
+      hostedLease: {
+        id: hostedLeaseId,
+        replaceSettled: (id) => replaceHostedLeaseId(location, session.generation, id),
+      },
+    };
+  }
   return {
     host: { ...options.host, env },
+    token: attachment.daemonAuthToken,
     flags: {
       ...options.flags,
       remoteConfig: undefined,
@@ -106,17 +161,87 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
   };
 }
 
+async function replaceHostedLeaseId(
+  location: ConnectionLocation,
+  generation: string,
+  settledId: string,
+): Promise<string> {
+  return await withCloudConnectionOwner(location, generation, () => {
+    const { record } = readCurrentCloudConnection(location, generation);
+    const currentId = record.hostedLeaseId;
+    if (!currentId) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
+    if (currentId !== settledId) return currentId;
+    const hostedLeaseId = randomBytes(16).toString('hex');
+    writeCloudConnection(location, { ...record, hostedLeaseId });
+    return hostedLeaseId;
+  });
+}
+
+export function bindHostedDaemon(host: HostEnvironment, daemonStateDir: string) {
+  const refuse = () => cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
+  let launch: Partial<ConnectionLocation & { generation: string }> | null;
+  try {
+    launch = JSON.parse(host.env.AGENT_DEVICE_HOSTED_ATTACHMENT ?? 'null');
+  } catch {
+    throw refuse();
+  }
+  const { stateDir, session, generation } = launch ?? {};
+  if (
+    typeof stateDir !== 'string' ||
+    typeof session !== 'string' ||
+    typeof generation !== 'string' ||
+    cloudLimrunDaemonDir({ stateDir, session }, { generation }) !== daemonStateDir
+  )
+    throw refuse();
+  const location = { stateDir, session };
+  const { record, state, binding } = readCurrentCloudConnection(location, generation);
+  if (!record.hostedLeaseId || !state.leaseBackend || binding.transport !== 'limrun')
+    throw refuse();
+  const attachment = resolveCloudAttachment(location, binding);
+  if (attachment.kind !== 'limrun') throw refuse();
+  const assertCurrent = () => {
+    const current = readCurrentCloudConnection(location, generation).record.hostedLeaseId;
+    if (!current) throw refuse();
+    return current;
+  };
+  assertCurrent();
+  return {
+    host: {
+      ...host,
+      env: {
+        ...host.env,
+        ...cloudLimrunEnv(attachment),
+        AGENT_DEVICE_HOSTED_ATTACHMENT: undefined,
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: binding.deadlineAt,
+      },
+    },
+    assertCurrent,
+    session,
+    generation,
+    lease: {
+      leaseId: record.hostedLeaseId,
+      tenantId: state.tenant,
+      runId: state.runId,
+      backend: state.leaseBackend,
+      leaseProvider: state.leaseProvider,
+      deviceKey: state.deviceKey,
+      clientId: state.clientId,
+    },
+  };
+}
+
 export async function protectConnectionTransport(
   context: {
     command: string;
     effectiveFlags: Pick<CliFlags, 'daemonAuthToken'>;
     cloudSession?: CloudSessionBinding;
+    cloudAttachmentToken?: string;
     claimedConnection?: RemoteConnectionState | null;
     daemonPaths: { baseDir: string };
   },
   transport: DaemonTransport,
 ): Promise<DaemonTransport> {
-  const token = context.effectiveFlags.daemonAuthToken;
+  const token = context.cloudAttachmentToken ?? context.effectiveFlags.daemonAuthToken;
   if (!token || (!context.cloudSession && !isLegacyDisconnect(context))) return transport;
   const { containsCloudCredential } = await import('../cloud-response.ts');
   const { normalizeError } = await import('@agent-device/kernel/errors');

@@ -43,6 +43,7 @@ test('Provider-backed integration daemon HTTP lease allocate forwards provider a
           tenantId: 'Tenant A',
           runId: 'run-1',
           backend: 'ios-instance',
+          leaseBackend: 'android-instance',
           leaseProvider: 'browserstack',
           clientId: 'client-a',
           deviceKey: 'dk-1',
@@ -63,6 +64,7 @@ test('Provider-backed integration daemon HTTP lease allocate forwards provider a
     assert.equal(response.status, 200);
 
     const leaseRequest = observedRequests.find((req) => req.command === 'lease_allocate');
+    assert.equal(leaseRequest?.meta?.leaseBackend, 'ios-instance');
     assert.deepEqual(leaseRequest?.flags, {
       platform: 'ios',
       device: 'iPhone 15',

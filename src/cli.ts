@@ -204,7 +204,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         });
         await applySavedCloudAttachment(ctx);
         let transport = resolveRunTransport(deps, ctx.host, ctx.admitConnection);
-        if (ctx.effectiveFlags.daemonAuthToken) {
+        if (ctx.cloudAttachmentToken || ctx.effectiveFlags.daemonAuthToken) {
           const { protectConnectionTransport } =
             await import('./cli/connection/cloud-attachment.ts');
           transport = await protectConnectionTransport(ctx, transport);
@@ -339,10 +339,11 @@ type CliRunContext = {
   claimedConnection?: RemoteConnectionState | null;
   commandConnection: CommandConnection | null;
   cloudSession?: CloudSessionBinding;
+  cloudAttachmentToken?: string;
+  cloudDaemonStateDir?: string;
+  hostedLease?: import('./cli/commands/connection-lease-policy.ts').HostedConnectionLease;
   admitConnection?: Parameters<typeof resolveRunTransport>[2];
   explicitFlagKeys: Set<FlagKey>;
-  // Mutated in place by resolveRemoteContext (auth, materialization) so the
-  // failure handler always sees the same state the throwing phase saw.
   effectiveFlags: CliFlags;
   resolvedRuntime: SessionRuntimeHints | undefined;
   connectionMetadata: RemoteConnectionRequestMetadata | undefined;
@@ -405,6 +406,7 @@ async function resolveRunContextOrExit(
       command: base.command,
       usesSessions: runsOnRemoteConnection(base.command),
       stateDir: daemonPaths.baseDir,
+      host: base.host,
       session: effectiveFlags.session ?? flags.session,
       binding: cloudSession,
       remoteConfig: effectiveFlags.remoteConfig,
@@ -488,6 +490,9 @@ async function applySavedCloudAttachment(ctx: CliRunContext): Promise<void> {
     session,
   });
   ctx.host = attachment.host;
+  ctx.cloudAttachmentToken = attachment.token;
+  ctx.cloudDaemonStateDir = attachment.daemonStateDir;
+  ctx.hostedLease = attachment.hostedLease;
   ctx.effectiveFlags = attachment.flags;
   if (session.transport === 'agent-device-daemon') {
     ctx.connectionMetadata = undefined;
@@ -550,6 +555,7 @@ async function resolveRemoteContext(
       batchSteps: ctx.parsedBatchSteps,
       forceRuntimePrepare: hasExplicitMetroRuntimeOverrides(ctx.explicitFlagKeys),
       cloudGeneration: ctx.cloudSession?.generation,
+      hostedLease: ctx.hostedLease,
     });
     ctx.effectiveFlags = materialized.flags;
     ctx.resolvedRuntime = materialized.runtime;
@@ -577,7 +583,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
   return {
     session: currentFlags.session,
     requestId: ctx.requestId,
-    stateDir: currentFlags.stateDir,
+    stateDir: ctx.cloudDaemonStateDir ?? currentFlags.stateDir,
     daemonBaseUrl: currentFlags.daemonBaseUrl,
     daemonAuthToken: currentFlags.daemonAuthToken,
     daemonTransport: currentFlags.daemonTransport,
@@ -623,9 +629,10 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
 }
 
 function maybeStartDaemonLogTail(ctx: CliRunContext): (() => void) | null {
-  const remoteDaemonBaseUrl = ctx.effectiveFlags.daemonBaseUrl;
-  return ctx.debugOutputEnabled && !ctx.effectiveFlags.json && !remoteDaemonBaseUrl
-    ? startDaemonLogTail(ctx.daemonPaths.logPath)
+  const { daemonBaseUrl, json } = ctx.effectiveFlags;
+  const stateDir = ctx.cloudDaemonStateDir ?? ctx.daemonPaths.baseDir;
+  return ctx.debugOutputEnabled && !json && !daemonBaseUrl
+    ? startDaemonLogTail(resolveDaemonPaths(stateDir).logPath)
     : null;
 }
 
@@ -739,7 +746,7 @@ async function handleRunCliFailure(
       logTail: ctx.debugOutputEnabled
         ? {
             daemonBaseUrl: ctx.effectiveFlags.daemonBaseUrl,
-            daemonPaths: ctx.daemonPaths,
+            daemonPaths: resolveDaemonPaths(ctx.cloudDaemonStateDir ?? ctx.daemonPaths.baseDir),
             record: normalized.diagnosticsRecord,
           }
         : undefined,
@@ -873,10 +880,6 @@ type CliDaemonTransportSetup = {
   cloudGeneration?: string;
 };
 
-/**
- * A remote connection reads each daemon reply for the leases its request ended, and forgets the
- * stored lease when the reply names it.
- */
 function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
   const { flags, host, cloudGeneration } = options;
   const send = createCliProgressTransport(options);

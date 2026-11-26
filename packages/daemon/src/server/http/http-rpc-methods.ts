@@ -4,11 +4,7 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import { readDevicePin } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  CommandRpcParams,
-  DaemonInstallSource,
-  LeaseBackend,
-} from '@agent-device/kernel/contracts';
+import type { CommandRpcParams, DaemonInstallSource } from '@agent-device/kernel/contracts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
 import {
   readLeaseAllocateProviderFlags,
@@ -89,33 +85,30 @@ function toLeaseDaemonRequest(
   params: Record<string, unknown>,
   headers: IncomingHttpHeaders,
 ): DaemonRequest {
-  return {
-    token: resolveToken(params, headers),
-    ...resolveRequestSessionAtIntake({
-      session: readStringParam(params, 'session'),
-      meta: { sessionExplicit: readBooleanParam(params, 'sessionExplicit') },
-    }),
-    command,
-    positionals: [],
-    flags: command === 'lease_allocate' ? readLeaseAllocateProviderFlags(params) : undefined,
-    meta: {
-      tenantId: readStringParam(params, 'tenantId') ?? readStringParam(params, 'tenant'),
-      runId: readStringParam(params, 'runId'),
-      leaseId: readStringParam(params, 'leaseId'),
-      leaseTtlMs: readIntParam(params, 'ttlMs'),
-      leaseRetainOnClose: readBooleanParam(params, 'retainOnClose'),
-      leaseBackend: readStringParam(params, 'backend') as LeaseBackend | undefined,
-      leaseProvider:
-        readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),
-      deviceKey: readStringParam(params, 'deviceKey'),
-      clientId: readStringParam(params, 'clientId'),
-      devicePin: command === 'lease_allocate' ? readDevicePin(params.devicePin) : undefined,
-      providerCredentialFingerprint:
-        command === 'lease_allocate'
-          ? readStringParam(params, 'providerCredentialFingerprint')
-          : undefined,
+  const leaseLabels = readLeaseLabelParams(params);
+  return withDisplacedLeaseClaims(
+    {
+      token: resolveToken(params, headers),
+      ...resolveRequestSessionAtIntake({
+        session: readStringParam(params, 'session'),
+        meta: { sessionExplicit: readBooleanParam(params, 'sessionExplicit') },
+      }),
+      command,
+      positionals: [],
+      flags: command === 'lease_allocate' ? readLeaseAllocateProviderFlags(params) : undefined,
+      meta: {
+        ...leaseLabels.meta,
+        leaseTtlMs: readIntParam(params, 'ttlMs'),
+        leaseRetainOnClose: readBooleanParam(params, 'retainOnClose'),
+        devicePin: command === 'lease_allocate' ? readDevicePin(params.devicePin) : undefined,
+        providerCredentialFingerprint:
+          command === 'lease_allocate'
+            ? readStringParam(params, 'providerCredentialFingerprint')
+            : undefined,
+      },
     },
-  };
+    leaseLabels.displaced,
+  );
 }
 
 function parseUrlSourceHeaders(rawHeaders: unknown): Record<string, string> {
@@ -222,7 +215,7 @@ const LEASE_LABEL_PARAMS = {
   leaseProvider: ['leaseProvider', 'provider'],
   deviceKey: ['deviceKey'],
   clientId: ['clientId'],
-  leaseBackend: ['leaseBackend', 'backend'],
+  leaseBackend: ['backend', 'leaseBackend'],
 } as const;
 
 /**

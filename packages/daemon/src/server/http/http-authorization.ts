@@ -11,6 +11,7 @@ import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { restrictRemoteHostInputs } from '../remote-host-input-policy.ts';
 import {
+  DAEMON_HTTP_LEASE_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
   normalizeTenantId,
@@ -18,6 +19,7 @@ import {
 import { sendRestJsonError } from '../http-errors.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
 import type { TenantSessionNamespace } from '../../core/session-tenant-scope.ts';
+import type { HostedAuxiliaryAdmission } from '../hosted-attachment-admission.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { assertMacOsAppLeaseTenantMayReadDiagnostics } from '../../resources/macos-app-lease.ts';
 import { createRpcError } from './http-rpc-envelope.ts';
@@ -252,6 +254,45 @@ async function authorizeDiagnosticsHttpRequest(
   return auth;
 }
 
+export function createAuxiliaryHttpAuthorizer(options: {
+  authHook: HttpAuthHook | null;
+  expectedToken?: string;
+  admitAttachment?: HostedAuxiliaryAdmission;
+}) {
+  const { authHook, expectedToken, admitAttachment } = options;
+  return async (
+    request: Omit<
+      Parameters<typeof authorizeAuxiliaryHttpRequest>[0],
+      'authHook' | 'expectedToken'
+    >,
+    leaseRegistry?: LeaseRegistry,
+  ) => {
+    const auth = await authorizeDiagnosticsHttpRequest({
+      ...request,
+      authHook,
+      expectedToken,
+      leaseRegistry,
+    });
+    if (!auth || !admitAttachment) return auth;
+    const { daemonRequest, req, res, commit } = request;
+    try {
+      return admitAttachment({
+        session:
+          daemonRequest.command === 'request_diagnostics'
+            ? daemonRequest.positionals[0]
+            : undefined,
+        tenantId: auth.tenantId,
+        leaseId: req.headers[DAEMON_HTTP_LEASE_HEADER],
+      });
+    } catch (error) {
+      const reply = () => sendRestJsonError(res, normalizeError(error));
+      if (commit) commit(reply);
+      else reply();
+      return null;
+    }
+  };
+}
+
 /**
  * An auth hook's own rejection, rendered as the flat REST error these routes
  * answer with rather than the JSON-RPC envelope the hook decision carries.
@@ -288,8 +329,6 @@ function enforceDaemonToken(
 }
 
 export {
-  authorizeAuxiliaryHttpRequest,
-  authorizeDiagnosticsHttpRequest,
   enforceDaemonToken,
   loadHttpAuthHook,
   restrictRemoteHttpRequest,

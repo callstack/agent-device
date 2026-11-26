@@ -171,6 +171,7 @@ export type RequestRouterDeps = {
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
   daemonPolicy?: DaemonPolicy;
+  admitAttachment?: (req: DaemonRequest) => DaemonRequest;
   trackDownloadableArtifact: TrackDownloadableArtifact;
 };
 
@@ -203,6 +204,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
     daemonPolicy,
+    admitAttachment,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
   const withSessionExecutionLock = leaseRegistrySessionExecutionLock(leaseRegistry);
@@ -284,6 +286,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   }
 
   async function runRequestWithinScope(req: DaemonRequest): Promise<DaemonResponse> {
+    req = admitAttachment?.(req) ?? req;
     registerParameterizedFillDiagnosticValue(req);
     const refusal =
       recordingFlagsResponse(req) ??
@@ -510,7 +513,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       let childScope: RequestExecutionScope | undefined;
       let response: DaemonResponse;
       try {
-        const scopedReq = bindReplayDeviceExecutionLock(req, parentScope);
+        const scopedReq = bindReplayDeviceExecutionLock(admitAttachment?.(req) ?? req, parentScope);
         childScope = await createRequestExecutionScope({
           host,
           req: scopedReq,

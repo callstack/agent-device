@@ -31,11 +31,17 @@ function remoteLeaseTtlMs(
     : undefined;
 }
 
+export type HostedConnectionLease = {
+  id: string;
+  replaceSettled(id: string): Promise<string>;
+};
+
 export type ConnectionLeasePolicy = {
   shouldAllocate(command: string): boolean;
   ttlMs(state: RemoteConnectionState, env: NodeJS.ProcessEnv): number | undefined;
   /** The id this client names a new lease with; without it the daemon mints one. */
   newLeaseId?(): string;
+  replaceSettled?(id: string): Promise<string>;
   resolveLeaseState(options: {
     command: string;
     client: AgentDeviceClient;

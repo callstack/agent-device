@@ -5,7 +5,7 @@ import {
   type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   createCloudSession,
   deleteCloudSession,
@@ -25,6 +25,7 @@ import {
   type CloudConnectionRecord,
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
+import { stopHostedLimrunDaemon } from './cloud-limrun.ts';
 import { resolveHostedCloudAccess, type HostedCloudAccess } from './cloud-access.ts';
 import { removeGeneratedRemoteConfigIfUnused } from './generated-config.ts';
 import { stopMetroCleanup } from '../commands/connection-metro-runtime.ts';
@@ -123,18 +124,53 @@ export async function releaseCloudConnection(options: {
 }): Promise<string | undefined> {
   const { location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
+  markCloudConnectionClosing(location, record);
+  removeCloudAttachment(location);
+  const daemonGeneration =
+    binding?.transport === 'agent-device-daemon' ? undefined : (record ?? binding)?.generation;
+  const retirementFailure = await stopHostedLimrunDaemon(location, daemonGeneration, host).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  const releasedId = await releaseBrokerSession({ location, record, host, binding }).catch(
+    (error: unknown) => {
+      if (!retirementFailure) throw error;
+      const retirement = asAppError(retirementFailure, 'COMMAND_FAILED');
+      const broker = asAppError(error, 'COMMAND_FAILED');
+      throw new AppError(retirement.code, retirement.message, {
+        ...retirement.details,
+        brokerReleaseReason: broker.details?.reason ?? broker.code,
+      });
+    },
+  );
+  if (retirementFailure) {
+    if (releasedId && record) {
+      record.brokerReleased = true;
+      writeCloudConnection(location, record);
+    }
+    throw retirementFailure;
+  }
+  await stopMetroCleanup(binding ? state?.metro : undefined);
+  removeCloudState(location, state, record);
+  return releasedId ?? record?.id;
+}
+
+async function releaseBrokerSession(options: {
+  location: ConnectionLocation;
+  record: CloudConnectionRecord | null;
+  host: HostEnvironment;
+  binding?: CloudSessionBinding;
+}): Promise<string | undefined> {
+  const { location, record, host, binding } = options;
+  if (record?.brokerReleased) return undefined;
   const access = await resolveHostedCloudAccess({
     env: host.env,
     stateDir: location.stateDir,
     interactive: false,
     savedOrigin: record?.origin ?? binding?.baseUrl,
   });
-  const id = await cloudSessionIdForRelease(access, record, binding?.id);
-  markCloudConnectionClosing(location, record);
-  removeCloudAttachment(location);
+  const id = await cloudSessionIdForRelease(access, location, record, binding?.id);
   if (id) await deleteCloudSession(access, id);
-  await stopMetroCleanup(binding ? state?.metro : undefined);
-  removeCloudState(location, state, record);
   return id;
 }
 
@@ -156,6 +192,7 @@ function cloudBindingForTeardown(
 
 async function cloudSessionIdForRelease(
   access: HostedCloudAccess,
+  location: ConnectionLocation,
   record: CloudConnectionRecord | null,
   bindingId: string | undefined,
 ): Promise<string | undefined> {
@@ -164,6 +201,7 @@ async function cloudSessionIdForRelease(
   const found = await lookupCloudSession(access, record.generation);
   if (!found?.active) return undefined;
   record.id = found.id;
+  writeCloudConnection(location, record);
   return found.id;
 }
 

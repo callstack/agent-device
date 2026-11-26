@@ -596,6 +596,7 @@ test('a command holding a revoked attachment cannot write another hosted RPC', a
   });
   expect(attachment.flags.daemonAuthToken).toBe(hostedDevice.attach.daemonAuthToken);
   const admit = (await activeConnection.resolveCloudAdmission({
+    host: createTestHostEnvironment(),
     ...location,
     command: 'open',
     usesSessions: true,
@@ -648,6 +649,7 @@ test('disconnect closes a cloud session while an admitted RPC is still in flight
   const fetchMock = stubCloudApi();
   expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
   const admit = (await activeConnection.resolveCloudAdmission({
+    host: createTestHostEnvironment(),
     ...location,
     command: 'open',
     usesSessions: true,
@@ -715,6 +717,27 @@ test('a connection command sweeps expired attachments for other sessions in its 
   expect(fs.existsSync(cloudAttachmentPath(locationOf(otherState)))).toBe(true);
   expect(readCloudConnection(locationOf(env))?.phase).toBe('committed');
   expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+test('a malformed expired record does not block a different session', async () => {
+  const env = cloudEnv();
+  const expired = locationOf(env);
+  const liveEnv = { ...env, AGENT_DEVICE_SESSION: 'still-running' };
+  const broker = stubCloudApi();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  expect((await runCliCapture(connectArgs, { env: liveEnv })).code).toBeNull();
+  const record = readCloudConnection(expired)!;
+  fs.writeFileSync(
+    path.join(cloudConnectionDir(expired), 'record.json'),
+    JSON.stringify({ ...record, generation: null, deadlineAt: new Date(0).toISOString() }),
+  );
+
+  const run = await runCliCapture(['connection', 'status', '--json'], { env: liveEnv });
+
+  expect(run.code).toBeNull();
+  expect(fs.existsSync(cloudAttachmentPath(expired))).toBe(true);
+  expect(fs.existsSync(cloudAttachmentPath(locationOf(liveEnv)))).toBe(true);
+  expect(broker).toHaveBeenCalledTimes(2);
 });
 
 test('expiry removes scoped credentials and refuses to route the command', async () => {
@@ -893,7 +916,7 @@ test('retains an unknown attempt when lookup only returns a bare 404', async () 
   expect((await runCliCapture(connectArgs, { env })).code).toBe(1);
   fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBe(1);
-  expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'pending' });
+  expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'closing' });
   expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
 });
 

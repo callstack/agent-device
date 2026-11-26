@@ -116,7 +116,7 @@ test('a login whose approved access token already expired returns a fresh one', 
         if (href.endsWith('/device-auth/poll')) {
           return jsonResponse({
             status: 'approved',
-            accessToken: 'adc_agent_expired',
+            accessToken: ' adc_agent_expired ',
             expiresAt: '2026-02-01T00:30:00.000Z',
             cliSession: {
               id: 'session-expired',
@@ -168,7 +168,7 @@ test('a refresh that answers with an expired access token is asked again, and no
     }
   };
   const expired = {
-    accessToken: 'adc_agent_expired',
+    accessToken: ' adc_agent_expired ',
     expiresAt: '2026-02-01T00:30:00.000Z',
     refreshCredential: 'adc_refresh_new',
   };
@@ -359,7 +359,7 @@ test('an expired approval token whose exchange fails transiently keeps the login
         if (href.endsWith('/device-auth/poll')) {
           return jsonResponse({
             status: 'approved',
-            accessToken: 'adc_agent_expired',
+            accessToken: ' adc_agent_expired ',
             // Past on the pinned clock: the login has to exchange this token.
             expiresAt: '2026-02-01T00:30:00.000Z',
             cliSession: { id: 'session-503', refreshCredential: 'adc_refresh_503' },
@@ -462,7 +462,7 @@ test('a login that exchanges an expired approval token does it under the acquisi
           if (href.endsWith('/device-auth/poll')) {
             return jsonResponse({
               status: 'approved',
-              accessToken: 'adc_agent_expired',
+              accessToken: ' adc_agent_expired ',
               expiresAt: '2026-02-01T00:30:00.000Z',
               cliSession: { id: 'session-one-lock', refreshCredential: 'adc_refresh_one' },
             });

@@ -234,7 +234,7 @@ export async function loginWithDeviceAuth(options: {
     throw new AppError('UNAUTHORIZED', 'Device authorization did not return CLI credentials.');
   }
   const nowIso = new Date(options.io?.now?.() ?? Date.now()).toISOString();
-  const approvedToken = approved.accessToken;
+  const approvedToken = approved.accessToken.trim();
   // Only a nonempty string counts as the approval's access-token expiry, so it is omitted for any
   // other value: one would reach `Date.parse` as a foreign object, which throws there after the
   // session is already saved. A string that cannot be read is kept: `isExpired` calls such a token
@@ -697,7 +697,7 @@ async function refreshAgentToken(options: {
   if (revoked) throw revoked;
   if (hasToken(response.accessToken)) {
     return {
-      accessToken: response.accessToken,
+      accessToken: response.accessToken.trim(),
       expiresAt: response.expiresAt,
       ...(hasToken(response.refreshCredential)
         ? { refreshCredential: response.refreshCredential }

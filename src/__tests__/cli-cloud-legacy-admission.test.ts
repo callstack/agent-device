@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import * as hostFiles from '@agent-device/host-kit/file';
 import {
   readRemoteConnectionState,
@@ -24,6 +24,7 @@ test('a selected direct route rechecks ownership before handing off a request', 
   const location = { stateDir, session: 'saved-direct' };
   const admit = await resolveCloudAdmission({
     command: 'snapshot',
+    host: createTestHostEnvironment(),
     usesSessions: true,
     ...location,
     binding: undefined,

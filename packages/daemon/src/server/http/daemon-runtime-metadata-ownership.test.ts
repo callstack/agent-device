@@ -305,7 +305,23 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
   // Startup rollback runs its steps in reverse, so the step that stops the watch must be REGISTERED
   // after the one that removes the record for it to run first.
-  const rollbackRemoval = source.indexOf('await finishDaemonRegistration({');
+  const registration = fs.readFileSync(
+    new URL('./daemon-startup-registration.ts', import.meta.url),
+    'utf8',
+  );
+  expect(registration).toMatch(
+    /rollback\.onRollback\(async \(\) => \{\s+await finishDaemonRegistration\(/,
+  );
+  expect(source).toMatch(/acquireDaemonStartupRegistration\(\{\s*paths: daemonPaths,\s*rollback,/);
+  const attachmentRegistration = source.indexOf(
+    'const attachmentRegistration = options.bindAttachment ? await acquireRegistration() : undefined;',
+  );
+  const ordinaryRegistration = source.indexOf(
+    'const registration = attachmentRegistration ?? (await acquireRegistration());',
+  );
+  const rollbackStop = source.search(
+    /rollback\.onRollback\(\(\) => \{\s*stopMetadataLossWatch\(\);/,
+  );
   // The close path: the watch is down before the release, which is the only step that removes the
   // record on that exit, can run.
   const closeStart = source.indexOf('const closeSteps = async');
@@ -313,8 +329,9 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   const closeRelease = source.indexOf('finishDaemonRegistration({', closeStop);
 
   expect(stops).toHaveLength(2);
-  expect(rollbackRemoval).toBeGreaterThan(0);
-  expect(stops[0]).toBeGreaterThan(rollbackRemoval);
+  expect(attachmentRegistration).toBeGreaterThan(0);
+  expect(ordinaryRegistration).toBeGreaterThan(attachmentRegistration);
+  expect(rollbackStop).toBeGreaterThan(ordinaryRegistration);
   expect(closeStop).toBeGreaterThan(0);
   expect(closeRelease).toBeGreaterThan(closeStop);
 });

@@ -16,6 +16,7 @@ import {
   type DaemonPaths,
   type DaemonServerMode,
   type ObservedDaemonIdentity,
+  type HostedDaemonAttachmentIdentity,
 } from './daemon-resolution.ts';
 
 /**
@@ -215,15 +216,37 @@ export type DaemonStopIdentity = Readonly<{
  * Reads a state directory's record once for a stop: whether it names a process, and whose process that
  * is. A record that states no owner describes the pre-existing detached daemon, which is what every
  * record written before the ownership field named.
+ * With a hosted attachment scope, an existing record outside that scope is unreadable.
  */
-export function readDaemonStopIdentity(infoPath: string): DaemonStopIdentity {
+export function readDaemonStopIdentity(
+  infoPath: string,
+  hostedAttachment?: HostedDaemonAttachmentIdentity,
+): DaemonStopIdentity {
   const reading = readDaemonRegistration(infoPath);
   if (reading.status !== 'present')
     return {
       ownership: reading.status === 'absent' ? 'absent' : 'unreadable',
       identity: null,
     };
+  if (hostedAttachment && !matchesHostedStop(reading, hostedAttachment)) {
+    return { ownership: 'unreadable', identity: null };
+  }
   return { ownership: reading.ownership, identity: reading.identity };
+}
+
+function matchesHostedStop(
+  reading: Extract<DaemonRegistrationReading, { status: 'present' }>,
+  expected: HostedDaemonAttachmentIdentity,
+): boolean {
+  const scope = reading.record.hostedAttachment as
+    | Partial<HostedDaemonAttachmentIdentity>
+    | undefined;
+  return (
+    reading.record.ownership === 'detached' &&
+    !!reading.identity?.startTime &&
+    scope?.session === expected.session &&
+    scope.generation === expected.generation
+  );
 }
 
 /**

@@ -39,7 +39,7 @@ export type CloudSessionBinding = {
   id: string;
   baseUrl: string;
   vendor: string;
-  transport: 'agent-device-daemon';
+  transport: 'agent-device-daemon' | 'limrun';
   viewerAvailable?: boolean;
   deadlineAt: string;
   generation: string;
@@ -967,7 +967,7 @@ function isOptionalCloudSessionBinding(value: unknown): boolean {
     hasStringFields(record, ['id', 'baseUrl', 'deadlineAt', 'generation']) &&
     typeof record.vendor === 'string' &&
     (record.viewerAvailable === undefined || typeof record.viewerAvailable === 'boolean') &&
-    record.transport === 'agent-device-daemon'
+    (record.transport === 'agent-device-daemon' || record.transport === 'limrun')
   );
 }
 

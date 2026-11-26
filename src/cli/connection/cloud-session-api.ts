@@ -5,7 +5,8 @@ import type { CloudSessionBinding } from '@agent-device/remote/remote-connection
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
   isCredentialEndpoint,
-  parseDaemonAttachment,
+  parseCloudAttachment,
+  readScopedToken,
   type CloudAttachment,
 } from './cloud-attachment-schema.ts';
 import {
@@ -13,7 +14,6 @@ import {
   containsCloudCredential,
   cloudUrlContainsCredential,
   fetchCloudApi,
-  isCloudText,
   isCloudTextArray,
   readCloudJsonResponse,
 } from '../cloud-response.ts';
@@ -69,7 +69,10 @@ const CREATE_RESPONSE_MESSAGES = {
   rejectedMessage: 'Cloud session API could not create a session.',
 };
 
-export function readCloudSessionRequest(flags: CliFlags) {
+export function readCloudSessionRequest(
+  flags: CliFlags,
+  accepts: readonly CloudAttachment['kind'][] = ['agent-device-daemon'],
+) {
   if (flags.platform !== 'ios' && flags.platform !== 'android') {
     throw new AppError('INVALID_ARGS', 'connect cloud requires --platform ios or android.');
   }
@@ -85,7 +88,7 @@ export function readCloudSessionRequest(flags: CliFlags) {
   return {
     platform: flags.platform,
     vendor: flags.vendor?.trim(),
-    accepts: ['agent-device-daemon'] as const,
+    accepts,
     maxMinutes: flags.maxMinutes,
     ...(flags.maxUsd !== undefined ? { maxUsdMicros: parseMaxUsdMicros(flags.maxUsd) } : {}),
     ...(needs ? { needs } : {}),
@@ -221,7 +224,10 @@ function observeCloudAllocation(
   brokerToken: string,
   attempt: CloudCreateAttempt,
 ): void {
-  const scoped = value.kind === 'created' ? readScopedToken(value.body.attach) : undefined;
+  const scoped =
+    value.kind === 'created'
+      ? readScopedToken(value.body.attach, value.body.transport === 'limrun')
+      : undefined;
   const credentials = scoped ? [brokerToken, scoped] : [brokerToken];
   if (containsCloudCredential(value.id, credentials)) throw invalidSession();
   attempt.observeId(value.id);
@@ -523,8 +529,9 @@ function parseCloudSession(
   access: CloudAccess,
   request: ReturnType<typeof readCloudSessionRequest>,
 ): CreatedCloudSession {
-  const { vendor, transport, platform, deadlineAt, viewerUrl, fallbackFrom } = record;
-  if (transport !== 'agent-device-daemon') {
+  const { vendor, transport, platform, viewerUrl, fallbackFrom } = record;
+  const deadlineAt = canonicalDeadline(record.deadlineAt);
+  if (!request.accepts.some((kind) => kind === transport)) {
     throw new AppError(
       'COMMAND_FAILED',
       'The cloud session uses an unsupported attachment transport.',
@@ -533,14 +540,14 @@ function parseCloudSession(
       },
     );
   }
-  const attachment = parseDaemonAttachment(asCloudRecord(record.attach));
+  const attachment = parseCloudAttachment(record.attach, transport);
   if (
     !attachment ||
     platform !== request.platform ||
+    (attachment.kind === 'limrun' && attachment.platform !== platform) ||
     !isPublicCatalogId(vendor) ||
     (request.vendor && vendor !== request.vendor) ||
-    typeof deadlineAt !== 'string' ||
-    !Number.isFinite(Date.parse(deadlineAt)) ||
+    !deadlineAt ||
     (viewerUrl !== undefined && !isCredentialEndpoint(viewerUrl))
   ) {
     throw invalidSession();
@@ -549,6 +556,8 @@ function parseCloudSession(
     vendor,
     fallbackFrom,
     viewerUrl,
+    deadlineAt,
+    receivedDeadline: record.deadlineAt,
   });
   return {
     binding: {
@@ -561,40 +570,66 @@ function parseCloudSession(
     },
     attachment,
     viewerUrl: safeViewerUrl,
-    ...(isCloudTextArray(fallbackFrom) &&
-    fallbackFrom.length &&
-    fallbackFrom.every(isPublicCatalogId)
-      ? { fallbackFrom }
-      : {}),
+    fallbackFrom: readFallbackFrom(fallbackFrom),
   };
+}
+
+function canonicalDeadline(value: unknown): string | undefined {
+  if (typeof value !== 'string') return;
+  const parts = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})$/.exec(
+    value,
+  );
+  if (!parts) return;
+  const local = `${parts[1]}.${(parts[2] ?? '').slice(0, 3).padEnd(3, '0')}`;
+  const localMs = Date.parse(`${local}Z`);
+  if (!Number.isFinite(localMs) || new Date(localMs).toISOString() !== `${local}Z`) return;
+  const utc = Date.parse(`${local}${parts[3]}`);
+  if (Number.isFinite(utc)) return new Date(utc).toISOString();
+}
+
+function readFallbackFrom(value: unknown): string[] | undefined {
+  if (isCloudTextArray(value) && value.length && value.every(isPublicCatalogId)) return value;
 }
 
 function readSafeCloudViewer(
   attachment: CloudAttachment,
   brokerToken: string,
-  display: { vendor: string; fallbackFrom: unknown; viewerUrl?: string },
+  display: {
+    vendor: string;
+    fallbackFrom: unknown;
+    viewerUrl?: string;
+    deadlineAt: string;
+    receivedDeadline: unknown;
+  },
 ): string | undefined {
-  const credentials = [brokerToken, attachment.daemonAuthToken];
+  const scopedToken = attachment.kind === 'limrun' ? attachment.token : attachment.daemonAuthToken;
+  const credentials = [brokerToken, scopedToken];
   if (
-    containsCloudCredential(attachment, [brokerToken]) ||
-    cloudUrlContainsCredential(attachment.daemonBaseUrl, [brokerToken]) ||
+    exposesBrokerCredential(attachment, brokerToken) ||
     containsCloudCredential(
-      { vendor: display.vendor, fallbackFrom: display.fallbackFrom },
+      [display.vendor, display.fallbackFrom, display.deadlineAt, display.receivedDeadline],
       credentials,
     ) ||
     (display.viewerUrl && cloudUrlContainsCredential(display.viewerUrl, [brokerToken]))
   )
     throw invalidSession();
-  return display.viewerUrl &&
-    !cloudUrlContainsCredential(display.viewerUrl, [attachment.daemonAuthToken])
+  return display.viewerUrl && !cloudUrlContainsCredential(display.viewerUrl, [scopedToken])
     ? display.viewerUrl
     : undefined;
 }
 
-function readScopedToken(value: unknown): string | undefined {
-  const attachment = asCloudRecord(value);
-  const token = attachment?.daemonAuthToken;
-  return isCloudText(token) ? token : undefined;
+function exposesBrokerCredential(attachment: CloudAttachment, brokerToken: string): boolean {
+  const credentials = [brokerToken];
+  const endpoints =
+    attachment.kind === 'agent-device-daemon'
+      ? [attachment.daemonBaseUrl]
+      : attachment.platform === 'ios'
+        ? [attachment.apiUrl]
+        : [attachment.apiUrl, attachment.adbWebSocketUrl];
+  return (
+    containsCloudCredential(attachment, credentials) ||
+    endpoints.some((url) => cloudUrlContainsCredential(url, credentials))
+  );
 }
 
 function isPublicCatalogId(value: unknown): value is string {

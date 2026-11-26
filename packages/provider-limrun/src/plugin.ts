@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { PluginConnection, ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import type { DeviceProviderPluginHost } from 'agent-device/plugins/device-host';
 import {
@@ -18,6 +19,15 @@ export type LimrunPluginOptions = Readonly<{
     host: DeviceProviderPluginHost,
   ): LimrunRuntimeDependencies | Promise<LimrunRuntimeDependencies>;
 }>;
+
+const ATTACHMENT_REASONS = {
+  // The hosted attachment deadline has passed.
+  expired: { reason: 'limrun_hosted_attachment_expired' },
+  // The hosted attachment deadline could not be parsed.
+  invalidDeadline: { reason: 'limrun_hosted_attachment_invalid_deadline' },
+  // A hosted attachment cannot run with an ambient Limrun account key.
+  accountKeyConflict: { reason: 'limrun_hosted_attachment_account_key_conflict' },
+} as const satisfies ReasonTable<'limrun provider'>;
 
 const LIMRUN_CONNECTION: PluginConnection = {
   capabilities: LIMRUN_CONNECTION_CAPABILITIES,
@@ -50,6 +60,10 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
         setup: async (host: DeviceProviderPluginHost) => {
           const credentials = readLimrunCredentials(host.env);
           if (!credentials) return { dormant: LIMRUN_CREDENTIAL_DORMANCY };
+          const deadline = host.env.LIMRUN_HOSTED_ATTACHMENT_DEADLINE;
+          const expiresAt = deadline === undefined ? undefined : Date.parse(deadline);
+          const dormant = hostedAttachmentDormancy(expiresAt, Boolean(credentials.apiKey));
+          if (dormant) return { dormant };
           const [register, dependencies] = await Promise.all([
             import('./runtime.ts'),
             options.createDependencies
@@ -71,10 +85,81 @@ export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDe
             dependencies,
             { includePlatformModule: true },
           );
-          await registration.runtime.prepareRentalRecovery();
-          return registration;
+          if (expiresAt === undefined) {
+            await registration.runtime.prepareRentalRecovery();
+            return registration;
+          }
+          const { refuseHostedInstanceRedirects } = await import('./hosted-instance-http.ts');
+          const tokens = [credentials.instances?.ios?.token, credentials.instances?.android?.token];
+          const restoreFetch = refuseHostedInstanceRedirects(
+            tokens.filter((token): token is string => token !== undefined),
+          );
+          try {
+            await registration.runtime.prepareRentalRecovery();
+          } catch (error) {
+            restoreFetch();
+            throw error;
+          }
+          const cancelShutdown = shutdownHostedRuntimeAt(expiresAt, () =>
+            registration.runtime.shutdown(),
+          );
+          return {
+            ...registration,
+            dispose: () => {
+              cancelShutdown();
+              restoreFetch();
+            },
+          };
         },
       },
     ],
+  };
+}
+
+function hostedAttachmentDormancy(expiresAt: number | undefined, hasAccountKey: boolean) {
+  if (expiresAt === undefined) return undefined;
+  if (!Number.isFinite(expiresAt)) {
+    return {
+      reason: ATTACHMENT_REASONS.invalidDeadline.reason,
+      message: 'The scoped Limrun attachment deadline could not be parsed.',
+    };
+  }
+  if (expiresAt <= Date.now()) {
+    return {
+      reason: ATTACHMENT_REASONS.expired.reason,
+      message: 'The scoped Limrun attachment deadline has passed.',
+    };
+  }
+  if (hasAccountKey) {
+    return {
+      reason: ATTACHMENT_REASONS.accountKeyConflict.reason,
+      message: 'The scoped Limrun attachment cannot run with a Limrun account key.',
+      hint: 'Unset LIMRUN_API_KEY before starting the hosted attachment daemon.',
+    };
+  }
+}
+
+const HOSTED_SHUTDOWN_RETRY_MS = 5_000;
+
+function shutdownHostedRuntimeAt(deadline: number, close: () => Promise<void>): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelled = false;
+  const schedule = (delay: number) => {
+    if (cancelled) return;
+    timer = setTimeout(arm, delay);
+    timer.unref();
+  };
+  const arm = () => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      void close().catch(() => schedule(HOSTED_SHUTDOWN_RETRY_MS));
+      return;
+    }
+    schedule(Math.min(remaining, 2_147_483_647));
+  };
+  arm();
+  return () => {
+    cancelled = true;
+    if (timer) clearTimeout(timer);
   };
 }

@@ -42,6 +42,7 @@ import {
   resolveDaemonPaths,
   type DaemonCapability,
   type DaemonRuntimeOwnership,
+  type HostedDaemonAttachmentIdentity,
   type DaemonPaths,
   type DaemonServerMode,
   type ObservedDaemonIdentity,
@@ -89,6 +90,7 @@ export type DaemonRegistrationFields = Readonly<{
   plugins?: readonly PluginInventoryEntry[];
   /** Who owns this process; see {@link DaemonRuntimeOwnership}. Absent records are detached daemons. */
   ownership?: DaemonRuntimeOwnership;
+  hostedAttachment?: HostedDaemonAttachmentIdentity;
 }>;
 type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>

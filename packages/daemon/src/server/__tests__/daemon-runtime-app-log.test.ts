@@ -16,7 +16,9 @@ import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavail
 
 test('daemon startup awaits app-log recovery after acquiring the lock and before opening servers', () => {
   const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
-  const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
+  const acquiredLock = source.indexOf(
+    'const registration = attachmentRegistration ?? (await acquireRegistration());',
+  );
   const legacyRecovery = source.indexOf('await deps.ownerLifecycle.recoverLegacyAppLogMarkers(');
   const recovery = source.indexOf('await recoverAppLogResourcesAfterDaemonLock(');
   const openedServers = source.indexOf('await openDaemonServers(');
@@ -32,18 +34,22 @@ test('daemon startup configures the Apple runner owner after acquiring the lock,
   // publish only once this process actually holds the daemon lock, so a losing process never
   // configures a global platform owner it does not own.
   const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
-  const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
+  const registration = fs.readFileSync(
+    new URL('../http/daemon-startup-registration.ts', import.meta.url),
+    'utf8',
+  );
+  const acquiredLock = source.indexOf(
+    'const registration = attachmentRegistration ?? (await acquireRegistration());',
+  );
   const runnerOwnerConfigured = source.indexOf('await deps.ownerLifecycle.configureForDaemonLock(');
-  const lockFailureExit = source.indexOf(
-    'reason: DAEMON_REGISTRATION_REASONS.refused.reason',
-    acquiredLock,
+  const lockFailureExit = registration.indexOf(
+    "if (acquisition.status !== 'acquired') throw registrationRefused(acquisition.status);",
   );
 
+  expect(lockFailureExit).toBeGreaterThanOrEqual(0);
+  expect(registration.indexOf('return registration;')).toBeGreaterThan(lockFailureExit);
   expect(acquiredLock).toBeGreaterThanOrEqual(0);
-  expect(lockFailureExit).toBeGreaterThan(acquiredLock);
   expect(runnerOwnerConfigured).toBeGreaterThan(acquiredLock);
-  // The configure call comes after the failure branch that refuses a lock held by another process.
-  expect(runnerOwnerConfigured).toBeGreaterThan(lockFailureExit);
 });
 
 test('retained startup recovery evidence is flushed after daemon.log publication', async () => {

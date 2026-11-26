@@ -70,6 +70,7 @@ for (const delivery of ['ordinary artifact', 'script artifact', 'failed batch re
       ...location,
       command: 'snapshot',
       usesSessions: true,
+      host: createTestHostEnvironment({ env }),
       binding,
     }))!;
     const isOrdinary = delivery === 'ordinary artifact';

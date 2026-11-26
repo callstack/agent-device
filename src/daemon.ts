@@ -5,8 +5,8 @@ import { openDaemonStartupProgress } from '@agent-device/daemon-contracts/daemon
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
 // The root's composition enters as a factory behind a function-scoped `await import`: the server
-// calls it before it acquires the registration, so startup order is unchanged, and the eager
-// closure of this entry stays exactly the operational server's (ADR 0019).
+// loads it after acquiring registration for a hosted attachment. The import keeps the eager
+// closure of this entry on the operational server (ADR 0019).
 async function runDaemon(): Promise<void> {
   const { captureHostEnvironment } = await import('@agent-device/host-kit/environment');
   const host = captureHostEnvironment(process);
@@ -15,6 +15,11 @@ async function runDaemon(): Promise<void> {
   const runtime = await startDaemonRuntime({
     host,
     startupProgress,
+    bindAttachment:
+      host.env.AGENT_DEVICE_HOSTED_ATTACHMENT === undefined
+        ? undefined
+        : async (stateDir) =>
+            (await import('./cli/connection/cloud-attachment.ts')).bindHostedDaemon(host, stateDir),
     composeDeps: async (input) => {
       const deps = await (await import('./daemon-composition.ts')).createDaemonRuntimeDeps(input);
       startupProgress.report('composition-loaded');

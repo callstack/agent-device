@@ -13,8 +13,10 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   readRemoteConnectionState,
+  type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
+import { asCloudRecord } from '../cloud-response.ts';
 import type { CloudSessionRequest } from './cloud-session-api.ts';
 
 export const CLOUD_CONNECTION_REASONS = {
@@ -48,8 +50,11 @@ export type CloudConnectionRecord = {
   phase: 'pending' | 'committed' | 'closing';
   origin: string;
   fingerprint: string;
+  accepts?: CloudSessionRequest['accepts'];
   id?: string;
   deadlineAt?: string;
+  hostedLeaseId?: string;
+  brokerReleased?: true;
 };
 
 function hash(value: string): string {
@@ -199,6 +204,7 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
       typeof record?.generation === 'string' &&
       typeof record.origin === 'string' &&
       typeof record.fingerprint === 'string' &&
+      hasValidStoredAccepts(record.accepts) &&
       ['pending', 'committed', 'closing'].includes(record.phase)
     ) {
       assertCloudRecordSession(location, record);
@@ -215,6 +221,15 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason, ioCode);
   }
   throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason);
+}
+
+function hasValidStoredAccepts(accepts: unknown): boolean {
+  return (
+    accepts === undefined ||
+    (Array.isArray(accepts) &&
+      accepts.length > 0 &&
+      accepts.every((kind) => kind === 'agent-device-daemon' || kind === 'limrun'))
+  );
 }
 
 export function assertCloudRecordSession(
@@ -268,6 +283,7 @@ export function prepareCloudConnection(
     phase: 'pending',
     origin,
     fingerprint,
+    accepts: request.accepts,
   };
 }
 
@@ -275,31 +291,47 @@ function assertCloudConnectionOwner(
   location: ConnectionLocation,
   generation: string | undefined,
 ): void {
-  const record = readCloudConnection(location);
   if (!generation) {
-    if (record) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.ownsSession.reason);
+    if (readCloudConnection(location))
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.ownsSession.reason);
     return;
   }
-  const binding = readRemoteConnectionState(location)?.cloudSession;
+  readCurrentCloudConnection(location, generation);
+}
+
+export function readCurrentCloudConnection(
+  location: ConnectionLocation,
+  generation: string,
+): {
+  record: CloudConnectionRecord;
+  state: RemoteConnectionState;
+  binding: CloudSessionBinding;
+} {
+  const record = readCloudConnection(location);
+  const state = readRemoteConnectionState(location);
+  const binding = state?.cloudSession;
   if (
     !record ||
     record.phase !== 'committed' ||
     record.generation !== generation ||
+    state?.session !== location.session ||
     !binding ||
     binding.generation !== generation ||
     binding.id !== record.id
   ) {
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
   }
-  assertCloudConnectionDeadline(location, record);
+  assertCloudConnectionDeadline(location, record, binding.transport);
+  return { record, state, binding };
 }
 
 function assertCloudConnectionDeadline(
   location: ConnectionLocation,
   record: CloudConnectionRecord,
+  transport: 'agent-device-daemon' | 'limrun',
 ): void {
   if (isExpired(record)) {
-    removeCloudAttachment(location);
+    if (transport === 'agent-device-daemon') removeCloudAttachment(location);
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.expired.reason);
   }
 }
@@ -308,7 +340,10 @@ function isExpired(record: CloudConnectionRecord): boolean {
   return record.deadlineAt !== undefined && Date.parse(record.deadlineAt) <= Date.now();
 }
 
-export async function cleanExpiredCloudAttachments(stateDir: string): Promise<void> {
+export async function cleanExpiredCloudAttachments(
+  stateDir: string,
+  retireExpiredDaemon: (location: ConnectionLocation, generation: string) => Promise<void>,
+): Promise<void> {
   const root = path.join(stateDir, 'cloud-connections');
   const status = lstatIfPresent(root);
   if (
@@ -322,10 +357,33 @@ export async function cleanExpiredCloudAttachments(stateDir: string): Promise<vo
     if (!entry.isDirectory()) continue;
     const location = readExpiredAttachmentLocation(stateDir, path.join(root, entry.name));
     if (!location) continue;
-    await tryWithConnectionLock(location, () => {
-      const current = readCloudConnection(location);
-      if (current && isExpired(current)) removeCloudAttachment(location);
+    await tryWithConnectionLock(location, async () => {
+      let current: CloudConnectionRecord | null;
+      let kind: unknown;
+      try {
+        current = readCloudConnection(location);
+        if (!current || !isExpired(current)) return;
+        kind = readExpiredAttachmentKind(location);
+      } catch {
+        return;
+      }
+      if (current.phase === 'pending' || kind === 'agent-device-daemon') {
+        removeCloudAttachment(location);
+      } else {
+        await retireExpiredDaemon(location, current.generation).then(
+          () => removeCloudAttachment(location),
+          () => undefined,
+        );
+      }
     });
+  }
+}
+
+function readExpiredAttachmentKind(location: ConnectionLocation): unknown {
+  try {
+    return asCloudRecord(readCloudCredentialJson(cloudAttachmentPath(location)))?.kind;
+  } catch {
+    return undefined;
   }
 }
 
@@ -343,19 +401,19 @@ function readExpiredAttachmentLocation(
   dir: string,
 ): ConnectionLocation | undefined {
   const status = lstatIfPresent(dir);
-  if (
-    !status?.isDirectory() ||
-    !isOwnedEntry(status, 0o077) ||
-    !lstatIfPresent(path.join(dir, 'attachment.json'))
-  )
-    return undefined;
+  if (!status?.isDirectory() || !isOwnedEntry(status, 0o077)) return undefined;
   let record: CloudConnectionRecord | null;
   try {
     record = readRecordFile(path.join(dir, 'record.json'));
   } catch {
     return undefined;
   }
-  if (typeof record?.session !== 'string' || !isExpired(record)) return undefined;
+  if (
+    typeof record?.session !== 'string' ||
+    !isExpired(record) ||
+    (!record.hostedLeaseId && !lstatIfPresent(path.join(dir, 'attachment.json')))
+  )
+    return undefined;
   const location = { stateDir, session: record.session };
   return cloudConnectionDir(location) === dir ? location : undefined;
 }

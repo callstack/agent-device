@@ -615,10 +615,7 @@ function assertConnection(connection: unknown): void {
   assertLocalConnectionCapabilities(connection.capabilities as ConnectionProviderCapabilities);
 }
 
-function assertLocalConnectionCapabilities(
-  policy: ConnectionProviderCapabilities | undefined,
-): void {
-  if (policy === undefined) return;
+function assertLocalConnectionCapabilities(policy: ConnectionProviderCapabilities): void {
   if (
     !policy ||
     typeof policy !== 'object' ||
@@ -634,6 +631,7 @@ function assertLocalConnectionCapabilities(
     (policy.holdsCloudDevice !== undefined && typeof policy.holdsCloudDevice !== 'boolean') ||
     (policy.forgetsEndedConnectionLease !== undefined &&
       typeof policy.forgetsEndedConnectionLease !== 'boolean') ||
+    (policy.acceptsHostedAttachment !== undefined && policy.acceptsHostedAttachment !== true) ||
     policy.requiresRemoteDaemon
   ) {
     throw invalidPlugin('Plugin connection must declare local provider capabilities');

@@ -560,11 +560,13 @@ test('a daemon refused the registration leaves the live journal byte-identical a
 
 test('daemon startup recovers inherited lease records only after it holds the registration', () => {
   const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
-  const refused = source.indexOf("reason: 'daemon_registration_refused'");
+  const acquired = source.indexOf(
+    'const registration = attachmentRegistration ?? (await acquireRegistration());',
+  );
   const recovery = source.indexOf('.recoverInherited(');
 
-  expect(refused).toBeGreaterThanOrEqual(0);
-  expect(recovery).toBeGreaterThan(refused);
+  expect(acquired).toBeGreaterThanOrEqual(0);
+  expect(recovery).toBeGreaterThan(acquired);
   expect(source.indexOf('expiredProviderLeaseReleaser.retryPending()')).toBe(-1);
 });
 

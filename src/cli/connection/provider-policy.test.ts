@@ -42,6 +42,7 @@ test('provider policy projects provider identity into semantic capabilities', as
     usesCloudWebDriverLease: false,
     holdsCloudDevice: true,
     forgetsEndedConnectionLease: true,
+    acceptsHostedAttachment: true,
   });
   // BrowserStack and AWS Device Farm declare no catalog capabilities: without an installed plugin
   // nothing declares theirs, and they keep the daemon's own routing.
