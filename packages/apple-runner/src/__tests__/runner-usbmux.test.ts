@@ -299,7 +299,7 @@ test('a phone with no CoreDevice backend still dials its Wi-Fi sync entry, becau
   assert.equal(connectedDeviceId(), 552);
 });
 
-test('treats a device usbmuxd no longer knows as unattached so a tunnel fallback can run', async () => {
+test('reports a missing XCTest-backed usbmux device as unattached', async () => {
   const socketPath = await createSocketPath(socketDirectories);
   // Result 2 is what the real daemon answers for an unknown DeviceID.
   await serveUsbmuxDevices(socketPath, [{ deviceId: 42, udid: DEVICE_UDID }], 2);

@@ -396,7 +396,6 @@ iOS physical-device prerequisites:
   Modern devices visible to devicectl use CoreDevice. Older devices visible only to xctrace use the XCTest backend automatically.
   XCTest-backed devices must already have the target app installed and should be opened by bundle ID; app inventory, install/reinstall, logs, performance sampling, recording, deep links, and launch arguments require CoreDevice.
   XCTest-backed runner commands travel through macOS usbmuxd; keep the trusted device connected by cable.
-  CoreDevice-backed runner commands use the usbmux cable entry when the device is attached by cable, and its CoreDevice tunnel otherwise. A device listed in usbmuxd only through its Wi-Fi sync entry (Finder's "Show this iPhone when on Wi-Fi") is driven over that tunnel, because the runner refuses a Wi-Fi sync connection.
   The AgentDeviceRunner XCTest host must be signed before commands can run on a physical device.
   Start with Automatic Signing and only these env vars:
     AGENT_DEVICE_IOS_TEAM_ID=ABCDE12345
@@ -412,6 +411,9 @@ iOS physical-device prerequisites:
 Android physical-device prerequisites:
   Enable USB debugging and confirm the device appears in agent-device devices --platform android.
   Android does not need the iOS runner signing setup. For React Native/Expo Metro reachability, read help react-native.
+
+iOS runner transport:
+  CoreDevice-backed devices use USB (usbmux) when connected by cable and the CoreDevice tunnel over Wi-Fi. agent-device selects the tunnel even when Finder's "Show this iPhone when on Wi-Fi" is enabled.
 
 Runner and daemon lifecycle (applies to simulators too):
   open without --relaunch is idempotent-foreground for an already-running app, except native macOS app opens keep it in the background (help macos); neither restarts the process. open --relaunch restarts the app; on iOS simulators this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch.
