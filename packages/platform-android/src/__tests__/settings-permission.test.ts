@@ -10,6 +10,7 @@ import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
+import { createFakeAndroidPmAdb, type FakePmReply } from './test-utils/fake-android-pm-shell.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 
@@ -553,48 +554,94 @@ function dumpsysWithRequested(): string {
   ].join('\n');
 }
 
+function fakeAllAdb(
+  baseScript: (flat: string) => FakeAdbReply,
+  pmReplies: Readonly<Record<string, FakePmReply>> = {},
+) {
+  return createFakeAndroidPmAdb((args) => baseScript(args.join(' ')), pmReplies);
+}
+
 // `all` intersects the declared set before issuing anything: INTERNET is declared
 // but not changeable, so it is skipped with a reason while RECORD_AUDIO lands.
 test('setAndroidPermission grant all applies the declared changeable ids', async () => {
-  await withFakeAdb(
-    fakeAdb((flat) => {
+  const fake = fakeAllAdb(
+    (flat) => {
       if (flat === CURRENT_USER) return '0';
       if (flat === DUMPSYS) return dumpsysWithRequested();
-      if (flat === 'shell pm grant --user 0 com.example.app android.permission.INTERNET') {
-        return {
-          stderr:
-            "Exception occurred while executing 'grant':\njava.lang.SecurityException: INTERNET is not a changeable permission type",
-          exitCode: 1,
-        };
-      }
-      if (flat === 'shell pm grant --user 0 com.example.app com.example.app.CUSTOM_PERMISSION') {
-        return {
-          stderr:
-            'SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
-          exitCode: 1,
-        };
-      }
       return undefined;
-    }),
-    async ({ calls, device }) => {
-      const result = await setPermission(device, 'grant', 'com.example.app', {
-        permissionTarget: 'all',
-      });
-      const flat = calls.map((args) => args.join(' '));
-      assert.ok(
-        flat.includes('shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO'),
-        flat.join('; '),
-      );
-      assert.deepEqual(result, {
-        permission: 'all',
-        permissions: ['android.permission.RECORD_AUDIO'],
-        warnings: [
-          "Skipped android.permission.INTERNET for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: INTERNET is not a changeable permission type",
-          'Skipped com.example.app.CUSTOM_PERMISSION for com.example.app: SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
-        ],
-      });
+    },
+    {
+      'shell pm grant --user 0 com.example.app android.permission.INTERNET': {
+        stderr:
+          "Exception occurred while executing 'grant':\njava.lang.SecurityException: INTERNET is not a changeable permission type",
+        exitCode: 1,
+      },
+      'shell pm grant --user 0 com.example.app com.example.app.CUSTOM_PERMISSION': {
+        stderr:
+          'SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
+        exitCode: 1,
+      },
     },
   );
+  await withFakeAdb(fake.script, async ({ device }) => {
+    const result = await setPermission(device, 'grant', 'com.example.app', {
+      permissionTarget: 'all',
+    });
+    const flat = fake.flatPmCalls();
+    assert.ok(
+      flat.includes('shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO'),
+      flat.join('; '),
+    );
+    assert.deepEqual(result, {
+      permission: 'all',
+      permissions: ['android.permission.RECORD_AUDIO'],
+      warnings: [
+        "Skipped android.permission.INTERNET for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: INTERNET is not a changeable permission type",
+        'Skipped com.example.app.CUSTOM_PERMISSION for com.example.app: SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
+      ],
+    });
+  });
+});
+
+// A lone declared id skips the batch and runs one plain `shell pm` call; its refusal is
+// classified the same way and skipped with the reason.
+test('setAndroidPermission grant all skips a lone unchangeable id on the single-call path', async () => {
+  const requested = [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    '      android.permission.INTERNET',
+    'Queries:',
+  ].join('\n');
+  const fake = fakeAllAdb(
+    (flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      return undefined;
+    },
+    {
+      'shell pm grant --user 0 com.example.app android.permission.INTERNET': {
+        stderr: 'SecurityException: INTERNET is not a changeable permission type',
+        exitCode: 1,
+      },
+    },
+  );
+  await withFakeAdb(fake.script, async ({ device }) => {
+    const result = await setPermission(device, 'grant', 'com.example.app', {
+      permissionTarget: 'all',
+    });
+    assert.deepEqual(fake.batchOptions, []);
+    assert.deepEqual(fake.flatPmCalls(), [
+      'shell pm grant --user 0 com.example.app android.permission.INTERNET',
+    ]);
+    assert.deepEqual(result, {
+      permission: 'all',
+      permissions: [],
+      warnings: [
+        'Skipped android.permission.INTERNET for com.example.app: SecurityException: INTERNET is not a changeable permission type',
+      ],
+    });
+  });
 });
 
 // A role-managed id (WRITE_SETTINGS on API 36: "managed by role") is
@@ -612,32 +659,32 @@ test('setAndroidPermission all skips a role-managed id', async () => {
     '        android.permission.RECORD_AUDIO: granted=false',
     'Queries:',
   ].join('\n');
-  await withFakeAdb(
-    fakeAdb((flat) => {
+  const fake = fakeAllAdb(
+    (flat) => {
       if (flat === CURRENT_USER) return '0';
       if (flat === DUMPSYS) return requested;
-      if (flat === 'shell pm grant --user 0 com.example.app android.permission.WRITE_SETTINGS') {
-        return {
-          stderr:
-            "Exception occurred while executing 'grant':\njava.lang.SecurityException: Permission android.permission.WRITE_SETTINGS is managed by role",
-          exitCode: 1,
-        };
-      }
       return undefined;
-    }),
-    async ({ device }) => {
-      const result = await setPermission(device, 'grant', 'com.example.app', {
-        permissionTarget: 'all',
-      });
-      assert.deepEqual(result, {
-        permission: 'all',
-        permissions: ['android.permission.RECORD_AUDIO'],
-        warnings: [
-          "Skipped android.permission.WRITE_SETTINGS for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: Permission android.permission.WRITE_SETTINGS is managed by role",
-        ],
-      });
+    },
+    {
+      'shell pm grant --user 0 com.example.app android.permission.WRITE_SETTINGS': {
+        stderr:
+          "Exception occurred while executing 'grant':\njava.lang.SecurityException: Permission android.permission.WRITE_SETTINGS is managed by role",
+        exitCode: 1,
+      },
     },
   );
+  await withFakeAdb(fake.script, async ({ device }) => {
+    const result = await setPermission(device, 'grant', 'com.example.app', {
+      permissionTarget: 'all',
+    });
+    assert.deepEqual(result, {
+      permission: 'all',
+      permissions: ['android.permission.RECORD_AUDIO'],
+      warnings: [
+        "Skipped android.permission.WRITE_SETTINGS for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: Permission android.permission.WRITE_SETTINGS is managed by role",
+      ],
+    });
+  });
 });
 
 // Every skip reason the pm boundary classifies keeps rendering the same operator-facing
@@ -660,32 +707,35 @@ test.each([
     '        android.permission.RECORD_AUDIO: granted=false',
     'Queries:',
   ].join('\n');
-  await withFakeAdb(
-    fakeAdb((flat) => {
+  const fake = fakeAllAdb(
+    (flat) => {
       if (flat === CURRENT_USER) return '0';
       if (flat === DUMPSYS) return requested;
-      if (flat === 'shell pm grant --user 0 com.example.app android.permission.CUSTOM') {
-        return { stderr: stderrText, exitCode: 1 };
-      }
       return undefined;
-    }),
-    async ({ device }) => {
-      const result = (await setPermission(device, 'grant', 'com.example.app', {
-        permissionTarget: 'all',
-      })) as Record<string, unknown>;
-      assert.deepEqual(result.permissions, ['android.permission.RECORD_AUDIO']);
-      assert.deepEqual(result.warnings, [
-        `Skipped android.permission.CUSTOM for com.example.app: ${stderrText}`,
-      ]);
+    },
+    {
+      'shell pm grant --user 0 com.example.app android.permission.CUSTOM': {
+        stderr: stderrText,
+        exitCode: 1,
+      },
     },
   );
+  await withFakeAdb(fake.script, async ({ device }) => {
+    const result = (await setPermission(device, 'grant', 'com.example.app', {
+      permissionTarget: 'all',
+    })) as Record<string, unknown>;
+    assert.deepEqual(result.permissions, ['android.permission.RECORD_AUDIO']);
+    assert.deepEqual(result.warnings, [
+      `Skipped android.permission.CUSTOM for com.example.app: ${stderrText}`,
+    ]);
+  });
 });
 
 // The abort side, named per the sequence it stops: an operational failure on the second
 // declared id leaves the first id applied (its pm call already landed) and never attempts the
 // third — proving the abort halts the fan-out rather than skipping past it. A mutation that
 // treats an unrecognized stderr as skippable (rather than aborting) makes the third id's pm
-// call appear in `calls`, failing the assertion below.
+// call appear in `pmCalls`, failing the assertion below.
 test('setAndroidPermission grant all stops after an operational failure, keeping the earlier applied id', async () => {
   const requested = [
     'Packages:',
@@ -701,58 +751,59 @@ test('setAndroidPermission grant all stops after an operational failure, keeping
     '        android.permission.READ_CONTACTS: granted=false',
     'Queries:',
   ].join('\n');
-  await withFakeAdb(
-    fakeAdb((flat) => {
+  const fake = fakeAllAdb(
+    (flat) => {
       if (flat === CURRENT_USER) return '0';
       if (flat === DUMPSYS) return requested;
-      if (flat === 'shell pm grant --user 0 com.example.app android.permission.CAMERA') {
-        return { stderr: 'device offline', exitCode: 1 };
-      }
       return undefined;
-    }),
-    async ({ calls, device }) => {
-      await assertRejectsAppError(
-        () =>
-          setPermission(device, 'grant', 'com.example.app', {
-            permissionTarget: 'all',
-          }),
-        { code: 'COMMAND_FAILED', message: /Failed to grant Android permission.*CAMERA/ },
-      );
-      const flat = calls.map((args) => args.join(' '));
-      assert.ok(
-        flat.includes('shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO'),
-        flat.join('; '),
-      );
-      assert.ok(
-        flat.includes('shell pm grant --user 0 com.example.app android.permission.CAMERA'),
-        flat.join('; '),
-      );
-      assert.ok(!flat.some((call) => call.includes('READ_CONTACTS')), flat.join('; '));
+    },
+    {
+      'shell pm grant --user 0 com.example.app android.permission.CAMERA': {
+        stderr: 'device offline',
+        exitCode: 1,
+      },
     },
   );
+  await withFakeAdb(fake.script, async ({ device }) => {
+    await assertRejectsAppError(
+      () =>
+        setPermission(device, 'grant', 'com.example.app', {
+          permissionTarget: 'all',
+        }),
+      { code: 'COMMAND_FAILED', message: /Failed to grant Android permission.*CAMERA/ },
+    );
+    const flat = fake.flatPmCalls();
+    assert.ok(
+      flat.includes('shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO'),
+      flat.join('; '),
+    );
+    assert.ok(
+      flat.includes('shell pm grant --user 0 com.example.app android.permission.CAMERA'),
+      flat.join('; '),
+    );
+    assert.ok(!flat.some((call) => call.includes('READ_CONTACTS')), flat.join('; '));
+  });
 });
 
 // Revoke under `all` warns per held permission, like the single path.
 test('setAndroidPermission revoke all warns for the held runtime id', async () => {
-  await withFakeAdb(
-    fakeAdb((flat) => {
-      if (flat === CURRENT_USER) return '0';
-      if (flat === DUMPSYS) return dumpsysWithRequested();
-      return undefined;
-    }),
-    async ({ device }) => {
-      const result = (await setPermission(device, 'deny', 'com.example.app', {
-        permissionTarget: 'all',
-      })) as Record<string, unknown>;
-      assert.deepEqual(result.permission, 'all');
-      assert.ok(
-        (result.permissions as string[]).includes('android.permission.RECORD_AUDIO'),
-        JSON.stringify(result),
-      );
-      const warnings = (result.warnings as string[]).join('\n');
-      assert.match(warnings, /RECORD_AUDIO was granted before this revoke/);
-    },
-  );
+  const fake = fakeAllAdb((flat) => {
+    if (flat === CURRENT_USER) return '0';
+    if (flat === DUMPSYS) return dumpsysWithRequested();
+    return undefined;
+  });
+  await withFakeAdb(fake.script, async ({ device }) => {
+    const result = (await setPermission(device, 'deny', 'com.example.app', {
+      permissionTarget: 'all',
+    })) as Record<string, unknown>;
+    assert.deepEqual(result.permission, 'all');
+    assert.ok(
+      (result.permissions as string[]).includes('android.permission.RECORD_AUDIO'),
+      JSON.stringify(result),
+    );
+    const warnings = (result.warnings as string[]).join('\n');
+    assert.match(warnings, /RECORD_AUDIO was granted before this revoke/);
+  });
 });
 
 // Validation happens before mutation: an unreadable dump issues no pm call.
@@ -861,25 +912,28 @@ test('setAndroidPermission grant camera on a package that declares nothing fails
 // An operational pm failure mid-`all` aborts instead of being skipped: an
 // offline device must not let launchApp continue with half-applied permissions.
 test('setAndroidPermission grant all propagates an operational pm failure', async () => {
-  await withFakeAdb(
-    fakeAdb((flat) => {
+  const fake = fakeAllAdb(
+    (flat) => {
       if (flat === CURRENT_USER) return '0';
       if (flat === DUMPSYS) return dumpsysWithRequested();
-      if (flat === 'shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO') {
-        return { stderr: 'device offline', exitCode: 1 };
-      }
       return undefined;
-    }),
-    async ({ device }) => {
-      await assertRejectsAppError(
-        () =>
-          setPermission(device, 'grant', 'com.example.app', {
-            permissionTarget: 'all',
-          }),
-        { code: 'COMMAND_FAILED', message: /Failed to grant Android permission.*RECORD_AUDIO/ },
-      );
+    },
+    {
+      'shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO': {
+        stderr: 'device offline',
+        exitCode: 1,
+      },
     },
   );
+  await withFakeAdb(fake.script, async ({ device }) => {
+    await assertRejectsAppError(
+      () =>
+        setPermission(device, 'grant', 'com.example.app', {
+          permissionTarget: 'all',
+        }),
+      { code: 'COMMAND_FAILED', message: /Failed to grant Android permission.*RECORD_AUDIO/ },
+    );
+  });
 });
 
 // A photos probe that fails operationally (not as non-changeable) aborts `all`
