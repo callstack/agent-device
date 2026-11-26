@@ -155,10 +155,11 @@ export type LimrunAndroidRuntimeAdapter = {
   ): Promise<AppError>;
 };
 
-/** One authenticated HTTP download the host performs on the provider's behalf, bounded by `timeoutMs`. */
+/** One public or instance-authenticated download bounded by `timeoutMs`. */
 export type LimrunFileDownload = Readonly<{
   url: string;
-  headers: Readonly<Record<string, string>>;
+  /** Credentials for an HTTPS download from the instance origin. Omit for public downloads. */
+  instance?: { apiUrl: string; token: string };
   destinationPath: string;
   timeoutMs: number;
   signal?: AbortSignal;

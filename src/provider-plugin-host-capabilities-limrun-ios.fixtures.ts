@@ -256,9 +256,23 @@ export async function fixture(
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
+  const fixtureUrl = `http://127.0.0.1:${address.port}/v1/ios_test/api`;
+  const instanceUrl = fixtureUrl.replace('http:', 'https:');
+  const instanceOrigin = new URL(instanceUrl).origin;
+  const fetchFromHost = globalThis.fetch;
+  // Exercise instance-origin validation while keeping this runner fixture on its local server.
+  globalThis.fetch = (input, init) => {
+    const url = typeof input === 'string' || input instanceof URL ? URL.parse(input) : null;
+    if (url?.origin !== instanceOrigin) return fetchFromHost(input, init);
+    url.protocol = 'http:';
+    return fetchFromHost(url, init);
+  };
+  cleanups.push(async () => {
+    globalThis.fetch = fetchFromHost;
+  });
   const stopReadiness: Mock<() => void> = vi.fn();
   const session = {
-    apiUrl: `http://127.0.0.1:${address.port}/v1/ios_test/api`,
+    apiUrl: instanceUrl,
     token: instanceToken,
     device: {
       id: 'limrun:ios:test',
@@ -335,7 +349,7 @@ export async function fixture(
     },
     commands,
     uploads,
-    apiUrl: session.apiUrl,
+    apiUrl: fixtureUrl,
     device: session.device,
     stopReadiness,
     requests,

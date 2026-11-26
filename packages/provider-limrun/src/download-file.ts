@@ -18,45 +18,84 @@ const LIMRUN_DOWNLOAD_REASONS = {
   httpError: { reason: 'limrun_download_http_error' },
   // The transfer's own deadline passed before the file reached disk.
   timeout: { reason: 'limrun_download_timeout' },
-  // The transfer failed before it could ask the instance for the file.
+  // The request or transfer failed, including when an authenticated endpoint redirects.
   failed: { reason: 'limrun_download_failed' },
+  // An authenticated download requires HTTPS on the instance origin.
+  endpointBlocked: { reason: 'limrun_download_endpoint_blocked' },
 } as const satisfies ReasonTable<'limrun'>;
 
 /**
- * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs`; a
- * failed or timed-out attempt leaves no file at the destination, so the caller can retry from the
- * same URL and never mistakes an earlier attempt's file for this one's.
+ * Streams a public or instance-authenticated download to disk. Instance downloads require HTTPS
+ * on the instance origin and refuse redirects. The transfer is bounded by `timeoutMs`. A failed
+ * or timed-out attempt leaves no file at the destination.
  *
- * A destination is a file this process chose, so a caller reads back what it asked for. The URL is not
- * published: an attached instance answers with a download URL that carries its bearer token as the
- * whole value, so the URL is a credential, not a location.
+ * The destination is chosen by the caller. Download URLs and transport messages stay private.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
+    const { instance } = options;
+    const url = instance ? instanceDownloadUrl(instance.apiUrl, options.url) : options.url;
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    const response = await fetch(options.url, {
-      method: 'GET',
-      headers: options.headers,
-      signal,
-    });
-    if (!response.ok) throw httpFailure(response);
-    if (!response.body) {
-      throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
-        reason: LIMRUN_DOWNLOAD_REASONS.emptyBody.reason,
-        destination: path.basename(options.destinationPath),
-      });
-    }
-    await pipeline(
-      Readable.fromWeb(response.body as WebReadableStream<Uint8Array>),
-      fs.createWriteStream(options.destinationPath),
-      { signal },
-    );
+    const body = await openFetchDownload(url, instance?.token, signal);
+    await writeDownloadBody(body, options.destinationPath, signal);
   } catch (error) {
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout, signal);
   }
+}
+
+async function openFetchDownload(
+  url: string | URL,
+  token: string | undefined,
+  signal: AbortSignal,
+): Promise<WebReadableStream<Uint8Array> | null> {
+  const authenticated = token !== undefined;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: authenticated ? { Authorization: `Bearer ${token}` } : undefined,
+    redirect: authenticated ? ('error' as const) : ('follow' as const),
+    signal,
+  });
+  if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
+    throw httpFailure(response.status);
+  }
+  return response.body as WebReadableStream<Uint8Array> | null;
+}
+
+async function writeDownloadBody(
+  body: WebReadableStream<Uint8Array> | null,
+  destinationPath: string,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!body) {
+    throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
+      reason: LIMRUN_DOWNLOAD_REASONS.emptyBody.reason,
+      destination: path.basename(destinationPath),
+    });
+  }
+  await pipeline(Readable.fromWeb(body), fs.createWriteStream(destinationPath), { signal });
+}
+
+function instanceDownloadUrl(apiUrl: string, value: string): URL {
+  const url = URL.parse(value);
+  const instance = URL.parse(apiUrl);
+  if (
+    !url ||
+    !instance ||
+    url.origin !== instance.origin ||
+    url.username ||
+    url.password ||
+    url.protocol !== 'https:'
+  ) {
+    throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download endpoint.', {
+      reason: LIMRUN_DOWNLOAD_REASONS.endpointBlocked.reason,
+      hint: 'Use an HTTPS instance URL and download from that same origin.',
+    });
+  }
+  return url;
 }
 
 /**
@@ -65,10 +104,9 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
  * carry that token out with or without its label. `statusCode` is what a caller acts on — a missing
  * recording and a missing file are both a 404 answer, not a failure of the transfer.
  */
-function httpFailure(response: Response): AppError {
-  void response.body?.cancel().catch(() => {});
-  return new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${response.status}`, {
-    statusCode: response.status,
+function httpFailure(statusCode: number): AppError {
+  return new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${statusCode}`, {
+    statusCode,
     reason: LIMRUN_DOWNLOAD_REASONS.httpError.reason,
   });
 }
@@ -86,6 +124,7 @@ function downloadFailure(
   signal: AbortSignal,
 ): unknown {
   if (error instanceof AppError) return error;
+  const authenticated = options.instance !== undefined;
   if (options.signal?.aborted && signal.reason === options.signal.reason) {
     const reason: unknown = options.signal.reason;
     if (reason instanceof AppError) return reason;
@@ -95,7 +134,7 @@ function downloadFailure(
     return new AppError('COMMAND_FAILED', 'Limrun download deadline expired', {
       reason: LIMRUN_DOWNLOAD_REASONS.timeout.reason,
       timeoutMs: options.timeoutMs,
-      transport: transportSummary(error),
+      transport: transportSummary(error, authenticated),
     });
   }
   if (timeout.aborted) {
@@ -106,17 +145,16 @@ function downloadFailure(
   }
   return new AppError('COMMAND_FAILED', 'Limrun download failed', {
     reason: LIMRUN_DOWNLOAD_REASONS.failed.reason,
-    transport: transportSummary(error),
+    transport: transportSummary(error, authenticated),
   });
 }
 
 /**
- * The transport's own code for a failure, without its message. `fetch` names a malformed request URL
- * with a `TypeError` and reports a socket failure with a Node code like `ECONNREFUSED`; both answer for
- * what went wrong without quoting the request it happened on.
+ * Fetch uses `TypeError` for redirect refusals as well as invalid requests. Keep the public
+ * download label and use a broader label for authenticated fetch failures.
  */
-function transportSummary(error: unknown): string {
-  if (error instanceof TypeError) return 'invalid-request';
+function transportSummary(error: unknown, authenticated: boolean): string {
+  if (error instanceof TypeError) return authenticated ? 'request-failed' : 'invalid-request';
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' && code.length > 0 ? code : 'unknown';
 }

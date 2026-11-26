@@ -1,4 +1,5 @@
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
+import { AppError } from '@agent-device/kernel/errors';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import type { ProviderAppLogReader } from '@agent-device/capture-kit/provider-app-log';
 import type { LogStream } from '@limrun/api/ios-client';
@@ -71,7 +72,17 @@ export function createLimrunIosAppLogReader(
     const pending = (async () => {
       try {
         const { readLimrunAppInfo } = await import('./ios-files.ts');
-        const info = await readLimrunAppInfo(input, await loadPlistParser(), app, signal);
+        const info = await readLimrunAppInfo(input, await loadPlistParser(), app, signal).catch(
+          (error: unknown) => {
+            if (
+              error instanceof AppError &&
+              error.details?.reason === 'limrun_download_endpoint_blocked'
+            ) {
+              return null;
+            }
+            throw error;
+          },
+        );
         if (active !== owned) return;
         executable =
           typeof info?.CFBundleExecutable === 'string' ? info.CFBundleExecutable : undefined;

@@ -97,7 +97,7 @@ test('iOS device session exposes reusable capabilities without its raw client', 
   assert.deepEqual(downloadFile.mock.calls.at(-1), [
     {
       url: 'https://ios.example/recording',
-      headers: { Authorization: 'Bearer ios-instance-token' },
+      instance: { apiUrl: 'https://ios.example', token: 'ios-instance-token' },
       destinationPath: '/tmp/ios-recording.mp4',
       timeoutMs: 60_000,
     },
@@ -189,7 +189,7 @@ test('Android device session exposes semantic ADB capabilities without its raw c
   assert.deepEqual(downloadFile.mock.calls.at(-1), [
     {
       url: 'https://android.example/recording',
-      headers: { Authorization: 'Bearer android-instance-token' },
+      instance: { apiUrl: 'https://android.example', token: 'android-instance-token' },
       destinationPath: '/tmp/android-recording.mp4',
       timeoutMs: 60_000,
     },
@@ -207,6 +207,7 @@ function iosSession(client: Record<string, unknown>): LimrunIosSession {
     instanceId: 'ios-instance',
     device: device('ios'),
     client,
+    apiUrl: 'https://ios.example',
     token: 'ios-instance-token',
     dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunIosSession;
@@ -223,6 +224,7 @@ function androidSession(
     device: device('android'),
     client,
     adbProvider,
+    apiUrl: 'https://android.example',
     token: 'android-instance-token',
     dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunAndroidSession;

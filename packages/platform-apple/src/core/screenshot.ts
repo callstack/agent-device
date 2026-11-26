@@ -512,6 +512,14 @@ async function copyRunnerScreenshotFromSimulator(
         return;
       } catch (error) {
         signal?.throwIfAborted();
+        if (
+          error instanceof AppError &&
+          error.details?.reason &&
+          typeof error.details.hint === 'string' &&
+          error.details.statusCode !== 404
+        ) {
+          throw error;
+        }
         lastError = error instanceof Error ? error.message : String(error);
       }
     }

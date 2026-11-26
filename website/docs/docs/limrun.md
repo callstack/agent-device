@@ -79,6 +79,8 @@ If your shell's account variables, or its instance variables for the platform yo
 
 `install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. For a signed asset URL, use `install-from-source <url>` in the active session. This path does not need `LIMRUN_API_KEY`.
 
+Use an HTTPS instance URL to download recordings and simulator files. These downloads use the same origin as the instance and refuse redirects.
+
 ## Keep idle sessions alive
 
 Limrun ends an instance after its inactivity timeout, which an idle session can reach while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. Keep-alive is off by default.
@@ -170,7 +172,7 @@ For an unpublished build, set `AGENT_DEVICE_LIMRUN_WATCHOS_RUNNER_APP` to the wa
 
 ## Connect an iOS app to Metro
 
-An installed Expo dev client can open with the same automatic launch URL discovery as a local simulator when its `exp+` scheme has one installed owner and Metro runtime information is available. An explicit launch URL takes precedence. If agent-device cannot verify which app owns a custom URL scheme, it leaves the launch confirmation for you to inspect and answer with the alert commands.
+Automatic launch URL discovery for an installed Expo dev client requires an HTTPS Limrun instance URL, one installed owner for its `exp+` scheme, and Metro runtime information. For a plaintext attachment, pass the URL explicitly with `agent-device open <app> --launch-url <url>`. If a launch prompt appears, inspect it with `agent-device alert get` and answer it with `agent-device alert accept` or `agent-device alert dismiss`.
 
 For a local Metro server, connect with `--provider-network-logs` and include `localhost:8081`, or your Metro port, in `--provider-network-hosts`. While the session is open, the app can reach that port on the machine running agent-device. See [Capture session network traffic](#capture-session-network-traffic) for the network changes this option makes. Otherwise, use a publicly reachable HTTPS Metro endpoint. `port reverse` is Android-only.
 
@@ -196,6 +198,8 @@ Android `get text` also uses the shared live text reader when the selected eleme
 After opening your app, use `logs start` to collect its stdout, stderr, and matching simulator logs. Use `open <app> --launch-console <path>` to capture its initial launch output. Runner logs contain the test results Limrun provides, but native XCTest stdout is unavailable.
 
 Remote simulator logs do not include sender or process image paths. Filters that rely only on those fields cannot match remotely.
+
+On plaintext attachments, app console logs remain available and simulator logs match by bundle ID. Matching by executable name requires an HTTPS Limrun instance URL.
 
 ## Change simulator settings
 

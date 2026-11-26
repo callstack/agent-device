@@ -47,6 +47,7 @@ type LimrunAndroidAdbSession = {
   client: LimrunAndroidClient;
   /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
   readonly token: string;
+  readonly apiUrl: string;
   adbTunnel?: LimrunAdbTunnel;
   adbSerial?: string;
   adbTunnelPromise?: Promise<string>;
@@ -96,6 +97,7 @@ export async function createLimrunAndroidSession(
     ownership: options.ownership,
     device: options.device,
     client,
+    apiUrl: options.apiUrl,
     token: options.token,
     dependencies,
   };
