@@ -5,7 +5,12 @@ import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import type { Point, Rect, SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  Rect,
+  SnapshotNode,
+  SnapshotPreferredBackend,
+} from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { RequestCaptureProof } from '../../capture-disclosure.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -136,8 +141,9 @@ export type InteractionRuntimeInput = {
   /**
    * Runs immediately before a tap is sent, before the ref frame expires: a throw refuses the tap
    * with nothing dispatched. `undefined` is a native-ref tap, which has no point to check.
+   * `resolvedOn` is the tree that measured the point, absent for a raw coordinate.
    */
-  admitTap?: (point: Point | undefined) => Promise<void>;
+  admitTap?: (point: Point | undefined, resolvedOn?: SnapshotNode[]) => Promise<void>;
   gestures?: BoundGestureExecutor;
   /**
    * The capture every observation on this request reads the screen through: the action binding's

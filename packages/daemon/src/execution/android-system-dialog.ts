@@ -281,15 +281,28 @@ function isSameAndroidBlockingDialogFocus(
 }
 
 /**
- * True when the tap point falls on one of the dialog's own buttons. Android's view hit test excludes
- * the right and bottom edges, so a point on them reaches the dialog around the button, not the
- * button.
+ * True when the tap point falls on one of the dialog's own buttons. `resolvedOn` is the tree the
+ * target was resolved on, when it was resolved on one: the point must be a dialog button there too,
+ * so an app control from a tree read before the dialog appeared is not retargeted to the dialog
+ * button that now covers it.
  */
 export function isAndroidBlockingDialogButtonPoint(
   admission: AndroidBlockingDialogButtonAdmission,
   point: Point,
+  resolvedOn?: SnapshotNode[],
 ): boolean {
-  return admission.buttons.some(
+  if (!isPointOnAnyButton(admission.buttons, point)) return false;
+  return (
+    resolvedOn === undefined || isPointOnAnyButton(findAppErrorDialogButtons(resolvedOn), point)
+  );
+}
+
+/**
+ * Android's view hit test excludes the right and bottom edges, so a point on them reaches the
+ * dialog around the button, not the button.
+ */
+function isPointOnAnyButton(buttons: readonly Rect[], point: Point): boolean {
+  return buttons.some(
     (rect) =>
       point.x >= rect.x &&
       point.x < rect.x + rect.width &&

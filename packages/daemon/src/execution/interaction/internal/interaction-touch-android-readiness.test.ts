@@ -421,13 +421,15 @@ type BlockingDialogObservation = typeof SYSTEM_UI_ANR | { status: 'clear' };
 async function pressWithSystemUiAnr(
   positionals: string[],
   flags: Record<string, unknown> = {},
-  /**
-   * The focus read number `read` (from 0) returns, before and after the tap. By default the dialog
-   * holds the focus until a tap reaches the device.
-   */
-  focus: {
+  setup: {
+    /**
+     * The focus read number `read` (from 0) returns, before and after the tap. By default the
+     * dialog holds the focus until a tap reaches the device.
+     */
     beforeTap?: (read: number) => BlockingDialogObservation;
     afterTap?: (read: number) => BlockingDialogObservation;
+    /** The session's stored snapshot, when it was taken before the dialog appeared. */
+    sessionNodes?: ReturnType<typeof attachRefs>;
   } = {},
 ) {
   const sessionStore = makeSessionStore();
@@ -435,11 +437,15 @@ async function pressWithSystemUiAnr(
   const session = makeAndroidSession(sessionName);
   session.appBundleId = 'com.example.app';
   const nodes = systemUiAnrScreen();
-  session.snapshot = { nodes, createdAt: Date.now(), backend: 'android' };
+  session.snapshot = {
+    nodes: setup.sessionNodes ?? nodes,
+    createdAt: Date.now(),
+    backend: 'android',
+  };
   sessionStore.publish(sessionName, session);
 
-  const beforeTap = focus.beforeTap ?? (() => SYSTEM_UI_ANR);
-  const afterTap = focus.afterTap ?? (() => ({ status: 'clear' }) as const);
+  const beforeTap = setup.beforeTap ?? (() => SYSTEM_UI_ANR);
+  const afterTap = setup.afterTap ?? (() => ({ status: 'clear' }) as const);
   let tapped = false;
   let reads = 0;
   mockTapPoint.mockImplementation(async (input) => {
@@ -502,6 +508,32 @@ test.each([
 test('a repeated press on the System UI ANR dialog stays refused', async () => {
   // The later taps of a repeated press would land on whatever the closed dialog uncovers.
   const response = await pressWithSystemUiAnr(['@e2'], { count: 2 });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      message: expect.stringContaining('Android system dialog is blocking press'),
+      details: { dispatched: 'no' },
+    },
+  });
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+test('a ref from a snapshot taken before the ANR dialog is not retargeted to the dialog button over it', async () => {
+  // The app's own button sits where the dialog's Close app now is: the tap would close System UI
+  // and report it as a press of the app's button.
+  const appScreen = attachRefs([
+    {
+      index: 0,
+      type: 'android.widget.Button',
+      label: 'Submit order',
+      identifier: 'com.example.app:id/submit',
+      rect: { x: 60, y: 590, width: 300, height: 100 },
+      enabled: true,
+      hittable: true,
+    },
+  ]);
+  const response = await pressWithSystemUiAnr(['@e1'], {}, { sessionNodes: appScreen });
 
   expect(response).toMatchObject({
     ok: false,

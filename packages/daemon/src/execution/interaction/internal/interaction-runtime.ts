@@ -297,7 +297,7 @@ function touchBackendMembers(
   return {
     tap: tapPoint
       ? async (_context, point, options) => {
-          await admitTap?.(point);
+          await admitTap?.(point, options?.pointObservation?.nodes);
           const evidence = textInputEvidence?.(point, options?.pointObservation);
           return await run(() =>
             tapPoint(point, {

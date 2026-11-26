@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { Point } from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   ensureAndroidBlockingSystemDialogReady,
   ensureAndroidBlockingSystemDialogReadyForTap,
@@ -41,7 +41,7 @@ export type ReadinessOutcome<TResult> =
  */
 export type AndroidDialogTapGate = Readonly<{
   open(admission: AndroidBlockingDialogButtonAdmission): void;
-  admitTap(point: Point | undefined): Promise<void>;
+  admitTap(point: Point | undefined, resolvedOn?: SnapshotNode[]): Promise<void>;
 }>;
 
 export function createAndroidDialogTapGate(): AndroidDialogTapGate {
@@ -51,9 +51,13 @@ export function createAndroidDialogTapGate(): AndroidDialogTapGate {
     open: (next) => {
       admission = next;
     },
-    admitTap: async (point) => {
+    admitTap: async (point, resolvedOn) => {
       if (!admission) return;
-      if (admittedTaps > 0 || !point || !isAndroidBlockingDialogButtonPoint(admission, point)) {
+      if (
+        admittedTaps > 0 ||
+        !point ||
+        !isAndroidBlockingDialogButtonPoint(admission, point, resolvedOn)
+      ) {
         throw admission.refusal();
       }
       await admission.confirmFocus();
