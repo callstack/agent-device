@@ -26,6 +26,6 @@ Use `--target mobile` for a phone. The provider verifies the workspace key at co
 
 ### Attach to an existing lease
 
-A broker creates a lease with its ADC workspace key and calls `POST /v2/leases/{id}/access` when the lease becomes active. Give the client the returned `websocket_url` as `ADC_ADB_WEBSOCKET_URL` and the lease's `token` as `ADC_LEASE_TOKEN`. Use a daemon environment containing only these scoped credentials for ADC. Start a separate daemon state directory for each attached lease.
+The lease owner creates a lease with its ADC workspace key and calls `POST /v2/leases/{id}/access` when the lease becomes active. Give the client the returned `websocket_url` as `ADC_ADB_WEBSOCKET_URL` and the lease's `token` as `ADC_LEASE_TOKEN`. Use a daemon environment containing only these scoped credentials for ADC. Start a separate daemon state directory for each attached lease.
 
-Run the same connect, open and disconnect commands with the leased form factor. In attached mode agent-device opens a local ADB tunnel to the existing device. Disconnect closes the tunnel. The broker owns release and settlement. `connect adc` runs the installed plugin and connects over ADB. `connect cloud` uses the Device Router to select a provider.
+Run the same connect, open and disconnect commands with the leased form factor. Disconnect closes your local ADB tunnel. The lease owner handles release and billing.
