@@ -4,6 +4,7 @@ import {
   type DeviceBindingRequest,
   type DeviceRuntimeGateway,
   type RuntimeOwnerRef,
+  type RuntimeOperationKey,
   providerRuntimeOwner,
   runtimeOwnerKey,
   sameRuntimeOwner,
@@ -178,7 +179,7 @@ export function createComposedPlatformRuntimeGateway(options: {
 
   return Object.freeze({
     applicationLifecycle,
-    inspectFacts: async (device) => {
+    inspectFacts: async (device, requested) => {
       ensureOpen();
       const provider = selectOrdinaryProvider(options.providerRuntimes, device);
       let owner: PlatformRuntimeOwner;
@@ -190,7 +191,7 @@ export function createComposedPlatformRuntimeGateway(options: {
         owner = await loadLocal(device.platform);
       }
       ensureOpen();
-      return await inspectAndValidate(owner, device);
+      return await inspectAndValidate(owner, device, requested);
     },
     bind: async (request) => {
       ensureOpen();
@@ -267,8 +268,12 @@ function selectOrdinaryProvider(
   return matching[0];
 }
 
-async function inspectAndValidate(owner: PlatformRuntimeOwner, device: DeviceInfo) {
-  const facts = await owner.inspectFacts(device);
+async function inspectAndValidate(
+  owner: PlatformRuntimeOwner,
+  device: DeviceInfo,
+  requested?: readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
+) {
+  const facts = await owner.inspectFacts(device, requested);
   if (!factsMatchDeviceOwner(device, owner.owner, facts)) {
     throw runtimeContractError('Platform runtime facts do not match the selected device and owner');
   }

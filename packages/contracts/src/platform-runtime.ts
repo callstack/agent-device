@@ -317,7 +317,11 @@ export type DeviceBindingRequest = Readonly<{
 
 /** Provider-first request gateway. Ordinary and exact-owner selection stay inside this module. */
 export type DeviceRuntimeGateway<Operations extends object> = Readonly<{
-  inspectFacts(device: DeviceInfo): Promise<RuntimeFacts<Operations>>;
+  /** Return device facts. When supplied, `requested` names the operations the caller needs resolved. */
+  inspectFacts(
+    device: DeviceInfo,
+    requested?: readonly RuntimeOperationKey<Operations>[],
+  ): Promise<RuntimeFacts<Operations>>;
   bind(request: DeviceBindingRequest): Promise<DeviceBinding<Operations>>;
   /**
    * Attempts each owner once; repeated calls share the attempt and the same rejection.

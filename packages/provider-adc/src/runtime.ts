@@ -27,7 +27,8 @@ export type AdcSession = {
   socketSpec: string;
   device: DeviceInfo;
   adb: AndroidAdbProvider;
-  clipboardSupport?: Promise<AndroidClipboardShellSupport>;
+  clipboardSupport?: Exclude<AndroidClipboardShellSupport, 'probe-failed'>;
+  clipboardProbe?: Promise<void>;
 };
 type Allocation = { tv: boolean; rental?: LeaseLifecycleContext['rental'] };
 

@@ -85,7 +85,8 @@ export function unsupportedOperationResponse(
 export async function admitRuntimeOperations(
   request: RuntimeAdmissionRequest,
 ): Promise<AdmittedRuntimeGateway> {
-  const facts = await requireFactsInspection(request.inspectFacts)(request.device);
+  const inspect = requireFactsInspection(request.inspectFacts);
+  const facts = await inspect(request.device, request.required);
   for (const operation of request.required) {
     const operationFact = facts.operations[operation];
     const fact =

@@ -48,7 +48,10 @@ function createDeferredGateway(compose: () => Promise<ClaimRecoveryGateway>): Cl
   let composed: Promise<ClaimRecoveryGateway> | undefined;
   const gateway = (): Promise<ClaimRecoveryGateway> => (composed ??= compose());
   return Object.freeze({
-    inspectFacts: async (device) => await (await gateway()).inspectFacts(device),
+    inspectFacts: async (device, requested) => {
+      const loaded = await gateway();
+      return await loaded.inspectFacts(device, requested);
+    },
     bind: async (request) => await (await gateway()).bind(request),
     // A composition that failed owns nothing to shut down; its error already failed the bind.
     shutdown: async () =>

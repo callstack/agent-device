@@ -74,11 +74,15 @@ it.each([
   { target: 'mobile', stderr: '', available: true },
   { target: 'tv', stderr: 'No shell command implementation.', available: false },
 ] as const)(
-  'reports clipboard support from the leased $target after a transient ADB failure',
+  'appstate on the leased $target completes while clipboard inspection is stalled and clipboard admission can retry',
   async ({ target, stderr, available }) => {
+    let failProbe!: (reason: Error) => void;
+    const stalled = new Promise<never>((_, reject) => {
+      failProbe = reject;
+    });
     const exec = vi
       .fn()
-      .mockRejectedValueOnce(new Error('device offline'))
+      .mockReturnValueOnce(stalled)
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr });
     const provider = vi.spyOn(adbModule, 'createAdbProvider').mockReturnValue({ exec });
     const config = credentials({
@@ -94,7 +98,7 @@ it.each([
     });
     const android = {
       createLeaseInteractor: vi.fn(),
-      getForegroundApp: vi.fn(),
+      getForegroundApp: vi.fn().mockResolvedValue({ appId: 'com.example.foreground' }),
       bindDeployment: vi.fn(),
     };
     const { runtime, platformModule } = createRegistration(config, {}, android);
@@ -112,17 +116,36 @@ it.each([
         },
       });
       const owner = await platformModule.loadRuntime(host);
-      const unknown = await owner.inspectFacts(device);
-      expect(unknown.operations.readClipboard.available).toBe(false);
-      expect(unknown.operations.writeClipboard.available).toBe(false);
-      const facts = await owner.inspectFacts(device);
-      expect(facts.operations.readClipboard.available).toBe(available);
-      expect(facts.operations.writeClipboard.available).toBe(available);
       const scope = {
         signal: new AbortController().signal,
         diagnostics: { emit: vi.fn() },
         progress: { report: vi.fn() },
       };
+      const inspectAndRunAppState = async () => {
+        const facts = await owner.inspectFacts(device, ['appState']);
+        expect(facts.operations.appState.available).toBe(true);
+        expect(facts.operations.readClipboard.available).toBe(false);
+        const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+        return await binding.operations.appState?.();
+      };
+      const cold = await inspectAndRunAppState();
+      expect(cold?.package).toBe('com.example.foreground');
+      expect(exec).not.toHaveBeenCalled();
+
+      const reading = owner.inspectFacts(device, ['readClipboard']);
+      const writing = owner.inspectFacts(device, ['writeClipboard']);
+      const pending = await inspectAndRunAppState();
+      expect(pending?.package).toBe('com.example.foreground');
+      expect(exec).toHaveBeenCalledTimes(1);
+
+      failProbe(new Error('device offline'));
+      const [unknown, joined] = await Promise.all([reading, writing]);
+      expect(joined.operations.writeClipboard.available).toBe(false);
+      expect(unknown.operations.readClipboard.available).toBe(false);
+      expect(unknown.operations.writeClipboard.available).toBe(false);
+      const facts = await owner.inspectFacts(device, ['writeClipboard']);
+      expect(facts.operations.readClipboard.available).toBe(available);
+      expect(facts.operations.writeClipboard.available).toBe(available);
       const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
       expect(binding.facts.operations.readClipboard).toEqual(facts.operations.readClipboard);
       expect(binding.operations.readClipboard !== undefined).toBe(available);

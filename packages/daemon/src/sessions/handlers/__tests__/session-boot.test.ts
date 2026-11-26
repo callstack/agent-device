@@ -99,7 +99,7 @@ test('boot prefers explicit device selector over active session device', async (
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(selectedDevice);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(selectedDevice, ['bootTarget']);
   expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime).toHaveBeenCalledWith(selectedDevice, {
     required: ['bootTarget'],
@@ -272,7 +272,7 @@ test('boot --headless admits a stopped Android emulator through facts and binds 
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(placeholder);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(placeholder, ['bootTargetHeadless']);
   expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime).toHaveBeenCalledWith(placeholder, {
     required: ['bootTargetHeadless'],
@@ -319,7 +319,7 @@ test('boot rejects the macOS host boot cell after one facts inspection and befor
 
   expect(response?.ok).toBe(false);
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(device);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(device, ['bootTarget']);
   expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
 });
 
@@ -358,7 +358,7 @@ test('boot admits a stopped Android emulator through normal readiness', async ()
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(placeholder);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledWith(placeholder, ['bootTarget']);
   expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
   expect(mockEnsureReadyRuntime).toHaveBeenCalledOnce();
   if (response && response.ok) {

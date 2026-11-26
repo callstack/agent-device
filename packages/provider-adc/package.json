@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/adc",
-  "version": "0.22.0-dev.1",
+  "version": "0.22.0-dev.2",
   "private": true,
   "type": "module",
   "description": "ADC Android phones and TVs for agent-device.",

@@ -51,19 +51,24 @@ export async function createPlatformOwner(
     loadAndroidClipboardSupport(),
   ]);
   const ownsDevice = runtime.ownsDevice;
-  async function factsFor(device: DeviceInfo) {
+  async function probeClipboard(session: AdcSession) {
+    try {
+      const signal = AbortSignal.timeout(5_000);
+      const support = await clipboardSupport.probeAndroidClipboardShellSupport(
+        session.adb.exec,
+        signal,
+      );
+      if (support !== 'probe-failed') session.clipboardSupport = support;
+    } finally {
+      delete session.clipboardProbe;
+    }
+  }
+
+  function factsFor(device: DeviceInfo) {
     const base = createUnavailablePlatformRuntimeFacts(device, owner, unavailable);
     if (!ownsDevice(device)) return base;
     const session = sessionFor(device);
-    session.clipboardSupport ??= clipboardSupport.probeAndroidClipboardShellSupport(
-      session.adb.exec,
-      AbortSignal.timeout(5_000),
-    );
-    const probe = session.clipboardSupport;
-    const support = await probe;
-    if (support === 'probe-failed' && session.clipboardSupport === probe)
-      delete session.clipboardSupport;
-    if (!ownsDevice(device)) return base;
+    const support = session.clipboardSupport ?? 'probe-failed';
     const clipboard = clipboardSupport.androidClipboardRuntimeFact(support);
     return {
       device: base.device,
@@ -95,14 +100,26 @@ export async function createPlatformOwner(
   return {
     owner,
     ownsDevice,
-    inspectFacts: factsFor,
+    async inspectFacts(device, requested) {
+      if (
+        ownsDevice(device) &&
+        (requested?.includes('readClipboard') || requested?.includes('writeClipboard'))
+      ) {
+        const session = sessionFor(device);
+        if (session.clipboardSupport === undefined) {
+          session.clipboardProbe ??= probeClipboard(session);
+          await session.clipboardProbe;
+        }
+      }
+      return factsFor(device);
+    },
     async bind({ device, intent, scope }) {
       if (
         !ownsDevice(device) ||
         (intent.kind === 'exact-owner' && !sameRuntimeOwner(intent.owner, owner))
       )
         throw new AppError('DEVICE_NOT_FOUND', 'No active ADC lease owns this device.');
-      const facts = await factsFor(device);
+      const facts = factsFor(device);
       const signal = scope.signal;
       const { adb } = sessionFor(device);
       function requireInteractor() {
