@@ -139,16 +139,20 @@ test('sends app and spend cap together to the preloaded route', async () => {
   });
 });
 
-test('rejects a preload response that uses the archive URL as the daemon endpoint', async () => {
-  const appUrl = 'https://archives.example/app.zip';
+test.each([
+  ['daemon endpoint', (url: string) => ({ attach: { ...response.attach, daemonBaseUrl: url } })],
+  [
+    'encoded viewer URL',
+    (url: string) => ({
+      viewerUrl: `https://viewer.example/?src=${encodeURIComponent(url)}`,
+    }),
+  ],
+])('rejects a normalized archive URL echoed in the %s', async (_field, echo) => {
+  const appUrl = 'HTTPS://ARCHIVES.EXAMPLE/app.zip';
+  const canonical = 'https://archives.example/app.zip';
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () =>
-      Response.json(
-        { ...response, attach: { ...response.attach, daemonBaseUrl: appUrl } },
-        { status: 201 },
-      ),
-    ),
+    vi.fn(async () => Response.json({ ...response, ...echo(canonical) }, { status: 201 })),
   );
   await expect(
     createCloudSession(access, readCloudSessionRequest({ ...baseFlags, appUrl }), attempt),

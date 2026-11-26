@@ -1,6 +1,7 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { sleep } from '@agent-device/host-kit/retry';
+import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
@@ -118,7 +119,7 @@ function parseCloudAppSource(value: string): { url: string } {
       { reason: CLOUD_SESSION_API_REASONS.appUrlFormat.reason },
     );
   }
-  return { url: value };
+  return { url: url.href };
 }
 
 // A positive plain decimal of at most six fractional digits, as integer micro-USD in a string.
@@ -154,9 +155,20 @@ export async function createCloudSession(
   request: CloudSessionRequest,
   attempt: CloudCreateAttempt,
 ): Promise<CreatedCloudSession> {
+  const archiveUrl = request.app?.url;
+  if (archiveUrl) {
+    registerDiagnosticSensitiveValue(archiveUrl);
+    registerDiagnosticSensitiveValue(encodeURIComponent(archiveUrl));
+  }
   const record = await postCloudSession(access, request, attempt);
   const session = parseCloudSession(record.body, record.id, access, request);
-  if (request.app && containsCloudCredential(session, [request.app.url])) throw invalidSession();
+  if (
+    archiveUrl &&
+    (containsCloudCredential(session, [archiveUrl]) ||
+      exposesAttachmentCredential(session.attachment, archiveUrl) ||
+      (session.viewerUrl && cloudUrlContainsCredential(session.viewerUrl, [archiveUrl])))
+  )
+    throw invalidSession();
   return session;
 }
 
@@ -235,7 +247,9 @@ async function postCloudSession(
         signal: AbortSignal.timeout(Math.min(remaining, CREATE_REQUEST_TIMEOUT_MS)),
       },
       request.needs,
-      request.app ? [access.accessToken, request.app.url] : [access.accessToken],
+      request.app
+        ? [access.accessToken, request.app.url, encodeURIComponent(request.app.url)]
+        : [access.accessToken],
     );
     if (value !== RETRY_CREATION) {
       observeCloudAllocation(value, access.accessToken, attempt);
@@ -668,7 +682,7 @@ function readSafeCloudViewer(
   const scopedToken = attachment.kind === 'limrun' ? attachment.token : attachment.daemonAuthToken;
   const credentials = [brokerToken, scopedToken];
   if (
-    exposesBrokerCredential(attachment, brokerToken) ||
+    exposesAttachmentCredential(attachment, brokerToken) ||
     containsCloudCredential(
       [display.vendor, display.fallbackFrom, display.deadlineAt, display.receivedDeadline],
       credentials,
@@ -681,8 +695,8 @@ function readSafeCloudViewer(
     : undefined;
 }
 
-function exposesBrokerCredential(attachment: CloudAttachment, brokerToken: string): boolean {
-  const credentials = [brokerToken];
+function exposesAttachmentCredential(attachment: CloudAttachment, credential: string): boolean {
+  const credentials = [credential];
   const endpoints =
     attachment.kind === 'agent-device-daemon'
       ? [attachment.daemonBaseUrl]

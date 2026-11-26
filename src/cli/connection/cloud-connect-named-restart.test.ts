@@ -140,7 +140,10 @@ test('a lost preload response binds retry to the same archive and idempotency ke
   expect(JSON.parse(mismatch.stdout).error.details.reason).toBe('cloud_connect_pending_conflict');
   expect(broker.posts()).toHaveLength(1);
 
-  const restarted = await runCliCapture(args, { env: processEnv(stateDir) });
+  const restarted = await runCliCapture(
+    [...connectArgs, '--app-url', 'HTTPS://ARCHIVES.EXAMPLE:443/build.zip', '--max-usd', '0.50'],
+    { env: processEnv(stateDir) },
+  );
   expect(restarted.code, restarted.stderr || restarted.stdout).toBeNull();
 
   expect(broker.posts()).toEqual(
