@@ -40,9 +40,31 @@ function matchesRemoteIdentity(entry: RemoteHealthCacheEntry, info: DaemonInfo):
   return entry.baseUrl === info.baseUrl && entry.token === info.token && entry.pid === info.pid;
 }
 
-function isCacheableRemoteHealth(health: RemoteDaemonHealth): boolean {
+const INSTANCE_ID_MAX_LENGTH = 256;
+// The characters Node accepts in a header value: an ID outside them could never be sent.
+const HEADER_VALUE = /^[\t\u0020-\u007e\u0080-\u00ff]+$/;
+
+/**
+ * An instance ID a later request can carry as its precondition header: a bounded, valid header
+ * value that does not echo the credential or the URL this client sent to `/health`.
+ */
+function isUsableInstanceId(value: string | undefined, info: DaemonInfo): value is string {
   return (
-    health.reachable && !!health.instanceId && (!health.upstream || !!health.upstream.instanceId)
+    typeof value === 'string' &&
+    value.length <= INSTANCE_ID_MAX_LENGTH &&
+    HEADER_VALUE.test(value) &&
+    !(info.token && value.includes(info.token)) &&
+    !(info.baseUrl && value.includes(info.baseUrl))
+  );
+}
+
+// A proxy fences its upstream only through the upstream ID, so a proxy answer needs one.
+function isCacheableRemoteHealth(health: RemoteDaemonHealth, info: DaemonInfo): boolean {
+  const needsUpstream = health.upstream !== undefined || health.service === 'agent-device-proxy';
+  return (
+    health.reachable &&
+    isUsableInstanceId(health.instanceId, info) &&
+    (!needsUpstream || isUsableInstanceId(health.upstream?.instanceId, info))
   );
 }
 
@@ -110,22 +132,20 @@ function readPersistedHealth(
   // The file name holds a digest prefix; the full digest inside rules out a prefix collision.
   if (!persisted || persisted.identity !== identity) return undefined;
   const health: RemoteDaemonHealth = { reachable: true, ...store.readRecord(persisted.health) };
-  return isCacheableRemoteHealth(health) ? health : undefined;
+  return isCacheableRemoteHealth(health, info) ? health : undefined;
 }
 
 // The cache only saves a round trip, so a state directory it cannot write or remove from leaves the
 // command to the next probe rather than failing it.
 function persistHealth(info: DaemonInfo, health: RemoteDaemonHealth, stateDir: string): void {
-  const { service, version, rpcProtocolVersion, instanceId, hostArch, capabilities, upstream } =
-    health;
+  // Only what admits a later request: the instance preconditions and the capabilities.
+  const { instanceId, capabilities, upstream } = health;
   const record = {
-    service,
-    version,
-    rpcProtocolVersion,
     instanceId,
-    hostArch,
     capabilities,
-    upstream,
+    ...(upstream
+      ? { upstream: { instanceId: upstream.instanceId, capabilities: upstream.capabilities } }
+      : {}),
   };
   const identity = persistedIdentity(info);
   const entry = { identity, health: record };
@@ -152,7 +172,7 @@ export function cacheRemoteDaemonHealth(
   health: RemoteDaemonHealth,
   stateDir?: string,
 ): void {
-  if (!isCacheableRemoteHealth(health)) return;
+  if (!isCacheableRemoteHealth(health, info)) return;
   remoteHealthCache = {
     baseUrl: info.baseUrl ?? '',
     token: info.token,
@@ -184,20 +204,16 @@ export function readCachedRemoteHealth(
 }
 
 /**
- * The cached answer for this daemon, or `probe`'s, which is cached when it is usable and no
- * invalidation landed while it was in flight.
+ * A live answer from `probe`, cached when it is usable and no invalidation landed while it was in
+ * flight. It never reads a cached answer, so a forced refresh always asks the daemon.
  */
-export async function cachedRemoteHealth(
+export async function probedRemoteHealth(
   info: DaemonInfo,
   probe: () => Promise<RemoteDaemonHealth>,
-  store?: PersistedHealthStore,
+  stateDir?: string,
 ): Promise<RemoteDaemonHealth> {
-  const cached = readCachedRemoteHealth(info, store);
-  if (cached) return cached;
   const generation = remoteHealthGeneration;
   const health = await probe();
-  if (generation === remoteHealthGeneration) {
-    cacheRemoteDaemonHealth(info, health, store?.stateDir);
-  }
+  if (generation === remoteHealthGeneration) cacheRemoteDaemonHealth(info, health, stateDir);
   return health;
 }

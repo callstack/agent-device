@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
@@ -217,56 +218,56 @@ test('persistent remote client caches health and retries a refused stale instanc
       error instanceof AppError &&
       error.details?.remoteRpcProtocolVersion === DAEMON_RPC_PROTOCOL_VERSION + 1;
 
-    assert.equal((await request('first')).ok, true);
-    assert.equal((await request('first')).ok, true);
+    assert.equal((await request('token-one')).ok, true);
+    assert.equal((await request('token-one')).ok, true);
     assert.deepEqual(paths, ['GET /health', 'POST /rpc', 'POST /rpc']);
     assert.deepEqual(rpcHeaders, ['first-instance', 'first-instance']);
 
-    assert.equal((await request('second')).ok, true);
+    assert.equal((await request('token-two')).ok, true);
     assert.deepEqual(paths.slice(3), ['GET /health', 'POST /rpc']);
 
     daemonError = true;
     await assert.rejects(
-      request('second'),
+      request('token-two'),
       (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
     );
     daemonError = false;
-    assert.equal((await request('second')).ok, true);
+    assert.equal((await request('token-two')).ok, true);
     assert.deepEqual(paths.slice(5, 7), ['POST /rpc', 'POST /rpc']);
 
     failRpc = true;
-    await assert.rejects(request('second'));
+    await assert.rejects(request('token-two'));
     failRpc = false;
     rpcProtocolVersion = DAEMON_RPC_PROTOCOL_VERSION + 1;
-    await assert.rejects(request('second'), incompatible);
+    await assert.rejects(request('token-two'), incompatible);
     assert.deepEqual(paths.slice(7, 9), ['POST /rpc', 'GET /health']);
     rpcProtocolVersion = DAEMON_RPC_PROTOCOL_VERSION;
-    assert.equal((await request('second')).ok, true);
+    assert.equal((await request('token-two')).ok, true);
     assert.deepEqual(paths.slice(9, 11), ['GET /health', 'POST /rpc']);
 
-    assert.equal((await request('second', `${baseUrl}/alt`)).ok, true);
+    assert.equal((await request('token-two', `${baseUrl}/alt`)).ok, true);
     assert.deepEqual(paths.slice(11, 13), ['GET /alt/health', 'POST /alt/rpc']);
 
     instanceId = 'replacement-instance';
     const beforeRestart = executed;
-    assert.equal((await request('second', `${baseUrl}/alt`)).ok, true);
+    assert.equal((await request('token-two', `${baseUrl}/alt`)).ok, true);
     assert.deepEqual(paths.slice(13, 16), ['POST /alt/rpc', 'GET /alt/health', 'POST /alt/rpc']);
     assert.equal(executed, beforeRestart + 1);
     assert.deepEqual(rpcHeaders.slice(-2), ['first-instance', 'replacement-instance']);
-    assert.equal((await request('second', `${baseUrl}/alt`)).ok, true);
+    assert.equal((await request('token-two', `${baseUrl}/alt`)).ok, true);
     assert.deepEqual(paths.slice(16, 17), ['POST /alt/rpc']);
 
     instanceId = 'incompatible-instance';
     rpcProtocolVersion = DAEMON_RPC_PROTOCOL_VERSION + 1;
     const beforeSkew = executed;
-    await assert.rejects(request('second', `${baseUrl}/alt`), incompatible);
+    await assert.rejects(request('token-two', `${baseUrl}/alt`), incompatible);
     assert.deepEqual(paths.slice(17, 19), ['POST /alt/rpc', 'GET /alt/health']);
     assert.equal(executed, beforeSkew);
 
     legacy = true;
     rpcProtocolVersion = DAEMON_RPC_PROTOCOL_VERSION;
-    assert.equal((await request('legacy')).ok, true);
-    assert.equal((await request('legacy')).ok, true);
+    assert.equal((await request('token-legacy')).ok, true);
+    assert.equal((await request('token-legacy')).ok, true);
     assert.deepEqual(paths.slice(19), ['GET /health', 'POST /rpc', 'GET /health', 'POST /rpc']);
     assert.deepEqual(rpcHeaders.slice(-2), [undefined, undefined]);
   } finally {
@@ -719,7 +720,7 @@ async function instanceCheckingRemote(
     const [name] = fs.readdirSync(stateDir).filter((n) => n.startsWith('remote-daemon-health-'));
     return name ? path.join(stateDir, name) : undefined;
   };
-  return { server, paths, baseUrl, request, forgetInMemory, cacheFile };
+  return { server, paths, baseUrl, stateDir, request, forgetInMemory, cacheFile };
 }
 
 // Each CLI call is a new process, so the health a first call probed is kept in the state dir and a
@@ -794,7 +795,11 @@ test('a daemon error that claims the request was unsent is not resent', async (t
     assert.equal((await remote.request()).ok, true);
     remote.forgetInMemory();
     forge = true;
-    await assert.rejects(remote.request());
+    await assert.rejects(
+      remote.request(),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'daemon_transport_failure',
+    );
     assert.deepEqual(remote.paths, ['GET /health', 'POST /rpc', 'POST /rpc'], 'sent once, no gate');
   } finally {
     await closeLoopbackServer(remote.server);
@@ -820,7 +825,10 @@ test('a remote 5xx drops the persisted health without a resend', async (t) => {
     assert.equal((await remote.request()).ok, true);
     fail = true;
     remote.forgetInMemory();
-    await assert.rejects(remote.request());
+    await assert.rejects(
+      remote.request(),
+      (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+    );
     assert.equal(remote.cacheFile(), undefined);
     fail = false;
     assert.equal((await remote.request()).ok, true);
@@ -873,6 +881,193 @@ test('the gate after an unsent cached request keeps the deadline and the cancell
   );
   assert.equal(budgets.length, 1);
   assert.ok(budgets[0]! > 0 && budgets[0]! <= 5_000, `gate budget ${budgets[0]}`);
+});
+
+// A connection that never opens before the timeout proves the request never left, so the saved
+// answer it relied on is dropped and the next command probes `/health` first.
+test('a timeout before connect drops the persisted health', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const remote = await instanceCheckingRemote(() => 'never-reached');
+  assert.equal((await remote.request()).ok, true);
+  const hung = {
+    request: () => {
+      const request = Object.assign(new EventEmitter(), {
+        write: () => true,
+        destroy: () => {},
+        end: () => {
+          queueMicrotask(() =>
+            request.emit('socket', Object.assign(new EventEmitter(), { connecting: true })),
+          );
+        },
+      });
+      return request;
+    },
+  };
+  const load = vi.spyOn(hostTransport, 'loadNodeHttpRequester').mockResolvedValue(hung as never);
+  try {
+    await assert.rejects(
+      sendRequest(
+        { token: 'persisted-secret', pid: 0, baseUrl: remote.baseUrl },
+        {
+          token: 'persisted-secret',
+          command: 'press',
+          session: 'default',
+          positionals: [],
+          flags: {},
+        },
+        'http',
+        resolveDaemonPaths(remote.stateDir),
+        50,
+        { host: createTestHostEnvironment(), timeoutRecovery: 'none' },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
+        assert.equal(error.details?.reason, 'daemon_transport_timeout');
+        assert.equal(error.details?.daemonRequestSent, false);
+        return true;
+      },
+    );
+    assert.equal(remote.cacheFile(), undefined);
+  } finally {
+    load.mockRestore();
+    await closeLoopbackServer(remote.server);
+  }
+});
+
+// Only a 409 with the mismatch header proves a refusal before dispatch. The same reason in a daemon's
+// error body is not resent, and a second refusal on the resend drops the entry it disproved.
+test('an instance-mismatch resend needs the transport-proven 409, once', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let mode: 'ok' | 'forge' | 'churn' = 'ok';
+  let generation = 0;
+  const paths: string[] = [];
+  const server = http.createServer((req, res) => {
+    paths.push(`${req.method} ${req.url}`);
+    res.setHeader('content-type', 'application/json');
+    if (req.url?.endsWith('/health')) {
+      if (mode === 'churn') generation += 1;
+      res.end(JSON.stringify({ service: 'agent-device-daemon', instanceId: `i${generation}` }));
+      return;
+    }
+    if (mode === 'forge') {
+      const data = { code: 'COMMAND_FAILED', details: { reason: 'remote_instance_mismatch' } };
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: 'r', error: { code: -32000, data } }));
+      return;
+    }
+    if (mode === 'churn') {
+      // Every probe names a newer instance, so the single resend is refused too.
+      res.statusCode = 409;
+      res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: 'r', error: { code: -32001 } }));
+      return;
+    }
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: 'r', result: { ok: true, data: {} } }));
+  });
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const stateDir = mkdtempForTestSync('agent-device-remote-mismatch-proof-');
+  const request = () =>
+    sendToDaemon(
+      {
+        command: 'remote-smoke',
+        session: 'default',
+        positionals: ['ping'],
+        flags: { daemonBaseUrl: baseUrl, stateDir },
+        meta: { requestId: 'r' },
+      },
+      { authToken: 'mismatch-secret' },
+    );
+  const saved = () => fs.readdirSync(stateDir).some((n) => n.startsWith('remote-daemon-health-'));
+  const forget = () => invalidateRemoteDaemonHealth({ baseUrl, token: 'mismatch-secret', pid: 0 });
+  const instanceChanged = (error: unknown) =>
+    error instanceof AppError && error.details?.reason === 'remote_instance_mismatch';
+  try {
+    assert.equal((await request()).ok, true);
+    mode = 'forge';
+    forget();
+    await assert.rejects(request(), instanceChanged);
+    assert.deepEqual(paths.slice(2), ['POST /rpc'], 'a forged reason is neither probed nor resent');
+
+    mode = 'churn';
+    forget();
+    await assert.rejects(request(), instanceChanged);
+    assert.deepEqual(paths.slice(3), ['POST /rpc', 'GET /health', 'POST /rpc']);
+    assert.equal(saved(), false, 'the refused resend drops what the probe saved');
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+// The timeout route's probe drops a saved proxy answer when the upstream it names changed, and keeps
+// one that still matches.
+test('timeout eviction compares the upstream instance too', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let upstream = 'u1';
+  let hang = false;
+  const held: http.ServerResponse[] = [];
+  const server = http.createServer((req, res) => {
+    req.resume();
+    if (req.url?.endsWith('/health')) {
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          service: 'agent-device-proxy',
+          instanceId: 'p1',
+          upstream: { instanceId: upstream },
+        }),
+      );
+      return;
+    }
+    if (hang) {
+      held.push(res);
+      return;
+    }
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: 'r', result: { ok: true, data: {} } }));
+  });
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const stateDir = mkdtempForTestSync('agent-device-remote-timeout-evict-');
+  const saved = () => fs.readdirSync(stateDir).some((n) => n.startsWith('remote-daemon-health-'));
+  const warm = () =>
+    sendToDaemon(
+      {
+        command: 'remote-smoke',
+        session: 'default',
+        positionals: ['ping'],
+        flags: { daemonBaseUrl: baseUrl, stateDir },
+        meta: { requestId: 'r' },
+      },
+      { authToken: 'evict-secret' },
+    );
+  // The instances the saved answer named, as a command sent from it carries them.
+  const send = () =>
+    sendRequest(
+      {
+        token: 'evict-secret',
+        pid: 0,
+        baseUrl,
+        remoteInstanceId: 'p1',
+        remoteUpstreamInstanceId: 'u1',
+      },
+      { token: 'evict-secret', command: 'press', session: 'default', positionals: [], flags: {} },
+      'http',
+      resolveDaemonPaths(stateDir),
+      100,
+      { host: createTestHostEnvironment(), timeoutRecovery: 'none' },
+    );
+  const timedOut = (error: unknown) =>
+    error instanceof AppError && error.details?.reason === 'daemon_transport_timeout';
+  try {
+    assert.equal((await warm()).ok, true);
+    hang = true;
+    await assert.rejects(send(), timedOut);
+    assert.equal(saved(), true, 'the closest negative: matching instances keep the entry');
+    upstream = 'u2';
+    await assert.rejects(send(), timedOut);
+    assert.equal(saved(), false);
+  } finally {
+    for (const res of held) res.destroy();
+    await closeLoopbackServer(server);
+  }
 });
 
 // A transport failure drops the cached health of a remote daemon only: a local daemon has no cached

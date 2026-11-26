@@ -20,24 +20,25 @@ export async function readCachedRemoteDaemonHealth(
   return readCachedRemoteHealth(info, { stateDir, readRecord: readCachedRemoteHealthRecord });
 }
 
-/** The remote `/health` answer within this caller's bound, through the cache. */
-export async function cachedRemoteDaemonHealth(
+/** A live remote `/health` answer within this caller's bound, cached for later commands. */
+export async function probeRemoteDaemonHealth(
   info: DaemonInfo,
   stateDir: string,
   probeTimeoutMs?: number,
   callerSignal?: AbortSignal,
 ): Promise<RemoteDaemonHealth> {
-  const { cachedRemoteHealth } = await loadRemoteHealthCache();
-  return await cachedRemoteHealth(
+  const { probedRemoteHealth } = await loadRemoteHealthCache();
+  return await probedRemoteHealth(
     info,
     () => readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
-    { stateDir, readRecord: readCachedRemoteHealthRecord },
+    stateDir,
   );
 }
 
 /**
- * Probes a remote daemon's `/health` before anything is sent to it, re-probing a daemon that is there
- * but not ready for the recovery budget, and points `info` at the daemon that answered.
+ * Probes a remote daemon's `/health` live before anything is sent to it, re-probing a daemon that is
+ * there but not ready for the recovery budget, and points `info` at the daemon that answered. It
+ * never reads a saved answer, so a caller that already looked one up has made its only lookup.
  */
 export async function openRemoteHealthGate(
   info: DaemonInfo,
@@ -46,7 +47,7 @@ export async function openRemoteHealthGate(
 ): Promise<void> {
   // The command's budget starts with the first probe, which already runs under it and its signal.
   const deadline = performance.now() + (healthRecovery?.budgetMs ?? 0);
-  let health = await cachedRemoteDaemonHealth(
+  let health = await probeRemoteDaemonHealth(
     info,
     stateDir,
     healthRecovery?.budgetMs,
@@ -57,7 +58,7 @@ export async function openRemoteHealthGate(
     const { recoverRemoteDaemonHealth } = await import('./daemon-client-remote-health-recovery.ts');
     health = await recoverRemoteDaemonHealth({
       info,
-      probe: (budgetMs, signal) => cachedRemoteDaemonHealth(info, stateDir, budgetMs, signal),
+      probe: (budgetMs, signal) => probeRemoteDaemonHealth(info, stateDir, budgetMs, signal),
       failedProbe: health,
       recovery: healthRecovery,
       deadline,
@@ -67,7 +68,7 @@ export async function openRemoteHealthGate(
   applyRemoteDaemonHealth(info, health);
 }
 
-/** Drops the cached answer for this daemon, then probes it as on first contact. */
+/** Drops the cached answer for this daemon, then probes it live even when the drop failed. */
 export async function refreshRemoteDaemonHealth(
   info: DaemonInfo,
   stateDir: string,

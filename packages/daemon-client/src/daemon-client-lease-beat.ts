@@ -15,7 +15,7 @@ import {
 } from '@agent-device/contracts/lease-scope';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
-import { sendRequest } from './daemon-client-transport.ts';
+import { sendRequest, type SendRequestOptions } from './daemon-client-transport.ts';
 
 // The lease beat: what keeps a remote lease alive across a client-side phase the daemon never sees.
 //
@@ -306,6 +306,7 @@ export function buildUploadLeaseHeartbeat(
   info: DaemonInfo,
   settings: DaemonClientSettings,
   request: Omit<DaemonWireRequest, 'token'>,
+  remoteHealthGate?: SendRequestOptions['remoteHealthGate'],
 ): ((budgetMs: number, signal: AbortSignal) => Promise<unknown>) | undefined {
   if (!isRemoteDaemon(info)) return undefined;
   const leaseScope = leaseScopeFromRequest(request);
@@ -328,6 +329,7 @@ export function buildUploadLeaseHeartbeat(
       // The beat's own budget governs; the command's heartbeat policy only ever caps it, and an
       // unbounded policy leaves the budget standing on its own.
       policyTimeoutMs === undefined ? budgetMs : Math.min(policyTimeoutMs, budgetMs),
-      { host: settings.host, signal },
+      // A beat sent from a cached `/health` answer gets the same refresh and single resend.
+      { host: settings.host, signal, remoteHealthGate },
     );
 }

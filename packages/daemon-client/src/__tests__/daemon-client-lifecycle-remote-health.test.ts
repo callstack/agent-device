@@ -4,6 +4,7 @@
 // and `details.dispatched` instead of comparing the message.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
 import { test } from 'vitest';
 import {
@@ -16,7 +17,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { DAEMON_UNAVAILABLE_REASONS } from '../daemon-lifecycle-errors.ts';
 import { sendToDaemon } from '../index.ts';
-import { cachedRemoteDaemonHealth } from '../daemon-client-remote-health-gate.ts';
+import {
+  probeRemoteDaemonHealth,
+  readCachedRemoteDaemonHealth,
+  refreshRemoteDaemonHealth,
+} from '../daemon-client-remote-health-gate.ts';
 
 // A press, so the refusal states the fact a caller needs before resending a mutating command.
 function remotePress(baseUrl: string) {
@@ -177,16 +182,16 @@ test('a health caller probes on its own bound, and a settled answer is cached', 
   if (await skipWhenLoopbackUnavailable(t)) return;
   const remote = await slowHealthyRemote(300);
   try {
-    const unbounded = cachedRemoteDaemonHealth(remote.info, remote.stateDir);
-    const bounded = await cachedRemoteDaemonHealth(remote.info, remote.stateDir, 50);
+    const unbounded = probeRemoteDaemonHealth(remote.info, remote.stateDir);
+    const bounded = await probeRemoteDaemonHealth(remote.info, remote.stateDir, 50);
 
     assert.equal(bounded.reachable, false);
     assert.equal(bounded.timedOut, true);
     assert.equal((await unbounded).reachable, true);
     assert.equal(remote.probes(), 2, 'each caller sent its own probe');
-    // The settled answer is cached, so a later bounded caller reads it without probing.
+    // The settled answer is cached, so a later caller reads it without probing.
     assert.equal(
-      (await cachedRemoteDaemonHealth(remote.info, remote.stateDir, 50)).reachable,
+      (await readCachedRemoteDaemonHealth(remote.info, remote.stateDir))?.reachable,
       true,
     );
     assert.equal(remote.probes(), 2);
@@ -200,12 +205,9 @@ test('an aborted or budgetless health caller sends no probe', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const remote = await slowHealthyRemote(0);
   try {
+    assert.equal((await probeRemoteDaemonHealth(remote.info, remote.stateDir, 0)).reachable, false);
     assert.equal(
-      (await cachedRemoteDaemonHealth(remote.info, remote.stateDir, 0)).reachable,
-      false,
-    );
-    assert.equal(
-      (await cachedRemoteDaemonHealth(remote.info, remote.stateDir, undefined, AbortSignal.abort()))
+      (await probeRemoteDaemonHealth(remote.info, remote.stateDir, undefined, AbortSignal.abort()))
         .reachable,
       false,
     );
@@ -214,3 +216,26 @@ test('an aborted or budgetless health caller sends no probe', async (t) => {
     await closeLoopbackServer(remote.handler);
   }
 });
+
+// A forced refresh asks the daemon even when the saved entry cannot be removed, so it never reuses
+// the answer it was asked to verify.
+test.skipIf(process.platform === 'win32')(
+  'a forced refresh probes live whatever is saved',
+  async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const remote = await slowHealthyRemote(0);
+    try {
+      await probeRemoteDaemonHealth(remote.info, remote.stateDir);
+      assert.equal(remote.probes(), 1);
+      fs.chmodSync(remote.stateDir, 0o500);
+      try {
+        await refreshRemoteDaemonHealth(remote.info, remote.stateDir, undefined);
+      } finally {
+        fs.chmodSync(remote.stateDir, 0o700);
+      }
+      assert.equal(remote.probes(), 2);
+    } finally {
+      await closeLoopbackServer(remote.handler);
+    }
+  },
+);

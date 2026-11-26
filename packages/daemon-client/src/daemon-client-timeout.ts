@@ -543,3 +543,51 @@ export function createRequestGuard(params: {
     },
   };
 }
+
+/**
+ * `daemonRequestSent` is required: the client discloses dispatch from it, and a producer that
+ * could not say would otherwise be read as sent.
+ */
+export function handleTransportError(
+  err: unknown,
+  requestId: string | undefined,
+  remote: boolean,
+  daemonRequestSent: boolean,
+): AppError {
+  emitDiagnostic({
+    level: 'error',
+    phase: 'daemon_request_socket_error',
+    data: {
+      requestId,
+      message: err instanceof Error ? err.message : String(err),
+    },
+  });
+  return new AppError(
+    'COMMAND_FAILED',
+    'Failed to communicate with daemon',
+    {
+      daemonRequestSent,
+      reason: DAEMON_TRANSPORT_REASONS.failure.reason,
+      requestId,
+      hint: remote
+        ? 'Retry command. If this persists, verify the remote daemon URL, auth token, and remote host reachability.'
+        : 'Retry command. If this persists, clean stale daemon metadata and start a fresh session.',
+    },
+    err instanceof Error ? err : undefined,
+  );
+}
+
+export function requestTimeoutError(
+  timeoutMs: number,
+  requestId: string | undefined,
+  daemonRequestSent: boolean,
+  remoteResponseStarted?: boolean,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
+    reason: DAEMON_TRANSPORT_REASONS.timeout.reason,
+    timeoutMs,
+    requestId,
+    daemonRequestSent,
+    ...(remoteResponseStarted ? { remoteResponseStarted: true } : {}),
+  });
+}

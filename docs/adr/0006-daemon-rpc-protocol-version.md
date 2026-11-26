@@ -12,11 +12,13 @@ Accepted
 - A client may cache a successful probe if `/health` advertises an instance ID for the daemon endpoint and, for a proxy, for its upstream daemon.
 - The cache may outlive the client process in the state directory. Name the entry by a digest of the client version, RPC protocol version, base URL, and token. Do not write the token or the URL.
 - Read a persisted entry only from a bounded regular file that the current user owns and that nobody else can write. Otherwise, probe `/health`.
-- If a cached RPC fails before its connection opens, probe `/health` as on first contact, within the command's remaining budget. Then send the RPC once more. Take this evidence only from the client's own transport, never from a reply.
+- Persist only the instance IDs and capabilities. Cache an instance ID only when it is a valid HTTP header value that does not contain the token or the URL. Cache a proxy answer only with its upstream instance ID.
+- If a cached RPC fails or times out before its connection opens, clear the cache. After a failure, probe `/health` live as on first contact, within the remaining budget, then send the RPC once more. Do this for every send that carries the cached instance IDs, lease heartbeats included. Take this evidence only from the client's own transport, never from a reply.
+- A forced refresh always probes `/health` live, even when the cache cannot be cleared.
 - Clear the cache on a remote HTTP 5xx. Do not resend the RPC.
 - Before you refuse a command for a capability that only the cache lacks, probe `/health` again.
 - Send those instance IDs as conditional headers on every cached RPC. Peers without complete instance IDs retain per-command probes.
-- After a stale-instance refusal, clear the cache and probe `/health` again. Retry the refused RPC once, and only if the new peer's protocol is compatible.
+- After a stale-instance refusal, clear the cache and probe `/health` again. Retry the refused RPC once, and only if the new peer's protocol is compatible. Act only on a 409 with the mismatch header that the client's transport read. Clear the cache again if the retry is refused too.
 - A peer that advertises an instance ID must continue to honor the conditional RPC headers in future versions.
 - Change `rpcProtocolVersion` only when older and newer peers cannot safely communicate over the HTTP RPC boundary for existing commands.
 - Do not change `rpcProtocolVersion` for additive changes.
@@ -61,6 +63,9 @@ A cached RPC whose connection never opened proves that nothing was dispatched.
 Only the client's own transport supplies that evidence; a reply can carry the same error details after the command ran.
 The client then clears the cache and probes `/health` as on first contact, with the recovery and typed refusal of that path, and sends the RPC once more, all within the command's remaining budget.
 A cached RPC that fails after its connection opened is not resent.
+A timeout before the connection opened also clears the cache; its budget is spent, so nothing is resent.
+Only a 409 with the mismatch header that the client's transport read counts as a stale-instance refusal; the same reason in an error body does not.
+The persisted record holds only the instance IDs and capabilities, and only header-valid IDs that echo neither the token nor the URL.
 A remote HTTP 5xx clears the cache, whatever its framing, because a proxy answers that way while its upstream daemon restarts.
 A timeout leaves the decision to the timeout route, which clears the cache only when its `/health` probe finds the daemon gone or replaced.
 A capability that only the cached answer lacks is checked against a fresh probe before the client refuses the command, because the daemon may have been upgraded.

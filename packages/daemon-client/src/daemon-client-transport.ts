@@ -4,7 +4,6 @@ import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   assertScriptArtifactsCapability,
   readDaemonCapabilities,
@@ -36,7 +35,9 @@ import {
 import {
   abortedRequestError,
   handleRequestTimeout,
+  handleTransportError,
   refuseAbortedRequest,
+  requestTimeoutError,
 } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -47,7 +48,7 @@ import type {
 } from './daemon-client-loopback-probe.ts';
 
 type ResolvedDaemonTransport = LoopbackTransport;
-type SendRequestOptions = {
+export type SendRequestOptions = {
   /** The host whose working directory and environment this request's client-side work reads. */
   host: HostEnvironment;
   onProgress?: RequestProgressSink;
@@ -65,7 +66,10 @@ type SendRequestOptions = {
    */
   timeoutRecovery?: 'retire-unresponsive' | 'none';
   /** Re-probes a daemon whose `/health` answer was cached, before an unsent request is resent. */
-  remoteHealthGate?: (budgetMs: number | undefined) => Promise<void>;
+  remoteHealthGate?: (
+    budgetMs: number | undefined,
+    signal: AbortSignal | undefined,
+  ) => Promise<void>;
 };
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
@@ -370,7 +374,11 @@ async function recoverFromTimeout(
     responseStarted: error.details.remoteResponseStarted === true,
     readRemoteHealth: async (budgetMs) => {
       const health = await readDaemonHttpHealth(info, budgetMs, options.signal);
-      if (!health.reachable || health.instanceId !== info.remoteInstanceId) {
+      // A caller abort proves nothing about the daemon; any other miss or changed instance does.
+      const replaced =
+        health.instanceId !== info.remoteInstanceId ||
+        health.upstream?.instanceId !== info.remoteUpstreamInstanceId;
+      if (!options.signal?.aborted && (!health.reachable || replaced)) {
         await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
       }
       return health;
@@ -421,7 +429,12 @@ async function sendRequestWithFallback(
   try {
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
   } catch (error) {
-    if (info.baseUrl && isRemoteInstanceMismatch(error)) {
+    if (
+      info.baseUrl &&
+      isRemoteInstanceMismatch(error) &&
+      error instanceof AppError &&
+      PROVEN_STALE.has(error)
+    ) {
       return await retryAfterRemoteInstanceMismatch(
         info,
         req,
@@ -435,12 +448,7 @@ async function sendRequestWithFallback(
     if (dropsCachedRemoteHealth(error)) {
       await invalidateRemoteDaemonHealth(info, statePaths.baseDir);
     }
-    if (
-      info.baseUrl &&
-      options.remoteHealthGate &&
-      error instanceof AppError &&
-      PROVEN_UNSENT.has(error)
-    ) {
+    if (info.baseUrl && options.remoteHealthGate && isProvenUnsentFailure(error)) {
       return await resendAfterRemoteHealthGate(
         options.remoteHealthGate,
         info,
@@ -503,7 +511,7 @@ async function resendAfterRemoteHealthGate(
   const requestId = req.meta?.requestId;
   const gateBudgetMs = remainingRemoteRequestTimeoutMs(req, timeoutMs, deadline);
   try {
-    await gate(gateBudgetMs);
+    await gate(gateBudgetMs, options.signal);
   } catch (error) {
     refuseAbortedRequest(options.signal, requestId);
     throw error;
@@ -547,8 +555,19 @@ export function applyRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHe
   info.capabilities = (health.upstream ?? health).capabilities;
 }
 
-/** Failures raised here before the connection opened; a daemon error can carry the same details. */
+// Evidence only this module records; a daemon error can carry the same reason and details.
+/** Failures and timeouts raised here before the HTTP connection opened. */
 const PROVEN_UNSENT = new WeakSet<AppError>();
+/** Refusals raised here from a 409 with the instance-mismatch header. */
+const PROVEN_STALE = new WeakSet<AppError>();
+
+function isProvenUnsentFailure(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    PROVEN_UNSENT.has(error) &&
+    error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason
+  );
+}
 
 function remainingRemoteRequestTimeoutMs(
   req: DaemonWireRequest,
@@ -574,13 +593,14 @@ function isRemoteInstanceMismatch(error: unknown): boolean {
   );
 }
 
-// A timeout is left to the timeout route, which drops the cache only when its probe shows the
-// daemon gone or replaced.
+// A sent request's timeout is left to the timeout route, which drops the cache only when its probe
+// shows the daemon gone or replaced; an unsent one, or a proven stale instance, drops it here.
 function dropsCachedRemoteHealth(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  if (PROVEN_UNSENT.has(error) || PROVEN_STALE.has(error)) return true;
   return (
-    error instanceof AppError &&
-    (error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason ||
-      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyUnreadable.reason)
+    error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason ||
+    error.details?.reason === DAEMON_TRANSPORT_REASONS.replyUnreadable.reason
   );
 }
 
@@ -654,39 +674,6 @@ function requireDaemonTransport(
 ): ResolvedDaemonTransport {
   if (hasDaemonTransport(info, transport)) return transport;
   throw daemonEndpointUnavailableError(transport);
-}
-
-/**
- * `daemonRequestSent` is required: the client discloses dispatch from it, and a producer that
- * could not say would otherwise be read as sent.
- */
-function handleTransportError(
-  err: unknown,
-  requestId: string | undefined,
-  remote: boolean,
-  daemonRequestSent: boolean,
-): AppError {
-  emitDiagnostic({
-    level: 'error',
-    phase: 'daemon_request_socket_error',
-    data: {
-      requestId,
-      message: err instanceof Error ? err.message : String(err),
-    },
-  });
-  return new AppError(
-    'COMMAND_FAILED',
-    'Failed to communicate with daemon',
-    {
-      daemonRequestSent,
-      reason: DAEMON_TRANSPORT_REASONS.failure.reason,
-      requestId,
-      hint: remote
-        ? 'Retry command. If this persists, verify the remote daemon URL, auth token, and remote host reachability.'
-        : 'Retry command. If this persists, clean stale daemon metadata and start a fresh session.',
-    },
-    err instanceof Error ? err : undefined,
-  );
 }
 
 async function sendSocketRequest(
@@ -773,21 +760,6 @@ async function sendSocketRequest(
       detachCallerAbort();
       reject(handleTransportError(err, req.meta?.requestId, false, requestWritten));
     });
-  });
-}
-
-function requestTimeoutError(
-  timeoutMs: number,
-  requestId: string | undefined,
-  daemonRequestSent: boolean,
-  remoteResponseStarted?: boolean,
-): AppError {
-  return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
-    reason: DAEMON_TRANSPORT_REASONS.timeout.reason,
-    timeoutMs,
-    requestId,
-    daemonRequestSent,
-    ...(remoteResponseStarted ? { remoteResponseStarted: true } : {}),
   });
 }
 
@@ -880,12 +852,12 @@ async function sendHttpRequest(
           if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
             res.resume();
             if (timeoutHandle) clearTimeout(timeoutHandle);
-            rejectOnce(
-              new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
-                reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
-                daemonBaseUrl: info.baseUrl,
-              }),
-            );
+            const stale = new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
+              reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
+              daemonBaseUrl: info.baseUrl,
+            });
+            PROVEN_STALE.add(stale);
+            rejectOnce(stale);
             return;
           }
           if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
@@ -930,9 +902,14 @@ async function sendHttpRequest(
       const timeoutHandle =
         typeof timeoutMs === 'number'
           ? setTimeout(() => {
-              rejectOnce(
-                requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent, responseStarted),
+              const expired = requestTimeoutError(
+                timeoutMs,
+                req.meta?.requestId,
+                requestSent,
+                responseStarted,
               );
+              if (!connected) PROVEN_UNSENT.add(expired);
+              rejectOnce(expired);
               request.destroy();
             }, timeoutMs)
           : undefined;

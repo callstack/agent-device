@@ -21,7 +21,10 @@ import {
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
 import { createRequestGuard } from './daemon-client-timeout.ts';
-import { sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
+import {
+  sendRequest as sendDaemonRequest,
+  type SendRequestOptions,
+} from './daemon-client-transport.ts';
 import { isRemoteDaemon, readRegisteredDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 import type {
@@ -123,12 +126,12 @@ async function sendToDaemonOnHost(
   const info = daemon.info;
   // A cached `/health` answer skipped the probe; this runs it when the command needs a fresh one.
   const remoteHealthGate = daemon.remoteHealthCached
-    ? async (budgetMs: number | undefined) => {
+    ? async (budgetMs: number | undefined, signal: AbortSignal | undefined) => {
         const { refreshRemoteDaemonHealth } = await import('./daemon-client-remote-health-gate.ts');
         await refreshRemoteDaemonHealth(
           info,
           settings.paths.baseDir,
-          budgetMs === undefined ? undefined : { budgetMs, signal: options.signal },
+          budgetMs === undefined ? undefined : { budgetMs, signal },
         );
       }
     : undefined;
@@ -140,6 +143,7 @@ async function sendToDaemonOnHost(
         requestWithoutAuthFlag,
         options.signal,
         options.onProgress,
+        remoteHealthGate,
       ),
   );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
@@ -189,7 +193,7 @@ async function sendToDaemonOnHost(
             return await send(request);
           // A capability missing only from a cached answer may have arrived with a daemon upgrade.
           if (remoteHealthGate && !info.capabilities?.includes('script-artifacts')) {
-            await cancellation.guard(() => remoteHealthGate(requestTimeoutMs));
+            await cancellation.guard(() => remoteHealthGate(requestTimeoutMs, options.signal));
           }
           return await sendRemoteScriptOpen(info, request, settings.paths.baseDir, send);
         },
@@ -408,6 +412,7 @@ async function protectArtifactUploadWithLeaseBeats(
   request: Omit<DaemonRequest, 'token'>,
   callerSignal: AbortSignal | undefined,
   onProgress: DaemonTransportOptions['onProgress'],
+  remoteHealthGate: SendRequestOptions['remoteHealthGate'],
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
   if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
@@ -422,7 +427,7 @@ async function protectArtifactUploadWithLeaseBeats(
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
     await import('./daemon-client-lease-beat.ts');
   return await runProtectedLeaseWork({
-    heartbeat: buildUploadLeaseHeartbeat(info, settings, request),
+    heartbeat: buildUploadLeaseHeartbeat(info, settings, request, remoteHealthGate),
     // The upload stops for either owner of its signal: the lease beat finding the lease gone, or
     // the caller aborting this one call.
     task: (leaseSignal) =>

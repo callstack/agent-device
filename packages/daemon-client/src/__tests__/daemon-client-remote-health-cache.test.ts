@@ -6,7 +6,7 @@ import { test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   cacheRemoteDaemonHealth,
-  cachedRemoteHealth,
+  probedRemoteHealth,
   invalidateRemoteDaemonHealth,
   readCachedRemoteHealth,
 } from '../daemon-client-remote-health-cache.ts';
@@ -38,27 +38,46 @@ const HEALTHY: RemoteDaemonHealth = { reachable: true, instanceId: 'remote-insta
 test('a probe answer that lands after an invalidation is not cached', async () => {
   const info = { baseUrl: 'http://remote.example.test:7777', token: 'cache-test', pid: 0 };
   let answer: (health: RemoteDaemonHealth) => void = () => {};
-  const inFlight = cachedRemoteHealth(
+  const inFlight = probedRemoteHealth(
     info,
     () => new Promise<RemoteDaemonHealth>((resolve) => (answer = resolve)),
   );
   invalidateRemoteDaemonHealth(info);
   answer(HEALTHY);
   assert.deepEqual(await inFlight, HEALTHY);
-
-  let probes = 0;
-  const next = await cachedRemoteHealth(info, async () => {
-    probes += 1;
-    return HEALTHY;
-  });
-  assert.deepEqual(next, HEALTHY);
-  assert.equal(probes, 1, 'the stale answer was not cached');
+  assert.equal(readCachedRemoteHealth(info), undefined, 'the stale answer was not cached');
   // The closest negative: with no invalidation in flight, that usable answer is cached.
-  await cachedRemoteHealth(info, async () => {
-    probes += 1;
-    return HEALTHY;
-  });
-  assert.equal(probes, 1);
+  await probedRemoteHealth(info, async () => HEALTHY);
+  assert.deepEqual(readCachedRemoteHealth(info), HEALTHY);
+});
+
+// Only admission metadata is kept, and only IDs a later request can send as headers without echoing
+// the credential or URL. A proxy answer must name its upstream instance.
+test('only usable instance IDs are cached, and a proxy needs its upstream ID', () => {
+  const info = { baseUrl: 'http://remote.example.test:7777', token: 'cache-secret', pid: 0 };
+  const cached = (health: RemoteDaemonHealth) => {
+    invalidateRemoteDaemonHealth(info);
+    cacheRemoteDaemonHealth(info, health);
+    return readCachedRemoteHealth(info) !== undefined;
+  };
+  assert.equal(cached(HEALTHY), true, 'the closest negative: a plain daemon ID');
+  assert.equal(cached({ reachable: true, instanceId: 'bad\nid' }), false, 'not a header value');
+  assert.equal(
+    cached({ reachable: true, instanceId: 'x-cache-secret' }),
+    false,
+    'echoes the token',
+  );
+  assert.equal(
+    cached({ reachable: true, instanceId: `${info.baseUrl}/x` }),
+    false,
+    'echoes the URL',
+  );
+  assert.equal(cached({ reachable: true, instanceId: 'p', service: 'agent-device-proxy' }), false);
+  assert.equal(
+    cached({ reachable: true, instanceId: 'p', upstream: { instanceId: 'u' } }),
+    true,
+    'a proxy with its upstream ID',
+  );
 });
 
 /** The persisted entries in `stateDir`, one file per daemon identity. */

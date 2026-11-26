@@ -708,6 +708,36 @@ describe('buildUploadLeaseHeartbeat', () => {
     assert.equal('ttlMs' in first!.params, false);
   });
 
+  test('a beat from cached health that never connects re-probes once within its own budget', async () => {
+    // Nothing listens, so the beat provably never left. A beat relying on a cached `/health`
+    // answer gets the same single refresh a command gets, under the beat's own budget and signal.
+    const closed = net.createServer();
+    const port = await listenOnLoopback(closed);
+    await closeLoopbackServer(closed);
+    const gateCalls: { budgetMs: number | undefined; signal: AbortSignal | undefined }[] = [];
+    const signal = new AbortController().signal;
+    const beat = buildUploadLeaseHeartbeat(
+      { baseUrl: `http://127.0.0.1:${String(port)}`, token: 'remote-token', pid: 0 },
+      { ...settings, transportPreference: 'auto' },
+      installRequest,
+      async (budgetMs, gateSignal) => {
+        gateCalls.push({ budgetMs, signal: gateSignal });
+        throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
+          reason: 'remote_daemon_unavailable',
+        });
+      },
+    );
+    assert.ok(beat);
+    await assert.rejects(beat!(1_000, signal), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'remote_daemon_unavailable');
+      return true;
+    });
+    assert.equal(gateCalls.length, 1);
+    assert.equal(gateCalls[0]!.signal, signal);
+    assert.ok(gateCalls[0]!.budgetMs! > 0 && gateCalls[0]!.budgetMs! <= 1_000);
+  });
+
   test('a beat that never answers dies at its budget, not at the heartbeat policy', async () => {
     vi.useFakeTimers();
     // The daemon accepts the connection and never answers — a half-open pipe. The beat exists to
