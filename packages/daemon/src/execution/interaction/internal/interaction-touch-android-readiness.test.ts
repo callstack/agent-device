@@ -393,6 +393,13 @@ const SYSTEM_UI_ANR = {
   },
 } as const;
 
+/** The typed context of a refusal by the System UI ANR dialog's guard. */
+const SYSTEM_UI_ANR_REFUSAL = {
+  dispatched: 'no',
+  focusedPackage: SYSTEM_UI_ANR.focus.package,
+  focusedWindow: SYSTEM_UI_ANR.focus.focusedWindow,
+} as const;
+
 function systemUiAnrScreen() {
   return attachRefs([
     {
@@ -508,7 +515,7 @@ test('a press at a point outside the System UI ANR dialog buttons is refused bef
     error: {
       code: 'COMMAND_FAILED',
       message: expect.stringContaining('Android system dialog is blocking press'),
-      details: { dispatched: 'no', focusedPackage: 'com.android.systemui' },
+      details: SYSTEM_UI_ANR_REFUSAL,
     },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
@@ -522,7 +529,7 @@ test.each([
   async (_edge, positionals) => {
     const response = await pressWithSystemUiAnr(positionals);
 
-    expect(response).toMatchObject({ ok: false, error: { details: { dispatched: 'no' } } });
+    expect(response).toMatchObject({ ok: false, error: { details: SYSTEM_UI_ANR_REFUSAL } });
     expect(mockTapPoint).not.toHaveBeenCalled();
   },
 );
@@ -541,7 +548,7 @@ test.each([
 
   expect(response).toMatchObject({
     ok: false,
-    error: { details: { dispatched: 'no' } },
+    error: { details: SYSTEM_UI_ANR_REFUSAL },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
@@ -566,7 +573,7 @@ test('a ref from a snapshot taken before the ANR dialog is not retargeted to the
     ok: false,
     error: {
       message: expect.stringContaining('Android system dialog is blocking press'),
-      details: { dispatched: 'no' },
+      details: SYSTEM_UI_ANR_REFUSAL,
     },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
@@ -582,7 +589,7 @@ test('a Wait ref is not retargeted to Close app when the dialog buttons moved si
   ]);
   const response = await pressWithSystemUiAnr(['@e2'], {}, { sessionNodes: storedScreen });
 
-  expect(response).toMatchObject({ ok: false, error: { details: { dispatched: 'no' } } });
+  expect(response).toMatchObject({ ok: false, error: { details: SYSTEM_UI_ANR_REFUSAL } });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
@@ -602,7 +609,7 @@ test('a press on a System UI ANR dialog button is refused when the dialog loses 
     error: {
       code: 'COMMAND_FAILED',
       message: expect.stringContaining('Android system dialog lost focus before press was sent'),
-      details: { dispatched: 'no' },
+      details: SYSTEM_UI_ANR_REFUSAL,
     },
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
@@ -613,6 +620,7 @@ test.each([
     'the focus read answers nothing',
     { status: 'unknown' } as const,
     'Android focus could not be read to confirm',
+    SYSTEM_UI_ANR.focus,
   ],
   [
     'another dialog has the focus',
@@ -625,10 +633,14 @@ test.each([
       },
     } as const,
     'Android system dialog is blocking press',
+    {
+      package: 'com.example.other',
+      focusedWindow: 'Application Not Responding: com.example.other',
+    },
   ],
 ])(
   'a press on a System UI ANR dialog button is refused when, before the send, %s',
-  async (_case, beforeSend, message) => {
+  async (_case, beforeSend, message, focus) => {
     const response = await pressWithSystemUiAnr(
       ['@e2'],
       {},
@@ -639,7 +651,14 @@ test.each([
 
     expect(response).toMatchObject({
       ok: false,
-      error: { message: expect.stringContaining(message), details: { dispatched: 'no' } },
+      error: {
+        message: expect.stringContaining(message),
+        details: {
+          dispatched: 'no',
+          focusedPackage: focus.package,
+          focusedWindow: focus.focusedWindow,
+        },
+      },
     });
     expect(mockTapPoint).not.toHaveBeenCalled();
   },
