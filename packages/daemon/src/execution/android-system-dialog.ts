@@ -256,11 +256,13 @@ export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
         error: error instanceof Error ? error.message : String(error),
       },
     });
-    throw readiness.refusal();
+    throw readiness.refusal(ANDROID_BLOCKING_DIALOG_HINT);
   }
-  if (buttons.length === 0) throw readiness.refusal();
+  // Before Android 7.0, the dialog's buttons carry no `aerr_` ids, so no press can close it.
+  if (buttons.length === 0) throw readiness.refusal(ANDROID_BLOCKING_DIALOG_HINT);
   const { session, command } = params;
-  const { focus, refusal } = readiness;
+  const { focus } = readiness;
+  const refusal = () => readiness.refusal();
   return {
     status: 'dialog-buttons',
     admission: {
@@ -359,7 +361,12 @@ export async function waitForAndroidBlockingDialogFocusToClear(
 
 type AndroidBlockingSystemDialogReadiness =
   | AndroidBlockingDialogReadinessResult
-  | { status: 'foreign-dialog'; focus: AndroidBlockingDialogFocus; refusal: () => AppError };
+  | {
+      status: 'foreign-dialog';
+      focus: AndroidBlockingDialogFocus;
+      /** `hint` defaults to the dialog's own buttons; pass another when they cannot be pressed. */
+      refusal: (hint?: string) => AppError;
+    };
 
 async function readAndroidBlockingSystemDialogReadiness(params: {
   session: SessionState;
@@ -422,13 +429,13 @@ async function readAndroidBlockingSystemDialogReadiness(params: {
   return {
     status: 'foreign-dialog',
     focus,
-    refusal: () => {
+    refusal: (hint = ANDROID_FOREIGN_DIALOG_HINT) => {
       const error = androidBlockingDialogError({
         session,
         command,
         focus,
         message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
-        hint: ANDROID_FOREIGN_DIALOG_HINT,
+        hint,
       });
       // ADR 0039: before the command, the refusal sends nothing. After it, the command's own
       // dispatch ledger discloses what was sent.

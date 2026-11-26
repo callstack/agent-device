@@ -345,7 +345,8 @@ test('a tap stays refused when the foreign dialog shows no framework buttons', a
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: expect.stringContaining('Android system dialog is blocking press'),
-    details: { dispatched: 'no' },
+    // No press can close it, so the hint does not send the agent back to one.
+    details: { dispatched: 'no', hint: expect.stringContaining('reboot the emulator') },
   });
 });
 
@@ -361,7 +362,9 @@ test('a tap stays refused when the foreign dialog cannot be read, and the read f
   const unread = await withDiagnosticsScope({}, async () => {
     await expect(
       ensureAndroidBlockingSystemDialogReadyForTap({ session, command: 'press', observation }),
-    ).rejects.toMatchObject({ details: { dispatched: 'no' } });
+    ).rejects.toMatchObject({
+      details: { dispatched: 'no', hint: expect.stringContaining('reboot the emulator') },
+    });
     return countDiagnosticEventsByPhase(['android_blocking_dialog_buttons_unread']);
   });
 
