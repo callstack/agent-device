@@ -75,6 +75,11 @@ export function describeSettingWrite(
       ? 'Time zone reset to the device default'
       : `Time zone set to ${state}`;
   }
+  if (setting === 'locale') {
+    return state === SETTING_RESET_STATE
+      ? 'Locale reset to the device default'
+      : `Locale set to ${state}`;
+  }
   return `Updated setting: ${setting}`;
 }
 
@@ -419,6 +424,7 @@ type ValueSetting = {
 }[SettingName];
 
 const VALUE_PARSERS = {
+  locale: parseLocaleId,
   timezone: parseTimeZoneId,
 } as const satisfies Record<ValueSetting, (value: string) => string>;
 
@@ -450,6 +456,30 @@ function isKnownTimeZone(name: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** A language, an optional script, and an optional region: the parts every owner can write. */
+const LOCALE_ID_PATTERN = /^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\d{3}))?$/;
+
+/**
+ * The BCP 47 tag of a locale id written with `-` or `_` in any casing, such as `en-IN` for `en_in`.
+ * Extensions and variants are refused: neither owner can apply them.
+ */
+export function parseLocaleId(value: string): string {
+  const canonical = canonicalLocale(value.trim().replaceAll('_', '-'));
+  if (canonical !== undefined && LOCALE_ID_PATTERN.test(canonical)) return canonical;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid locale id: ${value}. Use a language with an optional script and region, such as en_IN, fr-CA, or zh-Hans-CN.`,
+  );
+}
+
+function canonicalLocale(tag: string): string | undefined {
+  try {
+    return Intl.getCanonicalLocales(tag)[0];
+  } catch {
+    return undefined;
   }
 }
 

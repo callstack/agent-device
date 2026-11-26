@@ -114,6 +114,20 @@ describe('settings CLI permission', () => {
     );
   });
 
+  test('reads locale as a written value the daemon parses again', () => {
+    const locale = settingsCliReader(['locale', 'en_IN'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(locale).toEqual({ setting: 'locale', state: 'en-IN', app: 'com.example.app' });
+    expect(settingsDaemonWriter(locale)).toMatchObject({
+      positionals: ['locale', 'en-IN'],
+      input: { app: 'com.example.app' },
+    });
+    expect(() => settingsCliReader(['locale', 'english'], flags())).toThrow(
+      expect.objectContaining({ code: 'INVALID_ARGS' }),
+    );
+  });
+
   test.each(['mobile-data', 'bluetooth'])(
     'forwards --app on %s so the daemon refuses it instead of dropping it',
     (setting) => {

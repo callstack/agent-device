@@ -751,6 +751,63 @@ test('settings timezone refuses an invalid zone and a tvOS leaf before reaching 
   expect(fixtureSettingsMutations).toHaveLength(0);
 });
 
+test.each([
+  { positionals: ['locale', 'fr_ca'], state: 'fr-CA', message: 'Locale set to fr-CA' },
+  {
+    positionals: ['locale', 'RESET'],
+    state: 'reset',
+    message: 'Locale reset to the device default',
+  },
+])('settings $positionals reaches the owner as the parsed value', async (row) => {
+  const sessionStore = makeSessionStore();
+  const sessionName = `ios-${row.positionals[0]}-${row.state}`;
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: row.positionals }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok && response.data).toMatchObject({ state: row.state, message: row.message });
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({
+    setting: row.positionals[0],
+    state: row.state,
+  });
+});
+
+test('settings locale refuses an invalid id and a tvOS leaf before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  sessionStore.publish('ios-locale-invalid', makeSession('ios-locale-invalid', iosSimulatorDevice));
+  sessionStore.publish('tvos-locale', makeSession('tvos-locale', tvOsSimulatorDevice));
+
+  const invalid = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('ios-locale-invalid', 'settings', {
+      positionals: ['locale', 'en-u-nu-thai'],
+    }),
+    sessionName: 'ios-locale-invalid',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+  const tvos = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('tvos-locale', 'settings', { positionals: ['locale', 'en_IN'] }),
+    sessionName: 'tvos-locale',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(invalid?.ok === false && invalid.error.code).toBe('INVALID_ARGS');
+  expect(tvos?.ok === false && tvos.error.code).toBe('UNSUPPORTED_OPERATION');
+  expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
 // A macOS permission is a host-level TCC grant, so naming an app is refused rather than dropped.
 test('settings mobile-data reaches the Android owner as an on/off mutation', async () => {
   const sessionStore = makeSessionStore();
@@ -774,6 +831,7 @@ test.each([
   ['mobile-data', 'off'],
   ['keep-awake', 'off'],
   ['bluetooth', 'off'],
+  ['locale', 'en_IN'],
   ['timezone', 'Asia/Kolkata'],
 ])('settings Android %s refuses a named app before reaching the owner', async (setting, state) => {
   const sessionStore = makeSessionStore();

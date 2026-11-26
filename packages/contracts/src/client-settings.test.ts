@@ -86,6 +86,14 @@ describe('public client settings cover the catalog', () => {
     expectTypeOf<{ setting: 'timezone' }>().not.toExtend<SettingsUpdateOptions>();
     expectTypeOf<Value['app']>().toEqualTypeOf<string | undefined>();
   });
+
+  test('locale takes a value or reset, and an app to refuse', () => {
+    type Value = Extract<SettingsUpdateOptions, { setting: 'locale' }>;
+    expectTypeOf<{ setting: 'locale'; state: 'en_IN' }>().toExtend<SettingsUpdateOptions>();
+    expectTypeOf<{ setting: 'locale'; state: 'reset' }>().toExtend<SettingsUpdateOptions>();
+    expectTypeOf<{ setting: 'locale' }>().not.toExtend<SettingsUpdateOptions>();
+    expectTypeOf<Value['app']>().toEqualTypeOf<string | undefined>();
+  });
 });
 
 /**

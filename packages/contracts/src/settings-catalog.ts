@@ -155,6 +155,12 @@ export const SETTINGS = {
     appScope: { apple: 'device-level', mobile: 'device-level' },
     help: 'Sets the device time zone from an IANA name, such as Asia/Kolkata, on iPhone and iPad simulators (sets TZ in simulator launchd; applies only to apps launched afterwards and is lost when the simulator reboots; the status bar keeps the host time) and Android (the system time zone, with automatic time zone turned off). reset hands it back to the device default: the host Mac time zone on a simulator, and automatic time zone on Android, which applies the network zone a moment later. The response reports the time zone held before. --app is refused.',
   },
+  locale: {
+    forms: [{ kind: 'value', placeholder: 'locale-id' }],
+    app: 'input',
+    appScope: { apple: 'device-level', mobile: 'device-level' },
+    help: 'Sets the device language and region from one locale id, such as en_IN or fr-CA, on iPhone and iPad simulators (AppleLanguages and AppleLocale) and Android (the system locale list). reset removes the simulator override, which leaves English with no region, and applies the system image default on Android. The response reports the locale held before. An iOS app reads the locale at launch, so relaunch it; Android applies it to running apps at once. --app is refused.',
+  },
   faceid: {
     forms: [{ kind: 'choice', states: ['match', 'nonmatch', 'enroll', 'unenroll'] }],
     help: 'Simulates Face ID on iPhone and iPad simulators.',
