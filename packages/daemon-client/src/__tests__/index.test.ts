@@ -20,7 +20,7 @@ import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { downloadRemoteArtifact } from '@agent-device/remote/daemon-artifacts';
 import { resolveDaemonStartupHint } from '../daemon-lifecycle-errors.ts';
-import { canConnectSocket } from '../daemon-client-transport.ts';
+import { probeLoopbackPort } from '../daemon-client-loopback-probe.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -133,7 +133,7 @@ test('startup recovery guidance retains configured paths and requires stopping e
   }
 });
 
-test('canConnectSocket times out stalled local daemon probes', async () => {
+test('probeLoopbackPort times out stalled local daemon probes', async () => {
   const originalCreateConnection = net.createConnection;
   let timeoutMs: number | undefined;
   let destroyed = false;
@@ -156,9 +156,9 @@ test('canConnectSocket times out stalled local daemon probes', async () => {
   ) => socket) as typeof net.createConnection;
 
   try {
-    const reachable = await canConnectSocket(65_530);
+    const probe = await probeLoopbackPort(65_530, 'socket');
 
-    assert.equal(reachable, false);
+    assert.equal(probe.reachable, false);
     assert.equal(timeoutMs, 500);
     assert.equal(destroyed, true);
   } finally {

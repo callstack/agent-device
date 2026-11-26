@@ -14,6 +14,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo, DaemonTakeoverCause } from './daemon-client-metadata.ts';
+import type { LoopbackConnectDenial } from './daemon-client-loopback-probe.ts';
 import { resolveLocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 
 // The ways an explicit lifecycle stops short of a usable daemon, as this client judges it. A busy
@@ -51,6 +52,11 @@ export const DAEMON_UNAVAILABLE_REASONS = {
   // The daemon process ended because the host refused its loopback listen, as a sandbox around the
   // launching command does.
   startupListenDenied: { reason: 'startup-listen-denied' },
+  // The host refused this client's loopback connect to the registered daemon with `EPERM` or `EACCES`,
+  // as a sandbox around it does; `details.daemon` names the daemon left alone. A refusal found after a
+  // request was written also records `details.daemonRequestSent`, because that request may have run. A
+  // connect that failed with another errno is ordinary unreachability.
+  connectDenied: { reason: 'daemon-connect-denied' },
   // The daemon stayed registered and reachable but never reported the startup phase that follows.
   startupStalled: { reason: 'startup-stalled' },
   // Startup passed the ceiling its own startup budget allows, so this client stopped waiting.
@@ -222,6 +228,41 @@ export function daemonBusyError(
       ? `The daemon is still starting up. Retry in a moment; if it never finishes starting, stop it with ${daemonStopCommand(stateDir)}.`
       : `Wait for its requests, sessions and leases to end and retry, or stop it deliberately with ${daemonStopCommand(stateDir)}.`,
   });
+}
+
+/**
+ * The answer to a loopback endpoint the host refused, whether the daemon's listen or a client's
+ * connect. One owner for both: a sandboxed agent reads it to ask for host access instead of giving up.
+ */
+export const DAEMON_LOOPBACK_DENIED_HINT =
+  'The host denied agent-device a loopback port on 127.0.0.1 (connect or listen EPERM or EACCES). ' +
+  'A sandbox around this command likely blocks local ports and simulator access. Run agent-device ' +
+  "outside the sandbox: allow the agent-device command in the agent's sandbox rules, or rerun it " +
+  'with host access (escalated permissions).';
+
+/**
+ * The refusal when the host denied this client's connect to the registered daemon. The daemon keeps
+ * running: this client saw nothing of it, so it replaced, retired and signaled nothing.
+ */
+export function daemonConnectDeniedError(params: {
+  info: DaemonInfo;
+  denial: LoopbackConnectDenial;
+  stateDir: string;
+}): AppError {
+  const { info, denial, stateDir } = params;
+  return new AppError(
+    'COMMAND_FAILED',
+    `The host denied this client a connect to the daemon's loopback endpoint on 127.0.0.1:${denial.port}.`,
+    {
+      reason: DAEMON_UNAVAILABLE_REASONS.connectDenied.reason,
+      stateDir,
+      daemon: daemonIdentityOf(info),
+      transport: denial.transport,
+      port: denial.port,
+      errno: denial.errno,
+      hint: DAEMON_LOOPBACK_DENIED_HINT,
+    },
+  );
 }
 
 /** Refuses replacement when the record cannot prove a detached owner. */

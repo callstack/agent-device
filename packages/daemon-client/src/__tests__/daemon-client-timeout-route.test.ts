@@ -514,6 +514,54 @@ test('request-timeout route: an attach client leaves a daemon that answers no pr
   }
 });
 
+// A sandboxed client whose RPC times out AND whose probe connect the host refused holds no evidence
+// about the daemon, so the timeout's own hint must not claim its session survived. The refusal is the
+// finding worth reporting: it replaces the timeout's reason and carries the shared host-access hint.
+// EPERM and EACCES cannot be produced by a stand-in server, so the probe seam answers with the refusal
+// this client's host really gave it.
+test('a timeout whose liveness probe the host refused reports the refusal, not a kept-alive session', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const daemon = await startStandIn('socket', 'refuse');
+  const paths = dummyStatePaths();
+  const info = await registeredOwner(paths, daemon.port, 'socket');
+  const liveness = await import('../daemon-client-liveness-probe.ts');
+  vi.spyOn(liveness, 'answersLivenessProbe').mockResolvedValue({
+    reachable: false,
+    denial: { errno: 'EPERM', transport: 'socket', port: daemon.port },
+  });
+  try {
+    const error = await expectRouteError(
+      sendRequest(
+        info,
+        buildRequest(RESET_POLICY_COMMAND, undefined),
+        'socket',
+        paths,
+        TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
+      ),
+      /sandbox around this command/,
+    );
+
+    assert.equal(error.details?.reason, 'daemon-connect-denied');
+    assert.equal(error.details?.errno, 'EPERM');
+    assert.equal(error.details?.port, daemon.port);
+    // The refusal replaces the timeout's REASON, not its facts: this request had already been written,
+    // so the error still says the daemon may have run it. Without `daemonRequestSent` the disclosure
+    // seam would call a request that dispatched `no`, and a retrying caller would run it twice.
+    assert.equal(error.details?.daemonRequestSent, true);
+    assert.equal(error.details?.dispatched, 'unknown');
+    assert.ok(
+      !/kept alive|survive/i.test(String(error.details?.hint)),
+      'the hint claims no session this client could not have reached',
+    );
+    assert.equal(isProcessAlive(info.pid), true, 'a refused probe authorizes no signal');
+    assert.ok(fs.existsSync(paths.infoPath), 'the registration is left in place');
+    assert.ok(fs.existsSync(paths.lockPath), 'the lock is left in place');
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
+});
+
 test('request-timeout route: the reset acts on the resolved state paths, not the request flags', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   // Path resolution happens upstream of `sendRequest`, which receives the state paths the caller

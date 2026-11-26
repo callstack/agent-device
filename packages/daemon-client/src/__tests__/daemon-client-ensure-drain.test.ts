@@ -287,6 +287,47 @@ test('a daemon still running past the deadline that answers a probe is left alon
   }
 });
 
+// The escalation route: a daemon still running at the drain deadline that answers no probe gets force
+// retired. A connect the HOST refused is not a missed probe, so this route names the sandbox instead.
+test('a drain that outlives the deadline with a probe the host refused signals nothing', async (t) => {
+  if (!(await withLoopback(t))) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  let childPid = 0;
+  const drain = installVirtualDrain(() => childPid);
+  const stale = await startScriptedDaemon(draining, {
+    afterRpc: () => {
+      drain.begin(undefined);
+      void closeLoopbackServer(stale.server);
+    },
+  });
+  const { child } = await registerDaemon(paths, {
+    httpPort: stale.port,
+    version: '0.0.0-stale',
+    capabilities: ['quiesce'],
+  });
+  childPid = child.pid;
+  const liveness = await import('../daemon-client-liveness-probe.ts');
+  vi.spyOn(liveness, 'answersLivenessProbe').mockResolvedValue({
+    reachable: false,
+    denial: { errno: 'EPERM', transport: 'socket', port: stale.port },
+  });
+
+  try {
+    await assert.rejects(ensureDaemon({ stateDir, daemonTransport: 'http' }), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'daemon-connect-denied');
+      assert.equal(error.details?.errno, 'EPERM');
+      return true;
+    });
+
+    assert.deepEqual(drain.signals, []);
+    assert.equal(isProcessAlive(childPid), true);
+    assert.equal(spawn.mock.calls.length, 0);
+  } finally {
+    drain.end();
+  }
+});
+
 test('an embedded host that outlives the deadline and answers no probe is never signaled', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();

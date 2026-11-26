@@ -23,8 +23,8 @@ import {
 } from '@agent-device/contracts/daemon-http';
 import { sendToDaemon } from '../index.ts';
 import {
-  canConnect,
   isDaemonTransportUnavailableError,
+  probeDaemonReachability,
   sendRequest,
 } from '../daemon-client-transport.ts';
 import { DAEMON_UNAVAILABLE_REASONS } from '../daemon-lifecycle-errors.ts';
@@ -62,12 +62,46 @@ test('auto health probing reserves time for a healthy fallback when HTTP hangs',
     const httpPort = await listenOnLoopback(httpServer);
     const port = await listenOnLoopback(socketServer);
     assert.equal(
-      await canConnect({ token: 'secret', pid: 1, transport: 'http', httpPort, port }, 'auto', 120),
+      (
+        await probeDaemonReachability(
+          { token: 'secret', pid: 1, transport: 'http', httpPort, port },
+          'auto',
+          120,
+        )
+      ).reachable,
       true,
     );
   } finally {
     await closeLoopbackServer(httpServer);
     await closeLoopbackServer(socketServer);
+  }
+});
+
+// A reachability probe shape that a boolean "unreachable" would report wrongly, and that a caller
+// reads before it retires a daemon: a fallback leg that answers AFTER the deadline must not bury the
+// refusal the first leg already proved.
+test('a fallback leg answering past the deadline still reports the first leg as a denial', async () => {
+  const probe = await import('../daemon-client-loopback-probe.ts');
+  const denial = { errno: 'EPERM', transport: 'socket', port: 41_234 } as const;
+  // "Late" is spent, not faked: the budget is 20 ms and the socket leg answers after 40 ms, so the
+  // deadline has provably passed by the time the fallback's answer lands.
+  const socketLeg = vi.spyOn(probe, 'probeLoopbackPort').mockImplementation(async () => {
+    await sleep(40);
+    return { reachable: false, denial };
+  });
+  const httpLeg = vi.spyOn(probe, 'probeHttpEndpoint').mockResolvedValue({ reachable: true });
+  try {
+    assert.deepEqual(
+      await probeDaemonReachability(
+        { token: 'secret', pid: 1, transport: 'dual', port: 41_234, httpPort: 41_235 },
+        'auto',
+        20,
+      ),
+      { reachable: false, denial },
+    );
+  } finally {
+    socketLeg.mockRestore();
+    httpLeg.mockRestore();
   }
 });
 
@@ -93,10 +127,12 @@ test('the health deadline includes requester loading and forbids a late request'
   try {
     const httpPort = await listenOnLoopback(server);
     let settled = false;
-    probing = canConnect({ token: 'secret', pid: 1, httpPort }, 'http', 40).then((reachable) => {
-      settled = true;
-      return reachable;
-    });
+    probing = probeDaemonReachability({ token: 'secret', pid: 1, httpPort }, 'http', 40).then(
+      (probe) => {
+        settled = true;
+        return probe.reachable;
+      },
+    );
     await sleep(90);
     assert.equal(settled, true, 'loading must not extend the probe deadline');
     assert.equal(await probing, false);
@@ -560,7 +596,7 @@ test.for([
 
 test('an endpoint missing for the requested transport rejects with a typed reason the classifier accepts', async () => {
   const socketOnly = { port: 1, token: 't', pid: 1 };
-  const error = await canConnect(socketOnly, 'http').then(
+  const error = await probeDaemonReachability(socketOnly, 'http').then(
     () => undefined,
     (error: unknown) => error,
   );

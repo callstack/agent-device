@@ -36,8 +36,13 @@ import {
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type {
+  DaemonProbeVerdict,
+  LoopbackConnectDenial,
+  LoopbackTransport,
+} from './daemon-client-loopback-probe.ts';
 
-type ResolvedDaemonTransport = 'socket' | 'http';
+type ResolvedDaemonTransport = LoopbackTransport;
 type SendRequestOptions = {
   /** The host whose working directory and environment this request's client-side work reads. */
   host: HostEnvironment;
@@ -185,60 +190,57 @@ type RemoteDaemonHealthLink = Pick<
   'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'capabilities'
 >;
 
-export async function canConnect(
+export async function probeDaemonReachability(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
   probeTimeoutMs?: number,
-): Promise<boolean> {
+): Promise<DaemonProbeVerdict> {
   const deadline = Date.now() + (probeTimeoutMs ?? Number.POSITIVE_INFINITY);
   const transport = chooseTransport(info, preference);
   const fallback = chooseAutoFallbackTransport(info, preference, transport);
   const firstBudget = (deadline - Date.now()) / (fallback ? 2 : 1);
-  if (await canConnectWithTransport(info, transport, firstBudget)) return Date.now() < deadline;
-  return fallback
-    ? (await canConnectWithTransport(info, fallback, deadline - Date.now())) &&
-        Date.now() < deadline
-    : false;
+  const first = await probeTransportEndpoint(info, transport, firstBudget);
+  if (first.reachable) return { reachable: Date.now() < deadline };
+  if (!fallback) return first;
+  const second = await probeTransportEndpoint(info, fallback, deadline - Date.now());
+  if (second.reachable) return answeredWithinDeadline(deadline, first.denial);
+  // One refused leg is enough to withhold a death verdict: the client cannot read the other leg's
+  // silence as proof while the host has shown it refuses this daemon's endpoints.
+  return { reachable: false, denial: first.denial ?? second.denial };
 }
 
-async function canConnectWithTransport(
+/**
+ * A leg that answered after the deadline is not a reachable daemon, but a refusal the other leg
+ * reported is still evidence this client holds. It travels with the verdict, so a late answer
+ * cannot turn a refused endpoint back into a dead daemon.
+ */
+function answeredWithinDeadline(
+  deadline: number,
+  denial?: LoopbackConnectDenial,
+): DaemonProbeVerdict {
+  return Date.now() < deadline ? { reachable: true } : { reachable: false, denial };
+}
+
+async function probeTransportEndpoint(
   info: DaemonInfo,
   transport: ResolvedDaemonTransport,
   timeoutMs: number,
-): Promise<boolean> {
-  return transport === 'http'
-    ? await canConnectHttp(info, timeoutMs)
-    : await canConnectSocket(info.port, timeoutMs);
-}
-
-export function canConnectSocket(
-  port: number | undefined,
-  timeoutMs = LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
-): Promise<boolean> {
-  if (!port || timeoutMs <= 0) return Promise.resolve(false);
-  return new Promise((resolve) => {
-    let settled = false;
-    const socket = net.createConnection({ host: '127.0.0.1', port }, () => {
-      finish(true);
-    });
-    const finish = (reachable: boolean) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve(reachable);
-    };
-    socket.setTimeout(Math.min(LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS, Math.ceil(timeoutMs)));
-    socket.on('timeout', () => {
-      finish(false);
-    });
-    socket.on('error', () => {
-      finish(false);
-    });
+): Promise<DaemonProbeVerdict> {
+  // Loaded here, never at module scope: no client entry surface pays for a verdict it only reads on a
+  // probe (`scripts/__tests__/eager-closure-budgets.ts`).
+  const { probeHttpEndpoint, probeLoopbackPort } =
+    await import('./daemon-client-loopback-probe.ts');
+  if (transport !== 'http') return await probeLoopbackPort(info.port, 'socket', timeoutMs);
+  const endpoint = daemonHealthEndpoint(info);
+  if (!endpoint) return { reachable: false };
+  return await probeHttpEndpoint({
+    endpoint,
+    headers: info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {},
+    timeoutMs: Math.min(
+      info.baseUrl ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
+      timeoutMs,
+    ),
   });
-}
-
-function canConnectHttp(info: DaemonInfo, timeoutMs: number): Promise<boolean> {
-  return readDaemonHttpHealth(info, timeoutMs).then((health) => health.reachable);
 }
 
 export async function readRemoteDaemonHealth(
@@ -447,6 +449,10 @@ async function recoverFromTimeout(
  * One of the transport's own failures, with whether it happened after the request left this
  * process (the daemon may have run it). A lost connection or a timeout records
  * `daemonRequestSent`; a reply that could not be read or parsed was always sent.
+ *
+ * A `daemon-connect-denied` is usually a pre-send finding and is left alone. Only the one a timeout
+ * produced carries `daemonRequestSent`, and that one has to reach the disclosure seam too: the request
+ * was written before the host refused the probe, so the caller must still be told it may have run.
  */
 function classifyTransportFailure(
   error: unknown,
@@ -460,7 +466,9 @@ function classifyTransportFailure(
     case DAEMON_TRANSPORT_REASONS.replyInvalid.reason:
       return { failure: error, sent: true };
     default:
-      return undefined;
+      // A refusal this module did not produce, from the timeout route, states for itself that the
+      // request left this process. It gets the same disclosure: the daemon may have run it.
+      return error.details?.daemonRequestSent === true ? { failure: error, sent: true } : undefined;
   }
 }
 
