@@ -105,5 +105,8 @@ test('a non-default app id names the problem without the default installer', () 
     appId: 'com.other.app',
     serial: 'emulator-5560',
   });
-  assert.equal(problem, 'Android fixture preflight: com.other.app is not installed on emulator-5560.');
+  assert.equal(
+    problem,
+    'Android fixture preflight: com.other.app is not installed on emulator-5560.',
+  );
 });

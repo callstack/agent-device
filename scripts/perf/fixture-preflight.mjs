@@ -31,7 +31,8 @@ export function parseAndroidPackageFacts(dumpsys) {
   return {
     // An unknown package prints no flag list. A removed-for-user package keeps its record but
     // prints only `installed=false` per user.
-    installed: flags.size > 0 && !(/installed=false/.test(dumpsys) && !/installed=true/.test(dumpsys)),
+    installed:
+      flags.size > 0 && !(/installed=false/.test(dumpsys) && !/installed=true/.test(dumpsys)),
     debuggable: flags.has('DEBUGGABLE'),
     devClient: dumpsys.includes(DEV_LAUNCHER_COMPONENT),
   };
