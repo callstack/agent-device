@@ -1,4 +1,5 @@
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type { HostedDaemonAttachmentIdentity } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { resolveSessionlessLeaseAdmissionExemption } from '../core/daemon-command-registry.ts';
@@ -10,8 +11,7 @@ import {
   type SessionLease,
 } from '../core/lease-context.ts';
 
-export type HostedAttachmentScope = {
-  session: string;
+export type HostedAttachmentScope = HostedDaemonAttachmentIdentity & {
   lease: SessionLease & { tenantId: string };
   assertCurrent(): string;
 };

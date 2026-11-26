@@ -296,6 +296,8 @@ export type DaemonOwnership = (typeof DAEMON_OWNERSHIPS)[number];
  */
 export type DaemonRuntimeOwnership = Exclude<DaemonOwnership, 'unknown'>;
 
+export type HostedDaemonAttachmentIdentity = Readonly<{ session: string; generation: string }>;
+
 /**
  * The lifetime a lifecycle path has proved the daemon on a state directory is, together with the owner
  * its record stated at that read. Ownership travels inside the observation because a pid only says what

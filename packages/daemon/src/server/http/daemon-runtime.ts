@@ -620,6 +620,10 @@ async function startDaemonRuntimeOnHost(
       capabilities: DAEMON_CAPABILITIES,
       plugins: deps.pluginInventory,
       ownership,
+      hostedAttachment: attachment && {
+        session: attachment.session,
+        generation: attachment.generation,
+      },
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);

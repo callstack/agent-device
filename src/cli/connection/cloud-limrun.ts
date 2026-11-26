@@ -81,7 +81,8 @@ export async function stopHostedLimrunDaemon(
     const { stopRecordedDaemon } = await import('@agent-device/daemon-client');
     const { readDaemonStopIdentity } =
       await import('@agent-device/daemon-contracts/daemon-registration');
-    let identity = readDaemonStopIdentity(paths.infoPath);
+    const expected = { session: location.session, generation };
+    let identity = readDaemonStopIdentity(paths.infoPath, expected);
     if (
       identity.ownership === 'absent' &&
       (await import('@agent-device/host-kit/file')).lstatIfPresent(paths.lockPath)
@@ -89,11 +90,13 @@ export async function stopHostedLimrunDaemon(
       const { recoverAbandonedDaemonRegistration } =
         await import('@agent-device/daemon-contracts/daemon-registration-owner');
       const retirement = await recoverAbandonedDaemonRegistration({ paths, observed: null });
-      identity = readDaemonStopIdentity(paths.infoPath);
+      identity = readDaemonStopIdentity(paths.infoPath, expected);
       if (identity.ownership === 'absent' && retirement.status !== 'absent')
         throw new Error('Hosted daemon startup ownership is unresolved.');
     }
-    await stopRecordedDaemon(identity, { paths, host });
+    if (identity.ownership === 'unreadable')
+      throw new Error('Hosted daemon registration is unverified.');
+    if (identity.ownership !== 'absent') await stopRecordedDaemon(identity, { paths, host });
   } catch {
     const reason = CLOUD_LIMRUN_REASONS.daemonStopUnconfirmed.reason;
     const hint = 'Run agent-device disconnect again to finish closing this session.';

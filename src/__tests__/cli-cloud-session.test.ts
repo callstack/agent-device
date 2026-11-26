@@ -719,6 +719,27 @@ test('a connection command sweeps expired attachments for other sessions in its 
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
+test('a malformed expired record does not block a different session', async () => {
+  const env = cloudEnv();
+  const expired = locationOf(env);
+  const liveEnv = { ...env, AGENT_DEVICE_SESSION: 'still-running' };
+  const broker = stubCloudApi();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  expect((await runCliCapture(connectArgs, { env: liveEnv })).code).toBeNull();
+  const record = readCloudConnection(expired)!;
+  fs.writeFileSync(
+    path.join(cloudConnectionDir(expired), 'record.json'),
+    JSON.stringify({ ...record, generation: null, deadlineAt: new Date(0).toISOString() }),
+  );
+
+  const run = await runCliCapture(['connection', 'status', '--json'], { env: liveEnv });
+
+  expect(run.code).toBeNull();
+  expect(fs.existsSync(cloudAttachmentPath(expired))).toBe(true);
+  expect(fs.existsSync(cloudAttachmentPath(locationOf(liveEnv)))).toBe(true);
+  expect(broker).toHaveBeenCalledTimes(2);
+});
+
 test('expiry removes scoped credentials and refuses to route the command', async () => {
   const env = cloudEnv();
   const location = locationOf(env);

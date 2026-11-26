@@ -18,6 +18,7 @@ import {
   cloudAttachmentPath,
   readCloudConnection,
   writeCloudConnection,
+  type ConnectionLocation,
 } from '../cli/connection/cloud-connection-record.ts';
 import { resolveCloudAdmission } from '../cli/connection/active-connection.ts';
 import { cloudLimrunDaemonDir } from '../cli/connection/cloud-limrun.ts';
@@ -97,6 +98,25 @@ function limrunLease(platform: 'ios' | 'android') {
   };
 }
 
+function writeHostedDaemonRegistration(
+  location: ConnectionLocation,
+  scope: { session: string; generation: string } | null = readCloudConnection(location)!,
+): void {
+  const record = readCloudConnection(location)!;
+  const paths = resolveDaemonPaths(cloudLimrunDaemonDir(location, record));
+  fs.mkdirSync(paths.baseDir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(
+    paths.infoPath,
+    JSON.stringify({
+      ownership: 'detached',
+      pid: 12345,
+      processStartTime: 'fixture-start-time',
+      hostedAttachment: scope && { session: scope.session, generation: scope.generation },
+    }),
+    { mode: 0o600 },
+  );
+}
+
 function limrunEnv(version?: 'current' | 'old' | 'alias') {
   return {
     ...cloudEnv(),
@@ -160,6 +180,7 @@ test('fences and retires the attachment before a missing broker credential preve
   const mock = stubCloudApi();
   mock.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
   expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  writeHostedDaemonRegistration(location);
   const result = await runCliCapture(['disconnect', '--json'], {
     env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
   });
@@ -180,6 +201,7 @@ test('expires remote daemon credentials without trying to stop a local daemon', 
   expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
   const record = readCloudConnection(location)!;
   writeCloudConnection(location, { ...record, deadlineAt: new Date(0).toISOString() });
+  removeRemoteConnectionState(location);
   expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
 
   await resolveCloudAdmission({
@@ -201,6 +223,7 @@ test('expired attachments without a saved binding retire their generation before
   const broker = stubCloudApi();
   broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
   expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  writeHostedDaemonRegistration(location);
   const record = readCloudConnection(location)!;
   writeCloudConnection(location, { ...record, deadlineAt: new Date(0).toISOString() });
   removeRemoteConnectionState(location);
@@ -234,6 +257,30 @@ test('expired attachments without a saved binding retire their generation before
   expect(stop).toHaveBeenCalledTimes(2);
   expect(fs.existsSync(credential)).toBe(false);
 });
+
+test.each(['missing', 'session', 'generation'] as const)(
+  'disconnect refuses to stop a daemon with a %s registration scope',
+  async (mismatch) => {
+    const env = limrunEnv('current');
+    const location = locationOf(env);
+    const broker = stubCloudApi();
+    broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+    expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+    const record = readCloudConnection(location)!;
+    writeHostedDaemonRegistration(
+      location,
+      mismatch === 'missing' ? null : { ...record, [mismatch]: 'unrelated' },
+    );
+
+    const result = await runCliCapture(['disconnect', '--json'], { env });
+
+    expect(JSON.parse(result.stdout).error.details.reason).toBe(
+      'cloud_attachment_daemon_stop_unconfirmed',
+    );
+    expect(stop).not.toHaveBeenCalled();
+    expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', brokerReleased: true });
+  },
+);
 
 test('disconnect preserves recovery when a startup owns the lock before publishing a registration', async () => {
   const env = limrunEnv('current');
@@ -319,6 +366,10 @@ test('hosted daemon ownership precedes credential read and bounds allocation ove
     stderr: { write: () => {} },
   });
   try {
+    expect(JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')).hostedAttachment).toEqual({
+      session: location.session,
+      generation: state.cloudSession?.generation,
+    });
     const info = await readRegisteredDaemon(paths, { required: true });
     const admin = await fetch(`http://127.0.0.1:${info.httpPort}/admin/leases`, {
       headers: { authorization: `Bearer ${runtime.token}` },
@@ -473,6 +524,7 @@ test.each(['ios', 'android'] as const)(
     expect(attached.flags.daemonAuthToken).toBeUndefined();
     expect(attached.daemonStateDir).toMatch(/cloud-connections.*daemon-/);
 
+    writeHostedDaemonRegistration(location);
     mock.mockImplementationOnce(async () => {
       expect(stop).toHaveBeenCalledOnce();
       expect(fs.existsSync(attachmentFile)).toBe(false);
@@ -556,6 +608,7 @@ test('a failed local retirement still ends the hosted lease and preserves a fenc
   const broker = stubCloudApi();
   broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
   expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  writeHostedDaemonRegistration(location);
 
   stop.mockRejectedValueOnce(new Error('private retirement failure'));
   const disconnect = await runCliCapture(['disconnect', '--json'], { env });

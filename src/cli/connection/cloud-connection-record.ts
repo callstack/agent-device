@@ -16,6 +16,7 @@ import {
   type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
+import { asCloudRecord } from '../cloud-response.ts';
 import type { CloudSessionRequest } from './cloud-session-api.ts';
 
 export const CLOUD_CONNECTION_REASONS = {
@@ -357,20 +358,23 @@ export async function cleanExpiredCloudAttachments(
     const location = readExpiredAttachmentLocation(stateDir, path.join(root, entry.name));
     if (!location) continue;
     await tryWithConnectionLock(location, async () => {
-      const current = readCloudConnection(location);
-      if (!current || !isExpired(current)) return;
-      const binding = readRemoteConnectionState(location)?.cloudSession;
-      const usesRemoteDaemon =
-        binding?.transport === 'agent-device-daemon' &&
-        binding.generation === current.generation &&
-        binding.id === current.id;
-      const retired =
-        usesRemoteDaemon ||
-        (await retireExpiredDaemon(location, current.generation).then(
-          () => true,
-          () => false,
-        ));
-      if (retired) removeCloudAttachment(location);
+      let current: CloudConnectionRecord | null;
+      let kind: unknown;
+      try {
+        current = readCloudConnection(location);
+        if (!current || !isExpired(current)) return;
+        kind = asCloudRecord(readCloudCredentialJson(cloudAttachmentPath(location)))?.kind;
+      } catch {
+        return;
+      }
+      if (kind === 'agent-device-daemon') {
+        removeCloudAttachment(location);
+      } else if (kind === 'limrun') {
+        await retireExpiredDaemon(location, current.generation).then(
+          () => removeCloudAttachment(location),
+          () => undefined,
+        );
+      }
     });
   }
 }

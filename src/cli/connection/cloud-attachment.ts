@@ -221,6 +221,7 @@ export function bindHostedDaemon(host: HostEnvironment, daemonStateDir: string) 
     },
     assertCurrent,
     session,
+    generation,
     lease: {
       leaseId: record.hostedLeaseId,
       tenantId: state.tenant,
