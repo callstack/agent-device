@@ -125,7 +125,8 @@ test('bare snapshot refs without @ prefix throw helpful error', () => {
     () => readInputFromCli('fill', ['e5', 'text'], BASE_FLAGS),
     (err: any) => {
       assert.equal(err.code, 'INVALID_ARGS');
-      assert.match(err.message, /Did you mean "@e5"\?/);
+      assert.match(err.message, /Snapshot refs need the @ prefix/);
+      assert.doesNotMatch(err.message, /\be5\b|\btext\b/);
       return true;
     },
   );

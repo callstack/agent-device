@@ -1,6 +1,6 @@
 import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readFillTargetFromPositionals } from '@agent-device/selectors/interaction-positionals';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { activateCompleteRefFrame, expireRefFrame } from '../../../core/ref-frame.ts';
@@ -224,45 +224,52 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   }
 });
 
-test('fill positionals sent straight to the daemon keep the fill_target_missing refusal the CLI reports', async () => {
+test('fill positionals sent straight to the daemon keep the refusal readFillTargetFromPositionals reports', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'fill-target-missing';
   sessionStore.publish(sessionName, makeSession(sessionName));
 
-  // fill $REF "136849" with an unset REF, and fill "$REF" "136849" with an unset REF.
-  for (const positionals of [['136849'], ['', '136849']]) {
+  // Missing target (unset REF), bare ref, non-target words, and unknown selector key all get
+  // the exact decoder refusal without echoing any positional, with or without --record-as / --text-stdin.
+  const cases = [
+    [['hunter2'], 'fill_target_missing'],
+    [['', 'hunter2'], 'fill_target_missing'],
+    [['e5', 'hunter2'], undefined],
+    [['Email', 'hunter2'], undefined],
+    [['button=Email', 'hunter2'], undefined],
+    [['label=pw secret', 'hunter2'], undefined],
+  ] as const;
+
+  for (const [positionals, reason] of cases) {
     let cliError: unknown;
     try {
-      readFillTargetFromPositionals(positionals);
+      readFillTargetFromPositionals([...positionals]);
     } catch (error) {
       cliError = error;
     }
+    expect(cliError, positionals.join(' ')).toBeInstanceOf(AppError);
     const cli = normalizeError(cliError);
-    const response = await runInteraction(sessionStore, sessionName, 'fill', positionals);
-    expect(response?.ok).toBe(false);
-    if (response && !response.ok) {
-      expect(response.error).toMatchObject({
-        code: 'INVALID_ARGS',
-        message: cli.message,
-        hint: cli.hint,
-        details: { reason: 'fill_target_missing', dispatched: 'no' },
-      });
-    }
-  }
-  expect(mockFillPoint).not.toHaveBeenCalled();
-});
-
-test('a sensitive fill that received only its text keeps fill_target_missing without echoing the text', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'fill-target-missing-sensitive';
-  sessionStore.publish(sessionName, makeSession(sessionName));
-
-  for (const flags of [{ textStdin: true }, { recordAs: 'PASSWORD' }]) {
-    const response = await runInteraction(sessionStore, sessionName, 'fill', ['hunter2'], flags);
-    expect(response?.ok).toBe(false);
-    if (response && !response.ok) {
-      expect(response.error.details?.reason).toBe('fill_target_missing');
-      expect(JSON.stringify(response.error)).not.toContain('hunter2');
+    for (const flags of [undefined, { recordAs: 'PASSWORD' }, { textStdin: true }]) {
+      const response = await runInteraction(
+        sessionStore,
+        sessionName,
+        'fill',
+        [...positionals],
+        flags,
+      );
+      expect(response?.ok).toBe(false);
+      if (response && !response.ok) {
+        expect(response.error).toMatchObject({
+          code: 'INVALID_ARGS',
+          message: cli.message,
+          hint: cli.hint,
+          details: { dispatched: 'no', ...(reason === undefined ? {} : { reason }) },
+        });
+        expect(response.error.details?.reason, positionals.join(' ')).toBe(reason);
+        expect(JSON.stringify(response.error), positionals.join(' ')).not.toMatch(
+          /hunter2|pw secret|Email|\be5\b|\bbutton\b/,
+        );
+      }
     }
   }
   expect(mockFillPoint).not.toHaveBeenCalled();

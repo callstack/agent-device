@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { interactionCliReaders, interactionDaemonWriters } from './interactions.ts';
 import { selectorCliReaders } from './selectors.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { readFillTargetFromPositionals } from '@agent-device/selectors/interaction-positionals';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 const BASE_FLAGS: CliFlags = { json: false, help: false, version: false };
@@ -145,6 +146,41 @@ test('fill --text-stdin refuses a text argument without echoing it', () => {
     expect(error.details?.reason).toBe('fill_text_source_conflict');
     expect(JSON.stringify({ message: error.message, details: error.details })).not.toMatch(
       /argv-secret/,
+    );
+  }
+});
+
+test('fill --record-as refuses unreadable targets with the shared decoder refusal and without echoing text', () => {
+  // fill $REF "pw-secret" --record-as PW with an unset REF, bare ref, unknown key, and non-target words.
+  for (const [positionals, reason] of [
+    [['pw-secret'], 'fill_target_missing'],
+    [['', 'pw-secret'], 'fill_target_missing'],
+    [['e5', 'pw-secret'], undefined],
+    [['Email', 'pw-secret'], undefined],
+    [['button=Email', 'pw-secret'], undefined],
+  ] as const) {
+    let decoderError: unknown;
+    try {
+      readFillTargetFromPositionals([...positionals]);
+    } catch (error) {
+      decoderError = error;
+    }
+    let caught: unknown;
+    try {
+      interactionCliReaders.fill([...positionals], { ...BASE_FLAGS, recordAs: 'PW' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught, positionals.join(' ')).toBeInstanceOf(AppError);
+    expect(decoderError, positionals.join(' ')).toBeInstanceOf(AppError);
+    const error = caught as AppError;
+    const expected = decoderError as AppError;
+    expect(error.code, positionals.join(' ')).toBe(expected.code);
+    expect(error.message, positionals.join(' ')).toBe(expected.message);
+    expect(error.details, positionals.join(' ')).toEqual(expected.details);
+    expect(error.details?.reason, positionals.join(' ')).toBe(reason);
+    expect(JSON.stringify({ message: error.message, details: error.details })).not.toMatch(
+      /pw-secret|Email|\be5\b|\bbutton\b/,
     );
   }
 });

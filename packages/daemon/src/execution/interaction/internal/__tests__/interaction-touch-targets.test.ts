@@ -56,16 +56,18 @@ test('parseFillTarget preserves selector text whitespace', () => {
   });
 });
 
-test('parseFillTarget rejects invalid coordinates instead of treating them as a point', () => {
-  const parsed = parseFillTarget(['10', 'not-y', 'text']);
+test('parseFillTarget rejects invalid coordinates without quoting them', () => {
+  const parsed = parseFillTarget(['10', 'not-y', 'pw-secret']);
 
   expect(parsed.ok).toBe(false);
   if (!parsed.ok) {
     expect(parsed.response.ok).toBe(false);
     if (!parsed.response.ok) {
-      expect(parsed.response.error.message).toBe(
-        'fill requires x y text, @ref text, or selector text',
+      expect(parsed.response.error.code).toBe('INVALID_ARGS');
+      expect(parsed.response.error.message).toContain(
+        'Target is not a @ref, selector, or "x y" point',
       );
+      expect(JSON.stringify(parsed.response.error)).not.toMatch(/not-y|pw-secret/);
     }
   }
 });
