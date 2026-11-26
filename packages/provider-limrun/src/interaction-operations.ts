@@ -220,6 +220,10 @@ export function limrunAppleSettingsFacts(
               PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
               'Limrun does not expose keychain reset.',
             ),
+            timezone: unavailableFact(
+              PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
+              'Limrun iOS does not expose simulator launchd time zone overrides; set it on a local simulator.',
+            ),
           },
         }
       : (setting ?? unsupported),

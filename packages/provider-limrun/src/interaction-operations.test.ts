@@ -141,7 +141,7 @@ test('app-event delivery is admitted on both direct-session legs', () => {
   expect(factsFor(iosDevice, false).triggerAppEvent).toEqual(liveSessionUnavailable);
 });
 
-test('iOS inherits shared settings except unavailable keychain reset', () => {
+test('iOS inherits shared settings except keychain reset and time zone', () => {
   const android = limrunAndroidSettingsFacts();
   expect(runtimeSubjectFact(android.setSetting, 'animations').available).toBe(true);
   const ios = limrunAppleSettingsFacts(testIosRunner.facts);
@@ -158,6 +158,10 @@ test('iOS inherits shared settings except unavailable keychain reset', () => {
     expect(runtimeSubjectFact(ios.setSetting, setting).available).toBe(true);
   }
   expect(runtimeSubjectFact(ios.setSetting, 'reset-keychain').available).toBe(false);
+  expect(runtimeSubjectFact(ios.setSetting, 'timezone')).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
   expect(runtimeSubjectFact(ios.readSetting, 'text-size').available).toBe(true);
   expect(limrunAndroidSettingsFacts(liveSessionUnavailable).setSetting).toEqual(
     liveSessionUnavailable,
