@@ -96,7 +96,7 @@ export async function dispatchRuntimeInteraction<
     touchExecutor: options.touchExecutor,
     settleObservationCapture: options.settleObservationCapture,
     consumedCapture,
-    ...(options.androidDialogTapGate ? { admitTap: options.androidDialogTapGate.admitTap } : {}),
+    admitTap: options.androidDialogTapGate?.admitTap,
   });
   const actionStartedAt = Date.now();
   try {
