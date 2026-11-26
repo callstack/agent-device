@@ -20,6 +20,7 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import { expireRefFrame } from '../core/ref-frame.ts';
 import {
   resolveRefFrameEffect,
+  leavesDeviceUntouched,
   shouldGuardAndroidBlockingDialog,
 } from '../core/daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
@@ -59,11 +60,7 @@ export async function dispatchGenericCommand(params: {
   const session = sessionStore.requireCurrent(sessionRef);
   const platformCommand = req.command;
 
-  const commandReadiness = await ensureGenericCommandReady(
-    session,
-    platformCommand,
-    params.androidObservation,
-  );
+  const commandReadiness = await ensureGenericCommandReady(session, req, params.androidObservation);
   if (commandReadiness.response) return commandReadiness.response;
   // #1638: freeze the settled diff's baseline before anything can mutate the
   // screen or the stored snapshot — including the Android dialog preflight.
@@ -271,7 +268,11 @@ async function ensureNoAndroidBlockingDialogReady(
   phase: 'before-command' | 'after-command' = 'before-command',
 ): Promise<AndroidDialogReadiness> {
   const platformCommand = req.command;
-  if (session.device.platform !== 'android' || !shouldGuardAndroidBlockingDialog(req)) {
+  if (
+    session.device.platform !== 'android' ||
+    !shouldGuardAndroidBlockingDialog(platformCommand) ||
+    leavesDeviceUntouched(req)
+  ) {
     return { status: 'clear' };
   }
   if (isActiveProviderDevice(session.device)) {
@@ -291,7 +292,7 @@ async function ensureNoAndroidBlockingDialogReady(
 
 async function ensureGenericCommandReady(
   session: SessionState,
-  platformCommand: string,
+  req: DaemonRequest,
   observation: AndroidObservationAdapter | undefined,
 ): Promise<GenericCommandReadiness> {
   // No support gate survives here. R56 migrated `app-switcher`, the last generic-route descriptor
@@ -303,7 +304,8 @@ async function ensureGenericCommandReady(
     session.device.platform !== 'android' ||
     isActiveProviderDevice(session.device) ||
     !session.screenRecording ||
-    platformCommand === 'record'
+    req.command === 'record' ||
+    leavesDeviceUntouched(req)
   ) {
     return {};
   }

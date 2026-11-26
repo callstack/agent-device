@@ -108,9 +108,13 @@ export function canOverrideLockPolicySelector(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.lockPolicySelectorOverride === true;
 }
 
-export function shouldGuardAndroidBlockingDialog(req: DaemonRequest): boolean {
-  const guard = getDaemonCommandDescriptor(req.command)?.androidBlockingDialogGuard;
-  return typeof guard === 'function' ? guard(req) : guard === true;
+export function shouldGuardAndroidBlockingDialog(command: string): boolean {
+  return getDaemonCommandDescriptor(command)?.androidBlockingDialogGuard === true;
+}
+
+/** Whether the request must not change the device, so no Android dialog recovery runs for it. */
+export function leavesDeviceUntouched(req: DaemonRequest): boolean {
+  return getDaemonCommandDescriptor(req.command)?.leavesDeviceUntouched?.(req) === true;
 }
 
 /**

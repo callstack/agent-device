@@ -2,7 +2,7 @@ import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
   alertRefFrameEffect,
   alertRecordingEffect,
-  lockScreenAndroidBlockingDialogGuard,
+  lockScreenLeavesDeviceUntouched,
   lockScreenRecordingEffect,
   lockScreenRefFrameEffect,
   settingsRecordingEffect,
@@ -644,13 +644,13 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       // way hardware-button selects a key; admission binds exactly that one fact. No post-action
       // observation is declared: settling would re-capture, and so re-foreground, the session app
       // over the lock screen this command shows. `status` only reads, so it keeps the ref frame,
-      // records as an observation, and skips the Android blocking-dialog guard.
+      // records as an observation, and runs no Android dialog recovery.
       ...GENERIC_MUTATING_COMMAND_TRAITS,
       recordingEffect: lockScreenRecordingEffect,
       daemon: {
         ...GENERIC_MUTATING_COMMAND_TRAITS.daemon,
         refFrameEffect: lockScreenRefFrameEffect,
-        androidBlockingDialogGuard: lockScreenAndroidBlockingDialogGuard,
+        leavesDeviceUntouched: lockScreenLeavesDeviceUntouched,
       },
       platformExecution: { kind: 'device-runtime', uses: lockScreenRuntimePlanUses },
     },

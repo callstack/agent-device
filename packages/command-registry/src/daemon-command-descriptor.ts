@@ -59,11 +59,13 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
    */
   saveScriptFlagOwner?: boolean;
   lockPolicySelectorOverride?: boolean;
+  androidBlockingDialogGuard?: boolean;
   /**
-   * Whether the generic route recovers an Android blocking dialog before and after the command. A
-   * resolver answers per request, for a command whose read-only action must not tap or relaunch.
+   * Requests that must not change the device, though the command's other requests may. The
+   * generic route runs no Android dialog recovery for them: neither the blocking-dialog guard nor
+   * the screen-recording recovery taps a dialog or relaunches the app first.
    */
-  androidBlockingDialogGuard?: boolean | ((req: TRequest) => boolean);
+  leavesDeviceUntouched?: (req: TRequest) => boolean;
   preferExplicitDeviceOverExistingSession?: boolean;
   allowSessionlessDefaultDevice?: (req: TRequest) => boolean;
   skipSessionlessProviderDevice?: (req: TRequest) => boolean;

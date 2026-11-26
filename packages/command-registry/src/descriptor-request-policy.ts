@@ -113,8 +113,8 @@ export const lockScreenRecordingEffect = (req: DispatchedCommand): RecordingEffe
 export const lockScreenRefFrameEffect = (req: DispatchedCommand): RefFrameEffect =>
   readOnlySubactionRefFrameEffect(req, LOCK_SCREEN_READ_ONLY_ACTIONS, '');
 // The read sends nothing, so it must not tap Close app on an Android dialog or relaunch the app.
-export const lockScreenAndroidBlockingDialogGuard = (req: DispatchedCommand): boolean =>
-  readOnlySubactionRecordingEffect(req, LOCK_SCREEN_READ_ONLY_ACTIONS, '') === 'mutates-app';
+export const lockScreenLeavesDeviceUntouched = (req: DispatchedCommand): boolean =>
+  readOnlySubactionRecordingEffect(req, LOCK_SCREEN_READ_ONLY_ACTIONS, '') === 'observes-app';
 
 // A settings request reads only when it names a readable setting with nothing after it; every other
 // settings request changes device state — including `settings text-size <category>`, which names the
