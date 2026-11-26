@@ -316,6 +316,7 @@ test('a recorded drag writes and parses one targets-v1 annotation for both endpo
       action({
         command: 'gesture',
         positionals: ['drag', 'id="source"', 'id="destination"', '800', '500', '0'],
+        flags: { settle: true, settleQuietMs: 25, timeoutMs: 2_000 },
         targetEvidences: {
           source: { ...evidence, id: 'source' },
           destination: { ...evidence, id: 'destination' },
@@ -326,6 +327,7 @@ test('a recorded drag writes and parses one targets-v1 annotation for both endpo
 
   const { script, parsed } = writeAndParse(writer, session);
   expect(script.match(/agent-device:targets-v1/g)).toHaveLength(1);
+  expect(parsed.actions[0]?.flags).toEqual({});
   expect(parsed.actions[0]?.targetEvidences).toEqual({
     source: { ...evidence, id: 'source' },
     destination: { ...evidence, id: 'destination' },

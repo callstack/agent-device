@@ -17,6 +17,7 @@ Completed process history is in git history.
   The planner does not clamp points, cache the viewport, or distort the requested components.
 - Android touch execution never falls back to `adb input swipe`.
 - On Android, gestures do not stop or restart the snapshot session.
+- If `--settle` is set, wait for a quiet tree after the final repetition succeeds. Keep the completed action result if observation fails.
 - Keep the positional `.ad` codec. One `PUBLIC_GESTURE_SYNTAX` table defines argument arity for the CLI argv parse and the `.ad` line parse.
 - For repeated coordinate swipes, the combined planned gesture and pause schedule must fit within 60 seconds.
 - `gesture tap` holds 2 to 5 stationary contacts; the motion intents keep exactly two (amended 2026-10).
@@ -270,6 +271,12 @@ ADR 0011's coordinate path remains unchanged.
 Coordinate-authored gestures do not resolve selectors or refs and therefore cannot claim element-targeting guarantees.
 Before it enters the coordinate gesture executor, target-authored drag explicitly runs the shared selector/ref resolution preflight.
 Its endpoint resolution and recording contracts are tested at that composition seam.
+
+### Settle after gesture execution
+
+With `--settle`, take the comparison baseline from the last observed session tree before dispatch. Start the quiet wait after the final successful repetition and record the gesture before the wait. Reuse the gesture's admitted capture binding under [ADR 0019](0019-request-bound-platform-runtime.md).
+
+If observation returns an inconclusive verdict, include it with the completed action result. If observation throws, return the completed action result without a settle field. Issue refs only from a committed settle diff under [ADR 0014](0014-session-ref-frame-lifetime.md).
 
 ## Consequences
 

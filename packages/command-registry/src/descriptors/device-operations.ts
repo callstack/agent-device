@@ -408,7 +408,8 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       // R52 retires this command's capability bucket: admission is the owner's gesture-tier facts,
       // which the retired `requireGestureSupported` used to decide inside the daemon. The declared
       // uses are the four tiers one gesture input can select between (ADR 0019 §9).
-      timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+      timeoutPolicy: postActionObservationTimeoutPolicy('gesture', DEFAULT_TIMEOUT_POLICY),
+      postActionObservation: postActionObservation('gesture'),
       batchable: true,
       compositeResource: 'none',
       platformExecution: { kind: 'device-runtime', uses: gestureRuntimePlanUses },
@@ -510,7 +511,8 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       },
       // R54 retires this command's capability bucket. A swipe always normalizes to a coordinate
       // fling, so it declares only the one-contact plan it can select.
-      timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+      timeoutPolicy: postActionObservationTimeoutPolicy('swipe', DEFAULT_TIMEOUT_POLICY),
+      postActionObservation: postActionObservation('swipe'),
       batchable: true,
       compositeResource: 'none',
       platformExecution: { kind: 'device-runtime', uses: swipeRuntimePlanUses },

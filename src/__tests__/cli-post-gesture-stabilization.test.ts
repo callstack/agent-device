@@ -91,3 +91,22 @@ test('a repository config cannot switch the stabilization off for whoever runs i
   );
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test.each([
+  ['swipe', SWIPE],
+  ['gesture swipe', GESTURE_SWIPE],
+  ['gesture tap', ['gesture', 'tap', '10', '20', '30', '40']],
+] as const)('%s forwards settle observation flags', async (_name, argv) => {
+  const result = await runCliCapture([
+    ...argv,
+    '--settle',
+    '--settle-quiet',
+    '25',
+    '--timeout',
+    '900',
+  ]);
+  assert.equal(result.code, null);
+  assert.equal(result.calls[0]?.flags?.settle, true);
+  assert.equal(result.calls[0]?.flags?.settleQuietMs, 25);
+  assert.equal(result.calls[0]?.flags?.timeoutMs, 900);
+});

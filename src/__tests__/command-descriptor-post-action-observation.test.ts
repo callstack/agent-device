@@ -47,6 +47,8 @@ const SETTLE_OBSERVATION_COMMANDS = [
   PUBLIC_COMMANDS.hover,
   PUBLIC_COMMANDS.press,
   PUBLIC_COMMANDS.scroll,
+  PUBLIC_COMMANDS.swipe,
+  PUBLIC_COMMANDS.gesture,
   PUBLIC_COMMANDS.back,
 ] as const;
 
@@ -65,6 +67,8 @@ const SETTLE_READER_POSITIONALS: Record<string, string[]> = {
   [PUBLIC_COMMANDS.hover]: ['10', '20'],
   [PUBLIC_COMMANDS.fill]: ['10', '20', 'hello'],
   [PUBLIC_COMMANDS.scroll]: ['down'],
+  [PUBLIC_COMMANDS.swipe]: ['30', '40', '50', '60'],
+  [PUBLIC_COMMANDS.gesture]: ['swipe', 'left'],
   [PUBLIC_COMMANDS.back]: [],
 };
 
@@ -143,7 +147,6 @@ test('post-action observation CLI reader input follows descriptor traits', () =>
   const nonSettleReaders: Array<[CommandName, string[]]> = [
     [PUBLIC_COMMANDS.home, []],
     [PUBLIC_COMMANDS.type, ['hi']],
-    [PUBLIC_COMMANDS.swipe, ['30', '40', '50', '60']],
   ];
   for (const [command, positionals] of nonSettleReaders) {
     const input = readInputFromCli(command, positionals, SETTLE_FLAGS_SNAPSHOT);
@@ -208,7 +211,7 @@ test('post-action observation session-event safe flags follow descriptor traits'
       `${command}: session event must disclose the settle quiet window`,
     );
   }
-  for (const command of [PUBLIC_COMMANDS.type, PUBLIC_COMMANDS.swipe]) {
+  for (const command of [PUBLIC_COMMANDS.type, PUBLIC_COMMANDS.home]) {
     const details = buildActionDetails(actionWithSettleFlags(command));
     const flags = (details.flags ?? {}) as Record<string, unknown>;
     assert.equal(
@@ -266,6 +269,8 @@ const COMPILE_TIME_CLIENT_OPTION_COVERAGE: SettleCapableClientOptionCommands = [
   'hover',
   'fill',
   'scroll',
+  'swipe',
+  'gesture',
   'back',
 ];
 
