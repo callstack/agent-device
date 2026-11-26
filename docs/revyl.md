@@ -114,7 +114,7 @@ report a refused command as a success:
 - `swipe` and `gesture` refuse. Use `scroll`, which plans the path itself and sends one drag.
 - `keyboard`, `clipboard`, `alert`, `fold`, `telephony`, and `tv-remote` are not supported.
 - The other `settings` refuse: `wifi`, `airplane`, `mobile-data`, `bluetooth`, `animations`,
-  `text-size`, `faceid`, `touchid`, and `fingerprint`. Revyl's devices refuse airplane mode, and the
+  `text-size`, `timezone`, `faceid`, `touchid`, and `fingerprint`. Revyl's devices refuse airplane mode, and the
   worker has no action for the rest.
 - `reinstall` refuses, as described above.
 - `uninstall`, `apps`, `push`, `logs`, `network dump`, `artifacts`, and `recordings` are not
