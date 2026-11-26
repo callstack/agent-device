@@ -36,7 +36,7 @@ const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
   'Wait for Android to recover, close the dialog, restart the app, or reboot the emulator, then retry.';
 const ANDROID_FOREIGN_DIALOG_HINT =
-  "Press one of the dialog's buttons (Close app or Wait), or run `alert dismiss`, then retry. Every other input is refused while the dialog has focus.";
+  "Press one of the dialog's buttons (Close app or Wait), then retry. Every other input is refused while the dialog has focus.";
 const ANDROID_BLOCKING_DIALOG_INSPECTION_WARNING =
   'Android blocking-dialog readiness could not be inspected; the command continued.';
 const ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT = 240;
