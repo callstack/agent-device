@@ -8,13 +8,22 @@ import { withFakeAdb, type FakeAdbResponse } from './test-utils/fake-adb.ts';
  * whose `auto_time_zone` row starts at `initialAutoTimeZone` and holds whatever is written to it.
  */
 function timeZoneDevice(
-  options: { honor?: boolean; known?: boolean; initialAutoTimeZone?: string } = {},
+  options: {
+    honor?: boolean;
+    known?: boolean;
+    dropReadBack?: boolean;
+    initialAutoTimeZone?: string;
+  } = {},
 ) {
   let zone = 'America/Los_Angeles';
   const state = { autoTimeZone: options.initialAutoTimeZone ?? '1' };
   const script = (args: string[]): FakeAdbResponse => {
     const flat = args.join(' ');
-    if (flat === 'shell getprop persist.sys.timezone') return `${zone}\n`;
+    if (flat === 'shell getprop persist.sys.timezone') {
+      if (options.dropReadBack && zone !== 'America/Los_Angeles')
+        return new Error('device offline');
+      return `${zone}\n`;
+    }
     if (flat === 'shell settings get global auto_time_zone') return `${state.autoTimeZone}\n`;
     const auto = /^shell settings put global auto_time_zone ([01])$/.exec(flat);
     if (auto) {
@@ -46,6 +55,7 @@ test('settings timezone turns automatic time zone off, then sets and reads back 
     });
     const flat = calls.map((args) => args.join(' '));
     expect(flat).toContain('shell settings put global auto_time_zone 0');
+    expect(flat).not.toContain('shell settings put global auto_time_zone 1');
     expect(flat.indexOf('shell settings put global auto_time_zone 0')).toBeLessThan(
       flat.indexOf('shell cmd alarm set-timezone Asia/Kolkata'),
     );
@@ -76,6 +86,7 @@ test('settings timezone reset turns automatic time zone back on without naming a
     });
     const flat = calls.map((args) => args.join(' '));
     expect(flat).toContain('shell settings put global auto_time_zone 1');
+    expect(flat).not.toContain('shell settings put global auto_time_zone 0');
     expect(flat.some((args) => args.includes('set-timezone'))).toBe(false);
   });
 });
@@ -100,6 +111,14 @@ test.each([
     });
   },
 );
+
+test('settings timezone puts automatic time zone back when the read-back connection drops', async () => {
+  const fake = timeZoneDevice({ dropReadBack: true });
+  await withFakeAdb(fake, async ({ device }) => {
+    await expect(setAndroidSetting(device, 'timezone', 'Asia/Kolkata')).rejects.toThrow();
+    expect(fake.state.autoTimeZone).toBe('1');
+  });
+});
 
 test('settings timezone keeps automatic time zone off on failure when it was already off', async () => {
   const fake = timeZoneDevice({ honor: false, initialAutoTimeZone: '0' });

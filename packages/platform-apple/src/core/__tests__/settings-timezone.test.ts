@@ -55,6 +55,16 @@ test('settings timezone sets TZ in the simulator launchd and reset unsets it', a
   });
 });
 
+test('a zone the host time zone database lacks is refused before launchctl runs', async () => {
+  await withFakeAppleTool(simulator(), async ({ calls }) => {
+    await expect(set('Mars/Olympus_Mons')).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'time-zone-unknown-to-simulator', dispatched: 'no' },
+    });
+    expect(spawnedWrites(calls)).toEqual([]);
+  });
+});
+
 test('a failed launchctl setenv fails the setting with the simctl output', async () => {
   const script = (args: string[]): FakeAppleToolResponse =>
     args.includes('setenv') ? { stderr: 'launchd unavailable', exitCode: 1 } : simulator()(args);

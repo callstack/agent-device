@@ -1,7 +1,17 @@
 import { SETTING_RESET_STATE } from '@agent-device/contracts/settings-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
+import { hostFileExistsSync } from '@agent-device/host-kit/host-file';
 import { runSimctlForDevice } from './simctl-execution.ts';
+
+const IOS_TIME_ZONE_REASONS = {
+  // The Mac's time zone database, which simulator processes read, has no file for the zone.
+  timeZoneUnknown: { reason: 'time-zone-unknown-to-simulator' },
+} as const satisfies ReasonTable<'settings'>;
+
+// Simulator processes resolve `TZ` against the host's database: the runtime ships no zoneinfo.
+const HOST_ZONEINFO_DIRECTORY = '/usr/share/zoneinfo';
 
 /**
  * The simulator has no time zone of its own: its apps take the host Mac's unless their environment
@@ -13,6 +23,14 @@ export async function setIosTimeZone(
   state: string,
 ): Promise<Record<string, unknown>> {
   const timeZone = state === SETTING_RESET_STATE ? undefined : state;
+  // `launchctl setenv` takes any string, and an app falls back to UTC for a zone it cannot load.
+  if (timeZone !== undefined && !hostFileExistsSync(`${HOST_ZONEINFO_DIRECTORY}/${timeZone}`)) {
+    throw new AppError('COMMAND_FAILED', `The simulator has no time zone data for ${timeZone}.`, {
+      reason: IOS_TIME_ZONE_REASONS.timeZoneUnknown.reason,
+      dispatched: 'no',
+      timeZone,
+    });
+  }
   const previousTimeZone = await readLaunchdTimeZone(device);
   await runSimctlChecked(
     device,

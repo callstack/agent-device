@@ -34,6 +34,7 @@ async function assertTimeZoneRoundTrip(context: LiveContext): Promise<void> {
     'timezone',
     'reset',
   ]);
+  assert.equal(zoneReset.json?.data?.timeZone, null, JSON.stringify(zoneReset.json));
   assert.equal(zoneReset.json?.data?.autoTimeZone, true, JSON.stringify(zoneReset.json));
   verifyCommand(context, C.settings, 'time zone set and reset report what they changed');
 }

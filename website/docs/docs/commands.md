@@ -1806,8 +1806,8 @@ Time zone:
 
 - `settings timezone <iana-zone>` sets the time zone on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous time zone as `previousTimeZone`.
 - Pass an IANA time zone name such as `Asia/Kolkata` or `America/New_York`; offsets and unknown names are refused with `INVALID_ARGS` before anything changes.
-- On iOS simulators, `settings timezone` sets `TZ` in simulator `launchd`: it applies only to apps launched afterwards (run `open <app> --relaunch` for a running app), is lost when the simulator reboots, and leaves the status bar on the Mac's time. `settings timezone reset` gives newly launched apps the Mac's time zone again.
-- On Android devices and emulators, running apps and the status bar take the new time zone at once. `settings timezone` turns automatic time zone off and verifies `persist.sys.timezone` (failing with `time-zone-not-applied` and restoring automatic time zone if the device kept another zone). `settings timezone reset` turns automatic time zone back on and reports `timeZone: null`, because the device applies the network zone a moment later.
+- On iOS simulators, `settings timezone` sets `TZ` in simulator `launchd`: it applies only to apps launched afterwards (run `open <app> --relaunch` for a running app), is lost when the simulator reboots, and leaves the status bar on the Mac's time. A zone missing from the Mac's time zone database, which simulator apps read, fails with `time-zone-unknown-to-simulator` before anything changes. `settings timezone reset` gives newly launched apps the Mac's time zone again.
+- On Android devices and emulators, running apps and the status bar take the new time zone at once. `settings timezone` turns automatic time zone off and verifies `persist.sys.timezone` (failing with `time-zone-not-applied` if the device kept another zone; any failure puts the previous automatic time zone setting back). `settings timezone reset` turns automatic time zone back on and reports `timeZone: null`, because the device applies the network zone a moment later.
 
 Biometrics:
 

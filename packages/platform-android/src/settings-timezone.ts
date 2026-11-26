@@ -28,12 +28,27 @@ export async function setAndroidTimeZone(
   }
   const previousAutoTimeZone = await readAndroidAutoTimeZone(device);
   await writeAndroidAutoTimeZone(device, '0');
+  try {
+    return await applyAndroidTimeZone(device, requested, previousTimeZone, previousAutoTimeZone);
+  } catch (error) {
+    // Every failure once automatic time zone is off, an adb transport error included, puts the
+    // stored value back. A failed restore must not hide the error that caused it.
+    await writeAndroidAutoTimeZone(device, previousAutoTimeZone).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function applyAndroidTimeZone(
+  device: DeviceInfo,
+  requested: string,
+  previousTimeZone: string,
+  previousAutoTimeZone: string,
+): Promise<Record<string, unknown>> {
   const result = await runAndroidShell(device, ['cmd', 'alarm', 'set-timezone', requested], {
     allowFailure: true,
   });
   // The alarm shell prints the exception and exits non-zero for a zone the device does not know.
   if (result.exitCode !== 0) {
-    await writeAndroidAutoTimeZone(device, previousAutoTimeZone);
     throw discloseDispatch(
       androidAdbResultError('Failed to set the Android time zone', result, {
         timeZone: requested,
@@ -44,7 +59,6 @@ export async function setAndroidTimeZone(
   }
   const timeZone = await readAndroidTimeZone(device);
   if (timeZone !== requested) {
-    await writeAndroidAutoTimeZone(device, previousAutoTimeZone);
     throw new AppError('COMMAND_FAILED', `Android kept the time zone ${timeZone || '(empty)'}.`, {
       reason: ANDROID_TIME_ZONE_REASONS.timeZoneNotApplied.reason,
       dispatched: 'unknown',

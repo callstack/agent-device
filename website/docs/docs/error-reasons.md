@@ -378,6 +378,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `time-zone-not-applied` | `persist.sys.timezone` did not hold the requested zone after `cmd alarm set-timezone`. |
 | `setting_app_not_package` | The named app resolves to an intent such as `settings`, not to an installed package. |
 | `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |
+| `time-zone-unknown-to-simulator` | The Mac's time zone database, which simulator processes read, has no file for the zone. |
 | `ios-notification-permission-unsupported` | iOS simulator notification prompts must be answered with `alert accept` or `alert dismiss`. |
 
 ### `shake`
