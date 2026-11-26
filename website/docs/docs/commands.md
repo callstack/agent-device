@@ -1755,7 +1755,7 @@ agent-device trigger-app-event screenshot_taken '{"source":"qa"}'
 Change OS settings and app permissions.
 
 ```bash
-agent-device settings <wifi|bluetooth|airplane|mobile-data|keep-awake|location|animations> <on|off> | settings location set <lat> <lon> | settings appearance <light|dark|toggle> | settings text-size [extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large] | settings <faceid|touchid> <match|nonmatch|enroll|unenroll> | settings fingerprint <match|nonmatch> | settings clear-app-state [app-id] | settings reset-keychain clear | settings permission <grant|deny|reset> <all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> | settings permission <grant|deny|reset> photos [full|limited] | settings permission <grant|reset> <accessibility|screen-recording|input-monitoring> [--app <id-or-name>]
+agent-device settings <wifi|bluetooth|airplane|mobile-data|keep-awake|location|animations> <on|off> | settings location set <lat> <lon> | settings appearance <light|dark|toggle> | settings text-size [extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large] | settings timezone <iana-zone|reset> | settings <faceid|touchid> <match|nonmatch|enroll|unenroll> | settings fingerprint <match|nonmatch> | settings clear-app-state [app-id] | settings reset-keychain clear | settings permission <grant|deny|reset> <all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> | settings permission <grant|deny|reset> photos [full|limited] | settings permission <grant|reset> <accessibility|screen-recording|input-monitoring> [--app <id-or-name>]
 ```
 
 | Option | What it does |
@@ -1774,6 +1774,7 @@ agent-device settings mobile-data off
 agent-device settings location set 37.3349 -122.009
 agent-device settings animations off
 agent-device settings text-size accessibility-extra-large
+agent-device settings timezone Asia/Kolkata
 agent-device settings appearance dark
 agent-device settings faceid match
 agent-device settings fingerprint nonmatch
@@ -1801,6 +1802,13 @@ Device settings:
 - Pair `settings mobile-data on` with `settings wifi off` to move a session, such as a video stream, from Wi-Fi to cellular. On a multi-SIM device, or one without an active SIM, the command can fail even when the switch took effect.
 - `settings text-size` without a category reads the current size. It works on iPhone and iPad simulators and on Android. A running app picks up a new size only after `open <app> --relaunch`.
 
+Time zone:
+
+- `settings timezone <iana-zone>` sets the time zone on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous time zone as `previousTimeZone`.
+- Pass an IANA time zone name such as `Asia/Kolkata` or `America/New_York`; offsets and unknown names are refused with `INVALID_ARGS` before anything changes.
+- On iOS simulators, `settings timezone` sets `TZ` in simulator `launchd`: it applies only to apps launched afterwards (run `open <app> --relaunch` for a running app), is lost when the simulator reboots, and leaves the status bar on the Mac's time. `settings timezone reset` gives newly launched apps the Mac's time zone again.
+- On Android devices and emulators, running apps and the status bar take the new time zone at once. `settings timezone` turns automatic time zone off and verifies `persist.sys.timezone` (failing with `time-zone-not-applied` and restoring automatic time zone if the device kept another zone). `settings timezone reset` turns automatic time zone back on and reports `timeZone: null`, because the device applies the network zone a moment later.
+
 Biometrics:
 
 - `faceid` and `touchid` work on iPhone and iPad simulators. `fingerprint` works on Android emulators and on devices that have `cmd fingerprint`.
@@ -1815,7 +1823,7 @@ App state:
 Permissions:
 
 - On iOS and Android, `permission` applies to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. `--app` counts only on the command line; `AGENT_DEVICE_TARGET_APP` never retargets a settings change.
-- Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, or `bluetooth` takes no app).
+- Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, `bluetooth`, or `timezone` takes no app).
 - On iOS simulators, targeting `notifications` with `grant`, `deny`, or `reset` returns `ios-notification-permission-unsupported`. Use `alert accept` or `alert dismiss` to answer the notification prompt.
 - On iOS simulators, the simulator decides which other permissions it can change and refuses the rest. `grant all` skips a refused service with a warning.
 - On Android, a permission group applies only the permissions the app declares. `full|limited` applies only to iOS `photos`.
