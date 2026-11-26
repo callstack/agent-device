@@ -518,3 +518,17 @@ test('a press on a System UI ANR dialog button is refused when the dialog loses 
   });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
+
+test('a press on a System UI ANR dialog button waits for the dialog focus to clear', async () => {
+  // Android removes the dialog window asynchronously: the first reads after the tap still show it.
+  const response = await pressWithSystemUiAnr(
+    ['@e2'],
+    {},
+    {
+      afterTap: (read) => (read < 2 ? SYSTEM_UI_ANR : { status: 'clear' }),
+    },
+  );
+
+  expect(response).toMatchObject({ ok: true });
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
+});
