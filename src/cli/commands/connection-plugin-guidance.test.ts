@@ -96,26 +96,63 @@ test('connect keeps an unknown provider separate from a known missing plugin', a
   assert.doesNotMatch(error.hint, /plugins add/);
 });
 
-test('connect reports a failed selected plugin even when its error text describes a missing plugin', async () => {
+test.each([
+  ['0.22.0', 'Reinstall it with agent-device plugins update @agent-device/testmu.'],
+  [
+    '0.22.0-dev',
+    'To choose a release, run agent-device plugins add @agent-device/testmu@nightly-0.22.',
+  ],
+  ['0.0.0', 'Use an explicit package version or tag to reinstall it.'],
+])(
+  'connect reports a failed unpinned registry plugin on CLI version %s',
+  async (coreVersion, recovery) => {
+    vi.mocked(readVersion).mockReturnValue(coreVersion);
+    const { home, env } = pluginHome();
+    selectPlugin(
+      home,
+      '@agent-device/testmu',
+      'throw new Error("TestMu AI requires the @agent-device/testmu plugin.");',
+    );
+    const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
+      cwd: home,
+      env,
+      stateDirPrefix: 'connect-broken-plugin-',
+    });
+    assert.equal(result.code, 1);
+    assert.deepEqual(result.calls, []);
+    const { error } = JSON.parse(result.stdout);
+    assert.equal(error.details.reason, 'plugin-unavailable');
+    assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
+    assert.equal(error.details.installCommand, undefined);
+    assert.match(error.hint, /plugins list --json/);
+    assert.ok(error.hint.includes(recovery));
+    assert.doesNotMatch(error.hint, /keep its version selector/);
+    if (coreVersion !== '0.22.0') assert.doesNotMatch(error.hint, /plugins update/);
+  },
+);
+
+test('connect keeps configuration guidance for an unavailable local plugin archive', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(
-    home,
-    '@agent-device/testmu',
-    'throw new Error("TestMu AI requires the @agent-device/testmu plugin.");',
-  );
+  selectPlugin(home, '@agent-device/testmu', 'throw new Error("Plugin failed to load.");');
+  const configPath = path.join(home, 'config.json');
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  config.plugins['@agent-device/testmu'].artifact = {
+    integrity: `sha512-${'A'.repeat(86)}==`,
+    version: '2.0.0',
+  };
+  fs.writeFileSync(configPath, JSON.stringify(config));
+
   const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
     cwd: home,
     env,
-    stateDirPrefix: 'connect-broken-plugin-',
+    stateDirPrefix: 'connect-broken-plugin-archive-',
   });
   assert.equal(result.code, 1);
   assert.deepEqual(result.calls, []);
   const { error } = JSON.parse(result.stdout);
   assert.equal(error.details.reason, 'plugin-unavailable');
-  assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
-  assert.equal(error.details.installCommand, undefined);
   assert.match(error.hint, /plugins list --json/);
-  assert.match(error.hint, /plugins add @agent-device\/testmu@nightly-0.22/);
+  assert.doesNotMatch(error.hint, /plugins (?:update|add)/);
 });
 
 test('connect does not call a selected plugin missing when it has no connection callbacks', async () => {
@@ -157,11 +194,15 @@ test('a 0.22 nightly core prescribes the matching channel plugin release', async
   assert.ok(help?.includes(`${error.details.installCommand}\n`));
 });
 
-test('a main-channel 0.22 nightly repairs a failed BrowserStack selection with the matching release', async () => {
+test('connect recommends a pin-preserving repair for a failed BrowserStack selection', async () => {
   const version = '0.22.0-nightly.20261118.186';
   vi.mocked(readVersion).mockReturnValue(version);
   const { home, env } = pluginHome();
   selectPlugin(home, '@agent-device/browserstack', 'throw new Error("Plugin failed to load.");');
+  const configPath = path.join(home, 'config.json');
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  config.plugins['@agent-device/browserstack'].version = '0.22.0-nightly.20261117.185';
+  fs.writeFileSync(configPath, JSON.stringify(config));
   const result = await runCliCapture(
     ['connect', 'browserstack', '--platform', 'android', '--session', 'checkout', '--json'],
     { cwd: home, env, stateDirPrefix: 'connect-nightly-broken-browserstack-' },
@@ -170,7 +211,16 @@ test('a main-channel 0.22 nightly repairs a failed BrowserStack selection with t
   assert.deepEqual(result.calls, []);
   const { error } = JSON.parse(result.stdout);
   assert.equal(error.details.reason, 'plugin-unavailable');
-  assert.ok(error.hint.includes('plugins add @agent-device/browserstack'));
+  assert.ok(
+    error.hint.includes(
+      'Reinstall it with agent-device plugins update @agent-device/browserstack to keep its version selector.',
+    ),
+  );
+  assert.ok(
+    error.hint.includes(
+      'To replace its selector with the CLI-matched release (0.22.0-nightly.20261118.186), run agent-device plugins add @agent-device/browserstack.',
+    ),
+  );
 });
 
 test('a stable core prescribes the plain package for the same plugin', async () => {
@@ -215,6 +265,7 @@ test('connect reports an unreadable plugin selection instead of prescribing a ne
   assert.equal(error.details.reason, 'plugin-unavailable');
   assert.match(error.details.failedPlugins[0].error.message, /Plugin config/);
   assert.equal(error.details.installCommand, undefined);
+  assert.doesNotMatch(error.hint, /plugins (add|update)/);
 });
 
 test.each([

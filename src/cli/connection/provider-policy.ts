@@ -7,7 +7,13 @@ import {
   pluginConnectionNames,
   primePluginConnections,
 } from '@agent-device/plugins/connection';
-import { pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
+import {
+  firstPartyPluginVersion,
+  pluginInstallCommand,
+  pluginInstallationHint,
+  type PluginReleaseDeclaration,
+} from '@agent-device/contracts/plugin-installation';
+import { readRegistryPluginSelection } from '@agent-device/plugins/store';
 import { readVersion } from '@agent-device/host-kit/version';
 import { AppError, PLUGIN_INSTALLATION_REASONS } from '@agent-device/kernel/errors';
 import {
@@ -15,7 +21,6 @@ import {
   providerPluginAdmission,
   providerPluginConnectionCapabilities,
 } from '@agent-device/contracts/provider-plugin-catalog';
-import { providerPluginInstallCommand } from '../../commands/provider-plugin-catalog.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
 export type ConnectProvider = string;
@@ -181,12 +186,19 @@ function unavailableConnectPluginError(
     (entry) => entry === selected || entry.package === undefined,
   );
   if (selected || failures.length > 0) {
+    const registrySelection =
+      selected?.source === 'store' && selected.package === declaration.package
+        ? readRegistryPluginSelection(env, declaration.package)
+        : undefined;
+    const repair = registrySelection
+      ? registryPluginRecoveryHint(declaration, registrySelection.version, readVersion())
+      : '';
     return new AppError('UNSUPPORTED_OPERATION', `${declaration.label} plugin is unavailable.`, {
       reason: PLUGIN_INSTALLATION_REASONS.unavailable.reason,
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run ${providerPluginInstallCommand(declaration)}, then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin and fix its configuration.${repair} Then retry your original command.`,
     });
   }
   return new AppError(
@@ -199,6 +211,26 @@ function unavailableConnectPluginError(
       ...pluginInstallationHint(declaration, readVersion()),
     },
   );
+}
+
+function registryPluginRecoveryHint(
+  declaration: PluginReleaseDeclaration,
+  selector: string | undefined,
+  coreVersion: string,
+): string {
+  const matchedVersion = firstPartyPluginVersion(coreVersion);
+  const update = ` Reinstall it with agent-device plugins update ${declaration.package}`;
+  if (selector === undefined) {
+    if (matchedVersion) return `${update}.`;
+    const install = pluginInstallCommand(declaration, coreVersion);
+    return install.endsWith(` ${declaration.package}`)
+      ? ' Use an explicit package version or tag to reinstall it.'
+      : ` To choose a release, run ${install}.`;
+  }
+
+  const preserve = `${update} to keep its version selector.`;
+  if (!matchedVersion || selector === matchedVersion) return preserve;
+  return `${preserve} To replace its selector with the CLI-matched release (${matchedVersion}), run ${pluginInstallCommand(declaration, coreVersion)}.`;
 }
 
 /**
