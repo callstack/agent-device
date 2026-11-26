@@ -21,7 +21,7 @@ import {
 } from '../../resources/artifact-tracking.ts';
 import { expectOkData } from '../__tests__/replay-suite/session-test-suite.fixtures.ts';
 
-test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
+test.each(['complete', 'missing sidecar', 'copy failure', 'close failure'] as const)(
   'a remote suite preserves the timed-out attempt outcome when recording cleanup reports %s',
   async (outcome) => {
     await getReplayExecution();
@@ -49,6 +49,13 @@ test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
         if (outcome !== 'missing sidecar') fs.writeFileSync(telemetryPath, '{}');
         return { ...finished, result: { ...finished.result, telemetryPath } };
       });
+    const platformResourceCleanup = platformResourceCleanupFixture();
+    const closeFailed = outcome === 'close failure';
+    if (closeFailed) {
+      platformResourceCleanup.stopSnapshotHelper.mockRejectedValue(
+        new Error('Helper stop failed.'),
+      );
+    }
     const tenantId = 'recording-suite';
     const clientRoot = path.join(root, 'client');
     const copy = fs.promises.copyFile;
@@ -68,7 +75,7 @@ test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
         host: createTestHostEnvironment({ cwd: root, env: {} }),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
-        platformResourceCleanup: platformResourceCleanupFixture(),
+        platformResourceCleanup,
         req: {
           token: 'fixture',
           session: 'suite',
@@ -130,7 +137,7 @@ test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
       const archiveRecording = archiveFiles.find((file) => path.basename(file) === 'recording.mp4');
       const inventory = await listDownloadableArtifacts({ tenantId }, {});
       try {
-        expect(inventoryAtCopy).toEqual(outcome === 'missing sidecar' ? [] : [[]]);
+        expect(inventoryAtCopy).toEqual(outcome === 'missing sidecar' || closeFailed ? [] : [[]]);
         const output = inventory.find((artifact) => artifact.artifactType === 'screen-recording');
         if (outcome !== 'complete') {
           expect(runtime.forceCleanup).not.toHaveBeenCalled();
@@ -140,14 +147,18 @@ test.each(['complete', 'missing sidecar', 'copy failure'] as const)(
           expect(data.failures).toMatchObject([
             {
               error: { details: { reason: 'timeout' } },
-              warnings: [
-                'Could not include the recording in the suite archive. Check the daemon host for the recording files.',
-              ],
+              ...(closeFailed
+                ? { infrastructure: true }
+                : {
+                    warnings: [
+                      'Could not include the recording in the suite archive. Check the daemon host for the recording files.',
+                    ],
+                  }),
             },
           ]);
-          expect(
-            (data.failures as Array<{ infrastructure?: true }>)[0]!.infrastructure,
-          ).toBeUndefined();
+          expect((data.failures as Array<{ infrastructure?: true }>)[0]!.infrastructure).toBe(
+            closeFailed ? true : undefined,
+          );
         } else {
           expect(runtime.forceCleanup).not.toHaveBeenCalled();
           expect(output?.id).toBeTypeOf('string');

@@ -272,31 +272,28 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
           );
         }
       };
-      let warnings: readonly string[] = [];
-      try {
-        warnings = await closeWithRetry();
-      } finally {
-        // Detached cleanup can close the session after the archive has already been published.
-        if (
-          closingRef &&
-          artifactPaths &&
-          video &&
-          req.flags?.recordVideo &&
-          (req.internal?.publicNetworkOnly || req.meta?.clientArtifactPaths?.artifactsDir)
-        ) {
-          const { collectSuiteRecordingOutputs } = await import('../recording-outputs.ts');
-          const outputs = await collectSuiteRecordingOutputs(sessionStore, closingRef);
-          if (outputs === null) {
-            warnings = [
-              ...warnings,
-              'Could not include the recording in the suite archive. Check the daemon host for the recording files.',
-            ];
-          }
-          for (const output of outputs ?? []) {
-            if (output.path) artifactPaths.add(output.path);
-            recordingOutputs.set(output.artifactId ?? output.path!, output);
-          }
-        }
+      const warnings = await closeWithRetry();
+      // Detached cleanup can close the session after the archive has already been published.
+      if (
+        !closingRef ||
+        !artifactPaths ||
+        !video ||
+        !req.flags?.recordVideo ||
+        !(req.internal?.publicNetworkOnly || req.meta?.clientArtifactPaths?.artifactsDir)
+      ) {
+        return warnings;
+      }
+      const { collectSuiteRecordingOutputs } = await import('../recording-outputs.ts');
+      const outputs = await collectSuiteRecordingOutputs(sessionStore, closingRef);
+      if (outputs === null) {
+        return [
+          ...warnings,
+          'Could not include the recording in the suite archive. Check the daemon host for the recording files.',
+        ];
+      }
+      for (const output of outputs) {
+        if (output.path) artifactPaths.add(output.path);
+        recordingOutputs.set(output.artifactId ?? output.path!, output);
       }
       return warnings;
     },
