@@ -100,10 +100,11 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   await assertElementText(context, 'id="automation-appearance"', 'dark');
   await runStep(context, 'restore light appearance', ['settings', 'appearance', 'light']);
   await assertElementText(context, 'id="automation-appearance"', 'light');
+  await assertTimeZoneRoundTrip(context);
   verifyCommand(
     context,
     C.settings,
-    'permission reset/deny/grant and appearance dark/light all produce durable evidence',
+    'permission reset/deny/grant, appearance dark/light, and time zone set/reset all produce durable evidence',
   );
 
   // XCUIDevice models physical device orientation, which is intentionally not
@@ -340,4 +341,20 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
 function appleCaptureCount(result: { json?: any }): number {
   const backends = result.json?.data?.snapshotDiagnostics?.stats?.backends ?? {};
   return Number(backends['apple-runner'] ?? 0) + Number(backends['simulator-ax-bridge'] ?? 0);
+}
+
+/** Each write reports what it set, and reset reports what it cleared. */
+async function assertTimeZoneRoundTrip(context: LiveContext): Promise<void> {
+  const zone = await runStep(context, 'set Asia/Kolkata time zone', [
+    'settings',
+    'timezone',
+    'Asia/Kolkata',
+  ]);
+  assert.equal(zone.json?.data?.timeZone, 'Asia/Kolkata', JSON.stringify(zone.json));
+  const zoneReset = await runStep(context, 'reset time zone', ['settings', 'timezone', 'reset']);
+  assert.equal(
+    zoneReset.json?.data?.previousTimeZone,
+    'Asia/Kolkata',
+    JSON.stringify(zoneReset.json),
+  );
 }
