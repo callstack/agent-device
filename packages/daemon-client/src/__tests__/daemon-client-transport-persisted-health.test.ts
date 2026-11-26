@@ -426,3 +426,37 @@ test('timeout eviction compares the upstream instance too', async (t) => {
     await closeLoopbackServer(server);
   }
 });
+
+// A command with no budget gives the gate no deadline, so a caller abort must still settle the send
+// at once instead of waiting out a probe that is still in flight.
+test('a caller abort settles a gate that has no budget', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const closed = http.createServer();
+  const port = await listenOnLoopback(closed);
+  await closeLoopbackServer(closed);
+  const controller = new AbortController();
+  await assert.rejects(
+    sendRequest(
+      { token: 'secret', pid: 0, baseUrl: `http://127.0.0.1:${port}` },
+      { token: 'secret', command: 'press', session: 'default', positionals: ['@e1'], flags: {} },
+      'http',
+      resolveDaemonPaths(mkdtempForTestSync('agent-device-remote-gate-unbounded-')),
+      undefined,
+      {
+        host: createTestHostEnvironment(),
+        signal: controller.signal,
+        remoteHealthGate: async (budgetMs) => {
+          assert.equal(budgetMs, undefined);
+          controller.abort();
+          await new Promise(() => {});
+        },
+      },
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
+      assert.equal(error.details?.reason, 'request_canceled');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+});

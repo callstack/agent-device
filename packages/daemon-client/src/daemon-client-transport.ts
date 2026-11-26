@@ -34,6 +34,7 @@ import {
 } from './daemon-client-rpc.ts';
 import {
   abortedRequestError,
+  createRequestGuard,
   handleRequestTimeout,
   handleTransportError,
   refuseAbortedRequest,
@@ -511,7 +512,9 @@ async function resendAfterRemoteHealthGate(
   const requestId = req.meta?.requestId;
   const gateBudgetMs = remainingRemoteRequestTimeoutMs(req, timeoutMs, deadline);
   try {
-    await gate(gateBudgetMs, options.signal);
+    // Settles on the caller's abort even when a probe without a budget is still in flight.
+    const guard = createRequestGuard({ signal: options.signal, requestId });
+    await guard.guard(() => gate(gateBudgetMs, options.signal));
   } catch (error) {
     refuseAbortedRequest(options.signal, requestId);
     throw error;
