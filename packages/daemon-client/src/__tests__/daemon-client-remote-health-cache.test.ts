@@ -61,12 +61,20 @@ test('a probe answer that lands after an invalidation is not cached', async () =
   assert.equal(probes, 1);
 });
 
-// The state dir holds one answer named by a digest of client version, URL and token. It holds neither
-// secret, and any other identity, an unusable answer or an unreadable file reads as a miss.
+/** The persisted entries in `stateDir`, one file per daemon identity. */
+function persistedFiles(stateDir: string): string[] {
+  return fs
+    .readdirSync(stateDir)
+    .filter((name) => name.startsWith('remote-daemon-health-'))
+    .map((name) => path.join(stateDir, name));
+}
+
+// Each identity has its own entry, named by a digest of client version, RPC protocol, URL and token.
+// No entry holds either secret, and any other identity, an unusable answer or an unreadable file
+// reads as a miss.
 test('persisted health is private and reused only by the identity that cached it', () => {
   const stateDir = mkdtempForTestSync('agent-device-remote-health-store-');
   const store = { stateDir, readRecord: readCachedRemoteHealthRecord };
-  const file = path.join(stateDir, 'remote-daemon-health.json');
   const info = { baseUrl: 'http://remote.example.test:7777', token: 'store-secret', pid: 0 };
   const forget = () => invalidateRemoteDaemonHealth(info);
   const reuse = (identity: typeof info) => {
@@ -75,9 +83,11 @@ test('persisted health is private and reused only by the identity that cached it
   };
 
   cacheRemoteDaemonHealth(info, { reachable: true }, stateDir);
-  assert.equal(fs.existsSync(file), false, 'an answer without an instance is not persisted');
+  assert.deepEqual(persistedFiles(stateDir), [], 'an answer without an instance is not persisted');
 
   cacheRemoteDaemonHealth(info, { ...HEALTHY, statusCode: 200, timedOut: true }, stateDir);
+  const [file] = persistedFiles(stateDir);
+  assert.ok(file, 'the usable answer is persisted');
   const written = fs.readFileSync(file, 'utf8');
   assert.equal(written.includes('store-secret'), false, 'the token is never written');
   assert.equal(written.includes('remote.example.test'), false, 'the URL is never written');
@@ -95,10 +105,17 @@ test('persisted health is private and reused only by the identity that cached it
   assert.equal(reuse(info), undefined, 'another RPC protocol probes again');
   rpcProtocol.current = 3;
 
-  invalidateRemoteDaemonHealth({ ...info, token: 'other-token' }, stateDir);
-  assert.equal(fs.existsSync(file), true, 'another identity leaves the entry alone');
+  // Alternating between two daemons keeps both entries.
+  const other = { ...info, token: 'other-token' };
+  cacheRemoteDaemonHealth(other, { reachable: true, instanceId: 'other-instance' }, stateDir);
+  assert.equal(persistedFiles(stateDir).length, 2);
+  assert.equal(reuse(info)?.instanceId, HEALTHY.instanceId);
+  assert.equal(reuse(other)?.instanceId, 'other-instance');
+
+  invalidateRemoteDaemonHealth(other, stateDir);
+  assert.deepEqual(persistedFiles(stateDir), [file], 'another identity leaves the entry alone');
   invalidateRemoteDaemonHealth(info, stateDir);
-  assert.equal(fs.existsSync(file), false);
+  assert.deepEqual(persistedFiles(stateDir), []);
 });
 
 // A shared state dir may hold an entry another user planted. Only a regular file this user owns and
@@ -106,9 +123,10 @@ test('persisted health is private and reused only by the identity that cached it
 test.skipIf(process.platform === 'win32')('a planted persisted entry reads as a miss', () => {
   const stateDir = mkdtempForTestSync('agent-device-remote-health-planted-');
   const store = { stateDir, readRecord: readCachedRemoteHealthRecord };
-  const file = path.join(stateDir, 'remote-daemon-health.json');
   const info = { baseUrl: 'http://remote.example.test:7777', token: 'planted', pid: 0 };
   cacheRemoteDaemonHealth(info, HEALTHY, stateDir);
+  const [file] = persistedFiles(stateDir);
+  assert.ok(file);
   const entry = fs.readFileSync(file);
   const reuse = () => {
     invalidateRemoteDaemonHealth(info);

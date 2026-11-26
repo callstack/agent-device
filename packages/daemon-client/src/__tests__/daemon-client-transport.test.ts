@@ -714,7 +714,11 @@ async function instanceCheckingRemote(
   // What a new CLI process starts with: no health cached in memory, only what the state dir holds.
   const forgetInMemory = () =>
     invalidateRemoteDaemonHealth({ baseUrl, token: 'persisted-secret', pid: 0 });
-  const cacheFile = path.join(stateDir, 'remote-daemon-health.json');
+  // One entry per daemon identity; this remote has one identity, so at most one entry.
+  const cacheFile = (): string | undefined => {
+    const [name] = fs.readdirSync(stateDir).filter((n) => n.startsWith('remote-daemon-health-'));
+    return name ? path.join(stateDir, name) : undefined;
+  };
   return { server, paths, baseUrl, request, forgetInMemory, cacheFile };
 }
 
@@ -730,10 +734,10 @@ test('a later process reuses persisted remote health and still catches a replace
     assert.equal((await remote.request()).ok, true);
     assert.deepEqual(remote.paths, ['GET /health', 'POST /rpc', 'POST /rpc']);
 
-    const persisted = fs.readFileSync(remote.cacheFile, 'utf8');
+    const persisted = fs.readFileSync(remote.cacheFile()!, 'utf8');
     assert.equal(persisted.includes('persisted-secret'), false, 'the token is never written');
     assert.equal(persisted.includes(remote.baseUrl), false, 'the URL is never written');
-    assert.equal(fs.statSync(remote.cacheFile).mode & 0o077, 0, 'only the owner reads it');
+    assert.equal(fs.statSync(remote.cacheFile()!).mode & 0o077, 0, 'only the owner reads it');
 
     instanceId = 'persisted-two';
     remote.forgetInMemory();
@@ -763,7 +767,7 @@ test('an unsent request from cached remote health opens the health gate', async 
     assert.equal(error.details?.dispatched, 'no');
     return true;
   });
-  assert.equal(fs.existsSync(remote.cacheFile), false, 'the unreachable daemon is forgotten');
+  assert.equal(remote.cacheFile(), undefined, 'the unreachable daemon is forgotten');
 });
 
 // Resend evidence is only what this process saw: a daemon error that carries the transport-failure
@@ -817,7 +821,7 @@ test('a remote 5xx drops the persisted health without a resend', async (t) => {
     fail = true;
     remote.forgetInMemory();
     await assert.rejects(remote.request());
-    assert.equal(fs.existsSync(remote.cacheFile), false);
+    assert.equal(remote.cacheFile(), undefined);
     fail = false;
     assert.equal((await remote.request()).ok, true);
     assert.deepEqual(remote.paths, [

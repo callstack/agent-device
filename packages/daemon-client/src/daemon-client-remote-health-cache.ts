@@ -29,11 +29,11 @@ let remoteHealthGeneration = 0;
  * The state-directory copy of the cache, so a CLI process does not pay a `/health` round trip that
  * an earlier process already made. Safe to reuse because every RPC sent from it carries the cached
  * instance preconditions: a replaced daemon or proxy upstream answers 409 before it dispatches, and
- * the client probes again. The file names its daemon by a digest of client version, RPC protocol
- * version, base URL and token, so it never holds the token or URL, and a client upgrade, protocol
- * change or token change reads as a miss.
+ * the client probes again. Each daemon identity has its own file, named by a digest of client
+ * version, RPC protocol version, base URL and token, so no file holds the token or URL, and a client
+ * upgrade, protocol change or token change reads as a miss. Stale files are tiny and never read.
  */
-const PERSISTED_HEALTH_FILE = 'remote-daemon-health.json';
+const PERSISTED_HEALTH_FILE_PREFIX = 'remote-daemon-health-';
 const PERSISTED_HEALTH_MAX_BYTES = 16 * 1024;
 
 function matchesRemoteIdentity(entry: RemoteHealthCacheEntry, info: DaemonInfo): boolean {
@@ -61,8 +61,8 @@ function persistedIdentity(info: DaemonInfo): string {
     .digest('hex');
 }
 
-function persistedHealthPath(stateDir: string): string {
-  return path.join(stateDir, PERSISTED_HEALTH_FILE);
+function persistedHealthPath(stateDir: string, identity: string): string {
+  return path.join(stateDir, `${PERSISTED_HEALTH_FILE_PREFIX}${identity.slice(0, 16)}.json`);
 }
 
 /**
@@ -70,9 +70,12 @@ function persistedHealthPath(stateDir: string): string {
  * user owns and nobody else can write. A link, FIFO or other special file reads as a miss without
  * blocking, and the caller probes `/health` instead.
  */
-function readPersistedEntry(stateDir: string): { identity: unknown; health: unknown } | null {
+function readPersistedEntry(
+  stateDir: string,
+  identity: string,
+): { identity: unknown; health: unknown } | null {
   try {
-    const descriptor = openVerifiedFileForRead(persistedHealthPath(stateDir));
+    const descriptor = openVerifiedFileForRead(persistedHealthPath(stateDir, identity));
     if (descriptor === undefined) return null;
     try {
       const stats = fs.fstatSync(descriptor);
@@ -102,8 +105,10 @@ function readPersistedHealth(
   info: DaemonInfo,
   store: PersistedHealthStore,
 ): RemoteDaemonHealth | undefined {
-  const persisted = readPersistedEntry(store.stateDir);
-  if (!persisted || persisted.identity !== persistedIdentity(info)) return undefined;
+  const identity = persistedIdentity(info);
+  const persisted = readPersistedEntry(store.stateDir, identity);
+  // The file name holds a digest prefix; the full digest inside rules out a prefix collision.
+  if (!persisted || persisted.identity !== identity) return undefined;
   const health: RemoteDaemonHealth = { reachable: true, ...store.readRecord(persisted.health) };
   return isCacheableRemoteHealth(health) ? health : undefined;
 }
@@ -122,11 +127,12 @@ function persistHealth(info: DaemonInfo, health: RemoteDaemonHealth, stateDir: s
     capabilities,
     upstream,
   };
-  const entry = { identity: persistedIdentity(info), health: record };
+  const identity = persistedIdentity(info);
+  const entry = { identity, health: record };
   try {
     fs.mkdirSync(stateDir, { recursive: true });
     publishFileSync({
-      destination: persistedHealthPath(stateDir),
+      destination: persistedHealthPath(stateDir, identity),
       contents: `${JSON.stringify(entry)}\n`,
       mode: 0o600,
     });
@@ -134,9 +140,10 @@ function persistHealth(info: DaemonInfo, health: RemoteDaemonHealth, stateDir: s
 }
 
 function removePersistedHealth(info: DaemonInfo, stateDir: string): void {
-  if (readPersistedEntry(stateDir)?.identity !== persistedIdentity(info)) return;
+  const identity = persistedIdentity(info);
+  if (readPersistedEntry(stateDir, identity)?.identity !== identity) return;
   try {
-    fs.rmSync(persistedHealthPath(stateDir), { force: true });
+    fs.rmSync(persistedHealthPath(stateDir, identity), { force: true });
   } catch {}
 }
 
