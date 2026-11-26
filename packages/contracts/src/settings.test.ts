@@ -8,6 +8,7 @@ import {
   parseSettingsMutation,
   parseSettingState,
   parseTextSizeCategory,
+  parseTimeZoneId,
   readTextSizeCategory,
   settingsAppNotConsumedRefusal,
   settingsAppScope,
@@ -44,6 +45,7 @@ describe('settings usage', () => {
       'settings location set <lat> <lon>',
       'settings appearance <light|dark|toggle>',
       `settings text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`,
+      'settings timezone <iana-zone|reset>',
       'settings <faceid|touchid> <match|nonmatch|enroll|unenroll>',
       'settings fingerprint <match|nonmatch>',
       'settings clear-app-state [app-id]',
@@ -229,6 +231,51 @@ describe('text-size', () => {
   });
 });
 
+describe('timezone', () => {
+  test('a time zone Intl knows passes through as written so device read-back decides', () => {
+    expect(parseSettingsMutation(['Timezone', 'Asia/Kolkata'])).toEqual({
+      setting: 'timezone',
+      state: 'Asia/Kolkata',
+    });
+    expect(parseTimeZoneId('america/new_york')).toBe('america/new_york');
+    expect(parseTimeZoneId(' Etc/GMT+5 ')).toBe('Etc/GMT+5');
+    expect(parseTimeZoneId('Asia/Kolkata')).toBe('Asia/Kolkata');
+    expect(parseTimeZoneId('asia/kolkata')).toBe('asia/kolkata');
+    expect(parseTimeZoneId('US/Pacific')).toBe('US/Pacific');
+    expect(parseTimeZoneId('us/pacific')).toBe('us/pacific');
+  });
+
+  test('an offset or a name the time zone data does not know is refused', () => {
+    for (const value of ['+05:30', 'Mars/Olympus_Mons', 'Asia/', '']) {
+      expectInvalidArgs(() => parseTimeZoneId(value), `Invalid time zone: ${value}.`);
+    }
+  });
+
+  test('reset is a state of its own, and timezone takes exactly one value', () => {
+    expect(parseSettingsMutation(['timezone', 'RESET'])).toEqual({
+      setting: 'timezone',
+      state: 'reset',
+    });
+    expectInvalidArgs(
+      () => parseSettingsMutation(['timezone']),
+      'settings timezone requires a state: <iana-zone|reset>.',
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['timezone', 'Asia/Kolkata', 'extra']),
+      SETTINGS_INVALID_ARGS_MESSAGE,
+    );
+  });
+
+  test('timezone writes answer with the zone set or the reset', () => {
+    expect(describeSettingWrite('timezone', 'Asia/Kolkata', undefined)).toBe(
+      'Time zone set to Asia/Kolkata',
+    );
+    expect(describeSettingWrite('timezone', 'reset', undefined)).toBe(
+      'Time zone reset to the device default',
+    );
+  });
+});
+
 describe('owner parsers', () => {
   test('parsePermissionTarget accepts the mobile targets only', () => {
     expect(parsePermissionTarget(' Camera ')).toBe('camera');
@@ -281,7 +328,13 @@ describe('settingsAppScope', () => {
   });
 });
 
-describe('settingsAppScope device-wide radios', () => {
+describe('settingsAppScope device-wide settings', () => {
+  test('timezone changes the whole device on every mobile family', () => {
+    expect(settingsAppScope('apple', 'timezone', 'reset')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'timezone', 'Asia/Kolkata')).toBe('device-level');
+    expect(settingsAppScope('macos-host', 'timezone', 'reset')).toBe('unknown');
+  });
+
   test.each(['mobile-data', 'keep-awake', 'bluetooth'])(
     '%s switches the whole device wherever it is served',
     (setting) => {

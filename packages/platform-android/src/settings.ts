@@ -58,6 +58,7 @@ export const ANDROID_SETTINGS = [
   'animations',
   'appearance',
   'text-size',
+  'timezone',
   'fingerprint',
   'clear-app-state',
   'permission',
@@ -228,6 +229,10 @@ export async function setAndroidSetting(
     }
     case 'text-size': {
       return await setAndroidTextSize(device, state);
+    }
+    case 'timezone': {
+      const { setAndroidTimeZone } = await import('./settings-timezone.ts');
+      return await setAndroidTimeZone(device, state);
     }
     default:
       return normalized satisfies never;

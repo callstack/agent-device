@@ -17,6 +17,26 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   await assertPermissionRecovery(context);
   await assertPushBroadcast(context);
   await assertImeRecovery(context);
+  await assertTimeZoneRoundTrip(context);
+}
+
+/** Each write reports what it set, and reset hands the zone back to automatic time zone. */
+async function assertTimeZoneRoundTrip(context: LiveContext): Promise<void> {
+  const zone = await runStep(context, 'set Android Asia/Kolkata time zone', [
+    'settings',
+    'timezone',
+    'Asia/Kolkata',
+  ]);
+  assert.equal(zone.json?.data?.timeZone, 'Asia/Kolkata', JSON.stringify(zone.json));
+  assert.equal(zone.json?.data?.autoTimeZone, false, JSON.stringify(zone.json));
+  const zoneReset = await runStep(context, 'reset Android time zone', [
+    'settings',
+    'timezone',
+    'reset',
+  ]);
+  assert.equal(zoneReset.json?.data?.timeZone, null, JSON.stringify(zoneReset.json));
+  assert.equal(zoneReset.json?.data?.autoTimeZone, true, JSON.stringify(zoneReset.json));
+  verifyCommand(context, C.settings, 'time zone set and reset report what they changed');
 }
 
 // Leaves the fixture on Automation lab with its permission controls on screen: Android

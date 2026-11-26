@@ -62,7 +62,10 @@ const macOsSettingUnavailable = Object.freeze({
   reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'The macOS host supports settings appearance and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>.',
 } as const);
-/** Content size and BiometricKit_Sim notifications answer only on iPhone and iPad simulators. */
+/**
+ * Content size and BiometricKit_Sim notifications answer only on iPhone and iPad simulators. The
+ * time zone write is admitted there too, and nowhere else in the Apple family.
+ */
 const handheldSimulatorUnavailable = Object.freeze({
   available: false,
   reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
@@ -193,6 +196,7 @@ function appleSettingsFacts(device: DeviceInfo) {
       'reset-keychain': available,
       permission: available,
       'text-size': handheld,
+      timezone: handheld,
       faceid: handheld,
       touchid: handheld,
     } satisfies Record<AppleSimulatorSetting, RuntimeOperationFact>,

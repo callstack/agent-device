@@ -75,6 +75,17 @@ describe('public client settings cover the catalog', () => {
     expectTypeOf<Toggle['state']>().toEqualTypeOf<'on' | 'off'>();
     expectTypeOf<Toggle['app']>().toEqualTypeOf<string | undefined>();
   });
+
+  test('timezone takes a value or reset, and an app to refuse', () => {
+    type Value = Extract<SettingsUpdateOptions, { setting: 'timezone' }>;
+    expectTypeOf<{
+      setting: 'timezone';
+      state: 'Asia/Kolkata';
+    }>().toExtend<SettingsUpdateOptions>();
+    expectTypeOf<{ setting: 'timezone'; state: 'reset' }>().toExtend<SettingsUpdateOptions>();
+    expectTypeOf<{ setting: 'timezone' }>().not.toExtend<SettingsUpdateOptions>();
+    expectTypeOf<Value['app']>().toEqualTypeOf<string | undefined>();
+  });
 });
 
 /**

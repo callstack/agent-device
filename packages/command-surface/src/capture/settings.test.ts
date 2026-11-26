@@ -96,6 +96,24 @@ describe('settings CLI permission', () => {
     }
   });
 
+  test('reads timezone as a written value the daemon parses again', () => {
+    const timeZone = settingsCliReader(['timezone', 'Asia/Kolkata'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(timeZone).toEqual({
+      setting: 'timezone',
+      state: 'Asia/Kolkata',
+      app: 'com.example.app',
+    });
+    expect(settingsDaemonWriter(timeZone)).toMatchObject({
+      positionals: ['timezone', 'Asia/Kolkata'],
+      input: { app: 'com.example.app' },
+    });
+    expect(() => settingsCliReader(['timezone', '+05:30'], flags())).toThrow(
+      expect.objectContaining({ code: 'INVALID_ARGS' }),
+    );
+  });
+
   test.each(['mobile-data', 'bluetooth'])(
     'forwards --app on %s so the daemon refuses it instead of dropping it',
     (setting) => {

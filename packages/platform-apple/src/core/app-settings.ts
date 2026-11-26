@@ -24,6 +24,7 @@ import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/maco
 import { closeIosApp } from './app-launch.ts';
 import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
+import { setIosTimeZone } from './settings-timezone.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runSimctlForDevice } from './simctl-execution.ts';
@@ -49,6 +50,7 @@ const APPLE_SIMULATOR_SETTINGS = [
   'reset-keychain',
   'permission',
   'text-size',
+  'timezone',
   'faceid',
   'touchid',
 ] as const satisfies readonly SettingName[];
@@ -186,6 +188,8 @@ export async function setIosSetting(
     case 'text-size': {
       return await setIosTextSize(device, state);
     }
+    case 'timezone':
+      return await setIosTimeZone(device, state);
     case 'appearance':
     case 'permission':
     case 'location':
