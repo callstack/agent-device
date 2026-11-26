@@ -249,14 +249,24 @@ async function finishSessionScreenRecording(params: {
     await screenRecordingDurableResource.confirmLiveMissing({ binding, resource: recording });
     return;
   }
-  const completion = await finishLiveScreenRecording({
+  await finishLiveScreenRecording({
     binding,
     intent: 'disposal',
     confirmedMissing,
   });
-  if (!params.ref.session.lease) return;
-  const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
-  retainLeasedSessionRecording(params.ref, completion, recording.envelope.metadata);
+  const record = screenRecordingDurableResource.store.read(
+    screenRecordingDurableResource.store.resolvePath(binding.sessionDir),
+  );
+  if (
+    record.status !== 'decoded' ||
+    record.envelope.lifecycle !== 'completed' ||
+    record.envelope.sessionId !== recording.envelope.sessionId ||
+    record.envelope.fence.token !== recording.envelope.fence.token ||
+    record.envelope.fence.generation !== recording.envelope.fence.generation
+  )
+    return;
+  const { retainSessionRecording } = await import('./recording-outputs.ts');
+  retainSessionRecording(params.ref, record.envelope);
 }
 
 async function finishSessionAudioProbe(params: {

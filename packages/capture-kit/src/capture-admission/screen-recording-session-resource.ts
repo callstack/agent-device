@@ -1,3 +1,12 @@
+import fs from 'node:fs';
+import { errorMessage } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { outputFileIdentity } from '@agent-device/host-kit/file';
+import type {
+  DurableCaptureProgress,
+  LiveResourceHandle,
+} from '@agent-device/contracts/durable-resource';
+import type { ScreenRecordingFinalization } from '@agent-device/contracts/recording-stop-progress';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -35,6 +44,7 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
   completionMetadata: encodeScreenRecordingCompletionMetadata,
+  finishLive: finishRecordingExport,
   // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
   // record is served the same export the first stop was answered with. That answer is a cold path: the
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
@@ -70,6 +80,86 @@ export function finishLiveScreenRecording(params: {
   confirmedMissing?: () => boolean;
 }): Promise<ScreenRecordingCompletion> {
   return screenRecordingDurableResource.finishLive(params);
+}
+
+type RecordingExportProof = Readonly<{ completedAt: number; identities: string[] }>;
+const liveExportProofs = new WeakMap<
+  LiveResourceHandle<ScreenRecordingCompletion>,
+  RecordingExportProof | null
+>();
+
+async function finishRecordingExport(
+  handle: LiveResourceHandle<ScreenRecordingCompletion>,
+  progress: DurableCaptureProgress,
+) {
+  const reservedPath = progress.learned?.remoteCapturePath;
+  if (typeof reservedPath !== 'string') return { outcome: await handle.finish(progress) };
+  const [{ chunkPathAt }, { deriveRecordingTelemetryPath }, { readStopCheckpoints }] =
+    await Promise.all([
+      import('../recording/output-path.ts'),
+      import('../recording/telemetry.ts'),
+      import('../recording/stop-checkpoints.ts'),
+    ]);
+  if (readStopCheckpoints(progress.learned).exportPath && !liveExportProofs.has(handle)) {
+    liveExportProofs.set(handle, null);
+  }
+  const readExportProof = (
+    outPath: string,
+    { chunks, telemetryPath }: ScreenRecordingFinalization,
+  ): RecordingExportProof | null => {
+    try {
+      if (
+        outPath !== reservedPath ||
+        chunks?.some(
+          (chunk, offset) =>
+            chunk.index !== offset + 1 || chunk.path !== chunkPathAt(reservedPath, chunk.index),
+        ) ||
+        (telemetryPath !== undefined &&
+          telemetryPath !== deriveRecordingTelemetryPath(reservedPath))
+      ) {
+        throw new Error('Recording export does not match its reservation.');
+      }
+      const files = [
+        reservedPath,
+        ...(chunks?.slice(1).map(({ path }) => path) ?? []),
+        ...(telemetryPath ? [telemetryPath] : []),
+      ];
+      return {
+        completedAt: Date.now(),
+        identities: files.map((file) => {
+          const stat = fs.lstatSync(file);
+          if (!stat.isFile()) throw new Error('Recording export is not a regular file.');
+          return outputFileIdentity(stat);
+        }),
+      };
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'screen_recording_export_proof_failed',
+        data: { error: errorMessage(error) },
+      });
+      return null;
+    }
+  };
+  const outcome = await handle.finish({
+    ...progress,
+    record: (fact) => {
+      const { exportPath, finalization } = readStopCheckpoints(fact);
+      const proof =
+        exportPath && !liveExportProofs.has(handle)
+          ? readExportProof(exportPath, finalization ?? {})
+          : undefined;
+      progress.record(fact);
+      // A failed checkpoint can cause retry to produce a new export.
+      if (proof !== undefined) liveExportProofs.set(handle, proof);
+    },
+  });
+  if (outcome.status !== 'completed' || outcome.alreadyCompleted) return { outcome };
+  if (!liveExportProofs.has(handle)) {
+    liveExportProofs.set(handle, readExportProof(outcome.result.outPath, outcome.result));
+  }
+  const proof = liveExportProofs.get(handle);
+  return { outcome, ...(proof ? { metadata: { remoteCaptureExport: proof } } : {}) };
 }
 
 export function encodeScreenRecordingCompletionMetadata(

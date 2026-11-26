@@ -5,7 +5,17 @@ export const TENANT_RESOURCE_REASONS = {
   expired: { reason: 'RESOURCE_EXPIRED' },
 } as const satisfies ReasonTable<'daemon resources'>;
 
-type TenantOwnedEntry = { tenantId?: string };
+type TenantOwnedEntry = { tenantId?: string | null };
+
+/** An explicit null owner restricts access to the shared, unnamed tenant scope. */
+export function matchesTenantOwnedEntry(
+  entry: TenantOwnedEntry,
+  tenantId: string | undefined,
+): boolean {
+  return entry.tenantId === null
+    ? tenantId === undefined
+    : !entry.tenantId || entry.tenantId === tenantId;
+}
 
 export type TenantOwnedResourceKind = {
   label: string;
@@ -35,7 +45,7 @@ export function requireTenantOwnedEntry<T extends TenantOwnedEntry>(
   if (!entry) {
     throw expiredTenantOwnedEntryError(kind, id);
   }
-  if (entry.tenantId && entry.tenantId !== tenantId) {
+  if (!matchesTenantOwnedEntry(entry, tenantId)) {
     throw new AppError(
       'UNAUTHORIZED',
       `${kind.label} ${kind.plural ? 'belong' : 'belongs'} to a different tenant`,

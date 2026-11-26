@@ -2,7 +2,10 @@ import { daemonPlatformServicesFixture } from '../../../__tests__/support/platfo
 import { expect, vi, type Mock } from 'vitest';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type {
+  CleanupOutcome,
+  DurableCaptureProgress,
+} from '@agent-device/contracts/durable-resource';
 import {
   type DeviceBinding,
   type RuntimeOperationUnavailability,
@@ -135,7 +138,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
   const owner = localRuntimeOwner(session.device.platform);
   let currentOutPath = '';
   let currentClientOutPath: string | undefined;
-  const handle: ScreenRecordingLiveHandle = {
+  const handle = {
     inspect: () => ({
       backend: 'adb screenrecord',
       outPath: currentOutPath,
@@ -150,7 +153,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
     setTouchReferenceFrame: () => {},
     setRunnerSessionId: () => {},
     invalidate: () => {},
-    finish: vi.fn(async () => {
+    finish: vi.fn(async (_progress?: DurableCaptureProgress) => {
       if (options.finishError) throw options.finishError;
       return {
         status: 'completed' as const,
@@ -168,7 +171,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
     }),
     forceCleanup: vi.fn(async () => options.cleanup ?? { status: 'cleaned' as const }),
     [Symbol.asyncDispose]: async () => {},
-  };
+  } satisfies ScreenRecordingLiveHandle;
   const start = vi.fn(
     async (input: Parameters<PlatformRuntimeOperations['screenRecordingStart']>[0]) => {
       currentOutPath = input.outputPath;

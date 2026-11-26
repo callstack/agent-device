@@ -44,9 +44,9 @@ test('a completed manifest hands back the whole stop response it stored', async 
   fs.writeFileSync(harness.videoPath, 'mp4');
   writeManifest(harness, encodeScreenRecordingCompletionMetadata(completion));
 
-  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
-    { kind: 'completed', completion },
-  );
+  expect(
+    resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE }),
+  ).toMatchObject({ kind: 'completed', completion });
   expect(screenRecordingManifestIsTerminal(harness.params)).toBe(true);
 });
 
@@ -111,9 +111,9 @@ test('an open manifest stays available for exact-owner recovery', async () => {
   const harness = makeHarness();
   writeManifest(harness, { phase: 'active' }, { lifecycle: 'open' });
 
-  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
-    { kind: 'open', resourcePath: manifestPath(harness.sessionStore) },
-  );
+  expect(
+    resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE }),
+  ).toMatchObject({ kind: 'open', resourcePath: manifestPath(harness.sessionStore) });
   expect(screenRecordingManifestIsTerminal(harness.params)).toBe(false);
 });
 

@@ -8,12 +8,7 @@ import type {
   ScreenRecordingCompletion,
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import {
-  deviceIdentity,
-  sameDeviceIdentity,
-  type DeviceIdentity,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, RUNTIME_CONTRACT_REASONS } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -33,8 +28,16 @@ import {
  * handed a path it cannot download.
  */
 export type ScreenRecordingStopRecovery =
-  | Readonly<{ kind: 'completed'; completion: ScreenRecordingCompletion }>
-  | Readonly<{ kind: 'open'; resourcePath: string }>
+  | Readonly<{
+      kind: 'completed';
+      completion: ScreenRecordingCompletion;
+      envelope: DurableResourceEnvelope<'screen-recording'>;
+    }>
+  | Readonly<{
+      kind: 'open';
+      resourcePath: string;
+      envelope: DurableResourceEnvelope<'screen-recording'>;
+    }>
   | Readonly<{ kind: 'none' }>;
 
 const OPTIONAL_RESPONSE_FIELDS = [
@@ -50,13 +53,27 @@ type ScreenRecordingManifestParams = Readonly<{
 }>;
 
 export function resolveScreenRecordingStopRecovery(
-  params: ScreenRecordingManifestParams & Readonly<{ device: DeviceInfo }>,
+  params: ScreenRecordingManifestParams &
+    Readonly<{
+      device: DeviceInfo;
+      admittedEnvelope?: DurableResourceEnvelope<'screen-recording'>;
+    }>,
 ): ScreenRecordingStopRecovery {
-  const { resourcePath, record } = readSessionManifest(params);
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    params.sessionStore.resolveSessionDir(params.sessionName),
+  );
+  const record = params.admittedEnvelope
+    ? { status: 'decoded' as const, envelope: params.admittedEnvelope }
+    : screenRecordingResourceStore.read(resourcePath);
   if (record.status !== 'decoded') return { kind: 'none' };
   assertManifestBelongsToRequest(params, record.envelope);
-  if (record.envelope.lifecycle !== 'completed') return { kind: 'open', resourcePath };
-  const completion = readReplayableStoredCompletion(record.envelope.metadata);
+  if (record.envelope.lifecycle !== 'completed')
+    return { kind: 'open', resourcePath, envelope: record.envelope };
+  const { metadata } = record.envelope;
+  const completion =
+    metadata?.remoteCaptureOutput === true
+      ? readStoredCompletion(metadata)
+      : readReplayableStoredCompletion(metadata);
   if (completion === undefined) {
     emitDiagnostic({
       level: 'warn',
@@ -65,28 +82,13 @@ export function resolveScreenRecordingStopRecovery(
     });
     return { kind: 'none' };
   }
-  return { kind: 'completed', completion };
+  return { kind: 'completed', completion, envelope: record.envelope };
 }
 
 /** Whether the session's manifest recorded a terminal recording, even one with no serveable file. */
 export function screenRecordingManifestIsTerminal(params: ScreenRecordingManifestParams): boolean {
   const { record } = readSessionManifest(params);
   return record.status === 'decoded' && record.envelope.lifecycle === 'completed';
-}
-
-/**
- * The device a stop without a held session must be answered on: the one the session's durable
- * manifest names, when a decodable manifest exists. `undefined` means there is nothing to recover
- * from, and a caller that addressed a session answers on the session instead of choosing a device.
- * The caller still resolves this identity against the host to recover the live device fields, and
- * `assertManifestBelongsToRequest` still fails the request closed when the resolved device or the
- * session address does not match what the manifest recorded.
- */
-export function screenRecordingManifestDevice(
-  params: ScreenRecordingManifestParams,
-): DeviceIdentity | undefined {
-  const { record } = readSessionManifest(params);
-  return record.status === 'decoded' ? record.envelope.device : undefined;
 }
 
 function readSessionManifest(params: ScreenRecordingManifestParams): Readonly<{
@@ -133,6 +135,13 @@ function assertManifestBelongsToRequest(
 export function readReplayableStoredCompletion(
   metadata: JsonObject | undefined,
 ): ScreenRecordingCompletion | undefined {
+  const completion = readStoredCompletion(metadata);
+  return completion && fs.existsSync(completion.outPath) ? completion : undefined;
+}
+
+export function readStoredCompletion(
+  metadata: JsonObject | undefined,
+): ScreenRecordingCompletion | undefined {
   const stored = metadata?.[SCREEN_RECORDING_COMPLETION_METADATA_KEY];
   if (
     !isRecord(stored) ||
@@ -142,8 +151,7 @@ export function readReplayableStoredCompletion(
   ) {
     return undefined;
   }
-  const completion = stored as unknown as ScreenRecordingCompletion;
-  return fs.existsSync(completion.outPath) ? completion : undefined;
+  return stored as unknown as ScreenRecordingCompletion;
 }
 
 /** The values a stop response computes on rather than repeats. */

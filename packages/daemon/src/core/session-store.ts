@@ -153,9 +153,9 @@ export class SessionStore {
     }
   }
 
-  publish(address: string, session: SessionState): SessionRef {
+  publish(address: string, session: SessionState, journalId = randomUUID()): SessionRef {
     this.assertPublishable(address);
-    const entry = { current: session, journalId: randomUUID() };
+    const entry = { current: session, journalId };
     this.sessions.set(address, entry);
     for (const retained of this.retainedExecutionHosts.values()) {
       if (devicesOverlap(retained.device.id, session.device.id)) {
@@ -682,6 +682,7 @@ export type AuthorizedSession = Readonly<{
 
 export type AuthorizedOpenSlot = Readonly<{
   [openAuthority]: true;
+  lifetimeId: string;
   assertPublishable(): void;
   canPersist(): boolean;
   publish(draft: Omit<SessionState, 'lease'>): AuthorizedSession;
@@ -802,6 +803,7 @@ export class SessionCoordinator {
   reserve(req: DaemonRequest, address: string): AuthorizedOpenSlot {
     const admitted = req.internal?.admittedLease;
     const lease = admitted && sessionLeaseOf(admitted);
+    const lifetimeId = randomUUID();
     let published = false;
     const active = () => req.internal?.sessionAuthorityActive?.() !== false;
     const assertPublishable = () => {
@@ -812,12 +814,13 @@ export class SessionCoordinator {
     assertPublishable();
     return {
       [openAuthority]: true,
+      lifetimeId,
       assertPublishable,
       canPersist: () => !published && !this.#store.get(address),
       publish: (draft) => {
         assertPublishable();
         throwIfRequestCanceled(req.meta?.requestId);
-        const ref = this.#store.publish(address, { ...draft, lease });
+        const ref = this.#store.publish(address, { ...draft, lease }, lifetimeId);
         published = true;
         req.internal?.onLifetimePublished?.(address, ref.lifetime);
         const authority = this.bind(ref, () => active() && !isRequestCanceled(req.meta?.requestId));

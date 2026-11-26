@@ -11,7 +11,7 @@ import type {
 import type { ScreenRecordingFinalization } from '@agent-device/contracts/recording-stop-progress';
 import { stopAndExportScreenRecording } from '@agent-device/capture-kit/recording-stop-sequence';
 import { measureCapturedWindow } from './captured-window.ts';
-import { chunkPathAt } from './chunk-path.ts';
+import { chunkPathAt } from '@agent-device/capture-kit/recording-output-path';
 import {
   cleanupChunks,
   nativeChunksDisposition,

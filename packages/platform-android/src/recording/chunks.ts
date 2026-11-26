@@ -2,7 +2,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
-import { chunkPathAt } from './chunk-path.ts';
+import { chunkPathAt } from '@agent-device/capture-kit/recording-output-path';
 import type { NativeChunk } from './manifest.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;

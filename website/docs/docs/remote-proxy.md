@@ -104,6 +104,13 @@ send the lease id in the `x-agent-device-lease-id` header: without it, `GET /art
 list the artifact and the download fails with `UNAUTHORIZED` and reason `LEASE_OUTPUT_MISMATCH`.
 The same header is required to read the diagnostics record of a request on a leased session.
 This holds after the session closes, for as long as the daemon keeps the file.
+Use the same tenant to capture and download a recording. A recording made without a tenant is
+available only to a request without a tenant.
+
+Stop and download remote recordings before restarting or upgrading the daemon.
+The download IDs expire when the daemon stops.
+If `record stop` returns `LEASE_OUTPUT_MISMATCH` for a recording started before an upgrade or
+completed during recovery, check the daemon host for the finished files.
 
 By default, artifacts leave the inventory after download or after 15 minutes.
 `AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress

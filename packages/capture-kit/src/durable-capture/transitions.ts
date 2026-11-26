@@ -44,6 +44,7 @@ export async function finishLiveDurableCapture<
       fence: active.envelope.fence,
       resourcePath,
       intent: params.intent,
+      producer: true,
       confirmedMissing: params.confirmedMissing,
       onCleanupPending: () => {
         cleanupPending = true;
@@ -75,6 +76,7 @@ export async function finishDurableCaptureHandle<
     fence: ResourceOwnershipFence;
     resourcePath: string;
     intent: DurableCaptureFinishIntent;
+    producer?: true;
     confirmedMissing?: () => boolean;
     onCleanupPending?(outcome: Extract<CleanupOutcome, { status: 'cleanup-pending' }>): void;
   },
@@ -123,20 +125,21 @@ export async function finishDurableCaptureHandle<
       settleIfMissing(lease);
       markCompletingDurableCapture(lease);
       const progress = createStopProgress(lease);
-      let finishOutcome: FinishOutcome<C>;
+      let finished: { outcome: FinishOutcome<C>; metadata?: JsonObject };
       try {
-        finishOutcome = await params.handle.finish(progress);
+        finished =
+          params.producer && definition.finishLive
+            ? await definition.finishLive(params.handle, progress)
+            : { outcome: await params.handle.finish(progress) };
       } catch (finishError) {
         settleIfMissing(lease);
         await respondToFailedFinish(definition, lease, params, finishError, params.intent);
         throw finishError;
       }
-      if (finishOutcome.status === 'completed') {
-        transitionFinishOutcome(definition, lease, finishOutcome);
-        return finishOutcome.result;
-      }
-      transitionFinishOutcome(definition, lease, finishOutcome);
-      const finishError = cleanupPendingError(definition, finishOutcome);
+      const { outcome, metadata } = finished;
+      transitionFinishOutcome(definition, lease, outcome, metadata);
+      if (outcome.status === 'completed') return outcome.result;
+      const finishError = cleanupPendingError(definition, outcome);
       settleIfMissing(lease);
       await respondToFailedFinish(definition, lease, params, finishError, params.intent);
       throw finishError;
@@ -350,12 +353,14 @@ export function transitionFinishOutcome<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureOpenResourceFenceLease<K>,
   outcome: FinishOutcome<C>,
+  producerMetadata?: JsonObject,
 ): void {
   if (outcome.status === 'completed') {
     lease.transition('completed', {
       metadata: {
         ...(lease.envelope.metadata ?? {}),
         ...definition.completionMetadata(outcome.result),
+        ...producerMetadata,
         phase: 'completed',
       },
     });

@@ -1,3 +1,5 @@
+import type { Stats } from 'node:fs';
+
 export {
   isAtomicPublishTemporaryPath,
   publishDurableFileSync,
@@ -34,3 +36,9 @@ export {
   type ProcessLockRelease,
   PROCESS_LOCK_REASONS,
 } from './internal/process-lock.ts';
+
+/** Identifies the current output at a path. Directory identity stays stable as entries change. */
+export function outputFileIdentity(stat: Stats): string {
+  const inode = `${stat.dev}:${stat.ino}`;
+  return stat.isDirectory() ? inode : `${inode}:${stat.size}:${stat.mtimeMs}`;
+}

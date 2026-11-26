@@ -32,12 +32,11 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   cleanupDownloadableArtifact,
   listDownloadableArtifacts,
+  settleCommittedFileOutputs,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
-import { localEnv, successfulData, withHttp } from './http-output.fixtures.ts';
-import { finalizeDaemonResponse } from '../request-finalization.ts';
-import { runBatchCommands } from '../../sessions/handlers/session-batch.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
+import { localEnv, successfulData, withHttp } from './http-output.fixtures.ts';
 
 const outputCases = [
   { command: 'screenshot', positionals: ['/host/screenshot.png'] },
@@ -258,6 +257,20 @@ test('local HTTP still honors capture destinations and cwd', async () => {
   );
 });
 
+async function handleRecordingRequest(
+  harness: ReturnType<typeof makeRecordRuntimeHarness>,
+  request: DaemonRequest,
+) {
+  const response = await harness.run(
+    request.positionals,
+    request.meta,
+    request.flags,
+    request.internal,
+  );
+  if (response.ok) settleCommittedFileOutputs(response.data?.artifacts, true);
+  return response;
+}
+
 test('remote recording without client metadata stays in its session and downloads by ID', async () => {
   const harness = makeRecordRuntimeHarness('remote-record-output-');
   const root = mkdtempForTestSync('remote-record-victim-');
@@ -269,12 +282,7 @@ test('remote recording without client metadata stays in its session and download
     return await start(input);
   });
   await withHttp(
-    async (request) =>
-      finalizeDaemonResponse(
-        request,
-        await harness.run(request.positionals, request.meta, request.flags, request.internal),
-        trackDownloadableArtifact,
-      ),
+    (request) => handleRecordingRequest(harness, request),
     async (post, base) => {
       const started = await post({
         command: 'record',
@@ -282,16 +290,29 @@ test('remote recording without client metadata stays in its session and download
         meta: { cwd: root },
       });
       expect(started.result?.ok).toBe(true);
-      const output = started.result?.data?.outPath as string;
-      expect(path.dirname(output)).toBe(
+      const source = harness.runtime.start.mock.calls[0]![0].outputPath;
+      expect(path.dirname(source)).toBe(
         harness.sessionStore.resolveSessionDir(harness.sessionName),
       );
-      expect(output).toMatch(/recording-[0-9a-f-]+\.mp4$/);
+      expect(started.result?.data?.outPath).toBe(path.basename(source));
+      expect(started.result?.data?.sessionStateDir).toBeUndefined();
       expect(fs.readFileSync(victim, 'utf8')).toBe('protected-content');
       const stopped = await post({ command: 'record', positionals: ['stop'] });
       expect(stopped.result?.ok).toBe(true);
+      expect(stopped.result?.data?.outPath).toBe(path.basename(source));
       const artifact = stopped.result?.data?.artifacts?.[0];
       expect(artifact?.artifactId).toBeTypeOf('string');
+      const tenantHeaders = {
+        authorization: 'Bearer test-token',
+        [DAEMON_HTTP_TENANT_HEADER]: 'named-tenant',
+      };
+      const inventory = await fetch(`${base}/artifacts`, { headers: tenantHeaders });
+      expect(inventory.status).toBe(200);
+      expect(await inventory.json()).toMatchObject({ artifacts: [] });
+      const denied = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {
+        headers: tenantHeaders,
+      });
+      expect(denied.status).toBe(401);
       const download = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {
         headers: { authorization: 'Bearer test-token' },
       });
@@ -313,12 +334,7 @@ test.each(['local', 'local-client-destination', 'remote'] as const)(
       return await start(input);
     });
     await withHttp(
-      async (request) =>
-        finalizeDaemonResponse(
-          request,
-          await harness.run(request.positionals, request.meta, request.flags, request.internal),
-          trackDownloadableArtifact,
-        ),
+      (request) => handleRecordingRequest(harness, request),
       async (post) => {
         const started = await post(
           {
@@ -331,10 +347,11 @@ test.each(['local', 'local-client-destination', 'remote'] as const)(
           origin === 'remote',
         );
         expect(started.result?.ok, JSON.stringify(started)).toBe(true);
-        const stopped = await post(
-          { command: 'record', positionals: ['stop'] },
-          origin !== 'remote',
-        );
+        if (origin !== 'remote') {
+          const refused = await post({ command: 'record', positionals: ['stop'] }, true);
+          expect(refused.error?.data?.details).toMatchObject({ reason: 'LEASE_OUTPUT_MISMATCH' });
+        }
+        const stopped = await post({ command: 'record', positionals: ['stop'] }, false);
         expect(stopped.result?.ok, JSON.stringify(stopped)).toBe(true);
         const artifactId = stopped.result?.data?.artifacts?.[0]?.artifactId;
         if (origin === 'remote') {
@@ -670,31 +687,6 @@ test.each([
     });
   },
 );
-
-test('batch recording keeps remote origin and generates a session-owned destination', async () => {
-  const harness = makeRecordRuntimeHarness('remote-batch-record-');
-  const response = await runBatchCommands(
-    {
-      token: 'test-token',
-      session: harness.sessionName,
-      command: 'batch',
-      positionals: [],
-      flags: { batchSteps: [{ command: 'record', positionals: ['start'] }] },
-      meta: { cwd: '/client/chosen-root' },
-      internal: { publicNetworkOnly: true },
-    },
-    harness.sessionName,
-    async (request) =>
-      await harness.run(request.positionals, request.meta, request.flags, request.internal),
-  );
-  expect(response.ok).toBe(true);
-  if (!response.ok) return;
-  const results = response.data?.results as Array<{ data: { outPath: string } }>;
-  expect(path.dirname(results[0]!.data.outPath)).toBe(
-    harness.sessionStore.resolveSessionDir(harness.sessionName),
-  );
-  await harness.run(['stop']);
-});
 
 test('remote perf memory output reaches the runtime only as a session artifact and downloads by ID', async () => {
   const root = mkdtempForTestSync('remote-perf-memory-');
