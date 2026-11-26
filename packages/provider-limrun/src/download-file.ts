@@ -66,7 +66,7 @@ async function openFetchDownload(
 }
 
 async function writeDownloadBody(
-  body: WebReadableStream<Uint8Array> | null | undefined,
+  body: WebReadableStream<Uint8Array> | null,
   destinationPath: string,
   signal: AbortSignal,
 ): Promise<void> {
@@ -82,8 +82,14 @@ async function writeDownloadBody(
 function instanceDownloadUrl(apiUrl: string, value: string): URL {
   const url = URL.parse(value);
   const instance = URL.parse(apiUrl);
-  if (!url || !instance) throw new TypeError('Invalid Limrun download endpoint.');
-  if (url.origin !== instance.origin || url.username || url.password || url.protocol !== 'https:') {
+  if (
+    !url ||
+    !instance ||
+    url.origin !== instance.origin ||
+    url.username ||
+    url.password ||
+    url.protocol !== 'https:'
+  ) {
     throw new AppError('COMMAND_FAILED', 'Limrun refused the authenticated download endpoint.', {
       reason: LIMRUN_DOWNLOAD_REASONS.endpointBlocked.reason,
       hint: 'Use an HTTPS instance URL and download from that same origin.',
@@ -145,7 +151,7 @@ function downloadFailure(
 
 /**
  * Fetch uses `TypeError` for redirect refusals as well as invalid requests. Keep the public
- * download label and use a broader label for authenticated requests that refuse redirects.
+ * download label and use a broader label for authenticated fetch failures.
  */
 function transportSummary(error: unknown, authenticated: boolean): string {
   if (error instanceof TypeError) return authenticated ? 'request-failed' : 'invalid-request';

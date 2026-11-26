@@ -184,26 +184,47 @@ test('an HTTP failure publishes its status and reason, and no peer body text at 
   }
 });
 
-test.each([
-  ['public', 'invalid-request'],
-  ['instance-authenticated', 'request-failed'],
-] as const)('a malformed %s download URL stays private', async (mode, transport) => {
-  const token = 'liminst_9b74c9897bac770ffc029102a200c5de';
+test('a malformed public download URL stays private', async () => {
+  const url = 'private-invalid-url';
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  const failure = await downloadLimrunFile({
-    url: token,
-    ...(mode === 'instance-authenticated'
-      ? { instance: { apiUrl: 'https://instance.example', token } }
-      : {}),
-    destinationPath,
-    timeoutMs: 5_000,
-  }).catch((error: unknown) => error);
+  const failure = await downloadLimrunFile({ url, destinationPath, timeoutMs: 5_000 }).catch(
+    (error: unknown) => error,
+  );
 
   expect(failure).toBeInstanceOf(AppError);
-  const details = (failure as AppError).details ?? {};
-  expect(details).toEqual({ reason: 'limrun_download_failed', transport });
-  expect(JSON.stringify(details)).not.toMatch(token);
-  expect(JSON.stringify((failure as AppError).cause ?? '')).not.toMatch(token);
+  expect((failure as AppError).details).toEqual({
+    reason: 'limrun_download_failed',
+    transport: 'invalid-request',
+  });
+  expect(JSON.stringify(failure)).not.toContain(url);
+  expect(JSON.stringify((failure as AppError).cause ?? '')).not.toContain(url);
+});
+
+test.each([
+  ['private-invalid-url', 'https://instance.example'],
+  ['https://instance.example/clip.mp4', 'private-invalid-url'],
+])('refuses an invalid authenticated endpoint before fetch (%s, %s)', async (url, apiUrl) => {
+  const token = 'private-instance-token';
+  const request = vi.spyOn(globalThis, 'fetch');
+  try {
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+    const failure = await downloadLimrunFile({
+      url,
+      instance: { apiUrl, token },
+      destinationPath,
+      timeoutMs: 5_000,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AppError);
+    expect((failure as AppError).details).toEqual({
+      reason: 'limrun_download_endpoint_blocked',
+      hint: 'Use an HTTPS instance URL and download from that same origin.',
+    });
+    expect(JSON.stringify(failure)).not.toMatch(/private-invalid-url|private-instance-token/);
+    expect(request).not.toHaveBeenCalled();
+  } finally {
+    request.mockRestore();
+  }
 });
 
 test('a failed retry removes the file an earlier attempt left at the destination', async () => {
