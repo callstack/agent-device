@@ -1,10 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   ensureAndroidBlockingSystemDialogReady,
-  ensureAndroidBlockingSystemDialogReadyForTap,
-  waitForAndroidBlockingDialogFocusToClear,
-  type AndroidBlockingDialogTapReadinessResult,
-  type AndroidDialogTapTarget,
+  type AndroidBlockingDialogReadinessResult,
 } from '../../android-system-dialog.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
@@ -27,41 +24,27 @@ export type ReadinessOutcome<TResult> =
   | { aborted: true; response: DaemonResponse }
   | {
       aborted: false;
-      readiness: AndroidBlockingDialogTapReadinessResult;
+      readiness: AndroidBlockingDialogReadinessResult;
       runtimeResult: TResult;
     };
 
 export async function runWithAndroidDialogReadinessCheck<TResult>(
   session: SessionState,
   command: string,
-  options: {
-    refContext: RefAdmissionContext | undefined;
-    /**
-     * Present on a single plain press or click: while a foreign ANR dialog has focus, the tap may
-     * still go to the dialog's Close app or Wait button.
-     */
-    dialogTapTarget?: AndroidDialogTapTarget;
-  },
-  run: (readiness: AndroidBlockingDialogTapReadinessResult) => Promise<TResult>,
+  options: { refContext: RefAdmissionContext | undefined },
+  run: (readiness: AndroidBlockingDialogReadinessResult) => Promise<TResult>,
   observation?: AndroidObservationAdapter,
 ): Promise<ReadinessOutcome<TResult>> {
   if (session.lease?.leaseProvider) {
     const readiness = { status: 'clear' } as const;
     return { aborted: false, readiness, runtimeResult: await run(readiness) };
   }
-  const readiness: AndroidBlockingDialogTapReadinessResult = options.dialogTapTarget
-    ? await ensureAndroidBlockingSystemDialogReadyForTap({
-        session,
-        command,
-        target: options.dialogTapTarget,
-        observation,
-      })
-    : await ensureAndroidBlockingSystemDialogReady({
-        session,
-        command,
-        phase: 'before-command',
-        observation,
-      });
+  const readiness = await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command,
+    phase: 'before-command',
+    observation,
+  });
   // ADR 0014: blocking-dialog recovery is itself device-mutating and expires the
   // frame at its own seam. A ref action admitted against the pre-recovery frame
   // must NOT continue against the recovered UI — abort it through the SHARED
@@ -83,9 +66,6 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     if (abort) return { aborted: true, response: abort };
   }
   const runtimeResult = await run(readiness);
-  if (readiness.status === 'dialog-button') {
-    await waitForAndroidBlockingDialogFocusToClear(session, observation);
-  }
   await ensureAndroidBlockingSystemDialogReady({
     session,
     command,

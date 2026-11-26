@@ -1089,8 +1089,6 @@ agent-device diff screenshot --baseline before.png --out diff.png --json
 
 On iOS, a press on a control nested inside a larger touch control, such as a swipe action beside its row, refuses with `target_not_hittable` when the platform reports the control as not hittable. Reveal the control, for example by swiping its row, and take a new `snapshot -i`.
 
-On Android, while another app's "isn't responding" dialog has focus, every input command, such as `fill`, `swipe`, or `back`, refuses with `dispatched: no`, except a single `click` or `press` on the dialog's **Close app** or **Wait** button. Take a new `snapshot -i` and press the button's ref, or its coordinates. The command then waits for the dialog to close. A repeated press, a double tap, a hold, jitter, a ref list, a selector, or a press anywhere else stays refused. When the dialog belongs to the session's own app, agent-device closes it and relaunches the app before the command.
-
 A comma-separated ref plan, such as `press @e13,@e14`, presses 2 to 16 refs as one command. Run `snapshot -i` first and copy the refs exactly. A refusal after the first press reports `details.dispatchedSteps`; plan again from a new `snapshot -i`. While script recording is armed, a plan needs `--no-record`. See `agent-device help press`.
 
 If rotation stops repeated iOS presses, inspect the screen before you continue with the remaining presses.

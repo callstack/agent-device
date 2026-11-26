@@ -28,10 +28,7 @@ import {
   runWithAndroidDialogReadinessCheck,
   type RefAdmissionContext,
 } from './interaction-touch-android-readiness.ts';
-import type {
-  AndroidBlockingDialogTapReadinessResult,
-  AndroidDialogTapTarget,
-} from '../../android-system-dialog.ts';
+import type { AndroidBlockingDialogReadinessResult } from '../../android-system-dialog.ts';
 import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import {
   buildCorroboratedTapResponseData,
@@ -65,11 +62,6 @@ export async function dispatchRuntimeInteraction<
      * admission rejection built from this context.
      */
     refContext?: RefAdmissionContext;
-    /**
-     * Present on a single plain press or click: while a foreign Android ANR dialog has focus, the
-     * tap may still go to the dialog's Close app or Wait button, checked before dispatch.
-     */
-    androidDialogTapTarget?: AndroidDialogTapTarget;
     /** A failed local iOS tap may be corroborated against one same-scope capture. */
     iosTapCorroboration?: {
       target: InteractionRequestTarget;
@@ -82,7 +74,7 @@ export async function dispatchRuntimeInteraction<
      */
     afterRun?(
       result: TResult,
-      readiness: AndroidBlockingDialogTapReadinessResult,
+      readiness: AndroidBlockingDialogReadinessResult,
     ): Promise<string | undefined>;
     buildPayloads(
       result: TResult,
@@ -105,7 +97,7 @@ export async function dispatchRuntimeInteraction<
     const outcome = await runWithAndroidDialogReadinessCheck(
       session,
       params.req.command,
-      { refContext: options.refContext, dialogTapTarget: options.androidDialogTapTarget },
+      { refContext: options.refContext },
       async (readiness) => {
         const result = await options.run(runtime);
         afterRunWarning = await options.afterRun?.(result, readiness);

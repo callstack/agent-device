@@ -28,9 +28,6 @@ import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
 import { formatTouchTargetLabel } from './interaction-touch-targets.ts';
 import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
-import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
-import type { AndroidDialogTapTarget } from '../../android-system-dialog.ts';
-import { refFrameTree } from '../../../core/ref-frame.ts';
 
 /**
  * How an admitted targeted `press`/`click`/`longpress`/`hover` executes: the direct-iOS
@@ -110,15 +107,6 @@ function buildTargetedRuntimeOptions(
   return {
     androidFreshnessBaseline: admitted.androidFreshnessBaseline,
     refContext: admitted.refContext,
-    ...(admitsAndroidDialogButtonTap(session, command, admitted.refs, req.flags)
-      ? {
-          androidDialogTapTarget: readAndroidDialogTapTarget(
-            session,
-            target,
-            req.internal?.findResolvedTarget,
-          ),
-        }
-      : {}),
     iosTapCorroboration: { target, extra: targetedExtra },
     run: async (runtime) =>
       await runTargetedTouchInteraction({
@@ -169,47 +157,6 @@ function buildTargetedRuntimeOptions(
       });
     },
   };
-}
-
-/**
- * Only one plain tap may close a foreign Android ANR dialog: a repeated tap, a double tap, or a
- * multi-ref plan would send its later taps to whatever the closed dialog uncovers, a hold is not a
- * tap, and jitter can move the contact off the checked button.
- */
-function admitsAndroidDialogButtonTap(
-  session: AdmittedTargetedTouch['session'],
-  command: TargetedTouchCommand,
-  refs: readonly string[] | undefined,
-  flags: CommandFlags | undefined,
-): boolean {
-  if (session.device.platform !== 'android') return false;
-  if (command !== 'press' && command !== 'click') return false;
-  if (refs && refs.length > 1) return false;
-  return (
-    (flags?.count ?? 1) <= 1 &&
-    flags?.doubleTap !== true &&
-    (flags?.holdMs ?? 0) <= 0 &&
-    (flags?.jitterPx ?? 0) <= 0
-  );
-}
-
-/**
- * The node the runtime will tap, or the raw point; a selector is never admitted. A `find` match
- * taps its own node. A ref taps its node in the authorized frame (ADR 0014), not in a newer
- * observation such as a screenshot's, so the check must read the same tree.
- */
-function readAndroidDialogTapTarget(
-  session: AdmittedTargetedTouch['session'],
-  target: AdmittedTargetedTouch['target'],
-  preresolved: PreresolvedInteractionTarget | undefined,
-): AndroidDialogTapTarget {
-  if (target.kind === 'point') return { kind: 'point', point: { x: target.x, y: target.y } };
-  if (target.kind === 'selector') return { kind: 'selector' };
-  if (preresolved) return { kind: 'ref', node: preresolved.node };
-  const ref = normalizeRef(target.ref);
-  const tree = refFrameTree(session) ?? session.snapshot;
-  const node = ref && tree ? findNodeByRef(tree.nodes, ref) : null;
-  return { kind: 'ref', node: node ?? undefined };
 }
 
 async function runTargetedTouchInteraction(params: {

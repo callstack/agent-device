@@ -4,36 +4,21 @@ import type {
 } from '@agent-device/contracts/android-observation';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
-import {
-  AppError,
-  discloseDispatch,
-  normalizeError,
-  type NormalizedError,
-} from '@agent-device/kernel/errors';
-import { centerOfRect, type Point, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import { expireRefFrame } from '../core/ref-frame.ts';
-import { thrownBeforeDispatch } from './request-dispatch-disclosure.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
 const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;
-/**
- * The ANR dialog's (`AppNotRespondingDialog`) Close app and Wait buttons. The resource id does not
- * depend on the device language, and an app cannot declare an id in the `android` package.
- */
+/** The framework id of the ANR dialog's Close app button. It does not depend on the device language. */
 const ANDROID_ANR_CLOSE_BUTTON_ID = 'android:id/aerr_close';
-const ANDROID_ANR_DIALOG_BUTTON_IDS: ReadonlySet<string> = new Set([
-  ANDROID_ANR_CLOSE_BUTTON_ID,
-  'android:id/aerr_wait',
-]);
 const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
   'Wait for Android to recover, close the dialog, restart the app, or reboot the emulator, then retry.';
-const ANDROID_FOREIGN_DIALOG_HINT =
-  "Take a new snapshot -i, then press the ref of one of the dialog's buttons (Close app or Wait). Every other input is refused while the dialog has focus.";
 const ANDROID_BLOCKING_DIALOG_INSPECTION_WARNING =
   'Android blocking-dialog readiness could not be inspected; the command continued.';
 const ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT = 240;
@@ -50,19 +35,6 @@ export type AndroidBlockingDialogReadinessResult =
       focusedPackage?: string;
     }
   | { status: 'recovered'; warning: string };
-
-/**
- * What a single press or click aims at, read before dispatch: the node a ref names in the session
- * snapshot, a raw point, or a selector.
- */
-export type AndroidDialogTapTarget =
-  | { kind: 'ref'; node: SnapshotNode | undefined }
-  | { kind: 'point'; point: Point }
-  | { kind: 'selector' };
-
-export type AndroidBlockingDialogTapReadinessResult =
-  | AndroidBlockingDialogReadinessResult
-  | { status: 'dialog-button' };
 type AndroidDialogButtonTapResult =
   | { ok: true; x: number; y: number }
   | {
@@ -204,155 +176,6 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
   phase: 'before-command' | 'after-command';
   observation?: AndroidObservationAdapter;
 }): Promise<AndroidBlockingDialogReadinessResult> {
-  const readiness = await readAndroidBlockingSystemDialogReadiness(params);
-  if (readiness.status === 'foreign-dialog') throw readiness.refusal();
-  return readiness;
-}
-
-/**
- * The before-command check of a single press or click. A foreign ANR dialog ("System UI isn't
- * responding") refuses every other input, so its Close app and Wait buttons are the only way to
- * close it from a command. The tap proceeds with `dialog-button` only when it aims at one of them
- * in a fresh capture and the dialog still has focus; otherwise it is refused with nothing sent.
- */
-export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
-  session: SessionState;
-  command: string;
-  target: AndroidDialogTapTarget;
-  observation?: AndroidObservationAdapter;
-}): Promise<AndroidBlockingDialogTapReadinessResult> {
-  const readiness = await readAndroidBlockingSystemDialogReadiness({
-    ...params,
-    phase: 'before-command',
-  });
-  if (readiness.status !== 'foreign-dialog') return readiness;
-  const { session, command } = params;
-  const observation = requireObservation(params.observation);
-  let buttons: SnapshotNode[];
-  try {
-    buttons = findAnrDialogButtons(await readAndroidSnapshotNodes(session, observation));
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_blocking_dialog_buttons_unread',
-      data: {
-        session: session.name,
-        deviceId: session.device.id,
-        command,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    throw readiness.refusal();
-  }
-  // Before Android 7.0, the dialog's buttons carry no `aerr_` ids, so no press can close it.
-  if (buttons.length === 0) throw readiness.refusal();
-  if (!aimsAtAnrDialogButton(buttons, params.target)) {
-    throw readiness.refusal(ANDROID_FOREIGN_DIALOG_HINT);
-  }
-  await confirmAndroidBlockingDialogFocus(session, command, readiness.focus, observation);
-  return { status: 'dialog-button' };
-}
-
-/**
- * A ref must name a Close app or Wait node, and the button with the same id in the fresh capture
- * must contain that node's center: so a ref read before the dialog appeared, or a Wait ref whose
- * stored position now shows Close app, is refused. A raw point must be inside either button.
- */
-function aimsAtAnrDialogButton(buttons: SnapshotNode[], target: AndroidDialogTapTarget): boolean {
-  if (target.kind === 'point') return findButtonAtPoint(buttons, target.point) !== undefined;
-  if (target.kind !== 'ref' || !target.node?.rect) return false;
-  const button = findButtonAtPoint(buttons, centerOfRect(target.node.rect));
-  return button !== undefined && button.identifier === target.node.identifier;
-}
-
-/**
- * Reads the focus again as the last step of readiness, before ref resolution and the send. The
- * buttons came from a capture, so if the dialog lost focus since then, a tap at their points could
- * reach what the dialog uncovered.
- */
-async function confirmAndroidBlockingDialogFocus(
-  session: SessionState,
-  command: string,
-  focus: AndroidBlockingDialogFocus,
-  observation: AndroidObservationAdapter,
-): Promise<void> {
-  const current = await observation.readBlockingDialog(session.device).catch((error: unknown) => {
-    throw thrownBeforeDispatch(error);
-  });
-  if (current.status === 'dialog' && isSameAndroidBlockingDialogFocus(current.focus, focus)) return;
-  const dialog = formatAndroidBlockingDialogFocus(focus);
-  const message =
-    current.status === 'dialog'
-      ? `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(current.focus)}.`
-      : current.status === 'unknown'
-        ? `Android focus could not be read to confirm that the system dialog still has focus before ${command} was sent: ${dialog}.`
-        : `Android system dialog lost focus before ${command} was sent: ${dialog}.`;
-  throw discloseDispatch(
-    androidBlockingDialogError({
-      session,
-      command,
-      focus: current.status === 'dialog' ? current.focus : focus,
-      message,
-      hint: 'Nothing was sent. Take a new snapshot, then retry the command.',
-    }),
-    'no',
-  );
-}
-
-function isSameAndroidBlockingDialogFocus(
-  a: AndroidBlockingDialogFocus,
-  b: AndroidBlockingDialogFocus,
-): boolean {
-  return a.package === b.package && a.focusedWindow === b.focusedWindow;
-}
-
-/**
- * Android's view hit test excludes the right and bottom edges, so a point on them reaches the
- * dialog around the button, not the button.
- */
-function findButtonAtPoint(buttons: SnapshotNode[], point: Point): SnapshotNode | undefined {
-  return buttons.find(
-    ({ rect }) =>
-      rect !== undefined &&
-      point.x >= rect.x &&
-      point.x < rect.x + rect.width &&
-      point.y >= rect.y &&
-      point.y < rect.y + rect.height,
-  );
-}
-
-/**
- * After a tap on a dialog button, Android removes the dialog window asynchronously. Waits a bounded
- * time for the focus to leave the dialog, so the after-command check reads the result of the tap
- * and not the frame before it.
- */
-export async function waitForAndroidBlockingDialogFocusToClear(
-  session: SessionState,
-  observation: AndroidObservationAdapter | undefined,
-): Promise<void> {
-  const adapter = requireObservation(observation);
-  for (let attempt = 0; attempt < ANDROID_MODAL_POLL_ATTEMPTS; attempt += 1) {
-    const dialog = await adapter.readBlockingDialog(session.device);
-    if (dialog.status !== 'dialog') return;
-    await sleep(ANDROID_MODAL_POLL_MS);
-  }
-}
-
-type AndroidBlockingSystemDialogReadiness =
-  | AndroidBlockingDialogReadinessResult
-  | {
-      status: 'foreign-dialog';
-      focus: AndroidBlockingDialogFocus;
-      /** `hint` defaults to recovery steps; a press that may target the buttons passes its own. */
-      refusal: (hint?: string) => AppError;
-    };
-
-async function readAndroidBlockingSystemDialogReadiness(params: {
-  session: SessionState;
-  command: string;
-  phase: 'before-command' | 'after-command';
-  observation?: AndroidObservationAdapter;
-}): Promise<AndroidBlockingSystemDialogReadiness> {
   const { session, command } = params;
   if (session.device.platform !== 'android' || isProviderOwnedSession(session)) {
     return { status: 'clear' };
@@ -405,22 +228,13 @@ async function readAndroidBlockingSystemDialogReadiness(params: {
     });
   }
 
-  return {
-    status: 'foreign-dialog',
+  throw androidBlockingDialogError({
+    session,
+    command,
     focus,
-    refusal: (hint = ANDROID_BLOCKING_DIALOG_HINT) => {
-      const error = androidBlockingDialogError({
-        session,
-        command,
-        focus,
-        message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
-        hint,
-      });
-      // ADR 0039: before the command, the refusal sends nothing. After it, the command's own
-      // dispatch ledger discloses what was sent.
-      return params.phase === 'before-command' ? discloseDispatch(error, 'no') : error;
-    },
-  };
+    message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
+    hint: ANDROID_BLOCKING_DIALOG_HINT,
+  });
 }
 
 async function recoverAppOwnedAndroidBlockingSystemDialogSafely(
@@ -566,8 +380,15 @@ function findCloseAppButton(
   if (options.requireDialogSignal !== false && !containsBlockingDialog(nodes)) {
     return undefined;
   }
-  return findAnrDialogButtons(nodes).find(
-    (node) => node.identifier === ANDROID_ANR_CLOSE_BUTTON_ID,
+  return findTouchableDialogButton(nodes, ANDROID_ANR_CLOSE_BUTTON_ID);
+}
+
+function findTouchableDialogButton(
+  nodes: SnapshotNode[],
+  identifier: string,
+): SnapshotNode | undefined {
+  return nodes.find(
+    (node) => node.identifier === identifier && node.rect && isTouchableDialogNode(node),
   );
 }
 
@@ -644,21 +465,6 @@ function readNodeTextParts(node: {
   return parts
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .map((part) => part.trim());
-}
-
-/**
- * The ANR dialog's touchable Close app and Wait buttons, read by resource id: the dialog's text is in
- * the device language.
- */
-function findAnrDialogButtons(nodes: SnapshotNode[]): SnapshotNode[] {
-  return nodes
-    .filter(isTouchableDialogNode)
-    .filter(
-      (node) =>
-        node.rect !== undefined &&
-        node.identifier !== undefined &&
-        ANDROID_ANR_DIALOG_BUTTON_IDS.has(node.identifier),
-    );
 }
 
 function containsBlockingDialog(nodes: SnapshotNode[]): boolean {
