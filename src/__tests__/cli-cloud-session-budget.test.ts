@@ -124,6 +124,18 @@ test('refuses --max-usd outside connect cloud', async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+test('validates the provider name before applying cloud-only flag rules', async () => {
+  const fetchMock = stubCloudApi();
+  const refused = await runCliCapture(
+    ['connect', 'browserstrack', '--vendor', 'provider-a', '--platform', 'ios', '--json'],
+    { env: cloudEnv() },
+  );
+  expect(JSON.parse(refused.stdout).error.message).toContain(
+    'Unknown connect provider: browserstrack',
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
 test('refuses a project config cap before contacting the cloud API', async () => {
   const project = mkdtempForTestSync('agent-device-cloud-project-');
   fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify({ maxUsd: '0.50' }));

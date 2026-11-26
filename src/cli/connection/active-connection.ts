@@ -88,13 +88,13 @@ function hasNamedCloudConnection(location: ConnectionLocation): boolean {
 
 export async function resolveConnectionAuthFlags(options: {
   command: string;
-  provider: string | undefined;
+  positionals: string[];
   flags: CliFlags;
   host: HostEnvironment;
   location: ConnectionLocation;
 }): Promise<CliFlags> {
-  const { command, provider, flags, host, location } = options;
-  if (await usesCloudSessionAuth(command, provider, flags, location)) return flags;
+  const { command, positionals, flags, host, location } = options;
+  if (await usesCloudSessionAuth(command, positionals, flags, host, location)) return flags;
   const resolution = await resolveRemoteAuthForCli({
     command,
     flags,
@@ -106,12 +106,15 @@ export async function resolveConnectionAuthFlags(options: {
 
 async function usesCloudSessionAuth(
   command: string,
-  provider: string | undefined,
+  positionals: string[],
   flags: CliFlags,
+  host: HostEnvironment,
   location: ConnectionLocation,
 ): Promise<boolean> {
   if (command === 'disconnect') return hasNamedCloudConnection(location);
   if (command !== 'connect') return false;
+  const { readConnectProvider } = await import('./provider-policy.ts');
+  const provider = await readConnectProvider(positionals, host.env);
   const { selectCloudSessionPath } = await import('./connect-provider-adapters.ts');
   return selectCloudSessionPath(provider, flags);
 }

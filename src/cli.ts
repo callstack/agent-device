@@ -525,7 +525,7 @@ async function resolveRemoteContext(
     const { resolveConnectionAuthFlags } = await import('./cli/connection/active-connection.ts');
     ctx.effectiveFlags = await resolveConnectionAuthFlags({
       command: ctx.command,
-      provider: ctx.positionals[0],
+      positionals: ctx.positionals,
       flags: ctx.effectiveFlags,
       host: ctx.host,
       location: { stateDir: ctx.daemonPaths.baseDir, session: ctx.sessionName },

@@ -1,4 +1,3 @@
-import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import { resolveHostedCloudAccess } from '../connection/cloud-access.ts';
 import {
   readCloudSessionRequest,
@@ -46,11 +45,8 @@ import {
 } from '@agent-device/contracts/lease-scope';
 import {
   admitProviderForRoute,
-  connectProviderNamesForError,
   connectionProviderCapabilities,
-  isConnectProviderName,
-  primeProviderConnection,
-  unavailableConnectPluginError,
+  readConnectProvider,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
@@ -747,27 +743,6 @@ function formatProviderReleaseWarning(warning: unknown): string | undefined {
   if (typeof entry.message !== 'string' || entry.message.length === 0) return undefined;
   const code = typeof entry.code === 'string' && entry.code.length > 0 ? ` (${entry.code})` : '';
   return `Provider release warning${code}: ${entry.message}`;
-}
-
-async function readConnectProvider(
-  positionals: string[],
-  env: NodeJS.ProcessEnv,
-): Promise<ConnectProvider | undefined> {
-  const provider = canonicalLeaseProvider(positionals[0]);
-  if (provider === undefined) return undefined;
-  if (positionals.length > 1) {
-    throw new AppError('INVALID_ARGS', 'connect accepts at most one provider positional.');
-  }
-  await primeProviderConnection(provider, env);
-  if (isConnectProviderName(provider, env)) {
-    return provider;
-  }
-  const pluginError = unavailableConnectPluginError(provider, env);
-  if (pluginError) throw pluginError;
-  throw new AppError(
-    'INVALID_ARGS',
-    `Unknown connect provider: ${provider}. Supported providers: ${connectProviderNamesForError(env)}.`,
-  );
 }
 
 function readRequestedConnectionState(
