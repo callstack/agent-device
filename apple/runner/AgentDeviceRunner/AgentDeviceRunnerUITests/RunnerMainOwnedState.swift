@@ -8,7 +8,11 @@ final class RunnerMainOwnedState {
   var bundleId: String?
   var processIdentifier: Int?
   var accessibilityHealth: RunnerAccessibilityHealth = .unknown
-  var needsPostSnapshotInteractionDelay = false
+  /// When the first interaction after an XCTest snapshot may run. The guarantee is a minimum gap
+  /// *since the snapshot finished*, not a pause at the interaction: a caller that already spent
+  /// that gap elsewhere has satisfied it and waits for nothing. `nil` = no snapshot is pending
+  /// stabilization.
+  var postSnapshotInteractionReadyUptime: TimeInterval?
   /// The device's only screen in portrait points, kept for the rest of the command after its first
   /// successful read. Each command reads it again, because display scaling can change it while the
   /// runner runs; orientation is applied per gesture.
