@@ -266,8 +266,9 @@ function aimsAtAnrDialogButton(buttons: SnapshotNode[], target: AndroidDialogTap
 }
 
 /**
- * Reads the focus again just before the tap is sent. The buttons came from a capture, so if the
- * dialog lost focus since then, a tap at their points could reach what the dialog uncovered.
+ * Reads the focus again as the last step of readiness, before ref resolution and the send. The
+ * buttons came from a capture, so if the dialog lost focus since then, a tap at their points could
+ * reach what the dialog uncovered.
  */
 async function confirmAndroidBlockingDialogFocus(
   session: SessionState,
