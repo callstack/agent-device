@@ -562,6 +562,20 @@ test('a ref from a snapshot taken before the ANR dialog is not retargeted to the
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
+test('a Wait ref is not retargeted to Close app when the dialog buttons moved since the snapshot', async () => {
+  // The stored snapshot shows Wait where the current dialog shows Close app.
+  const [title, closeApp, wait] = systemUiAnrScreen();
+  const storedScreen = attachRefs([
+    { ...title! },
+    { ...wait!, rect: closeApp!.rect! },
+    { ...closeApp!, rect: wait!.rect! },
+  ]);
+  const response = await pressWithSystemUiAnr(['@e2'], {}, { sessionNodes: storedScreen });
+
+  expect(response).toMatchObject({ ok: false, error: { details: { dispatched: 'no' } } });
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
 test('a press on a System UI ANR dialog button is refused when the dialog loses focus before the send', async () => {
   // Readiness reads the dialog; by the read just before the send, Android has removed it, so the
   // button points now belong to the screen underneath.

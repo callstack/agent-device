@@ -298,7 +298,10 @@ test("a tap may target a foreign ANR dialog's own buttons, and nothing is tapped
     status: 'dialog-buttons',
     admission: {
       focus: systemDialogFocus(),
-      buttons: [CLOSE_APP_RECT, { x: 100, y: 700, width: 220, height: 80 }],
+      buttons: [
+        { identifier: 'android:id/aerr_close', rect: CLOSE_APP_RECT },
+        { identifier: 'android:id/aerr_wait', rect: { x: 100, y: 700, width: 220, height: 80 } },
+      ],
     },
   });
   expect(tapCalls(calls)).toEqual([]);
@@ -323,7 +326,12 @@ test("a tap may target a localized foreign ANR dialog's own buttons", async () =
 
   expect(readiness).toMatchObject({
     status: 'dialog-buttons',
-    admission: { buttons: [CLOSE_APP_RECT, { x: 100, y: 700, width: 220, height: 80 }] },
+    admission: {
+      buttons: [
+        { identifier: 'android:id/aerr_close', rect: CLOSE_APP_RECT },
+        { identifier: 'android:id/aerr_wait', rect: { x: 100, y: 700, width: 220, height: 80 } },
+      ],
+    },
   });
 });
 

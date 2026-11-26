@@ -61,7 +61,7 @@ export type AndroidBlockingDialogReadinessResult =
  */
 export type AndroidBlockingDialogButtonAdmission = Readonly<{
   focus: AndroidBlockingDialogFocus;
-  buttons: readonly Rect[];
+  buttons: readonly AndroidAppErrorDialogButton[];
   refusal: () => AppError;
   /**
    * Reads the focus again immediately before the tap is sent. Throws, with nothing sent, when the
@@ -70,6 +70,9 @@ export type AndroidBlockingDialogButtonAdmission = Readonly<{
    */
   confirmFocus: () => Promise<void>;
 }>;
+
+/** One framework app-error dialog button: its resource id (the action it takes) and its frame. */
+export type AndroidAppErrorDialogButton = Readonly<{ identifier: string; rect: Rect }>;
 
 export type AndroidBlockingDialogTapReadinessResult =
   | AndroidBlockingDialogReadinessResult
@@ -237,7 +240,7 @@ export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
   });
   if (readiness.status !== 'foreign-dialog') return readiness;
   const observation = requireObservation(params.observation);
-  let buttons: Rect[];
+  let buttons: AndroidAppErrorDialogButton[];
   try {
     buttons = findAppErrorDialogButtons(
       await readAndroidSnapshotNodes(params.session, observation),
@@ -302,18 +305,21 @@ function isSameAndroidBlockingDialogFocus(
 
 /**
  * True when the tap point falls on one of the dialog's own buttons. `resolvedOn` is the tree the
- * target was resolved on, when it was resolved on one: the point must be a dialog button there too,
- * so an app control from a tree read before the dialog appeared is not retargeted to the dialog
- * button that now covers it.
+ * target was resolved on, when it was resolved on one: the same button must be at the point there
+ * too. So an app control from a tree read before the dialog appeared is not retargeted to the
+ * dialog button that now covers it, and a Wait target is not retargeted to Close app.
  */
 export function isAndroidBlockingDialogButtonPoint(
   admission: AndroidBlockingDialogButtonAdmission,
   point: Point,
   resolvedOn?: SnapshotNode[],
 ): boolean {
-  if (!isPointOnAnyButton(admission.buttons, point)) return false;
+  const button = findButtonAtPoint(admission.buttons, point);
+  if (!button) return false;
+  if (resolvedOn === undefined) return true;
   return (
-    resolvedOn === undefined || isPointOnAnyButton(findAppErrorDialogButtons(resolvedOn), point)
+    findButtonAtPoint(findAppErrorDialogButtons(resolvedOn), point)?.identifier ===
+    button.identifier
   );
 }
 
@@ -321,9 +327,12 @@ export function isAndroidBlockingDialogButtonPoint(
  * Android's view hit test excludes the right and bottom edges, so a point on them reaches the
  * dialog around the button, not the button.
  */
-function isPointOnAnyButton(buttons: readonly Rect[], point: Point): boolean {
-  return buttons.some(
-    (rect) =>
+function findButtonAtPoint(
+  buttons: readonly AndroidAppErrorDialogButton[],
+  point: Point,
+): AndroidAppErrorDialogButton | undefined {
+  return buttons.find(
+    ({ rect }) =>
       point.x >= rect.x &&
       point.x < rect.x + rect.width &&
       point.y >= rect.y &&
@@ -658,11 +667,14 @@ function readNodeTextParts(node: {
  * already read the ANR window's focus, and the dialog's text is in the device language, so only the
  * framework id identifies a button: an app cannot declare an id in the `android` package.
  */
-function findAppErrorDialogButtons(nodes: SnapshotNode[]): Rect[] {
+function findAppErrorDialogButtons(nodes: SnapshotNode[]): AndroidAppErrorDialogButton[] {
   return nodes
     .filter(isTouchableDialogNode)
-    .filter((node) => ANDROID_APP_ERROR_DIALOG_BUTTON_ID.test(node.identifier ?? ''))
-    .flatMap((node) => (node.rect ? [node.rect] : []));
+    .flatMap(({ identifier, rect }) =>
+      identifier && rect && ANDROID_APP_ERROR_DIALOG_BUTTON_ID.test(identifier)
+        ? [{ identifier, rect }]
+        : [],
+    );
 }
 
 function containsBlockingDialog(nodes: SnapshotNode[]): boolean {
