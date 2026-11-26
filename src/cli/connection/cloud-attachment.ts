@@ -10,7 +10,7 @@ import type {
   RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { isLegacyCloudProfile } from './active-connection.ts';
-import { parseCloudAttachment, type CloudAttachment } from './cloud-session-api.ts';
+import { parseCloudAttachment, type CloudAttachment } from './cloud-attachment-schema.ts';
 import {
   admitCloudCredentialDirectory,
   CLOUD_CONNECTION_REASONS,
