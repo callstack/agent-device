@@ -721,6 +721,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       '@agent-device/provision-kit':
         specifier: workspace:*
         version: link:../provision-kit

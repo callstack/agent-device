@@ -341,6 +341,6 @@ function parseSourceUrl(raw: string): URL {
   return parsed;
 }
 
-export function invalidSourceUrlError(): AppError {
+function invalidSourceUrlError(): AppError {
   return new AppError('INVALID_ARGS', 'Invalid source URL');
 }

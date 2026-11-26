@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { ANDROID_CONTENT_RECOVERY_REASONS } from '@agent-device/contracts/android-snapshot-quality';
+import {
+  ANDROID_CONTENT_RECOVERY_REASONS,
+  isUnreadableCaptureContentError,
+} from '@agent-device/contracts/android-snapshot-quality';
 import { throwDaemonError } from '@agent-device/kernel/errors';
-import { AppError, isUnreadableCaptureContentError, normalizeAgentDeviceError } from './index.ts';
+import { AppError, normalizeAgentDeviceError } from './index.ts';
 
 // Public-entry contract, through `./index.ts`: a client polling with `snapshot` classifies the
 // error it caught after the daemon wire round trip, not the producer's in-process error.

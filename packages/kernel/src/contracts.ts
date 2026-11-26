@@ -1,7 +1,7 @@
 import { AppError, type DaemonError } from './errors.ts';
 
 export type { AppErrorCode } from './errors.ts';
-export { defaultHintForCode, normalizeError } from './errors.ts';
+export { defaultHintForCode } from './errors.ts';
 import type { PlatformSelector, PublicPlatform } from './device.ts';
 
 const SESSION_RUNTIME_PLATFORMS = ['ios', 'android', 'harmonyos'] as const;
@@ -434,7 +434,6 @@ export type JsonRpcRequestEnvelope<TParams = unknown> = {
   params?: TParams;
 };
 
-export { centerOfRect } from './snapshot.ts';
 export type { Rect, SnapshotNode } from './snapshot.ts';
 
 type RuntimeSchema<T> = {

@@ -12,7 +12,7 @@ import { readMetadataCommandFlags } from './command-flags.ts';
 import { listCommandFamilyDaemonWriters } from './family/registry.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
-export type { AgentDeviceClient, AgentDeviceCommandClient } from './client-port.ts';
+export type { AgentDeviceClient } from './client-port.ts';
 export type { CommandMetadata, JsonSchema } from './command-contract.ts';
 export { commandInputExample } from './command-contract.ts';
 export type { InputAudience, InputAudienceMap } from './input-audience.ts';

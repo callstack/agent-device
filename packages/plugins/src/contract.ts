@@ -136,7 +136,6 @@ export type ProviderContribution = Readonly<{
 
 export type {
   MacOsPlatformLeafContribution,
-  PlatformBackgroundCommand,
   PlatformBackgroundProcess,
   PlatformContribution,
   PlatformHost,
@@ -168,11 +167,3 @@ export type AgentDevicePlugin<C extends Contribution = Contribution> = Readonly<
  * union.
  */
 export type ProviderOnlyPlugin = AgentDevicePlugin<ProviderContribution>;
-
-/**
- * The default export of a plugin package's `./agent-device` entry. The store calls it with
- * `config.json` `plugins[name].options`; a JS host calls it directly.
- */
-export type AgentDevicePluginFactory<Options = Record<string, unknown>> = (
-  options?: Options,
-) => AgentDevicePlugin | Promise<AgentDevicePlugin>;

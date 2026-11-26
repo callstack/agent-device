@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseSelectorChain } from './parse.ts';
 import {
-  findSelectorChainMatch,
+  listSelectorChainMatches,
   resolveSelectorChain,
   resolveSelectorChainDomain,
 } from './resolve.ts';
@@ -102,12 +102,12 @@ test('resolveSelectorChainDomain reports the first matching alternative when not
   assert.deepEqual(missing, { resolution: null, matchedNodes: [], firstMatch: null });
 });
 
-test('findSelectorChainMatch returns first matching selector for existence checks', () => {
+test('listSelectorChainMatches lists every match from the first matching selector', () => {
   const chain = parseSelectorChain('label="Continue" || id=auth_continue');
-  const match = findSelectorChainMatch(loginFormNodes, chain, {
+  const match = listSelectorChainMatches(loginFormNodes, chain, {
     platform: 'ios',
   });
   assert.ok(match);
   assert.equal(match.selectorIndex, 0);
-  assert.equal(match.matches, 2);
+  assert.equal(match.matchedNodes.length, 2);
 });

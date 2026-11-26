@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const [core, plugin, scratch] = process.argv.slice(2);
-const { startAgentDevice } = await import(pathToFileURL(path.join(core, 'dist/src/index.js')));
+const { startAgentDevice } = await import('../../../src/host.ts');
 const { default: replayPlugin } = await import(
   pathToFileURL(path.join(plugin, 'dist/agent-device.mjs'))
 );
@@ -104,6 +104,4 @@ try {
 } finally {
   await installed.close();
 }
-process.stdout.write(
-  'Packed native replay, suites, failure isolation and embedded scopes passed.\n',
-);
+process.stdout.write('Packed native replay plugin passed against the source host.\n');

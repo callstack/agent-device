@@ -1,6 +1,6 @@
 import { daemonRuntimeSchema, type SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from './json.ts';
+import { isRecord } from '@agent-device/kernel/record';
 
 export const DEFAULT_BATCH_MAX_STEPS = 100;
 

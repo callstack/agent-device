@@ -71,7 +71,7 @@ export async function createLimrunRuntimeDependencies(
   };
 }
 
-/** The capabilities the daemon and `startAgentDevice` add to a `setup` host; refuses a host without them. */
+/** The capabilities the daemon adds to a `setup` host; refuses a host without them. */
 function requireHostCapabilities(host: DeviceProviderPluginHost): ProviderHostCapabilities {
   const { stateDir, loadAndroid, loadApple, loadHostKit } = host;
   if (stateDir !== undefined && loadAndroid && loadApple && loadHostKit)
@@ -81,7 +81,7 @@ function requireHostCapabilities(host: DeviceProviderPluginHost): ProviderHostCa
     'This agent-device host does not provide the device capabilities Limrun needs.',
     {
       reason: LIMRUN_HOST_REASONS.capabilityMissing,
-      hint: 'Run Limrun through the agent-device daemon or startAgentDevice of a matching release.',
+      hint: 'Run Limrun through the agent-device daemon of a matching release.',
     },
   );
 }

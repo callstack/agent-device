@@ -105,7 +105,6 @@ export default defineConfig({
         group('Integrations', [
           'client-api',
           'build-an-integration',
-          'ai-sdk',
           'eve',
           'remote-proxy',
           'device-clouds',

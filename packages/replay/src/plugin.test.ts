@@ -5,11 +5,11 @@ import { expect, test, vi } from 'vitest';
 import { createReplaySetupHost } from '@agent-device/plugins/host';
 import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
 import replayPlugin from './plugin.ts';
+import type { AgentDevicePlugin } from 'agent-device/plugins';
 import type {
-  AgentDevicePlugin,
   ReplayBackendContribution,
   ReplayExecutionContribution,
-} from 'agent-device/plugins';
+} from '@agent-device/plugins/replay-backend';
 
 function contributionOf(
   plugin: AgentDevicePlugin,

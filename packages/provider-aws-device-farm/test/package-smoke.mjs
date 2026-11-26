@@ -68,7 +68,7 @@ export function environment(endpoint) {
   return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` };
 }
 
-export async function verifyPacked({ core, contracts, plugin }) {
+export async function verifyPacked({ core, plugin }) {
   const flags = {
     platform: 'android',
     awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project',
@@ -111,7 +111,7 @@ export async function verifyPacked({ core, contracts, plugin }) {
       await run();
     } catch (error) {
       assert.ok(error instanceof core.AppError);
-      return contracts.normalizeError(error);
+      return core.normalizeAgentDeviceError(error);
     }
     assert.fail('Expected an AWS failure');
   };
@@ -145,7 +145,10 @@ export async function verifyPacked({ core, contracts, plugin }) {
       { flags },
     ),
   );
-  await runtime.shutdown();
+  await assert.rejects(runtime.shutdown(), (error) => {
+    assert.equal(error.details?.reason, 'provider_session_cleanup_incomplete');
+    return true;
+  });
   assert.equal(allocation.code, 'COMMAND_FAILED');
   assert.equal(allocation.details.reason, 'host-primary');
   assert.equal(allocation.hint, 'Retry manually.');
@@ -161,11 +164,11 @@ export async function verifyTypes({ consumer, run, root }) {
   fs.writeFileSync(
     path.join(consumer, 'consumer.mts'),
     `
-import { startAgentDevice } from 'agent-device';
+import type { ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import awsDeviceFarm from '@agent-device/aws-device-farm/agent-device';
 import { verifyAwsDeviceFarmConnection } from '@agent-device/aws-device-farm/connection-verification';
-const runtime = await startAgentDevice({ stateDir: './state', plugins: [awsDeviceFarm()] });
-await runtime.close();
+const plugin: ProviderAgentDevicePlugin = awsDeviceFarm();
+void plugin;
 await verifyAwsDeviceFarmConnection({ platform: 'android', projectArn: 'project', deviceArn: 'device' }, async () => ({ stdout: '{}' }));
 `,
   );

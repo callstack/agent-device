@@ -24,28 +24,14 @@ After you add or update the plugin, close your sessions and run `agent-device da
 
 ## Use it from JavaScript
 
-The package default-exports a plugin factory. Pass credentials as options, or leave them out to read
-`REVYL_API_KEY` and the optional `REVYL_API_URL` from the environment:
+Run this in the same shell as the CLI commands above so the daemon can read
+`REVYL_API_KEY` and, for a private backend, the optional `REVYL_API_URL`. The example uses the CLI's default state directory. If you
+passed `--state-dir` to the CLI, pass the same `stateDir` to both calls.
 
 ```js
-import revyl from '@agent-device/revyl';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
-const plugin = revyl({ apiKey: 'your-api-key' });
+await ensureDaemon();
+const client = createAgentDeviceClient({ session: 'checkout-ios' });
+console.log(await client.sessions.list());
 ```
-
-Pass that object to a host you start yourself, and drive the device with its client:
-
-```js
-import { startAgentDevice } from 'agent-device';
-import revyl from '@agent-device/revyl';
-
-const host = await startAgentDevice({
-  stateDir: './.my-app/agent-device-state',
-  plugins: [revyl({ apiKey: 'your-api-key' })],
-});
-// host.client drives the device; await host.close() when you are done.
-```
-
-Credentials passed as options are used instead of the environment variables, and the daemon does not
-compare them with your shell. Each option replaces only its own variable: passing `apiUrl` alone still
-reads `REVYL_API_KEY` from the environment.

@@ -147,5 +147,4 @@ export type {
   RefTarget,
   SelectorTarget,
 } from '../client-target.ts';
-export { isRecord } from '../json.ts';
 export type { JsonObject, JsonPrimitive, JsonValue } from '../json.ts';

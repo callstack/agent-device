@@ -155,53 +155,19 @@ which is what a local fake of the API is for.
 
 ## Use it from JavaScript
 
-Install the plugin package as a dependency of your host and pass it to a host you start yourself.
-`startAgentDevice()` runs the daemon in your process and registers the plugin objects you hand it, so
-no `plugins add` step and no `REVYL_API_KEY` in the environment are needed:
+Install and connect the plugin as described above. Use the same shell so the
+client uses the CLI's state directory and Revyl credentials:
 
 ```ts
-import { createAgentDeviceClient, startAgentDevice } from 'agent-device';
-import revyl from '@agent-device/revyl';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
-const host = await startAgentDevice({
-  stateDir: './.my-app/agent-device-state',
-  plugins: [revyl({ apiKey: 'your-api-key', apiUrl: 'https://backend.example.com' })],
-});
-
-const scope = {
-  session: 'checkout-ios',
-  tenant: 'revyl',
-  runId: process.env.GITHUB_RUN_ID ?? 'local-run',
-  leaseBackend: 'ios-instance',
-  leaseProvider: 'revyl',
-} as const;
-
-const lease = await host.client.leases.allocate({
-  ...scope,
-  platform: 'ios',
-  providerApp: 'https://apps.example.com/MyApp-simulator.zip',
-});
-const client = createAgentDeviceClient({ ...host.clientConfig, ...scope, leaseId: lease.leaseId });
-
-try {
-  await client.apps.open({ app: 'com.example.app' });
-  await client.capture.snapshot({ interactiveOnly: true });
-  await client.interactions.click({ selector: 'label="Continue"' });
-} finally {
-  // Releasing the lease ends the Revyl session, so a failure cannot leave a device rented.
-  // The inner finally closes the host even when the release itself fails; otherwise the embedded
-  // daemon stays alive and nothing retries the release.
-  try {
-    await host.client.leases.release({ ...scope, leaseId: lease.leaseId });
-  } finally {
-    await host.close();
-  }
-}
+await ensureDaemon();
+const client = createAgentDeviceClient({ session: 'checkout-ios' });
 ```
 
-`apiUrl` is optional and only needed for a staging or private Revyl backend. Leaving both out makes
-the plugin read `REVYL_API_KEY` from the environment, which is also the only path a CLI or MCP session
-takes when the daemon loads the plugin from the plugin store.
+If you passed `--state-dir` to the CLI, pass the same `stateDir` to both
+`ensureDaemon()` and `createAgentDeviceClient()`. Call `client.apps.open()` to start
+work on the session and rent a device.
 
 ## Troubleshoot
 

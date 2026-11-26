@@ -41,7 +41,7 @@ In text mode, every command prints each response warning as a `Warning:` line af
 `value=$(agent-device get text …)` captures only the value. With `--json`, warnings stay in
 `data.warnings` and no `Warning:` line is printed.
 
-Text from a device or a remote daemon, such as a label or a file path, can hold control characters. The CLI prints them as JSON escapes such as `\u001b`, so printed JSON still parses back to the exact values. MCP and AI SDK structured content keeps the exact values.
+Text from a device or a remote daemon, such as a label or a file path, can hold control characters. The CLI prints them as JSON escapes such as `\u001b`, so printed JSON still parses back to the exact values. MCP structured content keeps the exact values.
 
 ## Navigation
 
@@ -160,7 +160,7 @@ Exact behavior: `agent-device help daemon`.
 - `daemon stop --clean` also removes the Apple runner processes and leases that daemon kept.
 - On Windows, `daemon stop` force-terminates the daemon at once (`mode: "forced"`, `cleanupConfidence: "unknown"`) rather than waiting for an in-process teardown.
 - On macOS, `daemon stop` can refuse a daemon that an older build started, with `details.terminationReason: identity-unverified`. Stop it with the build that started it, or send `SIGTERM` to its recorded PID. Do not run an older and a newer build on one macOS host: device claims and runner leases are shared by the host.
-- `daemon stop` refuses a daemon that a host process embeds (`daemon-owner-embedded`). Close it in that process with the handle from `startAgentDevice()`. For the other refusals, see [Daemon lifecycle](/docs/client-api#daemon-lifecycle).
+- `daemon stop` refuses a daemon that a host process embeds (`daemon-owner-embedded`). Only internal hosts can create embedded runtimes. The CLI cannot stop a live embedded runtime. For the other refusals, see [Daemon lifecycle](/docs/client-api#daemon-lifecycle).
 - `daemon status` reads the daemon's record without contacting it, including each registered provider and why a plugin failed to register. See [provider plugins](/docs/plugins).
 - A `--state-dir` or `AGENT_DEVICE_STATE_DIR` must be a private directory of your own account. agent-device refuses one that another account owns or can write. See [Supported environment variables](/docs/configuration#supported-environment-variables).
 

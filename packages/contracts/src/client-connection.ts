@@ -24,9 +24,8 @@ import type {
  * A missing daemon fails with `details.reason: 'daemon-not-running'`; an incompatible one uses
  * `'daemon-incompatible'`.
  *
- * `ensureDaemon()` is the explicit way to start or replace a detached daemon. `startAgentDevice()`
- * imported from `agent-device` owns one in your process and refuses an already registered state
- * directory. `ensureDaemon()` refuses to replace a daemon that holds another client's work.
+ * Use `ensureDaemon()` to start or replace a detached daemon explicitly. It refuses to replace a
+ * daemon that holds another client's work.
  *
  * Independent of `daemonTransport`, `daemonServerMode` and `daemonBaseUrl`: a remote connection never
  * starts or retires a local daemon.

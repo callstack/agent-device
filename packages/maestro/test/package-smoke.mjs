@@ -16,6 +16,7 @@ function files(directory) {
 
 test('packed core excludes the engine and the managed plugin works without workspace dependencies', async (t) => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-package-'));
+  let cleanup;
   try {
     const coreTarball = path.join(
       scratch,
@@ -37,10 +38,31 @@ test('packed core excludes the engine and the managed plugin works without works
     const core = path.join(consumer, 'node_modules/agent-device');
     const cli = path.join(core, 'bin/agent-device.mjs');
     const env = {
-      ...process.env,
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([name]) => !name.startsWith('AGENT_DEVICE_')),
+      ),
+      HOME: path.join(scratch, 'user-home'),
+      AGENT_DEVICE_CLAIMS_DIR: path.join(scratch, 'claims'),
       AGENT_DEVICE_HOME: home,
       AGENT_DEVICE_STATE_DIR: path.join(scratch, 'state'),
       AGENT_DEVICE_NO_UPDATE: '1',
+    };
+    cleanup = () => {
+      run(
+        process.execPath,
+        [cli, 'daemon', 'stop', '--clean', '--state-dir', env.AGENT_DEVICE_STATE_DIR, '--json'],
+        consumer,
+        env,
+      );
+      const status = JSON.parse(
+        run(
+          process.execPath,
+          [cli, 'daemon', 'status', '--state-dir', env.AGENT_DEVICE_STATE_DIR, '--json'],
+          consumer,
+          env,
+        ),
+      );
+      assert.equal(status.data.state, 'stopped');
     };
     const coreCode = files(path.join(core, 'dist'))
       .filter((file) => file.endsWith('.js'))
@@ -50,6 +72,18 @@ test('packed core excludes the engine and the managed plugin works without works
     assert.ok(
       !files(path.join(core, 'dist')).some((file) => /run-script-(?:http-)?child\./.test(file)),
     );
+    const flow = path.join(scratch, 'no-device.yaml');
+    fs.writeFileSync(flow, 'appId: com.example.app\n---\n- evalScript: ${output.value = "ok"}\n');
+    const replayArgs = [
+      'replay',
+      flow,
+      '--maestro',
+      '--platform',
+      'ios',
+      '--session',
+      'packed-maestro',
+      '--json',
+    ];
     const script = path.join(scratch, 'flow.ad');
     fs.writeFileSync(script, 'open com.example.app\n');
     assert.match(
@@ -73,6 +107,26 @@ test('packed core excludes the engine and the managed plugin works without works
     );
     assert.match(missing, /plugin-not-installed/);
     assert.match(missing, /agent-device plugins add @agent-device\/maestro/);
+    const absentReplay = run(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `
+      import { spawnSync } from 'node:child_process';
+      const result = spawnSync(process.execPath, ${JSON.stringify([cli, ...replayArgs])}, { encoding: 'utf8' });
+      if (result.status !== 1) throw new Error('missing Maestro replay did not fail');
+      process.stdout.write(result.stdout);
+    `,
+      ],
+      consumer,
+      env,
+    );
+    const absent = JSON.parse(absentReplay);
+    assert.equal(absent.success, false);
+    assert.equal(absent.error.details.reason, 'plugin-not-installed');
+    assert.equal(absent.error.details.package, '@agent-device/maestro');
+    cleanup();
     const added = JSON.parse(
       run(process.execPath, [cli, 'plugins', 'add', pluginTarball, '--json'], consumer, env),
     );
@@ -97,6 +151,26 @@ test('packed core excludes the engine and the managed plugin works without works
         compatible: true,
       },
     ]);
+    const replay = JSON.parse(run(process.execPath, [cli, ...replayArgs], consumer, env));
+    assert.equal(replay.success, true);
+    assert.equal(replay.data.replayed, 1);
+    const status = JSON.parse(
+      run(
+        process.execPath,
+        [cli, 'daemon', 'status', '--state-dir', env.AGENT_DEVICE_STATE_DIR, '--json'],
+        consumer,
+        env,
+      ),
+    );
+    assert.equal(status.data.state, 'running');
+    assert.ok(
+      status.data.plugins.some(
+        (entry) =>
+          entry.package === '@agent-device/maestro' &&
+          entry.source === 'store' &&
+          entry.state === 'active',
+      ),
+    );
     const store = path.join(home, 'plugins', artifact.installation);
     const plugin = path.join(store, 'node_modules/@agent-device/maestro');
     const manifest = JSON.parse(fs.readFileSync(path.join(plugin, 'package.json'), 'utf8'));
@@ -113,7 +187,7 @@ test('packed core excludes the engine and the managed plugin works without works
       'run-script-debug',
       'run-script-env',
     ]) {
-      await t.test(`packed runtime ${mode}`, () => {
+      await t.test(`packed Maestro plugin with source host: ${mode}`, () => {
         const output = run(
           process.execPath,
           [
@@ -151,6 +225,10 @@ test('packed core excludes the engine and the managed plugin works without works
     assert.match(failed, /plugin_load_failed/);
     assert.ok(!failed.includes('plugin-not-installed'));
   } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
+    try {
+      cleanup?.();
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
   }
 });

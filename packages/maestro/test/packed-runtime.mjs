@@ -57,7 +57,7 @@ async function registry() {
   };
 }
 async function embedded(label) {
-  const { startAgentDevice } = await import(pathToFileURL(path.join(core, 'dist/src/index.js')));
+  const { startAgentDevice } = await import('../../../src/host.ts');
   let backend;
   const plugin = maestroPlugin();
   const runtime = await startAgentDevice({

@@ -3,25 +3,8 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 
-// Guards `examples/sdk/*.ts` against drifting away from the subpath API
-// manifest documented across the Node.js API docs. Each page lists the entry
-// points for its audience under "API reference"; their union is the published
-// surface. Checked in both directions:
-//   forward — every symbol an example imports from an `agent-device/...`
-//             subpath is one the doc's manifest lists for that subpath, so an
-//             example cannot start exercising undocumented API unnoticed.
-//   reverse — the handful of symbols the issue calls out as the minimum
-//             example surface (createAgentDeviceClient, normalizeBaseUrl,
-//             resolveRuntimeTransport, centerOfRect, runBatch) each still
-//             appear in some example's imports, so an example cannot be
-//             quietly deleted or renamed away from the symbol it exists to
-//             demonstrate.
-// This mirrors command-doc-coverage.test.ts's markdown-scanning approach
-// rather than compiling snippets, since the manifest list is already a
-// structured, parseable statement of the subpath surface. The docs' own
-// fenced ```ts snippets are compiled separately, in the Node integration lane
-// (test/integration/client-api-doc-snippets.test.ts) — that check spawns a
-// real tsc Program and doesn't fit the unit suite's wall-clock budget.
+// Check example imports against the documented package entry points.
+// The required client example preserves a runnable path through the retained SDK.
 
 const API_DOC_PATHS = [
   'website/docs/docs/client-api.md',
@@ -32,14 +15,10 @@ const PACKAGE_JSON_PATH = 'package.json';
 
 type SubpathManifest = ReadonlyMap<string, ReadonlySet<string>>;
 
-// Symbols the acceptance criteria for #1463 requires an example to exercise.
+// Symbols the retained SDK examples must exercise.
 // Each must be imported by at least one file in examples/sdk/.
 const REQUIRED_EXAMPLE_SYMBOLS: readonly { subpath: string; symbol: string }[] = [
   { subpath: 'agent-device', symbol: 'createAgentDeviceClient' },
-  { subpath: 'agent-device/metro', symbol: 'normalizeBaseUrl' },
-  { subpath: 'agent-device/metro', symbol: 'resolveRuntimeTransport' },
-  { subpath: 'agent-device/contracts', symbol: 'centerOfRect' },
-  { subpath: 'agent-device/batch', symbol: 'runBatch' },
 ];
 
 // Parses the "API reference" bullet list: a top-level `- \`agent-device...\``
@@ -172,7 +151,7 @@ describe('examples/sdk vs Node.js API docs drift guard', () => {
     );
   });
 
-  test('the minimum example surface required by #1463 is still exercised', () => {
+  test('the retained client example is still exercised', () => {
     const missing = REQUIRED_EXAMPLE_SYMBOLS.filter(
       ({ subpath, symbol }) =>
         ![...importsByFile.values()].some((importsBySubpath) =>

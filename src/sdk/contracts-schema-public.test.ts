@@ -24,8 +24,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import { centerOfRect, defaultHintForCode, normalizeError, type DaemonError } from './contracts.ts';
-import { AppError } from './index.ts';
+import { defaultHintForCode } from './contracts.ts';
+import { AppError, normalizeAgentDeviceError } from './index.ts';
+import { centerOfRect } from '@agent-device/kernel/snapshot';
+import type { DaemonError } from '@agent-device/kernel/errors';
 
 const invalidArgsCode = 'INVALID_ARGS' satisfies AppErrorCode;
 const rect = { x: 1, y: 2, width: 3, height: 4 } satisfies Rect;
@@ -167,8 +169,8 @@ test('command result contracts are assignable to command result map', () => {
   );
 });
 
-test('public contract exports normalize and hint app errors', () => {
-  const normalized = normalizeError(new AppError(invalidArgsCode, 'Invalid command'));
+test('public error helpers normalize and hint app errors', () => {
+  const normalized = normalizeAgentDeviceError(new AppError(invalidArgsCode, 'Invalid command'));
 
   assert.equal(normalized.code, invalidArgsCode);
   assert.equal(normalized.hint, defaultHintForCode(invalidArgsCode));
@@ -178,7 +180,7 @@ test('public contract exports normalize and hint app errors', () => {
   );
 });
 
-test('public contracts retain the DaemonError type export', () => {
+test('kernel daemon errors retain the wire error shape', () => {
   const daemonError = {
     code: 'COMMAND_FAILED',
     message: 'Daemon command failed',

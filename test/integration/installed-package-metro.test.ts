@@ -6,7 +6,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import { runCmd, runCmdSync } from '@agent-device/host-kit/command';
 
@@ -45,7 +45,7 @@ function packInstalledPackage(tempRoot: string): string {
 }
 
 function ensureBuiltPackage(): void {
-  const distMetroPath = path.join(repoRoot, 'dist', 'src', 'metro.js');
+  const distMetroPath = path.join(repoRoot, 'dist', 'src', 'index.js');
   if (fs.existsSync(distMetroPath)) return;
 
   runCmdSync('pnpm', ['build'], {
@@ -95,7 +95,7 @@ async function runNodeModuleJson(cwd: string, args: string[], script: string): P
   return readJson(stdout);
 }
 
-/** A v2 plugin written against the packed `agent-device/plugins` types, type-checked as a consumer. */
+/** Compile the retained SDK names and official plugins against packed declarations. */
 async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<void> {
   for (const name of ['maestro', 'replay']) {
     const tarball = path.join(consumerRoot, `${name}.tgz`);
@@ -108,48 +108,17 @@ async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<v
   const source = path.join(consumerRoot, 'plugin-contract-smoke.ts');
   fs.writeFileSync(
     source,
-    `import { addPluginArtifact, type AgentDevicePluginFactory } from 'agent-device/plugins';
-import { startAgentDevice, type AgentDeviceHost, type StartAgentDeviceOptions, type AgentDeviceClientConfig } from 'agent-device';
+    `import { createAgentDeviceClient, ensureDaemon, AppError, isAgentDeviceError, normalizeAgentDeviceError } from 'agent-device';
+import type { AgentDeviceClient, CaptureScreenshotResult, CaptureSnapshotResult, DeviceBootOptions, LeaseAllocateOptions, LeaseScopedOptions, PressOptions, SnapshotNode } from 'agent-device';
+import { defaultHintForCode } from 'agent-device/contracts';
+import { parseSelectorChain, listSelectorChainMatches } from 'agent-device/selectors';
+import type { AgentDevicePlugin, MacOsPlatformLeafContribution, PlatformBackgroundProcess, PlatformContribution, PlatformHost, PlatformOutputSink, PlatformSetup, PluginConnection, PluginConnectionContext, PluginRuntimeSetup, ProviderAgentDevicePlugin, ProviderPluginHost, RunHostCommand } from 'agent-device/plugins';
 import maestro from '@agent-device/maestro/agent-device';
 import replay from '@agent-device/replay/agent-device';
-
-export async function installArtifact(archive: string, host: { cwd: string; env: Record<string, string | undefined> }) {
-  return await addPluginArtifact(archive, host);
-}
-
-export async function hostConsumer(host: NonNullable<StartAgentDeviceOptions['host']>) {
-  const options: StartAgentDeviceOptions = { stateDir: './state', host, plugins: [await example(), maestro(), replay()] };
-  const running: AgentDeviceHost = await startAgentDevice(options);
-  const config: AgentDeviceClientConfig = running.clientConfig;
-  void config;
-  return await running.close();
-}
-
-
-type ExampleOptions = { credentials?: { username: string; accessKey: string } };
-
-const example: AgentDevicePluginFactory<ExampleOptions> = (options = {}) => ({
-  apiVersion: 3,
-  contributes: [
-    {
-      kind: 'provider',
-      provider: 'example',
-      credentials: {
-        variables: options.credentials ? [] : ['EXAMPLE_USERNAME', 'EXAMPLE_ACCESS_KEY'],
-        byBackend: { 'android-instance': ['EXAMPLE_USERNAME'] },
-      },
-      setup: async (host) => ({
-        runtime: { provider: 'example', shutdown: async () => {}, hostEnv: host.env },
-        platformModule: {
-          owner: { kind: 'provider-runtime', provider: 'example', instance: 'example' },
-          loadRuntime: async () => ({}),
-        },
-      }),
-    },
-  ],
-});
-
-export default example;
+const plugins: AgentDevicePlugin[] = [maestro(), replay()];
+void [plugins, createAgentDeviceClient, ensureDaemon, AppError, isAgentDeviceError, normalizeAgentDeviceError, defaultHintForCode, parseSelectorChain, listSelectorChainMatches];
+type PublicTypes = [AgentDeviceClient, CaptureScreenshotResult, CaptureSnapshotResult, DeviceBootOptions, LeaseAllocateOptions, LeaseScopedOptions, PressOptions, SnapshotNode, MacOsPlatformLeafContribution, PlatformBackgroundProcess, PlatformContribution, PlatformHost, PlatformOutputSink, PlatformSetup, PluginConnection, PluginConnectionContext, PluginRuntimeSetup, ProviderAgentDevicePlugin, ProviderPluginHost, RunHostCommand];
+export type { PublicTypes };
 `,
   );
   await execFileText(
@@ -316,9 +285,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     assert.ok(pluginTypes.length < 16 * 1024);
     for (const exported of [
       'AgentDevicePlugin',
-      'AgentDevicePluginFactory',
       'PluginConnection',
-      'PluginCredentials',
       'PluginRuntimeSetup',
       'ProviderPluginHost',
     ]) {
@@ -331,26 +298,32 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     const managedHome = path.join(consumerRoot, 'managed-plugin-home');
     const replayArchive = path.join(consumerRoot, 'replay.tgz');
     const expectedIntegrity = `sha512-${crypto.createHash('sha512').update(fs.readFileSync(replayArchive)).digest('base64')}`;
-    const selection = await runNodeModuleJson(
-      consumerRoot,
-      ['--input-type=module', '-e'],
-      `import { addPluginArtifact } from 'agent-device/plugins';
-       const selected = await addPluginArtifact(${JSON.stringify(replayArchive)}, {
-         cwd: process.cwd(),
-         env: { ...process.env, HOME: ${JSON.stringify(managedHome)}, AGENT_DEVICE_HOME: ${JSON.stringify(managedHome)} },
-       });
-       console.log(JSON.stringify(selected));`,
+    const cli = path.join(installedPackageRoot, 'bin/agent-device.mjs');
+    const pluginCommandOptions = {
+      cwd: consumerRoot,
+      env: {
+        ...process.env,
+        HOME: managedHome,
+        AGENT_DEVICE_HOME: managedHome,
+        AGENT_DEVICE_STATE_DIR: path.join(managedHome, 'state'),
+      },
+      timeoutMs: SUBPROCESS_TIMEOUT_MS,
+    };
+    const added = await runCmd(
+      process.execPath,
+      [cli, 'plugins', 'add', replayArchive, '--json'],
+      pluginCommandOptions,
     );
+    const receipt = readJson(added.stdout);
+    assert.equal(receipt.success, true);
+    const selection = receipt.data.artifact;
     assert.equal(selection.name, '@agent-device/replay');
     assert.equal(selection.integrity, expectedIntegrity);
+    assert.equal(selection.compatibility, 'unchecked');
     const inventory = await runCmd(
       process.execPath,
-      [path.join(installedPackageRoot, 'bin/agent-device.mjs'), 'plugins', 'list', '--json'],
-      {
-        cwd: consumerRoot,
-        env: { ...process.env, HOME: managedHome, AGENT_DEVICE_HOME: managedHome },
-        timeoutMs: SUBPROCESS_TIMEOUT_MS,
-      },
+      [cli, 'plugins', 'list', '--json'],
+      pluginCommandOptions,
     );
     const selectedPlugin = readJson(inventory.stdout).data.plugins.find(
       (plugin: { name?: string }) => plugin.name === '@agent-device/replay',
@@ -360,9 +333,106 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     assert.equal(selectedPlugin?.version, selection.version);
     assert.equal(selectedPlugin?.backend, 'ad');
     assert.equal(selectedPlugin?.compatible, true);
+    metroPort = await listenOnLoopback(metroServer);
+    t.after(async () => {
+      await closeLoopbackServer(metroServer);
+    });
+
+    bridgeServer.on('upgrade', (req, socket) => {
+      if (req.url !== '/bridge') {
+        socket.destroy();
+        return;
+      }
+      const key = req.headers['sec-websocket-key'];
+      if (typeof key !== 'string') {
+        socket.destroy();
+        return;
+      }
+      bridgeSocketRef = socket;
+      acceptWebSocket(socket, key);
+    });
+    bridgePort = await listenOnLoopback(bridgeServer);
+    t.after(async () => {
+      destroySocket(bridgeSocketRef);
+      await closeLoopbackServer(bridgeServer);
+    });
+
+    remoteConfigPath = path.join(configDir, 'demo.remote.json');
     fs.writeFileSync(
-      path.join(consumerRoot, 'fixture-plugin.mjs'),
-      String.raw`
+      remoteConfigPath,
+      JSON.stringify({
+        platform: 'ios',
+        metroProjectRoot: projectRoot,
+        metroProxyBaseUrl: `http://127.0.0.1:${bridgePort}`,
+        metroBearerToken: bridgeToken,
+        tenant: 'tenant-1',
+        runId: 'run-1',
+        leaseId: 'lease-1',
+        metroPreparePort: metroPort,
+        metroStatusHost: '127.0.0.1',
+      }),
+      'utf8',
+    );
+
+    const imports = await runNodeModuleJson(
+      consumerRoot,
+      ['--input-type=module', '-e'],
+      `
+      const entries = ['agent-device', 'agent-device/contracts', 'agent-device/selectors', 'agent-device/plugins'];
+      const exports = await Promise.all(entries.map(async (entry) => Object.keys(await import(entry)).sort()));
+      const removed = ['ai-sdk', 'android-adb', 'artifacts', 'batch', 'finders', 'install-source', 'io', 'metro', 'remote-config'];
+      const denied = await Promise.all(removed.map(async (entry) => {
+        try { await import('agent-device/' + entry); return false; }
+        catch (error) { return error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'; }
+      }));
+      console.log(JSON.stringify({ exports, denied }));
+    `,
+    );
+    assert.deepEqual(imports.exports, [
+      [
+        'AppError',
+        'createAgentDeviceClient',
+        'ensureDaemon',
+        'isAgentDeviceError',
+        'normalizeAgentDeviceError',
+      ],
+      ['defaultHintForCode'],
+      ['listSelectorChainMatches', 'parseSelectorChain'],
+      [],
+    ]);
+    assert.ok(imports.denied.every(Boolean));
+    const cliStdout = await execFileText(
+      process.execPath,
+      [
+        path.join(installedPackageRoot, 'bin', 'agent-device.mjs'),
+        'metro',
+        'prepare',
+        '--remote-config',
+        remoteConfigPath,
+        '--json',
+      ],
+      { cwd: consumerRoot },
+    );
+    const cliResult = readJson(cliStdout);
+    assert.equal(cliResult.success, true);
+    assert.equal(cliResult.data.reused, true);
+    assert.equal(cliResult.data.bridge.enabled, true);
+    assert.equal(bridgeRegistered, true);
+    assert.equal(bridgeRequestCount >= 2, true);
+  } finally {
+    destroySocket(bridgeSocketRef);
+    await closeLoopbackServer(bridgeServer);
+    await closeLoopbackServer(metroServer);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('private source host isolates embedded runtimes, attachment, and shutdown', async (t) => {
+  const consumerRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-source-host-'));
+  t.after(() => fs.rmSync(consumerRoot, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(consumerRoot, 'fixture-plugin.mjs'),
+    String.raw`
 export const disposed = [];
 export const setups = [];
 export function fixture(provider, setupOverride) {
@@ -398,21 +468,22 @@ export function fixture(provider, setupOverride) {
   };
 }
 `,
-    );
-    const hosted = readJson(
-      await execFileText(
-        process.execPath,
-        [
-          '--input-type=module',
-          '-e',
-          String.raw`
+  );
+  const hosted = readJson(
+    await execFileText(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        '--input-type=module',
+        '-e',
+        String.raw`
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { createAgentDeviceClient } from 'agent-device';
-import { startAgentDevice } from 'agent-device';
+import { createAgentDeviceClient } from ${JSON.stringify(pathToFileURL(path.join(repoRoot, 'packages/client/src/index.ts')).href)};
+import { startAgentDevice } from ${JSON.stringify(pathToFileURL(path.join(repoRoot, 'src/host.ts')).href)};
 
 const exec = promisify(execFile);
 const cwd = process.cwd();
@@ -487,18 +558,19 @@ try {
   const child = await exec(
     process.execPath,
     [
+      '--experimental-strip-types',
       '--input-type=module',
       '-e',
-      "import { createAgentDeviceClient } from 'agent-device'; console.log(JSON.stringify(await createAgentDeviceClient(" + config + ").sessions.list()));",
+      "import { createAgentDeviceClient } from " + JSON.stringify(${JSON.stringify(pathToFileURL(path.join(repoRoot, 'packages/client/src/index.ts')).href)}) + "; console.log(JSON.stringify(await createAgentDeviceClient(" + config + ").sessions.list()));",
     ],
     { cwd },
   );
   assert.deepEqual(JSON.parse(child.stdout), []);
-  const cli = path.join(cwd, 'node_modules/agent-device/bin/agent-device.mjs');
+  const cli = ${JSON.stringify(path.join(repoRoot, 'src/bin.ts'))};
   await assert.rejects(
     exec(
       process.execPath,
-      [cli, 'daemon', 'stop', '--clean', '--state-dir', a.clientConfig.stateDir, '--json'],
+      ['--experimental-strip-types', cli, 'daemon', 'stop', '--clean', '--state-dir', a.clientConfig.stateDir, '--json'],
       { cwd },
     ),
     (error) => {
@@ -510,7 +582,7 @@ try {
   await assert.rejects(
     exec(
       process.execPath,
-      [cli, 'daemon', 'stop', '--state-dir', a.clientConfig.stateDir, '--json'],
+      ['--experimental-strip-types', cli, 'daemon', 'stop', '--state-dir', a.clientConfig.stateDir, '--json'],
       { cwd },
     ),
     (error) => {
@@ -567,215 +639,10 @@ assert.deepEqual(disposed, [
 assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
 
 `,
-        ],
-        { cwd: consumerRoot },
-      ),
-    );
-    assert.equal(hosted.attachedFromChild, true);
-    assert.equal(hosted.replacementRefused, true);
-    metroPort = await listenOnLoopback(metroServer);
-    t.after(async () => {
-      await closeLoopbackServer(metroServer);
-    });
-
-    bridgeServer.on('upgrade', (req, socket) => {
-      if (req.url !== '/bridge') {
-        socket.destroy();
-        return;
-      }
-      const key = req.headers['sec-websocket-key'];
-      if (typeof key !== 'string') {
-        socket.destroy();
-        return;
-      }
-      bridgeSocketRef = socket;
-      acceptWebSocket(socket, key);
-    });
-    bridgePort = await listenOnLoopback(bridgeServer);
-    t.after(async () => {
-      destroySocket(bridgeSocketRef);
-      await closeLoopbackServer(bridgeServer);
-    });
-
-    remoteConfigPath = path.join(configDir, 'demo.remote.json');
-    fs.writeFileSync(
-      remoteConfigPath,
-      JSON.stringify({
-        platform: 'ios',
-        metroProjectRoot: projectRoot,
-        metroProxyBaseUrl: `http://127.0.0.1:${bridgePort}`,
-        metroBearerToken: bridgeToken,
-        tenant: 'tenant-1',
-        runId: 'run-1',
-        leaseId: 'lease-1',
-        metroPreparePort: metroPort,
-        metroStatusHost: '127.0.0.1',
-      }),
-      'utf8',
-    );
-
-    const imports = await runNodeModuleJson(
-      consumerRoot,
-      ['--input-type=module', '-e'],
-      `
-        import { readFileSync } from 'node:fs';
-        import nodePath from 'node:path';
-        import * as agentDeviceRoot from 'agent-device';
-        import 'agent-device/contracts';
-        import { createLocalArtifactAdapter as createIoArtifactAdapter } from 'agent-device/io';
-        import { buildBundleUrl, normalizeBaseUrl } from 'agent-device/metro';
-        const client = agentDeviceRoot.createAgentDeviceClient();
-        const exportSubpaths = Object.keys(
-          JSON.parse(
-            readFileSync(
-              nodePath.join(process.cwd(), 'node_modules', 'agent-device', 'package.json'),
-              'utf8',
-            ),
-          ).exports,
-        ).sort();
-        const subpathSmoke = {
-          '.': (mod) => mod.centerOfRect({ x: 0, y: 0, width: 10, height: 4 }),
-          './ai-sdk': (mod) => typeof mod.createAgentDeviceTools,
-          './android-adb': (mod) => {
-            const manager = mod.createAndroidPortReverseManager(async () => ({
-              stdout: '',
-              stderr: '',
-              exitCode: 0,
-            }));
-            return typeof manager.ensure;
-          },
-          './artifacts': async (mod) => {
-            const name = await mod.resolveAndroidArchivePackageName(
-              nodePath.join(process.cwd(), 'package.json'),
-              { env: { ...process.env }, cwd: process.cwd() },
-            );
-            return String(name);
-          },
-          './batch': async (mod) => {
-            const response = await mod.runBatch(
-              { command: 'batch', positionals: [], flags: { batchOnError: 'continue' } },
-              'smoke-session',
-              async () => {
-                throw new Error('batch invoke should not run');
-              },
-            );
-            return response.ok === false ? response.error.code : 'unexpected-success';
-          },
-          './contracts': (mod) => mod.centerOfRect({ x: 2, y: 2, width: 6, height: 6 }),
-          './finders': (mod) => mod.findBestMatchesByLocator([], 'text', 'anything').matches.length,
-          './install-source': (mod) => !('isTrustedInstallSourceUrl' in mod) && Array.isArray(mod.ARCHIVE_EXTENSIONS) && typeof mod.validateDownloadSourceUrl === 'function',
-          './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
-          './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
-          './plugins': (mod) => Object.keys(mod).length === 1 && typeof mod.addPluginArtifact === 'function',
-          './remote-config': (mod) => typeof mod,
-          './selectors': (mod) =>
-            mod.isSelectorToken('||') &&
-            typeof mod.parseSelectorChain === 'function' &&
-            typeof mod.listSelectorChainMatches === 'function',
-        };
-        const subpathSmokeResults = {};
-        for (const subpath of Object.keys(subpathSmoke).sort()) {
-          const mod = await import('agent-device' + subpath.slice(1));
-          subpathSmokeResults[subpath] = await subpathSmoke[subpath](mod);
-        }
-        const removedSubpaths = await Promise.all([
-          'agent-device/host',
-          'agent-device/backend',
-          'agent-device/commands',
-          'agent-device/testing/conformance',
-          'agent-device/observability',
-          'agent-device/limrun',
-        ].map(async (specifier) => {
-          try {
-            await import(specifier);
-            return false;
-          } catch {
-            return true;
-          }
-        }));
-        console.log(JSON.stringify({
-          bundleUrl: buildBundleUrl('https://public.example.test', 'ios'),
-          rootExports: Object.keys(agentDeviceRoot).sort(),
-          rootClientSnapshot: typeof client.capture.snapshot,
-          rootArtifactAdapter: typeof agentDeviceRoot.createLocalArtifactAdapter({
-            cwd: process.cwd(),
-          }).reserveOutput,
-          ioArtifactAdapter: typeof createIoArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
-          removedSubpathsBlocked: removedSubpaths.every(Boolean),
-          normalizedBaseUrl: normalizeBaseUrl('https://public.example.test///'),
-          protocolBundleUrl: buildBundleUrl('https://public.example.test', 'android'),
-          exportSubpaths,
-          smokedSubpaths: Object.keys(subpathSmoke).sort(),
-          subpathSmokeResults,
-        }));
-      `,
-    );
-    assert.equal(
-      imports.bundleUrl,
-      'https://public.example.test/index.bundle?platform=ios&dev=true&minify=false',
-    );
-    assert.deepEqual(imports.rootExports, [
-      'AppError',
-      'centerOfRect',
-      'createAgentDeviceClient',
-      'createLocalArtifactAdapter',
-      'ensureDaemon',
-      'isAgentDeviceError',
-      'isUnreadableCaptureContentError',
-      'normalizeAgentDeviceError',
-      'startAgentDevice',
-    ]);
-    assert.equal(imports.rootClientSnapshot, 'function');
-    assert.equal(imports.rootArtifactAdapter, 'function');
-    assert.equal(imports.ioArtifactAdapter, 'function');
-    assert.equal(imports.removedSubpathsBlocked, true);
-    assert.equal(imports.normalizedBaseUrl, 'https://public.example.test');
-    assert.equal(
-      imports.protocolBundleUrl,
-      'https://public.example.test/index.bundle?platform=android&dev=true&minify=false',
-    );
-    // Every subpath in the packed package's exports map must have a smoke check
-    // above; adding a subpath without one fails here.
-    assert.deepEqual(imports.smokedSubpaths, imports.exportSubpaths);
-    assert.deepEqual(imports.subpathSmokeResults, {
-      '.': { x: 5, y: 2 },
-      './ai-sdk': 'function',
-      './android-adb': 'function',
-      './artifacts': 'undefined',
-      './batch': 'INVALID_ARGS',
-      './contracts': { x: 5, y: 5 },
-      './finders': 0,
-      './install-source': true,
-      './io': 'function',
-      './plugins': true,
-      // Type-only subpath: resolving the module from the packed exports map is
-      // the entire runtime check.
-      './remote-config': 'object',
-      './metro': 'https://public.example.test/index.bundle?platform=ios&dev=true&minify=false',
-      './selectors': true,
-    });
-    const cliStdout = await execFileText(
-      process.execPath,
-      [
-        path.join(installedPackageRoot, 'bin', 'agent-device.mjs'),
-        'metro',
-        'prepare',
-        '--remote-config',
-        remoteConfigPath,
-        '--json',
       ],
       { cwd: consumerRoot },
-    );
-    const cliResult = readJson(cliStdout);
-    assert.equal(cliResult.success, true);
-    assert.equal(cliResult.data.reused, true);
-    assert.equal(cliResult.data.bridge.enabled, true);
-    assert.equal(bridgeRegistered, true);
-    assert.equal(bridgeRequestCount >= 2, true);
-  } finally {
-    destroySocket(bridgeSocketRef);
-    await closeLoopbackServer(bridgeServer);
-    await closeLoopbackServer(metroServer);
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+    ),
+  );
+  assert.equal(hosted.attachedFromChild, true);
+  assert.equal(hosted.replacementRefused, true);
 });

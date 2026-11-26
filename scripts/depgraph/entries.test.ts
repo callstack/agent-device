@@ -14,7 +14,7 @@ test('maps declared root and workspace exports to graph source files', () => {
     JSON.stringify({
       exports: {
         '.': { default: './dist/src/index.js' },
-        './io': { require: './dist/src/io.js' },
+        './selectors': { require: './dist/src/selectors.js' },
       },
     }),
   );
@@ -29,11 +29,11 @@ test('maps declared root and workspace exports to graph source files', () => {
   execFileSync('git', ['add', 'package.json', 'packages/example/package.json'], { cwd: repo });
   const entries = graphEntries(
     repo,
-    new Set(['src/sdk/index.ts', 'src/sdk/io.ts', 'packages/example/src/index.ts']),
+    new Set(['src/sdk/index.ts', 'src/sdk/selectors.ts', 'packages/example/src/index.ts']),
   );
   assert.deepEqual(entries['src (agent-device)'], [
     { id: 'sdk/index.ts', subpath: '.' },
-    { id: 'sdk/io.ts', subpath: './io' },
+    { id: 'sdk/selectors.ts', subpath: './selectors' },
   ]);
   assert.deepEqual(entries['packages/example'], [
     { id: 'packages/example/src/index.ts', subpath: '.' },

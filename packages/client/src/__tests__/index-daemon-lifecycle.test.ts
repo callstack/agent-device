@@ -41,7 +41,7 @@ test('the removed managed lifecycle is refused where the config is read', () => 
       assert.equal(error.code, 'INVALID_ARGS');
       assert.equal(error.details?.daemonLifecycle, 'managed');
       assert.match(String(error.details?.hint), /ensureDaemon\(\{ stateDir \}\)/);
-      assert.match(String(error.details?.hint), /startAgentDevice\(\{ stateDir \}\)/);
+      assert.doesNotMatch(String(error.details?.hint), /startAgentDevice/);
       return true;
     },
   );

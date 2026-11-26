@@ -285,7 +285,7 @@ for (const ownership of ['detached', 'embedded'] as const)
     assert.match(
       String(error.details?.hint),
       ownership === 'embedded'
-        ? /owned by host process \d+\. Close it there/
+        ? /owned by host process \d+\. Close it in that process/
         : /agent-device daemon stop/,
     );
     assert.equal(isProcessAlive(child.pid), true);

@@ -45,11 +45,11 @@ agent-device plugins add @agent-device/replay
 
 Finish your sessions and restart that daemon, then retry the original invocation with all its arguments. Native `.ad` scripts keep their syntax, variables, target verification, resume and repair behavior. Ordinary script recording stays in core.
 
-A remote daemon needs its own installation. A local plugin store does not make an engine available remotely. An embedded host imports the factory from `@agent-device/replay/agent-device` and supplies `plugins: [replay()]` to `startAgentDevice`. Supplied plugins are authoritative; the embedded runtime does not read the store.
+A remote daemon needs its own installation. A local plugin store does not make an engine available remotely.
 
 Maestro YAML replay requires `@agent-device/maestro` on both client and daemon hosts. Maestro suites also need `@agent-device/replay` on the daemon host. `replay export` needs the Maestro plugin on the client only.
 
-A missing installation returns `plugin-not-installed` with the package and installation command. Selected package failures keep `plugin_load_failed`, `invalid_plugin`, `incompatible-plugin-api` or `plugin_setup_failed`; repair or update that selected package. `daemon-plugin-set-stale` requires restarting the daemon after sessions finish. For an embedded daemon, its host closes and recreates the runtime. No recovery installs packages or ends sessions automatically.
+A missing installation returns `plugin-not-installed` with the package and installation command. Selected package failures keep `plugin_load_failed`, `invalid_plugin`, `incompatible-plugin-api` or `plugin_setup_failed`; repair or update that selected package. `daemon-plugin-set-stale` requires restarting the daemon after sessions finish. No recovery installs packages or ends sessions automatically.
 
 ## See which providers are registered
 
@@ -80,7 +80,7 @@ When the daemon stops, it closes every plugin once: each runtime shuts down, the
 
 When two plugins claim the same provider, the first one wins: bundled providers, then installed plugins in package-name order, then plugins supplied by an embedding host. The others are `failed` with `duplicate_provider`. The first claim holds through both dormant and failed setup outcomes. `cloud` and `proxy` are reserved and can't be claimed.
 
-When the scope has no pending lease end, an allocation that names an absent provider or one that failed to register returns `UNSUPPORTED_OPERATION` with reason `provider-not-registered` before it records a lease. The error lists the registered providers. The `failedPlugins` field lists failed registrations that name the provider or its package, and failures the daemon could not attribute to a package or claim. If a managed provider is absent, the error gives its package and the install command for your daemon's version. Run that command on the daemon host and restart the daemon. If you embed the runtime, call the plugin factory and pass its result in `plugins` when you recreate the runtime. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
+When the scope has no pending lease end, an allocation that names an absent provider or one that failed to register returns `UNSUPPORTED_OPERATION` with reason `provider-not-registered` before it records a lease. The error lists the registered providers. The `failedPlugins` field lists failed registrations that name the provider or its package, and failures the daemon could not attribute to a package or claim. If a managed provider is absent, the error gives its package and the install command for your daemon's version. Run that command on the daemon host and restart the daemon. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
 
 ## Install Maestro support
 
@@ -105,11 +105,11 @@ The interface is experimental. A plugin package exports a factory at `./agent-de
 ```
 
 ```ts
-import type { AgentDevicePluginFactory } from 'agent-device/plugins';
+import type { AgentDevicePlugin } from 'agent-device/plugins';
 
 type ExampleOptions = { credentials?: { username: string; accessKey: string } };
 
-const example: AgentDevicePluginFactory<ExampleOptions> = (options = {}) => ({
+const example = (options: ExampleOptions = {}): AgentDevicePlugin => ({
   apiVersion: 3,
   contributes: [
     {
@@ -260,10 +260,3 @@ agent-device plugins list --json
 ```
 
 The archive must contain an npm package with a name, an exact version, and an `./agent-device` export. Installation does not run package lifecycle scripts or load the plugin factory. The list command loads the factory to check compatibility. The installation returns an `artifact` receipt with compatibility marked `unchecked`. Run `plugins list --json` for the checked `plugins` inventory, including the artifact's installation ID and SHA-512 integrity. If the package is already selected, remove it before adding the artifact. `plugins update` does not update artifacts from the registry; remove the selection and add the replacement artifact. Finish active sessions and restart the daemon after changing the selection.
-
-A Node.js host can call the same manager with an explicit environment and working directory:
-
-```js
-import { addPluginArtifact } from 'agent-device/plugins';
-await addPluginArtifact('./provider-plugin.tgz', { env: process.env, cwd: process.cwd() });
-```

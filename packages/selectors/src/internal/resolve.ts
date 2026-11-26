@@ -121,8 +121,8 @@ export type AstSelectorChainMatchList = {
  * Every node the winning chain alternative matches, in snapshot order, plus
  * that alternative and its index; `null` when no alternative matches.
  *
- * "Winning" is the SAME alternative `findSelectorChainMatch` picks — the first
- * with at least one match — decoupled from uniqueness and disambiguation:
+ * The first alternative with at least one match wins, regardless of
+ * uniqueness and disambiguation:
  * several matches are reported, never refused or narrowed to one. That is NOT
  * always what `resolveSelectorChain` names: under its default
  * `requireUnique: true` it skips an ambiguous alternative and resolves from a
@@ -149,35 +149,6 @@ export function listSelectorChainMatches(
       return matchesSelector(node, selector, options.platform);
     });
     if (matchedNodes.length > 0) return { selector, selectorIndex: i, matchedNodes };
-  }
-  return null;
-}
-
-/**
- * A first-match lookup used by existence checks. No façade twin: the root
- * façade resolves through the policy interface only, so this shape reaches
- * consumers via the published `./ast` surface alone (#1630).
- */
-export type AstSelectorChainMatch = {
-  selectorIndex: number;
-  selector: Selector;
-  matches: number;
-  diagnostics: SelectorDiagnostics[];
-};
-
-export function findSelectorChainMatch(
-  nodes: SnapshotState['nodes'],
-  chain: SelectorChain,
-  options: SelectorMatchOptions,
-): AstSelectorChainMatch | null {
-  const requireRect = options.requireRect ?? false;
-  const diagnostics: SelectorDiagnostics[] = [];
-  for (const [i, selector] of chain.selectors.entries()) {
-    const matches = countSelectorMatchesOnly(nodes, selector, options.platform, requireRect);
-    diagnostics.push({ selector: selector.raw, matches });
-    if (matches > 0) {
-      return { selectorIndex: i, selector, matches, diagnostics };
-    }
   }
   return null;
 }
@@ -318,21 +289,6 @@ function compareCandidatesWithVisibility(
     return { result: visibleA ? 1 : -1, criterion: 'visible' };
   }
   return compareDisambiguationCandidates(a, b);
-}
-
-function countSelectorMatchesOnly(
-  nodes: SnapshotState['nodes'],
-  selector: Selector,
-  platform: Platform | PublicPlatform,
-  requireRect: boolean,
-): number {
-  let count = 0;
-  for (const node of nodes) {
-    if (requireRect && !node.rect) continue;
-    if (!matchesSelector(node, selector, platform)) continue;
-    count += 1;
-  }
-  return count;
 }
 
 type DisambiguationComparison = {

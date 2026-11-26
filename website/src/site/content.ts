@@ -72,7 +72,6 @@ export const docs = {
   clouds: '/docs/device-clouds',
   proxy: '/docs/remote-proxy',
   client: '/docs/client-api',
-  aiSdk: '/docs/ai-sdk',
   eve: '/docs/eve',
   sessions: '/docs/sessions',
   capabilities: '/docs/capabilities',
@@ -138,7 +137,7 @@ export const faq = [
   },
   {
     q: 'Can I build my own agent or QA product on it?',
-    a: 'Yes. The typed Node.js client is a public surface over the same runtime, with AI SDK tools and an Eve integration on top. e2e and T3 Code build on it.',
+    a: 'Yes. The typed Node.js client is a public surface over the same runtime, with an Eve integration available. e2e and T3 Code build on it.',
   },
   {
     q: 'Can several agents share one machine?',

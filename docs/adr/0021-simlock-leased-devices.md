@@ -63,9 +63,9 @@ agent-device does not verify that a device is leased.
 - The CLI and daemon accept no per-request Android adb server port.
   One daemon uses one adb server.
   Therefore, agents with leases from different Simlock daemons use separate state directories.
-  Node SDK `agent-device/android-adb` functions run the caller's own adb executor.
-  Therefore, the caller points that executor at Simlock's server.
-  Per-call `AndroidAdbExecutorOptions.serverPort` takes effect only if the executor honors it.
+  Internal Android ADB functions can use an executor configured for a specific Simlock server.
+  Per-call `AndroidAdbExecutorOptions.serverPort` takes effect only if that executor honors it.
+  The 0.22 SDK has no public entry for supplying an ADB executor.
 
 ## 4. Rejected alternative
 

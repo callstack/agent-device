@@ -30,6 +30,9 @@
       "path": "../kernel"
     },
     {
+      "path": "../plugins"
+    },
+    {
       "path": "../provision-kit"
     },
     {

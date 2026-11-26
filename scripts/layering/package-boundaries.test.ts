@@ -696,6 +696,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/gestures',
     '@agent-device/host-kit',
     '@agent-device/kernel',
+    '@agent-device/plugins',
     '@agent-device/provision-kit',
     '@agent-device/selectors',
     '@agent-device/test-kit',

@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import type { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
+import type { AgentDevicePlugin } from 'agent-device/plugins';
 import type {
-  AgentDevicePlugin,
   ReplayBackendContribution,
   ReplayExecutionContribution,
-} from 'agent-device/plugins';
+} from '@agent-device/plugins/replay-backend';
 
 function contributionOf(
   plugin: AgentDevicePlugin,
