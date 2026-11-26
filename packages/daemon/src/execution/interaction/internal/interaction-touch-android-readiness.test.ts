@@ -679,3 +679,18 @@ test('a press on a System UI ANR dialog button waits for the dialog focus to cle
   expect(response).toMatchObject({ ok: true });
   expect(mockTapPoint).toHaveBeenCalledTimes(1);
 });
+
+test('a press that closes the System UI ANR dialog still reports an app the dialog did not cover', async () => {
+  // The launcher, not the session app, was under the dialog: the press reports that the session
+  // app is not in front, as after any other press.
+  mockGetAndroidAppState.mockResolvedValue({
+    package: 'com.google.android.apps.nexuslauncher',
+    activity: 'Launcher',
+  });
+
+  await expect(pressWithSystemUiAnr(['@e2'])).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('left com.example.app'),
+  });
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
+});

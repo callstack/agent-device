@@ -129,9 +129,6 @@ function buildTargetedRuntimeOptions(
       }),
     afterRun: async (result, readiness) => {
       if (session.lease?.leaseProvider) return undefined;
-      // The dialog, not the session app, owned the focus before this tap, so the tap cannot have
-      // escaped the app.
-      if (readiness.status === 'dialog-button') return undefined;
       return await assertAndroidPressStayedInApp(
         session,
         {
