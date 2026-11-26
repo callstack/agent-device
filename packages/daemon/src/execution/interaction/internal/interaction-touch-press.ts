@@ -25,10 +25,11 @@ import {
   type TargetedTouchResult,
 } from './interaction-touch-response.ts';
 import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
-import { createAndroidDialogTapGate } from './interaction-touch-android-readiness.ts';
 import { formatTouchTargetLabel } from './interaction-touch-targets.ts';
 import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
+import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
+import type { AndroidDialogTapTarget } from '../../android-system-dialog.ts';
 
 /**
  * How an admitted targeted `press`/`click`/`longpress`/`hover` executes: the direct-iOS
@@ -109,7 +110,7 @@ function buildTargetedRuntimeOptions(
     androidFreshnessBaseline: admitted.androidFreshnessBaseline,
     refContext: admitted.refContext,
     ...(admitsAndroidDialogButtonTap(session, command, admitted.refs, req.flags)
-      ? { androidDialogTapGate: createAndroidDialogTapGate() }
+      ? { androidDialogTapTarget: readAndroidDialogTapTarget(session, target) }
       : {}),
     iosTapCorroboration: { target, extra: targetedExtra },
     run: async (runtime) =>
@@ -130,7 +131,7 @@ function buildTargetedRuntimeOptions(
       if (session.lease?.leaseProvider) return undefined;
       // The dialog, not the session app, owned the focus before this tap, so the tap cannot have
       // escaped the app.
-      if (readiness.status === 'dialog-buttons') return undefined;
+      if (readiness.status === 'dialog-button') return undefined;
       return await assertAndroidPressStayedInApp(
         session,
         {
@@ -167,8 +168,8 @@ function buildTargetedRuntimeOptions(
 }
 
 /**
- * Only one plain tap may close a foreign Android app-error dialog: a repeated tap, a double tap,
- * or a multi-ref plan would send its later taps to whatever the closed dialog uncovers.
+ * Only one plain tap may close a foreign Android ANR dialog: a repeated tap, a double tap, or a
+ * multi-ref plan would send its later taps to whatever the closed dialog uncovers.
  */
 function admitsAndroidDialogButtonTap(
   session: AdmittedTargetedTouch['session'],
@@ -180,6 +181,18 @@ function admitsAndroidDialogButtonTap(
   if (command !== 'press' && command !== 'click') return false;
   if (refs && refs.length > 1) return false;
   return (flags?.count ?? 1) <= 1 && flags?.doubleTap !== true;
+}
+
+/** The ref's node in the session snapshot, or the raw point; a selector is never admitted. */
+function readAndroidDialogTapTarget(
+  session: AdmittedTargetedTouch['session'],
+  target: AdmittedTargetedTouch['target'],
+): AndroidDialogTapTarget {
+  if (target.kind === 'point') return { kind: 'point', point: { x: target.x, y: target.y } };
+  if (target.kind === 'selector') return { kind: 'selector' };
+  const ref = normalizeRef(target.ref);
+  const node = ref && session.snapshot ? findNodeByRef(session.snapshot.nodes, ref) : null;
+  return { kind: 'ref', node: node ?? undefined };
 }
 
 async function runTargetedTouchInteraction(params: {

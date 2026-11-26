@@ -44,8 +44,6 @@ export async function createInteractionRuntimeForRoute(
       pairedGestureViewport?: Rect;
       touchExecutor?: BoundTouchExecutor;
       gestures?: BoundGestureExecutor;
-      /** See `InteractionRuntimeInput.admitTap`. */
-      admitTap?: InteractionRuntimeInput['admitTap'];
       /**
        * Filled with the LAST capture this request consumed. ADR 0014 ambiguity
        * issuance is only valid against a tree the session stored under the
@@ -108,7 +106,6 @@ export async function createInteractionRuntimeForRoute(
     probeTargetHittability: readTargetHittabilityProbe(params, session),
     pairedGestureViewport: params.pairedGestureViewport,
     touchExecutor: params.touchExecutor,
-    ...(params.admitTap ? { admitTap: params.admitTap } : {}),
     gestures: params.gestures,
     boundCapture: resolveBoundCapture(params),
   });
@@ -253,7 +250,6 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
     ...touchBackendMembers(
       params.touchExecutor,
       params.expireRefFrame,
-      params.admitTap,
       flags,
       params.coordinateTapTextInputEvidence,
     ),
@@ -284,7 +280,6 @@ function gestureBackendMembers(
 function touchBackendMembers(
   executor: InteractionRuntimeInput['touchExecutor'],
   expireRefFrame: () => void,
-  admitTap: InteractionRuntimeInput['admitTap'],
   flags: InteractionRuntimeInput['flags'],
   textInputEvidence: InteractionRuntimeInput['coordinateTapTextInputEvidence'],
 ): Partial<AgentDeviceBackend> {
@@ -296,10 +291,9 @@ function touchBackendMembers(
   };
   return {
     tap: tapPoint
-      ? async (_context, point, options) => {
-          await admitTap?.(point, options?.pointObservation?.nodes);
+      ? (_context, point, options) => {
           const evidence = textInputEvidence?.(point, options?.pointObservation);
-          return await run(() =>
+          return run(() =>
             tapPoint(point, {
               ...flags,
               ...(evidence ? { coordinateTapTextInputEvidence: evidence } : {}),
@@ -307,12 +301,7 @@ function touchBackendMembers(
           );
         }
       : undefined,
-    tapTarget: tapRef
-      ? async (_context, target) => {
-          await admitTap?.(undefined);
-          return await run(() => tapRef(target.ref));
-        }
-      : undefined,
+    tapTarget: tapRef ? (_context, target) => run(() => tapRef(target.ref)) : undefined,
     fill: fillPoint
       ? (_context, point, text, options) => run(() => fillPoint(point, text, options))
       : undefined,

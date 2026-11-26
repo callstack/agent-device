@@ -10,12 +10,7 @@ import {
   normalizeError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import {
-  centerOfRect,
-  type Point,
-  type Rect,
-  type SnapshotNode,
-} from '@agent-device/kernel/snapshot';
+import { centerOfRect, type Point, type SnapshotNode } from '@agent-device/kernel/snapshot';
 
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import { expireRefFrame } from '../core/ref-frame.ts';
@@ -26,11 +21,13 @@ import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;
 const ANDROID_CLOSE_APP_PATTERN = /^close app$/i;
 /**
- * The framework's app-error dialog buttons (`AppNotRespondingDialog`, `AppErrorDialog`): Close app,
- * Wait, Send feedback, Open app again, App info. The resource id does not depend on the device
- * language.
+ * The ANR dialog's (`AppNotRespondingDialog`) Close app and Wait buttons. The resource id does not
+ * depend on the device language, and an app cannot declare an id in the `android` package.
  */
-const ANDROID_APP_ERROR_DIALOG_BUTTON_ID = /^android:id\/aerr_[a-z_]+$/;
+const ANDROID_ANR_DIALOG_BUTTON_IDS: ReadonlySet<string> = new Set([
+  'android:id/aerr_close',
+  'android:id/aerr_wait',
+]);
 const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
@@ -55,28 +52,17 @@ export type AndroidBlockingDialogReadinessResult =
   | { status: 'recovered'; warning: string };
 
 /**
- * A foreign blocking dialog that a single tap may still close: the dialog's own buttons as the
- * presentation published them, and the refusal for a tap anywhere else. A dialog button is the one
- * input that can clear the dialog, so the guard must not refuse it.
+ * What a single press or click aims at, read before dispatch: the node a ref names in the session
+ * snapshot, a raw point, or a selector.
  */
-export type AndroidBlockingDialogButtonAdmission = Readonly<{
-  focus: AndroidBlockingDialogFocus;
-  buttons: readonly AndroidAppErrorDialogButton[];
-  refusal: () => AppError;
-  /**
-   * Reads the focus again immediately before the tap is sent. Throws, with nothing sent, when the
-   * dialog no longer has focus: the buttons were read from an earlier frame, so a tap at their
-   * points could reach what the dialog uncovered.
-   */
-  confirmFocus: () => Promise<void>;
-}>;
-
-/** One framework app-error dialog button: its resource id (the action it takes) and its frame. */
-export type AndroidAppErrorDialogButton = Readonly<{ identifier: string; rect: Rect }>;
+export type AndroidDialogTapTarget =
+  | { kind: 'ref'; node: SnapshotNode | undefined }
+  | { kind: 'point'; point: Point }
+  | { kind: 'selector' };
 
 export type AndroidBlockingDialogTapReadinessResult =
   | AndroidBlockingDialogReadinessResult
-  | { status: 'dialog-buttons'; admission: AndroidBlockingDialogButtonAdmission };
+  | { status: 'dialog-button' };
 type AndroidDialogButtonTapResult =
   | { ok: true; x: number; y: number }
   | {
@@ -224,14 +210,15 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
 }
 
 /**
- * The before-command check of a single tap. A foreign app-error dialog ("System UI isn't
- * responding") refuses every other input, so its own buttons are the only way to close it from a
- * command. The tap proceeds with `dialog-buttons` when the dialog shows touchable buttons; the
- * caller must refuse, before any send, a tap point outside them.
+ * The before-command check of a single press or click. A foreign ANR dialog ("System UI isn't
+ * responding") refuses every other input, so its Close app and Wait buttons are the only way to
+ * close it from a command. The tap proceeds with `dialog-button` only when it aims at one of them
+ * in a fresh capture and the dialog still has focus; otherwise it is refused with nothing sent.
  */
 export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
   session: SessionState;
   command: string;
+  target: AndroidDialogTapTarget;
   observation?: AndroidObservationAdapter;
 }): Promise<AndroidBlockingDialogTapReadinessResult> {
   const readiness = await readAndroidBlockingSystemDialogReadiness({
@@ -239,20 +226,19 @@ export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
     phase: 'before-command',
   });
   if (readiness.status !== 'foreign-dialog') return readiness;
+  const { session, command } = params;
   const observation = requireObservation(params.observation);
-  let buttons: AndroidAppErrorDialogButton[];
+  let buttons: SnapshotNode[];
   try {
-    buttons = findAppErrorDialogButtons(
-      await readAndroidSnapshotNodes(params.session, observation),
-    );
+    buttons = findAnrDialogButtons(await readAndroidSnapshotNodes(session, observation));
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
       phase: 'android_blocking_dialog_buttons_unread',
       data: {
-        session: params.session.name,
-        deviceId: params.session.device.id,
-        command: params.command,
+        session: session.name,
+        deviceId: session.device.id,
+        command,
         error: error instanceof Error ? error.message : String(error),
       },
     });
@@ -260,42 +246,54 @@ export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
   }
   // Before Android 7.0, the dialog's buttons carry no `aerr_` ids, so no press can close it.
   if (buttons.length === 0) throw readiness.refusal(ANDROID_BLOCKING_DIALOG_HINT);
-  const { session, command } = params;
-  const { focus } = readiness;
-  const refusal = () => readiness.refusal();
-  return {
-    status: 'dialog-buttons',
-    admission: {
-      focus,
-      buttons,
-      refusal,
-      confirmFocus: async () => {
-        const current = await observation
-          .readBlockingDialog(session.device)
-          .catch((error: unknown) => {
-            throw thrownBeforeDispatch(error);
-          });
-        if (current.status === 'dialog') {
-          if (!isSameAndroidBlockingDialogFocus(current.focus, focus)) throw refusal();
-          return;
-        }
-        const dialog = formatAndroidBlockingDialogFocus(focus);
-        throw discloseDispatch(
-          androidBlockingDialogError({
-            session,
-            command,
-            focus,
-            message:
-              current.status === 'unknown'
-                ? `Android focus could not be read to confirm that the system dialog still has focus before ${command} was sent: ${dialog}.`
-                : `Android system dialog lost focus before ${command} was sent: ${dialog}.`,
-            hint: 'Nothing was sent. Take a new snapshot, then retry the command.',
-          }),
-          'no',
-        );
-      },
-    },
-  };
+  if (!aimsAtAnrDialogButton(buttons, params.target)) throw readiness.refusal();
+  await confirmAndroidBlockingDialogFocus(session, command, readiness.focus, observation);
+  return { status: 'dialog-button' };
+}
+
+/**
+ * A ref must name a Close app or Wait node, and the button with the same id in the fresh capture
+ * must contain that node's center: so a ref read before the dialog appeared, or a Wait ref whose
+ * stored position now shows Close app, is refused. A raw point must be inside either button.
+ */
+function aimsAtAnrDialogButton(buttons: SnapshotNode[], target: AndroidDialogTapTarget): boolean {
+  if (target.kind === 'point') return findButtonAtPoint(buttons, target.point) !== undefined;
+  if (target.kind !== 'ref' || !target.node?.rect) return false;
+  const button = findButtonAtPoint(buttons, centerOfRect(target.node.rect));
+  return button !== undefined && button.identifier === target.node.identifier;
+}
+
+/**
+ * Reads the focus again just before the tap is sent. The buttons came from a capture, so if the
+ * dialog lost focus since then, a tap at their points could reach what the dialog uncovered.
+ */
+async function confirmAndroidBlockingDialogFocus(
+  session: SessionState,
+  command: string,
+  focus: AndroidBlockingDialogFocus,
+  observation: AndroidObservationAdapter,
+): Promise<void> {
+  const current = await observation.readBlockingDialog(session.device).catch((error: unknown) => {
+    throw thrownBeforeDispatch(error);
+  });
+  if (current.status === 'dialog' && isSameAndroidBlockingDialogFocus(current.focus, focus)) return;
+  const dialog = formatAndroidBlockingDialogFocus(focus);
+  const message =
+    current.status === 'dialog'
+      ? `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(current.focus)}.`
+      : current.status === 'unknown'
+        ? `Android focus could not be read to confirm that the system dialog still has focus before ${command} was sent: ${dialog}.`
+        : `Android system dialog lost focus before ${command} was sent: ${dialog}.`;
+  throw discloseDispatch(
+    androidBlockingDialogError({
+      session,
+      command,
+      focus: current.status === 'dialog' ? current.focus : focus,
+      message,
+      hint: 'Nothing was sent. Take a new snapshot, then retry the command.',
+    }),
+    'no',
+  );
 }
 
 function isSameAndroidBlockingDialogFocus(
@@ -306,35 +304,13 @@ function isSameAndroidBlockingDialogFocus(
 }
 
 /**
- * True when the tap point falls on one of the dialog's own buttons. `resolvedOn` is the tree the
- * target was resolved on, when it was resolved on one: the same button must be at the point there
- * too. So an app control from a tree read before the dialog appeared is not retargeted to the
- * dialog button that now covers it, and a Wait target is not retargeted to Close app.
- */
-export function isAndroidBlockingDialogButtonPoint(
-  admission: AndroidBlockingDialogButtonAdmission,
-  point: Point,
-  resolvedOn?: SnapshotNode[],
-): boolean {
-  const button = findButtonAtPoint(admission.buttons, point);
-  if (!button) return false;
-  if (resolvedOn === undefined) return true;
-  return (
-    findButtonAtPoint(findAppErrorDialogButtons(resolvedOn), point)?.identifier ===
-    button.identifier
-  );
-}
-
-/**
  * Android's view hit test excludes the right and bottom edges, so a point on them reaches the
  * dialog around the button, not the button.
  */
-function findButtonAtPoint(
-  buttons: readonly AndroidAppErrorDialogButton[],
-  point: Point,
-): AndroidAppErrorDialogButton | undefined {
+function findButtonAtPoint(buttons: SnapshotNode[], point: Point): SnapshotNode | undefined {
   return buttons.find(
     ({ rect }) =>
+      rect !== undefined &&
       point.x >= rect.x &&
       point.x < rect.x + rect.width &&
       point.y >= rect.y &&
@@ -670,17 +646,17 @@ function readNodeTextParts(node: {
 }
 
 /**
- * The touchable buttons of a framework app-error dialog, read by resource id. The caller has
- * already read the ANR window's focus, and the dialog's text is in the device language, so only the
- * framework id identifies a button: an app cannot declare an id in the `android` package.
+ * The ANR dialog's touchable Close app and Wait buttons, read by resource id: the dialog's text is in
+ * the device language.
  */
-function findAppErrorDialogButtons(nodes: SnapshotNode[]): AndroidAppErrorDialogButton[] {
+function findAnrDialogButtons(nodes: SnapshotNode[]): SnapshotNode[] {
   return nodes
     .filter(isTouchableDialogNode)
-    .flatMap(({ identifier, rect }) =>
-      identifier && rect && ANDROID_APP_ERROR_DIALOG_BUTTON_ID.test(identifier)
-        ? [{ identifier, rect }]
-        : [],
+    .filter(
+      (node) =>
+        node.rect !== undefined &&
+        node.identifier !== undefined &&
+        ANDROID_ANR_DIALOG_BUTTON_IDS.has(node.identifier),
     );
 }
 

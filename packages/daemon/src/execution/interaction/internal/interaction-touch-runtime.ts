@@ -26,10 +26,12 @@ import { isAndroidEscapeError } from './interaction-android-escape.ts';
 import { corroborateIosTapFailure, interactionTargetExtra } from './interaction-ios-tap-outcome.ts';
 import {
   runWithAndroidDialogReadinessCheck,
-  type AndroidDialogTapGate,
   type RefAdmissionContext,
 } from './interaction-touch-android-readiness.ts';
-import type { AndroidBlockingDialogTapReadinessResult } from '../../android-system-dialog.ts';
+import type {
+  AndroidBlockingDialogTapReadinessResult,
+  AndroidDialogTapTarget,
+} from '../../android-system-dialog.ts';
 import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import {
   buildCorroboratedTapResponseData,
@@ -64,10 +66,10 @@ export async function dispatchRuntimeInteraction<
      */
     refContext?: RefAdmissionContext;
     /**
-     * Present on a single press or click: while a foreign Android app-error dialog has focus, the
-     * tap may still go to one of the dialog's own buttons, checked at the tap point before send.
+     * Present on a single plain press or click: while a foreign Android ANR dialog has focus, the
+     * tap may still go to the dialog's Close app or Wait button, checked before dispatch.
      */
-    androidDialogTapGate?: AndroidDialogTapGate;
+    androidDialogTapTarget?: AndroidDialogTapTarget;
     /** A failed local iOS tap may be corroborated against one same-scope capture. */
     iosTapCorroboration?: {
       target: InteractionRequestTarget;
@@ -96,7 +98,6 @@ export async function dispatchRuntimeInteraction<
     touchExecutor: options.touchExecutor,
     settleObservationCapture: options.settleObservationCapture,
     consumedCapture,
-    admitTap: options.androidDialogTapGate?.admitTap,
   });
   const actionStartedAt = Date.now();
   try {
@@ -104,7 +105,7 @@ export async function dispatchRuntimeInteraction<
     const outcome = await runWithAndroidDialogReadinessCheck(
       session,
       params.req.command,
-      { refContext: options.refContext, dialogTapGate: options.androidDialogTapGate },
+      { refContext: options.refContext, dialogTapTarget: options.androidDialogTapTarget },
       async (readiness) => {
         const result = await options.run(runtime);
         afterRunWarning = await options.afterRun?.(result, readiness);

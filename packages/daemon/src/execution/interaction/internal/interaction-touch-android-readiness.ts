@@ -1,12 +1,10 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   ensureAndroidBlockingSystemDialogReady,
   ensureAndroidBlockingSystemDialogReadyForTap,
-  isAndroidBlockingDialogButtonPoint,
   waitForAndroidBlockingDialogFocusToClear,
-  type AndroidBlockingDialogButtonAdmission,
   type AndroidBlockingDialogTapReadinessResult,
+  type AndroidDialogTapTarget,
 } from '../../android-system-dialog.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
@@ -33,43 +31,17 @@ export type ReadinessOutcome<TResult> =
       runtimeResult: TResult;
     };
 
-/**
- * The per-request gate of a single tap while a foreign app-error dialog has focus. Readiness opens
- * it with the dialog's buttons; the backend calls `admitTap` immediately before it sends the tap
- * (and before the ref frame expires). Only one tap, on one of the dialog's buttons, passes, and only
- * while the dialog still has focus. Any other tap is refused with `dispatched: no`.
- */
-export type AndroidDialogTapGate = Readonly<{
-  open(admission: AndroidBlockingDialogButtonAdmission): void;
-  admitTap(point: Point | undefined, resolvedOn?: SnapshotNode[]): Promise<void>;
-}>;
-
-export function createAndroidDialogTapGate(): AndroidDialogTapGate {
-  let admission: AndroidBlockingDialogButtonAdmission | undefined;
-  let admittedTaps = 0;
-  return {
-    open: (next) => {
-      admission = next;
-    },
-    admitTap: async (point, resolvedOn) => {
-      if (!admission) return;
-      if (
-        admittedTaps > 0 ||
-        !point ||
-        !isAndroidBlockingDialogButtonPoint(admission, point, resolvedOn)
-      ) {
-        throw admission.refusal();
-      }
-      await admission.confirmFocus();
-      admittedTaps += 1;
-    },
-  };
-}
-
 export async function runWithAndroidDialogReadinessCheck<TResult>(
   session: SessionState,
   command: string,
-  options: { refContext: RefAdmissionContext | undefined; dialogTapGate?: AndroidDialogTapGate },
+  options: {
+    refContext: RefAdmissionContext | undefined;
+    /**
+     * Present on a single plain press or click: while a foreign ANR dialog has focus, the tap may
+     * still go to the dialog's Close app or Wait button.
+     */
+    dialogTapTarget?: AndroidDialogTapTarget;
+  },
   run: (readiness: AndroidBlockingDialogTapReadinessResult) => Promise<TResult>,
   observation?: AndroidObservationAdapter,
 ): Promise<ReadinessOutcome<TResult>> {
@@ -77,8 +49,13 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     const readiness = { status: 'clear' } as const;
     return { aborted: false, readiness, runtimeResult: await run(readiness) };
   }
-  const readiness: AndroidBlockingDialogTapReadinessResult = options.dialogTapGate
-    ? await ensureAndroidBlockingSystemDialogReadyForTap({ session, command, observation })
+  const readiness: AndroidBlockingDialogTapReadinessResult = options.dialogTapTarget
+    ? await ensureAndroidBlockingSystemDialogReadyForTap({
+        session,
+        command,
+        target: options.dialogTapTarget,
+        observation,
+      })
     : await ensureAndroidBlockingSystemDialogReady({
         session,
         command,
@@ -105,9 +82,8 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     });
     if (abort) return { aborted: true, response: abort };
   }
-  if (readiness.status === 'dialog-buttons') options.dialogTapGate?.open(readiness.admission);
   const runtimeResult = await run(readiness);
-  if (readiness.status === 'dialog-buttons') {
+  if (readiness.status === 'dialog-button') {
     await waitForAndroidBlockingDialogFocusToClear(session, observation);
   }
   await ensureAndroidBlockingSystemDialogReady({

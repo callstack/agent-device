@@ -255,6 +255,8 @@ test('a dump that answered nothing is reported as unobserved, not as a clear scr
   expect(unobserved).toBe(1);
 });
 
+const WAIT_RECT = { x: 100, y: 700, width: 220, height: 80 };
+
 /** System UI's ANR dialog as the framework draws it: a title and buttons with `aerr_` ids. */
 function systemUiAnrDialogNodes(): RawSnapshotNode[] {
   return [
@@ -277,37 +279,40 @@ function systemUiAnrDialogNodes(): RawSnapshotNode[] {
       type: 'android.widget.Button',
       label: 'Wait',
       identifier: 'android:id/aerr_wait',
-      rect: { x: 100, y: 700, width: 220, height: 80 },
+      rect: WAIT_RECT,
     },
   ];
 }
 
-test("a tap may target a foreign ANR dialog's own buttons, and nothing is tapped for it", async () => {
+/** A ref target naming a dialog button as the session snapshot stored it. */
+function refTo(identifier: string, rect = CLOSE_APP_RECT) {
+  return { kind: 'ref', node: { index: 0, ref: 'e2', identifier, rect } } as const;
+}
+
+test("a tap on a foreign ANR dialog's Close app or Wait proceeds, and nothing is tapped for it", async () => {
   // The dialog refuses every other input, so its buttons are the only way to close it.
   const session = makeAndroidSession('readiness-system-tap');
   screenNodes = systemUiAnrDialogNodes();
   const { observation, calls } = makeObservation(systemDialogFocus);
 
-  const readiness = await ensureAndroidBlockingSystemDialogReadyForTap({
-    session,
-    command: 'press',
-    observation,
-  });
-
-  expect(readiness).toMatchObject({
-    status: 'dialog-buttons',
-    admission: {
-      focus: systemDialogFocus(),
-      buttons: [
-        { identifier: 'android:id/aerr_close', rect: CLOSE_APP_RECT },
-        { identifier: 'android:id/aerr_wait', rect: { x: 100, y: 700, width: 220, height: 80 } },
-      ],
-    },
-  });
+  for (const target of [
+    refTo('android:id/aerr_close'),
+    refTo('android:id/aerr_wait', WAIT_RECT),
+    { kind: 'point', point: { x: 210, y: 740 } } as const,
+  ]) {
+    await expect(
+      ensureAndroidBlockingSystemDialogReadyForTap({
+        session,
+        command: 'press',
+        target,
+        observation,
+      }),
+    ).resolves.toEqual({ status: 'dialog-button' });
+  }
   expect(tapCalls(calls)).toEqual([]);
 });
 
-test("a tap may target a localized foreign ANR dialog's own buttons", async () => {
+test("a tap on a localized foreign ANR dialog's Close app proceeds", async () => {
   // Android translates the dialog's title and labels; the framework ids stay the same.
   const session = makeAndroidSession('readiness-system-tap-localized');
   const [title, closeApp, wait] = systemUiAnrDialogNodes();
@@ -318,30 +323,61 @@ test("a tap may target a localized foreign ANR dialog's own buttons", async () =
   ];
   const { observation } = makeObservation(systemDialogFocus);
 
-  const readiness = await ensureAndroidBlockingSystemDialogReadyForTap({
-    session,
-    command: 'press',
-    observation,
-  });
+  await expect(
+    ensureAndroidBlockingSystemDialogReadyForTap({
+      session,
+      command: 'press',
+      target: refTo('android:id/aerr_close'),
+      observation,
+    }),
+  ).resolves.toEqual({ status: 'dialog-button' });
+});
 
-  expect(readiness).toMatchObject({
-    status: 'dialog-buttons',
-    admission: {
-      buttons: [
-        { identifier: 'android:id/aerr_close', rect: CLOSE_APP_RECT },
-        { identifier: 'android:id/aerr_wait', rect: { x: 100, y: 700, width: 220, height: 80 } },
-      ],
+test.each([
+  ['a selector', { kind: 'selector' } as const],
+  ['a ref to a node the session snapshot does not hold', { kind: 'ref', node: undefined } as const],
+  ['a ref to an app control', refTo('com.example.app:id/submit')],
+  ["a ref to the dialog's Send feedback", refTo('android:id/aerr_report')],
+  ['a Wait ref whose stored position now shows Close app', refTo('android:id/aerr_wait')],
+  ['a point outside the buttons', { kind: 'point', point: { x: 540, y: 1500 } } as const],
+])('a tap on a foreign ANR dialog stays refused for %s', async (_case, target) => {
+  const session = makeAndroidSession('readiness-system-tap-refused');
+  screenNodes = systemUiAnrDialogNodes();
+  const { observation, calls } = makeObservation(systemDialogFocus);
+
+  await expect(
+    ensureAndroidBlockingSystemDialogReadyForTap({
+      session,
+      command: 'press',
+      target,
+      observation,
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('Android system dialog is blocking press'),
+    details: {
+      dispatched: 'no',
+      focusedPackage: 'com.android.systemui',
+      focusedWindow: 'Application Not Responding: com.android.systemui',
+      hint: expect.stringContaining('Close app or Wait'),
     },
   });
+  expect(tapCalls(calls)).toEqual([]);
 });
 
 test('a tap stays refused when the foreign dialog shows no framework buttons', async () => {
   // An app control labelled "Close app" is not the dialog's button: only the framework id counts.
   const session = makeAndroidSession('readiness-system-tap-no-ids');
+  screenNodes = systemUiAnrDialogNodes().map(({ identifier: _id, ...node }) => node);
   const { observation } = makeObservation(systemDialogFocus);
 
   await expect(
-    ensureAndroidBlockingSystemDialogReadyForTap({ session, command: 'press', observation }),
+    ensureAndroidBlockingSystemDialogReadyForTap({
+      session,
+      command: 'press',
+      target: { kind: 'point', point: { x: 210, y: 640 } },
+      observation,
+    }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: expect.stringContaining('Android system dialog is blocking press'),
@@ -361,7 +397,12 @@ test('a tap stays refused when the foreign dialog cannot be read, and the read f
 
   const unread = await withDiagnosticsScope({}, async () => {
     await expect(
-      ensureAndroidBlockingSystemDialogReadyForTap({ session, command: 'press', observation }),
+      ensureAndroidBlockingSystemDialogReadyForTap({
+        session,
+        command: 'press',
+        target: refTo('android:id/aerr_close'),
+        observation,
+      }),
     ).rejects.toMatchObject({
       details: { dispatched: 'no', hint: expect.stringContaining('reboot the emulator') },
     });
@@ -386,8 +427,13 @@ test('a tap stays refused when a surface covers the foreign dialog', async () =>
   const { observation } = makeObservation(systemDialogFocus);
 
   await expect(
-    ensureAndroidBlockingSystemDialogReadyForTap({ session, command: 'press', observation }),
-  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+    ensureAndroidBlockingSystemDialogReadyForTap({
+      session,
+      command: 'press',
+      target: refTo('android:id/aerr_close'),
+      observation,
+    }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { dispatched: 'no' } });
 });
 
 test('the session app ANR is still recovered before a tap, not admitted', async () => {
@@ -397,6 +443,7 @@ test('the session app ANR is still recovered before a tap, not admitted', async 
   const readiness = await ensureAndroidBlockingSystemDialogReadyForTap({
     session,
     command: 'press',
+    target: refTo('android:id/aerr_close'),
     observation,
   });
 
