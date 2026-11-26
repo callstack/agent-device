@@ -110,7 +110,7 @@ test.each([
   expect(() => readCloudSessionRequest({ ...baseFlags, appUrl })).toThrow(
     expect.objectContaining({
       message:
-        '--app-url requires an HTTPS archive URL of at most 2048 ASCII characters without spaces, backslashes, credentials, a query, or a fragment.',
+        '--app-url requires an HTTPS archive URL of at most 2048 characters after URL encoding, without spaces, backslashes, credentials, a query, or a fragment.',
       details: { reason: 'cloud_invalid_app_url' },
     }),
   );
