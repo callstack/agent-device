@@ -284,18 +284,24 @@ export async function refuseUnavailableExactOwnerFact(
     testCase.device,
     localRuntimeOwner(testCase.device.platform),
   );
+  const refused = refusedRuntimeOperation(testCase.command);
+  const admittedOperations = binding.plan?.admitted ?? [];
   const admitted = Object.fromEntries(
-    (binding.plan?.admitted ?? []).map((operation) => [operation, available]),
+    admittedOperations.map((operation) => [operation, available]),
   );
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: base.device,
     operations: {
       ...base.operations,
       ...admitted,
-      [refusedRuntimeOperation(testCase.command)]: testCase.unavailable,
+      [refused]: testCase.unavailable,
     },
   };
-  const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
+  const inspectFacts = vi.fn<InspectDeviceRuntimeFacts>(async (device, requested) => {
+    expect(device).toEqual(testCase.device);
+    if (requested) expect(requested).toEqual([...admittedOperations, refused]);
+    return facts;
+  });
   const bindDevice = vi.fn() as unknown as BindDeviceRuntime;
 
   const resolved = await binding.resolve(testCase.device, {
@@ -305,7 +311,6 @@ export async function refuseUnavailableExactOwnerFact(
   });
 
   expect(inspectFacts).toHaveBeenCalledTimes(1);
-  expect(inspectFacts).toHaveBeenCalledWith(testCase.device);
   expect(bindDevice).not.toHaveBeenCalled();
   expect(resolved.ok).toBe(false);
   if (resolved.ok) throw new Error(`${testCase.command} admitted an unavailable exact-owner cell`);

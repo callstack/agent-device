@@ -105,7 +105,8 @@ test.each(['boot', 'shutdown', 'capabilities', 'apps', 'open'] as const)(
         inventoryRequests.every((request) => request.androidAvdSelection === 'include-stopped'),
     ).toBe(true);
     if (!selected.ok) expect(selected.error.code).not.toBe('DEVICE_NOT_FOUND');
-    expect(inspectFacts).toHaveBeenCalledWith(stopped);
+    const inspectedDevices = inspectFacts.mock.calls.map(([device]) => device);
+    expect(inspectedDevices).toContainEqual(stopped);
     const factsBeforeInvalid = inspectFacts.mock.calls.length;
 
     const invalid = await handler({

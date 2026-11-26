@@ -105,7 +105,7 @@ test('resolves one admitted binding and drives one back navigation', async () =>
   expect(resolved.ok).toBe(true);
   if (!resolved.ok) return;
   expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.inspectFacts).toHaveBeenCalledWith(appleDevice);
+  expect(harness.inspectFacts).toHaveBeenCalledWith(appleDevice, backRuntimeUse.required);
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledWith(appleDevice, backRuntimeUse);
   expect(await resolved.execute(backExecutionParams())).toEqual({
