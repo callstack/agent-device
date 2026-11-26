@@ -137,6 +137,33 @@ test('persisted health is private and reused only by the identity that cached it
   assert.deepEqual(persistedFiles(stateDir), []);
 });
 
+// `/health` receives the credential trimmed, as the auth headers send it, so an ID that echoes the
+// trimmed value is refused both before it is saved and when an entry on disk carries it.
+test('an instance ID echoing the padded credential is neither saved nor read', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-health-padded-');
+  const store = { stateDir, readRecord: readCachedRemoteHealthRecord };
+  const info = { baseUrl: 'http://remote.example.test:7777', token: '  padded-secret\n', pid: 0 };
+  invalidateRemoteDaemonHealth(info);
+  cacheRemoteDaemonHealth(info, { reachable: true, instanceId: 'id-padded-secret' }, stateDir);
+  assert.equal(readCachedRemoteHealth(info, store), undefined);
+  assert.deepEqual(persistedFiles(stateDir), [], 'nothing reaches disk');
+
+  cacheRemoteDaemonHealth(
+    info,
+    { reachable: true, instanceId: 'proxy', upstream: { instanceId: 'upstream' } },
+    stateDir,
+  );
+  const [file] = persistedFiles(stateDir);
+  assert.ok(file, 'the closest negative: IDs without the credential are saved');
+  const entry = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+    health: { upstream: { instanceId: string } };
+  };
+  entry.health.upstream.instanceId = 'upstream-padded-secret';
+  fs.writeFileSync(file, JSON.stringify(entry), { mode: 0o600 });
+  invalidateRemoteDaemonHealth(info);
+  assert.equal(readCachedRemoteHealth(info, store), undefined, 'an echoing upstream ID on disk');
+});
+
 // A shared state dir may hold an entry another user planted. Only a regular file this user owns and
 // nobody else can write counts; anything else is a miss, and a FIFO does not block the read.
 test.skipIf(process.platform === 'win32')('a planted persisted entry reads as a miss', () => {

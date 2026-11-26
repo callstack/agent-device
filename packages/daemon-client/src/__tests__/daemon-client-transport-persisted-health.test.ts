@@ -250,16 +250,14 @@ test('a timeout before connect drops the persisted health', async (t) => {
   assert.equal((await remote.request()).ok, true);
   const hung = {
     request: () => {
-      const request = Object.assign(new EventEmitter(), {
+      // A request whose socket is assigned but never connects, as against a host dropping SYNs.
+      const request = new EventEmitter();
+      const connectingSocket = Object.assign(new EventEmitter(), { connecting: true });
+      return Object.assign(request, {
         write: () => true,
         destroy: () => {},
-        end: () => {
-          queueMicrotask(() =>
-            request.emit('socket', Object.assign(new EventEmitter(), { connecting: true })),
-          );
-        },
+        end: () => queueMicrotask(() => request.emit('socket', connectingSocket)),
       });
-      return request;
     },
   };
   const load = vi.spyOn(hostTransport, 'loadNodeHttpRequester').mockResolvedValue(hung as never);

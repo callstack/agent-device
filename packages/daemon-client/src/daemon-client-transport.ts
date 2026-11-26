@@ -499,7 +499,7 @@ async function retryAfterRemoteInstanceMismatch(
  * cache skipped, then one resend, both within what is left of the command's budget.
  */
 async function resendAfterRemoteHealthGate(
-  gate: (budgetMs: number | undefined) => Promise<void>,
+  gate: NonNullable<SendRequestOptions['remoteHealthGate']>,
   info: DaemonInfo,
   req: DaemonWireRequest,
   statePaths: DaemonPaths,

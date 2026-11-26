@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openVerifiedFileForRead, publishFileSync } from '@agent-device/host-kit/file';
 import { readVersion } from '@agent-device/host-kit/version';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
+import {
+  buildDaemonHttpAuthHeaders,
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from '@agent-device/contracts/daemon-http';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
 
@@ -49,11 +52,13 @@ const HEADER_VALUE = /^[\t\u0020-\u007e\u0080-\u00ff]+$/;
  * value that does not echo the credential or the URL this client sent to `/health`.
  */
 function isUsableInstanceId(value: string | undefined, info: DaemonInfo): value is string {
+  // The credential as `/health` received it: the auth header builder trims it.
+  const sentToken = buildDaemonHttpAuthHeaders(info.token)['x-agent-device-token'];
   return (
     typeof value === 'string' &&
     value.length <= INSTANCE_ID_MAX_LENGTH &&
     HEADER_VALUE.test(value) &&
-    !(info.token && value.includes(info.token)) &&
+    !(sentToken && value.includes(sentToken)) &&
     !(info.baseUrl && value.includes(info.baseUrl))
   );
 }
