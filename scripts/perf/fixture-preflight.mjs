@@ -10,6 +10,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+export const DEFAULT_FIXTURE_APP_ID = 'com.callstack.agentdevicelab';
+const DUMPSYS_TIMEOUT_MS = 30_000;
 const DUMPSYS_MAX_BUFFER_BYTES = 32 * 1024 * 1024;
 // The dev client registers its activities and scheme under this component; a Release fixture
 // strips it. Match the component identity, not prose.
@@ -27,8 +29,9 @@ export function parseAndroidPackageFacts(dumpsys) {
     for (const token of match[1].split(/\s+/)) if (token) flags.add(token);
   }
   return {
-    // An unknown package prints no flag list.
-    installed: flags.size > 0,
+    // An unknown package prints no flag list. A removed-for-user package keeps its record but
+    // prints only `installed=false` per user.
+    installed: flags.size > 0 && !(/installed=false/.test(dumpsys) && !/installed=true/.test(dumpsys)),
     debuggable: flags.has('DEBUGGABLE'),
     devClient: dumpsys.includes(DEV_LAUNCHER_COMPONENT),
   };
@@ -36,15 +39,19 @@ export function parseAndroidPackageFacts(dumpsys) {
 
 /** Returns the one-line reason the package is not a usable Release fixture, or null when it is. */
 export function androidReleaseFixtureProblem(facts, { appId, serial }) {
-  const install = `pnpm test-app:android:fixture --serial ${serial}`;
+  // The installer only knows the default package; for another id, name the problem alone.
+  const fix =
+    appId === DEFAULT_FIXTURE_APP_ID
+      ? ` Install the Release fixture: pnpm test-app:android:fixture --serial ${serial}`
+      : '';
   if (!facts.installed) {
-    return `Android fixture preflight: ${appId} is not installed on ${serial}. Install the Release fixture: ${install}`;
+    return `Android fixture preflight: ${appId} is not installed on ${serial}.${fix}`;
   }
   if (facts.debuggable) {
-    return `Android fixture preflight: ${appId} on ${serial} is a debuggable build, not the Release fixture. Install it: ${install}`;
+    return `Android fixture preflight: ${appId} on ${serial} is a debuggable build, not the Release fixture.${fix}`;
   }
   if (facts.devClient) {
-    return `Android fixture preflight: ${appId} on ${serial} is a dev-client build (expo-dev-launcher), not the Release fixture. Install it: ${install}`;
+    return `Android fixture preflight: ${appId} on ${serial} is a dev-client build (expo-dev-launcher), not the Release fixture.${fix}`;
   }
   return null;
 }
@@ -62,6 +69,7 @@ export function assertAndroidReleaseFixture({ serial, appId, adb = resolveAdb() 
   try {
     dumpsys = execFileSync(adb, ['-s', serial, 'shell', 'dumpsys', 'package', appId], {
       encoding: 'utf8',
+      timeout: DUMPSYS_TIMEOUT_MS,
       maxBuffer: DUMPSYS_MAX_BUFFER_BYTES,
     });
   } catch (error) {
@@ -69,7 +77,7 @@ export function assertAndroidReleaseFixture({ serial, appId, adb = resolveAdb() 
     const reason = error instanceof Error ? error.message.split('\n').filter(Boolean).pop() : '';
     throw new Error(
       `Android fixture preflight: could not read the installed package on ${serial}: ${reason}. ` +
-        `Check the serial, then install the Release fixture: pnpm test-app:android:fixture --serial ${serial}`,
+        `Check that adb runs and ${serial} is online, then install the Release fixture: pnpm test-app:android:fixture --serial ${serial}`,
     );
   }
   const problem = androidReleaseFixtureProblem(parseAndroidPackageFacts(dumpsys), {

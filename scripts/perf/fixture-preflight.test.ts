@@ -94,3 +94,16 @@ test('resolveAdb takes an SDK platform-tools binary that exists and falls back t
   assert.equal(resolveAdb({ ANDROID_HOME: sdk }), adb);
   assert.equal(resolveAdb({ ANDROID_HOME: path.join(sdk, 'no-such-sdk') }), 'adb');
 });
+
+test('a package removed for the user is not installed', () => {
+  const removed = `Packages:\n  Package [${IDS.appId}] (1):\n    flags=[ HAS_CODE ]\n    User 0: ceDataInode=0 installed=false hidden=false\n`;
+  assert.equal(parseAndroidPackageFacts(removed).installed, false);
+});
+
+test('a non-default app id names the problem without the default installer', () => {
+  const problem = androidReleaseFixtureProblem(parseAndroidPackageFacts(''), {
+    appId: 'com.other.app',
+    serial: 'emulator-5560',
+  });
+  assert.equal(problem, 'Android fixture preflight: com.other.app is not installed on emulator-5560.');
+});

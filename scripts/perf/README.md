@@ -11,8 +11,8 @@ For each platform, the suite records a reason for each catalog command that it d
 
 1. Run `pnpm build`. The suite drives the built CLI and the built SDK.
 2. Use your own booted simulator or emulator. For Android, install the cached Release fixture with
-   `pnpm test-app:android:fixture --serial <serial>`. It needs `gh` auth and `ANDROID_HOME`, and it
-   checks the installed package afterwards. For iOS, install a current Release fixture; see
+   `pnpm test-app:android:fixture --serial <serial>`. It needs `pnpm test-app:install` run once, `gh` auth, and
+   `ANDROID_HOME`, and it checks the installed package afterwards. For iOS, install a current Release fixture; see
    `examples/test-app/README.md`.
 3. For iOS, set `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` to a path in your worktree.
 4. For Android, run `pnpm build:android` once. The snapshot helper APK must be in `android/snapshot-helper/dist/`.

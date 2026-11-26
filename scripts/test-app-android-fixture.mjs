@@ -16,12 +16,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertAndroidReleaseFixture } from './perf/fixture-preflight.mjs';
+import { DEFAULT_FIXTURE_APP_ID, assertAndroidReleaseFixture } from './perf/fixture-preflight.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ACTION_PATH = path.join(REPO_ROOT, '.github', 'actions', 'setup-fixture-app');
 const BUILD_CACHE_WORKFLOW = '.github/workflows/test-app-build-cache.yml';
-const DEFAULT_APP_ID = 'com.callstack.agentdevicelab';
 const ARCHIVE_MEMBER = 'binary.tar.gz';
 
 function run(command, args, options = {}) {
@@ -89,11 +88,7 @@ function findUnpackedApk(dir) {
     throw new Error(
       `Expected exactly one fixture APK in ${dir}; found ${apks.length}. The artifact layout changed.`,
     );
-  const apk = path.resolve(apks[0]);
-  // Reject an archive member that escapes the fresh directory.
-  if (!apk.startsWith(path.resolve(dir) + path.sep))
-    throw new Error(`Fixture artifact unpacked outside ${dir}.`);
-  return apk;
+  return path.resolve(apks[0]);
 }
 
 function freshDir(name) {
@@ -120,10 +115,11 @@ function main() {
   const repository = parseRepository(
     run('git', ['remote', 'get-url', 'origin'], { capture: true }),
   );
-  const headShas = [
-    run('git', ['rev-parse', 'HEAD'], { capture: true }).trim(),
-    run('git', ['rev-parse', 'origin/main'], { capture: true }).trim(),
-  ];
+  const headShas = [run('git', ['rev-parse', 'HEAD'], { capture: true }).trim()];
+  // A clone without a fetched origin/main still resolves an artifact for the current head.
+  try {
+    headShas.push(run('git', ['rev-parse', 'origin/main'], { capture: true }).trim());
+  } catch {}
   const token = run('gh', ['auth', 'token'], { capture: true }).trim();
   const artifactId = findTrustedArtifactId({ repository, name, headShas, token });
   if (!artifactId) {
@@ -157,7 +153,7 @@ function main() {
     // verifies the result, including that the package id and certificate are preserved.
     run('bash', [path.join(ACTION_PATH, 'repack-android-apk.sh'), sourceApk, outApk]);
     run(adb, ['-s', serial, 'install', '-r', outApk]);
-    assertAndroidReleaseFixture({ serial, appId: DEFAULT_APP_ID, adb });
+    assertAndroidReleaseFixture({ serial, appId: DEFAULT_FIXTURE_APP_ID, adb });
     process.stdout.write(`Release fixture ${name} installed on ${serial}\n`);
   } finally {
     for (const dir of [downloadDir, stageDir, repackDir])
