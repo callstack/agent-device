@@ -25,6 +25,7 @@ import {
   type TargetedTouchResult,
 } from './interaction-touch-response.ts';
 import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
+import { createAndroidDialogTapGate } from './interaction-touch-android-readiness.ts';
 import { formatTouchTargetLabel } from './interaction-touch-targets.ts';
 import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
@@ -107,6 +108,9 @@ function buildTargetedRuntimeOptions(
   return {
     androidFreshnessBaseline: admitted.androidFreshnessBaseline,
     refContext: admitted.refContext,
+    ...(admitsAndroidDialogButtonTap(session, command, admitted.refs, req.flags)
+      ? { androidDialogTapGate: createAndroidDialogTapGate() }
+      : {}),
     iosTapCorroboration: { target, extra: targetedExtra },
     run: async (runtime) =>
       await runTargetedTouchInteraction({
@@ -124,6 +128,9 @@ function buildTargetedRuntimeOptions(
       }),
     afterRun: async (result, readiness) => {
       if (session.lease?.leaseProvider) return undefined;
+      // The dialog, not the session app, owned the focus before this tap, so the tap cannot have
+      // escaped the app.
+      if (readiness.status === 'dialog-buttons') return undefined;
       return await assertAndroidPressStayedInApp(
         session,
         {
@@ -157,6 +164,22 @@ function buildTargetedRuntimeOptions(
       });
     },
   };
+}
+
+/**
+ * Only one plain tap may close a foreign Android app-error dialog: a repeated tap, a double tap,
+ * or a multi-ref plan would send its later taps to whatever the closed dialog uncovers.
+ */
+function admitsAndroidDialogButtonTap(
+  session: AdmittedTargetedTouch['session'],
+  command: TargetedTouchCommand,
+  refs: readonly string[] | undefined,
+  flags: CommandFlags | undefined,
+): boolean {
+  if (session.device.platform !== 'android') return false;
+  if (command !== 'press' && command !== 'click') return false;
+  if (refs && refs.length > 1) return false;
+  return (flags?.count ?? 1) <= 1 && flags?.doubleTap !== true;
 }
 
 async function runTargetedTouchInteraction(params: {

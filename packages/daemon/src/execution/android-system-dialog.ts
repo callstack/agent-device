@@ -5,7 +5,13 @@ import type {
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
-import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import { containsPoint } from '@agent-device/kernel/rect';
+import {
+  centerOfRect,
+  type Point,
+  type Rect,
+  type SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import { expireRefFrame } from '../core/ref-frame.ts';
@@ -14,10 +20,18 @@ import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
 const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;
 const ANDROID_CLOSE_APP_PATTERN = /^close app$/i;
+/**
+ * The framework's app-error dialog buttons (`AppNotRespondingDialog`, `AppErrorDialog`): Close app,
+ * Wait, Send feedback, Open app again, App info. The resource id does not depend on the device
+ * language.
+ */
+const ANDROID_APP_ERROR_DIALOG_BUTTON_ID = /^android:id\/aerr_[a-z_]+$/;
 const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
   'Wait for Android to recover, close the dialog, restart the app, or reboot the emulator, then retry.';
+const ANDROID_FOREIGN_DIALOG_HINT =
+  "Press one of the dialog's buttons (Close app or Wait), or run `alert dismiss`, then retry. Every other input is refused while the dialog has focus.";
 const ANDROID_BLOCKING_DIALOG_INSPECTION_WARNING =
   'Android blocking-dialog readiness could not be inspected; the command continued.';
 const ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT = 240;
@@ -34,6 +48,21 @@ export type AndroidBlockingDialogReadinessResult =
       focusedPackage?: string;
     }
   | { status: 'recovered'; warning: string };
+
+/**
+ * A foreign blocking dialog that a single tap may still close: the dialog's own buttons as the
+ * presentation published them, and the refusal for a tap anywhere else. A dialog button is the one
+ * input that can clear the dialog, so the guard must not refuse it.
+ */
+export type AndroidBlockingDialogButtonAdmission = Readonly<{
+  focus: AndroidBlockingDialogFocus;
+  buttons: readonly Rect[];
+  refusal: () => AppError;
+}>;
+
+export type AndroidBlockingDialogTapReadinessResult =
+  | AndroidBlockingDialogReadinessResult
+  | { status: 'dialog-buttons'; admission: AndroidBlockingDialogButtonAdmission };
 type AndroidDialogButtonTapResult =
   | { ok: true; x: number; y: number }
   | {
@@ -175,6 +204,78 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
   phase: 'before-command' | 'after-command';
   observation?: AndroidObservationAdapter;
 }): Promise<AndroidBlockingDialogReadinessResult> {
+  const readiness = await readAndroidBlockingSystemDialogReadiness(params);
+  if (readiness.status === 'foreign-dialog') throw readiness.refusal();
+  return readiness;
+}
+
+/**
+ * The before-command check of a single tap. A foreign app-error dialog ("System UI isn't
+ * responding") refuses every other input, so its own buttons are the only way to close it from a
+ * command. The tap proceeds with `dialog-buttons` when the dialog shows touchable buttons; the
+ * caller must refuse, before any send, a tap point outside them.
+ */
+export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
+  session: SessionState;
+  command: string;
+  observation?: AndroidObservationAdapter;
+}): Promise<AndroidBlockingDialogTapReadinessResult> {
+  const readiness = await readAndroidBlockingSystemDialogReadiness({
+    ...params,
+    phase: 'before-command',
+  });
+  if (readiness.status !== 'foreign-dialog') return readiness;
+  const observation = requireObservation(params.observation);
+  let buttons: Rect[];
+  try {
+    buttons = findAppErrorDialogButtons(
+      await readAndroidSnapshotNodes(params.session, observation),
+    );
+  } catch {
+    throw readiness.refusal();
+  }
+  if (buttons.length === 0) throw readiness.refusal();
+  return {
+    status: 'dialog-buttons',
+    admission: { focus: readiness.focus, buttons, refusal: readiness.refusal },
+  };
+}
+
+/** True when the tap point falls on one of the dialog's own buttons. */
+export function isAndroidBlockingDialogButtonPoint(
+  admission: AndroidBlockingDialogButtonAdmission,
+  point: Point,
+): boolean {
+  return admission.buttons.some((rect) => containsPoint(rect, point.x, point.y));
+}
+
+/**
+ * After a tap on a dialog button, Android removes the dialog window asynchronously. Waits a bounded
+ * time for the focus to leave the dialog, so the after-command check reads the result of the tap
+ * and not the frame before it.
+ */
+export async function waitForAndroidBlockingDialogFocusToClear(
+  session: SessionState,
+  observation: AndroidObservationAdapter | undefined,
+): Promise<void> {
+  const adapter = requireObservation(observation);
+  for (let attempt = 0; attempt < ANDROID_MODAL_POLL_ATTEMPTS; attempt += 1) {
+    const dialog = await adapter.readBlockingDialog(session.device);
+    if (dialog.status !== 'dialog') return;
+    await sleep(ANDROID_MODAL_POLL_MS);
+  }
+}
+
+type AndroidBlockingSystemDialogReadiness =
+  | AndroidBlockingDialogReadinessResult
+  | { status: 'foreign-dialog'; focus: AndroidBlockingDialogFocus; refusal: () => AppError };
+
+async function readAndroidBlockingSystemDialogReadiness(params: {
+  session: SessionState;
+  command: string;
+  phase: 'before-command' | 'after-command';
+  observation?: AndroidObservationAdapter;
+}): Promise<AndroidBlockingSystemDialogReadiness> {
   const { session, command } = params;
   if (session.device.platform !== 'android' || isProviderOwnedSession(session)) {
     return { status: 'clear' };
@@ -227,13 +328,18 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
     });
   }
 
-  throw androidBlockingDialogError({
-    session,
-    command,
+  return {
+    status: 'foreign-dialog',
     focus,
-    message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
-    hint: ANDROID_BLOCKING_DIALOG_HINT,
-  });
+    refusal: () =>
+      androidBlockingDialogError({
+        session,
+        command,
+        focus,
+        message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
+        hint: ANDROID_FOREIGN_DIALOG_HINT,
+      }),
+  };
 }
 
 async function recoverAppOwnedAndroidBlockingSystemDialogSafely(
@@ -459,6 +565,19 @@ function readNodeTextParts(node: {
   return parts
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .map((part) => part.trim());
+}
+
+/**
+ * The touchable buttons of a framework app-error dialog, read by resource id. Only a screen that
+ * also shows the dialog's "isn't responding" title counts, so an app's own control with a
+ * look-alike id never opens the gate.
+ */
+function findAppErrorDialogButtons(nodes: SnapshotNode[]): Rect[] {
+  if (!containsBlockingDialog(nodes)) return [];
+  return nodes
+    .filter(isTouchableDialogNode)
+    .filter((node) => ANDROID_APP_ERROR_DIALOG_BUTTON_ID.test(node.identifier ?? ''))
+    .flatMap((node) => (node.rect ? [node.rect] : []));
 }
 
 function containsBlockingDialog(nodes: SnapshotNode[]): boolean {

@@ -15,7 +15,10 @@ import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
+import {
+  ensureAndroidBlockingSystemDialogReady,
+  ensureAndroidBlockingSystemDialogReadyForTap,
+} from '../android-system-dialog.ts';
 
 // A blocking dialog can surface with no adb traffic at all, so nothing a previous command observed
 // is evidence about this one. These pin what each readiness phase owes the command it guards.
@@ -250,4 +253,102 @@ test('a dump that answered nothing is reported as unobserved, not as a clear scr
   // dump may be carried forward as evidence that the device was clear.
   expect(readiness).toEqual({ status: 'clear' });
   expect(unobserved).toBe(1);
+});
+
+/** System UI's ANR dialog as the framework draws it: a title and buttons with `aerr_` ids. */
+function systemUiAnrDialogNodes(): RawSnapshotNode[] {
+  return [
+    {
+      index: 0,
+      type: 'android.widget.TextView',
+      label: "System UI isn't responding",
+      identifier: 'android:id/alertTitle',
+      rect: { x: 50, y: 400, width: 500, height: 80 },
+    },
+    {
+      index: 1,
+      type: 'android.widget.Button',
+      label: 'Close app',
+      identifier: 'android:id/aerr_close',
+      rect: CLOSE_APP_RECT,
+    },
+    {
+      index: 2,
+      type: 'android.widget.Button',
+      label: 'Wait',
+      identifier: 'android:id/aerr_wait',
+      rect: { x: 100, y: 700, width: 220, height: 80 },
+    },
+  ];
+}
+
+test("a tap may target a foreign ANR dialog's own buttons, and nothing is tapped for it", async () => {
+  // The dialog refuses every other input, so its buttons are the only way to close it.
+  const session = makeAndroidSession('readiness-system-tap');
+  screenNodes = systemUiAnrDialogNodes();
+  const { observation, calls } = makeObservation(systemDialogFocus);
+
+  const readiness = await ensureAndroidBlockingSystemDialogReadyForTap({
+    session,
+    command: 'press',
+    observation,
+  });
+
+  expect(readiness).toMatchObject({
+    status: 'dialog-buttons',
+    admission: {
+      focus: systemDialogFocus(),
+      buttons: [CLOSE_APP_RECT, { x: 100, y: 700, width: 220, height: 80 }],
+    },
+  });
+  expect(tapCalls(calls)).toEqual([]);
+});
+
+test('a tap stays refused when the foreign dialog shows no framework buttons', async () => {
+  // An app control labelled "Close app" is not the dialog's button: only the framework id counts.
+  const session = makeAndroidSession('readiness-system-tap-no-ids');
+  const { observation } = makeObservation(systemDialogFocus);
+
+  await expect(
+    ensureAndroidBlockingSystemDialogReadyForTap({ session, command: 'press', observation }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('Android system dialog is blocking press'),
+  });
+});
+
+test('a tap stays refused when a surface covers the foreign dialog', async () => {
+  const session = makeAndroidSession('readiness-system-tap-covered');
+  screenNodes = [
+    ...systemUiAnrDialogNodes(),
+    {
+      index: 3,
+      type: 'com.google.android.material.bottomsheet.BottomSheetDialog',
+      identifier: 'com.example:id/bottom_sheet',
+      hittable: true,
+      rect: { x: 0, y: 0, width: 1080, height: 2400 },
+    },
+  ];
+  const { observation } = makeObservation(systemDialogFocus);
+
+  await expect(
+    ensureAndroidBlockingSystemDialogReadyForTap({ session, command: 'press', observation }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+});
+
+test('the session app ANR is still recovered before a tap, not admitted', async () => {
+  const session = makeAndroidSession('readiness-anr-tap', { appBundleId: APP });
+  const { observation, calls } = makeObservation(anrFocus);
+
+  const readiness = await ensureAndroidBlockingSystemDialogReadyForTap({
+    session,
+    command: 'press',
+    observation,
+  });
+
+  expect(readiness).toEqual({
+    status: 'recovered',
+    warning: `Recovered Android app ANR before press: closed and relaunched ${APP}.`,
+  });
+  expect(tapCalls(calls)).toEqual([CLOSE_APP_TAP]);
 });

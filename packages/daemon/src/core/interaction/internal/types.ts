@@ -133,6 +133,11 @@ export type InteractionRuntimeInput = {
   ) => Promise<import('@agent-device/contracts/backend').TargetHittability>;
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
+  /**
+   * Runs immediately before a tap is sent, before the ref frame expires: a throw refuses the tap
+   * with nothing dispatched. `undefined` is a native-ref tap, which has no point to check.
+   */
+  admitTap?: (point: Point | undefined) => void;
   gestures?: BoundGestureExecutor;
   /**
    * The capture every observation on this request reads the screen through: the action binding's

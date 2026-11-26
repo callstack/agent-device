@@ -22,11 +22,15 @@ import { handleInteractionCommands } from '../index.ts';
 
 type EnsureAndroidBlockingSystemDialogReady =
   typeof import('../../android-system-dialog.ts').ensureAndroidBlockingSystemDialogReady;
+type EnsureAndroidBlockingSystemDialogReadyForTap =
+  typeof import('../../android-system-dialog.ts').ensureAndroidBlockingSystemDialogReadyForTap;
 
 const { androidDialogReadiness } = vi.hoisted(() => ({
   androidDialogReadiness: {
     spy: vi.fn<EnsureAndroidBlockingSystemDialogReady>(),
     actual: undefined as unknown as EnsureAndroidBlockingSystemDialogReady,
+    tapSpy: vi.fn<EnsureAndroidBlockingSystemDialogReadyForTap>(),
+    tapActual: undefined as unknown as EnsureAndroidBlockingSystemDialogReadyForTap,
   },
 }));
 
@@ -45,7 +49,12 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 vi.mock('../../android-system-dialog.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../android-system-dialog.ts')>();
   androidDialogReadiness.actual = actual.ensureAndroidBlockingSystemDialogReady;
-  return { ...actual, ensureAndroidBlockingSystemDialogReady: androidDialogReadiness.spy };
+  androidDialogReadiness.tapActual = actual.ensureAndroidBlockingSystemDialogReadyForTap;
+  return {
+    ...actual,
+    ensureAndroidBlockingSystemDialogReady: androidDialogReadiness.spy,
+    ensureAndroidBlockingSystemDialogReadyForTap: androidDialogReadiness.tapSpy,
+  };
 });
 
 import {
@@ -69,6 +78,10 @@ beforeEach(() => {
   mockInteractorSnapshot.mockReset();
   androidDialogReadiness.spy.mockReset();
   androidDialogReadiness.spy.mockImplementation((params) => androidDialogReadiness.actual(params));
+  androidDialogReadiness.tapSpy.mockReset();
+  androidDialogReadiness.tapSpy.mockImplementation((params) =>
+    androidDialogReadiness.tapActual(params),
+  );
 });
 
 test('press @ref fails when Android tap escapes to launcher', async () => {
@@ -312,12 +325,10 @@ test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
 test('a ref action aborts with the shared ref_frame_expired rejection after Android dialog recovery mutates', async () => {
   // Simulate recovery: the before-command readiness check taps a blocking dialog
   // (a device mutation) and reports `recovered`, expiring the frame.
-  androidDialogReadiness.spy.mockImplementation(async (params) => {
-    if (params.phase === 'before-command') {
-      expireRefFrame(params.session);
-      return { status: 'recovered', warning: 'Recovered from a blocking system dialog' };
-    }
-    return { status: 'clear' };
+  // A single press reads readiness through the tap variant.
+  androidDialogReadiness.tapSpy.mockImplementation(async (params) => {
+    expireRefFrame(params.session);
+    return { status: 'recovered', warning: 'Recovered from a blocking system dialog' };
   });
   const sessionStore = makeSessionStore();
   const sessionName = 'android-recovery-abort';
@@ -360,5 +371,110 @@ test('a ref action aborts with the shared ref_frame_expired rejection after Andr
     expect(details?.scope).toBe('all');
   }
   // The outstanding ref action never dispatched a press against the recovered UI.
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+// While System UI's ANR dialog has focus, the guard refuses every input. The dialog's own
+// buttons are the one input that can close it, so a single press on one of them goes through, and
+// any other tap is still refused before it is sent.
+const SYSTEM_UI_ANR = {
+  status: 'dialog',
+  focus: {
+    package: 'com.android.systemui',
+    focusedWindow: 'Application Not Responding: com.android.systemui',
+    raw: 'mCurrentFocus=Window{ffeedd u0 Application Not Responding: com.android.systemui}',
+  },
+} as const;
+
+function systemUiAnrScreen() {
+  return attachRefs([
+    {
+      index: 0,
+      type: 'android.widget.TextView',
+      label: "System UI isn't responding",
+      identifier: 'android:id/alertTitle',
+      rect: { x: 50, y: 400, width: 500, height: 80 },
+    },
+    {
+      index: 1,
+      type: 'android.widget.Button',
+      label: 'Close app',
+      identifier: 'android:id/aerr_close',
+      rect: { x: 100, y: 600, width: 220, height: 80 },
+      enabled: true,
+      hittable: true,
+    },
+    {
+      index: 2,
+      type: 'android.widget.Button',
+      label: 'Wait',
+      identifier: 'android:id/aerr_wait',
+      rect: { x: 100, y: 700, width: 220, height: 80 },
+      enabled: true,
+      hittable: true,
+    },
+  ]);
+}
+
+async function pressWithSystemUiAnr(positionals: string[], flags: Record<string, unknown> = {}) {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-system-ui-anr';
+  const session = makeAndroidSession(sessionName);
+  session.appBundleId = 'com.example.app';
+  const nodes = systemUiAnrScreen();
+  session.snapshot = { nodes, createdAt: Date.now(), backend: 'android' };
+  sessionStore.publish(sessionName, session);
+
+  // The dialog holds the focus until a tap reaches the device.
+  let tapped = false;
+  mockTapPoint.mockImplementation(async (input) => {
+    tapped = true;
+    return { x: input.point.x, y: input.point.y };
+  });
+  mockGetAndroidBlockingDialogObservation.mockImplementation(async () =>
+    tapped ? { status: 'clear' } : SYSTEM_UI_ANR,
+  );
+  const bindings = getRuntimeBindings();
+  return await handleInteractionCommands({
+    createCommandSurface: touchCreateCommandSurface,
+    req: { token: 't', session: sessionName, command: 'press', positionals, flags },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...bindings,
+    androidObservation: { ...bindings.androidObservation, readSnapshotNodes: async () => nodes },
+  });
+}
+
+test("press on the System UI ANR dialog's Close app goes through the blocking-dialog guard", async () => {
+  const response = await pressWithSystemUiAnr(['@e2']);
+
+  expect(response).toMatchObject({ ok: true });
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
+  expect(mockTapPoint.mock.calls[0]?.[0].point).toEqual({ x: 210, y: 640 });
+});
+
+test('a press at a point outside the System UI ANR dialog buttons is refused before it is sent', async () => {
+  const response = await pressWithSystemUiAnr(['540', '1500']);
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining('Android system dialog is blocking press'),
+      details: { dispatched: 'no', focusedPackage: 'com.android.systemui' },
+    },
+  });
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+test('a repeated press on the System UI ANR dialog stays refused', async () => {
+  // The later taps of a repeated press would land on whatever the closed dialog uncovers.
+  const response = await pressWithSystemUiAnr(['@e2'], { count: 2 });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { message: expect.stringContaining('Android system dialog is blocking press') },
+  });
   expect(mockTapPoint).not.toHaveBeenCalled();
 });

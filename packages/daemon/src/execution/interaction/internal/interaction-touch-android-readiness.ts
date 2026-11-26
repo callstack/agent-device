@@ -1,7 +1,13 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { discloseDispatch } from '@agent-device/kernel/errors';
+import type { Point } from '@agent-device/kernel/snapshot';
 import {
   ensureAndroidBlockingSystemDialogReady,
-  type AndroidBlockingDialogReadinessResult,
+  ensureAndroidBlockingSystemDialogReadyForTap,
+  isAndroidBlockingDialogButtonPoint,
+  waitForAndroidBlockingDialogFocusToClear,
+  type AndroidBlockingDialogButtonAdmission,
+  type AndroidBlockingDialogTapReadinessResult,
 } from '../../android-system-dialog.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
@@ -24,27 +30,57 @@ export type ReadinessOutcome<TResult> =
   | { aborted: true; response: DaemonResponse }
   | {
       aborted: false;
-      readiness: AndroidBlockingDialogReadinessResult;
+      readiness: AndroidBlockingDialogTapReadinessResult;
       runtimeResult: TResult;
     };
+
+/**
+ * The per-request gate of a single tap while a foreign app-error dialog has focus. Readiness opens
+ * it with the dialog's buttons; the backend calls `admitTap` immediately before it sends the tap
+ * (and before the ref frame expires). Only one tap, on one of the dialog's buttons, passes. Any
+ * other tap is refused with the guard's own error and `dispatched: no`.
+ */
+export type AndroidDialogTapGate = Readonly<{
+  open(admission: AndroidBlockingDialogButtonAdmission): void;
+  admitTap(point: Point | undefined): void;
+}>;
+
+export function createAndroidDialogTapGate(): AndroidDialogTapGate {
+  let admission: AndroidBlockingDialogButtonAdmission | undefined;
+  let admittedTaps = 0;
+  return {
+    open: (next) => {
+      admission = next;
+    },
+    admitTap: (point) => {
+      if (!admission) return;
+      if (admittedTaps > 0 || !point || !isAndroidBlockingDialogButtonPoint(admission, point)) {
+        throw discloseDispatch(admission.refusal(), 'no');
+      }
+      admittedTaps += 1;
+    },
+  };
+}
 
 export async function runWithAndroidDialogReadinessCheck<TResult>(
   session: SessionState,
   command: string,
-  options: { refContext: RefAdmissionContext | undefined },
-  run: (readiness: AndroidBlockingDialogReadinessResult) => Promise<TResult>,
+  options: { refContext: RefAdmissionContext | undefined; dialogTapGate?: AndroidDialogTapGate },
+  run: (readiness: AndroidBlockingDialogTapReadinessResult) => Promise<TResult>,
   observation?: AndroidObservationAdapter,
 ): Promise<ReadinessOutcome<TResult>> {
   if (session.lease?.leaseProvider) {
     const readiness = { status: 'clear' } as const;
     return { aborted: false, readiness, runtimeResult: await run(readiness) };
   }
-  const readiness = await ensureAndroidBlockingSystemDialogReady({
-    session,
-    command,
-    phase: 'before-command',
-    observation,
-  });
+  const readiness: AndroidBlockingDialogTapReadinessResult = options.dialogTapGate
+    ? await ensureAndroidBlockingSystemDialogReadyForTap({ session, command, observation })
+    : await ensureAndroidBlockingSystemDialogReady({
+        session,
+        command,
+        phase: 'before-command',
+        observation,
+      });
   // ADR 0014: blocking-dialog recovery is itself device-mutating and expires the
   // frame at its own seam. A ref action admitted against the pre-recovery frame
   // must NOT continue against the recovered UI — abort it through the SHARED
@@ -65,7 +101,11 @@ export async function runWithAndroidDialogReadinessCheck<TResult>(
     });
     if (abort) return { aborted: true, response: abort };
   }
+  if (readiness.status === 'dialog-buttons') options.dialogTapGate?.open(readiness.admission);
   const runtimeResult = await run(readiness);
+  if (readiness.status === 'dialog-buttons') {
+    await waitForAndroidBlockingDialogFocusToClear(session, observation);
+  }
   await ensureAndroidBlockingSystemDialogReady({
     session,
     command,
