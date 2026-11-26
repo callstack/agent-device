@@ -52,7 +52,8 @@ export function isAndroidPermissionPackage(packageName: string): boolean {
 const ANDROID_SYSTEM_DIALOG_PACKAGES = new Set(['android', 'com.android.systemui']);
 const ANDROID_ALERT_ID_PATTERN =
   /^android:id\/(?:alertTitle|message|button[123]|parentPanel|buttonPanel|contentPanel)$/i;
-const ANDROID_ALERT_BUTTON_ID_PATTERN = /^android:id\/button[123]$/i;
+/** AlertDialog's buttons, and the ANR dialog's (`AppNotRespondingDialog`) Close app and Wait. */
+const ANDROID_ALERT_BUTTON_ID_PATTERN = /^android:id\/(?:button[123]|aerr_(?:close|wait))$/i;
 const ANDROID_PERMISSION_ID_PATTERN = /(?:^|:)id\/permission_/i;
 const ANDROID_BLOCKING_DIALOG_PATTERN =
   /\b(?:is(?:n't| not) responding|keeps stopping|has stopped|close app|app info)\b/i;

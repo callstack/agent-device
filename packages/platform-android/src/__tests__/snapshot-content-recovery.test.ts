@@ -236,6 +236,43 @@ test('keeps a recognized system dialog without window metadata', () => {
   expect(decision).toBeUndefined();
 });
 
+test('keeps an ANR dialog whose buttons carry the framework aerr ids', () => {
+  // The ANR dialog (`AppNotRespondingDialog`) names its buttons aerr_close and aerr_wait, not
+  // button1..3, in every device language.
+  const decision = unusableDecisionFor(
+    helperXml([
+      node({
+        text: 'System UI reagiert nicht',
+        resourceId: 'android:id/alertTitle',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'App schließen',
+        resourceId: 'android:id/aerr_close',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Button',
+      }),
+      node({
+        text: 'Warten',
+        resourceId: 'android:id/aerr_wait',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Button',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 3,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.pagerviewexample' },
+  );
+
+  expect(decision).toBeUndefined();
+});
+
 test('rejects system chrome inherited under an empty application window', () => {
   const decision = unusableDecisionFor(
     helperXml([
