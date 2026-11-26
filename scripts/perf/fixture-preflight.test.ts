@@ -75,7 +75,7 @@ test('a debuggable build names the install command even without the dev launcher
 
 test('a dev-client build that is not debuggable still fails on the dev launcher', () => {
   const problem = androidReleaseFixtureProblem(
-    parseAndroidPackageFacts(DEV_CLIENT_DUMP.replace(/DEBUGGABLE /g, '')),
+    parseAndroidPackageFacts(DEV_CLIENT_DUMP.replaceAll('DEBUGGABLE ', '')),
     IDS,
   );
   assert.match(problem!, /dev-client build \(expo-dev-launcher\)/);
