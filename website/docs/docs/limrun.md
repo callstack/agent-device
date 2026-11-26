@@ -17,7 +17,7 @@ If the CLI prints an install command in a missing-plugin error, use that command
 
 After installing or changing a plugin, finish sessions and run `agent-device daemon stop --state-dir <path>` for the matching detached daemon, then retry the command.
 
-The plugin installs the Limrun SDK (`@limrun/api`) as its own dependency. Run `agent-device plugins update @agent-device/limrun` to pick up SDK fixes.
+The plugin bundles a pinned version of the Limrun SDK. To get SDK fixes, upgrade to a newer agent-device release and install its matching Limrun plugin.
 
 ## Set credentials and connect
 

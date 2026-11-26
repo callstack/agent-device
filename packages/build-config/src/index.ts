@@ -29,6 +29,11 @@ export function providerPluginWithBundledDependencies(
   return {
     ...providerPluginBuildConfig,
     deps: { ...providerPluginBuildConfig.deps, onlyBundle },
+    // SDKs can derive request headers from their constructor names.
+    minify: {
+      compress: { keepNames: { class: true, function: true } },
+      mangle: { keepNames: true },
+    },
     plugins: [licenseNotices],
   };
 }

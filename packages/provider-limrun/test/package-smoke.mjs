@@ -20,6 +20,7 @@ export const dependencies = {
 };
 export const args = ['--platform', 'android'];
 export const fetchRedirects = ['https://api.limrun.com'];
+export const userAgentPattern = /^agent-device-cli\/\S+ Limrun\/JS /;
 
 export function environment() {
   return { LIMRUN_API_KEY: 'lim_fixture_key' };
