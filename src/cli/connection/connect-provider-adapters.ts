@@ -20,7 +20,7 @@ import { withPluginConnection } from '@agent-device/plugins/load';
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
-import { persistAndResolveGeneratedProfile } from './generated-config.ts';
+import { persistAndResolveGeneratedProfile, requireConnectionTarget } from './generated-config.ts';
 import type { CreatedCloudSession } from './cloud-session-api.ts';
 
 type ConnectProfile = { flags: CliFlags; remoteConfigPath: string };
@@ -143,6 +143,7 @@ export async function resolveConnectProviderProfile(options: {
       cwd,
       env,
     });
+    requireConnectionTarget(options.flags, resolved.profile.target);
     const leaseProvider = resolved.profile.leaseProvider;
     const flags = {
       ...profileToCliFlags(resolved.profile),
@@ -236,7 +237,7 @@ async function resolveProviderConnectionProfile(
       sessionIsolation: context.flags.sessionIsolation ?? 'tenant',
       runId: context.flags.runId ?? `${provider}-${clientId}`,
       clientId,
-      target: context.flags.target ?? 'mobile',
+      target: 'mobile',
       session: context.flags.session,
       stateDir: context.stateDir,
       leaseBackend:

@@ -102,7 +102,7 @@ test('resolves one admitted binding and exposes one point focus', async () => {
   expect(resolved.ok).toBe(true);
   if (!resolved.ok) return;
   expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.inspectFacts).toHaveBeenCalledWith(appleDevice);
+  expect(harness.inspectFacts).toHaveBeenCalledWith(appleDevice, focusRuntimeUse.required);
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledWith(appleDevice, focusRuntimeUse);
   expect(await resolved.execute(focusExecutionParams())).toEqual({

@@ -7,7 +7,6 @@ import {
   type DeviceBindingIntent,
   type DeviceRuntimeGateway,
   type ResourceOwnershipFence,
-  type RuntimeFacts,
   type RuntimeOperationKey,
   type RuntimeOwnerRef,
   type RuntimeUse,
@@ -58,9 +57,8 @@ export type BindExactDeviceRuntime = <
   BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
 >;
 
-export type InspectDeviceRuntimeFacts = (
-  device: DeviceInfo,
-) => Promise<RuntimeFacts<PlatformRuntimeOperations>>;
+export type InspectDeviceRuntimeFacts =
+  DeviceRuntimeGateway<PlatformRuntimeOperations>['inspectFacts'];
 
 export type BoundDeviceIdentity = Readonly<{
   device: DeviceInfo;
@@ -166,9 +164,9 @@ export function createRequestRuntimeBindings(params: {
   };
 
   return {
-    inspectFacts: async (device) => {
+    inspectFacts: async (device, requested) => {
       params.admitDevice?.(device);
-      return await params.gateway.inspectFacts(device);
+      return await params.gateway.inspectFacts(device, requested);
     },
     bindDevice,
     bindExactDevice,

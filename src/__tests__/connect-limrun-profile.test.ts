@@ -64,6 +64,68 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test.each([
+  ['environment', 'tv'],
+  ['project config', 'tv'],
+  ['environment', 'tablet'],
+  ['project config', 'tablet'],
+])('connect limrun ignores %s target %s', async (source, target) => {
+  const cwd = mkdtempForTestSync('agent-device-limrun-target-');
+  const env: Record<string, string> = {
+    LIMRUN_API_KEY: 'lim_test_key',
+    AGENT_DEVICE_STATE_DIR: cwd,
+  };
+  if (source === 'environment') {
+    env.AGENT_DEVICE_TARGET = target;
+  } else {
+    const configPath = path.join(cwd, 'agent-device.json');
+    const contents = JSON.stringify({ target });
+    fs.writeFileSync(configPath, contents);
+  }
+  const result = await runCliCapture(
+    ['connect', 'limrun', '--platform', 'android', '--session', 'ci', '--json'],
+    { cwd, env },
+  );
+  assert.equal(result.code, null, result.stdout);
+  const { data } = JSON.parse(result.stdout);
+  assert.equal(data.connected, true);
+  assert.equal(data.target, 'mobile');
+});
+
+test.each([
+  { profileTarget: undefined, envTarget: 'tv', args: [], error: undefined },
+  { profileTarget: undefined, envTarget: 'tv', args: ['--target', 'tv'], error: 'INVALID_ARGS' },
+  { profileTarget: 'tv', envTarget: 'mobile', args: [], error: undefined },
+  { profileTarget: 'tv', envTarget: 'mobile', args: ['--target', 'tv'], error: undefined },
+  { profileTarget: 'tv', envTarget: 'tablet', args: ['--target', 'tv'], error: undefined },
+  { profileTarget: 'tv', envTarget: 'tv', args: ['--target', 'tablet'], error: 'INVALID_ARGS' },
+  { profileTarget: 'tablet', envTarget: 'tv', args: [], error: 'INVALID_ARGS' },
+])(
+  'connect --remote-config uses profile target $profileTarget with $envTarget in the environment and args $args',
+  async ({ profileTarget, envTarget, args, error }) => {
+    const cwd = mkdtempForTestSync('agent-device-remote-target-');
+    const configPath = path.join(cwd, 'remote.json');
+    const profile = {
+      daemonBaseUrl: 'https://proxy.example.test',
+      leaseProvider: 'proxy',
+      tenant: 'team',
+      runId: 'target-test',
+      platform: 'android',
+      target: profileTarget,
+    };
+    const contents = JSON.stringify(profile);
+    fs.writeFileSync(configPath, contents);
+    const result = await runCliCapture(
+      ['connect', '--remote-config', configPath, '--session', 'ci', '--json', ...args],
+      { cwd, env: { AGENT_DEVICE_STATE_DIR: cwd, AGENT_DEVICE_TARGET: envTarget } },
+    );
+    const response = JSON.parse(result.stdout);
+    assert.equal(response.success, error === undefined, result.stdout);
+    assert.equal(response.error?.code, error);
+    if (response.success) assert.equal(response.data.target, profileTarget);
+  },
+);
+
 test('connect limrun generates a local daemon remote profile', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-');
   const stateDir = path.join(tempRoot, '.state');

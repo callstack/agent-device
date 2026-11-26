@@ -67,7 +67,11 @@ import {
 } from './connection-lease-transaction.ts';
 import { hasDeferredMetroConfig, stopMetroCleanup } from './connection-metro-runtime.ts';
 import { releasePreviousLease } from './connection-previous-lease.ts';
-import { removeGeneratedRemoteConfigIfUnused } from '../connection/generated-config.ts';
+import {
+  removeGeneratedRemoteConfigIfUnused,
+  requireConnectionTarget,
+} from '../connection/generated-config.ts';
+import { connectEnvironment } from '../remote-config-flags.ts';
 import { writeCommandOutput } from './shared.ts';
 import { formatDeliveredArtifactLines } from '@agent-device/command-output';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -85,8 +89,11 @@ import {
   type RuntimePreparationNotice,
 } from './connection-presentation.ts';
 
-export const connectCommand: ClientCommandHandler = async (params) => {
-  const { positionals, flags, host } = params;
+export const connectCommand: ClientCommandHandler = async (input) => {
+  const { positionals, flags } = input;
+  const env = connectEnvironment(input.host.env);
+  const host = { ...input.host, env };
+  const params = { ...input, host };
   const stateDir = resolveDaemonPaths(flags.stateDir, host).baseDir;
   const provider = await readConnectProvider(positionals, host.env);
   assertConnectProviderUsage(provider, flags);
@@ -171,6 +178,7 @@ async function connectCloudProfile(
   pending: CloudConnection['record'],
 ): Promise<boolean> {
   const { location, record, state, host } = connection;
+  requireConnectionTarget(params.flags, 'mobile');
   const request = readCloudSessionRequest(params.flags);
   const access = await resolveHostedCloudAccess({
     env: host.env,

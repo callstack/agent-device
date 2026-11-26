@@ -91,7 +91,7 @@ test('connects through a hosted daemon with the scoped daemon token and ends the
       '20',
       '--json',
     ],
-    { env },
+    { env: { ...env, AGENT_DEVICE_TARGET: 'tv' } },
   );
   expect(connect.code, connect.stderr || connect.stdout).toBeNull();
   expect(JSON.parse(connect.stdout).data).toMatchObject({
@@ -110,6 +110,7 @@ test('connects through a hosted daemon with the scoped daemon token and ends the
   const stateDir = env.AGENT_DEVICE_STATE_DIR;
   const state = readRemoteConnectionState({ stateDir, session: sessionName });
   expect(state?.cloudSession?.id).toBe(hostedDevice.id);
+  expect(state?.target).toBe('mobile');
   expect(fs.readFileSync(state!.remoteConfigPath, 'utf8')).not.toContain(
     hostedDevice.attach.daemonAuthToken,
   );

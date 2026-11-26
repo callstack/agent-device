@@ -917,7 +917,11 @@ async function loadLimrunPlatformRuntime(
   host: PlatformRuntimeHost,
 ): Promise<PlatformRuntimeOwner> {
   const { createLimrunPlatformRuntimeOwner } = await import('./app-log-runtime.ts');
+  const { loadProviderAndroidInteractionFacts } =
+    await import('@agent-device/capture-kit/provider-interaction');
+  const androidInteractionFacts = await loadProviderAndroidInteractionFacts();
   return createLimrunPlatformRuntimeOwner({
+    androidInteractionFacts,
     host,
     runtimeInstance,
     ownsDevice: (device) => runtime.ownsDevice(device),

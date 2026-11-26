@@ -19,6 +19,16 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       },
     },
     {
+      label: 'connect adc --platform android --target tv',
+      argv: ['connect', 'adc', '--platform', 'android', '--target', 'tv'],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'connect');
+        assert.equal(parsed.flags.platform, 'android');
+        assert.equal(parsed.flags.target, 'tv');
+      },
+    },
+    {
       label: 'open --platform ios --target tv',
       argv: ['open', 'Settings', '--platform', 'ios', '--target', 'tv'],
       strictFlags: true,

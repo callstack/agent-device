@@ -2629,7 +2629,7 @@ The following option table describes `connect [provider]`.
 Configure remote or provider state.
 
 ```bash
-agent-device connect [cloud] list [--live] [--json] | connect cloud --platform ios|android [--vendor <id>] [--max-minutes <minutes>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer] | connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
+agent-device connect [cloud] list [--live] [--json] | connect cloud --platform ios|android [--vendor <id>] [--max-minutes <minutes>] [--needs <capability,...>] [--device <model>] [--os <version>] [--show-viewer] | connect [provider] [--target <target>] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
 ```
 
 | Option | What it does |
@@ -2668,6 +2668,7 @@ agent-device connect [cloud] list [--live] [--json] | connect cloud --platform i
 | `--max-minutes <minutes>` | Connect cloud: request a maximum session duration in minutes |
 | `--needs <capability,...>` | Connect cloud: require each of these comma-separated capabilities |
 | `--show-viewer` | Connect cloud: open the live viewer in the browser |
+| `--target mobile\|tv\|desktop` | Device target class to match |
 | `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
 | `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
 | `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |

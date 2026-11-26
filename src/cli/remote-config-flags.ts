@@ -1,4 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   REMOTE_CONFIG_FIELD_SPECS,
   type RemoteConfigProfile,
@@ -10,6 +11,12 @@ import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config-c
 const REMOTE_CONFIG_DEFAULT_FLAG_KEYS = REMOTE_CONFIG_FIELD_SPECS.map(
   (spec) => spec.key,
 ) as readonly (keyof RemoteConfigProfile)[];
+
+// Both option parsing and provider resolution load profile defaults. Neither may turn
+// the caller's ambient target into a selection or a validation error on connect.
+export function connectEnvironment(env: EnvMap): EnvMap {
+  return { ...env, AGENT_DEVICE_TARGET: undefined };
+}
 
 export function profileToCliFlags(profile: RemoteConfigProfile): Partial<CliFlags> {
   const flags: Partial<CliFlags> = {};

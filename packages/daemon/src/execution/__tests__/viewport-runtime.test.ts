@@ -120,7 +120,7 @@ test('resolves one admitted binding and exposes one normalized viewport operatio
   expect(resolved.ok).toBe(true);
   if (!resolved.ok) return;
   expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.inspectFacts).toHaveBeenCalledWith(webDevice);
+  expect(harness.inspectFacts).toHaveBeenCalledWith(webDevice, viewportRuntimeUse.required);
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledWith(webDevice, viewportRuntimeUse);
   expect(await resolved.execute(viewportExecutionParams())).toEqual({

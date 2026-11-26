@@ -9,6 +9,8 @@
     // which dependency analysis cannot follow from the exec's path string.
     "scripts/release-install-hints.ts",
     "packages/provider-aws-device-farm/test/package-smoke.mjs",
+    "packages/provider-adc/src/adb-server.mjs",
+    "packages/provider-adc/tsdown.config.ts",
     "packages/provider-limrun/test/package-smoke.mjs",
     "packages/provider-browserstack/test/package-smoke.mjs",
     "packages/provider-browserstack/tsdown.config.ts",

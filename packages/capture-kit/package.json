@@ -171,6 +171,10 @@
       "types": "./src/provider-app-log.ts",
       "default": "./src/provider-app-log.ts"
     },
+    "./provider-interaction": {
+      "types": "./src/provider-interaction.ts",
+      "default": "./src/provider-interaction.ts"
+    },
     "./quality-warnings": {
       "types": "./src/snapshot/snapshot-presentation/quality-warnings.ts",
       "default": "./src/snapshot/snapshot-presentation/quality-warnings.ts"

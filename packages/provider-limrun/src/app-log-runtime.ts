@@ -1,10 +1,14 @@
+import { setTimeout as sleep } from 'node:timers/promises';
+import {
+  bindProviderInteractionOperations,
+  type ProviderAndroidInteractionFacts,
+} from '@agent-device/capture-kit/provider-interaction';
 import { createLimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunAndroidPerfOperations } from './android-perf-runtime.ts';
 import type { LimrunIosRunner } from './runtime-dependencies.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { bindLimrunInteractionOperations } from './interaction-operations.ts';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
 import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
@@ -67,6 +71,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     bindPerformance(device: DeviceInfo): Promise<LimrunAndroidPerfOperations | undefined>;
     host: PlatformRuntimeHost;
     runtimeInstance: string;
+    androidInteractionFacts: ProviderAndroidInteractionFacts;
     ownsDevice(device: DeviceInfo): boolean;
     getIosRunner(device: DeviceInfo): LimrunIosRunner | undefined;
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
@@ -181,7 +186,9 @@ function bindLimrunAppLogs(
     if (!interactor) throw new AppError('DEVICE_NOT_FOUND', 'Limrun session is unavailable');
     return interactor;
   };
-  const interaction = bindLimrunInteractionOperations({
+  const interaction = bindProviderInteractionOperations({
+    pause: (milliseconds) => sleep(milliseconds, undefined, { signal }),
+    screenshotHint: 'Limrun captures through its provider endpoint',
     device,
     signal,
     getInteractor: requireLimrunInteractor,

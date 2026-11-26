@@ -72,6 +72,7 @@ import {
   type ResolveRequestSessionRef,
 } from '../../request-admission.ts';
 import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
+import { RUNTIME_OPERATION_NAMES } from '@agent-device/contracts/runtime-operation-names';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
 export type SessionInventoryCommandInput = Readonly<{
@@ -424,7 +425,7 @@ async function inspectCapabilityFacts(
 ): Promise<RuntimeFacts<PlatformRuntimeOperations> | undefined> {
   if (!inspectFacts) return undefined;
   try {
-    return await inspectFacts(device);
+    return await inspectFacts(device, RUNTIME_OPERATION_NAMES);
   } catch {
     // Capability projection is advisory. A provider facts failure must fail closed rather than
     // reconstructing support from the retired capability matrix.

@@ -16,13 +16,11 @@ export function createAndroidToolHost(): AndroidToolHost {
      */
     probeClipboardShellSupport: async (device, signal) => {
       try {
-        const { runAndroidShell, androidClipboardShellSupportForResult } =
+        const { resolveAndroidAdbExecutor, loadAndroidClipboardSupport } =
           await loadAndroidMechanics();
-        const result = await runAndroidShell(device, ['cmd', 'clipboard', 'get', 'text'], {
-          allowFailure: true,
-          signal,
-        });
-        return await androidClipboardShellSupportForResult(result);
+        const { probeAndroidClipboardShellSupport } = await loadAndroidClipboardSupport();
+        const adb = resolveAndroidAdbExecutor(device);
+        return await probeAndroidClipboardShellSupport(adb, signal);
       } catch {
         return 'probe-failed';
       }

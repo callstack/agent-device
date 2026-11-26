@@ -137,6 +137,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'provider-webdriver',
   'provider-aws-device-farm',
   'provider-browserstack',
+  'provider-adc',
   'provider-limrun',
   'provider-revyl',
   'provider-testmu',

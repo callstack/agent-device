@@ -28,7 +28,6 @@ import {
   type LimrunAppDeploymentRuntimeOptions,
 } from './deployment-runtime.ts';
 import {
-  limrunAndroidInteractionFacts,
   limrunAndroidSettingsFacts,
   limrunAppleSettingsFacts,
   LIMRUN_FOLD_UNAVAILABLE,
@@ -146,7 +145,9 @@ export function limrunAppLogFacts(
   const isAndroid = device.platform === 'android';
   const runner = options.getIosRunner(device);
   if (!isAndroid && !runner) throw invalidRuntimeContract('Limrun iOS session has no Apple runner');
-  const interactionFacts = isAndroid ? limrunAndroidInteractionFacts(device) : runner!.facts;
+  const interactionFacts = isAndroid
+    ? options.androidInteractionFacts(device, available)
+    : runner!.facts;
   return Object.freeze({
     device: { ...deviceShape(device), providerMode: 'provider-runtime' },
     operations: {

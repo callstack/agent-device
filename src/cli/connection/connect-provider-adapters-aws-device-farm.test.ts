@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -289,3 +289,27 @@ function readRequiredActiveState(stateDir: string): RemoteConnectionState {
   assert.ok(state);
   return state;
 }
+
+test('connect refuses an Android TV target the provider did not select', async () => {
+  const stateDir = mkdtempForTestSync('connect-aws-tv-');
+  const flags = {
+    platform: 'android',
+    awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
+    awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device:device-a',
+    awsAppArn: 'arn:aws:devicefarm:us-west-2:123:upload:app-a',
+    device: 'Pixel 8',
+    target: 'tv',
+    json: false,
+    help: false,
+    version: false,
+  } as const;
+  const resolve = resolveConnectProviderProfile({
+    provider: 'aws-device-farm',
+    flags,
+    stateDir,
+    cwd: stateDir,
+    env: {},
+  });
+  await expect(resolve).rejects.toThrow('does not supply the requested target');
+  assert.equal(fs.existsSync(path.join(stateDir, 'remote-connections')), false);
+});

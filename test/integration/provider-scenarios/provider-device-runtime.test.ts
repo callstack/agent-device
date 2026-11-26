@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
+import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { RuntimeOperationName } from '@agent-device/contracts/runtime-operation-names';
+import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {
@@ -14,6 +17,7 @@ import {
   type FakeProviderCall,
   FakeProviderDeviceRuntime,
   createFakeProviderWorld,
+  createProviderScenarioLifecycleModule,
   iosLeaseFlags,
   iosLeaseMeta,
   leaseFlags,
@@ -28,6 +32,58 @@ test('Provider-backed scenario composes lease, inventory, dispatch, and port rev
     await runFakeProviderScenario(daemon, runtime);
   });
 }, 15_000);
+
+test('the daemon requests clipboard facts only for clipboard admission and capabilities', async () => {
+  const runtime = new FakeProviderDeviceRuntime('android');
+  const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
+  const owner = providerRuntimeOwner(FAKE_PROVIDER, 'android');
+  const module = createProviderScenarioLifecycleModule(runtime, owner);
+  const inspections: (readonly RuntimeOperationName[])[] = [];
+  const observed: typeof module = {
+    owner,
+    async loadRuntime(host) {
+      const loaded = await module.loadRuntime(host);
+      return {
+        ...loaded,
+        inspectFacts(device, requested) {
+          inspections.push(requested ?? []);
+          return loaded.inspectFacts(device, requested);
+        },
+      };
+    },
+  };
+  const daemon = await createProviderScenarioHarness({
+    ...providers,
+    deviceInventorySource: providers.deviceInventorySource!,
+    platformRuntime: {
+      providerRuntimes: [runtime],
+      providerModules: [{ runtime, module: observed }],
+    },
+  });
+  try {
+    const lease = await allocateFakeProviderLease(daemon);
+    const flags = leaseFlags(lease.leaseId);
+    const options = { meta: leaseMeta(lease.leaseId) };
+    await daemon.callCommand('appstate', [], flags, options);
+    expect(inspections.flat()).toContain('appState');
+    expect(inspections.flat()).not.toContain('readClipboard');
+    expect(inspections.flat()).not.toContain('writeClipboard');
+    inspections.length = 0;
+    const capabilities = await daemon.callCommand('capabilities', [], flags, options);
+    assertRpcOk(capabilities);
+    expect(inspections.flat()).toContain('readClipboard');
+    expect(inspections.flat()).toContain('writeClipboard');
+    for (const action of ['read', 'write']) {
+      inspections.length = 0;
+      const response = await daemon.callCommand('clipboard', [action], flags, options);
+      assertRpcError(response, 500, 'UNSUPPORTED_OPERATION', /clipboard is not supported/);
+      expect(inspections).toContainEqual([action + 'Clipboard']);
+    }
+  } finally {
+    await daemon.close();
+    await runtime.shutdown();
+  }
+});
 
 test('provider session retains the allocated device and lease for implicit commands', async () => {
   await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon, runtime }) => {

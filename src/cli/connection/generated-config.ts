@@ -77,6 +77,14 @@ function resolveGeneratedRemoteConfigProfile(options: {
   }
 }
 
+export function requireConnectionTarget(flags: CliFlags, selected: RemoteConfigProfile['target']) {
+  if (flags.target && flags.target !== (selected ?? 'mobile'))
+    throw new AppError(
+      'INVALID_ARGS',
+      'The connection provider does not supply the requested target.',
+    );
+}
+
 export function persistAndResolveGeneratedProfile(options: {
   stateDir: string;
   cwd: string;
@@ -86,6 +94,7 @@ export function persistAndResolveGeneratedProfile(options: {
   flags: CliFlags;
   extraFlags?: Partial<CliFlags>;
 }): { flags: CliFlags; remoteConfigPath: string } {
+  requireConnectionTarget(options.flags, options.profile.target);
   const remoteConfigPath = writeGeneratedRemoteConfig({
     stateDir: options.stateDir,
     provider: options.provider,

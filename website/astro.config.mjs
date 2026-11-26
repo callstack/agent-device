@@ -108,6 +108,7 @@ export default defineConfig({
           'eve',
           'remote-proxy',
           'device-clouds',
+          'adc',
           'browserstack',
           'aws-device-farm',
           'testmu',

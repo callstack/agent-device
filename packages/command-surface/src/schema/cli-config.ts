@@ -31,7 +31,7 @@ export function resolveConfigDefaults(options: {
 }): ConfigDefaults {
   const defaults: ConfigDefaults = { flags: {} };
   for (const entry of resolveConfigPaths(options.cwd, options.cliFlags.config, options.env)) {
-    const parsed = loadSingleConfigFile(entry);
+    const parsed = loadSingleConfigFile(entry, options.command);
     mergeDefinedFlags(defaults.flags, parsed.flags);
     if (parsed.devicePin) defaults.devicePin = parsed.devicePin;
   }
@@ -70,7 +70,7 @@ function resolveInputPath(inputPath: string, cwd: string, env: EnvMap): string {
   return resolveUserPath(inputPath, { cwd, env });
 }
 
-function loadSingleConfigFile(entry: ConfigPath): ConfigDefaults {
+function loadSingleConfigFile(entry: ConfigPath, command: string | null): ConfigDefaults {
   const { path: filePath, required } = entry;
   if (!fs.existsSync(filePath)) {
     if (required) {
@@ -102,6 +102,7 @@ function loadSingleConfigFile(entry: ConfigPath): ConfigDefaults {
   }
 
   const { devicePin, ...flagDefaults } = parsed;
+  if (command === 'connect') delete flagDefaults.target;
   const defaults: ConfigDefaults = {
     flags: parseConfigObject(flagDefaults, { source: entry.source, label: configFileLabel(entry) }),
   };
@@ -215,6 +216,7 @@ function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFl
   }
   const flags: Partial<CliFlags> = {};
   for (const spec of getConfigurableOptionSpecs(command)) {
+    if (command === 'connect' && spec.key === 'target') continue;
     const envValue = spec.env.names
       .map((name) => ({ name, value: env[name] }))
       .find((entry) => typeof entry.value === 'string' && entry.value.trim().length > 0);
