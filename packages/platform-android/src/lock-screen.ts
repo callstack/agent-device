@@ -1,4 +1,4 @@
-import { LOCK_SCREEN_REASONS } from '@agent-device/contracts/device';
+import { LOCK_SCREEN_REASONS, type LockScreenState } from '@agent-device/contracts/device';
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
@@ -10,6 +10,7 @@ import { readAndroidCurrentUserId } from './permission-grant-state.ts';
 /** The Android-only `lock-screen` reasons; the shared ones are in LOCK_SCREEN_REASONS. */
 const ANDROID_LOCK_SCREEN_REASONS = {
   // dumpsys reported no keyguard state, or no lock type for the foreground user, so nothing was sent.
+  // `status` reports it when there is no keyguard state.
   stateUnreadable: { reason: 'lock-screen-state-unreadable' },
   // The screen lock is set to None, so there is no lock screen to show; nothing was sent.
   lockScreenDisabled: { reason: 'lock-screen-disabled' },
@@ -98,6 +99,18 @@ export async function unlockAndroidScreen(
     hint: UNLOCK_UNVERIFIED_HINT,
     retry: dismiss,
   });
+}
+
+/**
+ * The lock state `dumpsys window` reports: `locked` while the keyguard shows. It is the same read
+ * that `lockAndroidScreen` and `unlockAndroidScreen` verify against, and it sends nothing. A dump
+ * without a keyguard state refuses instead of guessing.
+ */
+export async function readAndroidLockScreenState(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<LockScreenState> {
+  return (await readKeyguardBeforeDispatch(device, signal)) ? 'locked' : 'unlocked';
 }
 
 /** The keyguard state before anything is sent; a dump without one refuses instead of guessing. */

@@ -70,6 +70,36 @@ extension RunnerTests {
 #endif
   }
 
+  /// Reads SpringBoard's lock state and changes nothing. A screen SpringBoard has blanked while
+  /// unlocked is still unlocked: only the lock state decides the answer.
+  func executeLockScreenStatusCommand() -> Response {
+#if os(iOS) && targetEnvironment(simulator)
+    return lockScreenStatusResponse(springboardLockState())
+#else
+    return Response(ok: false, error: ErrorPayload(
+      code: RunnerWireErrorCode.hardwareControlUnavailable,
+      message: "lockScreenStatus is supported only on iPhone and iPad simulators",
+      hint: "lock-screen status reads iPhone and iPad simulators and Android phones and tablets."
+    ))
+#endif
+  }
+
+  /// The `lockScreenStatus` answer for one read. An unreadable state is an error, never unlocked.
+  func lockScreenStatusResponse(_ state: LockScreenStateRead) -> Response {
+    switch state {
+    case .locked:
+      return Response(ok: true, data: DataPayload(message: "lockScreenStatus", locked: true))
+    case .unlocked, .unlockedScreenOff:
+      return Response(ok: true, data: DataPayload(message: "lockScreenStatus", locked: false))
+    case .unreadable(let message):
+      return Response(ok: false, error: ErrorPayload(
+        code: RunnerWireErrorCode.observationUnavailable,
+        message: message,
+        hint: "Take a screenshot to see whether the lock screen is up."
+      ))
+    }
+  }
+
   /// The transition rules, independent of the device. The verification window starts only after
   /// the dispatch returned, and every wait is followed by a read, so a state SpringBoard reached
   /// during the last wait is never reported as a failure.
@@ -245,6 +275,15 @@ extension RunnerTests {
     switch springboardNotifyState(Self.springboardBlankedScreenNotification) {
     case .failure(let error): return .unreadable(error.message)
     case .success(let blanked): return blanked != 0 ? .unlockedScreenOff : .unlocked
+    }
+  }
+
+  /// SpringBoard's lock state alone. The status read does not need the blanked-screen state, so a
+  /// failure to read that state does not fail the read.
+  private func springboardLockState() -> LockScreenStateRead {
+    switch springboardNotifyState(Self.springboardLockStateNotification) {
+    case .failure(let error): return .unreadable(error.message)
+    case .success(let locked): return locked != 0 ? .locked : .unlocked
     }
   }
 

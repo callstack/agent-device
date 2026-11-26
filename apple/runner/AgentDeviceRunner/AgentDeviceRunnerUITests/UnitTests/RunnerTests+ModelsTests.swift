@@ -248,10 +248,11 @@ extension RunnerTests {
   /// Commands that did not exist at the merge-base, so no classification of its is compared with
   /// theirs. `appState` arrived with #2929, `pasteboardWrite` with the runner-written simulator
   /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge, `keyboardStatus` with
-  /// the return key in `keyboard status`, `lockScreen` and `unlockScreen` with `lock-screen`.
+  /// the return key in `keyboard status`, `lockScreen` and `unlockScreen` with `lock-screen`, and
+  /// `lockScreenStatus` with `lock-screen status`.
   private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
     .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge, .keyboardStatus, .accessibilityAudit,
-    .lockScreen, .unlockScreen,
+    .lockScreen, .unlockScreen, .lockScreenStatus,
   ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
@@ -271,7 +272,9 @@ extension RunnerTests {
   /// derived trait keeps. The table below pins its
   /// `converts: false`, which is what `invalidatesRememberedTextEntryTap` reads, so the answer is
   /// still asserted — against its own row rather than against a classification the merge-base lacks.
-  private static let commandsWithoutMergeBaseWitness: Set<CommandType> = [.keyboardStatus, .accessibilityAudit]
+  private static let commandsWithoutMergeBaseWitness: Set<CommandType> = [
+    .keyboardStatus, .accessibilityAudit, .lockScreenStatus,
+  ]
 
   private func assertRememberedTextEntryWitnessInvalidation(
     _ command: Command,
@@ -347,6 +350,10 @@ extension RunnerTests {
       (
         .unlockScreen,
         expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true, isReadOnly: false)
+      ),
+      (
+        .lockScreenStatus,
+        expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false, retains: true, isReadOnly: true)
       ),
       (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),
       (.keyboardReturn, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),

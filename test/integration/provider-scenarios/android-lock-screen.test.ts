@@ -128,6 +128,55 @@ test('Provider-backed integration Android lock-screen unlock refuses a PIN lock 
   }
 });
 
+test('Provider-backed integration Android lock-screen status reads the keyguard before and after a lock and sends nothing', async () => {
+  const world = await createAndroidSettingsWorld({ onAdbExec: keyguardDevice() });
+
+  try {
+    const client = world.daemon.client();
+    await client.apps.open({ app: 'settings', ...world.selection, saveScript: true });
+    const status = async () => {
+      world.adbCalls.splice(0);
+      const result = await client.command.lockScreen({ action: 'status', ...world.selection });
+      // A read sends no key event, no dismissal, and needs no lock settings.
+      assert.deepEqual(lockScreenShellCalls(world.adbCalls), []);
+      assert.ok(world.adbCalls.some((call) => call.join(' ') === 'shell dumpsys window'));
+      return result;
+    };
+
+    assert.deepEqual(await status(), {
+      action: 'lock-screen',
+      state: 'unlocked',
+      message: 'The screen is unlocked',
+    });
+    await client.command.lockScreen({ action: 'lock', ...world.selection });
+    assert.deepEqual(await status(), {
+      action: 'lock-screen',
+      state: 'locked',
+      message: 'The screen is locked',
+    });
+    await client.command.lockScreen({ action: 'unlock', ...world.selection });
+    assert.deepEqual(await status(), {
+      action: 'lock-screen',
+      state: 'unlocked',
+      message: 'The screen is unlocked',
+    });
+
+    await client.command.wait({ selector: 'label="Apps"', ...world.selection });
+    const published = await client.sessions.saveScript({
+      path: path.join(world.tempRoot, 'lock-screen-status.ad'),
+    });
+    const actions = parseReplayScriptDetailed(
+      fs.readFileSync(published.savedScript, 'utf8'),
+    ).actions.filter((action) => action.command === 'lock-screen');
+    assert.deepEqual(
+      actions.map((action) => action.positionals),
+      [['status'], ['lock'], ['status'], ['unlock'], ['status']],
+    );
+  } finally {
+    await world.close();
+  }
+});
+
 test('Provider-backed integration Android lock-screen refuses an Android TV target before adb', async () => {
   const tv: DeviceInfo = {
     platform: 'android',
@@ -142,13 +191,15 @@ test('Provider-backed integration Android lock-screen refuses an Android TV targ
   try {
     await world.daemon.client().apps.open({ app: 'settings', ...world.selection });
     world.adbCalls.splice(0);
-    const data = assertRpcError(
-      await world.daemon.callCommand('lock-screen', ['lock'], world.selection),
-      500,
-      'UNSUPPORTED_OPERATION',
-      /lock-screen/,
-    );
-    assert.equal((data.details as Record<string, unknown>).reason, 'unsupported-platform-leaf');
+    for (const action of ['lock', 'status']) {
+      const data = assertRpcError(
+        await world.daemon.callCommand('lock-screen', [action], world.selection),
+        500,
+        'UNSUPPORTED_OPERATION',
+        /lock-screen/,
+      );
+      assert.equal((data.details as Record<string, unknown>).reason, 'unsupported-platform-leaf');
+    }
     assert.deepEqual(lockScreenShellCalls(world.adbCalls), []);
   } finally {
     await world.close();

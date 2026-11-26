@@ -11,6 +11,7 @@ import {
   SYSTEM_BUTTONS,
   SYSTEM_BUTTON_LABELS,
   androidHardwareButtonFacts,
+  bindLockScreenStatus,
   bindSystemButton,
   systemButtonRuntimeOperationFacts,
 } from './system-button-runtime.ts';
@@ -46,10 +47,40 @@ test('an omitted button reports the family denial, a named one its own cell', ()
     mediaPrevious: unsupported,
     mediaRewind: unsupported,
     mediaFastForward: unsupported,
+    lockScreenStatus: unsupported,
   });
   const allDenied = systemButtonRuntimeOperationFacts({ unsupported });
-  expect(Object.keys(allDenied).sort()).toEqual([...SYSTEM_BUTTONS].sort());
+  expect(Object.keys(allDenied).sort()).toEqual([...SYSTEM_BUTTONS, 'lockScreenStatus'].sort());
   for (const button of SYSTEM_BUTTONS) expect(allDenied[button]).toEqual(unsupported);
+  expect(allDenied.lockScreenStatus).toEqual(unsupported);
+  expect(
+    systemButtonRuntimeOperationFacts({ unsupported, lockScreenStatus: available })
+      .lockScreenStatus,
+  ).toEqual(available);
+});
+
+// The lock state read is the one lock-screen cell that returns a value: the binder hands back what
+// the interactor read, and an interactor without the member fails closed rather than answering.
+test('a local lockScreenStatus binding returns the state the interactor read', async () => {
+  const read = vi.fn(async () => 'locked' as const);
+  const resolveInteractor = vi.fn(
+    async () => ({ lockScreenStatus: read }) as unknown as Interactor,
+  );
+  const bound = bindLockScreenStatus(new AbortController().signal, resolveInteractor);
+  await expect(bound.lockScreenStatus({ options: { appBundleId: 'com.example' } })).resolves.toBe(
+    'locked',
+  );
+  expect(read).toHaveBeenCalledOnce();
+  expect(read).toHaveBeenCalledWith();
+  expect(resolveInteractor).toHaveBeenCalledWith(
+    expect.objectContaining({ appBundleId: 'com.example' }),
+  );
+
+  const missing = bindLockScreenStatus(
+    new AbortController().signal,
+    async () => ({}) as unknown as Interactor,
+  );
+  await expect(missing.lockScreenStatus({})).rejects.toThrow();
 });
 
 test.each(SYSTEM_BUTTONS)(
@@ -183,13 +214,14 @@ test('the lock-screen positional helper enforces arity and the exact action', ()
   expect(LOCK_SCREEN_ACTIONS.map((action) => parseLockScreenPositionals([action]))).toEqual([
     'lock',
     'unlock',
+    'status',
   ]);
   expect(parseLockScreenPositionals(['UNLOCK'])).toBe('unlock');
   for (const positionals of [[], ['lock', 'unlock'], ['locked'], [''], ['sleep']] as const) {
     expect(() => parseLockScreenPositionals(positionals)).toThrowError(
       expect.objectContaining({
         code: 'INVALID_ARGS',
-        message: 'lock-screen requires exactly one action: lock, unlock.',
+        message: 'lock-screen requires exactly one action: lock, unlock, status.',
       }),
     );
   }

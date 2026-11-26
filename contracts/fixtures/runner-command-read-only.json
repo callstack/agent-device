@@ -97,6 +97,12 @@
   },
   {
     "command": {
+      "command": "lockScreenStatus"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
       "command": "longPress"
     },
     "readOnly": false

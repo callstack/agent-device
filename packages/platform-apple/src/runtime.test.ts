@@ -419,7 +419,7 @@ test.each([
       progress: { report: () => {} },
     },
   });
-  for (const operation of ['lockScreen', 'unlockScreen'] as const) {
+  for (const operation of ['lockScreen', 'unlockScreen', 'lockScreenStatus'] as const) {
     expectOperationAvailability(binding, operation, verdict === 'available');
     if (verdict === 'available') continue;
     expect(binding.facts.operations[operation]).toMatchObject({

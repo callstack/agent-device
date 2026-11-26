@@ -83,6 +83,7 @@ const RUNNER_TRANSPORT_METHODS: Record<
   volumeDown: { invoke: (i) => i.volumeDown!(), runnerCommand: 'volumeDown' },
   lockScreen: { invoke: (i) => i.lockScreen!(), runnerCommand: 'lockScreen' },
   unlockScreen: { invoke: (i) => i.unlockScreen!(), runnerCommand: 'unlockScreen' },
+  lockScreenStatus: { invoke: (i) => i.lockScreenStatus!(), runnerCommand: 'lockScreenStatus' },
   tvRemote: { invoke: (i) => i.tvRemote!('select'), runnerCommand: 'remotePress' },
   keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
   keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },

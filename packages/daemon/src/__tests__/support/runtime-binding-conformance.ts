@@ -223,6 +223,17 @@ export const conformedRuntimeBindings = {
         }),
       ),
   },
+  'lock-screen status': {
+    plan: { refused: 'lockScreenStatus', admitted: [], command: 'lock-screen' },
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundSystemButtonRuntime('lock-screen', {
+          device,
+          positionals: ['status'],
+          ...bindings,
+        }),
+      ),
+  },
   'tv-remote': {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundTvRemoteRuntime({ device, positionals: ['down'], ...bindings })),

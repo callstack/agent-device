@@ -362,10 +362,10 @@ Exact behavior: `agent-device help hardware-button`.
 
 <!-- generated:command lock-screen -->
 
-Lock or unlock the device screen.
+Lock, unlock, or read the lock state of the device screen.
 
 ```bash
-agent-device lock-screen <lock|unlock>
+agent-device lock-screen <lock|unlock|status>
 ```
 
 Supported targets: [Lock screen](/docs/capabilities#system-and-hardware).

@@ -25,6 +25,7 @@
   "volumeDown": "none",
   "lockScreen": "none",
   "unlockScreen": "none",
+  "lockScreenStatus": "none",
   "keyboardDismiss": "app-windows",
   "keyboardReturn": "none",
   "keyboardStatus": "app-windows",

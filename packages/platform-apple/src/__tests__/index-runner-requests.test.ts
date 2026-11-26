@@ -192,6 +192,7 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
   'ios-simulator.interactor-volume-up.press': [IOS_SIMULATOR, (i) => i.volumeUp!()],
   'ios-simulator.interactor-lock-screen.lock': [IOS_SIMULATOR, (i) => i.lockScreen!()],
   'ios-simulator.interactor-unlock-screen.unlock': [IOS_SIMULATOR, (i) => i.unlockScreen!()],
+  'ios-simulator.interactor-lock-screen-status.read': [IOS_SIMULATOR, (i) => i.lockScreenStatus!()],
   'ios-simulator.interactor-volume-down.press': [IOS_SIMULATOR, (i) => i.volumeDown!()],
   'tvos.interactor-tv-remote.hold': [TVOS_SIMULATOR, (i) => i.tvRemote!('select', 500)],
   'ios-simulator.interactor-keyboard-dismiss.dismiss': [IOS_SIMULATOR, (i) => i.keyboardDismiss!()],

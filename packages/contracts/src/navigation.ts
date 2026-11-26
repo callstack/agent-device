@@ -122,7 +122,8 @@ export type HardwareButtonCommandResult = {
  * `lock-screen` — `{ action: 'lock-screen', state, message }`.
  *
  * `state` is the lock state the device reported after the command, read back rather than assumed
- * from the dispatch. A request that found the screen already in that state reports it too.
+ * from the dispatch. A request that found the screen already in that state reports it too. For
+ * `lock-screen status`, it is the lock state the device reports, read without a dispatch.
  */
 export type LockScreenCommandResult = {
   action: 'lock-screen';

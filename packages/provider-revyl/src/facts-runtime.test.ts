@@ -78,6 +78,7 @@ const EXPECTED_CELLS = {
   keyboardStatus: 'mode',
   listApps: 'mode',
   lockScreen: 'mode',
+  lockScreenStatus: 'mode',
   materializeAppSource: 'available',
   mediaFastForward: 'mode',
   mediaNext: 'mode',

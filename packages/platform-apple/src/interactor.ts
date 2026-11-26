@@ -27,7 +27,11 @@ import {
   type MacOsHelperSurface,
   type SessionSurface,
 } from '@agent-device/contracts/session';
-import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
+import {
+  DEVICE_ROTATIONS,
+  type DeviceRotation,
+  type LockScreenState,
+} from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
@@ -214,6 +218,14 @@ export function createAppleInteractor(
         { command: 'unlockScreen', appBundleId: runnerContext.appBundleId },
         runnerOpts,
       );
+    },
+    lockScreenStatus: async () => {
+      const result = await runAppleRunnerCommand(
+        device,
+        { command: 'lockScreenStatus', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+      return readRunnerLockScreenState(result);
     },
     // Volume presses reach the runner only on physical iPhone/iPad; the facts refuse every other
     // kind, and Apple exposes no power press at all, so no `power` member exists here.
@@ -539,6 +551,15 @@ async function setRunnerOrientation(
     );
   }
   return { orientation: observed };
+}
+
+/** SpringBoard's lock state as the runner read it; an answer without one is never read as unlocked. */
+function readRunnerLockScreenState(result: Record<string, unknown>): LockScreenState {
+  const locked = readRunnerBoolean(result, 'locked');
+  if (locked !== undefined) return locked ? 'locked' : 'unlocked';
+  throw new AppError('COMMAND_FAILED', 'iOS runner returned no lock state', {
+    locked: result.locked,
+  });
 }
 
 function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation {

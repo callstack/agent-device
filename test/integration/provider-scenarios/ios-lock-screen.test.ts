@@ -4,7 +4,7 @@ import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 import { createRecordingAppleToolProvider } from './providers.ts';
 
-test('Provider-backed integration iOS lock-screen sends lockScreen and unlockScreen to the runner without activating the app', async () => {
+test('Provider-backed integration iOS lock-screen sends lockScreen, unlockScreen, and lockScreenStatus to the runner without activating the app', async () => {
   const ok = { stdout: '', stderr: '', exitCode: 0 };
   const tool = createRecordingAppleToolProvider({
     simctl: async (args) => {
@@ -26,7 +26,7 @@ test('Provider-backed integration iOS lock-screen sends lockScreen and unlockScr
       hasLiveSession: () => true,
       runCommand: async (_device, command) => {
         runnerCommands.push(command.command);
-        return {};
+        return command.command === 'lockScreenStatus' ? { locked: true } : {};
       },
     }),
     appleToolProvider: () => tool.provider,
@@ -47,8 +47,14 @@ test('Provider-backed integration iOS lock-screen sends lockScreen and unlockScr
       state: 'unlocked',
       message: 'Unlocked the screen',
     });
-    // Activating the session app would dismiss the lock screen the first command shows.
-    assert.deepEqual(runnerCommands, ['lockScreen', 'unlockScreen']);
+    assert.deepEqual(await daemon.client().command.lockScreen({ action: 'status', ...selection }), {
+      action: 'lock-screen',
+      state: 'locked',
+      message: 'The screen is locked',
+    });
+    // Activating the session app would dismiss the lock screen the first command shows, and the
+    // lock screen a status read reports on.
+    assert.deepEqual(runnerCommands, ['lockScreen', 'unlockScreen', 'lockScreenStatus']);
     assert.deepEqual(
       tool.calls.filter((call) => call.includes('launch')),
       [],

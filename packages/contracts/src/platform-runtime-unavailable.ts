@@ -243,6 +243,7 @@ export function createUnavailablePlatformRuntimeFacts(
       shake: frozen.systemButton,
       lockScreen: frozen.systemButton,
       unlockScreen: frozen.systemButton,
+      lockScreenStatus: frozen.systemButton,
       volumeUp: frozen.systemButton,
       volumeDown: frozen.systemButton,
       power: frozen.systemButton,

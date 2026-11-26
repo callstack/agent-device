@@ -3,6 +3,7 @@ import {
   appSwitcherRuntimeUse,
   homeRuntimeUse,
   lockScreenRuntimeUse,
+  lockScreenStatusRuntimeUse,
   mediaFastForwardRuntimeUse,
   mediaNextRuntimeUse,
   mediaPlayPauseRuntimeUse,
@@ -132,9 +133,15 @@ const LOCK_SCREEN_COMMAND_ROWS = {
   lock: { use: lockScreenRuntimeUse, state: 'locked', message: 'Locked the screen' },
   unlock: { use: unlockScreenRuntimeUse, state: 'unlocked', message: 'Unlocked the screen' },
 } as const satisfies Record<
-  LockScreenAction,
+  Exclude<LockScreenAction, 'status'>,
   Readonly<{ use: SystemButtonUse; state: LockScreenState; message: string }>
 >;
+
+/** The message `lock-screen status` reports for each state the owner read. */
+const LOCK_SCREEN_STATUS_MESSAGES = {
+  locked: 'The screen is locked',
+  unlocked: 'The screen is unlocked',
+} as const satisfies Record<LockScreenState, string>;
 
 /** The neutral intent one press carries, projected from a resolved command context. */
 function systemButtonInput(context: DaemonCommandContext): SystemButtonInput {
@@ -225,10 +232,11 @@ export async function resolveBoundHardwareButtonRuntime(
 }
 
 /**
- * The one place `lock-screen` reaches a device. The action picks the lockScreen or unlockScreen
- * cell, and admission inspects the exact owner's fact for it before the dispatcher runs. The owner
- * returns only once the device reports the requested lock state, and throws a typed reason
- * otherwise, so the result names that state.
+ * The one place `lock-screen` reaches a device. The action picks the lockScreen, unlockScreen, or
+ * lockScreenStatus cell, and admission inspects the exact owner's fact for it before the
+ * dispatcher runs. lock and unlock return only once the device reports the requested lock state,
+ * and throw a typed reason otherwise, so the result names that state. status reports the state the
+ * owner read, and sends nothing.
  */
 export async function resolveBoundLockScreenRuntime(
   params: {
@@ -239,7 +247,9 @@ export async function resolveBoundLockScreenRuntime(
 ): Promise<ResolvedGenericExecution> {
   // Shared with the CLI reader: an unknown or missing action refuses with INVALID_ARGS before
   // any owner is inspected or bound.
-  const row = LOCK_SCREEN_COMMAND_ROWS[parseLockScreenPositionals(params.positionals ?? [])];
+  const action = parseLockScreenPositionals(params.positionals ?? []);
+  if (action === 'status') return await readBoundLockScreenStatus(params);
+  const row = LOCK_SCREEN_COMMAND_ROWS[action];
   return await pressBoundSystemButton(
     'lock-screen',
     row.use,
@@ -249,5 +259,31 @@ export async function resolveBoundLockScreenRuntime(
       state: row.state,
       message: row.message,
     }),
+  );
+}
+
+/**
+ * `lock-screen status`: admits and binds the lockScreenStatus cell, then reports the lock state
+ * the owner read. An owner that cannot read the state throws, so the result is never a guess.
+ */
+async function readBoundLockScreenStatus(
+  params: { device: DeviceInfo } & RuntimeAdmissionBindings,
+): Promise<ResolvedGenericExecution> {
+  return await resolveBoundGenericRuntime(
+    {
+      command: 'lock-screen',
+      device: params.device,
+      use: lockScreenStatusRuntimeUse,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+    },
+    async (
+      runtime: BoundDeviceRuntime<typeof lockScreenStatusRuntimeUse>,
+      context,
+    ): Promise<LockScreenCommandResult> => {
+      const state = await runtime.operations.lockScreenStatus(systemButtonInput(context));
+      return { action: 'lock-screen', state, message: LOCK_SCREEN_STATUS_MESSAGES[state] };
+    },
   );
 }

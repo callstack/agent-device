@@ -7,7 +7,10 @@ import { KEYBOARD_INTERACTOR_OPERATIONS } from './keyboard-runtime.ts';
 import { ORIENTATION_INTERACTOR_OPERATIONS } from './orientation-runtime.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import { SETTINGS_INTERACTOR_OPERATIONS } from './settings-runtime.ts';
-import { SYSTEM_BUTTON_INTERACTOR_OPERATIONS } from './system-button-runtime.ts';
+import {
+  LOCK_SCREEN_STATUS_INTERACTOR_OPERATIONS,
+  SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+} from './system-button-runtime.ts';
 import { TV_REMOTE_INTERACTOR_OPERATIONS } from './tv-remote-runtime.ts';
 
 /**
@@ -21,6 +24,7 @@ import { TV_REMOTE_INTERACTOR_OPERATIONS } from './tv-remote-runtime.ts';
 const ALL_FAMILY_OPERATIONS = [
   ...BACK_INTERACTOR_OPERATIONS,
   ...SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+  ...LOCK_SCREEN_STATUS_INTERACTOR_OPERATIONS,
   ...ORIENTATION_INTERACTOR_OPERATIONS,
   ...TV_REMOTE_INTERACTOR_OPERATIONS,
   ...KEYBOARD_INTERACTOR_OPERATIONS,

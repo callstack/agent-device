@@ -344,6 +344,20 @@ test('lock-screen action events name the verified lock state', () => {
   assert.deepEqual(buildActionDetails(lock), { command: 'lock-screen', state: 'locked' });
 });
 
+test('lock-screen status action events report the state read, not a change', () => {
+  const status = (result: Record<string, unknown>) =>
+    action('lock-screen', result, { positionals: ['status'] });
+  assert.equal(
+    buildActionSummary(status({ action: 'lock-screen', state: 'locked' })),
+    'The screen is locked',
+  );
+  assert.equal(
+    buildActionSummary(status({ action: 'lock-screen', state: 'unlocked' })),
+    'The screen is unlocked',
+  );
+  assert.equal(buildActionSummary(status({})), 'Read the lock screen state');
+});
+
 test('telephony action events name the simulated event and carry neither number nor text', () => {
   const sms = action(
     'telephony',

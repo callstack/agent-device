@@ -105,6 +105,14 @@ export const findRecordingEffect = (req: DispatchedCommand): RecordingEffect => 
 export const clipboardRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
   readOnlySubactionRecordingEffect(req, new Set(['read']), '');
 
+// lock-screen actions are lock/unlock/status: status reads the lock state, and lock and unlock
+// change it. The action is required, so a request without one is classified as a change.
+const LOCK_SCREEN_READ_ONLY_ACTIONS = new Set(['status']);
+export const lockScreenRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
+  readOnlySubactionRecordingEffect(req, LOCK_SCREEN_READ_ONLY_ACTIONS, '');
+export const lockScreenRefFrameEffect = (req: DispatchedCommand): RefFrameEffect =>
+  readOnlySubactionRefFrameEffect(req, LOCK_SCREEN_READ_ONLY_ACTIONS, '');
+
 // A settings request reads only when it names a readable setting with nothing after it; every other
 // settings request changes device state — including `settings text-size <category>`, which names the
 // same word and performs a mutation. The leg comes from the same resolver the daemon admits with, so
