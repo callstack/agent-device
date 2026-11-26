@@ -64,7 +64,7 @@ const macOsSettingUnavailable = Object.freeze({
 } as const);
 /**
  * Content size and BiometricKit_Sim notifications answer only on iPhone and iPad simulators. The
- * time zone write is admitted there too, and nowhere else in the Apple family.
+ * locale and time zone writes are admitted there too, and nowhere else in the Apple family.
  */
 const handheldSimulatorUnavailable = Object.freeze({
   available: false,
@@ -197,6 +197,7 @@ function appleSettingsFacts(device: DeviceInfo) {
       permission: available,
       'text-size': handheld,
       timezone: handheld,
+      locale: handheld,
       faceid: handheld,
       touchid: handheld,
     } satisfies Record<AppleSimulatorSetting, RuntimeOperationFact>,

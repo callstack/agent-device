@@ -25,6 +25,7 @@ import { closeIosApp } from './app-launch.ts';
 import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
 import { setIosTimeZone } from './settings-timezone.ts';
+import { setIosLocale } from './settings-locale.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runSimctlForDevice } from './simctl-execution.ts';
@@ -51,6 +52,7 @@ const APPLE_SIMULATOR_SETTINGS = [
   'permission',
   'text-size',
   'timezone',
+  'locale',
   'faceid',
   'touchid',
 ] as const satisfies readonly SettingName[];
@@ -190,6 +192,8 @@ export async function setIosSetting(
     }
     case 'timezone':
       return await setIosTimeZone(device, state);
+    case 'locale':
+      return await setIosLocale(device, state);
     case 'appearance':
     case 'permission':
     case 'location':
