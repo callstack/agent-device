@@ -359,10 +359,17 @@ export async function cleanExpiredCloudAttachments(
     await tryWithConnectionLock(location, async () => {
       const current = readCloudConnection(location);
       if (!current || !isExpired(current)) return;
-      const retired = await retireExpiredDaemon(location, current.generation).then(
-        () => true,
-        () => false,
-      );
+      const binding = readRemoteConnectionState(location)?.cloudSession;
+      const usesRemoteDaemon =
+        binding?.transport === 'agent-device-daemon' &&
+        binding.generation === current.generation &&
+        binding.id === current.id;
+      const retired =
+        usesRemoteDaemon ||
+        (await retireExpiredDaemon(location, current.generation).then(
+          () => true,
+          () => false,
+        ));
       if (retired) removeCloudAttachment(location);
     });
   }

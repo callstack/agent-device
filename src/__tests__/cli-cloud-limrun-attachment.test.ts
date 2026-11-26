@@ -24,7 +24,13 @@ import { cloudLimrunDaemonDir } from '../cli/connection/cloud-limrun.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { createTestClient, grantedLease } from './remote-connection.fixtures.ts';
 import { runCliCapture } from './cli-capture.ts';
-import { cloudEnv, hostedDevice, locationOf, stubCloudApi } from './cli-cloud-session.fixtures.ts';
+import {
+  cloudEnv,
+  connectArgs,
+  hostedDevice,
+  locationOf,
+  stubCloudApi,
+} from './cli-cloud-session.fixtures.ts';
 import { createDaemonRuntimeDeps } from '../daemon-composition.ts';
 
 const { stop } = vi.hoisted(() => ({ stop: vi.fn(async () => undefined) }));
@@ -164,6 +170,29 @@ test('fences and retires the attachment before a missing broker credential preve
   expect(mock.mock.calls).toHaveLength(1);
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
   expect(mock.mock.calls[1]?.[1].method).toBe('DELETE');
+});
+
+test('expires remote daemon credentials without trying to stop a local daemon', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const broker = stubCloudApi();
+  broker.mockResolvedValueOnce(Response.json(hostedDevice, { status: 201 }));
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const record = readCloudConnection(location)!;
+  writeCloudConnection(location, { ...record, deadlineAt: new Date(0).toISOString() });
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
+
+  await resolveCloudAdmission({
+    command: 'connect',
+    usesSessions: true,
+    stateDir: location.stateDir,
+    host: createTestHostEnvironment({ env }),
+    session: location.session,
+    binding: undefined,
+  });
+
+  expect(stop).not.toHaveBeenCalled();
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
 });
 
 test('expired attachments without a saved binding retire their generation before removing credentials', async () => {
