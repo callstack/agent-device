@@ -47,6 +47,7 @@ import type { BoundSnapshotCapture } from '../../core/snapshot-runtime-binding.t
 import { resolveObservationCapture } from '../../core/observation-capture.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
 import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
+import type { ReplaySuiteRecordingArtifact } from '@agent-device/contracts/replay';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';
 
@@ -136,7 +137,9 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     return ref && sessionStore.resolveCurrent(ref) ? sessionStore.refresh(ref) : undefined;
   };
   const completed = (name: string) => (attempts.get(name)?.running ? undefined : pinned(name));
+  const recordingOutputs = new Map<string, ReplaySuiteRecordingArtifact>();
   const video = createReplayTestVideoOwner({
+    suiteRequest: req,
     sessionStore,
     withSessionExecutionLock,
     sessionRef: (name, phase) => (phase === 'start' ? running(name) : completed(name)),
@@ -153,17 +156,18 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     bindDevice,
     platformServices,
   };
-  const suiteRequest = req.internal?.publicNetworkOnly
-    ? {
-        ...req,
-        flags: {
-          ...req.flags,
-          artifactsDir: resolveSessionTestArtifactsRoot(
-            sessionStore.resolveSessionDir(sessionName),
-          ),
-        },
-      }
-    : req;
+  const suiteRequest =
+    req.internal?.publicNetworkOnly || req.meta?.clientArtifactPaths?.artifactsDir
+      ? {
+          ...req,
+          flags: {
+            ...req.flags,
+            artifactsDir: resolveSessionTestArtifactsRoot(
+              sessionStore.resolveSessionDir(sessionName),
+            ),
+          },
+        }
+      : req;
   return await runReplayTestCommand({
     ...splitReplayCommandRequest(suiteRequest),
     host,
@@ -212,11 +216,12 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       return result;
     }, req),
     dependencies: replayDaemonDependencies,
-    cleanupSession: async (name) => {
+    cleanupSession: async (name, artifactPaths) => {
       // A timed-out attempt can still hold the lock. Its late cleanup runs after it settles.
       const lifetime = completed(name)?.lifetime;
       if (!lifetime) return [];
       let acquiring = true;
+      let closingRef: SessionRef | undefined;
       const closePinned = (signal?: AbortSignal) =>
         withSessionExecutionLock(
           name,
@@ -225,6 +230,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
             if (ref?.lifetime !== lifetime) return [];
             await holdDevice(ref.session.device.id);
             acquiring = false;
+            closingRef = ref;
             return await closeReplayTestSession({
               host,
               req,
@@ -247,25 +253,51 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         error instanceof AppError &&
         error.code === 'DEVICE_IN_USE' &&
         error.details?.reason === 'DEVICE_EXECUTION_LOCK_BUSY';
-      try {
-        return await closePinned();
-      } catch (error) {
-        if (!lockBusy(error)) throw error;
-        const signal = getRequestSignal(req.meta?.requestId);
-        const expiresAt = getRequestDeadlineMs(req.meta?.requestId);
-        const remaining = expiresAt === undefined ? undefined : expiresAt - Date.now();
-        if (signal?.aborted || (remaining !== undefined && remaining <= 0)) throw error;
-        return await retryWithPolicy(
-          () => closePinned(signal),
-          { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 200, jitter: 0, shouldRetry: lockBusy },
-          {
-            signal,
-            deadline: remaining === undefined ? undefined : Deadline.fromTimeoutMs(remaining),
-          },
-        );
+      const closeWithRetry = async () => {
+        try {
+          return await closePinned();
+        } catch (error) {
+          if (!lockBusy(error)) throw error;
+          const signal = getRequestSignal(req.meta?.requestId);
+          const expiresAt = getRequestDeadlineMs(req.meta?.requestId);
+          const remaining = expiresAt === undefined ? undefined : expiresAt - Date.now();
+          if (signal?.aborted || (remaining !== undefined && remaining <= 0)) throw error;
+          return await retryWithPolicy(
+            () => closePinned(signal),
+            { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 200, jitter: 0, shouldRetry: lockBusy },
+            {
+              signal,
+              deadline: remaining === undefined ? undefined : Deadline.fromTimeoutMs(remaining),
+            },
+          );
+        }
+      };
+      const warnings = await closeWithRetry();
+      // Detached cleanup can close the session after the archive has already been published.
+      if (
+        !closingRef ||
+        !artifactPaths ||
+        !video ||
+        !req.flags?.recordVideo ||
+        !(req.internal?.publicNetworkOnly || req.meta?.clientArtifactPaths?.artifactsDir)
+      ) {
+        return warnings;
       }
+      const { collectSuiteRecordingOutputs } = await import('../recording-outputs.ts');
+      const outputs = await collectSuiteRecordingOutputs(sessionStore, closingRef);
+      if (outputs === null) {
+        return [
+          ...warnings,
+          'Could not include the recording in the suite archive. Check the daemon host for the recording files.',
+        ];
+      }
+      for (const output of outputs) {
+        if (output.path) artifactPaths.add(output.path);
+        recordingOutputs.set(output.artifactId ?? output.path!, output);
+      }
+      return warnings;
     },
-    ...(video ? { video } : {}),
+    ...(video ? { video, recordingOutputs: () => [...recordingOutputs.values()] } : {}),
   });
 };
 

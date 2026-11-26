@@ -138,6 +138,30 @@ test('a local daemon (no clientArtifactPaths hint) returns the suite result unch
   assert.equal(data, result);
 });
 
+test('a public suite without a client destination returns relative paths and standalone IDs', () => {
+  const daemonRoot = path.join(mkdtempForTestSync('public-suite-artifacts-'), SUITE_INVOCATION_ID);
+  const recording = {
+    session: 'default:test:1',
+    artifactId: 'recording-id',
+    fileName: 'recording.mp4',
+  };
+
+  const data = attachRemoteReplayTestArtifacts(
+    suiteResult(daemonRoot),
+    req(undefined),
+    [{ ...recording, path: path.join(daemonRoot, 'recording.mp4') }],
+    true,
+  );
+
+  assert.equal(data.artifactsDir, SUITE_INVOCATION_ID);
+  assert.equal(
+    (data.tests as Array<{ artifactsDir?: string }>)[0]?.artifactsDir,
+    path.join(SUITE_INVOCATION_ID, 'qa-flows__open.ad', 'attempt-1'),
+  );
+  assert.deepEqual(data.recordingArtifacts, [recording]);
+  assert.equal(data.artifacts, undefined);
+});
+
 test('a suite directory that was never created (all sources skipped) still reports the caller-local root, but registers no download', () => {
   const tempRoot = mkdtempForTestSync('agent-device-remote-test-artifacts-empty-');
   const daemonRoot = path.join(tempRoot, SUITE_INVOCATION_ID);

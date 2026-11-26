@@ -1,3 +1,5 @@
+import type { ReplaySuiteRecordingArtifact } from '@agent-device/contracts/replay';
+import type { ReplayTestCleanupSession } from '@agent-device/contracts/replay-test-execution';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import type {
@@ -97,8 +99,6 @@ export type ReplayTestVideoOwner = Readonly<{
   throwIfCanceled: () => void;
 }>;
 
-type ReplayTestSessionCleanup = (sessionName: string) => Promise<readonly string[] | void>;
-
 export type ReplayTestCommand = ReplayCommand &
   Readonly<{
     createSession: ReplayTestSessionFactory;
@@ -107,6 +107,7 @@ export type ReplayTestCommand = ReplayCommand &
       requestId: string | undefined,
       task: () => Promise<T>,
     ) => Promise<T>;
-    cleanupSession: ReplayTestSessionCleanup;
+    cleanupSession: ReplayTestCleanupSession;
     video?: ReplayTestVideoOwner;
+    recordingOutputs?: () => readonly ReplaySuiteRecordingArtifact[];
   }>;

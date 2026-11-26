@@ -298,6 +298,15 @@ The artifact registry owns expiry and download consumption.
 A stop retry can return the IDs that the current daemon still holds.
 A new daemon cannot restore remote download IDs from the manifest alone.
 
+A remote test suite copies verified recording files into its archive before it publishes their IDs.
+The suite result includes IDs for recordings collected before the suite responds.
+Detached cleanup settles the recording and leaves its files on the daemon host.
+The suite owns stop and publication for its recordings.
+After a daemon restart, startup recovery settles the recorder and leaves its files on the daemon host.
+This keeps the files in a published archive fixed.
+If recording collection fails, the attempt reports a warning and keeps its outcome.
+The archive and the recording files have separate download lifetimes.
+
 ### 2.6 Native markers
 
 These markers cover the windows between the spawn of a native recorder and the publication of the manifest that names it:

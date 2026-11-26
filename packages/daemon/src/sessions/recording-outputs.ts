@@ -1,3 +1,10 @@
+import fs from 'node:fs';
+import { outputFileIdentity } from '@agent-device/host-kit/file';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
+import { chunkPathAt } from '@agent-device/capture-kit/recording-output-path';
+import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
+import type { ReplaySuiteRecordingArtifact } from '@agent-device/contracts/replay';
+import type { SessionStore } from '../core/session-store.ts';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readStoredCompletion } from '@agent-device/capture-kit/screen-recording-stop-recovery';
@@ -40,6 +47,7 @@ function readVerifiedRecording(envelope: RecordingEnvelope) {
     return { ...artifact, path: artifact.path!, sourceIdentity, artifactId };
   });
   return {
+    completion,
     files,
     completedAt: verified.completedAt,
     producer: recordingProducer(metadata),
@@ -51,7 +59,8 @@ export function retainSessionRecording(ref: SessionRef, envelope: RecordingEnvel
   if (
     metadata?.remoteCaptureOutput !== true ||
     metadata.remoteCaptureLifetime !== ref.lifetime.journalId ||
-    metadata.remoteCaptureTenantId === null
+    metadata.remoteCaptureTenantId === null ||
+    metadata.suiteRecordingArchivePath !== undefined
   )
     return;
   try {
@@ -85,7 +94,14 @@ function recordingProducer(metadata: RecordingEnvelope['metadata']) {
 }
 
 export function commitRecordingOutputs(envelope: RecordingEnvelope, publish: boolean) {
-  const { producer, files, completedAt } = readVerifiedRecording(envelope);
+  return publishVerifiedRecording(envelope, readVerifiedRecording(envelope), publish);
+}
+
+function publishVerifiedRecording(
+  envelope: RecordingEnvelope,
+  { producer, files, completedAt }: ReturnType<typeof readVerifiedRecording>,
+  publish: boolean,
+) {
   return commitRecordingFileOutputs(
     files,
     producer,
@@ -95,4 +111,64 @@ export function commitRecordingOutputs(envelope: RecordingEnvelope, publish: boo
     completedAt,
     publish,
   );
+}
+
+export async function collectSuiteRecordingOutputs(
+  store: SessionStore,
+  ref: SessionRef,
+): Promise<ReplaySuiteRecordingArtifact[] | null> {
+  const copied: string[] = [];
+  try {
+    const record = screenRecordingResourceStore.read(
+      screenRecordingResourceStore.resolvePath(store.resolveSessionDir(ref.address)),
+    );
+    if (record.status !== 'decoded' || record.envelope.lifecycle !== 'completed') return [];
+    const { envelope } = record;
+    const archivePath = envelope.metadata?.suiteRecordingArchivePath;
+    if (
+      typeof archivePath !== 'string' ||
+      envelope.metadata?.remoteCaptureLifetime !== ref.lifetime.journalId
+    )
+      return [];
+
+    const recording = readVerifiedRecording(envelope);
+    const { completion, files } = recording;
+    const archivePaths = [
+      archivePath,
+      ...(completion.chunks?.slice(1).map(({ index }) => chunkPathAt(archivePath, index)) ?? []),
+      ...(completion.telemetryPath ? [deriveRecordingTelemetryPath(archivePath)] : []),
+    ];
+    for (const [index, file] of files.entries()) {
+      const target = archivePaths[index]!;
+      await assertArchiveSource(file.path, file.sourceIdentity);
+      await fs.promises.copyFile(
+        file.path,
+        target,
+        fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE,
+      );
+      copied.push(target);
+      await assertArchiveSource(file.path, file.sourceIdentity);
+    }
+    return publishVerifiedRecording(envelope, recording, true).map(
+      ({ artifactId, fileName }, index) => ({
+        session: ref.address,
+        artifactId,
+        fileName,
+        path: copied[index],
+      }),
+    );
+  } catch (error) {
+    await Promise.allSettled(copied.map((file) => fs.promises.unlink(file)));
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'suite_recording_collection_failed',
+      data: { session: ref.address, error: errorMessage(error) },
+    });
+    return null;
+  }
+}
+
+async function assertArchiveSource(file: string, identity: string): Promise<void> {
+  if (outputFileIdentity(await fs.promises.lstat(file)) !== identity)
+    throw new Error('Recording export changed before archive publication.');
 }
