@@ -507,6 +507,54 @@ test('maps 422 budget_exceeded to the cap and the minimum', async () => {
   expect(error.message).toContain('cap of $0.10');
 });
 
+const WIDEST_USD = '9999999999999.999999';
+const WIDEST_MICROS = '9999999999999999999';
+
+test('round-trips the widest --max-usd cap through both refusals', async () => {
+  const capped = readCloudSessionRequest({ ...baseFlags, maxUsd: WIDEST_USD });
+  expect(capped.maxUsdMicros).toBe(WIDEST_MICROS);
+  const amounts = { maxUsdMicros: capped.maxUsdMicros, minimumUsdMicros: WIDEST_MICROS };
+  const overCap = await refusal(422, { error: 'budget_exceeded', ...amounts }, capped);
+  expect(overCap.details).toMatchObject({
+    ...amounts,
+    hint: `Raise --max-usd to at least $${WIDEST_USD} or choose a cheaper device.`,
+  });
+  const balance = {
+    requiredUsdMicros: WIDEST_MICROS,
+    availableUsdMicros: `-${WIDEST_MICROS}`,
+    shortfallUsdMicros: WIDEST_MICROS,
+  };
+  const broke = await refusal(402, { error: 'insufficient_balance', ...balance }, capped);
+  expect(broke.details).toMatchObject(balance);
+  expect(broke.message).toContain(`balance is -$${WIDEST_USD}`);
+});
+
+test('drops amounts one digit over the widest --max-usd cap', async () => {
+  expect(() => parseMaxUsdMicros('10000000000000')).toThrow();
+  const over = '10000000000000000000';
+  const overCap = await refusal(422, {
+    error: 'budget_exceeded',
+    maxUsdMicros: over,
+    minimumUsdMicros: over,
+  });
+  expect(overCap.details).toEqual({
+    status: 422,
+    reason: 'budget_exceeded',
+    hint: 'Raise --max-usd or choose a cheaper device.',
+  });
+  const broke = await refusal(402, {
+    error: 'insufficient_balance',
+    requiredUsdMicros: over,
+    availableUsdMicros: `-${over}`,
+    shortfallUsdMicros: over,
+  });
+  expect(broke.details).toEqual({
+    status: 402,
+    reason: 'insufficient_balance',
+    hint: 'Top up the balance.',
+  });
+});
+
 test.each([
   [402, 'key_budget_exceeded'],
   [422, 'account_cap_exceeded'],
