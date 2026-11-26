@@ -24,7 +24,7 @@
     "packages/replay/test/packed-runtime.mjs",
     "packages/maestro/test/packed-runtime.mjs",
     "build/maestro/tsdown.config.ts",
-    "bundler/limrun/tsdown.config.ts",
+    "bundler/limrun/build.mjs",
     "packages/maestro/src/plugin.ts",
     "packages/replay/src/plugin.ts",
     "packages/replay/tsdown.config.ts",
@@ -230,7 +230,7 @@
     },
     {
       // Tool config default exports, loaded by the tool rather than imported.
-      "file": "{oxlint.config.ts,tsdown.config.ts,packages/provider-*/tsdown.config.ts,bundler/limrun/tsdown.config.ts,build/maestro/tsdown.config.ts,packages/replay/tsdown.config.ts,packages/proxy/tsdown.config.ts,vitest.mutation.config.ts}",
+      "file": "{oxlint.config.ts,tsdown.config.ts,packages/provider-*/tsdown.config.ts,build/maestro/tsdown.config.ts,packages/replay/tsdown.config.ts,packages/proxy/tsdown.config.ts,vitest.mutation.config.ts}",
       "exports": ["default"]
     },
     {

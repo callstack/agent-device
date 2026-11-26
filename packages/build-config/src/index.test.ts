@@ -4,7 +4,38 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'vitest';
-import { assertManagedPlatformPluginFactory } from './index.ts';
+import {
+  assertManagedPlatformPluginFactory,
+  providerPluginWithBundledDependencies,
+} from './index.ts';
+
+test('a provider SDK bundle leaves core contract subpaths external and includes license notices', () => {
+  const notices = { name: 'fixture-license-notices' };
+  const config = providerPluginWithBundledDependencies(['@vendor/sdk'], notices);
+
+  assert.deepEqual(config.deps.onlyBundle, ['@vendor/sdk']);
+  assert.ok(config.deps.alwaysBundle.some((pattern) => pattern.test('@agent-device/kernel')));
+  assert.ok(
+    config.deps.neverBundle.some((pattern) => pattern.test('agent-device/plugins/device-host')),
+  );
+  assert.deepEqual(config.plugins, [notices]);
+});
+
+test('a provider SDK bundle rejects a dependency that cannot be resolved', () => {
+  const { onLog } = providerPluginWithBundledDependencies([], { name: 'notices' }).inputOptions;
+  assert.ok(onLog);
+  assert.throws(
+    () =>
+      onLog('warn', { code: 'UNRESOLVED_IMPORT', message: 'Missing dependency' }, () =>
+        assert.fail('Unresolved imports must fail the build'),
+      ),
+    /Missing dependency/,
+  );
+  const warning = { code: 'TEST_WARNING', message: 'Example warning' };
+  const forwarded: unknown[] = [];
+  onLog('warn', warning, (level, log) => forwarded.push(level, log));
+  assert.deepEqual(forwarded, ['warn', warning]);
+});
 
 const HARMONYOS_CLAIM = { apiVersion: 3, platform: 'harmonyos' };
 

@@ -14,7 +14,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsdown --config ../../bundler/limrun/tsdown.config.ts",
+    "build": "node --experimental-strip-types ../../bundler/limrun/build.mjs",
     "prepack": "node check-runtime-dependencies.mjs && pnpm build"
   },
   "exports": {
