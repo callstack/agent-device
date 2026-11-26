@@ -341,6 +341,25 @@ test('a tap stays refused when the foreign dialog shows no framework buttons', a
   });
 });
 
+test('a tap stays refused when the foreign dialog cannot be read, and the read failure is recorded', async () => {
+  const session = makeAndroidSession('readiness-system-tap-unread');
+  const observation: AndroidObservationAdapter = {
+    ...makeObservation(systemDialogFocus).observation,
+    readSnapshotNodes: async () => {
+      throw new Error('uiautomator dump failed');
+    },
+  };
+
+  const unread = await withDiagnosticsScope({}, async () => {
+    await expect(
+      ensureAndroidBlockingSystemDialogReadyForTap({ session, command: 'press', observation }),
+    ).rejects.toMatchObject({ details: { dispatched: 'no' } });
+    return countDiagnosticEventsByPhase(['android_blocking_dialog_buttons_unread']);
+  });
+
+  expect(unread).toBe(1);
+});
+
 test('a tap stays refused when a surface covers the foreign dialog', async () => {
   const session = makeAndroidSession('readiness-system-tap-covered');
   screenNodes = [

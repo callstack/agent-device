@@ -242,7 +242,17 @@ export async function ensureAndroidBlockingSystemDialogReadyForTap(params: {
     buttons = findAppErrorDialogButtons(
       await readAndroidSnapshotNodes(params.session, observation),
     );
-  } catch {
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_blocking_dialog_buttons_unread',
+      data: {
+        session: params.session.name,
+        deviceId: params.session.device.id,
+        command: params.command,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
     throw readiness.refusal();
   }
   if (buttons.length === 0) throw readiness.refusal();
