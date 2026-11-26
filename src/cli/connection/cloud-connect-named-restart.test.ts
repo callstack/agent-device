@@ -36,7 +36,7 @@ function locationOf(stateDir: string) {
 // A broker with one hold per idempotency key, as the real create endpoint keeps.
 function stubBroker() {
   const byKey = new Map<string, { id: string; running: boolean }>();
-  const calls: Array<{ method: string; path: string; key: string | null }> = [];
+  const calls: Array<{ method: string; path: string; key: string | null; body?: unknown }> = [];
   const deadlineAt = new Date(Date.now() + 3600_000).toISOString();
   const created = (id: string) => ({
     id,
@@ -50,7 +50,12 @@ function stubBroker() {
   const loseNextCreateResponse = { armed: false };
   const fetchMock = vi.fn(async (url: URL, init: RequestInit) => {
     const key = new Headers(init.headers).get('Idempotency-Key');
-    calls.push({ method: String(init.method), path: url.pathname, key });
+    calls.push({
+      method: String(init.method),
+      path: url.pathname,
+      key,
+      ...(init.method === 'POST' ? { body: JSON.parse(String(init.body)) } : {}),
+    });
     if (init.method === 'POST') {
       let hold = byKey.get(key!);
       if (!hold) {
@@ -150,7 +155,8 @@ test('a lost preload response binds retry to the same archive and idempotency ke
     Array(2).fill({
       method: 'POST',
       path: '/v1/sessions/preloaded',
-      key: expect.any(String),
+      key: expect.stringMatching(/\S/),
+      body: expect.objectContaining({ app: { url: appUrl }, maxUsdMicros: '500000' }),
     }),
   );
   expect(broker.posts()[1]?.key).toBe(broker.posts()[0]?.key);

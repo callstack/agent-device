@@ -105,14 +105,15 @@ export function readCloudSessionRequest(
 }
 
 function parseCloudAppSource(value: string): { url: string } {
+  const maxLength = 2048;
   const url =
-    value.length <= 2048 &&
+    value.length <= maxLength &&
     /^https:\/\/[^/@]+(?:\/|$)/i.test(value) &&
     /^[!-~]+$/.test(value) &&
     !/[\\?#]/.test(value)
       ? URL.parse(value)
       : null;
-  if (!url || url.username || url.password) {
+  if (!url || url.href.length > maxLength || url.username || url.password) {
     throw new AppError(
       'INVALID_ARGS',
       '--app-url requires an HTTPS archive URL of at most 2048 ASCII characters without spaces, backslashes, credentials, a query, or a fragment.',

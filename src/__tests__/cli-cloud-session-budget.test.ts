@@ -37,7 +37,9 @@ test('connects with --max-usd through the bounded route and resumes with the sam
   expect(resumed.code, resumed.stderr || resumed.stdout).toBeNull();
   const posts = fetchMock.mock.calls.filter(([, init]) => init.method === 'POST');
   expect(posts.map(([url]) => url.pathname)).toEqual(Array(2).fill('/v1/sessions/bounded'));
-  expect(posts.map(([, init]) => postKey(init))).toEqual(Array(2).fill(postKey(posts[0]![1])));
+  const firstKey = postKey(posts[0]![1]);
+  expect(firstKey).toMatch(/\S/);
+  expect(posts.map(([, init]) => postKey(init))).toEqual([firstKey, firstKey]);
   expect(JSON.parse(String(posts[1]![1].body))).toMatchObject({ maxUsdMicros: '500000' });
   expect(readCloudConnection(location)).toMatchObject({ phase: 'committed', id: hostedDevice.id });
 });
@@ -69,6 +71,20 @@ test.each([404, 405])(
     expect(readRemoteConnectionState(locationOf(env))).toBeNull();
   },
 );
+
+test('rejects an archive URL whose serialized form exceeds the limit before saving intent', async () => {
+  const env = cloudEnv();
+  const fetchMock = stubCloudApi();
+  const appUrl = `https://archives.example/${'<'.repeat(700)}.zip`;
+  const refused = await runCliCapture([...connectArgs, '--app-url', appUrl], { env });
+
+  expect(JSON.parse(refused.stdout)).toMatchObject({
+    success: false,
+    error: { details: { reason: 'cloud_invalid_app_url' } },
+  });
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(readCloudConnection(locationOf(env))).toBeNull();
+});
 
 test.each([
   { status: 404, body: null },
