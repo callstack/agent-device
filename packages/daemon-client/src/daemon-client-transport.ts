@@ -439,9 +439,17 @@ async function recoverFromTimeout(
   return await handleRequestTimeout({
     info,
     statePaths,
+    remote: isRemoteDaemon(info),
     retireUnresponsive: options.timeoutRecovery !== 'none',
+    timeoutMs: expiredBudget,
+    requestId: req.meta?.requestId,
+    command: req.command,
+    platform: req.flags?.platform,
+    session: req.session,
+    action: req.positionals?.[0],
     requestSent: error.details.daemonRequestSent !== false,
-    ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
+    responseStarted: error.details.remoteResponseStarted === true,
+    readRemoteHealth: (budgetMs) => readDaemonHttpHealth(info, budgetMs, options.signal),
   });
 }
 
@@ -772,36 +780,15 @@ function requestTimeoutError(
   timeoutMs: number,
   requestId: string | undefined,
   daemonRequestSent: boolean,
+  remoteResponseStarted?: boolean,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     reason: DAEMON_TRANSPORT_REASONS.timeout.reason,
     timeoutMs,
     requestId,
     daemonRequestSent,
+    ...(remoteResponseStarted ? { remoteResponseStarted: true } : {}),
   });
-}
-
-// The fields a timed-out request is described by, read once so a socket and an HTTP timeout cannot
-// describe the same request differently.
-type TimeoutRequestFields = Omit<
-  Parameters<typeof handleRequestTimeout>[0],
-  'info' | 'statePaths' | 'retireUnresponsive' | 'requestSent'
->;
-
-function timeoutRequestContext(
-  req: DaemonWireRequest,
-  remote: boolean,
-  timeoutMs: number,
-): TimeoutRequestFields {
-  return {
-    remote,
-    timeoutMs,
-    requestId: req.meta?.requestId,
-    command: req.command,
-    platform: req.flags?.platform,
-    session: req.session,
-    action: req.positionals?.[0],
-  };
 }
 
 function buildRemoteInstancePreconditionHeaders(info: DaemonInfo): Record<string, string> {
@@ -848,6 +835,8 @@ async function sendHttpRequest(
     let settled = false;
     // Set when the request was handed to the OS (`finish`), never for a connection that failed first.
     let requestSent = false;
+    // Set when a 2xx progress stream opened on `/rpc`, proving the remote URL and auth token.
+    let responseStarted = false;
     const detachCallerAbort = (): void => {
       if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
     };
@@ -895,6 +884,9 @@ async function sendHttpRequest(
           return;
         }
         if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
+          if (res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 300) {
+            responseStarted = true;
+          }
           readDaemonHttpProgressResponse(res, {
             req,
             onProgress: options.onProgress,
@@ -933,7 +925,9 @@ async function sendHttpRequest(
     const timeoutHandle =
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
-            rejectOnce(requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent));
+            rejectOnce(
+              requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent, responseStarted),
+            );
             request.destroy();
           }, timeoutMs)
         : undefined;

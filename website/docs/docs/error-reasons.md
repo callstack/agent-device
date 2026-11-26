@@ -641,7 +641,7 @@ These reasons can come from more than one command.
 | --- | --- |
 | `daemon_endpoint_unavailable` | The daemon's socket or HTTP endpoint is unreachable; `details.transport` names the one tried. |
 | `daemon_transport_failure` | The connection to the daemon broke; `details.daemonRequestSent` says whether the request was written. |
-| `daemon_transport_timeout` | The daemon did not answer within the request's budget; `details.timeoutMs` is that budget. |
+| `daemon_transport_timeout` | The daemon did not answer within the request's budget; `details.timeoutMs` is that budget. For a sent remote request, `details.remoteResponseStarted` says whether a progress stream had already begun, and `details.remoteHealthAnswered` says whether `/health` answered when it had not. |
 | `daemon_response_invalid` | A message the daemon sent is not a daemon response envelope; `details.line`, when present, carries what arrived. |
 | `daemon_response_read_failure` | The response body could not be read before the connection ended. |
 | `daemon_request_too_large` | The serialized request passes `DAEMON_REQUEST_MAX_BYTES`, so it was refused before being sent. |
