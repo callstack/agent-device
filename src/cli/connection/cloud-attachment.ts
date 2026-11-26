@@ -12,7 +12,7 @@ import type {
 import type { HostedConnectionLease } from '../commands/connection-lease-policy.ts';
 import { isLegacyCloudProfile } from './active-connection.ts';
 import { cloudLimrunDaemonDir, cloudLimrunEnv, requireHostedLimrunPlugin } from './cloud-limrun.ts';
-import { parseCloudAttachment, type CloudAttachment } from './cloud-session-api.ts';
+import { parseCloudAttachment, type CloudAttachment } from './cloud-attachment-schema.ts';
 import {
   admitCloudCredentialDirectory,
   CLOUD_CONNECTION_REASONS,

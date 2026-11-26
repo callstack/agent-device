@@ -7,7 +7,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
 import { cloudConnectionDir, type ConnectionLocation } from './cloud-connection-record.ts';
-import type { CloudAttachment } from './cloud-session-api.ts';
+import type { CloudAttachment } from './cloud-attachment-schema.ts';
 
 const CLOUD_LIMRUN_REASONS = {
   // The installed Limrun plugin cannot consume scoped hosted attachments.

@@ -4,11 +4,16 @@ import { sleep } from '@agent-device/host-kit/retry';
 import type { CloudSessionBinding } from '@agent-device/remote/remote-connection-state';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import {
+  isCredentialEndpoint,
+  parseCloudAttachment,
+  readScopedToken,
+  type CloudAttachment,
+} from './cloud-attachment-schema.ts';
+import {
   asCloudRecord,
   containsCloudCredential,
   cloudUrlContainsCredential,
   fetchCloudApi,
-  isCloudText,
   isCloudTextArray,
   readCloudJsonResponse,
 } from '../cloud-response.ts';
@@ -30,11 +35,6 @@ const CLOUD_SESSION_API_REASONS = {
 } as const satisfies ReasonTable<'cloud sessions'>;
 
 type CloudAccess = { cloudBaseUrl: string; accessToken: string };
-
-export type CloudAttachment =
-  | { kind: 'agent-device-daemon'; daemonBaseUrl: string; daemonAuthToken: string }
-  | { kind: 'limrun'; platform: 'ios'; apiUrl: string; token: string }
-  | { kind: 'limrun'; platform: 'android'; apiUrl: string; token: string; adbWebSocketUrl: string };
 
 export type CreatedCloudSession = {
   binding: Omit<CloudSessionBinding, 'generation'>;
@@ -623,58 +623,12 @@ function exposesBrokerCredential(attachment: CloudAttachment, brokerToken: strin
   );
 }
 
-function readScopedToken(value: unknown, limrun: boolean): string | undefined {
-  const attachment = asCloudRecord(value);
-  const token = limrun ? attachment?.token : attachment?.daemonAuthToken;
-  return isCloudText(token) ? token.trim() : undefined;
-}
-
 function isPublicCatalogId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z0-9][a-z0-9_-]{0,127}$/i.test(value);
-}
-
-export function parseCloudAttachment(
-  value: unknown,
-  transport?: unknown,
-): CloudAttachment | undefined {
-  const entry = asCloudRecord(value);
-  const kind = transport ?? entry?.kind;
-  if (kind === 'agent-device-daemon') return parseDaemonAttachment(entry);
-  if (kind !== 'limrun' || !entry) return;
-  const { apiUrl, platform, adbWebSocketUrl } = entry;
-  const token = readScopedToken(entry, true);
-  if (!isCredentialEndpoint(apiUrl) || !token) return;
-  if (platform === 'ios') return { kind, apiUrl, token, platform };
-  if (
-    platform === 'android' &&
-    typeof adbWebSocketUrl === 'string' &&
-    matchesAdbAudience(apiUrl, adbWebSocketUrl)
-  )
-    return { kind, apiUrl, token, platform, adbWebSocketUrl };
-}
-
-function matchesAdbAudience(apiUrl: string, adbWebSocketUrl: string): boolean {
-  const adb = parseCloudEndpoint(adbWebSocketUrl, 'wss:', 'ws:');
-  if (!adb) return false;
-  adb.protocol = adb.protocol === 'wss:' ? 'https:' : 'http:';
-  return adb.origin === new URL(apiUrl).origin;
-}
-
-function parseDaemonAttachment(entry: Record<string, unknown> | undefined) {
-  const { daemonBaseUrl } = entry ?? {};
-  const daemonAuthToken = readScopedToken(entry, false);
-  if (isCredentialEndpoint(daemonBaseUrl) && daemonAuthToken) {
-    return { kind: 'agent-device-daemon' as const, daemonBaseUrl, daemonAuthToken };
-  }
-  return undefined;
 }
 
 function invalidSession(): AppError {
   return new AppError('COMMAND_FAILED', 'Cloud session API returned an invalid session.', {
     reason: CLOUD_SESSION_API_REASONS.invalidSession.reason,
   });
-}
-
-function isCredentialEndpoint(value: unknown): value is string {
-  return typeof value === 'string' && !!parseCloudEndpoint(value, 'https:', 'http:');
 }
