@@ -169,7 +169,8 @@ function buildTargetedRuntimeOptions(
 
 /**
  * Only one plain tap may close a foreign Android ANR dialog: a repeated tap, a double tap, or a
- * multi-ref plan would send its later taps to whatever the closed dialog uncovers.
+ * multi-ref plan would send its later taps to whatever the closed dialog uncovers, a hold is not a
+ * tap, and jitter can move the contact off the checked button.
  */
 function admitsAndroidDialogButtonTap(
   session: AdmittedTargetedTouch['session'],
@@ -180,7 +181,12 @@ function admitsAndroidDialogButtonTap(
   if (session.device.platform !== 'android') return false;
   if (command !== 'press' && command !== 'click') return false;
   if (refs && refs.length > 1) return false;
-  return (flags?.count ?? 1) <= 1 && flags?.doubleTap !== true;
+  return (
+    (flags?.count ?? 1) <= 1 &&
+    flags?.doubleTap !== true &&
+    (flags?.holdMs ?? 0) <= 0 &&
+    (flags?.jitterPx ?? 0) <= 0
+  );
 }
 
 /** The ref's node in the session snapshot, or the raw point; a selector is never admitted. */

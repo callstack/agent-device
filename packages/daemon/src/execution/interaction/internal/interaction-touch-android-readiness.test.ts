@@ -531,10 +531,12 @@ test.each([
   ['a repeated press', ['@e2'], { count: 2 }],
   ['a double tap', ['@e2'], { doubleTap: true }],
   ['a multi-ref plan', ['@e2,@e3'], {}],
+  ['a hold', ['@e2'], { holdMs: 800 }],
+  ['a jittered press', ['@e2'], { jitterPx: 40 }],
   ['a selector', ['id="android:id/aerr_close"'], {}],
 ])('%s on the System UI ANR dialog stays refused', async (_shape, positionals, flags) => {
-  // Later taps would land on whatever the closed dialog uncovers, and only a ref or a point is
-  // checked against the dialog.
+  // Later taps would land on whatever the closed dialog uncovers, a hold is not a tap, jitter can
+  // move the contact off the button, and only a ref or a point is checked against the dialog.
   const response = await pressWithSystemUiAnr(positionals, flags);
 
   expect(response).toMatchObject({
