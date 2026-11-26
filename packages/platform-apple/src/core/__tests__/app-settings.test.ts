@@ -612,7 +612,7 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
   await withFakeAppleTool(
     (args) => {
       if (isSimctlListApps(args)) return INSTALLED_APPS_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 revoke notifications com.example.app') {
+      if (args.join(' ') === 'simctl privacy sim-1 revoke camera com.example.app') {
         return { stderr: 'Failed to revoke access\nOperation not permitted', exitCode: 1 };
       }
       return unexpectedArgs(args);
@@ -626,13 +626,13 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
             'deny',
             'com.example.app',
             {
-              permissionTarget: 'notifications',
+              permissionTarget: 'camera',
             },
             process.env,
           ),
         {
           code: 'UNSUPPORTED_OPERATION',
-          message: /does not support setting notifications permission/i,
+          message: /does not support setting camera permission/i,
         },
       );
       assert.deepEqual(calls.at(-1), [
@@ -640,7 +640,7 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
         'privacy',
         'sim-1',
         'revoke',
-        'notifications',
+        'camera',
         'com.example.app',
       ]);
     },

@@ -64,6 +64,7 @@ async function setPermission(
       'iOS simulators do not support changing notification permissions through settings permission.',
       {
         reason: SIMCTL_SETTINGS_REASONS.notificationsUnsupported.reason,
+        dispatched: 'no',
         deviceId,
         hint: 'Use `alert accept` or `alert dismiss` to answer the notification prompt.',
       },

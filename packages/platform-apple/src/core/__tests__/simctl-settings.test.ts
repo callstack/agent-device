@@ -280,7 +280,7 @@ test.for(['grant', 'deny', 'reset'])(
     expect(resolveApp).not.toHaveBeenCalled();
     expect(error).toMatchObject({
       code: 'UNSUPPORTED_OPERATION',
-      details: { reason: 'ios-notification-permission-unsupported' },
+      details: { reason: 'ios-notification-permission-unsupported', dispatched: 'no' },
     });
     expect(error.details?.hint).toContain('alert accept');
     expect(error.details?.hint).toContain('alert dismiss');
