@@ -70,6 +70,11 @@ export function describeSettingWrite(
 ): string {
   if (setting === 'clear-app-state') return `Cleared user data for ${appBundleId}`;
   if (setting === 'text-size') return `Text size set to ${state}`;
+  if (setting === 'timezone') {
+    return state === SETTING_RESET_STATE
+      ? 'Time zone reset to the device default'
+      : `Time zone set to ${state}`;
+  }
   return `Updated setting: ${setting}`;
 }
 
@@ -413,13 +418,44 @@ type ValueSetting = {
     : Name;
 }[SettingName];
 
-const VALUE_PARSERS = {} as const satisfies Record<ValueSetting, (value: string) => string>;
+const VALUE_PARSERS = {
+  timezone: parseTimeZoneId,
+} as const satisfies Record<ValueSetting, (value: string) => string>;
 
 /** The value as the owners write it, or `reset`, so no device is handed a value it cannot read. */
 function parseSettingValue(setting: SettingName, value: string): string {
   if (normalizeName(value) === SETTING_RESET_STATE) return SETTING_RESET_STATE;
   const parser: (raw: string) => string = VALUE_PARSERS[setting as ValueSetting];
   return parser(value);
+}
+
+const TIME_ZONE_NAME_PATTERN = /^[A-Za-z][\w+-]*(\/[\w+-]+)*$/;
+
+/**
+ * An IANA time zone name the host's time zone data knows. A name `Intl.supportedValuesOf` lists
+ * is normalized to its listed casing; an alias it does not list, such as `Asia/Kolkata`, is kept
+ * as written and checked by the target device on read-back. Offsets such as `+05:30` are refused
+ * because neither owner takes one.
+ */
+export function parseTimeZoneId(value: string): string {
+  const name = value.trim();
+  if (TIME_ZONE_NAME_PATTERN.test(name) && isKnownTimeZone(name)) {
+    const lower = name.toLowerCase();
+    return Intl.supportedValuesOf('timeZone').find((zone) => zone.toLowerCase() === lower) ?? name;
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid time zone: ${value}. Use an IANA time zone name, such as Asia/Kolkata or America/New_York.`,
+  );
+}
+
+function isKnownTimeZone(name: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: name });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeName(value: string | undefined): string | undefined {

@@ -149,6 +149,12 @@ export const SETTINGS = {
     readable: true,
     help: 'Reads the preferred text size without a category and applies one with it, on iPhone and iPad simulators (simctl content size) and Android (system font_scale). Android has no ladder of its own: a read names the nearest rung and reports the multiplier as platformValue. A running app adopts a new size at its next configuration change, so relaunch it.',
   },
+  timezone: {
+    forms: [{ kind: 'value', placeholder: 'iana-zone' }],
+    app: 'input',
+    appScope: { apple: 'device-level', mobile: 'device-level' },
+    help: 'Sets the device time zone from an IANA name, such as Asia/Kolkata, on iPhone and iPad simulators (sets TZ in simulator launchd; applies only to apps launched afterwards and is lost when the simulator reboots; the status bar keeps the host time) and Android (the system time zone, with automatic time zone turned off). reset hands it back to the device default: the host Mac time zone on a simulator, and automatic time zone on Android, which applies the network zone a moment later. The response reports the time zone held before. --app is refused.',
+  },
   faceid: {
     forms: [{ kind: 'choice', states: ['match', 'nonmatch', 'enroll', 'unenroll'] }],
     help: 'Simulates Face ID on iPhone and iPad simulators.',
