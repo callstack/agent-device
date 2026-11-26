@@ -85,6 +85,7 @@ import {
   type TenantTrustDecision,
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
+import type { HostedAuxiliaryAdmission } from '../hosted-attachment-admission.ts';
 
 /** The capabilities this daemon serves over HTTP: `quiesce` is a local-only `daemon.json` fact. */
 const HTTP_DAEMON_CAPABILITIES: readonly DaemonCapability[] = [
@@ -98,6 +99,7 @@ export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
   hostAdminEnabled?: boolean;
+  admitAuxiliary?: HostedAuxiliaryAdmission;
   startupRecovered?: Promise<void>;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   endSessionsForLease?: (leaseId: string) => Promise<void>;
@@ -197,6 +199,7 @@ export async function createDaemonHttpServer(options: {
             res: request.res,
             authHook,
             expectedToken: token,
+            admitAttachment: options.admitAuxiliary,
             daemonRequest: request.daemonRequest,
             signal: request.signal,
             commit: request.commit,
@@ -218,6 +221,7 @@ export async function createDaemonHttpServer(options: {
             res: request.res,
             authHook,
             expectedToken: token,
+            admitAttachment: options.admitAuxiliary,
             daemonRequest: request.daemonRequest,
           }),
       })
@@ -236,6 +240,7 @@ export async function createDaemonHttpServer(options: {
             ...request,
             authHook,
             expectedToken: token,
+            admitAttachment: options.admitAuxiliary,
             leaseRegistry: options.leaseRegistry,
           }),
       })

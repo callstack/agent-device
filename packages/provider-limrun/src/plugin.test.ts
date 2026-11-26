@@ -307,47 +307,80 @@ test('an isolated hosted attachment stops its runtime when the deadline passes',
   }
 });
 
+test('an expired hosted attachment retries unconfirmed runtime shutdown', async () => {
+  vi.useFakeTimers();
+  sdk.shutdown.mockClear().mockRejectedValueOnce(new Error('shutdown unconfirmed'));
+  try {
+    const hosted = await providerOf(limrunPlugin({ createDependencies: stubDependencies })).setup(
+      pluginHost({
+        LIM_IOS_INSTANCE_URL: 'https://instance.example',
+        LIM_IOS_INSTANCE_TOKEN: 'fixture-token',
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 500).toISOString(),
+      }),
+    );
+    assert.ok(!hosted.dormant);
+    try {
+      await vi.advanceTimersByTimeAsync(500);
+      assert.equal(sdk.shutdown.mock.calls.length, 1);
+      await vi.advanceTimersByTimeAsync(5_000);
+      assert.equal(sdk.shutdown.mock.calls.length, 2);
+      await vi.advanceTimersByTimeAsync(5_000);
+      assert.equal(sdk.shutdown.mock.calls.length, 2);
+    } finally {
+      await hosted.dispose?.();
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('the hosted plugin refuses an SDK folder-sync redirect and leaves unrelated requests alone', async () => {
   const token = 'fixture-instance-bearer';
   const apiUrl = 'https://instance.example';
   const app = mkdtempForTestSync('limrun-redirect-app-');
   fs.writeFileSync(path.join(app, 'fixture.apk'), 'fixture');
+  const redirectRefused = new TypeError('redirect refused');
   const next = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-    if (init?.redirect === 'error') throw new TypeError('redirect refused');
+    if (init?.redirect === 'error') throw redirectRefused;
     return Response.json({});
   });
-  vi.stubGlobal('fetch', next);
   const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
-  const hosted = await providerOf(plugin).setup(
-    pluginHost({
-      LIM_IOS_INSTANCE_URL: apiUrl,
-      LIM_IOS_INSTANCE_TOKEN: token,
-      LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 60_000).toISOString(),
-    }),
-  );
+  vi.stubGlobal('fetch', next);
   try {
-    await assert.rejects(
-      syncFolder(app, {
-        apiUrl,
-        token,
-        udid: 'fixture',
-        basisCacheDir: mkdtempForTestSync('limrun-sync-cache-'),
-        install: true,
-        watch: false,
-        launchMode: 'None',
-        compression: 'identity',
-        log: () => {},
-        ignoreFn: () => false,
+    const hosted = await providerOf(plugin).setup(
+      pluginHost({
+        LIM_IOS_INSTANCE_URL: apiUrl,
+        LIM_IOS_INSTANCE_TOKEN: token,
+        LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 60_000).toISOString(),
       }),
     );
-    assert.equal(next.mock.calls.length, 1);
-    const [, init] = next.mock.calls[0]!;
-    assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${token}`);
-    assert.equal(init?.redirect, 'error');
-    await fetch(apiUrl, { headers: { authorization: 'Bearer unrelated-bearer' } });
-    assert.equal(next.mock.calls[1]?.[1]?.redirect, undefined);
+    assert.ok(!hosted.dormant);
+    try {
+      await assert.rejects(
+        syncFolder(app, {
+          apiUrl,
+          token,
+          udid: 'fixture',
+          basisCacheDir: mkdtempForTestSync('limrun-sync-cache-'),
+          install: true,
+          watch: false,
+          launchMode: 'None',
+          compression: 'identity',
+          log: () => {},
+          ignoreFn: () => false,
+        }),
+        (error) => error === redirectRefused,
+      );
+      assert.equal(next.mock.calls.length, 1);
+      const [, init] = next.mock.calls[0]!;
+      assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${token}`);
+      assert.equal(init?.redirect, 'error');
+      await fetch(apiUrl, { headers: { authorization: 'Bearer unrelated-bearer' } });
+      assert.equal(next.mock.calls[1]?.[1]?.redirect, undefined);
+    } finally {
+      await hosted.dispose?.();
+    }
   } finally {
-    if ('dispose' in hosted) await hosted.dispose?.();
     vi.unstubAllGlobals();
   }
 });

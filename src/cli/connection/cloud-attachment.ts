@@ -111,12 +111,8 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
     delete env.AGENT_DEVICE_CLOUD_API_KEY;
     delete env.AGENT_DEVICE_CLOUD_API_KEY_ORIGIN;
     const { location, session } = options;
-    const { record, state } = readCurrentCloudConnection(location, session.generation);
-    const hostedLeaseId =
-      record.hostedLeaseId ??
-      state.leaseId ??
-      state.endedLeaseId ??
-      randomBytes(16).toString('hex');
+    const { record } = readCurrentCloudConnection(location, session.generation);
+    const hostedLeaseId = record.hostedLeaseId ?? randomBytes(16).toString('hex');
     if (record.hostedLeaseId === undefined)
       writeCloudConnection(location, { ...record, hostedLeaseId });
     return {

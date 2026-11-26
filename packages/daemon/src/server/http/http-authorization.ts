@@ -11,6 +11,7 @@ import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { restrictRemoteHostInputs } from '../remote-host-input-policy.ts';
 import {
+  DAEMON_HTTP_LEASE_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
   normalizeTenantId,
@@ -18,6 +19,7 @@ import {
 import { sendRestJsonError } from '../http-errors.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
 import type { TenantSessionNamespace } from '../../core/session-tenant-scope.ts';
+import type { HostedAuxiliaryAdmission } from '../hosted-attachment-admission.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { assertMacOsAppLeaseTenantMayReadDiagnostics } from '../../resources/macos-app-lease.ts';
 import { createRpcError } from './http-rpc-envelope.ts';
@@ -177,6 +179,7 @@ async function authorizeAuxiliaryHttpRequest(params: {
   authHook: HttpAuthHook | null;
   expectedToken?: string;
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
+  admitAttachment?: HostedAuxiliaryAdmission;
   /** The request's own cancellation: the hook gets it, and a late result is not applied. */
   signal?: AbortSignal;
   /**
@@ -229,6 +232,21 @@ async function authorizeAuxiliaryHttpRequest(params: {
   }
 
   const trustedTenant = tenantTrust.tenantId;
+  if (params.admitAttachment) {
+    try {
+      return params.admitAttachment({
+        session:
+          daemonRequest.command === 'request_diagnostics'
+            ? daemonRequest.positionals[0]
+            : undefined,
+        tenantId: trustedTenant,
+        leaseId: req.headers[DAEMON_HTTP_LEASE_HEADER],
+      });
+    } catch (error) {
+      commit(() => sendRestJsonError(res, normalizeError(error)));
+      return null;
+    }
+  }
   return {
     tenantId: trustedTenant,
     ...(trustedTenant

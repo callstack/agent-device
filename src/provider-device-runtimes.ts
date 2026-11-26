@@ -83,7 +83,10 @@ async function composeProviderRuntime(
       'COMMAND_FAILED',
       'A compatible Limrun plugin is required for this session.',
       {
-        reason: PLUGIN_INSTALLATION_REASONS.unavailable.reason,
+        reason: (candidates.length === 0
+          ? PLUGIN_INSTALLATION_REASONS.notInstalled
+          : PLUGIN_INSTALLATION_REASONS.unavailable
+        ).reason,
       },
     );
   }

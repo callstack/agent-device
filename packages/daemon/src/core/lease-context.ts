@@ -234,8 +234,12 @@ export function assertRequestHoldsSessionLease(
  * an intake adapter displaced. A label the lease does not carry differs from any value the request
  * sends, and so does an empty label or a value that is not a string.
  */
-export function assertRequestPresentsLease(req: LeaseClaimRequest, lease: SessionLease): void {
-  const refusal = compareRequestLeaseClaims(req, lease);
+export function assertRequestPresentsLease(
+  req: LeaseClaimRequest,
+  lease: SessionLease,
+  options?: { allowOmittedId: true },
+): void {
+  const refusal = compareRequestLeaseClaims(req, lease, options);
   if (!refusal) return;
   if (refusal.kind === 'missing-id') {
     throw new AppError('UNAUTHORIZED', 'This session holds a device lease. Send its lease id.', {
@@ -254,9 +258,14 @@ export function assertRequestPresentsLease(req: LeaseClaimRequest, lease: Sessio
 export function compareRequestLeaseClaims(
   req: LeaseClaimRequest,
   lease: SessionLease,
+  options?: { allowOmittedId: true },
 ): LeaseClaimRefusal | undefined {
   const claims = readLeaseClaims(req);
-  if (claims.leaseId.every((claim) => typeof claim === 'string' && !claim.trim())) {
+  const omittedIdAllowed = options?.allowOmittedId && claims.leaseId.length === 0;
+  if (
+    !omittedIdAllowed &&
+    claims.leaseId.every((claim) => typeof claim === 'string' && !claim.trim())
+  ) {
     return { kind: 'missing-id' };
   }
   for (const field of LEASE_CLAIM_FIELDS) {

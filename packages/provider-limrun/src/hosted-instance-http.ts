@@ -4,6 +4,7 @@ let policy: { baseFetch: typeof fetch; wrappedFetch: typeof fetch } | undefined;
 /**
  * The pinned SDK uses global fetch from its private proxy transport and has no fetch option.
  * The hosted daemon must leave this wrapper installed for the lifetime of the attachment.
+ * If another fetch wrapper encloses ours, release drops our bearers and leaves that chain in place.
  */
 export function refuseHostedInstanceRedirects(tokens: readonly string[]): () => void {
   const bearers = new Set(tokens.map((token) => `Bearer ${token}`));

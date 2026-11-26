@@ -10,7 +10,7 @@ import { cloudConnectionDir, type ConnectionLocation } from './cloud-connection-
 import type { CloudAttachment } from './cloud-attachment-schema.ts';
 
 const CLOUD_LIMRUN_REASONS = {
-  // The installed Limrun plugin cannot consume scoped hosted attachments.
+  // No compatible Limrun plugin is installed or available for scoped hosted attachments.
   pluginRequired: { reason: 'cloud_limrun_plugin_required' },
   // The client could not confirm its attachment daemon stopped.
   daemonStopUnconfirmed: { reason: 'cloud_attachment_daemon_stop_unconfirmed' },

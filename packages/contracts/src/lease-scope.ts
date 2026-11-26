@@ -535,6 +535,8 @@ export function normalizeLeaseId(raw: unknown): string | undefined {
 
 /** The lease reasons that more than one package raises or reads. */
 export const LEASE_REASONS = {
+  // The requested lease id already names a lease that this daemon issued.
+  idInUse: { reason: 'LEASE_ID_IN_USE' },
   // The lease that the request names is not active.
   notFound: { reason: 'LEASE_NOT_FOUND' },
   // The lease does not match the tenant, run, backend, provider, device, or client of the request.

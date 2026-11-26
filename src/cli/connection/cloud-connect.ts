@@ -5,7 +5,7 @@ import {
   type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   createCloudSession,
   deleteCloudSession,
@@ -132,25 +132,40 @@ export async function releaseCloudConnection(options: {
     () => undefined,
     (error: unknown) => error,
   );
-  const access = record?.brokerReleased
-    ? undefined
-    : await resolveHostedCloudAccess({
-        env: host.env,
-        stateDir: location.stateDir,
-        interactive: false,
-        savedOrigin: record?.origin ?? binding?.baseUrl,
-      });
-  const id = access
-    ? await cloudSessionIdForRelease(access, location, record, binding?.id)
-    : record?.id;
-  if (access && id) {
-    await deleteCloudSession(access, id);
-    if (retirementFailure && record) {
+  let id = record?.id;
+  let released = false;
+  try {
+    const access = record?.brokerReleased
+      ? undefined
+      : await resolveHostedCloudAccess({
+          env: host.env,
+          stateDir: location.stateDir,
+          interactive: false,
+          savedOrigin: record?.origin ?? binding?.baseUrl,
+        });
+    if (access) {
+      id = await cloudSessionIdForRelease(access, location, record, binding?.id);
+      if (id) {
+        await deleteCloudSession(access, id);
+        released = true;
+      }
+    }
+  } catch (error) {
+    if (!retirementFailure) throw error;
+    const retirement = asAppError(retirementFailure, 'COMMAND_FAILED');
+    const broker = asAppError(error, 'COMMAND_FAILED');
+    throw new AppError(retirement.code, retirement.message, {
+      ...retirement.details,
+      brokerReleaseReason: broker.details?.reason ?? broker.code,
+    });
+  }
+  if (retirementFailure) {
+    if (released && record) {
       record.brokerReleased = true;
       writeCloudConnection(location, record);
     }
+    throw retirementFailure;
   }
-  if (retirementFailure) throw retirementFailure;
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudState(location, state, record);
   return id;

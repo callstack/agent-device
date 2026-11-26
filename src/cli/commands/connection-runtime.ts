@@ -100,14 +100,31 @@ export async function materializeRemoteConnectionForCommand(options: {
 }> {
   const { command, flags, client, host } = options;
   const { stateDir, state: savedState, existing } = options.selection;
-  const state =
-    options.hostedLease && savedState.leaseId && savedState.leaseId !== options.hostedLease.id
-      ? { ...savedState, leaseId: undefined, endedLeaseId: undefined }
-      : savedState;
-  const nextFlags = { ...flags, session: state.session };
+  const hostedLeaseId = options.hostedLease?.id;
+  const staleActiveLease =
+    hostedLeaseId !== undefined &&
+    savedState.leaseId !== undefined &&
+    savedState.leaseId !== hostedLeaseId;
+  const staleEndedLease =
+    hostedLeaseId !== undefined &&
+    savedState.endedLeaseId !== undefined &&
+    savedState.endedLeaseId !== hostedLeaseId;
+  const leaseChanged = staleActiveLease || staleEndedLease;
+  const state = leaseChanged
+    ? {
+        ...savedState,
+        leaseId: staleActiveLease ? undefined : savedState.leaseId,
+        endedLeaseId: staleEndedLease ? undefined : savedState.endedLeaseId,
+      }
+    : savedState;
+  const nextFlags = {
+    ...flags,
+    session: state.session,
+    ...(hostedLeaseId === undefined ? {} : { leaseId: state.leaseId }),
+  };
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
-  let changed = !existing;
+  let changed = !existing || leaseChanged;
 
   // Unknown creation evidence permits discard before binding, but only confirmed creation permits
   // rollback after a later failure. A committed session record takes over either lease.

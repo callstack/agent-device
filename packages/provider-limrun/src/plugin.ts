@@ -139,19 +139,27 @@ function hostedAttachmentDormancy(expiresAt: number | undefined, hasAccountKey: 
   }
 }
 
+const HOSTED_SHUTDOWN_RETRY_MS = 5_000;
+
 function shutdownHostedRuntimeAt(deadline: number, close: () => Promise<void>): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelled = false;
+  const schedule = (delay: number) => {
+    if (cancelled) return;
+    timer = setTimeout(arm, delay);
+    timer.unref();
+  };
   const arm = () => {
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      void close().catch(() => {});
+      void close().catch(() => schedule(HOSTED_SHUTDOWN_RETRY_MS));
       return;
     }
-    timer = setTimeout(arm, Math.min(remaining, 2_147_483_647));
-    timer.unref();
+    schedule(Math.min(remaining, 2_147_483_647));
   };
   arm();
   return () => {
+    cancelled = true;
     if (timer) clearTimeout(timer);
   };
 }

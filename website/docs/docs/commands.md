@@ -2568,7 +2568,7 @@ If connect times out, retry with the same session name, API origin, and allocati
 
 Use `AGENT_DEVICE_CLOUD_BASE_URL` for a custom cloud session API endpoint. Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing. If you use an API key with a custom origin, set `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN` to that origin for both commands. If ending the cloud session fails, run `disconnect` again in the same session.
 
-A compatible [Limrun plugin](/docs/limrun) enables its scoped attachment transport. The CLI only offers that transport when the installed plugin supports hosted attachments. The attachment uses an isolated local daemon with the instance credentials for its platform. `disconnect` blocks new commands, stops that daemon, and releases the hosted lease. If the local daemon cannot be stopped, the CLI still releases the hosted lease. Run `disconnect` again to finish the local cleanup.
+A compatible [Limrun plugin](/docs/limrun) enables its scoped attachment transport. The CLI only offers that transport when the installed plugin supports hosted attachments. The attachment uses an isolated local daemon with the instance credentials for its platform. If a live viewer URL contains the instance credential, the CLI omits it. `disconnect` blocks new commands, stops that daemon, and releases the hosted lease. If the local daemon cannot be stopped, the CLI still releases the hosted lease. Run `disconnect` again to finish the local cleanup.
 
 For a Limrun iOS attachment on a nightly or development build, set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` before connecting. [iOS simulator runner setup](/docs/limrun#use-an-ios-simulator)
 

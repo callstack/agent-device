@@ -216,6 +216,7 @@ export type DaemonStopIdentity = Readonly<{
  * Reads a state directory's record once for a stop: whether it names a process, and whose process that
  * is. A record that states no owner describes the pre-existing detached daemon, which is what every
  * record written before the ownership field named.
+ * With a hosted attachment scope, an existing record outside that scope is unreadable.
  */
 export function readDaemonStopIdentity(
   infoPath: string,

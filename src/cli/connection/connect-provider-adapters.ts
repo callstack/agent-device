@@ -138,9 +138,7 @@ export async function resolveCloudSessionProfile(
           })
         ).profile
       : {
-          tenant: flags.tenant,
           runId: flags.runId,
-          session: flags.session,
           platform: flags.platform,
           target: flags.target,
         };
@@ -149,7 +147,7 @@ export async function resolveCloudSessionProfile(
       ...context,
       flags,
       provider: 'cloud',
-      profile: { ...profile, clientId },
+      profile: { ...profile, tenant: flags.tenant, session: flags.session, clientId },
     }),
     provider: 'cloud',
   };

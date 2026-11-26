@@ -48,3 +48,13 @@ test('a hosted attachment daemon refuses an older plugin before setup', async ()
   expect(setup).not.toHaveBeenCalled();
   expect(unrelatedLoad).not.toHaveBeenCalled();
 });
+
+test('a hosted attachment daemon reports a missing Limrun plugin', async () => {
+  store.mockResolvedValueOnce([]);
+  const host = createTestHostEnvironment({
+    env: { LIMRUN_HOSTED_ATTACHMENT_DEADLINE: new Date(Date.now() + 60_000).toISOString() },
+  });
+  await expect(
+    createDaemonProviderRuntimeComposition(host, {} as PlatformHost),
+  ).rejects.toMatchObject({ details: { reason: 'plugin-not-installed' } });
+});

@@ -641,24 +641,26 @@ test.each([
   });
 });
 
-test.each([access.accessToken, response.attach.daemonAuthToken])(
-  'refuses a canonical deadline that also serves as a bearer',
-  async (token) => {
+test.each(['broker', 'daemon'] as const)(
+  'refuses a canonical deadline that also serves as the %s bearer',
+  async (bearer) => {
     const deadlineAt = '2026-11-19T15:00:00.000Z';
-    const brokerEcho = token === access.accessToken;
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
         Response.json({
           ...response,
           deadlineAt,
-          attach: { ...response.attach, daemonAuthToken: brokerEcho ? token : deadlineAt },
+          attach: {
+            ...response.attach,
+            daemonAuthToken: bearer === 'daemon' ? deadlineAt : response.attach.daemonAuthToken,
+          },
         }),
       ),
     );
     await expect(
       createCloudSession(
-        { ...access, accessToken: brokerEcho ? deadlineAt : access.accessToken },
+        { ...access, accessToken: bearer === 'broker' ? deadlineAt : access.accessToken },
         request,
         attempt,
       ),

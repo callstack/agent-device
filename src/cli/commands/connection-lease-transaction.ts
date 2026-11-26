@@ -430,10 +430,12 @@ async function allocateConnectionLease(
   try {
     return await client.leases.allocate(input);
   } catch (error) {
+    const details = asAppError(error, 'COMMAND_FAILED').details;
     if (
       !replaceSettled ||
       !input.leaseId ||
-      asAppError(error, 'COMMAND_FAILED').details?.reason !== 'LEASE_ID_IN_USE'
+      details?.reason !== LEASE_REASONS.idInUse.reason ||
+      details.settled !== true
     ) {
       throw error;
     }
