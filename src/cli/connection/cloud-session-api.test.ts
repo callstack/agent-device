@@ -530,7 +530,12 @@ test('round-trips the widest --max-usd cap through both refusals', async () => {
 });
 
 test('drops amounts one digit over the widest --max-usd cap', async () => {
-  expect(() => parseMaxUsdMicros('10000000000000')).toThrow();
+  expect(() => parseMaxUsdMicros('10000000000000')).toThrow(
+    expect.objectContaining({
+      code: 'INVALID_ARGS',
+      details: { reason: 'cloud_invalid_max_usd' },
+    }),
+  );
   const over = '10000000000000000000';
   const overCap = await refusal(422, {
     error: 'budget_exceeded',
