@@ -595,3 +595,23 @@ test('shared Apple label additions also name ordinary Android dialog actions', (
     );
   }
 });
+
+test('an ANR dialog in another language is found, and its buttons are chosen, by their ids', () => {
+  const system = { bundleId: 'android' };
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', system),
+    node(1, 'android.widget.TextView', {
+      ...system,
+      label: 'System UI reagiert nicht',
+      identifier: 'android:id/alertTitle',
+    }),
+    { ...button(2, 'App schließen', 'android:id/aerr_close', { x: 70, y: 1210 }), ...system },
+    { ...button(3, 'Warten', 'android:id/aerr_wait', { x: 70, y: 1336 }), ...system },
+  ]);
+
+  assert.equal(candidate?.alert.source, 'system-dialog');
+  assert.equal(candidate?.alert.title, 'System UI reagiert nicht');
+  const buttons = candidate?.buttons ?? [];
+  assert.equal(chooseAndroidAlertButton(buttons, 'dismiss')?.label, 'App schließen');
+  assert.equal(chooseAndroidAlertButton(buttons, 'accept')?.label, 'Warten');
+});

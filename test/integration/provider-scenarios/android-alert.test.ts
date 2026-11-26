@@ -185,3 +185,17 @@ test('Provider-backed integration Android alert ignores app-owned sheets', async
     },
   );
 });
+
+test('Provider-backed integration Android alert accept waits on an ANR dialog', async () => {
+  await withProviderScenarioResource(
+    async () => await createAndroidSettingsWorld(dismissibleDialog(androidSystemDialogXml)),
+    async (world) => {
+      const client = world.daemon.client();
+      await client.apps.open({ app: 'com.example.demo', ...world.selection });
+
+      const alertAccept = await client.command.alert({ action: 'accept', ...world.selection });
+      assert.equal(alertAccept.button, 'Wait');
+      assertCommandCall(world.adbCalls, ['shell', 'input', 'tap', '274', '638']);
+    },
+  );
+});
