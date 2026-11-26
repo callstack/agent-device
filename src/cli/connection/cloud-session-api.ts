@@ -45,16 +45,20 @@ export type CreatedCloudSession = {
 
 const SESSIONS_PATH = '/v1/sessions';
 const BOUNDED_SESSIONS_PATH = '/v1/sessions/bounded';
-const MICROS_PER_USD = 1_000_000n;
-const MAX_USD_PATTERN = /^(0|[1-9]\d{0,12})(?:\.(\d{1,6}))?$/;
+const MAX_USD_WHOLE_DIGITS = 13;
+const USD_FRACTION_DIGITS = 6;
+const MICROS_PER_USD = 10n ** BigInt(USD_FRACTION_DIGITS);
+const MAX_USD_PATTERN = new RegExp(
+  `^(0|[1-9]\\d{0,${MAX_USD_WHOLE_DIGITS - 1}})(?:\\.(\\d{1,${USD_FRACTION_DIGITS}}))?$`,
+);
+// Cloud responses may carry any amount as wide as the widest --max-usd cap.
+const MICRO_USD_PATTERN = new RegExp(`^\\d{1,${MAX_USD_WHOLE_DIGITS + USD_FRACTION_DIGITS}}$`);
 const TOP_UP_URL_PATTERN = /^[!-~]{1,2048}$/;
 const LIMIT_HINT = 'Raise the limit in the dashboard or wait for the next month.';
 const LIMIT_REFUSAL_MESSAGES = {
   key_budget_exceeded: 'This API key reached its spending limit, so no session was started.',
   account_cap_exceeded: 'The account reached its spending cap, so no session was started.',
 } as const;
-const AMOUNT_PATTERN = /^\d{1,15}$/;
-const BALANCE_PATTERN = /^-?\d{1,15}$/;
 const CONNECT_TIMEOUT_MS = 240_000;
 // Give the provider its two-minute allocation window and leave time to recover a lost response.
 const CREATE_REQUEST_TIMEOUT_MS = 125_000;
@@ -94,12 +98,12 @@ export function readCloudSessionRequest(flags: CliFlags) {
 export function parseMaxUsdMicros(value: string): string {
   const match = MAX_USD_PATTERN.exec(value);
   const micros = match
-    ? BigInt(match[1]!) * MICROS_PER_USD + BigInt((match[2] ?? '').padEnd(6, '0'))
+    ? BigInt(match[1]!) * MICROS_PER_USD + BigInt((match[2] ?? '').padEnd(USD_FRACTION_DIGITS, '0'))
     : 0n;
   if (micros <= 0n) {
     throw new AppError(
       'INVALID_ARGS',
-      '--max-usd requires a positive amount in USD, such as 0.50, with at most 6 decimal places.',
+      `--max-usd requires a positive amount in USD, such as 0.50, with at most ${USD_FRACTION_DIGITS} decimal places.`,
       { reason: CLOUD_SESSION_API_REASONS.budgetFormat.reason },
     );
   }
@@ -405,8 +409,8 @@ function budgetCapUnsupported(status: 404 | 405): AppError {
 }
 
 function budgetExceeded(body: Record<string, unknown> | undefined): AppError {
-  const maxUsdMicros = readAmount(body?.maxUsdMicros, AMOUNT_PATTERN);
-  const minimumUsdMicros = readAmount(body?.minimumUsdMicros, AMOUNT_PATTERN);
+  const maxUsdMicros = readMicroUsd(body?.maxUsdMicros);
+  const minimumUsdMicros = readMicroUsd(body?.minimumUsdMicros);
   const needs = minimumUsdMicros
     ? `needs at least ${formatUsdMicros(minimumUsdMicros)}`
     : 'cannot run within the cap';
@@ -427,9 +431,9 @@ function budgetExceeded(body: Record<string, unknown> | undefined): AppError {
 }
 
 function insufficientBalance(body: Record<string, unknown> | undefined, origin: string): AppError {
-  const requiredUsdMicros = readAmount(body?.requiredUsdMicros, AMOUNT_PATTERN);
-  const availableUsdMicros = readAmount(body?.availableUsdMicros, BALANCE_PATTERN);
-  const shortfallUsdMicros = readAmount(body?.shortfallUsdMicros, AMOUNT_PATTERN);
+  const requiredUsdMicros = readMicroUsd(body?.requiredUsdMicros);
+  const availableUsdMicros = readMicroUsd(body?.availableUsdMicros, { signed: true });
+  const shortfallUsdMicros = readMicroUsd(body?.shortfallUsdMicros);
   const topUpUrl = readTopUpUrl(body?.topUpUrl, origin);
   const amounts =
     requiredUsdMicros && availableUsdMicros
@@ -453,8 +457,10 @@ function insufficientBalance(body: Record<string, unknown> | undefined, origin: 
   );
 }
 
-function readAmount(value: unknown, pattern: RegExp): string | undefined {
-  return typeof value === 'string' && pattern.test(value) ? value : undefined;
+export function readMicroUsd(value: unknown, { signed = false } = {}): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const magnitude = signed ? value.replace(/^-/, '') : value;
+  return MICRO_USD_PATTERN.test(magnitude) ? value : undefined;
 }
 
 // A billing link is shown to a person, so keep only a plain https (or loopback http) URL.
@@ -475,7 +481,10 @@ function formatUsdMicros(micros: string): string {
   const negative = micros.startsWith('-');
   const digits = BigInt(negative ? micros.slice(1) : micros);
   const whole = digits / MICROS_PER_USD;
-  const fraction = (digits % MICROS_PER_USD).toString().padStart(6, '0').replace(/0+$/, '');
+  const fraction = (digits % MICROS_PER_USD)
+    .toString()
+    .padStart(USD_FRACTION_DIGITS, '0')
+    .replace(/0+$/, '');
   return `${negative ? '-' : ''}$${whole}.${fraction.padEnd(2, '0')}`;
 }
 

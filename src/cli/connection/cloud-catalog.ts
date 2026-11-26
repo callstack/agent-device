@@ -10,6 +10,7 @@ import {
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { writeCommandOutput } from '../commands/shared.ts';
 import { resolveCloudCatalogAccess } from './cloud-catalog-access.ts';
+import { readMicroUsd } from './cloud-session-api.ts';
 
 const AVAILABILITY_STATES = ['available', 'unavailable', 'unknown'] as const;
 const AVAILABILITY_REASONS = [
@@ -20,7 +21,6 @@ const AVAILABILITY_REASONS = [
   'capacity_unknown',
   'live_availability_unsupported',
 ] as const;
-const MICROS_PATTERN = /^\d{1,15}$/;
 
 export type CloudVendorAvailability = {
   state: (typeof AVAILABILITY_STATES)[number];
@@ -131,7 +131,7 @@ function isOptional(value: unknown, valid: (value: unknown) => boolean): boolean
 }
 
 function isMicros(value: unknown): boolean {
-  return typeof value === 'string' && MICROS_PATTERN.test(value);
+  return readMicroUsd(value) !== undefined;
 }
 
 function isPositiveInteger(value: unknown): boolean {
