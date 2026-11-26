@@ -144,3 +144,27 @@ test('a completed best-effort stderr write does not absorb later stream errors',
     (error) => error === failure,
   );
 });
+
+test('a stalled best-effort stderr write does not absorb an unrelated error', () => {
+  const stream = new Writable({ write: () => {} });
+  const failure = new Error('unrelated stderr failure');
+  writeStderrBestEffort('allocation progress\n', stream);
+
+  assert.throws(
+    () => stream.emit('error', failure),
+    (error) => error === failure,
+  );
+  assert.equal(stream.listenerCount('error'), 0);
+});
+
+test('a stalled best-effort stderr write leaves existing error handlers in charge', () => {
+  const stream = new Writable({ write: () => {} });
+  const handle = vi.fn();
+  stream.once('error', handle);
+  writeStderrBestEffort('allocation progress\n', stream);
+
+  const failure = new Error('unrelated stderr failure');
+  stream.emit('error', failure);
+  assert.deepEqual(handle.mock.calls, [[failure]]);
+  assert.equal(stream.listenerCount('error'), 0);
+});
