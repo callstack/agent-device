@@ -304,6 +304,29 @@ test("a tap may target a foreign ANR dialog's own buttons, and nothing is tapped
   expect(tapCalls(calls)).toEqual([]);
 });
 
+test("a tap may target a localized foreign ANR dialog's own buttons", async () => {
+  // Android translates the dialog's title and labels; the framework ids stay the same.
+  const session = makeAndroidSession('readiness-system-tap-localized');
+  const [title, closeApp, wait] = systemUiAnrDialogNodes();
+  screenNodes = [
+    { ...title!, label: 'System UI reagiert nicht' },
+    { ...closeApp!, label: 'App schließen' },
+    { ...wait!, label: 'Warten' },
+  ];
+  const { observation } = makeObservation(systemDialogFocus);
+
+  const readiness = await ensureAndroidBlockingSystemDialogReadyForTap({
+    session,
+    command: 'press',
+    observation,
+  });
+
+  expect(readiness).toMatchObject({
+    status: 'dialog-buttons',
+    admission: { buttons: [CLOSE_APP_RECT, { x: 100, y: 700, width: 220, height: 80 }] },
+  });
+});
+
 test('a tap stays refused when the foreign dialog shows no framework buttons', async () => {
   // An app control labelled "Close app" is not the dialog's button: only the framework id counts.
   const session = makeAndroidSession('readiness-system-tap-no-ids');

@@ -608,12 +608,11 @@ function readNodeTextParts(node: {
 }
 
 /**
- * The touchable buttons of a framework app-error dialog, read by resource id. Only a screen that
- * also shows the dialog's "isn't responding" title counts, so an app's own control with a
- * look-alike id never opens the gate.
+ * The touchable buttons of a framework app-error dialog, read by resource id. The caller has
+ * already read the ANR window's focus, and the dialog's text is in the device language, so only the
+ * framework id identifies a button: an app cannot declare an id in the `android` package.
  */
 function findAppErrorDialogButtons(nodes: SnapshotNode[]): Rect[] {
-  if (!containsBlockingDialog(nodes)) return [];
   return nodes
     .filter(isTouchableDialogNode)
     .filter((node) => ANDROID_APP_ERROR_DIALOG_BUTTON_ID.test(node.identifier ?? ''))
