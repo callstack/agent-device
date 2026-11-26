@@ -84,7 +84,7 @@ if (node?.ref && snapshot.refsGeneration !== undefined) {
 }
 ```
 
-A pin does not refresh a stale ref. After another capture replaces its generation, take a new snapshot and use its ref and generation.
+A pin does not refresh a stale ref. A device action expires its frame, and a newer ref-issuing response replaces its generation. Use the latest response's refs and `refsGeneration`, or take a new snapshot. Without new refs, a second press from the original snapshot is refused with `ref_frame_expired`.
 
 When the daemon can name the attached host device, `client.apps.open()` answers with it under `device`. Its `kind` (`simulator`, `emulator`, or `device`), `model` and `osVersion` are each optional and present only when the host or provider reported them, the same fields `client.sessions.list()` reports per session. A target that reports no OS leaves `osVersion` unset; nothing infers one.
 
