@@ -96,27 +96,40 @@ test('connect keeps an unknown provider separate from a known missing plugin', a
   assert.doesNotMatch(error.hint, /plugins add/);
 });
 
-test('connect reports a failed selected plugin even when its error text describes a missing plugin', async () => {
-  const { home, env } = pluginHome();
-  selectPlugin(
-    home,
-    '@agent-device/testmu',
-    'throw new Error("TestMu AI requires the @agent-device/testmu plugin.");',
-  );
-  const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
-    cwd: home,
-    env,
-    stateDirPrefix: 'connect-broken-plugin-',
-  });
-  assert.equal(result.code, 1);
-  assert.deepEqual(result.calls, []);
-  const { error } = JSON.parse(result.stdout);
-  assert.equal(error.details.reason, 'plugin-unavailable');
-  assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
-  assert.equal(error.details.installCommand, undefined);
-  assert.match(error.hint, /plugins list --json/);
-  assert.match(error.hint, /Reinstall it with agent-device plugins update @agent-device\/testmu/);
-});
+test.each([
+  ['0.22.0', 'Reinstall it with agent-device plugins update @agent-device/testmu.'],
+  [
+    '0.22.0-dev',
+    'To choose a release, run agent-device plugins add @agent-device/testmu@nightly-0.22.',
+  ],
+  ['0.0.0', 'Use an explicit package version or tag to reinstall it.'],
+])(
+  'connect reports a failed unpinned registry plugin on CLI version %s',
+  async (coreVersion, recovery) => {
+    vi.mocked(readVersion).mockReturnValue(coreVersion);
+    const { home, env } = pluginHome();
+    selectPlugin(
+      home,
+      '@agent-device/testmu',
+      'throw new Error("TestMu AI requires the @agent-device/testmu plugin.");',
+    );
+    const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
+      cwd: home,
+      env,
+      stateDirPrefix: 'connect-broken-plugin-',
+    });
+    assert.equal(result.code, 1);
+    assert.deepEqual(result.calls, []);
+    const { error } = JSON.parse(result.stdout);
+    assert.equal(error.details.reason, 'plugin-unavailable');
+    assert.equal(error.details.failedPlugins[0].package, '@agent-device/testmu');
+    assert.equal(error.details.installCommand, undefined);
+    assert.match(error.hint, /plugins list --json/);
+    assert.ok(error.hint.includes(recovery));
+    assert.doesNotMatch(error.hint, /keep its version selector/);
+    if (coreVersion !== '0.22.0') assert.doesNotMatch(error.hint, /plugins update/);
+  },
+);
 
 test('connect keeps configuration guidance for an unavailable local plugin archive', async () => {
   const { home, env } = pluginHome();

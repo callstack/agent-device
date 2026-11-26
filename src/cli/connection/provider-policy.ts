@@ -11,6 +11,7 @@ import {
   firstPartyPluginVersion,
   pluginInstallCommand,
   pluginInstallationHint,
+  type PluginReleaseDeclaration,
 } from '@agent-device/contracts/plugin-installation';
 import { readRegistryPluginSelection } from '@agent-device/plugins/store';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -190,21 +191,14 @@ function unavailableConnectPluginError(
         ? readRegistryPluginSelection(env, declaration.package)
         : undefined;
     const repair = registrySelection
-      ? ` Reinstall it with agent-device plugins update ${declaration.package} to keep its version selector.`
+      ? registryPluginRecoveryHint(declaration, registrySelection.version, readVersion())
       : '';
-    const matchedVersion = registrySelection?.version
-      ? firstPartyPluginVersion(readVersion())
-      : undefined;
-    const replace =
-      matchedVersion && registrySelection?.version !== matchedVersion
-        ? ` To replace its selector with the CLI-matched release (${matchedVersion}), run ${pluginInstallCommand(declaration, matchedVersion)}.`
-        : '';
     return new AppError('UNSUPPORTED_OPERATION', `${declaration.label} plugin is unavailable.`, {
       reason: PLUGIN_INSTALLATION_REASONS.unavailable.reason,
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin and fix its configuration.${repair}${replace} Then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin and fix its configuration.${repair} Then retry your original command.`,
     });
   }
   return new AppError(
@@ -217,6 +211,26 @@ function unavailableConnectPluginError(
       ...pluginInstallationHint(declaration, readVersion()),
     },
   );
+}
+
+function registryPluginRecoveryHint(
+  declaration: PluginReleaseDeclaration,
+  selector: string | undefined,
+  coreVersion: string,
+): string {
+  const matchedVersion = firstPartyPluginVersion(coreVersion);
+  const update = ` Reinstall it with agent-device plugins update ${declaration.package}`;
+  if (selector === undefined) {
+    if (matchedVersion) return `${update}.`;
+    const install = pluginInstallCommand(declaration, coreVersion);
+    return install.endsWith(` ${declaration.package}`)
+      ? ' Use an explicit package version or tag to reinstall it.'
+      : ` To choose a release, run ${install}.`;
+  }
+
+  const preserve = `${update} to keep its version selector.`;
+  if (!matchedVersion || selector === matchedVersion) return preserve;
+  return `${preserve} To replace its selector with the CLI-matched release (${matchedVersion}), run ${pluginInstallCommand(declaration, coreVersion)}.`;
 }
 
 /**
