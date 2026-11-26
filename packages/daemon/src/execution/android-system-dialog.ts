@@ -19,13 +19,13 @@ import type { SessionState } from '../core/session-state.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
 const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;
-const ANDROID_CLOSE_APP_PATTERN = /^close app$/i;
 /**
  * The ANR dialog's (`AppNotRespondingDialog`) Close app and Wait buttons. The resource id does not
  * depend on the device language, and an app cannot declare an id in the `android` package.
  */
+const ANDROID_ANR_CLOSE_BUTTON_ID = 'android:id/aerr_close';
 const ANDROID_ANR_DIALOG_BUTTON_IDS: ReadonlySet<string> = new Set([
-  'android:id/aerr_close',
+  ANDROID_ANR_CLOSE_BUTTON_ID,
   'android:id/aerr_wait',
 ]);
 const ANDROID_MODAL_POLL_MS = 500;
@@ -566,11 +566,9 @@ function findCloseAppButton(
   if (options.requireDialogSignal !== false && !containsBlockingDialog(nodes)) {
     return undefined;
   }
-  return nodes.filter(isTouchableDialogNode).find((node) => {
-    return (
-      readNodeTextParts(node).some((text) => ANDROID_CLOSE_APP_PATTERN.test(text)) && node.rect
-    );
-  });
+  return findAnrDialogButtons(nodes).find(
+    (node) => node.identifier === ANDROID_ANR_CLOSE_BUTTON_ID,
+  );
 }
 
 /** A node the recovery tap can actually reach: present in the tree and not covered by a surface above it. */

@@ -49,6 +49,7 @@ function anrDialogNodes(): RawSnapshotNode[] {
       index: 1,
       type: 'android.widget.Button',
       label: 'Close app',
+      identifier: 'android:id/aerr_close',
       rect: CLOSE_APP_RECT,
     },
   ];
@@ -169,6 +170,30 @@ test('an ANR that surfaces between two commands is recovered by the next pre-dis
   });
   // Recovering means the dialog was actually dismissed on the device, so the reported status is
   // pinned to the tap that did it rather than to the status value alone.
+  expect(tapCalls(calls)).toEqual([CLOSE_APP_TAP]);
+});
+
+test("the session app's ANR is recovered on a device in another language", async () => {
+  // Recovery finds Close app by its framework id, so a translated label does not hide it.
+  const session = makeAndroidSession('readiness-anr-localized', { appBundleId: APP });
+  const [title, closeApp] = anrDialogNodes();
+  screenNodes = [
+    { ...title!, label: `${APP} reagiert nicht` },
+    { ...closeApp!, label: 'App schließen' },
+  ];
+  const { observation, calls } = makeObservation(anrFocus);
+
+  const readiness = await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command: 'tap',
+    phase: 'before-command',
+    observation,
+  });
+
+  expect(readiness).toEqual({
+    status: 'recovered',
+    warning: `Recovered Android app ANR before tap: closed and relaunched ${APP}.`,
+  });
   expect(tapCalls(calls)).toEqual([CLOSE_APP_TAP]);
 });
 

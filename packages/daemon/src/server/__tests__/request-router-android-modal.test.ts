@@ -71,6 +71,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
             index: 1,
             type: 'android.widget.Button',
             label: 'Close app',
+            identifier: 'android:id/aerr_close',
             rect: { x: 100, y: 600, width: 220, height: 80 },
           },
         ]);

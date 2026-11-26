@@ -30,6 +30,7 @@ test('android blocking-dialog recovery expires the ref frame before its recovery
     index: 1,
     type: 'Button',
     label: 'Close app',
+    identifier: 'android:id/aerr_close',
     hittable: true,
     rect: { x: 20, y: 200, width: 120, height: 44 },
   };

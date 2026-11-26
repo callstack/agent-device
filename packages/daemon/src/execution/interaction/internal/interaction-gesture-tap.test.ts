@@ -284,6 +284,7 @@ for (const canceled of [false, true]) {
           ref: 'e0',
           type: 'Button',
           label: 'Close app',
+          identifier: 'android:id/aerr_close',
           rect: { x: 10, y: 20, width: 100, height: 40 },
         },
       ],

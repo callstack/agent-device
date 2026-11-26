@@ -61,6 +61,7 @@ test('recovery taps the reachable Close app, not a covered one that comes first'
     index: 0,
     type: 'Button',
     label: 'Close app',
+    identifier: 'android:id/aerr_close',
     hittable: true,
     rect: { x: 40, y: 300, width: 200, height: 80 },
   };
@@ -75,6 +76,7 @@ test('recovery taps the reachable Close app, not a covered one that comes first'
     index: 3,
     type: 'Button',
     label: 'Close app',
+    identifier: 'android:id/aerr_close',
     hittable: true,
     rect: { x: 40, y: 1800, width: 200, height: 80 },
   };
@@ -106,6 +108,7 @@ test('a fully covered dialog does not trigger recovery', async () => {
     index: 1,
     type: 'Button',
     label: 'Close app',
+    identifier: 'android:id/aerr_close',
     hittable: true,
     rect: { x: 40, y: 300, width: 200, height: 80 },
   };
@@ -135,6 +138,7 @@ test('collectively covered Close app is neither selected nor tapped', async () =
       parentIndex: 0,
       type: 'android.widget.Button',
       label: 'Close app',
+      identifier: 'android:id/aerr_close',
       hittable: true,
       rect: { x: 40, y: 300, width: 200, height: 80 },
     },
