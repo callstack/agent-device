@@ -68,10 +68,11 @@ export const DAEMON_CLIENT_CONFIG_REASONS = {
   // The client named both a pinned daemon instance and a daemon base URL, which answer "which
   // daemon" two different ways.
   bindingWithBaseUrl: { reason: 'daemon_binding_with_remote_base_url' },
-  // The daemon this client would start serves no HTTP endpoint, so the client starts nothing;
-  // `details.daemonServerMode` is the mode that cannot answer it.
-  serverModeServesNoHttpEndpoint: {
-    reason: 'daemon_server_mode_serves_no_http_endpoint',
+  // The daemon server mode this client would start opens no listener its own transport preference
+  // will call, so the client starts, retires and quiesces nothing; `details.daemonServerMode` and
+  // `details.daemonTransport` are the two settings that cannot be satisfied together.
+  serverModeServesNoClientTransport: {
+    reason: 'daemon_server_mode_serves_no_client_transport',
   },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
@@ -139,19 +140,29 @@ export function daemonContendedError(): AppError {
 }
 
 /**
- * The refusal when the daemon this client would start serves no HTTP endpoint, while the client asked
- * to talk HTTP to it. Nothing is spawned: the caller fixes the mode instead of reading an unavailable
- * endpoint for a daemon that was started and retired.
+ * The refusal when the server mode this client would start opens no listener its own transport
+ * preference will call. Nothing is started, retired or quiesced: the caller fixes one of the two
+ * settings instead of reading an unavailable endpoint for a daemon that was started and taken away
+ * again. `details` names both settings, because either one is the way out.
  */
-export function daemonHttpTransportNeedsHttpServerModeError(): AppError {
+export function daemonServerModeServesNoClientTransportError(
+  settings: Pick<DaemonClientSettings, 'serverMode' | 'transportPreference'>,
+): AppError {
+  const { serverMode, transportPreference } = settings;
+  const listener = transportPreference === 'http' ? 'HTTP' : 'socket';
+  const serving = transportPreference === 'http' ? 'http' : 'socket';
   return new AppError(
     'INVALID_ARGS',
-    'A daemon started in server mode "socket" serves no HTTP endpoint, and this client requires HTTP transport.',
+    `A daemon started in server mode "${serverMode}" serves no ${listener} endpoint, and this client requires ${transportPreference} transport.`,
     {
-      reason: DAEMON_CLIENT_CONFIG_REASONS.serverModeServesNoHttpEndpoint.reason,
-      daemonTransport: 'http',
-      daemonServerMode: 'socket',
-      hint: 'Drop --daemon-server-mode or AGENT_DEVICE_DAEMON_SERVER_MODE to let the daemon start in "http" mode, name "http" or "dual" instead, or use --daemon-transport socket.',
+      reason: DAEMON_CLIENT_CONFIG_REASONS.serverModeServesNoClientTransport.reason,
+      daemonTransport: transportPreference,
+      daemonServerMode: serverMode,
+      hint:
+        'Clear the server mode in every place it is set: `--daemon-server-mode` and ' +
+        '`AGENT_DEVICE_DAEMON_SERVER_MODE` each override the default, so one left behind still ' +
+        `starts this daemon. Or name the mode that serves a ${listener} endpoint ("${serving}" or ` +
+        '"dual"), or the transport this mode does serve with `--daemon-transport`.',
     },
   );
 }

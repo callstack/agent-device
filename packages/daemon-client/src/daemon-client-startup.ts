@@ -21,9 +21,10 @@ import {
   parseDaemonStartupProgressMessage,
   type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
-import type {
-  DaemonPaths,
-  DaemonTransportPreference,
+import {
+  serverModeAnswersTransport,
+  type DaemonPaths,
+  type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveDaemonLaunchSpec, resolveDaemonTakeover } from './daemon-launch-spec.ts';
 import {
@@ -46,8 +47,8 @@ import {
   DAEMON_LOOPBACK_DENIED_HINT,
   DAEMON_UNAVAILABLE_REASONS,
   daemonContendedError,
-  daemonHttpTransportNeedsHttpServerModeError,
   daemonIncompatibleError,
+  daemonServerModeServesNoClientTransportError,
   daemonTakeoverRetirementError,
   daemonStopCommand,
   daemonConnectDeniedError,
@@ -163,6 +164,19 @@ async function refineReplacement(
   return decision;
 }
 
+/**
+ * Refuses a server-mode and transport pair no daemon can satisfy, and so before this client starts,
+ * retires or quiesces one. The pair is judged on its own: it says nothing about a daemon already
+ * registered, which is why a client that can reach one reuses it, and why this is asked only where a
+ * daemon would be changed.
+ */
+export function assertServerModeAnswersClientTransport(
+  settings: Pick<DaemonClientSettings, 'serverMode' | 'transportPreference'>,
+): void {
+  if (!serverModeAnswersTransport(settings.serverMode, settings.transportPreference))
+    throw daemonServerModeServesNoClientTransportError(settings);
+}
+
 export async function readReusableLocalDaemon(
   settings: DaemonClientSettings,
   options: { deadline?: number; waitForLiveStartup?: boolean } = {},
@@ -187,6 +201,10 @@ export async function readReusableLocalDaemon(
     throw await newerDaemonRefusedError(existing, decision, settings.paths.baseDir);
   }
   if (remainingStartupBudget(deadline) < MINIMUM_DAEMON_TAKEOVER_BUDGET_MS) return null;
+  // Asked here, and nowhere earlier: a daemon this client can reach was returned above, and a daemon
+  // it may not retire was refused above. This is the first point a takeover would end the registered
+  // daemon, and a configuration that cannot produce a usable one is not a reason to end it.
+  assertServerModeAnswersClientTransport(settings);
   const notice = {
     stateDir: settings.paths.baseDir,
     previous: { pid: existing.pid, ...(existing.version ? { version: existing.version } : {}) },
@@ -348,13 +366,11 @@ type FailedDaemonStartup = {
 };
 
 export async function startLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
-  // Checked before the first launch: a socket-mode daemon opens no HTTP listener and publishes no
-  // `httpPort`, so an http client that started one could never observe it as ready over the endpoint
-  // it needs, would retire it, and would report an unavailable endpoint on every later call. Naming a
-  // server mode that cannot answer the client's own transport is a configuration to fix, not a daemon
-  // to start and take away again.
-  if (settings.transportPreference === 'http' && settings.serverMode === 'socket')
-    throw daemonHttpTransportNeedsHttpServerModeError();
+  // Asked before the first launch: a daemon whose server mode opens no listener this client will call
+  // can never be observed as ready over the endpoint it needs, so this client would retire it and
+  // report an unavailable endpoint on every later call. Naming a mode that cannot answer the client's
+  // own transport is a configuration to fix, not a daemon to start and take away again.
+  assertServerModeAnswersClientTransport(settings);
   const startupTimeoutMs = resolveDaemonStartupTimeoutMs(settings.host.env);
   const deadline = Date.now() + startupTimeoutMs;
   const cleanupResults: DaemonRetirementResult[] = [];

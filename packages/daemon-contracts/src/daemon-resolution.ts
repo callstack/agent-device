@@ -259,6 +259,23 @@ export function resolveDaemonServerMode(raw: string | undefined): DaemonServerMo
   return 'socket';
 }
 
+/**
+ * Whether a daemon started in `mode` answers a client that requires `preference`.
+ *
+ * The two vocabularies name the same two loopback listeners from opposite sides: the mode chooses
+ * which listeners the daemon opens (`socket` opens no HTTP listener, `http` opens no socket
+ * listener, `dual` opens both), and the preference states which one the client will call. `auto`
+ * accepts either listener, so every mode answers it. A pair that does not answer is a configuration
+ * no daemon can satisfy, so a client decides it before it starts, replaces, or quiesces one.
+ */
+export function serverModeAnswersTransport(
+  mode: DaemonServerMode,
+  preference: DaemonTransportPreference,
+): boolean {
+  if (preference === 'auto') return true;
+  return preference === 'http' ? mode !== 'socket' : mode !== 'http';
+}
+
 const LOOPBACK_BLOCK_LIST = new net.BlockList();
 LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
 LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
