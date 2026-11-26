@@ -335,6 +335,10 @@ prompt, which the runner leaves unanswered. Either can follow a dispatch, so the
 `lock-screen-secure`. A runtime without XCUIDevice's lock button answers
 `HARDWARE_CONTROL_UNAVAILABLE` before pressing anything.
 
+`lockScreenStatus` reads `com.apple.springboard.lockstate` once and answers `data.locked`, true
+while the lock screen is up. It changes nothing and brings no app forward. A dark screen that is
+not locked answers `false`. A lock state the runner cannot read answers `OBSERVATION_UNAVAILABLE`.
+
 `data` is command-specific. Common fields include snapshot nodes, text lookup results, gesture timing, visibility metadata, and screenshot or recording output details.
 
 Capture-plan snapshots carry `snapshotViewport`, the acquisition's declared viewport evidence.

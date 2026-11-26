@@ -290,6 +290,7 @@ await client.command.hardwareButton({ button: 'volume-down' });
 await client.command.hardwareButton({ button: 'power', platform: 'android' });
 await client.command.lockScreen({ action: 'lock' });
 await client.command.lockScreen({ action: 'unlock' });
+const { state } = await client.command.lockScreen({ action: 'status' });
 await client.command.fold({ pose: 'open' });
 await client.command.telephony({ action: 'call', number: '5551234' });
 await client.command.telephony({ action: 'sms', number: '5551234', text: 'Your code is 1234' });
@@ -307,7 +308,7 @@ await client.command.fold({
 
 `hardwareButton` presses one phone hardware key once: `button` is `'volume-up'`, `'volume-down'`, `'power'`, `'mute'`, `'sleep'`, `'wake'`, `'media-play-pause'`, `'media-next'`, `'media-previous'`, `'media-rewind'`, or `'media-fast-forward'`. It takes no hold duration and activates no app; the result reports the dispatched press, not the OS reaction. Android presses all eleven on phones and tablets; a physical iPhone or iPad presses volume only; iOS Simulators, Android TV, and tvOS refuse (use `tvRemote` on TV targets). `sleep` and `wake` are the explicit Android events that turn the screen off or on; `power` toggles it.
 
-`lockScreen` shows the lock screen (`action: 'lock'`) or dismisses it back to the app that was in front (`action: 'unlock'`), and resolves with `{ action: 'lock-screen', state: 'locked' | 'unlocked', message }` once the device reports that state. `lock` leaves a locked screen alone, and no app is activated. Android phones and tablets and iPhone and iPad simulators support it. `unlock` never enters a credential: a PIN, pattern, password, or passcode lock fails with `UNSUPPORTED_OPERATION` and `details.reason: 'lock-screen-secure'`.
+`lockScreen` shows the lock screen (`action: 'lock'`) or dismisses it back to the app that was in front (`action: 'unlock'`), and resolves with `{ action: 'lock-screen', state: 'locked' | 'unlocked', message }` once the device reports that state. `lock` leaves a locked screen alone, and no app is activated. `action: 'status'` resolves with the same shape and changes nothing: `state` is the lock state the device reports. Android phones and tablets and iPhone and iPad simulators support it. `unlock` never enters a credential: a PIN, pattern, password, or passcode lock fails with `UNSUPPORTED_OPERATION` and `details.reason: 'lock-screen-secure'`.
 
 `press`, `click`, and `longpress` do not wait for a missing target to appear. When a screen is still loading, wait for its landmark before interacting:
 
