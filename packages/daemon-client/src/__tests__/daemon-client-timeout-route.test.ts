@@ -39,6 +39,7 @@ vi.mock('@agent-device/host-kit/command', async () => {
 import { AppError } from '@agent-device/kernel/errors';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/daemon-http';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -129,6 +130,7 @@ function buildRequest(
   command: string,
   platform: 'android' | 'ios' | undefined,
   positionals: readonly string[] = [],
+  requestProgress?: 'command' | 'replay-test',
 ): DaemonWireRequest {
   return {
     token: 'test-token',
@@ -136,16 +138,18 @@ function buildRequest(
     command,
     positionals: [...positionals],
     flags: platform ? { platform } : {},
-    meta: { requestId: 'req-timeout-route' },
+    meta: {
+      requestId: 'req-timeout-route',
+      ...(requestProgress ? { requestProgress } : {}),
+    },
   };
 }
 
 /**
- * A daemon stand-in whose FIRST connection (the RPC) is accepted and never answered, so the
- * client's own envelope cuts the round trip off, and whose LATER connections — the timeout
- * handler's fresh probe — either answer like a live daemon (`answer`) or are destroyed
- * unanswered (`refuse`, the wedged daemon the reset path is built for: fails the probe fast
- * instead of spending its window).
+ * A daemon stand-in whose FIRST connection (the RPC) is accepted and never answered (or opens a
+ * stalled stream according to `firstResponse`), so the client's own envelope cuts the round trip
+ * off, and whose LATER connections — the timeout handler's fresh probe — answer according to
+ * `afterFirst`.
  *
  * `connections` counts accepted TCP connections, NOT requests: the probe's whole claim is that it
  * asks on a FRESH connection, so an HTTP request counter — which an RPC kept alive by keep-alive
@@ -153,9 +157,28 @@ function buildRequest(
  * answers `/health` on a connection after the first, so a row that reaches its kept-alive hint is
  * simultaneously proving a fresh connection carried a health request.
  */
+type StandInAnswer =
+  | 'answer'
+  | 'refuse'
+  | 'answer-late'
+  | 'not-found'
+  | 'named-daemon'
+  | 'named-proxy'
+  | 'foreign-service'
+  | 'hold';
+
+type StandInFirstResponse = 'silent' | 'stream-200' | 'stream-500' | 'html-200';
+
+const NAMED_HEALTH_SERVICES: Partial<Record<StandInAnswer, string>> = {
+  'named-daemon': 'agent-device-daemon',
+  'named-proxy': 'agent-device-proxy',
+  'foreign-service': 'web-server',
+};
+
 async function startStandIn(
   transport: 'http' | 'socket',
-  afterFirst: 'answer' | 'refuse' | 'answer-late',
+  afterFirst: StandInAnswer,
+  firstResponse: StandInFirstResponse = 'silent',
 ): Promise<{ server: LoopbackServer; port: number; connections: () => number }> {
   let connections = 0;
   // The TCP ordinal lives on the socket the request arrived on, so two requests sharing one
@@ -171,11 +194,52 @@ async function startStandIn(
             res.end('{}');
             return;
           }
+          // A non-2xx status must still reject `/health` even if the body names a daemon service.
+          if (connection > 1 && afterFirst === 'not-found') {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ service: 'agent-device-daemon' }));
+            return;
+          }
+          // A success that names a service: the contract's daemon/proxy, or a foreign server.
+          const service = NAMED_HEALTH_SERVICES[afterFirst];
+          if (connection > 1 && service) {
+            res.statusCode = 200;
+            res.end(JSON.stringify({ service }));
+            return;
+          }
+          // Holds the probe's connection open without an answer.
+          if (connection > 1 && afterFirst === 'hold') {
+            res.on('error', () => {});
+            return;
+          }
           if (connection > 1) {
             res.destroy();
             return;
           }
           res.on('error', () => {});
+          if (firstResponse === 'stream-200') {
+            res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+            res.write(
+              `${JSON.stringify({
+                type: 'progress',
+                event: {
+                  type: 'command',
+                  status: 'progress',
+                  message: 'Starting XCTest runner...',
+                },
+              })}\n`,
+            );
+            return;
+          }
+          if (firstResponse === 'stream-500') {
+            res.writeHead(500, { 'content-type': 'application/x-ndjson' });
+            res.flushHeaders();
+            return;
+          }
+          if (firstResponse === 'html-200') {
+            res.writeHead(200, { 'content-type': 'text/html' });
+            res.write('<html>');
+          }
         })
       : net.createServer((socket) => {
           const connection = ++connections;
@@ -244,8 +308,14 @@ type RouteRow = Readonly<{
   command: string;
   platform: 'android' | 'ios' | undefined;
   positionals?: readonly string[];
-  afterFirst: 'answer' | 'refuse' | 'answer-late';
+  requestProgress?: 'command' | 'replay-test';
+  firstResponse?: StandInFirstResponse;
+  afterFirst: StandInAnswer;
   hintPattern: RegExp;
+  /** `details.remoteResponseStarted`: set only for a sent remote request. */
+  remoteResponseStarted?: boolean;
+  /** `details.remoteHealthAnswered`: set only when a sent remote request checked `/health`. */
+  remoteHealthAnswered?: boolean;
   // The connections the stand-in must observe: 1 = the RPC only (route never probed),
   // 2 = RPC + the probe that answered, 3 = RPC + a missed probe + the one that answered,
   // 4 = RPC + every probe of the unresponsive verdict.
@@ -329,14 +399,137 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     resets: false,
   },
   {
-    // A remote client cannot reset anything on the daemon's host: no probe window, no sweep.
-    name: 'keeps a remote timeout declarative',
+    // A streamed CLI request that already opened a 2xx progress stream proves both URL and token
+    // directly, so the client skips `/health` entirely even if a second connect would fail (#5004).
+    name: 'clears the URL and token without probing /health once a remote progress stream started',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    requestProgress: 'command',
+    firstResponse: 'stream-200',
+    afterFirst: 'refuse',
+    hintPattern:
+      /already started answering this request, so its URL and auth token are not the cause.*builds and starts the XCTest runner.*running it again is safe/s,
+    remoteResponseStarted: true,
+    connections: 1,
+    resets: false,
+  },
+  {
+    // A local HTTP stream must never leak remote response flags onto local timeout recovery.
+    name: 'leaves local HTTP timeout details free of remote stream flags',
+    transport: 'http',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    requestProgress: 'command',
+    firstResponse: 'stream-200',
+    afterFirst: 'answer',
+    hintPattern: /The timed-out open request was canceled; the daemon was kept alive/,
+    connections: 2,
+    resets: false,
+  },
+  {
+    // Non-2xx progress headers are not proof that the daemon admitted the request.
+    name: 'does not treat a non-2xx NDJSON stream as a started remote response',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    requestProgress: 'command',
+    firstResponse: 'stream-500',
+    afterFirst: 'refuse',
+    hintPattern: /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: false,
+    connections: 2,
+    resets: false,
+  },
+  {
+    // A non-daemon web server at the wrong URL streaming 200 text/html must not clear the URL.
+    name: 'does not treat a non-NDJSON 200 response as a started remote progress stream',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    requestProgress: 'command',
+    firstResponse: 'html-200',
+    afterFirst: 'not-found',
+    hintPattern: /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: false,
+    connections: 2,
+    resets: false,
+  },
+  {
+    // Non-streaming callers (`--json`, MCP, SDK) and unstarted streams fall back to `/health` once.
+    name: 'clears the URL and token of a remote daemon whose /health names the daemon service',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    afterFirst: 'named-daemon',
+    hintPattern:
+      /still answers \/health, so its URL and auth token are not the cause.*builds and starts the XCTest runner.*running it again is safe/s,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: true,
+    connections: 2,
+    resets: false,
+  },
+  {
+    // #5058 forwards client disconnects through the proxy, so proxy and direct share one retry hint.
+    name: 'clears the URL and token of a remote proxy whose /health names the proxy service',
     transport: 'remote',
     command: RESET_POLICY_COMMAND,
     platform: 'android',
+    afterFirst: 'named-proxy',
+    hintPattern: /still answers \/health.*running it again is safe even if the app launched\.$/s,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: true,
+    connections: 2,
+    resets: false,
+  },
+  {
+    name: 'keeps the URL and token hint when a /health success names no daemon service',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
     afterFirst: 'answer',
-    hintPattern: /Verify the remote daemon URL, auth token, and remote host logs/,
-    connections: 1,
+    hintPattern: /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: false,
+    connections: 2,
+    resets: false,
+  },
+  {
+    name: 'keeps the URL and token hint when a /health success names a foreign service',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    afterFirst: 'foreign-service',
+    hintPattern: /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: false,
+    connections: 2,
+    resets: false,
+  },
+  {
+    name: 'keeps the URL and token hint when the remote URL answers /health with no success',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    afterFirst: 'not-found',
+    hintPattern: /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: false,
+    connections: 2,
+    resets: false,
+  },
+  {
+    name: 'keeps the URL and token hint for a remote daemon that no longer answers',
+    transport: 'remote',
+    command: RESET_POLICY_COMMAND,
+    platform: 'ios',
+    afterFirst: 'refuse',
+    hintPattern: /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    remoteResponseStarted: false,
+    remoteHealthAnswered: false,
+    connections: 2,
     resets: false,
   },
 ];
@@ -357,6 +550,7 @@ for (const row of ROUTE_ROWS) {
     const daemon = await startStandIn(
       row.transport === 'remote' ? 'http' : row.transport,
       row.afterFirst,
+      row.firstResponse,
     );
     // Preserved rows retain seeded metadata. Reset rows acquire a real child-owned registration.
     const statePaths = dummyStatePaths();
@@ -373,7 +567,7 @@ for (const row of ROUTE_ROWS) {
       const error = await expectRouteError(
         sendRequest(
           info,
-          buildRequest(row.command, row.platform, row.positionals),
+          buildRequest(row.command, row.platform, row.positionals, row.requestProgress),
           row.transport === 'remote' ? 'http' : row.transport,
           statePaths,
           TIMEOUT_MS,
@@ -384,6 +578,8 @@ for (const row of ROUTE_ROWS) {
       // The hint is printed as the Next step; a failure that already wrote its log never asks for
       // a --debug rerun.
       assert.equal(/--debug/.test(String(error.details?.hint)), false);
+      assert.equal(error.details?.remoteResponseStarted, row.remoteResponseStarted);
+      assert.equal(error.details?.remoteHealthAnswered, row.remoteHealthAnswered);
       assert.equal(daemon.connections(), row.connections, 'probe-vs-skip is a route decision');
       assert.equal(
         fs.existsSync(statePaths.infoPath),
@@ -400,6 +596,75 @@ for (const row of ROUTE_ROWS) {
     }
   });
 }
+
+test('request-timeout route: a held remote /health answers nothing within the probe bound', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // The probe only picks the hint, so a daemon that holds `/health` open must cost the caller about
+  // one second past the request window, not the full remote health-check window.
+  const daemon = await startStandIn('http', 'hold');
+  const startedAt = performance.now();
+  try {
+    const error = await expectRouteError(
+      sendRequest(
+        { token: 'test-token', pid: process.pid, baseUrl: `http://127.0.0.1:${daemon.port}` },
+        buildRequest(RESET_POLICY_COMMAND, 'ios'),
+        'http',
+        dummyStatePaths(),
+        TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
+      ),
+      /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    );
+    assert.equal(error.details?.remoteResponseStarted, false);
+    assert.equal(error.details?.remoteHealthAnswered, false);
+    assert.ok(performance.now() - startedAt < 2_000, 'the probe stays within its 1 s bound');
+  } finally {
+    (daemon.server as http.Server).closeAllConnections();
+    await closeLoopbackServer(daemon.server);
+  }
+});
+
+test('request-timeout route: a remote request that never left the client does not ask /health again', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // The RPC is refused as an instance change, and the retry's own `/health` read hangs until the
+  // budget ends, so the timeout lands before the request was resent. A later `/health` would
+  // answer, but nothing reached the daemon, so it cannot clear the token or promise a cancel. The
+  // window is wide enough that the 409 always lands before it, so the timeout is the retry's.
+  const windowMs = 500;
+  let healthReads = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/rpc') {
+      res.writeHead(409, { [DAEMON_HTTP_INSTANCE_MISMATCH_HEADER]: 'true' });
+      res.end();
+      return;
+    }
+    healthReads += 1;
+    if (healthReads === 1) return;
+    res.statusCode = 200;
+    res.end(JSON.stringify({ service: 'agent-device-daemon' }));
+  });
+  const port = await listenOnLoopback(server);
+  try {
+    const error = await expectRouteError(
+      sendRequest(
+        { token: 'test-token', pid: process.pid, baseUrl: `http://127.0.0.1:${port}` },
+        buildRequest(RESET_POLICY_COMMAND, 'ios'),
+        'http',
+        dummyStatePaths(),
+        windowMs,
+        { host: createTestHostEnvironment() },
+      ),
+      /^Verify the remote daemon URL, auth token, and remote host logs\.$/,
+    );
+    assert.equal(error.details?.daemonRequestSent, false);
+    assert.equal(error.details?.remoteResponseStarted, undefined);
+    assert.equal(error.details?.remoteHealthAnswered, undefined);
+    assert.equal(healthReads, 1, 'no post-timeout /health probe runs for an unsent request');
+  } finally {
+    server.closeAllConnections();
+    await closeLoopbackServer(server);
+  }
+});
 
 test('request-timeout route: a reset never deletes a registration a replacement daemon published', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;

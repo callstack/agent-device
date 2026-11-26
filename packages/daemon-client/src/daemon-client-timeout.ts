@@ -8,6 +8,7 @@ import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resoluti
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { DaemonProbeVerdict } from './daemon-client-loopback-probe.ts';
+import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
 
 // Recovery for a timed-out request is scoped to that request or to nothing. The daemon owns
 // request-scoped recovery (#3177): destroying the timed-out connection cancels exactly that
@@ -40,19 +41,89 @@ export async function handleRequestTimeout(
     action?: string;
     /** Whether the request left this process before the window expired. */
     requestSent: boolean;
+    /** Whether the remote daemon had already opened a 2xx progress stream before the timeout. */
+    responseStarted: boolean;
+    /** Reads the remote daemon's `/health` within a budget. The transport owns the request. */
+    readRemoteHealth: (budgetMs: number) => Promise<RemoteDaemonHealth>;
   }>,
 ): Promise<AppError> {
-  const { info, statePaths, remote, retireUnresponsive, timeoutMs, requestId, command, session } =
-    params;
+  const {
+    info,
+    statePaths,
+    remote,
+    retireUnresponsive,
+    timeoutMs,
+    requestId,
+    command,
+    session,
+    requestSent,
+    responseStarted,
+    readRemoteHealth,
+  } = params;
   // The command's declared policy (`timeoutPolicy.onTimeout`, ADR 0008) decides whether a local
   // timed-out request is RESET-ELIGIBLE; the liveness probe decides whether the eligibility runs.
   // A remote client cannot reach the host's process table or the daemon's state dir, so a remote
   // timeout stays purely declarative here.
   const resetEligible = !remote && shouldResetDaemonAfterRequestTimeout(command);
   const liveness = resetEligible ? await probeDaemonLiveness(info, session) : undefined;
+  const remoteProof = await resolveRemoteTimeoutProof({
+    remote,
+    requestSent,
+    responseStarted,
+    readRemoteHealth,
+  });
   const recovery = await recoverFromTimeout({ info, statePaths, liveness, retireUnresponsive });
-  emitTimeoutDiagnostic({ timeoutMs, requestId, command, remote, info, liveness, recovery });
-  return await timeoutFailure({ params, statePaths, liveness, recovery });
+  emitTimeoutDiagnostic({
+    timeoutMs,
+    requestId,
+    command,
+    remote,
+    info,
+    liveness,
+    remoteProof,
+    recovery,
+  });
+  return await timeoutFailure({ params, statePaths, liveness, remoteProof, recovery });
+}
+
+// The answer only picks the hint, so a probe that misses costs the old wording, not a recovery, and
+// it must not add the full health-check window to every remote timeout.
+const REMOTE_TIMEOUT_HEALTH_PROBE_MS = 1_000;
+
+/** What a sent remote request proved about the daemon URL and auth token before or after timeout. */
+type RemoteTimeoutProof = Readonly<{
+  /** Set for a sent remote request: whether a 2xx progress stream had opened before the timeout. */
+  responseStarted?: boolean;
+  /** Set when no progress stream had opened and `/health` was checked instead. */
+  healthAnswered?: boolean;
+}>;
+
+/**
+ * Whether a sent remote request already proved that the URL and auth token were fine.
+ * A 2xx progress stream proves both without another round trip. Non-streaming callers (`--json`,
+ * MCP, SDK) and streams that emitted no progress before the timeout ask `/health` once (1 s cap)
+ * and require a 2xx with a contract daemon or proxy `service`; `/health` checks no token, but
+ * `/rpc` refuses a wrong one at once, so a timed-out request had already passed it.
+ */
+async function resolveRemoteTimeoutProof(
+  params: Readonly<{
+    remote: boolean;
+    requestSent: boolean;
+    responseStarted: boolean;
+    readRemoteHealth: (budgetMs: number) => Promise<RemoteDaemonHealth>;
+  }>,
+): Promise<RemoteTimeoutProof> {
+  if (!params.remote || !params.requestSent) return {};
+  if (params.responseStarted) return { responseStarted: true };
+  const health = await params.readRemoteHealth(REMOTE_TIMEOUT_HEALTH_PROBE_MS);
+  return {
+    responseStarted: false,
+    healthAnswered:
+      health.reachable &&
+      health.statusCode !== undefined &&
+      health.statusCode < 300 &&
+      health.service !== undefined,
+  };
 }
 
 /**
@@ -117,10 +188,11 @@ function emitTimeoutDiagnostic(
     remote: boolean;
     info: DaemonInfo;
     liveness: DaemonProbeVerdict | undefined;
+    remoteProof: RemoteTimeoutProof;
     recovery: TimeoutRecovery;
   }>,
 ): void {
-  const { timeoutMs, requestId, command, remote, info, liveness, recovery } = params;
+  const { timeoutMs, requestId, command, remote, info, liveness, remoteProof, recovery } = params;
   const { retirement } = recovery;
   const resetDaemon = retirement?.status === 'retired';
   const preserved =
@@ -138,6 +210,8 @@ function emitTimeoutDiagnostic(
       daemonPreservedAfterTimeout: preserved || (!remote && !recovery.mayRetire),
       daemonLivenessProbeAnswered: liveness?.reachable,
       daemonLivenessConnectDenied: liveness?.denial,
+      remoteResponseStarted: remoteProof.responseStarted,
+      remoteHealthAnswered: remoteProof.healthAnswered,
       daemonBaseUrl: info.baseUrl,
     },
   });
@@ -155,10 +229,11 @@ async function timeoutFailure(
     params: Parameters<typeof handleRequestTimeout>[0];
     statePaths: DaemonPaths;
     liveness: DaemonProbeVerdict | undefined;
+    remoteProof: RemoteTimeoutProof;
     recovery: TimeoutRecovery;
   }>,
 ): Promise<AppError> {
-  const { params: request, statePaths, liveness, recovery } = params;
+  const { params: request, statePaths, liveness, remoteProof, recovery } = params;
   const { timeoutMs, requestId, requestSent } = request;
   const { retirement } = recovery;
   if (liveness?.denial) {
@@ -180,8 +255,14 @@ async function timeoutFailure(
     requestId,
     reason: DAEMON_TRANSPORT_REASONS.timeout.reason,
     daemonRequestSent: requestSent,
+    ...(remoteProof.responseStarted !== undefined
+      ? { remoteResponseStarted: remoteProof.responseStarted }
+      : {}),
+    ...(remoteProof.healthAnswered !== undefined
+      ? { remoteHealthAnswered: remoteProof.healthAnswered }
+      : {}),
     ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
-    hint: resolveTimeoutHint({ request, recovery, stateDir: statePaths.baseDir }),
+    hint: resolveTimeoutHint({ request, remoteProof, recovery, stateDir: statePaths.baseDir }),
   });
 }
 
@@ -192,17 +273,20 @@ async function timeoutFailure(
 function resolveTimeoutHint(
   params: Readonly<{
     request: Parameters<typeof handleRequestTimeout>[0];
+    remoteProof: RemoteTimeoutProof;
     recovery: TimeoutRecovery;
     stateDir: string;
   }>,
 ): string {
-  const { request, recovery, stateDir } = params;
+  const { request, remoteProof, recovery, stateDir } = params;
   const { retirement } = recovery;
   if (retirement?.status === 'retained') {
     return `The daemon could not be safely retired. State was retained at ${stateDir}. ${retirement.error?.hint ?? 'Read the request log and daemon.log in that directory before you retry.'}`;
   }
   return resolveRequestTimeoutHint({
     remote: request.remote,
+    remoteResponseStarted: remoteProof.responseStarted,
+    remoteHealthAnswered: remoteProof.healthAnswered,
     resetDaemon: retirement?.status === 'retired',
     stopCommand: recovery.stopCommand,
     command: request.command,
@@ -251,6 +335,9 @@ function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): b
   return platform !== undefined && AFFIRMATIVE_APPLE_PLATFORM_SELECTORS.has(platform);
 }
 
+/** The step that runs Apple runner startup under `prepare`'s own envelope. */
+const PREPARE_RUNNER_STEP = 'run agent-device prepare ios-runner with the same --platform';
+
 // Exported for direct hint-matrix testing: handleRequestTimeout also runs the real liveness probe
 // and process-kill side effects, so its wording is verified through this pure sub-function
 // (see also the production-seam route tests in
@@ -259,6 +346,10 @@ function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): b
 // cannot reach).
 export function resolveRequestTimeoutHint(params: {
   remote: boolean;
+  /** Whether a remote daemon had already opened a 2xx progress stream before the timeout. */
+  remoteResponseStarted?: boolean;
+  /** Whether a remote daemon answered `/health` after the timeout. */
+  remoteHealthAnswered?: boolean;
   resetDaemon: boolean;
   /** Set when the daemon answered nothing and this caller is not allowed to retire it. */
   stopCommand?: string;
@@ -269,8 +360,17 @@ export function resolveRequestTimeoutHint(params: {
   action?: string;
   session?: string;
 }): string {
-  const { remote, resetDaemon, stopCommand, command, applePlatformDeclared, session, action } =
-    params;
+  const {
+    remote,
+    remoteResponseStarted,
+    remoteHealthAnswered,
+    resetDaemon,
+    stopCommand,
+    command,
+    applePlatformDeclared,
+    session,
+    action,
+  } = params;
   // A daemon that survives this client window may still be exporting a `record stop` that ran out
   // of time — a stop still queued for the device lock is dropped before any export starts, hence
   // "may" — and a finished file stays retrievable by asking again. This holds whether the daemon
@@ -282,7 +382,12 @@ export function resolveRequestTimeoutHint(params: {
     } again to wait for that export and receive the completed recording.`;
   }
   if (remote) {
-    return 'Verify the remote daemon URL, auth token, and remote host logs.';
+    return resolveRemoteTimeoutHint({
+      command,
+      applePlatformDeclared,
+      remoteResponseStarted,
+      remoteHealthAnswered,
+    });
   }
   if (resetDaemon) {
     // The reset SIGKILLs the daemon pid only; child processes it owned (Apple runners included)
@@ -294,7 +399,7 @@ export function resolveRequestTimeoutHint(params: {
   }
   const iosPrepareHint =
     applePlatformDeclared && command === PUBLIC_COMMANDS.snapshot
-      ? ' If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.'
+      ? ` If this was the first Apple-platform snapshot on the device, ${PREPARE_RUNNER_STEP} before snapshot/test so runner startup is handled explicitly.`
       : '';
   // The daemon canceled the request when this client's connection was destroyed, and stayed
   // reachable (the probe answered, or the command's policy forbids the reset), so the session
@@ -302,6 +407,48 @@ export function resolveRequestTimeoutHint(params: {
   return `The timed-out ${
     command ?? 'request'
   } request was canceled; the daemon was kept alive so the session can still be closed or inspected. Read the request log for the timed-out step.${iosPrepareHint}`;
+}
+
+function resolveRemoteTimeoutHint(
+  params: Readonly<{
+    command: string | undefined;
+    applePlatformDeclared: boolean;
+    remoteResponseStarted?: boolean;
+    remoteHealthAnswered?: boolean;
+  }>,
+): string {
+  const { command, applePlatformDeclared, remoteResponseStarted, remoteHealthAnswered } = params;
+  if (remoteResponseStarted) {
+    return resolveReachableRemoteTimeoutHint(command, applePlatformDeclared, 'response-started');
+  }
+  if (remoteHealthAnswered) {
+    return resolveReachableRemoteTimeoutHint(command, applePlatformDeclared, 'health');
+  }
+  return 'Verify the remote daemon URL, auth token, and remote host logs.';
+}
+
+// The daemon cancels a request whose connection closed (directly and through agent-device-proxy,
+// #5058), so a timed-out `open` leaves nothing that a retry could race. The CLI prints the
+// observe-first step before this hint, since the open may have launched the app, so the retry is
+// stated as safe whatever that check shows. A first Apple open can spend the default envelope
+// building and starting the XCTest runner (#5004); `prepare` runs that startup under its own
+// longer envelope.
+function resolveReachableRemoteTimeoutHint(
+  command: string | undefined,
+  applePlatformDeclared: boolean,
+  proof: 'response-started' | 'health',
+): string {
+  const reachable =
+    proof === 'response-started'
+      ? 'The remote daemon already started answering this request, so its URL and auth token are not the cause.'
+      : 'The remote daemon still answers /health, so its URL and auth token are not the cause.';
+  if (command !== PUBLIC_COMMANDS.open) {
+    return `${reachable} Read the remote host logs for the timed-out ${command ?? 'request'} step.`;
+  }
+  const retry =
+    'The daemon canceled this open, so running it again is safe even if the app launched.';
+  if (!applePlatformDeclared) return `${reachable} ${retry}`;
+  return `${reachable} A first Apple open can outlast the request window while the host builds and starts the XCTest runner. ${retry} For a longer startup window, ${PREPARE_RUNNER_STEP} first.`;
 }
 
 function daemonWasForceKilled(retirement: DaemonRetirementResult | undefined): boolean {
