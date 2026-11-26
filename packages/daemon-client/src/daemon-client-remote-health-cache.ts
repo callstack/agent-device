@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openVerifiedFileForRead, publishFileSync } from '@agent-device/host-kit/file';
 import { readVersion } from '@agent-device/host-kit/version';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
 
@@ -28,8 +29,9 @@ let remoteHealthGeneration = 0;
  * The state-directory copy of the cache, so a CLI process does not pay a `/health` round trip that
  * an earlier process already made. Safe to reuse because every RPC sent from it carries the cached
  * instance preconditions: a replaced daemon or proxy upstream answers 409 before it dispatches, and
- * the client probes again. The file names its daemon by a digest of client version, base URL and
- * token, so it never holds the token or URL, and a client upgrade or token change reads as a miss.
+ * the client probes again. The file names its daemon by a digest of client version, RPC protocol
+ * version, base URL and token, so it never holds the token or URL, and a client upgrade, protocol
+ * change or token change reads as a miss.
  */
 const PERSISTED_HEALTH_FILE = 'remote-daemon-health.json';
 const PERSISTED_HEALTH_MAX_BYTES = 16 * 1024;
@@ -47,7 +49,15 @@ function isCacheableRemoteHealth(health: RemoteDaemonHealth): boolean {
 function persistedIdentity(info: DaemonInfo): string {
   return crypto
     .createHash('sha256')
-    .update(JSON.stringify([readVersion(), info.baseUrl ?? '', info.token, info.pid]))
+    .update(
+      JSON.stringify([
+        readVersion(),
+        DAEMON_RPC_PROTOCOL_VERSION,
+        info.baseUrl ?? '',
+        info.token,
+        info.pid,
+      ]),
+    )
     .digest('hex');
 }
 

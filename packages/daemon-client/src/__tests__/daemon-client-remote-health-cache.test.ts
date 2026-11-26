@@ -16,6 +16,16 @@ import {
 } from '../daemon-client-transport.ts';
 
 const clientVersion = vi.hoisted(() => ({ current: '1.0.0' }));
+const rpcProtocol = vi.hoisted(() => ({ current: 3 }));
+vi.mock('@agent-device/contracts/daemon-http', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/contracts/daemon-http')>();
+  return {
+    ...actual,
+    get DAEMON_RPC_PROTOCOL_VERSION() {
+      return rpcProtocol.current;
+    },
+  };
+});
 vi.mock('@agent-device/host-kit/version', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/version')>()),
   readVersion: () => clientVersion.current,
@@ -81,6 +91,9 @@ test('persisted health is private and reused only by the identity that cached it
   clientVersion.current = '9.9.9';
   assert.equal(reuse(info), undefined, 'a client upgrade probes again');
   clientVersion.current = '1.0.0';
+  rpcProtocol.current = 4;
+  assert.equal(reuse(info), undefined, 'another RPC protocol probes again');
+  rpcProtocol.current = 3;
 
   invalidateRemoteDaemonHealth({ ...info, token: 'other-token' }, stateDir);
   assert.equal(fs.existsSync(file), true, 'another identity leaves the entry alone');

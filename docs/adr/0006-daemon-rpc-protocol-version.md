@@ -10,7 +10,7 @@ Accepted
 - Package `version` is diagnostic only and must not be used as a compatibility gate.
 - Allow a missing `rpcProtocolVersion` unless a later security or protocol decision explicitly retires legacy compatibility.
 - A client may cache a successful probe if `/health` advertises an instance ID for the daemon endpoint and, for a proxy, for its upstream daemon.
-- The cache may outlive the client process in the state directory. Name the entry by a digest of the client version, base URL, and token. Do not write the token or the URL.
+- The cache may outlive the client process in the state directory. Name the entry by a digest of the client version, RPC protocol version, base URL, and token. Do not write the token or the URL.
 - Read a persisted entry only from a bounded regular file that the current user owns and that nobody else can write. Otherwise, probe `/health`.
 - If a cached RPC fails before its connection opens, probe `/health` as on first contact, within the command's remaining budget. Then send the RPC once more. Take this evidence only from the client's own transport, never from a reply.
 - Clear the cache on a remote HTTP 5xx. Do not resend the RPC.
@@ -47,8 +47,8 @@ A legacy remote daemon is allowed unless a later security or protocol decision e
 A client may cache a successful probe if `/health` advertises an instance ID for both the daemon endpoint and, if proxied, its upstream daemon.
 The CLI starts a new process for each command, so the cache also persists in the state directory.
 Without it, each remote command pays one extra network round trip for `/health`.
-The persisted entry is named by a digest of the client version, base URL, and token, and holds neither the token nor the URL.
-A different token, URL, or client version reads as a miss, so a client upgrade always probes again.
+The persisted entry is named by a digest of the client version, RPC protocol version, base URL, and token, and holds neither the token nor the URL.
+A different token, URL, client version, or RPC protocol version reads as a miss, so a client upgrade always probes again.
 The client sends those IDs as conditional headers on every cached RPC.
 Before dispatch, a daemon refuses a stale instance with a typed HTTP 409 response.
 Before it forwards a request, a proxy refuses its own stale instance.
