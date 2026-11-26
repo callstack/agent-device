@@ -68,6 +68,11 @@ export const DAEMON_CLIENT_CONFIG_REASONS = {
   // The client named both a pinned daemon instance and a daemon base URL, which answer "which
   // daemon" two different ways.
   bindingWithBaseUrl: { reason: 'daemon_binding_with_remote_base_url' },
+  // The daemon this client would start serves no HTTP endpoint, so the client starts nothing;
+  // `details.daemonServerMode` is the mode that cannot answer it.
+  serverModeServesNoHttpEndpoint: {
+    reason: 'daemon_server_mode_serves_no_http_endpoint',
+  },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {
@@ -129,6 +134,24 @@ export function daemonContendedError(): AppError {
     'Another process started a daemon while this one was starting.',
     {
       reason: DAEMON_UNAVAILABLE_REASONS.contended.reason,
+    },
+  );
+}
+
+/**
+ * The refusal when the daemon this client would start serves no HTTP endpoint, while the client asked
+ * to talk HTTP to it. Nothing is spawned: the caller fixes the mode instead of reading an unavailable
+ * endpoint for a daemon that was started and retired.
+ */
+export function daemonHttpTransportNeedsHttpServerModeError(): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'A daemon started in server mode "socket" serves no HTTP endpoint, and this client requires HTTP transport.',
+    {
+      reason: DAEMON_CLIENT_CONFIG_REASONS.serverModeServesNoHttpEndpoint.reason,
+      daemonTransport: 'http',
+      daemonServerMode: 'socket',
+      hint: 'Drop --daemon-server-mode or AGENT_DEVICE_DAEMON_SERVER_MODE to let the daemon start in "http" mode, name "http" or "dual" instead, or use --daemon-transport socket.',
     },
   );
 }

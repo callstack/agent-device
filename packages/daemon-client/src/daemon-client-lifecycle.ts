@@ -217,11 +217,23 @@ function resolveTransportClientSettings(
   const rawServerMode =
     flags?.daemonServerMode ??
     env.AGENT_DEVICE_DAEMON_SERVER_MODE ??
-    (rawTransport === 'dual' ? 'dual' : undefined);
-  return {
-    preference,
-    serverMode: resolveDaemonServerMode(rawServerMode),
-  };
+    defaultServerModeForRequestedTransport(rawTransport);
+  return { preference, serverMode: resolveDaemonServerMode(rawServerMode) };
+}
+
+/**
+ * The server mode that answers the transport a client named, used when that client named no server
+ * mode: the daemon a managed client starts has to serve the endpoint that client will call. `auto`
+ * and `socket` ask for nothing — the socket-only default answers both. A client that starts no
+ * daemon never reads this setting, so it decides nothing for one.
+ */
+function defaultServerModeForRequestedTransport(
+  rawTransport: string | undefined,
+): DaemonServerMode | undefined {
+  const normalized = (rawTransport ?? '').trim().toLowerCase();
+  if (normalized === 'dual') return 'dual';
+  if (normalized === 'http') return 'http';
+  return undefined;
 }
 
 function shouldUseOwnedReplayStateDir(

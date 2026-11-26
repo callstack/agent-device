@@ -46,6 +46,7 @@ import {
   DAEMON_LOOPBACK_DENIED_HINT,
   DAEMON_UNAVAILABLE_REASONS,
   daemonContendedError,
+  daemonHttpTransportNeedsHttpServerModeError,
   daemonIncompatibleError,
   daemonTakeoverRetirementError,
   daemonStopCommand,
@@ -347,6 +348,13 @@ type FailedDaemonStartup = {
 };
 
 export async function startLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+  // Checked before the first launch: a socket-mode daemon opens no HTTP listener and publishes no
+  // `httpPort`, so an http client that started one could never observe it as ready over the endpoint
+  // it needs, would retire it, and would report an unavailable endpoint on every later call. Naming a
+  // server mode that cannot answer the client's own transport is a configuration to fix, not a daemon
+  // to start and take away again.
+  if (settings.transportPreference === 'http' && settings.serverMode === 'socket')
+    throw daemonHttpTransportNeedsHttpServerModeError();
   const startupTimeoutMs = resolveDaemonStartupTimeoutMs(settings.host.env);
   const deadline = Date.now() + startupTimeoutMs;
   const cleanupResults: DaemonRetirementResult[] = [];
