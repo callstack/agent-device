@@ -47,6 +47,12 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 
 // The blocking-dialog readiness check runs for real (its focus probe is mocked
 // above); the recovery regression below swaps in a recovering implementation.
+// The guard polls the dialog focus between reads; these tests do not wait real time for it.
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
+  return { ...actual, sleep: vi.fn(async () => {}) };
+});
+
 vi.mock('../../android-system-dialog.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../android-system-dialog.ts')>();
   androidDialogReadiness.actual = actual.ensureAndroidBlockingSystemDialogReady;
