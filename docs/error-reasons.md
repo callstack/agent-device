@@ -374,6 +374,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `keep-awake-unreadable` | The device answered the keep-awake read-back with a value that is not a stay-on mask. |
 | `setting_app_not_package` | The named app resolves to an intent such as `settings`, not to an installed package. |
 | `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |
+| `ios-notification-permission-unsupported` | iOS simulator notification prompts must be answered with `alert accept` or `alert dismiss`. |
 
 ### `shake`
 
