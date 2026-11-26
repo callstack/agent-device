@@ -50,6 +50,12 @@ test('a static listing reads the optional price and minimum fields and keeps unk
   expect(await listCloudVendors(baseUrl, 'example-key')).toEqual([row]);
 });
 
+test('a price in micro-USD may be as wide as the widest --max-usd cap', async () => {
+  const row = { ...legacyRow, usdMicrosPerMinute: '9999999999999999999' };
+  stubVendors([row]);
+  expect(await listCloudVendors(baseUrl, 'example-key')).toEqual([row]);
+});
+
 test.each([
   ['a non-array body', { vendors: [] }],
   ['a row without a vendor', [{ ...legacyRow, vendor: '' }]],

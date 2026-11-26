@@ -45,13 +45,13 @@ export type CreatedCloudSession = {
 
 const SESSIONS_PATH = '/v1/sessions';
 const BOUNDED_SESSIONS_PATH = '/v1/sessions/bounded';
-const MICROS_PER_USD = 1_000_000n;
 const MAX_USD_WHOLE_DIGITS = 13;
 const USD_FRACTION_DIGITS = 6;
+const MICROS_PER_USD = 10n ** BigInt(USD_FRACTION_DIGITS);
 const MAX_USD_PATTERN = new RegExp(
   `^(0|[1-9]\\d{0,${MAX_USD_WHOLE_DIGITS - 1}})(?:\\.(\\d{1,${USD_FRACTION_DIGITS}}))?$`,
 );
-// The cloud refusals may echo any amount as wide as the widest --max-usd cap.
+// Cloud responses may carry any amount as wide as the widest --max-usd cap.
 const MICRO_USD_PATTERN = new RegExp(`^\\d{1,${MAX_USD_WHOLE_DIGITS + USD_FRACTION_DIGITS}}$`);
 const TOP_UP_URL_PATTERN = /^[!-~]{1,2048}$/;
 const LIMIT_HINT = 'Raise the limit in the dashboard or wait for the next month.';
@@ -103,7 +103,7 @@ export function parseMaxUsdMicros(value: string): string {
   if (micros <= 0n) {
     throw new AppError(
       'INVALID_ARGS',
-      '--max-usd requires a positive amount in USD, such as 0.50, with at most 6 decimal places.',
+      `--max-usd requires a positive amount in USD, such as 0.50, with at most ${USD_FRACTION_DIGITS} decimal places.`,
       { reason: CLOUD_SESSION_API_REASONS.budgetFormat.reason },
     );
   }
@@ -457,7 +457,7 @@ function insufficientBalance(body: Record<string, unknown> | undefined, origin: 
   );
 }
 
-function readMicroUsd(value: unknown, { signed = false } = {}): string | undefined {
+export function readMicroUsd(value: unknown, { signed = false } = {}): string | undefined {
   if (typeof value !== 'string') return undefined;
   const magnitude = signed ? value.replace(/^-/, '') : value;
   return MICRO_USD_PATTERN.test(magnitude) ? value : undefined;
@@ -481,7 +481,10 @@ function formatUsdMicros(micros: string): string {
   const negative = micros.startsWith('-');
   const digits = BigInt(negative ? micros.slice(1) : micros);
   const whole = digits / MICROS_PER_USD;
-  const fraction = (digits % MICROS_PER_USD).toString().padStart(6, '0').replace(/0+$/, '');
+  const fraction = (digits % MICROS_PER_USD)
+    .toString()
+    .padStart(USD_FRACTION_DIGITS, '0')
+    .replace(/0+$/, '');
   return `${negative ? '-' : ''}$${whole}.${fraction.padEnd(2, '0')}`;
 }
 
