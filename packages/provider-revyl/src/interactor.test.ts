@@ -16,6 +16,7 @@ import {
 } from './revyl-backend.fixtures.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import { REVYL_IOS_HIERARCHY } from './revyl-ios-hierarchy.fixtures.ts';
 
 const ANDROID_HIERARCHY =
@@ -381,6 +382,7 @@ test('a fling is one drag of its path over its duration on a worker that times d
   const { fixture, interactor } = await liveInteractor('android', { dragDuration: true });
   const report = await interactor.performGesture?.(FLING_LEFT);
 
+  assert.equal(fixture.paths().filter((request) => request.endsWith('/drag')).length, 1);
   assert.deepEqual(fixture.bodyFor('drag'), {
     start_x: 300,
     start_y: 401,
@@ -400,6 +402,27 @@ test('a fling is refused rather than run at the speed a worker that cannot time 
       error instanceof AppError &&
       error.code === 'UNSUPPORTED_OPERATION' &&
       error.details?.reason === 'unsupported-provider-mode',
+  );
+  assert.equal(
+    fixture.paths().some((request) => request.endsWith('/drag')),
+    false,
+  );
+});
+
+test('a Split View swipe is refused before any drag, since a straight drag cannot reach Split View', async () => {
+  const { fixture, interactor } = await liveInteractor('ios', { dragDuration: true });
+  const plan = buildGesturePlan(
+    { intent: 'fling', preset: 'split-view-left' },
+    { x: 0, y: 0, width: 390, height: 844 },
+    'ios',
+  );
+
+  await assert.rejects(
+    () => interactor.performGesture!(plan),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.reason === 'split_view_unavailable',
   );
   assert.equal(
     fixture.paths().some((request) => request.endsWith('/drag')),

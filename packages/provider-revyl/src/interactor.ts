@@ -6,6 +6,8 @@ import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { ScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
 import {
   buildScrollGesturePlan,
+  isSplitViewContactOrigin,
+  splitViewUnavailableError,
   type ScrollDirection,
 } from '@agent-device/contracts/scroll-gesture';
 import type {
@@ -335,12 +337,26 @@ class RevylInteractor implements Interactor {
    * `duration_ms`: a worker whose `health` does not report `supports_explicit_drag_duration` picks
    * its own speed, and the gesture is refused there rather than run as a slow swipe that reports a
    * fling. The planner has already held every sample inside the viewport.
+   *
+   * A straight drag keeps only the two endpoints, so a plan whose path has a corner or a held
+   * stretch between them is refused rather than flattened. Split View presets are such paths and
+   * also need a system edge contact, so they refuse with the Split View reason.
    */
   async performGesture(plan: GesturePlan): Promise<Record<string, unknown>> {
     if (plan.topology !== 'single') {
       throw unsupported(
         'gesture',
         'Revyl performs a one-finger fling or pan as one timed drag; it has no multi-touch action.',
+      );
+    }
+    if (isSplitViewContactOrigin(plan.contactOrigin)) {
+      throw splitViewUnavailableError('Revyl does not support Split View');
+    }
+    const samples = plan.pointers[0].samples;
+    if (samples.length > 2) {
+      throw unsupported(
+        'gesture',
+        'Revyl performs a gesture as one straight timed drag; it cannot follow a path with intermediate points.',
       );
     }
     if (!this.session.dragDuration) {
@@ -356,7 +372,6 @@ class RevylInteractor implements Interactor {
         },
       );
     }
-    const samples = plan.pointers[0].samples;
     const start = samples[0].point;
     const end = samples.at(-1)!.point;
     const drag = {

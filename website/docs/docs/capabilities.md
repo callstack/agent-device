@@ -114,7 +114,7 @@ What a **Yes** does not claim:
 | [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes | One-finger only, on a worker that reports drag duration | One-finger only, on a worker that reports drag duration |
 | [Hover and viewport size](/docs/commands#web-automation) | No | No | No | No | No | No | No | No |
 | [Read, accept, and dismiss system alerts](/docs/commands#wait-and-alerts) | No | No | No | No | Yes | Yes | No | No |
 | [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Yes | Dismiss only; status and enter unsupported | Yes | Dismiss only; status and enter unsupported | Yes | Yes | No | No |
