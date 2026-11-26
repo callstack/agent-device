@@ -5,7 +5,8 @@ import {
 } from '@agent-device/kernel/errors';
 import http, { type IncomingMessage } from 'node:http';
 import { type Socket } from 'node:net';
-import { Deadline } from './host.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { Deadline, resolveIosPhysicalDeviceControl } from './host.ts';
 import {
   type RunnerCommand,
   runnerRequestHeaders,
@@ -18,7 +19,7 @@ const RUNNER_HTTP_MAX_BODY_BYTES = 64 * 1024 * 1024;
 
 export type UsbmuxRunnerTransport = {
   postCommand(
-    deviceId: string,
+    device: DeviceInfo,
     endpoint: RunnerEndpoint,
     command: RunnerCommand,
     timeoutMs: number,
@@ -28,11 +29,16 @@ export type UsbmuxRunnerTransport = {
 
 export function createUsbmuxRunnerTransport(socketPath: string): UsbmuxRunnerTransport {
   return {
-    postCommand: async (deviceId, endpoint, command, timeoutMs, signal) => {
+    postCommand: async (device, endpoint, command, timeoutMs, signal) => {
       const deadline = Deadline.fromTimeoutMs(timeoutMs);
       const socket = await openUsbmuxRunnerSocket(
         socketPath,
-        deviceId,
+        {
+          udid: device.id,
+          // Only a device with no CoreDevice tunnel depends on a Wi-Fi sync entry; a CoreDevice
+          // phone's tunnel is the route that actually serves the command (#4107).
+          acceptsNetworkEntry: resolveIosPhysicalDeviceControl(device).backend === 'xctest',
+        },
         endpoint.port,
         deadline.remainingMs(),
         signal,

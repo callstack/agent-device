@@ -396,6 +396,7 @@ iOS physical-device prerequisites:
   Modern devices visible to devicectl use CoreDevice. Older devices visible only to xctrace use the XCTest backend automatically.
   XCTest-backed devices must already have the target app installed and should be opened by bundle ID; app inventory, install/reinstall, logs, performance sampling, recording, deep links, and launch arguments require CoreDevice.
   XCTest-backed runner commands travel through macOS usbmuxd; keep the trusted device connected by cable.
+  CoreDevice-backed runner commands use the usbmux cable entry when the device is attached by cable, and its CoreDevice tunnel otherwise. A device listed in usbmuxd only through its Wi-Fi sync entry (Finder's "Show this iPhone when on Wi-Fi") is driven over that tunnel, because the runner refuses a Wi-Fi sync connection.
   The AgentDeviceRunner XCTest host must be signed before commands can run on a physical device.
   Start with Automatic Signing and only these env vars:
     AGENT_DEVICE_IOS_TEAM_ID=ABCDE12345

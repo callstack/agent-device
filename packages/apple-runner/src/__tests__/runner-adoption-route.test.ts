@@ -154,7 +154,7 @@ test('the adoption probe dials usbmux for a cabled CoreDevice device, never loop
   expect(session).not.toBeNull();
   expect(
     mockUsbmuxPostCommand.mock.calls.map(
-      ([deviceId, endpoint]) => `${deviceId}:${endpoint.port}:${endpoint.token}`,
+      ([device, endpoint]) => `${device.id}:${endpoint.port}:${endpoint.token}`,
     ),
   ).toEqual([`${cabledDevice.id}:${RUNNER_PORT}:runner-token-fixture`]);
   expect(fetchUrls).toEqual([]);

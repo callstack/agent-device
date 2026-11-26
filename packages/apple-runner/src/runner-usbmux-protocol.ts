@@ -18,19 +18,39 @@ const USBMUX_RESULT_CONNECTION_REFUSED = 3;
 
 const USBMUX_DEVICE_UNATTACHED_HINT =
   'Connect the device by cable, trust this Mac, keep it unlocked, and retry.';
+/**
+ * Published with the unattached verdict when the device was listed, but only over its Wi-Fi sync
+ * entry. It names the toggle that created the entry, because that is the lever a reader has.
+ */
+const USBMUX_NETWORK_ENTRY_ONLY_HINT =
+  'This device is listed in usbmuxd only through its Wi-Fi sync entry ("Show this iPhone when on Wi-Fi"), which does not serve runner commands. The command uses the CoreDevice tunnel instead; leave the tunnel reachable, or connect the device by cable.';
+
+/**
+ * The one usbmux entry a command may use for one device.
+ *
+ * A Wi-Fi sync ("Network") entry dials the phone over its link-local Wi-Fi address, where the
+ * runner's listener refuses the incoming connection (#4107). It is therefore a route only for a
+ * device that owns nothing else: a CoreDevice-backed device reaches the same runner over its
+ * CoreDevice tunnel, and a cabled phone is reached through its USB entry.
+ */
+export type UsbmuxDeviceRoute = Readonly<{
+  udid: string;
+  /** True when the device has no CoreDevice tunnel, so a Wi-Fi sync entry is its only usbmux route. */
+  acceptsNetworkEntry: boolean;
+}>;
 
 export async function openUsbmuxRunnerSocket(
   socketPath: string,
-  udid: string,
+  route: UsbmuxDeviceRoute,
   port: number,
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<Socket> {
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
-  const deviceId = await resolveUsbmuxDeviceId(socketPath, udid, deadline.remainingMs(), signal);
+  const deviceId = await resolveUsbmuxDeviceId(socketPath, route, deadline.remainingMs(), signal);
   return await openUsbmuxDeviceSocket(
     socketPath,
-    udid,
+    route.udid,
     deviceId,
     port,
     deadline.remainingMs(),
@@ -40,7 +60,7 @@ export async function openUsbmuxRunnerSocket(
 
 async function resolveUsbmuxDeviceId(
   socketPath: string,
-  udid: string,
+  route: UsbmuxDeviceRoute,
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<number> {
@@ -48,20 +68,34 @@ async function resolveUsbmuxDeviceId(
   try {
     await writePlistPacket(socket, 1, buildPlistMessage('ListDevices'));
     const packet = await readUsbmuxPacket(socket, timeoutMs, signal);
-    const deviceId = readDeviceIdFromList(packet.payload.toString('utf8'), udid);
-    if (deviceId !== undefined) return deviceId;
-    throw new AppError('DEVICE_NOT_FOUND', 'iOS device is not available through usbmux', {
-      deviceId: udid,
-      backend: 'xctest',
-      // Discriminator for the usbmux-first route: usbmuxd answered and the
-      // device is simply not attached by cable, so a CoreDevice-backed device
-      // can fall back to its network tunnel instead of retrying this transport.
-      usbmuxDeviceAttached: false,
-      hint: USBMUX_DEVICE_UNATTACHED_HINT,
-    });
+    const selection = selectUsbmuxDevice(
+      packet.payload.toString('utf8'),
+      route.udid,
+      route.acceptsNetworkEntry,
+    );
+    if (selection.deviceId !== undefined) return selection.deviceId;
+    throw buildUsbmuxNoRouteError(route.udid, selection.networkEntryOnly);
   } finally {
     socket.destroy();
   }
+}
+
+/**
+ * The verdict for a device usbmuxd listed but cannot carry: no entry at all, or only the Wi-Fi sync
+ * entry this device must not use. Both are the same typed verdict — usbmux is not this command's
+ * route — so the caller's existing CoreDevice-tunnel fallback runs instead of retrying usbmux.
+ */
+function buildUsbmuxNoRouteError(udid: string, networkEntryOnly: boolean): AppError {
+  return new AppError('DEVICE_NOT_FOUND', 'iOS device is not available through usbmux', {
+    deviceId: udid,
+    backend: 'xctest',
+    // Discriminator for the usbmux-first route: usbmuxd answered and the
+    // device is simply not attached by cable, so a CoreDevice-backed device
+    // can fall back to its network tunnel instead of retrying this transport.
+    usbmuxDeviceAttached: false,
+    ...(networkEntryOnly ? { usbmuxNetworkEntryOnly: true } : {}),
+    hint: networkEntryOnly ? USBMUX_NETWORK_ENTRY_ONLY_HINT : USBMUX_DEVICE_UNATTACHED_HINT,
+  });
 }
 
 async function openUsbmuxDeviceSocket(
@@ -228,8 +262,20 @@ function buildPlistMessage(
   return `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>${body}</dict></plist>`;
 }
 
-function readDeviceIdFromList(xml: string, udid: string): number | undefined {
+const USBMUX_CONNECTION_TYPE_NETWORK = 'Network';
+
+/**
+ * Picks the entry to dial among the list's entries for `udid`: the USB entry when there is one,
+ * otherwise the first usable non-USB entry. A Network entry is usable only for a device that owns no
+ * CoreDevice tunnel, and a rejected one is reported so the refusal can name it.
+ */
+function selectUsbmuxDevice(
+  xml: string,
+  udid: string,
+  acceptsNetworkEntry: boolean,
+): { deviceId: number | undefined; networkEntryOnly: boolean } {
   let fallback: number | undefined;
+  let sawRejectedNetworkEntry = false;
   for (const node of walkXmlNodes(parseXmlDocumentSync(xml))) {
     const device = readListedDevice(node);
     if (device?.udid !== udid) continue;
@@ -237,10 +283,17 @@ function readDeviceIdFromList(xml: string, udid: string): number | undefined {
       readDictEntry(node, 'Properties')!,
       'ConnectionType',
     )?.text;
-    if (connectionType === 'USB') return device.id;
+    if (connectionType === 'USB') return { deviceId: device.id, networkEntryOnly: false };
+    if (connectionType === USBMUX_CONNECTION_TYPE_NETWORK && !acceptsNetworkEntry) {
+      sawRejectedNetworkEntry = true;
+      continue;
+    }
     fallback ??= device.id;
   }
-  return fallback;
+  return {
+    deviceId: fallback,
+    networkEntryOnly: fallback === undefined && sawRejectedNetworkEntry,
+  };
 }
 
 function readListedDevice(node: XmlNode): { udid: string; id: number } | undefined {

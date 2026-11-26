@@ -95,7 +95,7 @@ export async function postRunnerCommandOverRoute(
     );
   }
   if (route.kind === 'usbmux') {
-    return await usbmuxRunnerTransport.postCommand(device.id, endpoint, command, timeoutMs, signal);
+    return await usbmuxRunnerTransport.postCommand(device, endpoint, command, timeoutMs, signal);
   }
   if (!route.url) {
     throw discloseDispatch(

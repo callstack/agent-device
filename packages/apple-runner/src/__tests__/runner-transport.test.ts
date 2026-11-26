@@ -169,7 +169,7 @@ test('sendRunnerCommandOnce routes xctest physical devices through usbmux', asyn
   assert.equal(response.status, 200);
   assert.equal(fetchMock.mock.calls.length, 0);
   assert.deepEqual(mockUsbmuxPostCommand.mock.calls[0]?.slice(0, 3), [
-    xctestIosDevice.id,
+    xctestIosDevice,
     RUNNER_ENDPOINT_FIXTURE,
     { command: 'uptime' },
   ]);
@@ -191,7 +191,7 @@ test('sendRunnerCommandOnce routes coredevice physical devices through usbmux fi
   // The devicectl tunnel probe is the cost usbmux-first exists to avoid.
   assert.equal(mockRunCmd.mock.calls.length, 0);
   assert.deepEqual(mockUsbmuxPostCommand.mock.calls[0]?.slice(0, 3), [
-    iosDevice.id,
+    iosDevice,
     RUNNER_ENDPOINT_FIXTURE,
     { command: 'uptime' },
   ]);

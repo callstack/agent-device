@@ -34,10 +34,14 @@ const deviceTunnelIpCache = new Map<string, DeviceTunnelIpCacheEntry>();
  * usable across idle gaps, where the CoreDevice tunnel route re-probes
  * `devicectl` — seconds per command once its short-lived cache expires.
  *
- * A CoreDevice-backed device that usbmuxd does not list is Wi-Fi-only (modern
- * CoreDevice Wi-Fi runs over `remoted`, which usbmuxd never sees), so it falls
- * back to the tunnel route. The tunnel lookup and its cache therefore only run
- * for devices that genuinely need them, and cabled devices never pay for them.
+ * A CoreDevice-backed device that usbmuxd cannot carry falls back to the tunnel
+ * route. Two host states put the phone in that position: modern CoreDevice Wi-Fi
+ * runs over `remoted`, which usbmuxd never sees, and Finder's "Show this iPhone
+ * when on Wi-Fi" lists a Network entry whose connections the runner's listener
+ * refuses (#4107). The usbmux transport rejects that entry for a CoreDevice
+ * device and reports it unattached, so both states reach the same fallback here.
+ * The tunnel lookup and its cache therefore only run for devices that genuinely
+ * need them, and cabled devices never pay for them.
  */
 export function createRunnerCommandRouteResolver(
   device: DeviceInfo,

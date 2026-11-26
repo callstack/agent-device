@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import type { Server } from 'node:net';
 import { afterEach, test } from 'vitest';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createUsbmuxRunnerTransport } from '../runner-usbmux.ts';
+import { IOS_DEVICE } from './device-fixtures.ts';
 import {
   buildPacket,
   cleanupUsbmuxFixtures,
@@ -15,6 +17,18 @@ import {
 } from './runner-usbmux-fixtures.ts';
 
 const DEVICE_UDID = '00008020-001C2D2234567890';
+/** A CoreDevice-paired phone: it has a CoreDevice tunnel to fall back to. */
+const coreDevicePhone: DeviceInfo = {
+  ...IOS_DEVICE,
+  id: DEVICE_UDID,
+  iosPhysicalDeviceBackend: 'coredevice',
+};
+/** An XCTest-backed phone: usbmux is its only route, so a Wi-Fi sync entry is used. */
+const xctestPhone: DeviceInfo = {
+  ...IOS_DEVICE,
+  id: DEVICE_UDID,
+  iosPhysicalDeviceBackend: 'xctest',
+};
 const USBMUX_DEVICE_ID = 42;
 const RUNNER_PORT = 51_234;
 const RUNNER_ENDPOINT = { port: RUNNER_PORT, token: 'runner-token-fixture' };
@@ -85,7 +99,7 @@ test('xctest runner commands use usbmux device lookup and port transport', async
   );
 
   const response = await createUsbmuxRunnerTransport(socketPath).postCommand(
-    DEVICE_UDID,
+    xctestPhone,
     RUNNER_ENDPOINT,
     { command: 'uptime', commandId: 'runner-usbmux-test' },
     2_000,
@@ -140,9 +154,12 @@ async function serveUsbmuxDevices(
   return { connectedDeviceId: () => connectedDeviceId };
 }
 
-async function postThroughFakeUsbmux(socketPath: string, udid: string): Promise<unknown> {
+async function postThroughFakeUsbmux(
+  socketPath: string,
+  device: DeviceInfo = xctestPhone,
+): Promise<unknown> {
   return await createUsbmuxRunnerTransport(socketPath)
-    .postCommand(udid, RUNNER_ENDPOINT, { command: 'uptime' }, 5_000)
+    .postCommand(device, RUNNER_ENDPOINT, { command: 'uptime' }, 5_000)
     .catch((error: unknown) => error);
 }
 
@@ -160,7 +177,7 @@ test('selects the requested device by UDID regardless of its position in the lis
   ]) {
     const socketPath = await createSocketPath(socketDirectories);
     const server = await serveUsbmuxDevices(socketPath, devices);
-    await postThroughFakeUsbmux(socketPath, DEVICE_UDID);
+    await postThroughFakeUsbmux(socketPath);
     assert.equal(server.connectedDeviceId(), 77);
   }
 });
@@ -172,15 +189,22 @@ test('never matches a different device whose UDID merely shares a prefix', async
     { deviceId: 6, udid: DEVICE_UDID.slice(0, -1) },
   ]);
 
-  const error = await postThroughFakeUsbmux(socketPath, DEVICE_UDID);
+  const error = await postThroughFakeUsbmux(socketPath);
 
   assert.equal((error as AppError).code, 'DEVICE_NOT_FOUND');
   assert.equal(server.connectedDeviceId(), undefined);
 });
 
+/**
+ * A Wi-Fi sync ("Network") entry reaches the phone over `fe80::%en0`, where the runner's listener
+ * refuses the connection, so it is usable only as a last resort: for a cabled phone the USB entry
+ * wins (#1403), and for a CoreDevice phone the CoreDevice tunnel wins instead (#4107). A phone with
+ * no CoreDevice backend has no tunnel, so its Network entry stays the route.
+ */
 test.each([
   {
     name: 'prefers USB when Network is listed first',
+    device: coreDevicePhone,
     devices: [
       { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
       { deviceId: 551, udid: DEVICE_UDID, connectionType: 'USB' },
@@ -189,6 +213,7 @@ test.each([
   },
   {
     name: 'prefers USB when USB is listed first',
+    device: coreDevicePhone,
     devices: [
       { deviceId: 551, udid: DEVICE_UDID, connectionType: 'USB' },
       { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
@@ -196,7 +221,8 @@ test.each([
     expectedDeviceId: 551,
   },
   {
-    name: 'uses the first Network match when USB is absent',
+    name: 'uses the first Network match when USB is absent and no tunnel exists',
+    device: xctestPhone,
     devices: [
       { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
       { deviceId: 553, udid: DEVICE_UDID, connectionType: 'Network' },
@@ -205,6 +231,7 @@ test.each([
   },
   {
     name: 'ignores USB entries for a different UDID',
+    device: xctestPhone,
     devices: [
       { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
       { deviceId: 551, udid: `${DEVICE_UDID}0`, connectionType: 'USB' },
@@ -213,20 +240,63 @@ test.each([
   },
   {
     name: 'ignores USB entries with an invalid device ID',
+    device: xctestPhone,
     devices: [
       { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
       { deviceId: 0, udid: DEVICE_UDID, connectionType: 'USB' },
     ],
     expectedDeviceId: 552,
   },
-])('$name', async ({ devices, expectedDeviceId }) => {
+])('$name', async ({ device, devices, expectedDeviceId }) => {
   const socketPath = await createSocketPath(socketDirectories);
   const server = await serveUsbmuxDevices(socketPath, devices, 3);
 
-  const error = await postThroughFakeUsbmux(socketPath, DEVICE_UDID);
+  const error = await postThroughFakeUsbmux(socketPath, device);
 
   assert.equal((error as AppError).code, 'COMMAND_FAILED');
   assert.equal(server.connectedDeviceId(), expectedDeviceId);
+});
+
+// One Network entry and no cable: Finder's "Show this iPhone when on Wi-Fi" is what puts that entry
+// in the list at all, and it is the state the reporter's taps failed in (#4107). The fake daemon
+// would refuse the runner port (result 3), so a dialed entry reports "the runner is not listening"
+// and a refused one reports the route refusal — the two outcomes cannot be confused.
+async function serveWifiSyncOnlyDevice(): Promise<{
+  socketPath: string;
+  connectedDeviceId: () => number | undefined;
+}> {
+  const socketPath = await createSocketPath(socketDirectories);
+  const server = await serveUsbmuxDevices(
+    socketPath,
+    [{ deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' }],
+    3,
+  );
+  return { socketPath, connectedDeviceId: server.connectedDeviceId };
+}
+
+test('a CoreDevice phone with only a Wi-Fi sync entry is reported unattached so its tunnel route runs', async () => {
+  const { socketPath, connectedDeviceId } = await serveWifiSyncOnlyDevice();
+
+  const appError = (await postThroughFakeUsbmux(socketPath, coreDevicePhone)) as AppError;
+
+  // The verdict is the one the route already falls back on: usbmux is not this command's route, so
+  // the command goes to the CoreDevice tunnel instead of failing on a Wi-Fi sync connection the
+  // runner's listener refuses.
+  assert.equal(appError.code, 'DEVICE_NOT_FOUND');
+  assert.equal(appError.details?.usbmuxDeviceAttached, false);
+  assert.equal(appError.details?.usbmuxNetworkEntryOnly, true);
+  assert.match(String(appError.details?.hint), /Wi-Fi sync/);
+  assert.equal(connectedDeviceId(), undefined);
+});
+
+test('a phone with no CoreDevice backend still dials its Wi-Fi sync entry, because usbmux is its only route', async () => {
+  const { socketPath, connectedDeviceId } = await serveWifiSyncOnlyDevice();
+
+  const appError = (await postThroughFakeUsbmux(socketPath, xctestPhone)) as AppError;
+
+  assert.equal(appError.code, 'COMMAND_FAILED');
+  assert.equal(appError.details?.usbmuxDeviceAttached, undefined);
+  assert.equal(connectedDeviceId(), 552);
 });
 
 test('treats a device usbmuxd no longer knows as unattached so a tunnel fallback can run', async () => {
@@ -234,7 +304,7 @@ test('treats a device usbmuxd no longer knows as unattached so a tunnel fallback
   // Result 2 is what the real daemon answers for an unknown DeviceID.
   await serveUsbmuxDevices(socketPath, [{ deviceId: 42, udid: DEVICE_UDID }], 2);
 
-  const error = await postThroughFakeUsbmux(socketPath, DEVICE_UDID);
+  const error = await postThroughFakeUsbmux(socketPath, xctestPhone);
 
   const appError = error as AppError;
   assert.equal(appError.code, 'DEVICE_NOT_FOUND');
@@ -247,7 +317,7 @@ test('reports a refused runner port as the runner not listening, not a cable pro
   // Result 3 is what the real daemon answers for a closed port on a live device.
   await serveUsbmuxDevices(socketPath, [{ deviceId: 42, udid: DEVICE_UDID }], 3);
 
-  const error = await postThroughFakeUsbmux(socketPath, DEVICE_UDID);
+  const error = await postThroughFakeUsbmux(socketPath, coreDevicePhone);
 
   const appError = error as AppError;
   assert.equal(appError.code, 'COMMAND_FAILED');
