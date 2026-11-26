@@ -27,7 +27,10 @@ import {
 import { ensureDaemon, sendToDaemon } from '../index.ts';
 import { startLocalDaemon } from '../daemon-client-startup.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
-import { finishRegisteredDaemonFixtures } from './registered-daemon-fixture.ts';
+import {
+  finishRegisteredDaemonFixtures,
+  planRegisteredDaemonLaunches,
+} from './registered-daemon-fixture.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
@@ -136,6 +139,27 @@ test('a client with a daemon base URL asks for no server mode: it starts no daem
   );
   assert.equal(settings.remoteBaseUrl, 'http://127.0.0.1:9');
   assert.equal(settings.serverMode, 'socket');
+});
+
+test('a pair this client CAN use reaches the monitored-launch mock the refusals count', async () => {
+  // The refusal tests below assert the mock saw no call. That means something only because a pair
+  // that works does reach this same mock: were the mock's specifier to stop matching the one the
+  // launcher imports, a real daemon would start while the counter stayed at zero.
+  const stateDir = mkdtempForTestSync('agent-device-server-mode-spawn-control-');
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      { kind: 'exit', exit: { pid: 996_411, exitCode: 1 } },
+      { kind: 'exit', exit: { pid: 996_412, exitCode: 1 } },
+    ]),
+  );
+  const settings = settingsFor({ daemonTransport: 'http', stateDir });
+  const failure = await startLocalDaemon(settings).then(
+    () => assert.fail('expected the launch to fail'),
+    (error: unknown) => error,
+  );
+  assert.ok(failure instanceof AppError, String(failure));
+  assert.notEqual(failure.details?.reason, REFUSAL, 'a usable pair was refused');
+  assert.ok(spawn.mock.calls.length > 0, 'a launch never reached the monitored-launch mock');
 });
 
 test.for([
