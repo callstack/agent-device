@@ -167,7 +167,7 @@ export function providerRouteForConnection(options: {
     : 'drives-connection';
 }
 
-export function unavailableConnectPluginError(
+function unavailableConnectPluginError(
   provider: string,
   env: NodeJS.ProcessEnv,
 ): AppError | undefined {

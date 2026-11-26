@@ -113,8 +113,13 @@ async function usesCloudSessionAuth(
 ): Promise<boolean> {
   if (command === 'disconnect') return hasNamedCloudConnection(location);
   if (command !== 'connect') return false;
-  const { readConnectProvider } = await import('./provider-policy.ts');
-  const provider = await readConnectProvider(positionals, host.env);
   const { selectCloudSessionPath } = await import('./connect-provider-adapters.ts');
-  return selectCloudSessionPath(provider, flags);
+  try {
+    return selectCloudSessionPath(positionals[0], flags);
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== 'INVALID_ARGS') throw error;
+    const { readConnectProvider } = await import('./provider-policy.ts');
+    await readConnectProvider(positionals, host.env);
+    throw error;
+  }
 }
