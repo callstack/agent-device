@@ -149,8 +149,9 @@ export function daemonServerModeServesNoClientTransportError(
   settings: Pick<DaemonClientSettings, 'serverMode' | 'transportPreference'>,
 ): AppError {
   const { serverMode, transportPreference } = settings;
-  const listener = transportPreference === 'http' ? 'HTTP' : 'socket';
-  const serving = transportPreference === 'http' ? 'http' : 'socket';
+  const wantsHttp = transportPreference === 'http';
+  const listener = wantsHttp ? 'HTTP' : 'socket';
+  const serving = wantsHttp ? 'http' : 'socket';
   return new AppError(
     'INVALID_ARGS',
     `A daemon started in server mode "${serverMode}" serves no ${listener} endpoint, and this client requires ${transportPreference} transport.`,
@@ -161,8 +162,9 @@ export function daemonServerModeServesNoClientTransportError(
       hint:
         'Clear the server mode in every place it is set: `--daemon-server-mode` and ' +
         '`AGENT_DEVICE_DAEMON_SERVER_MODE` each override the default, so one left behind still ' +
-        `starts this daemon. Or name the mode that serves a ${listener} endpoint ("${serving}" or ` +
-        '"dual"), or the transport this mode does serve with `--daemon-transport`.',
+        `starts this daemon. Or name the mode that answers ${transportPreference} transport ` +
+        `("${serving}" or "dual"), or the transport that mode does answer with ` +
+        '`--daemon-transport`.',
     },
   );
 }
