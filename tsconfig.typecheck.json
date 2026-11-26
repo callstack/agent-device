@@ -33,6 +33,7 @@
     { "path": "packages/plugins" },
     { "path": "packages/provider-limrun" },
     { "path": "packages/provider-revyl" },
+    { "path": "packages/provider-saucelabs" },
     { "path": "packages/provider-testmu" },
     { "path": "packages/provider-webos" },
     { "path": "packages/provider-tizen" },

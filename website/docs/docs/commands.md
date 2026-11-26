@@ -446,7 +446,7 @@ Remote daemons and tenants:
 - `--tenant`, `--session-isolation tenant`, `--run-id`, and `--lease-id` enforce lease admission on tenant-scoped daemons.
 - `--daemon-base-url http(s)://host:port[/base-path]` calls a remote HTTP daemon instead of a local one. Add `--daemon-auth-token <token>` (or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`) for a non-loopback URL.
 - Remote screenshots download to the path you pass. When a remote `record stop` names no destination, the client saves the file in your working directory and warns.
-- To drive a Mac's simulators from another machine, see [Remote proxy](#remote-proxy). For hosted devices in CI, see [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), or [TestMu AI](/docs/testmu). For `connect --remote-config`, see [Remote Metro workflow](#remote-metro-workflow).
+- To drive a Mac's simulators from another machine, see [Remote proxy](#remote-proxy). For hosted devices in CI, see [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [Sauce Labs](/docs/saucelabs), or [TestMu AI](/docs/testmu). For `connect --remote-config`, see [Remote Metro workflow](#remote-metro-workflow).
 
 ## Human Takeover
 

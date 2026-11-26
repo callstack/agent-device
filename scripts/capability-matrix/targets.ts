@@ -27,7 +27,7 @@ export type CloudWebDriverTarget = Readonly<{
   /** Shorter name used when this column merges with the provider's other platform. */
   mergeLabel: string;
   /** Provider plugin to load: bundled registration, or the plugin package's `setup()`. */
-  plugin: 'browserstack' | 'aws-device-farm' | 'testmu';
+  plugin: 'browserstack' | 'aws-device-farm' | 'saucelabs' | 'testmu';
   flags: Readonly<Record<string, unknown>>;
 }>;
 
@@ -338,6 +338,38 @@ export const TARGETS: readonly Target[] = [
       device: 'iPhone 15',
       providerOsVersion: '17.0',
       providerApp: 'lt://pre-uploaded',
+    },
+  },
+  {
+    kind: 'cloud-webdriver',
+    id: 'saucelabs-android',
+    label: 'Sauce Labs Android',
+    group: 'provider',
+    provider: 'saucelabs',
+    platform: 'android',
+    mergeLabel: 'Sauce Labs',
+    plugin: 'saucelabs',
+    flags: {
+      platform: 'android',
+      device: 'Google Pixel 8',
+      providerOsVersion: '14',
+      providerApp: 'storage:00000000-0000-0000-0000-000000000000',
+    },
+  },
+  {
+    kind: 'cloud-webdriver',
+    id: 'saucelabs-ios',
+    label: 'Sauce Labs iOS',
+    group: 'provider',
+    provider: 'saucelabs',
+    platform: 'ios',
+    mergeLabel: 'Sauce Labs',
+    plugin: 'saucelabs',
+    flags: {
+      platform: 'ios',
+      device: 'iPhone 15',
+      providerOsVersion: '17',
+      providerApp: 'storage:00000000-0000-0000-0000-000000000000',
     },
   },
   {

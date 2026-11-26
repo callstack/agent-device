@@ -148,7 +148,7 @@ The same session and evidence model works at every step: the agent explores the 
 | --- | --- | --- |
 | Local | Trying commands and debugging apps on simulators, emulators, physical devices, macOS, and Linux. | Follow the Quick Start. |
 | CI/CD | Automated pull request and merge validation with replay scripts and captured artifacts. | Try the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml). |
-| Cloud / remote | Linux runners, managed devices, and remote jobs. | Set up a [remote proxy](https://agent-device.dev/docs/remote-proxy), connect a [device cloud](https://agent-device.dev/docs/device-clouds) (BrowserStack, AWS Device Farm, TestMu AI, Limrun), or [contact Callstack](mailto:hello@callstack.com) for team QA. |
+| Cloud / remote | Linux runners, managed devices, and remote jobs. | Set up a [remote proxy](https://agent-device.dev/docs/remote-proxy), connect a [device cloud](https://agent-device.dev/docs/device-clouds) (BrowserStack, AWS Device Farm, TestMu AI, Sauce Labs, Limrun), or [contact Callstack](mailto:hello@callstack.com) for team QA. |
 
 ## How it works
 

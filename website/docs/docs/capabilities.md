@@ -51,7 +51,7 @@ A provider column answers for that provider in its default configuration. Provid
 
 ### Inspect and verify the UI: hosted provider sessions
 
-| Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
+| Capability and reference | BrowserStack Android / TestMu AI Android / Sauce Labs Android | BrowserStack iOS / TestMu AI iOS / Sauce Labs iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Accessibility snapshot, snapshot diff, and audit](/docs/snapshots) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Refs, selectors, element lookup, and attribute reads](/docs/selectors) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -108,7 +108,7 @@ What a **Yes** does not claim:
 
 ### Interact with the app: hosted provider sessions
 
-| Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
+| Capability and reference | BrowserStack Android / TestMu AI Android / Sauce Labs Android | BrowserStack iOS / TestMu AI iOS / Sauce Labs iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
@@ -177,7 +177,7 @@ What a **Yes** does not claim:
 
 ### Apps and devices: hosted provider sessions
 
-| Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
+| Capability and reference | BrowserStack Android / TestMu AI Android / Sauce Labs Android | BrowserStack iOS / TestMu AI iOS / Sauce Labs iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Open and close apps, URLs, and deep links](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Install and reinstall an app](/docs/commands#app-install-in-place) | Yes | Yes | No | No | Yes | Yes | Install only; reinstall refuses because Revyl cannot uninstall | Install only; reinstall refuses because Revyl cannot uninstall |
@@ -229,7 +229,7 @@ What a **Yes** does not claim:
 
 ### Evidence and diagnostics: hosted provider sessions
 
-| Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
+| Capability and reference | BrowserStack Android / TestMu AI Android / Sauce Labs Android | BrowserStack iOS / TestMu AI iOS / Sauce Labs iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Screen recording](/docs/commands#media-and-logs) | No | No | No | No | Yes | Yes | No | No |
 | [App logs](/docs/debugging-profiling#logs) | No | No | No | No | Yes | Yes | No | No |
@@ -304,7 +304,7 @@ What a **Yes** does not claim:
 
 ### System and hardware: hosted provider sessions
 
-| Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
+| Capability and reference | BrowserStack Android / TestMu AI Android / Sauce Labs Android | BrowserStack iOS / TestMu AI iOS / Sauce Labs iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Back](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
 | [Home](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -346,6 +346,6 @@ These come with the tool rather than with a target, so no column above decides t
 | Typed Node.js API | The typed client exposes device and session operations through domain methods and `client.command`. Daemon-backed methods share CLI command semantics and target restrictions; the client does not expose every CLI entry point. | [Typed Node.js API](/docs/client-api#command-methods) |
 | Named sessions, leases, and parallel runs | Sessions and leases are daemon state, so parallel runs come from separate session names, device allowlists, and worktrees rather than from the target. Two worktrees can drive two platforms from one checkout. | [Named sessions, leases, and parallel runs](/docs/sessions#drive-two-platforms-from-one-checkout) |
 | Remote daemon and device host | A `proxy` between the agent machine and the device host forwards the same daemon surface, so the device rows above apply across it. Provider clouds need no proxy. | [Remote daemon and device host](/docs/remote-proxy#what-the-proxy-exposes) |
-| Hosted device providers | BrowserStack, AWS Device Farm, TestMu AI, Limrun, and Revyl appear as their own columns above. Provider artifact lookup after `close` works for the three WebDriver providers; Limrun and Revyl keep no artifacts. | [Hosted device providers](/docs/device-clouds#compare-providers) |
+| Hosted device providers | BrowserStack, AWS Device Farm, TestMu AI, Sauce Labs, Limrun, and Revyl appear as their own columns above. Provider artifact lookup after `close` works for the four WebDriver providers; Limrun and Revyl keep no artifacts. | [Hosted device providers](/docs/device-clouds#compare-providers) |
 | Native, React Native, Expo, and Flutter apps | Native and Flutter apps use the interactions and accessibility data exposed by their target. React Native and Expo development builds can additionally expose React component inspection, render profiling, and Metro CDP tools when their documented prerequisites are met. | [Native, React Native, Expo, and Flutter apps](/docs/introduction#what-you-can-use-it-for) |
 

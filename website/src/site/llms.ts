@@ -38,7 +38,7 @@ export const llmsDetails = `agent-device is the agent's hands, eyes, and evidenc
 
 - Verify behavior in a running app instead of reasoning only from source code, tests, or screenshots.
 - Explore UI flows on simulators, emulators, physical devices, desktop apps, and TV targets.
-- Run the same commands against devices elsewhere: a remote device host through the proxy, or hosted devices in a device cloud (BrowserStack, AWS Device Farm, TestMu AI, Limrun).
+- Run the same commands against devices elsewhere: a remote device host through the proxy, or hosted devices in a device cloud (BrowserStack, AWS Device Farm, TestMu AI, Sauce Labs, Limrun).
 - Reproduce bugs and collect bounded screenshots, recordings, logs, network, trace, or performance evidence.
 - Turn a successful exploratory flow into a deterministic \`.ad\` replay.
 

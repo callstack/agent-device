@@ -126,6 +126,9 @@ importers:
       '@agent-device/revyl':
         specifier: workspace:*
         version: link:packages/provider-revyl
+      '@agent-device/saucelabs':
+        specifier: workspace:*
+        version: link:packages/provider-saucelabs
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:packages/selectors
@@ -955,6 +958,21 @@ importers:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
+
+  packages/provider-saucelabs:
+    devDependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/provider-webdriver':
+        specifier: workspace:*
+        version: link:../provider-webdriver
       agent-device:
         specifier: workspace:*
         version: link:../..
