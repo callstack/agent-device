@@ -3,6 +3,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import { isMaestroYamlPath, maestroBackendRequiredMessage } from '@agent-device/ad-script';
+import { expandReplaySourceGlob } from './replay-source-glob.ts';
 
 const GLOB_PATTERN_CHARS = /[*?[\]{}]/;
 type ReplayInputSource = 'directory' | 'file' | 'glob';
@@ -67,7 +68,7 @@ function expandReplayInput(
     throw new AppError('INVALID_ARGS', `test input not found: ${input}`);
   }
 
-  const matches = fs.globSync(expandUserHomePath(input), { cwd });
+  const matches = expandReplaySourceGlob(expandUserHomePath(input), cwd);
   return {
     source: 'glob',
     paths: matches
