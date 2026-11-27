@@ -2,6 +2,8 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { LEASE_REASONS, leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
+import { isLeaseAdmissionExempt } from '../core/daemon-command-registry.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type {
   DeviceLease,
@@ -61,9 +63,11 @@ export async function releaseExpiredProviderLease(
 
 /**
  * Ends the session of the request whose session lease expired, or refuses the request before that
- * teardown. A composite is refused so it does not lose its session mid-run. A request that names
- * that lease is refused so its client can reallocate and resend: the refusal says `dispatched: no`, so
- * nothing of the request may run first. The lease expiry sweep ends that session instead.
+ * teardown. A composite is refused so it does not lose its session mid-run. A request that would do
+ * device work under that lease is refused so its client can reallocate and resend: the refusal says
+ * `dispatched: no`, so nothing of the request may run first, and the lease expiry sweep ends the
+ * session instead. A `close` or an admission-exempt command ends it now, and a `close` also ends a
+ * session whose lease the registry no longer holds.
  */
 export async function cleanupExpiredLeasedSession(params: {
   req: DaemonRequest;
@@ -76,16 +80,18 @@ export async function cleanupExpiredLeasedSession(params: {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
-  if (
-    !params.leaseRegistry.consumeExpiredLease(lease.leaseId, () => {
-      if (!refusesExpiredLeaseTeardown(params.req, lease.leaseId)) return;
-      throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-        reason: LEASE_REASONS.notFound.reason,
-        dispatched: 'no',
-      });
-    })
-  )
-    return false;
+  const expired = params.leaseRegistry.consumeExpiredLease(lease.leaseId, () => {
+    if (!refusesExpiredLeaseTeardown(params.req, lease.leaseId)) return;
+    throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+      reason: LEASE_REASONS.notFound.reason,
+      dispatched: 'no',
+    });
+  });
+  const closesLapsedSession =
+    endsSession(params.req) &&
+    !isBoundedCompositeRequest(params.req) &&
+    params.leaseRegistry.inspectLeaseBackend(lease.leaseId) === undefined;
+  if (!expired && !closesLapsedSession) return false;
   await endLeasedSession(
     ref,
     params.sessionStore,
@@ -101,7 +107,19 @@ function refusesExpiredLeaseTeardown(req: DaemonRequest, expiredLeaseId: string)
     req.command === 'batch' ||
     req.command === 'replay' ||
     isBoundedCompositeRequest(req) ||
-    resolveLeaseScope(req).leaseId === expiredLeaseId
+    (doesDeviceWork(req) && resolveLeaseScope(req).leaseId === expiredLeaseId)
+  );
+}
+
+function doesDeviceWork(req: DaemonRequest): boolean {
+  return !endsSession(req) && !isLeaseAdmissionExempt(req.command);
+}
+
+/** A `close` ends its session, unless a replay step asks it to close only the app. */
+function endsSession(req: DaemonRequest): boolean {
+  return (
+    resolveCommandDeviceClaimPolicy(req.command) === 'release-session' &&
+    req.internal?.closeAppOnly !== true
   );
 }
 
@@ -159,6 +177,7 @@ export function admitRequestLeaseForLockedScope(params: {
   const existingSession = ref?.session;
   // Admission runs before any handler, so its refusal says `dispatched: no`: a client that let
   // admission check its lease (`lease-admission`) reallocates and resends on that refusal alone.
+  // A `close` may have torn its session down just before this, so its refusal claims nothing.
   let activeLease: DeviceLease | undefined;
   try {
     activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
@@ -167,7 +186,7 @@ export function admitRequestLeaseForLockedScope(params: {
       daemonPolicy: params.daemonPolicy,
     });
   } catch (error) {
-    throw thrownBeforeDispatch(error);
+    throw endsSession(params.req) ? error : thrownBeforeDispatch(error);
   }
   if (!activeLease) return params.req;
 

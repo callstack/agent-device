@@ -211,6 +211,19 @@ test.each([
   fs.rmSync(ws.root, { recursive: true, force: true });
 });
 
+// A `close` ends the connection's session, so no lease is rented or renewed for it.
+test('a close refused for an inactive lease allocates nothing and is not resent', async () => {
+  const ws = workspace();
+  const result = await run(ws, ['close'], { leaseAdmission: true, refusal: admissionRefusal });
+
+  assert.equal(result.code, 1, result.stdout);
+  assert.deepEqual(commandsOf(result), ['close']);
+  assert.deepEqual(markedOf(result), [false]);
+  assert.equal(scopeOf(result.calls[0], 'leaseId'), 'lease-old');
+
+  fs.rmSync(ws.root, { recursive: true, force: true });
+});
+
 test('a resent command refused again is not sent a third time', async () => {
   const ws = workspace();
   const result = await runCliCapture(

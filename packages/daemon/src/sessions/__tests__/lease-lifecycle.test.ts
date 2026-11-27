@@ -132,9 +132,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
-// The refusal says `dispatched: no`, so the request that names the expired lease must not tear its
-// session down (recording, claim, runner) before the client reallocates; the expiry sweep does that.
-test('cleanupExpiredLeasedSession refuses a request naming the expired lease before any teardown', async () => {
+function sessionWithExpiredLease() {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
   const leaseRegistry = new LeaseRegistry({
@@ -149,26 +147,51 @@ test('cleanupExpiredLeasedSession refuses a request naming the expired lease bef
   sessionStore.publish('default', session);
   now = 1_011;
   const teardownSession = vi.fn(async () => {});
-
-  await expect(
+  const cleanup = (request: Partial<DaemonRequest> & Pick<DaemonRequest, 'command'>) =>
     cleanupExpiredLeasedSession({
       req: makeRequest({
-        command: 'press',
         meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: lease.leaseId },
+        ...request,
       }),
       env: process.env,
       sessionName: 'default',
       sessionStore,
       leaseRegistry,
       teardownSession,
-    }),
-  ).rejects.toMatchObject({
-    code: 'UNAUTHORIZED',
-    details: { reason: 'LEASE_NOT_FOUND', dispatched: 'no' },
-  });
-  expect(teardownSession).not.toHaveBeenCalled();
-  expect(sessionStore.get('default')).toBe(session);
-});
+    });
+  return { sessionStore, session, teardownSession, cleanup };
+}
+
+// The refusal says `dispatched: no`, so a request that would do device work under the expired lease
+// must not tear its session down (recording, claim, runner) before the client reallocates; the
+// expiry sweep does that.
+test.each<[string, Partial<DaemonRequest> & Pick<DaemonRequest, 'command'>]>([
+  ['press', { command: 'press' }],
+  ['an app-only close', { command: 'close', internal: { closeAppOnly: true } }],
+])(
+  'cleanupExpiredLeasedSession refuses %s naming the expired lease before any teardown',
+  async (_name, request) => {
+    const { sessionStore, session, teardownSession, cleanup } = sessionWithExpiredLease();
+
+    await expect(cleanup(request)).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+      details: { reason: 'LEASE_NOT_FOUND', dispatched: 'no' },
+    });
+    expect(teardownSession).not.toHaveBeenCalled();
+    expect(sessionStore.get('default')).toBe(session);
+  },
+);
+
+test.each(['close', 'lease_release', 'lease_heartbeat'])(
+  'cleanupExpiredLeasedSession tears down for %s naming the expired lease',
+  async (command) => {
+    const { sessionStore, teardownSession, cleanup } = sessionWithExpiredLease();
+
+    await expect(cleanup({ command })).resolves.toBe(true);
+    expect(teardownSession).toHaveBeenCalledOnce();
+    expect(sessionStore.get('default')).toBeUndefined();
+  },
+);
 
 test('releaseSessionLease releases with the stored session owner scope', async () => {
   const leaseRegistry = new LeaseRegistry();

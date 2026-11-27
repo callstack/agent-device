@@ -68,8 +68,11 @@ The client then allocates a new lease under a fresh id.
 Request admission refuses a request that names an inactive or unknown lease.
 The refusal is `UNAUTHORIZED` with `details.reason: LEASE_NOT_FOUND` and `details.dispatched: no`.
 Every lease-admission refusal comes after authentication and tenant scoping, and before any handler runs.
-If the request names the expired lease of its session, the daemon refuses before it tears that session down.
+If a request that would do device work names the expired lease of its session, the daemon refuses before it tears that session down.
 The lease expiry sweep ends that session later.
+For a `close` or an admission-exempt command, such as `lease_release`, the daemon tears that session down at once.
+A `close` also tears down a session whose lease the registry no longer holds.
+A refusal of `close` states no `details.dispatched`, because the teardown may have run.
 A sensitive `fill` value never redacts a typed `details.dispatched` or a shared lease `details.reason`. Any other value in those fields stays redacted.
 A daemon that makes this refusal advertises the `lease-admission` capability on `/health`.
 A proxy forwards the capability of the daemon behind it in `upstream`.
