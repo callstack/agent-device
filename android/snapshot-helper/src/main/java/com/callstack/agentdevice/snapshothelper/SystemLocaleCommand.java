@@ -7,7 +7,8 @@ import java.lang.reflect.Method;
 
 /**
  * Sets the system locale list. It runs through {@code app_process} as the shell user, which holds
- * CHANGE_CONFIGURATION and WRITE_SETTINGS; no installed app can hold the first. This is the same
+ * CHANGE_CONFIGURATION and WRITE_SETTINGS. An ordinary app gets CHANGE_CONFIGURATION only through
+ * an explicit development grant, and this helper does not request one. This is the same
  * persistent configuration update the Settings language picker makes, so it survives a reboot and
  * running apps receive a configuration change.
  *

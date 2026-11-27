@@ -3,11 +3,14 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatch, type ReasonTable } from '@agent-device/kernel/errors';
 import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError } from './adb-failure.ts';
+import type { PreparedAndroidAutomationHelper } from './automation-helper-artifact.ts';
 
-/** The `error.details.reason` a locale write states when the device kept another locale. */
+/** The `error.details.reason` values a locale write states when it refuses or fails. */
 const ANDROID_LOCALE_REASONS = {
   // The Android system locale list did not start with the requested locale after the update.
   localeNotApplied: { reason: 'locale-not-applied' },
+  // The installed helper APK is not the one the helper manifest names, so it does not run as shell.
+  helperApkUnverified: { reason: 'locale-helper-apk-unverified' },
 } as const satisfies ReasonTable<'settings'>;
 
 /** The helper class that runs as the shell user through `app_process`; see its Javadoc. */
@@ -28,7 +31,7 @@ export async function setAndroidLocale(
   const requested = state === SETTING_RESET_STATE ? await readAndroidDefaultLocale(device) : state;
   const { prepareAndroidAutomationHelper } = await import('./automation-helper-artifact.ts');
   const prepared = await prepareAndroidAutomationHelper(device, signal);
-  const apkPath = await readInstalledApkPath(device, prepared.artifact.manifest.packageName);
+  const apkPath = await readVerifiedHelperApkPath(device, prepared, signal);
   signal?.throwIfAborted();
   const result = await runAndroidShell(
     device,
@@ -68,17 +71,67 @@ async function readAndroidDefaultLocale(device: DeviceInfo): Promise<string> {
   });
 }
 
-/** The helper's base APK, which holds the class `app_process` loads. */
-async function readInstalledApkPath(device: DeviceInfo, packageName: string): Promise<string> {
-  const { readBaseApkPath } = await import('./helper-package-install.ts');
-  const result = await runAndroidShell(device, ['pm', 'path', packageName]);
-  const apkPath = readBaseApkPath(result.stdout);
-  if (apkPath !== undefined) return apkPath;
-  throw new AppError('COMMAND_FAILED', `Android reported no base APK path for ${packageName}.`, {
-    deviceId: device.id,
-    dispatched: 'no',
-    stdout: result.stdout,
+/**
+ * The helper's base APK, which holds the class `app_process` loads as the shell user. The install
+ * step may trust a cached decision or a higher installed versionCode, so this path proves its own
+ * bytes: the file that runs is the one whose SHA-256 matches the trusted manifest. A refusal drops
+ * the cached install decision, so the next command inspects the device again.
+ */
+async function readVerifiedHelperApkPath(
+  device: DeviceInfo,
+  prepared: Pick<PreparedAndroidAutomationHelper, 'adbProvider' | 'artifact' | 'deviceKey'>,
+  signal?: AbortSignal,
+): Promise<string> {
+  const { readBaseApkPath, readAndroidDeviceFileSha256 } =
+    await import('./helper-package-install.ts');
+  const { packageName, versionCode, sha256: expectedSha256 } = prepared.artifact.manifest;
+  const refuse = async (
+    message: string,
+    details: Record<string, unknown>,
+    cause?: unknown,
+  ): Promise<never> => {
+    const { forgetAndroidSnapshotHelperInstall } = await import('./snapshot-helper-install.ts');
+    forgetAndroidSnapshotHelperInstall({ deviceKey: prepared.deviceKey, packageName, versionCode });
+    throw new AppError(
+      'COMMAND_FAILED',
+      message,
+      {
+        ...details,
+        deviceId: device.id,
+        packageName,
+        reason: ANDROID_LOCALE_REASONS.helperApkUnverified.reason,
+        dispatched: 'no',
+        hint: `Uninstall ${packageName} from the device, then retry so agent-device reinstalls its helper.`,
+      },
+      cause,
+    );
+  };
+  const result = await runAndroidShell(device, ['pm', 'path', packageName], {
+    allowFailure: true,
+    signal,
   });
+  const apkPath = result.exitCode === 0 ? readBaseApkPath(result.stdout) : undefined;
+  if (apkPath === undefined) {
+    return await refuse(`Android reported no base APK path for ${packageName}.`, {
+      stdout: result.stdout,
+    });
+  }
+  let installedSha256: string;
+  try {
+    installedSha256 = await readAndroidDeviceFileSha256(prepared.adbProvider, apkPath, signal);
+  } catch (error) {
+    signal?.throwIfAborted();
+    return await refuse(
+      `Could not read the installed helper APK for ${packageName}.`,
+      { apkPath },
+      error,
+    );
+  }
+  if (installedSha256 === expectedSha256) return apkPath;
+  return await refuse(
+    `The installed helper APK for ${packageName} does not match the helper manifest.`,
+    { apkPath, expectedSha256, installedSha256 },
+  );
 }
 
 function readKeyValueLines(output: string): Record<string, string> {

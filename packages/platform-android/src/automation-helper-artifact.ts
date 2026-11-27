@@ -18,7 +18,7 @@ import type {
   AndroidSnapshotHelperInstallResult,
 } from './snapshot-helper-types.ts';
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
-type PreparedAndroidAutomationHelper = {
+export type PreparedAndroidAutomationHelper = {
   adb: AndroidAdbExecutor;
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
