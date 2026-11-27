@@ -57,6 +57,14 @@ function startWorker(serverBaseUrl: string) {
   return { done, stop };
 }
 
+/**
+ * A socket taken from an HTTP server on `upgrade` or `connect` has no `error` listener left, and a
+ * peer that dies with it open can reset it. These cases judge what arrived, not how it closed.
+ */
+function tolerateReset(socket: Duplex): void {
+  socket.on('error', () => undefined);
+}
+
 /** A loopback bridge whose registration answers `wsUrl(port)`, recording what reaches it. */
 async function listenBridge(wsUrl: (port: number) => string) {
   const received: string[] = [];
@@ -70,6 +78,7 @@ async function listenBridge(wsUrl: (port: number) => string) {
     res.end(JSON.stringify({ ok: true, data: { ws_url: wsUrl(port) } }));
   });
   server.on('upgrade', (req, socket) => {
+    tolerateReset(socket);
     received.push(`UPGRADE ${req.url}`);
     socketRef = socket;
     if (acceptWebSocketUpgrade(req, socket)) upgrade(socket);
@@ -138,6 +147,7 @@ test('the worker opens a loopback socket around an environment proxy', async () 
   });
   for (const event of ['upgrade', 'connect'] as const) {
     proxy.on(event, (req: http.IncomingMessage, socket: Duplex) => {
+      tolerateReset(socket);
       proxied.push(`${event} ${req.url}`);
       socket.destroy();
     });
