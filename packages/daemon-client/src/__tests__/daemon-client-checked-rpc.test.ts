@@ -269,11 +269,13 @@ test.each([
       res.end(JSON.stringify({ ok: true, ...health }));
     });
     try {
+      const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
       const verdict = assertRemoteServesCheckedRpc(
-        { daemonBaseUrl: `http://127.0.0.1:${await listenOnLoopback(server)}` },
+        { daemonBaseUrl: baseUrl },
         createTestHostEnvironment(),
       );
-      if (served) await expect(verdict).resolves.toBeUndefined();
+      // A served remote resolves to the base URL it probed: the one `connect` records.
+      if (served) await expect(verdict).resolves.toBe(baseUrl);
       else
         await expect(verdict).rejects.toMatchObject({
           details: { reason: 'remote_checked_rpc_unsupported', dispatched: 'no' },

@@ -41,8 +41,8 @@ export type RemoteConnectionState = {
     baseUrl?: string;
     transport?: CliFlags['daemonTransport'];
     serverMode?: CliFlags['daemonServerMode'];
-    /** Set only by `connect`, after every link of the remote advertised `checked-rpc`. */
-    rpc?: 'checked';
+    /** The sanitized URL `connect` probed and found serving checked RPC on every link. */
+    checkedRpcBaseUrl?: string;
   };
   tenant: string;
   runId: string;
@@ -224,6 +224,8 @@ type RemoteConnectionDefaults = {
   connection?: RemoteConnectionRequestMetadata;
   /** Set only by {@link claimRemoteConnectionDefaults}: the record it claimed, or `null` for none. */
   claimed?: RemoteConnectionState | null;
+  /** The endpoint `connect` validated for checked RPC, read from the record alone. */
+  checkedRpcBaseUrl?: string;
 };
 
 const REMOTE_CONNECTION_STATE_REASONS = {
@@ -394,29 +396,34 @@ export function writeRemoteConnectionState(options: {
   writeJsonFile(activeConnectionStatePath(options.stateDir), { session: options.state.session });
 }
 
-/**
- * Checked RPC holds only for the base URL `connect` validated. A command that names another
- * endpoint goes health-first, because nothing checked that endpoint serves the route.
- */
+/** Checked RPC holds only for the recorded URL `connect` probed; any other endpoint goes health-first. */
 export function bindCheckedRpcToValidatedEndpoint(
   flags: CliFlags,
-  defaults: Partial<CliFlags>,
+  checkedRpcBaseUrl: string | undefined,
+  env: Readonly<Record<string, string | undefined>>,
 ): CliFlags {
-  if (flags.daemonRpc !== 'checked' || flags.daemonBaseUrl === defaults.daemonBaseUrl) return flags;
+  if (flags.daemonRpc !== 'checked') return flags;
+  try {
+    const effective = sanitizeDaemonBaseUrl(
+      flags.daemonBaseUrl ?? env.AGENT_DEVICE_DAEMON_BASE_URL,
+    );
+    if (effective !== undefined && effective === checkedRpcBaseUrl) return flags;
+  } catch {
+    // An unparsable endpoint is refused later by the client's own base URL validation.
+  }
   return { ...flags, daemonRpc: undefined };
 }
 
 export function buildRemoteConnectionDaemonState(
   flags: Pick<
     CliFlags,
-    'daemonBaseUrl' | 'daemonAuthToken' | 'daemonTransport' | 'daemonServerMode' | 'daemonRpc'
+    'daemonBaseUrl' | 'daemonAuthToken' | 'daemonTransport' | 'daemonServerMode'
   >,
 ): RemoteConnectionState['daemon'] {
   return {
     baseUrl: sanitizeDaemonBaseUrl(flags.daemonBaseUrl),
     transport: flags.daemonTransport,
     serverMode: flags.daemonServerMode,
-    ...(flags.daemonRpc === 'checked' ? { rpc: 'checked' as const } : {}),
   };
 }
 
@@ -547,9 +554,11 @@ function remoteConnectionDefaults(
   }
   const profile = resolveConnectionProfile(state, options);
   const leaseScope = leaseScopeFromOptions(state);
+  const checkedRpcBaseUrl = state.daemon?.checkedRpcBaseUrl;
   return {
     runtime: state.runtime,
     connection: leaseScopeToConnectionMetadata(leaseScope),
+    ...(checkedRpcBaseUrl ? { checkedRpcBaseUrl } : {}),
     flags: {
       ...profile,
       remoteConfig: state.remoteConfigPath,
@@ -561,8 +570,7 @@ function remoteConnectionDefaults(
       daemonAuthToken: profile.daemonAuthToken,
       daemonTransport: state.daemon?.transport ?? profile.daemonTransport,
       daemonServerMode: state.daemon?.serverMode ?? profile.daemonServerMode,
-      // Only the mode `connect` checked; the profile's own value is never read here.
-      daemonRpc: state.daemon?.rpc,
+      daemonRpc: checkedRpcBaseUrl ? 'checked' : undefined,
       ...leaseScopeToCommandFlags(leaseScope),
       sessionIsolation: 'tenant',
       session: state.session,

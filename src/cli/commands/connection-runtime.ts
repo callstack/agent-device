@@ -235,8 +235,7 @@ function createRemoteConnectionStateFromFlags(
     session,
     remoteConfigPath,
     remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
-    // Only `connect` records checked RPC, after it checks the remote serves it.
-    daemon: buildRemoteConnectionDaemonState({ ...flags, daemonRpc: undefined }),
+    daemon: buildRemoteConnectionDaemonState(flags),
     tenant: flags.tenant,
     runId,
     leaseId: flags.leaseId,

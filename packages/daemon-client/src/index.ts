@@ -467,12 +467,13 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
 /**
  * Refuses `daemonRpc: checked` unless the remote endpoint advertises the `checked-rpc` capability in
  * `/health`, and, when it is a proxy, so does the daemon behind it. The probe goes through the same
- * base URL and trust validation as every remote request. `connect` runs it before it records the mode.
+ * base URL and trust validation as every remote request, and resolves to the base URL it probed:
+ * the one endpoint `connect` records checked RPC for. `undefined` means no remote was named.
  */
 export async function assertRemoteServesCheckedRpc(
   flags: Pick<DaemonRequest['flags'] & object, 'daemonBaseUrl'> & { daemonAuthToken?: string },
   host: HostEnvironment,
-): Promise<void> {
+): Promise<string | undefined> {
   const [{ resolveClientSettings }, { assertHealthServesCheckedRpc }] = await Promise.all([
     import('./daemon-client-lifecycle.ts'),
     import('./daemon-client-checked-rpc.ts'),
@@ -487,13 +488,14 @@ export async function assertRemoteServesCheckedRpc(
     flags.daemonAuthToken,
     host,
   );
-  if (!settings.remoteBaseUrl) return;
+  if (!settings.remoteBaseUrl) return undefined;
   const info: DaemonInfo = {
     token: settings.remoteAuthToken ?? '',
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
   assertHealthServesCheckedRpc(await readRemoteDaemonHealth(info), info);
+  return settings.remoteBaseUrl;
 }
 
 /** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */

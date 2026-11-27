@@ -428,7 +428,8 @@ async function resolveRunContextOrExit(
     const effectiveFlags = connectionDefaults
       ? bindCheckedRpcToValidatedEndpoint(
           mergeConnectionFlags(flags, connectionDefaults.flags, explicitFlagKeys),
-          connectionDefaults.flags,
+          connectionDefaults.checkedRpcBaseUrl,
+          base.host.env,
         )
       : flags;
     return {

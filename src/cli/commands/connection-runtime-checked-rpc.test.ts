@@ -23,7 +23,11 @@ function checkedConnection() {
       remoteConfigPath,
       tenant: 'tenant-a',
       runId: 'run-a',
-      daemon: { baseUrl: 'http://127.0.0.1:9', transport: 'http', rpc: 'checked' },
+      daemon: {
+        baseUrl: 'http://127.0.0.1:9',
+        transport: 'http',
+        checkedRpcBaseUrl: 'http://127.0.0.1:9',
+      },
       leaseId: 'lease-1',
       leaseBackend: 'android-instance',
       platform: 'android',
