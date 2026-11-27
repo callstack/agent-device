@@ -83,6 +83,7 @@ export const connectCommand: ClientCommandHandler = async ({
     host,
   );
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
+  await assertCheckedRpcServed(connectFlags, host);
   const context = resolveConnectContext({
     stateDir,
     flags: connectFlags,
@@ -123,6 +124,19 @@ export const connectCommand: ClientCommandHandler = async ({
   );
   return true;
 };
+
+/**
+ * `daemonRpc: checked` skips the `/health` probe on later commands, so `connect` accepts it only
+ * when every link of the remote advertises `checked-rpc`.
+ */
+async function assertCheckedRpcServed(flags: CliFlags, host: HostEnvironment): Promise<void> {
+  if (flags.daemonRpc !== 'checked' || !flags.daemonBaseUrl) return;
+  const { assertRemoteServesCheckedRpc } = await import('@agent-device/daemon-client');
+  await assertRemoteServesCheckedRpc({
+    baseUrl: flags.daemonBaseUrl,
+    token: flags.daemonAuthToken ?? host.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN,
+  });
+}
 
 function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
   if (!provider || !flags.remoteConfig) return;

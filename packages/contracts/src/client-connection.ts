@@ -144,6 +144,7 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'daemonAuthToken'
   | 'daemonTransport'
   | 'daemonServerMode'
+  | 'daemonRpc'
   | 'tenant'
   | 'sessionIsolation'
   | 'runId'

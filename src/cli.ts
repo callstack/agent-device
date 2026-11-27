@@ -538,6 +538,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     daemonAuthToken: currentFlags.daemonAuthToken,
     daemonTransport: currentFlags.daemonTransport,
     daemonServerMode: currentFlags.daemonServerMode,
+    daemonRpc: currentFlags.daemonRpc,
     tenant: currentFlags.tenant,
     sessionIsolation: currentFlags.sessionIsolation,
     runId: currentFlags.runId,

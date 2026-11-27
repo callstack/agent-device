@@ -1,5 +1,6 @@
 import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import {
+  DAEMON_RPC_MODES,
   PROVIDER_DEVICE_ORIENTATIONS,
   PROVIDER_DEVICE_TYPES,
 } from '@agent-device/contracts/remote';
@@ -71,6 +72,17 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['socket', 'http', 'dual'],
     usageLabel: '--daemon-server-mode socket|http|dual',
     usageDescription: 'Daemon server mode used when spawning daemon',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'daemonRpc',
+    names: ['--daemon-rpc'],
+    type: 'enum',
+    enumValues: DAEMON_RPC_MODES,
+    usageLabel: '--daemon-rpc health|checked',
+    usageDescription:
+      'Remote command RPC: health probes /health first; checked sends one request the remote checks itself',
     projectConfig: false,
     recorded: false,
   },

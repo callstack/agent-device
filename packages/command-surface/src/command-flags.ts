@@ -23,6 +23,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     daemonBaseUrl: options.daemonBaseUrl,
     daemonTransport: options.daemonTransport,
     daemonServerMode: options.daemonServerMode,
+    daemonRpc: options.daemonRpc,
     ...leaseScopeToCommandFlags(leaseScope),
     provider: options.provider,
     providerSessionId: options.providerSessionId,

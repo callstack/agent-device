@@ -393,7 +393,8 @@ async function protectArtifactUploadWithLeaseBeats(
   onProgress: DaemonTransportOptions['onProgress'],
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
-  if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
+  // A checked request uploads nothing (`remoteCheckedRpc`), so it has no phase for a beat to cover.
+  if (!isRemoteDaemon(info) || !leaseScope.leaseId || settings.remoteCheckedRpc) {
     return await prepareRemoteRequestArtifacts(
       request,
       info,
@@ -457,6 +458,19 @@ export async function stopRecordedDaemon(
 export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeIdentity> {
   const { resolveLocalDaemonCodeIdentity: resolve } = await import('./daemon-launch-spec.ts');
   return await resolve();
+}
+
+/**
+ * Refuses `daemonRpc: checked` unless the remote endpoint, and the daemon behind it when it is a
+ * proxy, advertise the `checked-rpc` capability in `/health`. `connect` runs it before it saves the
+ * connection.
+ */
+export async function assertRemoteServesCheckedRpc(params: {
+  baseUrl: string;
+  token: string | undefined;
+}): Promise<void> {
+  const { assertRemoteServesCheckedRpc: assert } = await import('./daemon-client-checked-rpc.ts');
+  await assert(params);
 }
 
 /** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */

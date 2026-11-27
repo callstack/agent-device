@@ -40,6 +40,8 @@ export type DaemonInfo = {
   baseUrl?: string;
   remoteInstanceId?: string;
   remoteUpstreamInstanceId?: string;
+  /** Requests go on the checked RPC route, and no `/health` probe preceded them. */
+  checkedRpc?: true;
 };
 
 /** Why a daemon is not the one this client would use. `transport` means alive but not on the

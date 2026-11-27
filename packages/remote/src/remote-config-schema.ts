@@ -1,4 +1,5 @@
 import {
+  DAEMON_RPC_MODES,
   PROVIDER_DEVICE_ORIENTATIONS,
   PROVIDER_DEVICE_TYPES,
   type RemoteConfigProfile,
@@ -37,6 +38,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   { key: 'daemonAuthToken', type: 'string' },
   { key: 'daemonTransport', type: 'enum', enumValues: ['auto', 'socket', 'http'] },
   { key: 'daemonServerMode', type: 'enum', enumValues: ['socket', 'http', 'dual'] },
+  { key: 'daemonRpc', type: 'enum', enumValues: DAEMON_RPC_MODES },
   { key: 'tenant', type: 'string' },
   { key: 'sessionIsolation', type: 'enum', enumValues: ['none', 'tenant'] },
   { key: 'runId', type: 'string' },

@@ -363,6 +363,23 @@ for the API.
 
 Remote clients read `/health` before sending commands and compare the daemon RPC protocol version. Keep client and proxy versions close: patch-level differences usually work, and incompatible RPC protocol versions fail before any command runs.
 
+### Send each command in one round trip
+
+By default every command makes two requests: `GET /health`, then `POST /rpc`. Add `"daemonRpc": "checked"` to the connection profile to send most commands as one `POST /rpc/checked` instead. The proxy and the daemon behind it then check the RPC protocol themselves, after the token, and refuse a mismatch with the same upgrade message before anything runs.
+
+```json
+{
+  "daemonBaseUrl": "https://example.trycloudflare.com/agent-device",
+  "daemonRpc": "checked"
+}
+```
+
+`connect` accepts the field only when the proxy and its daemon both list `checked-rpc` in `capabilities` on `/health`. `--daemon-rpc checked` and `AGENT_DEVICE_DAEMON_RPC=checked` set it for one command or shell; `--daemon-rpc health` turns it off.
+
+- `install` and `reinstall` still read `/health` first, because they can upload an app before the command runs.
+- If the remote stops serving the route, for example after a rollback, commands fail with `reason: "remote_checked_rpc_unsupported"` and `dispatched: "unknown"`. The client never resends them. Update the proxy and daemon, or remove `daemonRpc`.
+- Set it only when everything between you and the proxy forwards `/rpc/checked` and its `x-agent-device-rpc-protocol` header unchanged.
+
 `/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field. `leaseBackends` lists the lease backends the daemon admits (`macos-app` only on a macOS host); a host
 checks `upstream.leaseBackends` for `macos-app` before handing out a macOS app lease, and older
 daemons omit it.

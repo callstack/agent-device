@@ -16,6 +16,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import type {
   CloudProviderProfileFields,
+  DaemonRpcMode,
   RemoteConfigMetroOptions,
 } from './remote-config-fields.ts';
 import type { ScreenshotRequestFlags } from './screenshot.ts';
@@ -40,6 +41,7 @@ export type CliFlags = CloudProviderProfileFields &
     daemonAuthToken?: string;
     daemonTransport?: DaemonTransportPreference;
     daemonServerMode?: DaemonServerMode;
+    daemonRpc?: DaemonRpcMode;
     proxyHost?: string;
     proxyPort?: number;
     publicOrigin?: string;

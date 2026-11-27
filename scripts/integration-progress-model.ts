@@ -246,6 +246,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'daemonAuthToken',
         'daemonTransport',
         'daemonServerMode',
+        'daemonRpc',
         'remote',
         'tenant',
         'sessionIsolation',

@@ -83,6 +83,7 @@ explicit config:
 - `daemonAuthToken`
 - `daemonTransport`
 - `daemonServerMode`
+- `daemonRpc` (see [Send each command in one round trip](/docs/remote-proxy#send-each-command-in-one-round-trip))
 - `tenant`
 - `sessionIsolation`
 - `runId`

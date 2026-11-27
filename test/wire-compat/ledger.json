@@ -68,11 +68,11 @@
     "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_SERVICES": "sha256:3e9d09c1e78adf1d537aa22053e2dee7d35a33d37942721701476a0c06dff52b",
     "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_VERSION": "sha256:8dd8e36dc936523cf38bba3ed3737a6199431c35b7ce04e1441aaa2c8a186993",
     "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_VERSION_MAX_LENGTH": "sha256:0357d7c75ccb6fefe7ec901c7937bc795a2e66c4082c90fed27b4baf10c16416",
-    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
-    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:96a79a8ff5a078916ee7bffed1d9624d0ba9c0dcbd8e2c55f9abf37fccfef744",
+    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:5bd9f31964e3b83b410f1e918b71c2423a5dc7e0fe6e0c4b4b8bcd4edda77c65",
+    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:10dd49f8b54da8f469718c43ed84f5ac95c32c581345534a4b952db3d24a27b6",
     "packages/daemon-client/src/daemon-client-transport.ts#isHealthService": "sha256:ffd2c774e0efca5e5d2b01f9d37fe9b76aaf5e7569e07d9208fe667473771c10",
     "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
-    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:c4f638b4df43f572e105b6f8df578fe90ebf64cb56002e4d029a109bdbc167d1",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:feda23773be1f57ca93711e17c7ad45d344a3f65a2f4f1be15a8f0d3e1315abd",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthVersion": "sha256:856bd74aa8b2f205b6b30855755f16391015bffc1b6a323f618b51c26e749bfd",
     "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bf9ca0ecb9dc00f18d0bf4acab30d544d680246b8cdacbc50f684db182b6f23b",
@@ -248,15 +248,22 @@
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
     "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:b37b9391d20f535ca9c0858f92ed37943297c7acbf1fb10f8cad5cd5b53423eb",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
-    "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
-    "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
+    "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:c5b86a1d785db435cda62b56412006ba80f86f4f886c15cc84f8d03a3230ac1f",
+    "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:2fbcaa03bc0675fef8d19fd0a163d5d01a2162031745a41ff5c1db8a982cc2b6",
     "packages/daemon/src/server/upload-http.ts#authorizeUpload": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740",
     "packages/remote/src/daemon-artifacts.ts#FetchRemoteArtifactParams": "sha256:f90ae571961d6147a09973791178d369dfb8550990a1e0ebf120e97336540824",
     "packages/remote/src/daemon-artifacts.ts#fetchRemoteArtifact": "sha256:871f675d744dfa2bbf50237ac14b7f8957f973b126b774f4011da65573c8548f",
     "packages/remote/src/artifact-download.ts#RemoteArtifactRequest": "sha256:6cce66499f34bb18139917df592e554395936964025089024d6c6f67e4fa4b98",
     "packages/remote/src/artifact-download.ts#RemoteArtifactFetch": "sha256:e83939ec48a66917df9ec84becf53b6ca3c8115cfdada10731046381ac9e32c1",
     "packages/remote/src/artifact-download.ts#fetchRemoteArtifactFromUrl": "sha256:de6e71abdc758f760beffba0dc260473f88a8c60b13540b9c14d39f1a3d5e3a1",
-    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:cafb5fd5838819719b2fac62c5e108276dd800a58b4614462d138cf1ed2f7d6e"
+    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:cafb5fd5838819719b2fac62c5e108276dd800a58b4614462d138cf1ed2f7d6e",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#isCheckedRpcOutcomeResponse": "sha256:75fb9f3444a3f8f4a762811ba7cbe02d92a39ed4e55483ea0cf7f029e5720a3e",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#CheckedRpcOutcome": "sha256:965cd834c6dfb581db6cee46323bfd1c0b639749b4873454bb82ace8d9456f07",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#readCheckedRpcOutcome": "sha256:db0f4a1285d19036f7fbd4385b7b898b521b8b76e62c2d5e7f4e369ce0c81ad6",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#checkedRpcRefusalError": "sha256:1cadc96a26d64d8cd072cb4542680d1f4f797bc748fa4994b060e0d97cddecbd",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#protocolMismatchError": "sha256:f86912368af04fc263ad858f15e8bc67efa68be472e3d5e575e7b47addc357d4",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#readRefusalDetails": "sha256:41309e8fe57616e93848c93b36e8fb665a737f87d013243c6f6f1949e9f87215",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#isJsonRpcAnswer": "sha256:ecbf4226264fe3d3b551f89a075729df477e5c3b183dc2a761123c7229f4fe99"
   },
   "compatibleChanges": [
     {
@@ -386,18 +393,18 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth",
-      "digest": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before. #4511 adds optional parsed capabilities. A released daemon or proxy that sends none parses as before and only loses remote --save-script, which the client refuses before any RPC."
+      "digest": "sha256:5bd9f31964e3b83b410f1e918b71c2423a5dc7e0fe6e0c4b4b8bcd4edda77c65",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before. #4511 adds optional parsed capabilities. A released daemon or proxy that sends none parses as before and only loses remote --save-script, which the client refuses before any RPC. The checked RPC route (ADR 0006) adds an optional checkedRpc flag, read from the checked-rpc entry of the released capabilities list; a peer that does not list it reads as not serving the route."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink",
-      "digest": "sha256:96a79a8ff5a078916ee7bffed1d9624d0ba9c0dcbd8e2c55f9abf37fccfef744",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 adds optional capabilities to the parsed link; a link without them parses exactly as before."
+      "digest": "sha256:10dd49f8b54da8f469718c43ed84f5ac95c32c581345534a4b952db3d24a27b6",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 adds optional capabilities to the parsed link; a link without them parses exactly as before. The checked RPC route (ADR 0006) adds an optional checkedRpc flag, read from the checked-rpc entry of the released capabilities list; a peer that does not list it reads as not serving the route."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink",
-      "digest": "sha256:c4f638b4df43f572e105b6f8df578fe90ebf64cb56002e4d029a109bdbc167d1",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object. The service and version now reach error messages, so readHealthLink keeps a service only when it is one the DaemonHealthPayload contract names and a version only when it is version-shaped and at most 64 characters; anything else reads as absent. Released daemons and proxies report exactly those, so their payloads parse unchanged, and the /health request is unchanged."
+      "digest": "sha256:feda23773be1f57ca93711e17c7ad45d344a3f65a2f4f1be15a8f0d3e1315abd",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object. The service and version now reach error messages, so readHealthLink keeps a service only when it is one the DaemonHealthPayload contract names and a version only when it is version-shaped and at most 64 characters; anything else reads as absent. Released daemons and proxies report exactly those, so their payloads parse unchanged, and the /health request is unchanged. The checked RPC route (ADR 0006) adds an optional checkedRpc flag, read from the checked-rpc entry of the released capabilities list; a peer that does not list it reads as not serving the route. Every released field is read as before."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",
@@ -666,8 +673,8 @@
     },
     {
       "declaration": "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen",
-      "digest": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
-      "rationale": "Removes the unanswered open's record through the record owner instead of a direct unlink. The request still carries meta.scriptPublicationId and omits the caller path, and the response is read for the same scriptPublicationId field."
+      "digest": "sha256:c5b86a1d785db435cda62b56412006ba80f86f4f886c15cc84f8d03a3230ac1f",
+      "rationale": "Removes the unanswered open's record through the record owner instead of a direct unlink. The request still carries meta.scriptPublicationId and omits the caller path, and the response is read for the same scriptPublicationId field. A checked open skips the client-side capability check, because the daemon checks the same requirement from scriptPublicationId, and a failure that proves nothing was dispatched removes the record. The request and response fields are unchanged."
     },
     {
       "declaration": "packages/remote/src/script-version-publisher.ts#PublishOutcome",
@@ -688,6 +695,11 @@
       "declaration": "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES",
       "digest": "sha256:4ff6eba594b923a1d8f46a5856c42132b7ecd3a63d40f26c42972e06cb5a0a04",
       "rationale": "Adds the checked-rpc capability (ADR 0006). readDaemonCapabilities filters to known names, so a released client drops it, and a released daemon never lists it; a client treats an absent capability as cannot-do. The existing quiesce and script-artifacts entries are unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/session-script-destination.ts#RemoteEndpoint",
+      "digest": "sha256:2fbcaa03bc0675fef8d19fd0a163d5d01a2162031745a41ff5c1db8a982cc2b6",
+      "rationale": "Adds the client-local checkedRpc flag, set when the open goes on the checked RPC route. Nothing on the wire reads it; the open request and its response fields are unchanged."
     }
   ]
 }
