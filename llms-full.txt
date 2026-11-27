@@ -2632,7 +2632,7 @@ agent-device alert dismiss
 Handle system alerts:
 
 * `alert` handles system alerts on iOS, macOS, and Android permission dialogs. On iOS it also covers app-owned modal popups and Safari’s page prompts.
-* On Android, `alert` also handles the “isn’t responding” (ANR) dialog in any device language: `dismiss` presses Close app, and `accept` presses Wait. While another app’s ANR dialog has focus, commands that act on the screen are refused and their hint names `alert`.
+* On Android, `alert` also handles the “isn’t responding” (ANR) dialog in any device language: `dismiss` presses Close app, and `accept` presses Wait. While an ANR dialog has focus and its process does not belong to the session app alone, commands that act on the screen are refused and their hint names `alert`. An ANR of the session app is closed, and the app is relaunched, before the command runs.
 * Use `alert get` for a quick check, and `alert wait <short-ms>` only when a prompt may appear after async work. Do not use `settings permission` to answer a dialog already on screen; it is for setup before a flow.
 * `accept` and `dismiss` are sent once and never replayed, even if the response is lost. A closed alert does not prove that a permission was granted, so verify the app outcome.
 * `accept` picks the lasting grant, such as `Allow While Using App` over `Allow Once`, or “Allow all” on Android’s partial-media sheet. On iOS, `dismiss` presses only a recognized decline button, such as `Cancel` or `Don't Allow`. iOS simulators also recognize these labels in the device’s preferred languages; on physical iOS devices, tvOS, and visionOS the runner cannot read the OS strings, so it recognizes the system prompts’ Simplified Chinese wording from a built-in table, at the rank of the English label each entry translates; wording the table does not cover stays unknown.
@@ -3395,7 +3395,7 @@ Language and region:
 * `settings locale <locale-id>` sets the language and region together on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous locale as `previousLocale`.
 * A locale id is a language with an optional script and region, written with `-` or `_`, such as `en_IN`, `fr-CA`, or `zh-Hans-CN`. Extensions and variants are refused with `INVALID_ARGS` before anything changes.
 * On iOS simulators, a running app keeps its old locale until `open <app> --relaunch`. `settings locale reset` removes the override, which leaves English with no region. The reported `previousLocale` is a value `settings locale` accepts, and `previousLanguages` lists every preferred language.
-* On Android devices and emulators, running apps take the new locale at once. `settings locale reset` applies `ro.product.locale`, the locale the system image boots with.
+* On Android devices and emulators, running apps take the new locale at once. Android before 8.0 refuses with `locale-api-level-unsupported`. `settings locale reset` applies `ro.product.locale`, the locale the system image boots with.
 
 Time zone:
 
@@ -5213,24 +5213,26 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ### `settings`
 
-| Reason                                    | Meaning                                                                                     |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `setting_app_not_consumed`                | The asked-for setting applies to the target itself, so the named app consumes nothing.      |
-| `setting_permission_app_positional`       | A permission’s trailing positional reads as a bundle id or package, which belongs in –app.  |
-| `android_bluetooth_adapter_missing`       | The device declares no Bluetooth adapter, so there is nothing to turn on or off.            |
-| `android_bluetooth_command_unavailable`   | The build predates `svc bluetooth`, so the adapter cannot be switched from the shell.       |
-| `bluetooth-not-applied`                   | The device kept Bluetooth in its prior state after `svc bluetooth` accepted the request.    |
-| `bluetooth-unreadable`                    | The device answered the Bluetooth read-back with a value that is not a known state.         |
-| `mobile-data-not-applied`                 | The device kept mobile data in its prior state after `svc data` accepted the request.       |
-| `mobile-data-unreadable`                  | The device answered the mobile-data read-back with a value that is neither 0 nor 1.         |
-| `keep-awake-not-applied`                  | The device kept the screen turning off after `svc power stayon` accepted the request.       |
-| `keep-awake-unreadable`                   | The device answered the keep-awake read-back with a value that is not a stay-on mask.       |
-| `locale-not-applied`                      | The Android system locale list did not start with the requested locale after the update.    |
-| `time-zone-not-applied`                   | `persist.sys.timezone` did not hold the requested zone after `cmd alarm set-timezone`.      |
-| `setting_app_not_package`                 | The named app resolves to an intent such as `settings`, not to an installed package.        |
-| `app-no-data-container`                   | `clear-app-state` was refused because the installed app owns no data container.             |
-| `time-zone-unknown-to-simulator`          | The Mac’s time zone database, which simulator processes read, has no file for the zone.     |
-| `ios-notification-permission-unsupported` | iOS simulator notification prompts must be answered with `alert accept` or `alert dismiss`. |
+| Reason                                    | Meaning                                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `setting_app_not_consumed`                | The asked-for setting applies to the target itself, so the named app consumes nothing.               |
+| `setting_permission_app_positional`       | A permission’s trailing positional reads as a bundle id or package, which belongs in –app.           |
+| `android_bluetooth_adapter_missing`       | The device declares no Bluetooth adapter, so there is nothing to turn on or off.                     |
+| `android_bluetooth_command_unavailable`   | The build predates `svc bluetooth`, so the adapter cannot be switched from the shell.                |
+| `bluetooth-not-applied`                   | The device kept Bluetooth in its prior state after `svc bluetooth` accepted the request.             |
+| `bluetooth-unreadable`                    | The device answered the Bluetooth read-back with a value that is not a known state.                  |
+| `mobile-data-not-applied`                 | The device kept mobile data in its prior state after `svc data` accepted the request.                |
+| `mobile-data-unreadable`                  | The device answered the mobile-data read-back with a value that is neither 0 nor 1.                  |
+| `keep-awake-not-applied`                  | The device kept the screen turning off after `svc power stayon` accepted the request.                |
+| `keep-awake-unreadable`                   | The device answered the keep-awake read-back with a value that is not a stay-on mask.                |
+| `locale-not-applied`                      | The Android system locale list did not start with the requested locale after the update.             |
+| `locale-helper-apk-unverified`            | The helper package lists no base APK, or that APK’s SHA-256 differs from the trusted manifest.       |
+| `locale-api-level-unsupported`            | Android before 8.0 can reuse a verified install path for another APK, so the shell route is refused. |
+| `time-zone-not-applied`                   | `persist.sys.timezone` did not hold the requested zone after `cmd alarm set-timezone`.               |
+| `setting_app_not_package`                 | The named app resolves to an intent such as `settings`, not to an installed package.                 |
+| `app-no-data-container`                   | `clear-app-state` was refused because the installed app owns no data container.                      |
+| `time-zone-unknown-to-simulator`          | The Mac’s time zone database, which simulator processes read, has no file for the zone.              |
+| `ios-notification-permission-unsupported` | iOS simulator notification prompts must be answered with `alert accept` or `alert dismiss`.          |
 
 ### `shake`
 
