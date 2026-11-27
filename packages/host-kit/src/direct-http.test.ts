@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { execFile } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 import type { AddressInfo } from 'node:net';
 import { fetchOverDirectHttp, fetchWithCredential, loadDirectHttpAgent } from './direct-http.ts';
@@ -243,4 +244,110 @@ test('the credential requester keeps its direct agent whatever the options name'
     direct,
     direct,
   ]);
+});
+
+/** A server that records each upload's framing and body, and reports its first bytes. */
+async function serveUpload() {
+  const uploads: Array<{ length?: string; encoding?: string; body: string }> = [];
+  const started = deferred();
+  const { origin, closed } = await serveWith((req, res) => {
+    const upload = {
+      length: req.headers['content-length'],
+      encoding: req.headers['transfer-encoding'],
+      body: '',
+    };
+    uploads.push(upload);
+    req.on('data', (chunk) => {
+      upload.body += String(chunk);
+      started.resolve();
+    });
+    req.on('end', () => res.end());
+  });
+  return { origin, closed, uploads, started: started.promise };
+}
+
+test.each([
+  ['declares the length its headers give', { 'content-length': '12' }, '12', undefined],
+  ['is chunked without a declared length', undefined, undefined, 'chunked'],
+])('a streamed body is sent as it arrives and %s', async (_label, headers, length, encoding) => {
+  const server = await serveUpload();
+  async function* body() {
+    yield Buffer.from('first,');
+    // A sender that read the whole body first would never get here.
+    await server.started;
+    yield Buffer.from('second');
+  }
+
+  const response = await fetchWithCredential(server.origin, {
+    method: 'PUT',
+    ...(headers ? { headers } : {}),
+    body: body() as unknown as BodyInit,
+    duplex: 'half',
+  } as RequestInit);
+
+  expect(response.status).toBe(200);
+  expect(server.uploads).toEqual([{ length, encoding, body: 'first,second' }]);
+});
+
+/** One chunk, then silence; `release` runs when the stream is cancelled or destroyed. */
+const stalledStreams: Array<[string, (release: () => void) => unknown]> = [
+  [
+    'a web stream',
+    (release) =>
+      new ReadableStream<Uint8Array>({
+        start: (stream) => stream.enqueue(Buffer.from('first,')),
+        cancel: release,
+      }),
+  ],
+  [
+    'a Node stream',
+    (release) => {
+      const stream = new Readable({
+        read: () => {},
+        destroy: (error, done) => {
+          release();
+          done(error);
+        },
+      });
+      stream.push('first,');
+      return stream;
+    },
+  ],
+];
+
+test.each(stalledStreams)('an abort during an upload releases %s', async (_label, source) => {
+  const server = await serveUpload();
+  const released = deferred();
+  const controller = new AbortController();
+  const reason = new Error('caller gave up');
+
+  const pending = fetchWithCredential(server.origin, {
+    method: 'PUT',
+    body: source(released.resolve) as BodyInit,
+    signal: controller.signal,
+    duplex: 'half',
+  } as RequestInit);
+  await server.started;
+  controller.abort(reason);
+
+  await expect(pending).rejects.toBe(reason);
+  await released.promise;
+  await server.closed;
+});
+
+test('a streamed body that fails rejects the request as fetch does', async () => {
+  const server = await serveUpload();
+  const failure = new Error('disk gone');
+  async function* body() {
+    yield Buffer.from('first,');
+    throw failure;
+  }
+
+  await expect(
+    fetchWithCredential(server.origin, {
+      method: 'PUT',
+      body: body() as unknown as BodyInit,
+      duplex: 'half',
+    } as RequestInit),
+  ).rejects.toMatchObject({ message: 'fetch failed', cause: failure });
 });

@@ -49,19 +49,20 @@ test.each([
 });
 
 test.each([
-  ['wss://bridge.example.test/bridge?ticket=t', 'https:'],
-  ['https://bridge.example.test/bridge', 'https:'],
-  ['ws://127.0.0.1:4310/bridge?ticket=t', 'http:'],
-  ['WS://[::1]:4310/bridge', 'http:'],
-  ['http://localhost:4310/bridge', 'http:'],
-])('a credential socket may open to %s', (url, protocol) => {
-  expect(assertSecureCredentialSocket(url, 'Bridge socket URL').protocol).toBe(protocol);
+  'wss://bridge.example.test/bridge?ticket=t',
+  'ws://127.0.0.1:4310/bridge?ticket=t',
+  'WS://[::1]:4310/bridge',
+  'ws://localhost:4310/bridge',
+])('a credential socket may open to %s', (url) => {
+  expect(assertSecureCredentialSocket(url, 'Bridge socket URL').href).toBe(new URL(url).href);
 });
 
 test.each([
   'ws://bridge.example.test/bridge?ticket=t',
   'ws://10.0.0.7:4310/bridge',
-  'http://bridge.example.test/bridge',
+  'http://localhost/bridge',
+  'http://127.0.0.1:4310/bridge',
+  'https://bridge.example.test/bridge',
   'ftp://127.0.0.1/bridge',
   'ws:',
 ])('a credential socket never opens to %s', (url) => {

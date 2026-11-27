@@ -57,9 +57,9 @@ function routeResponseHeaders(route: string): readonly string[] {
  * The `Location` of a relayed upstream 3xx, as the client must see it. Only a target on the
  * upstream daemon itself is relayed, as a path moved onto the client-facing origin and base path
  * the request came in on. Its query and fragment are dropped: the daemon redirects with neither,
- * and both can carry a credential. A target elsewhere, with userinfo, or whose decoded path holds
- * the upstream token is dropped whole: the proxy never hands a client a credential or a foreign
- * destination.
+ * and both can carry a credential. A target elsewhere, with userinfo, or whose path holds the
+ * upstream token, as serialized or decoded, is dropped whole: the proxy never hands a client a
+ * credential or a foreign destination.
  */
 function relayedLocation(relay: RelayedResponse): string | undefined {
   const raw = relay.upstreamResponse.headers.get('location');
@@ -69,8 +69,13 @@ function relayedLocation(relay: RelayedResponse): string | undefined {
   if (!target || target.origin !== upstreamBase.origin || target.username || target.password) {
     return undefined;
   }
-  const path = decodedPath(target);
-  if (path === undefined || path.includes(relay.upstreamToken)) return undefined;
+  const decoded = decodedPath(target);
+  if (
+    decoded === undefined ||
+    [target.pathname, decoded].some((path) => path.includes(relay.upstreamToken))
+  ) {
+    return undefined;
+  }
   const basePath = upstreamBase.pathname.replace(/\/+$/, '');
   if (basePath && target.pathname !== basePath && !target.pathname.startsWith(`${basePath}/`)) {
     return undefined;

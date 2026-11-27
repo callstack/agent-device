@@ -310,3 +310,19 @@ test('a same-origin redirect is followed with the headers, at most five times', 
   await expect(download(loop)).rejects.toMatchObject(refusedRedirect);
   expect(hops).toBe(6);
 });
+
+test('a refused download URL leaves an existing file at the destination untouched', async () => {
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  fs.writeFileSync(destinationPath, 'earlier download');
+
+  await expect(
+    downloadLimrunFile({
+      url: 'http://limrun.invalid/files?signature=signed',
+      headers: {},
+      destinationPath,
+      timeoutMs: 5_000,
+    }),
+  ).rejects.toMatchObject(insecure);
+
+  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('earlier download');
+});

@@ -1,4 +1,5 @@
 import type { Agent, IncomingMessage } from 'node:http';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 // Loaded at send time by the code that sends a credential over plain http, never at module scope.
@@ -47,8 +48,14 @@ const DIRECT_HTTP_REASONS = {
  * with `TypeError('fetch failed')` carrying the cause. An abort ends the exchange with the signal's
  * reason, and five silent minutes end it with a `direct_http_idle_timeout` error: the call rejects
  * with it, or after the response, the body read does.
+ *
+ * `request`'s own body is read whole, so the request declares its length. A `streamedBody` is piped
+ * instead, as it arrives, with the length the headers declare or else chunked.
  */
-export async function fetchOverDirectHttp(request: Request): Promise<Response> {
+export async function fetchOverDirectHttp(
+  request: Request,
+  streamedBody?: AsyncIterable<Uint8Array>,
+): Promise<Response> {
   const url = new URL(request.url);
   if (url.protocol !== 'http:') throw new TypeError('fetchOverDirectHttp sends plain http only');
   // The module object itself, so a stubbed `request` is the one called.
@@ -111,11 +118,28 @@ export async function fetchOverDirectHttp(request: Request): Promise<Response> {
     // the caller's only that long.
     req.once('close', () => request.signal.removeEventListener('abort', abort));
     req.on('error', fail);
+    if (streamedBody) {
+      // A stream is destroyed or cancelled even while a read is pending, which the return of an
+      // async iterator over it would wait for.
+      const source =
+        streamedBody instanceof Readable
+          ? streamedBody
+          : streamedBody instanceof ReadableStream
+            ? Readable.fromWeb(streamedBody as WebReadableStream<Uint8Array>)
+            : Readable.from(streamedBody, { objectMode: false });
+      source.on('error', (error) => {
+        fail(error);
+        req.destroy();
+      });
+      // Releases the source, and the file behind it, when the exchange ends first.
+      req.once('close', () => source.destroy());
+      source.pipe(req);
+      return;
+    }
     if (!request.body) {
       req.end();
       return;
     }
-    // Read whole, so the request declares its length.
     request.arrayBuffer().then(
       (body) => req.end(Buffer.from(body)),
       (error: unknown) => {
@@ -139,5 +163,12 @@ export async function fetchWithCredential(
 ): Promise<Response> {
   if (send) return await send(input, init);
   if (new URL(input).protocol !== 'http:') return await fetch(input, init);
-  return await fetchOverDirectHttp(new Request(input, init));
+  const { body } = init;
+  if (!isStreamedBody(body)) return await fetchOverDirectHttp(new Request(input, init));
+  return await fetchOverDirectHttp(new Request(input, { ...init, body: null }), body);
+}
+
+/** A body that arrives in pieces: a web or Node stream, or any other async iterable. */
+function isStreamedBody(body: unknown): body is AsyncIterable<Uint8Array> {
+  return typeof body === 'object' && body !== null && Symbol.asyncIterator in body;
 }

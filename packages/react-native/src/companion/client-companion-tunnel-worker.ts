@@ -188,7 +188,7 @@ async function prepareBridgeSocket(wsUrl: string): Promise<() => WebSocket> {
   const destination = refuseWithoutRetry(() =>
     assertSecureCredentialSocket(wsUrl, 'Metro companion bridge socket URL'),
   );
-  if (destination.protocol === 'https:') return () => new WebSocket(wsUrl);
+  if (destination.protocol === 'wss:') return () => new WebSocket(wsUrl);
   const { Agent, WebSocket: DirectWebSocket } = await import('undici');
   return () => new DirectWebSocket(wsUrl, { dispatcher: new Agent() }) as unknown as WebSocket;
 }

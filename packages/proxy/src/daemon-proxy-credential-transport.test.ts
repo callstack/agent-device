@@ -51,6 +51,13 @@ test.each([
   ['a custom transport', 'plain http off loopback', 'http://daemon.invalid:4310', 'custom'],
   ['the default transport', 'a URL without a host', 'http://', undefined],
   ['a custom transport', 'a URL without a host', 'http://', 'custom'],
+  [
+    'the default transport',
+    'a URL with a username and password',
+    'https://operator:hunter2@daemon.example.test',
+    undefined,
+  ],
+  ['a custom transport', 'a URL with a username', 'https://operator@daemon.example.test', 'custom'],
 ] as const)(
   '%s never sends the upstream token to %s',
   async (_label, _destination, upstreamBaseUrl, transport) => {
@@ -89,7 +96,9 @@ test.each([
     ]) {
       const response = await proxy.handle(request);
       expect(response.status, request.url).toBe(400);
-      expect(await response.text(), request.url).toContain('Proxy upstreamBaseUrl');
+      const refusal = await response.text();
+      expect(refusal, request.url).toContain('Proxy upstreamBaseUrl');
+      expect(refusal, request.url).not.toMatch(/operator|hunter2/);
     }
     expect(sent).toEqual([]);
   },
@@ -175,6 +184,22 @@ test.each([
     }
   },
 );
+
+test('a relayed Location is dropped when its path holds the upstream token as written', async () => {
+  // A token that reads differently once decoded: `a%2Fb` decodes to `a/b`.
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'https://daemon.example.test',
+    upstreamToken: 'a%2Fb',
+    clientToken: 'client-secret',
+    upstreamFetch: async () =>
+      new Response(null, { status: 307, headers: { location: '/artifacts/a%2Fb' } }),
+  });
+
+  const response = await proxy.handle(rpc());
+
+  expect(response.status).toBe(307);
+  expect(response.headers.get('location')).toBe(null);
+});
 
 test('the default transports relay a daemon redirect with its target on every route', async () => {
   const daemon = await serve((req, res) => {

@@ -41,7 +41,11 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
 });
 
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
-import { fetchWithTimeout, sendRunnerCommandOnce } from '../runner-transport.ts';
+import {
+  fetchWithTimeout,
+  postRunnerCommandOverRoute,
+  sendRunnerCommandOnce,
+} from '../runner-transport.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { loadRealHostKitCapabilities } from '@agent-device/test-kit';
 
@@ -228,6 +232,37 @@ test('a forwarded runner route never sends its tokens over plain http off loopba
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, 'insecure_credential_transport');
       assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(fetchMock.mock.calls.length, 0);
+});
+
+// The same address is allowed on the tunnel route (the fallback cases below), so the exclusion
+// follows how the route was resolved, not what the address looks like.
+test.each([
+  ['whose endpoint carries its forwarding', { url: 'http://[fd00::123]:8100/command' }],
+  ['whose endpoint names no forwarding', undefined],
+])('a forwarded route to a tunnel-shaped address %s is refused', async (_label, http) => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const route = {
+    kind: 'network',
+    url: 'http://[fd00::123]:8100/command',
+    cachedTunnelIp: false,
+    via: 'forwarded',
+  } as const;
+
+  await assert.rejects(
+    () =>
+      postRunnerCommandOverRoute(iosDevice, route, {
+        endpoint: { ...RUNNER_ENDPOINT_FIXTURE, ...(http ? { http } : {}) },
+        command: { command: 'uptime' },
+        timeoutMs: 5_000,
+      }),
+    (error: unknown) => {
+      assert.equal((error as AppError).details?.reason, 'insecure_credential_transport');
+      assert.equal((error as AppError).details?.dispatched, 'no');
       return true;
     },
   );

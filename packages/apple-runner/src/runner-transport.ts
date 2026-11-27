@@ -105,10 +105,10 @@ export async function postRunnerCommandOverRoute(
       'no',
     );
   }
-  // A forwarded route is a provider-supplied URL that receives the runner token and the provider's
-  // own headers, so it gets the credential transport rule. Local routes are loopback, USB, or the
-  // device's CoreDevice tunnel.
-  if (endpoint.http) {
+  // The request carries the runner token, and a forwarded one the provider's own headers. The
+  // resolver builds the loopback URL and the CoreDevice tunnel URL itself; the tunnel is the one
+  // plain-http route off this machine. Every other route meets the credential transport rule.
+  if (route.via !== 'loopback' && route.via !== 'coredevice-tunnel') {
     const { assertSecureCredentialTransport } =
       await import('@agent-device/contracts/credential-transport');
     try {

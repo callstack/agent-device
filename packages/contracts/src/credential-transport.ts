@@ -7,8 +7,9 @@ import { isLoopbackHostname } from './loopback-host.ts';
 
 /** Why a client refuses to send a credential before any request leaves. */
 const CREDENTIAL_TRANSPORT_REASONS = {
-  // A credential would travel over plain http to a host that is not loopback, or to a URL that does
-  // not parse. The refusal names the setting, never the destination.
+  // A credential would travel over plain http or ws to a host that is not loopback, to a socket URL
+  // that is not ws or wss, or to a URL that does not parse. The refusal names the setting, never the
+  // destination.
   insecureTransport: { reason: 'insecure_credential_transport' },
 } as const satisfies ReasonTable<'remote connection'>;
 
@@ -26,25 +27,29 @@ export function isSecureCredentialDestination(url: URL): boolean {
 export function assertSecureCredentialTransport(url: string | URL, subject: string): URL {
   const destination = typeof url === 'string' ? URL.parse(url) : url;
   if (destination && isSecureCredentialDestination(destination)) return destination;
-  throw new AppError(
-    'INVALID_ARGS',
+  throw refusal(
     destination
       ? `${subject} must use https to send credentials; plain http is allowed only on loopback.`
       : `${subject} is not a valid URL, so no credential is sent to it.`,
-    {
-      reason: CREDENTIAL_TRANSPORT_REASONS.insecureTransport.reason,
-      hint: 'Use an https URL, or reach the host through a loopback tunnel or port forward, for example ssh -L 4310:127.0.0.1:4310 <host> and then http://127.0.0.1:4310.',
-    },
   );
 }
 
 /**
- * The same rule for a WebSocket that carries a credential: `wss` counts as https, and `ws` as plain
- * http, so loopback only. Returns the destination in that http(s) form.
+ * The same rule for a WebSocket that carries a credential: `wss` to any host, or `ws` to loopback.
+ * Any other scheme is refused, including the http and https a `WebSocket` would accept.
  */
 export function assertSecureCredentialSocket(url: string, subject: string): URL {
   const destination = URL.parse(url);
-  if (destination?.protocol === 'wss:') destination.protocol = 'https:';
-  if (destination?.protocol === 'ws:') destination.protocol = 'http:';
-  return assertSecureCredentialTransport(destination ?? url, subject);
+  if (destination?.protocol === 'wss:') return destination;
+  if (destination?.protocol === 'ws:' && isLoopbackHostname(destination.hostname)) {
+    return destination;
+  }
+  throw refusal(`${subject} must use wss to send credentials; ws is allowed only on loopback.`);
+}
+
+function refusal(message: string): AppError {
+  return new AppError('INVALID_ARGS', message, {
+    reason: CREDENTIAL_TRANSPORT_REASONS.insecureTransport.reason,
+    hint: 'Use an https or wss URL, or reach the host through a loopback tunnel or port forward, for example ssh -L 4310:127.0.0.1:4310 <host> and then http://127.0.0.1:4310.',
+  });
 }

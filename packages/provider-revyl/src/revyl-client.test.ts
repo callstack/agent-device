@@ -27,8 +27,10 @@ test('uses the public Revyl backend when no URL is configured', () => {
 
 test('a loopback backend and upload URL are reached directly, never through global fetch', async () => {
   const received: string[] = [];
+  const lengths: Array<string | undefined> = [];
   const server = http.createServer((req, res) => {
     received.push(`${req.method} ${req.url} ${req.headers.authorization ?? ''}`.trim());
+    if (req.method === 'PUT') lengths.push(req.headers['content-length']);
     req.resume();
     req.on('end', () => res.end('{}'));
   });
@@ -42,11 +44,14 @@ test('a loopback backend and upload URL are reached directly, never through glob
       clientVersion: '0.0.0-test',
     });
     await client.verifyCredentials();
+    const { size } = await fs.stat(import.meta.filename);
     await client.uploadSessionArtifact(
       `${origin}/upload?signature=signed`,
-      { filePath: import.meta.filename, size: (await fs.stat(import.meta.filename)).size },
+      { filePath: import.meta.filename, size },
       'application/zip',
     );
+    // A presigned PUT declares its length even though the file is streamed.
+    assert.deepEqual(lengths, [String(size)]);
 
     assert.deepEqual(received, [
       'GET /api/v1/entity/users/get_user_uuid Bearer test-key',

@@ -15,8 +15,9 @@ const RESPONSE_BODY_PREVIEW_BYTES = 500;
 const MAX_DOWNLOAD_REDIRECTS = 5;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-// Why a Limrun file download did not land. The destination is removed on every failure, so each row
-// means "retry from the same URL", and `limrun_download_failed` adds that the transport itself broke.
+// Why a Limrun file download did not land. A started download removes its destination on every
+// failure, so each row means "retry from the same URL", and `limrun_download_failed` adds that the
+// transport itself broke.
 const LIMRUN_DOWNLOAD_REASONS = {
   // The service answered the download with an error status; `details.statusCode` and `details.body` carry its reply.
   httpError: { reason: 'limrun_download_http_error' },
@@ -32,14 +33,16 @@ const LIMRUN_DOWNLOAD_REASONS = {
 /**
  * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs`; a
  * failed or timed-out attempt leaves no file at the destination, so the caller can retry from the
- * same URL and never mistakes an earlier attempt's file for this one's.
+ * same URL and never mistakes an earlier attempt's file for this one's. A URL that may not carry a
+ * credential is refused before any attempt, and the destination stays as it was.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
+  const url = assertSecureCredentialTransport(options.url, 'Limrun download URL');
   const timeout = AbortSignal.timeout(options.timeoutMs);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    const response = await fetchDownload(options, signal);
+    const response = await fetchDownload(url, options.headers, signal);
     if (!response.ok) throw await httpFailure(response, options);
     if (!response.body) {
       throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
@@ -63,10 +66,14 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
  * rule. A redirect is followed from https to https or on the same origin only, and the headers stay
  * behind once it leaves the origin.
  */
-async function fetchDownload(options: LimrunFileDownload, signal: AbortSignal): Promise<Response> {
+async function fetchDownload(
+  from: URL,
+  initialHeaders: LimrunFileDownload['headers'],
+  signal: AbortSignal,
+): Promise<Response> {
   const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
-  let url = assertSecureCredentialTransport(options.url, 'Limrun download URL');
-  let headers = options.headers;
+  let url = from;
+  let headers = initialHeaders;
   for (let redirects = 0; ; redirects += 1) {
     const response = await fetchWithCredential(url.href, {
       method: 'GET',

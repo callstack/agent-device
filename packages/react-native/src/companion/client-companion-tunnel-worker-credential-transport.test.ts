@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
+import net, { type AddressInfo } from 'node:net';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { afterEach, test, vi } from 'vitest';
@@ -125,17 +126,33 @@ test('the worker reaches a loopback bridge directly, never through global fetch'
   assert.equal(proxied.mock.calls.length, 0);
 });
 
+/** A TCP listener that records every connection, whatever protocol its caller speaks. */
+async function listenSink() {
+  const connections: unknown[] = [];
+  const server = net.createServer((socket) => {
+    connections.push(socket.remoteAddress);
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  cleanupTasks.push(() => new Promise((resolve) => server.close(resolve)));
+  return { port: (server.address() as AddressInfo).port, connections };
+}
+
 // `0.0.0.0` reaches this machine's listener and is not a loopback address, so a socket opened
-// without the check would show up at the bridge.
+// without the check would show up at the sink. So would `http` or `https` on loopback, which a
+// `WebSocket` accepts.
 test.for([
   (port: number) => `ws://0.0.0.0:${port}/bridge?ticket=secret`,
   (port: number) => `ws://0.0.0.0:${port}/bridge`,
-  (port: number) => `http://0.0.0.0:${port}/bridge?ticket=secret`,
-])('the worker refuses a plain socket off loopback before it opens', async (wsUrl) => {
-  const bridge = await listenBridge(wsUrl);
+  (port: number) => `http://127.0.0.1:${port}/bridge?ticket=secret`,
+  (port: number) => `https://127.0.0.1:${port}/bridge`,
+])('the worker refuses any socket but wss or loopback ws before it opens', async (wsUrl) => {
+  const sink = await listenSink();
+  const bridge = await listenBridge(() => wsUrl(sink.port));
 
   await startWorker(bridge.origin).done;
 
+  assert.deepEqual(sink.connections, []);
   assert.deepEqual(bridge.received, [registered, unregistered]);
 });
 

@@ -69,8 +69,9 @@ export type DaemonProxyAuthenticate = (
 export type DaemonProxyOptions = {
   /**
    * Base URL of the upstream agent-device daemon HTTP server. It must use https, or plain http to
-   * loopback, because every upstream request carries `upstreamToken`; with `upstreamFetch` it is
-   * the logical URL your transport routes. Any other URL refuses every request before it is sent.
+   * loopback, because every upstream request carries `upstreamToken`, and must not carry a username
+   * or password; with `upstreamFetch` it is the logical URL your transport routes. Any other URL
+   * refuses every request before it is sent.
    */
   upstreamBaseUrl: string;
   /** Auth token of the upstream daemon. Never leaves the proxy. */
@@ -580,11 +581,9 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
   // Loaded on the first upstream exchange, never at module scope: the proxy entry stays lean.
   let upstreamAdmission: Promise<void> | undefined;
   const admitUpstream = () =>
-    (upstreamAdmission ??= import('@agent-device/contracts/credential-transport').then(
-      ({ assertSecureCredentialTransport }) => {
-        assertSecureCredentialTransport(upstreamBaseUrl, 'Proxy upstreamBaseUrl');
-      },
-    ));
+    (upstreamAdmission ??= import('./upstream-admission.ts').then(({ assertAdmittedUpstream }) => {
+      assertAdmittedUpstream(upstreamBaseUrl);
+    }));
   const customUpstreamFetch = options.upstreamFetch;
   const upstreamFetch: DaemonProxyUpstreamFetch =
     customUpstreamFetch ??

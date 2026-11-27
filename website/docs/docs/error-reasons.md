@@ -252,6 +252,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `transfer_forwarding_deadline_exceeded` | The whole exchange outlived the proxy's aggregate forwarding budget. |
 | `transfer_gateway_status` | The upstream daemon answered with a status that is not an HTTP response this proxy may relay. |
 | `transfer_upstream_closed` | The upstream daemon closed the connection before it answered, or during a write. |
+| `proxy_upstream_userinfo` | The proxy's `upstreamBaseUrl` carries a username or password. The upstream credential is `upstreamToken` alone, and a request cannot be built from such a URL. |
 
 ### `react-devtools`
 
@@ -900,7 +901,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `insecure_credential_transport` | A credential would travel over plain http to a host that is not loopback, or to a URL that does not parse. The refusal names the setting, never the destination. |
+| `insecure_credential_transport` | A credential would travel over plain http or ws to a host that is not loopback, to a socket URL that is not ws or wss, or to a URL that does not parse. The refusal names the setting, never the destination. |
 | `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
 | `remote_rpc_protocol_missing` | The checked RPC call named no RPC protocol. An intermediary that strips request headers causes this. |
 | `remote_rpc_protocol_mismatch` | The daemon or proxy speaks a different RPC protocol from the caller. After authentication, `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused. |

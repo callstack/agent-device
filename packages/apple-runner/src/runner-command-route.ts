@@ -19,6 +19,12 @@ export type RunnerCommandRoute =
       kind: 'network';
       url: string | null;
       cachedTunnelIp: boolean;
+      /**
+       * How the URL was resolved: this Mac's loopback, the tunnel address CoreDevice reports for
+       * this device, or a URL a provider forwards. Only the tunnel route may carry the runner token
+       * over plain http to a host that is not loopback, because its tunnel encrypts the traffic.
+       */
+      via: 'loopback' | 'coredevice-tunnel' | 'forwarded';
     }
   | {
       kind: 'usbmux';
@@ -58,7 +64,7 @@ export function createRunnerCommandRouteResolver(
       timeoutBudgetMs?: number,
       forceRefresh = false,
     ): Promise<RunnerCommandRoute> => {
-      if (http) return { kind: 'network', url: http.url, cachedTunnelIp: false };
+      if (http) return { kind: 'network', url: http.url, cachedTunnelIp: false, via: 'forwarded' };
       if (runsOnThisHost(device)) return buildLoopbackRoute(port);
       const control = resolveIosPhysicalDeviceControl(device);
       if (control.backend === 'xctest') return buildUsbmuxRoute(device, port);
@@ -103,7 +109,12 @@ function runsOnThisHost(device: DeviceInfo): boolean {
 }
 
 function buildLoopbackRoute(port: number): RunnerCommandRoute {
-  return { kind: 'network', url: `http://127.0.0.1:${port}/command`, cachedTunnelIp: false };
+  return {
+    kind: 'network',
+    url: `http://127.0.0.1:${port}/command`,
+    cachedTunnelIp: false,
+    via: 'loopback',
+  };
 }
 
 function buildTunnelRoute(
@@ -115,6 +126,7 @@ function buildTunnelRoute(
     kind: 'network',
     url: tunnelIp ? `http://[${tunnelIp}]:${port}/command` : null,
     cachedTunnelIp,
+    via: 'coredevice-tunnel',
   };
 }
 
