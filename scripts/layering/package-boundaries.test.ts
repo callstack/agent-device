@@ -612,6 +612,8 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/host-kit/code-signature-cache',
     '@agent-device/host-kit/command',
     '@agent-device/host-kit/diagnostics',
+    // Loaded at send time: a direct connection for credential-bearing plain-http requests.
+    '@agent-device/host-kit/direct-http',
     '@agent-device/host-kit/doctor-lines',
     '@agent-device/host-kit/file',
     '@agent-device/host-kit/gzip-tar',

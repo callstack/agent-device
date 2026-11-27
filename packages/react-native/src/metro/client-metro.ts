@@ -455,10 +455,8 @@ function isRetryableBridgeError(error: unknown): boolean {
 
 async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<MetroBridgeResult> {
   // Checked on the final URL, right before the bearer token is sent, and outside the retry.
-  const bridgeUrl = assertSecureCredentialTransport(
-    `${input.baseUrl}/api/metro/bridge`,
-    'Metro bridge URL',
-  );
+  const bridgeUrl = `${input.baseUrl}/api/metro/bridge`;
+  assertSecureCredentialTransport(bridgeUrl, 'Metro bridge URL');
   let response: Response;
 
   try {

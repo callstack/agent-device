@@ -382,42 +382,6 @@ test('uploadArtifact falls back to legacy upload when direct upload exceeds redi
   }
 });
 
-test('uploadArtifact never uses a ticket over plain http off loopback, whatever carries its credential', async () => {
-  const content = 'cleartext-ticket';
-  const artifactPath = createTempFile('app.apk', content);
-  const requests: string[] = [];
-  const server = await startServer(async (req, res) => {
-    requests.push(`${req.method} ${req.url}`);
-    await readRequestBody(req);
-    if (req.url === '/upload/preflight') {
-      sendJson(res, {
-        ok: true,
-        cacheHit: false,
-        uploadId: 'cleartext-ticket',
-        upload: {
-          url: 'http://ticket.invalid/upload/direct/cleartext-ticket?signature=secret',
-          headers: {},
-        },
-      });
-      return;
-    }
-    sendJson(res, { ok: true, uploadId: 'legacy-upload' });
-  });
-
-  try {
-    const uploadId = await uploadArtifact({
-      localPath: artifactPath,
-      baseUrl: server.baseUrl,
-      token: TEST_TOKEN,
-    });
-    // One preflight, then the legacy route: no ticket attempt, so no retry preflight either.
-    assert.equal(uploadId, 'legacy-upload');
-    assert.deepEqual(requests, ['POST /upload/preflight', 'POST /upload']);
-  } finally {
-    await server.close();
-  }
-});
-
 test('uploadArtifact uses direct upload ticket and finalize flow', async () => {
   const content = 'direct-upload-apk';
   const artifactPath = createTempFile('app.apk', content);

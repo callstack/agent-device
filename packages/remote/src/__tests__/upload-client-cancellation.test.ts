@@ -18,10 +18,26 @@ import { uploadArtifact } from '../upload-client.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { observeOutcome } from './support/upload-transfer-fixtures.ts';
 
+// Control requests to a plain-http (loopback) daemon go direct over `node:http`, never through an
+// environment proxy, so that send is the control-plane seam these cases replace.
+const directHttp = vi.hoisted(() => ({
+  send: undefined as ((request: Request) => Promise<Response>) | undefined,
+}));
+vi.mock('@agent-device/host-kit/direct-http', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/direct-http')>();
+  return {
+    ...actual,
+    fetchOverDirectHttp: vi.fn(async (request: Request) =>
+      directHttp.send ? await directHttp.send(request) : await actual.fetchOverDirectHttp(request),
+    ),
+  };
+});
+
 const TEST_TOKEN = 'agent-device-upload-cancel-token';
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  directHttp.send = undefined;
   vi.restoreAllMocks();
   vi.useRealTimers();
   for (const dir of tempDirs) {
@@ -37,6 +53,8 @@ test('cancellation refuses preparation before it reads a missing artifact', asyn
   const reason = new Error('request owner stopped');
   control.abort(reason);
   const fetch = vi.spyOn(globalThis, 'fetch');
+  const direct = vi.fn(async () => new Response(null, { status: 500 }));
+  directHttp.send = direct;
   await assert.rejects(
     uploadArtifact({
       env: process.env,
@@ -48,6 +66,7 @@ test('cancellation refuses preparation before it reads a missing artifact', asyn
     (error: unknown) => error === reason,
   );
   assert.equal(fetch.mock.calls.length, 0);
+  assert.equal(direct.mock.calls.length, 0);
 });
 
 test('a standalone upload expires its preparation aggregate during hashing without starting a request', async () => {
@@ -56,6 +75,8 @@ test('a standalone upload expires its preparation aggregate during hashing witho
   const hashSource = new PassThrough();
   vi.spyOn(fs, 'createReadStream').mockReturnValue(hashSource as unknown as fs.ReadStream);
   const fetch = vi.spyOn(globalThis, 'fetch');
+  const direct = vi.fn(async () => new Response(null, { status: 500 }));
+  directHttp.send = direct;
   const outcome = uploadArtifact({
     env: process.env,
     localPath: artifactPath,
@@ -73,6 +94,8 @@ test('a standalone upload expires its preparation aggregate during hashing witho
     });
     assert.equal(hashSource.destroyed, true);
     assert.equal(fetch.mock.calls.length, 0);
+    assert.equal(direct.mock.calls.length, 0);
+    assert.equal(direct.mock.calls.length, 0);
   } finally {
     hashSource.destroy();
     await outcome;
@@ -116,12 +139,13 @@ test.each([
   let stalledSignal: AbortSignal | undefined;
   let preflights = 0;
   let refuseStall: ((error: Error) => void) | undefined;
-  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-    const route = new URL(String(input)).pathname;
+  let controlRequests = 0;
+  directHttp.send = async (request) => {
+    controlRequests += 1;
+    const route = new URL(request.url).pathname;
     if (route.endsWith('/preflight')) preflights += 1;
     if (route.endsWith('/' + phase) && (!retry || preflights === 2)) {
-      const signal = init?.signal;
-      assert.ok(signal);
+      const signal = request.signal;
       stalledSignal = signal;
       entered();
       if (prose) throw new Error(`Artifact transfer ${phase} timed out`);
@@ -135,7 +159,7 @@ test.each([
       uploadId: 'control-upload',
       upload: { url: `${server.baseUrl}/ticket`, headers: {} },
     });
-  });
+  };
   const outcome = observeOutcome(
     uploadArtifact({
       env: process.env,
@@ -181,7 +205,7 @@ test.each([
       routes,
       Array.from({ length: expectedTicketLegs }, () => 'PUT /ticket'),
     );
-    assert.equal(fetch.mock.calls.length, 1 + expectedTicketLegs);
+    assert.equal(controlRequests, 1 + expectedTicketLegs);
   } finally {
     caller.abort(new Error('fixture cleanup'));
     refuseStall?.(new Error('fixture cleanup'));

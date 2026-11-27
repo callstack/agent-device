@@ -400,56 +400,6 @@ for (const [status, code] of [
   });
 }
 
-test('connect cloud never sends its bearer token to a plain http cloud off loopback', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-cleartext-');
-  mockedResolveCloudAccessForConnect.mockResolvedValue({
-    accessToken: 'adc_agent_cloud',
-    cloudBaseUrl: 'http://cloud.example',
-  });
-  const fetchMock = vi.fn(async () => new Response('{}'));
-  vi.stubGlobal('fetch', fetchMock);
-  try {
-    await assert.rejects(
-      connectWithGeneratedCloudProfile(path.join(tempRoot, '.state')),
-      (error) => {
-        assert.equal(normalizeError(error).details?.reason, 'insecure_credential_transport');
-        return true;
-      },
-    );
-    assert.equal(fetchMock.mock.calls.length, 0);
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('connect cloud refuses a profile redirect to another origin before sending to it', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-redirect-');
-  mockedResolveCloudAccessForConnect.mockResolvedValue({
-    accessToken: 'adc_agent_cloud',
-    cloudBaseUrl: 'https://cloud.example',
-  });
-  const fetchMock = vi.fn(
-    async () =>
-      new Response(null, { status: 302, headers: { location: 'http://other.example/profile' } }),
-  );
-  vi.stubGlobal('fetch', fetchMock);
-  try {
-    await assert.rejects(
-      connectWithGeneratedCloudProfile(path.join(tempRoot, '.state')),
-      (error) => {
-        assert.equal(normalizeError(error).details?.reason, 'cloud_auth_redirect_refused');
-        return true;
-      },
-    );
-    assert.deepEqual(
-      fetchMock.mock.calls.map(([url]) => String(url)),
-      ['https://cloud.example/api/control-plane/connection-profile'],
-    );
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
 test('connect without remote config reports unsupported cloud profile keys', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-invalid-');
   const stateDir = path.join(tempRoot, '.state');

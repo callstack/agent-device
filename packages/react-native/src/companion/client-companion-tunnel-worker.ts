@@ -164,9 +164,10 @@ function clampRetryDelay(delayMs: number): number {
 }
 
 /** The final URL a bearer request goes to, or a refusal no retry can fix. */
-function bearerDestination(url: string): URL {
+function bearerDestination(url: string): string {
   try {
-    return assertSecureCredentialTransport(url, 'Metro companion bridge URL');
+    assertSecureCredentialTransport(url, 'Metro companion bridge URL');
+    return url;
   } catch (error) {
     throw new CompanionRegistrationError(
       error instanceof Error ? error.message : String(error),

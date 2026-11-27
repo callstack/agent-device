@@ -247,24 +247,23 @@ export async function uploadLimrunRunnerProducts(
       for (const file of payloads)
         yield* createReadStream(path.join(directory, file.path), { signal });
     }
+    const syncUrl = `${apiUrl}/sync`;
+    assertSecureCredentialTransport(syncUrl, 'Limrun API URL');
     const stream = createGzip();
     const compression = pipeline(Readable.from(body()), stream, { signal }).catch(() => {});
     try {
-      const response = await fetch(
-        assertSecureCredentialTransport(`${apiUrl}/sync`, 'Limrun API URL'),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/octet-stream',
-            'Content-Encoding': 'gzip',
-          },
-          body: Readable.toWeb(stream) as ReadableStream<Uint8Array>,
-          duplex: 'half',
-          signal,
-          redirect: 'error',
-        } as RequestInit & { duplex: 'half' },
-      );
+      const response = await fetch(syncUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/octet-stream',
+          'Content-Encoding': 'gzip',
+        },
+        body: Readable.toWeb(stream) as ReadableStream<Uint8Array>,
+        duplex: 'half',
+        signal,
+        redirect: 'error',
+      } as RequestInit & { duplex: 'half' });
       if (!response.ok) {
         await response.body?.cancel();
         throw limrunRunnerError(

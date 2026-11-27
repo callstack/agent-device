@@ -4,19 +4,29 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
 import https from 'node:https';
-import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
+import type { AddressInfo } from 'node:net';
 import { createDaemonProxy, type DaemonProxyUpstreamFetch } from './daemon-proxy.ts';
+
+async function listenLocal(server: http.Server): Promise<number> {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return (server.address() as AddressInfo).port;
+}
+
+async function closeLocal(server: http.Server): Promise<void> {
+  server.closeAllConnections();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+}
 
 const servers: http.Server[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(servers.splice(0).map((server) => closeLoopbackServer(server)));
+  await Promise.all(servers.splice(0).map((server) => closeLocal(server)));
 });
 
 async function serve(handler: http.RequestListener): Promise<string> {
   const server = http.createServer(handler);
   servers.push(server);
-  return `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  return `http://127.0.0.1:${await listenLocal(server)}`;
 }
 
 const rpc = () =>

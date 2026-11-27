@@ -3,14 +3,24 @@ import { execFile } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
+import type { AddressInfo } from 'node:net';
 
 // A credential sent over plain http goes only to loopback, and an environment proxy on another host
 // would read it in cleartext. Node reads `NODE_USE_ENV_PROXY` at startup, so each case runs a child.
 
+async function listenLocal(server: http.Server): Promise<number> {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return (server.address() as AddressInfo).port;
+}
+
+async function closeLocal(server: http.Server): Promise<void> {
+  server.closeAllConnections();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+}
+
 const servers: http.Server[] = [];
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => closeLoopbackServer(server)));
+  await Promise.all(servers.splice(0).map((server) => closeLocal(server)));
 });
 
 async function serve(seen: string[]): Promise<number> {
@@ -19,7 +29,7 @@ async function serve(seen: string[]): Promise<number> {
     res.end('ok');
   });
   servers.push(server);
-  return await listenOnLoopback(server);
+  return await listenLocal(server);
 }
 
 const TRANSPORT = path.join(import.meta.dirname, 'direct-http.ts');
