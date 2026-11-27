@@ -92,7 +92,7 @@ const DAEMON_STATE_ROOT_REASONS = {
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** Why this build refuses to send a request whose delivery the answering daemon cannot promise. */
-export const DAEMON_CAPABILITY_REFUSAL_REASONS = {
+const DAEMON_CAPABILITY_REFUSAL_REASONS = {
   // The remote daemon reports no script-artifacts capability, so it would record to its own disk.
   scriptArtifactsUnsupported: { reason: 'remote_script_artifacts_unsupported' },
   // The daemon reports no lease-admission capability, so it cannot check a lease no heartbeat checked.

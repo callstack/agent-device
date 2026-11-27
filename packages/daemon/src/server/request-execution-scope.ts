@@ -1,4 +1,3 @@
-import { AsyncResource } from 'node:async_hooks';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -59,6 +58,7 @@ import {
   readOpenWaitBudgetMs,
 } from '../sessions/open-device-contention-wait.ts';
 import {
+  bindOutsideRequestLocks,
   createRequestExecutionLocks,
   withRequestExecutionLockKeys,
 } from './request-execution-locks.ts';
@@ -239,9 +239,8 @@ export async function createRequestExecutionScope(params: {
   endSessionsForLease?: (leaseId: string) => Promise<void>;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  // Bound before this request takes a lock, so the lease end it starts never runs under one.
-  const queueLeaseEnd =
-    params.endSessionsForLease && AsyncResource.bind(params.endSessionsForLease);
+  // Bound here, before this request takes a lock.
+  const queueLeaseEnd = bindOutsideRequestLocks(params.endSessionsForLease);
   const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
   // A nested batch or replay step arrives with the identity of the request that spawned it, and its
   // own name is already the store key.
