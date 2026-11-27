@@ -143,38 +143,40 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       suiteHostSession: sessionName,
     },
   };
-  const response = await runReplayTestCommand({
-    ...splitReplayCommandRequest(suiteRequest),
-    host,
-    session: createReplaySession(sessionName, logPath, sessionStore, capture),
-    createSession: (testSessionName, testLogPath) =>
-      createReplaySession(testSessionName, testLogPath, sessionStore, capture),
-    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, attemptReq),
-    dependencies: replayDaemonDependencies,
-    cleanupSession: async (testSessionName) =>
-      await closeReplayTestSession({
-        host,
-        req,
-        sessionName: testSessionName,
-        logPath,
-        sessionStore,
-        leaseRegistry,
-        leaseLifecycleProvider,
-        inspectFacts,
-        bindDevice,
-        platformServices,
-        platformResourceCleanup,
-      }),
-    ...(video ? { video } : {}),
-  });
-  await releaseUnheldSuiteRequestLease({
-    req,
-    sessionName,
-    sessionStore,
-    leaseRegistry,
-    leaseLifecycleProvider,
-  });
-  return response;
+  try {
+    return await runReplayTestCommand({
+      ...splitReplayCommandRequest(suiteRequest),
+      host,
+      session: createReplaySession(sessionName, logPath, sessionStore, capture),
+      createSession: (testSessionName, testLogPath) =>
+        createReplaySession(testSessionName, testLogPath, sessionStore, capture),
+      invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, attemptReq),
+      dependencies: replayDaemonDependencies,
+      cleanupSession: async (testSessionName) =>
+        await closeReplayTestSession({
+          host,
+          req,
+          sessionName: testSessionName,
+          logPath,
+          sessionStore,
+          leaseRegistry,
+          leaseLifecycleProvider,
+          inspectFacts,
+          bindDevice,
+          platformServices,
+          platformResourceCleanup,
+        }),
+      ...(video ? { video } : {}),
+    });
+  } finally {
+    await releaseUnheldSuiteRequestLease({
+      req,
+      sessionName,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider,
+    });
+  }
 };
 
 /**
@@ -360,6 +362,7 @@ async function releaseUnheldSuiteRequestLease(params: {
 async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
   const { req, sessionName, logPath, sessionStore } = params;
   if (!sessionStore.get(sessionName)) return;
+  const suiteLeaseId = req.internal?.admittedLease?.leaseId;
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
     req: onDelegatingLedger(
@@ -370,7 +373,10 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
         positionals: [],
         flags: {},
         meta: req.meta,
-        internal: { cleanupIntent: 'suite-owned-test-session' },
+        internal: {
+          cleanupIntent: 'suite-owned-test-session',
+          ...(suiteLeaseId ? { suiteLeaseId } : {}),
+        },
       },
       req,
     ),
