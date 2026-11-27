@@ -59,6 +59,7 @@ import {
   claimRemoteConnectionDefaults,
   remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
+  bindCheckedRpcToValidatedEndpoint,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
@@ -425,7 +426,10 @@ async function resolveRunContextOrExit(
       remoteConfig: flags.remoteConfig,
     });
     const effectiveFlags = connectionDefaults
-      ? mergeConnectionFlags(flags, connectionDefaults.flags, explicitFlagKeys)
+      ? bindCheckedRpcToValidatedEndpoint(
+          mergeConnectionFlags(flags, connectionDefaults.flags, explicitFlagKeys),
+          connectionDefaults.flags,
+        )
       : flags;
     return {
       ...base,

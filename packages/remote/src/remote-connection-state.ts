@@ -394,6 +394,18 @@ export function writeRemoteConnectionState(options: {
   writeJsonFile(activeConnectionStatePath(options.stateDir), { session: options.state.session });
 }
 
+/**
+ * Checked RPC holds only for the base URL `connect` validated. A command that names another
+ * endpoint goes health-first, because nothing checked that endpoint serves the route.
+ */
+export function bindCheckedRpcToValidatedEndpoint(
+  flags: CliFlags,
+  defaults: Partial<CliFlags>,
+): CliFlags {
+  if (flags.daemonRpc !== 'checked' || flags.daemonBaseUrl === defaults.daemonBaseUrl) return flags;
+  return { ...flags, daemonRpc: undefined };
+}
+
 export function buildRemoteConnectionDaemonState(
   flags: Pick<
     CliFlags,

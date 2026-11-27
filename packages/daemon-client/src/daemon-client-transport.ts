@@ -536,7 +536,8 @@ function remoteResendPort(
     resend: async (budgetMs) =>
       await sendRequestWithTransport(info, req, statePaths, budgetMs, transport, options),
     readHealth: async (probeMs) => await readRemoteDaemonHealth(info, probeMs, options.signal),
-    probeHealth: async (probeMs, signal) => await cachedRemoteDaemonHealth(info, probeMs, signal),
+    // Live reads only: another call may refill the cache while recovery waits.
+    probeHealth: async (probeMs, signal) => await readRemoteDaemonHealth(info, probeMs, signal),
     invalidateHealth: async () => await invalidateRemoteDaemonHealth(info),
     refuseIfAborted: () => refuseAbortedRequest(options.signal, req.meta?.requestId),
     budgetSpent: () => requestTimeoutError(timeoutMs ?? 0, req.meta?.requestId, false),

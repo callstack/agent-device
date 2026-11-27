@@ -24,7 +24,7 @@ export type RemoteResendPort = {
   resend(timeoutMs: number | undefined): Promise<DaemonResponse>;
   /** A live `/health` read that refuses a skewed protocol. */
   readHealth(probeTimeoutMs: number | undefined): Promise<RemoteResendHealth>;
-  /** A `/health` read through the process cache, as the recovery loop probes. */
+  /** A live `/health` read for the recovery loop; never the process cache. */
   probeHealth(probeTimeoutMs: number, signal: AbortSignal | undefined): Promise<RemoteResendHealth>;
   invalidateHealth(): Promise<void>;
   /** Throws the typed cancellation when the caller has aborted. */

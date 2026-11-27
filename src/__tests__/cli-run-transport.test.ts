@@ -84,3 +84,59 @@ test('a CLI run builds one transport, shared by the remote-materialization clien
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('checked RPC holds only for the base URL connect validated; another endpoint goes health-first', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = path.join(project, 'remote.json');
+  fs.writeFileSync(remoteConfig, JSON.stringify({ daemonRpc: 'checked' }), 'utf8');
+  const now = new Date().toISOString();
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'checked-endpoint',
+      remoteConfigPath: remoteConfig,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfig),
+      daemon: { baseUrl: 'http://127.0.0.1:7001', transport: 'http', rpc: 'checked' },
+      tenant: 'tenant',
+      runId: 'run-checked',
+      connectedAt: now,
+      updatedAt: now,
+    },
+  });
+  const sent: Array<{ daemonBaseUrl?: string; daemonRpc?: string }> = [];
+  const transportForHost = vi.fn(() => async (req: Omit<DaemonRequest, 'token'>) => {
+    sent.push({ daemonBaseUrl: req.flags?.daemonBaseUrl, daemonRpc: req.flags?.daemonRpc });
+    return { ok: true, data: { sessions: [] } } satisfies DaemonResponse;
+  });
+  const host = { env: { HOME: home, PATH: process.env.PATH }, cwd: project };
+  vi.spyOn(process, 'exit').mockImplementation((() => {
+    throw new ProcessExit();
+  }) as never);
+  vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+  const run = async (extra: string[]) =>
+    await runCli(
+      [
+        'session',
+        'list',
+        '--session',
+        'checked-endpoint',
+        '--state-dir',
+        stateDir,
+        '--json',
+        ...extra,
+      ],
+      { sendToDaemon: vi.fn(), transportForHost },
+      host,
+    );
+
+  await run([]);
+  await run(['--daemon-base-url', 'http://127.0.0.1:7002']);
+
+  assert.deepEqual(sent, [
+    { daemonBaseUrl: 'http://127.0.0.1:7001', daemonRpc: 'checked' },
+    { daemonBaseUrl: 'http://127.0.0.1:7002', daemonRpc: undefined },
+  ]);
+});

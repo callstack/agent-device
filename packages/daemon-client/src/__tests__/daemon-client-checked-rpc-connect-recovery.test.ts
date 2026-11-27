@@ -173,3 +173,27 @@ test('an abort during checked connect recovery rejects with the typed cancellati
     await stopDriving();
   }
 });
+
+test('a concurrent call that refills the health cache during recovery never stands in for its probe', async () => {
+  const calls = firstCheckedConnectHangs();
+  const stopDriving = driveFakeTime();
+  // Lands after the connect timeout (3 s) and before the recovery probe (4 s).
+  const concurrent = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      void sendToDaemon(sessionList(), { authToken: 'remote-secret' }).then(() => resolve());
+    }, 3_500);
+  });
+  try {
+    const response = await sendToDaemon(sessionList('checked'), { authToken: 'remote-secret' });
+    await concurrent;
+
+    assert.equal(response.ok, true);
+    const routes = calls.map(({ method, path }) => `${method} ${path}`);
+    const resend = routes.lastIndexOf('POST /agent-device/rpc/checked');
+    const probes = routes.slice(1, resend).filter((route) => route === 'GET /agent-device/health');
+    // One probe is the concurrent call's own; the recovery made a live one of its own.
+    assert.equal(probes.length, 2, routes.join(', '));
+  } finally {
+    await stopDriving();
+  }
+});
