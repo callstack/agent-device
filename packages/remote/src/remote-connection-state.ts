@@ -409,7 +409,7 @@ export function writeRemoteConnectionState(options: {
     stateDir: options.stateDir,
     session: options.state.session,
   });
-  ensurePrivateDirectorySync(path.dirname(statePath));
+  ensurePrivateDirectorySync(path.dirname(statePath), { allowOwnedSymlinks: true });
   writeJsonFile(statePath, {
     ...options.state,
     leaseProvider: canonicalLeaseProvider(options.state.leaseProvider),

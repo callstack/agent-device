@@ -4,14 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   acquireProcessLock,
-  ensurePrivateChildDirectorySync,
   ensurePrivateDirectorySync,
   lstatIfPresent,
   openVerifiedFileForRead,
+  PrivateDirectoryInitializingError,
   PrivateDirectoryUnsafeError,
   publishFileSync,
   tryAcquireProcessLock,
-  verifyDirectoryIdentityNoFollow,
   withProcessLock,
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -66,16 +65,122 @@ function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-type VerifiedCloudStateRoot = Readonly<{
-  stateDir: string;
+type VerifiedDirectoryHandle = Readonly<{
+  dirPath: string;
   dev: number | bigint;
   ino: number | bigint;
+  fd: number | undefined;
 }>;
 
-const lockedCloudStateRoot = new AsyncLocalStorage<VerifiedCloudStateRoot>();
+const lockedCloudStateRoot = new AsyncLocalStorage<VerifiedDirectoryHandle>();
 
 export function cloudConnectionDir({ stateDir, session }: ConnectionLocation): string {
   return path.join(stateDir, 'cloud-connections', hash(session));
+}
+
+function closeVerifiedDirectoryHandle(handle: VerifiedDirectoryHandle | undefined): void {
+  if (handle?.fd === undefined) return;
+  try {
+    fs.closeSync(handle.fd);
+  } catch {}
+}
+
+function openNoFollowDirectoryFd(dirPath: string): number {
+  const flags =
+    fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) | (fs.constants.O_NOFOLLOW ?? 0);
+  try {
+    return fs.openSync(dirPath, flags);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ELOOP' || code === 'ENOTDIR' || code === 'ENOENT') {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    throw error;
+  }
+}
+
+function assertVerifiedDirectoryStats(
+  status: fs.Stats,
+  exposure: number,
+  requireLiveLinks = false,
+): void {
+  assertOwnedEntry(status, status.isDirectory() && !status.isSymbolicLink(), exposure);
+  if (process.platform !== 'win32' && (status.mode & 0o700) !== 0o700) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+  if (requireLiveLinks && process.platform !== 'win32' && status.nlink <= 0) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+}
+
+function openVerifiedDirectoryHandle(
+  dirPath: string,
+  exposure: number,
+  allowMissing = false,
+): VerifiedDirectoryHandle | undefined {
+  const resolved = path.resolve(dirPath);
+  const seen = lstatIfPresent(resolved);
+  if (!seen) {
+    if (allowMissing) return undefined;
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+  assertVerifiedDirectoryStats(seen, exposure);
+  if (process.platform === 'win32') {
+    return { dirPath: resolved, dev: seen.dev, ino: seen.ino, fd: undefined };
+  }
+  const fd = openNoFollowDirectoryFd(resolved);
+  try {
+    const fstat = fs.fstatSync(fd);
+    assertVerifiedDirectoryStats(fstat, exposure, true);
+    if (fstat.dev !== seen.dev || fstat.ino !== seen.ino) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    return { dirPath: resolved, dev: fstat.dev, ino: fstat.ino, fd };
+  } catch (error) {
+    fs.closeSync(fd);
+    throw error;
+  }
+}
+
+function assertDirectoryHandleIntact(handle: VerifiedDirectoryHandle, exposure: number): void {
+  if (process.platform === 'win32') {
+    const seen = lstatIfPresent(handle.dirPath);
+    if (
+      !seen ||
+      seen.isSymbolicLink() ||
+      !seen.isDirectory() ||
+      seen.dev !== handle.dev ||
+      seen.ino !== handle.ino
+    ) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    return;
+  }
+  const fstat = fs.fstatSync(handle.fd!);
+  assertVerifiedDirectoryStats(fstat, exposure, true);
+  if (fstat.dev !== handle.dev || fstat.ino !== handle.ino) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+  const current = openNoFollowDirectoryFd(handle.dirPath);
+  try {
+    const currentStat = fs.fstatSync(current);
+    assertVerifiedDirectoryStats(currentStat, exposure, true);
+    if (currentStat.dev !== handle.dev || currentStat.ino !== handle.ino) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+  } finally {
+    fs.closeSync(current);
+  }
+}
+
+function resolveInsideVerifiedHandle(
+  handle: VerifiedDirectoryHandle,
+  relativePath: string,
+): string {
+  if (process.platform === 'linux' && handle.fd !== undefined) {
+    return path.posix.join(`/proc/self/fd/${handle.fd}`, relativePath);
+  }
+  return path.join(handle.dirPath, relativePath);
 }
 
 export async function withConnectionLock<T>(
@@ -85,28 +190,37 @@ export async function withConnectionLock<T>(
   onContention?: () => void,
 ): Promise<T> {
   withCredentialStoreSafety(() => ensurePrivateDirectorySync(stateDir));
-  const expectedRoot = requireCloudStateRootIdentity(stateDir);
-  return await withProcessLock({
-    acquire: async () => {
-      try {
-        return await acquireProcessLock({
-          ...connectionLockOptions({ stateDir, session }),
-          ensureParentDir: false,
-          timeoutMs: 180_000,
-          onContention,
-        });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
-          throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  const rootHandle = openVerifiedDirectoryHandle(stateDir, 0o022)!;
+  const assertRoot = () => assertDirectoryHandleIntact(rootHandle, 0o022);
+  try {
+    return await withProcessLock({
+      acquire: async () => {
+        try {
+          return await acquireProcessLock({
+            ...connectionLockOptions({ stateDir, session }),
+            ensureParentDir: false,
+            assertParentIntact: assertRoot,
+            resolveEntryPath: (logicalPath) =>
+              resolveInsideVerifiedHandle(rootHandle, path.basename(logicalPath)),
+            timeoutMs: 180_000,
+            onContention,
+          });
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException | null)?.code;
+          if (code === 'ENOENT' || code === 'ENOTDIR') {
+            throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+          }
+          throw error;
         }
-        throw error;
-      }
-    },
-    task: async () => {
-      assertLockedCloudStateRoot(expectedRoot);
-      return await lockedCloudStateRoot.run(expectedRoot, task);
-    },
-  });
+      },
+      task: async () => {
+        assertRoot();
+        return await lockedCloudStateRoot.run(rootHandle, task);
+      },
+    });
+  } finally {
+    closeVerifiedDirectoryHandle(rootHandle);
+  }
 }
 
 export async function tryWithConnectionLock(
@@ -114,27 +228,36 @@ export async function tryWithConnectionLock(
   task: () => Promise<void> | void,
 ): Promise<void> {
   withCredentialStoreSafety(() => ensurePrivateDirectorySync(location.stateDir));
-  const expectedRoot = requireCloudStateRootIdentity(location.stateDir);
-  let lock;
+  const rootHandle = openVerifiedDirectoryHandle(location.stateDir, 0o022)!;
+  const assertRoot = () => assertDirectoryHandleIntact(rootHandle, 0o022);
   try {
-    lock = tryAcquireProcessLock({
-      ...connectionLockOptions(location),
-      ensureParentDir: false,
-    });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
-      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    let lock;
+    try {
+      lock = tryAcquireProcessLock({
+        ...connectionLockOptions(location),
+        ensureParentDir: false,
+        assertParentIntact: assertRoot,
+        resolveEntryPath: (logicalPath) =>
+          resolveInsideVerifiedHandle(rootHandle, path.basename(logicalPath)),
+      });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+      }
+      throw error;
     }
-    throw error;
+    if (lock.status !== 'acquired') return;
+    await withProcessLock({
+      acquire: async () => lock.acquisition.release,
+      task: async () => {
+        assertRoot();
+        return await lockedCloudStateRoot.run(rootHandle, async () => await task());
+      },
+    });
+  } finally {
+    closeVerifiedDirectoryHandle(rootHandle);
   }
-  if (lock.status !== 'acquired') return;
-  await withProcessLock({
-    acquire: async () => lock.acquisition.release,
-    task: async () => {
-      assertLockedCloudStateRoot(expectedRoot);
-      return await lockedCloudStateRoot.run(expectedRoot, async () => await task());
-    },
-  });
 }
 
 export function refuseContendedConnection(
@@ -184,69 +307,217 @@ export function admitCloudCredentialDirectory(
   location: ConnectionLocation,
   create = false,
 ): boolean {
+  return withAdmittedCredentialDirectoryHandle(location, create, () => true).admitted;
+}
+
+function withAdmittedCredentialDirectoryHandle<T>(
+  location: ConnectionLocation,
+  create: boolean,
+  task: (target: { rootHandle: VerifiedDirectoryHandle; connHandle: VerifiedDirectoryHandle }) => T,
+): { admitted: true; value: T } | { admitted: false } {
   return withCredentialStoreSafety(() => {
     const lockedRoot = lockedCloudStateRoot.getStore();
-    if (lockedRoot && lockedRoot.stateDir === path.resolve(location.stateDir)) {
+    let ownedRoot: VerifiedDirectoryHandle | undefined;
+    let rootHandle: VerifiedDirectoryHandle | undefined;
+    if (lockedRoot && lockedRoot.dirPath === path.resolve(location.stateDir)) {
       // Under an active connection lock, never recreate a vanished root or accept a substituted one.
-      assertLockedCloudStateRoot(lockedRoot);
+      assertDirectoryHandleIntact(lockedRoot, 0o022);
+      rootHandle = lockedRoot;
     } else {
       if (create) ensurePrivateDirectorySync(location.stateDir);
-      if (!admitCloudStateRootIdentity(location.stateDir)) return false;
+      ownedRoot = openVerifiedDirectoryHandle(location.stateDir, 0o022, !create);
+      if (!ownedRoot) return { admitted: false };
+      rootHandle = ownedRoot;
     }
-    const directory = cloudConnectionDir(location);
-    const cloud = path.dirname(directory);
-    for (const entry of [cloud, directory]) {
-      const status = readCloudDirectory(entry, create);
-      if (!status) return false;
-      assertOwnedEntry(
-        status,
-        !status.isSymbolicLink() && status.isDirectory(),
-        entry === directory ? 0o077 : 0o022,
+    let cloudHandle: VerifiedDirectoryHandle | undefined;
+    let connHandle: VerifiedDirectoryHandle | undefined;
+    try {
+      const cloudPath = resolveInsideVerifiedHandle(rootHandle, 'cloud-connections');
+      cloudHandle = openOrCreateVerifiedSubdir(
+        rootHandle,
+        cloudPath,
+        'cloud-connections',
+        0o022,
+        create,
       );
-      verifyDirectoryIdentityNoFollow(entry, status);
+      if (!cloudHandle) return { admitted: false };
+      const sessionSegment = hash(location.session);
+      const connPath = resolveInsideVerifiedHandle(cloudHandle, sessionSegment);
+      connHandle = openOrCreateVerifiedSubdir(cloudHandle, connPath, sessionSegment, 0o077, create);
+      if (!connHandle) return { admitted: false };
+      assertDirectoryHandleIntact(rootHandle, 0o022);
+      assertDirectoryHandleIntact(cloudHandle, 0o022);
+      assertDirectoryHandleIntact(connHandle, 0o077);
+      const result = task({ rootHandle, connHandle });
+      assertDirectoryHandleIntact(rootHandle, 0o022);
+      assertDirectoryHandleIntact(connHandle, 0o077);
+      return { admitted: true, value: result };
+    } finally {
+      closeVerifiedDirectoryHandle(connHandle);
+      closeVerifiedDirectoryHandle(cloudHandle);
+      closeVerifiedDirectoryHandle(ownedRoot);
     }
-    return true;
   });
 }
 
-function readCloudDirectory(entry: string, create: boolean): fs.Stats | undefined {
-  const existing = lstatIfPresent(entry);
-  if (existing || !create) return existing;
-  ensurePrivateChildDirectorySync(path.dirname(entry), path.basename(entry));
-  return lstatIfPresent(entry);
+const CLOUD_DIR_WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
+
+function waitForCloudSubdirOwnerBits(dirPath: string, initial: fs.Stats): fs.Stats {
+  let current = initial;
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    if ((current.mode & 0o700) === 0o700) return current;
+    Atomics.wait(CLOUD_DIR_WAIT_BUFFER, 0, 0, 10);
+    const next = lstatIfPresent(dirPath);
+    if (!next || next.isSymbolicLink() || !next.isDirectory()) return current;
+    current = next;
+  }
+  return current;
+}
+
+function ensureCloudSubdirOwnerBitsReady(entryPath: string, stats: fs.Stats | undefined): void {
+  if (
+    process.platform === 'win32' ||
+    !stats ||
+    stats.isSymbolicLink() ||
+    !stats.isDirectory() ||
+    (stats.mode & 0o700) === 0o700
+  ) {
+    return;
+  }
+  const ready = waitForCloudSubdirOwnerBits(entryPath, stats);
+  if ((ready.mode & 0o700) !== 0o700) {
+    throw new PrivateDirectoryInitializingError(
+      'COMMAND_FAILED',
+      `Private directory ${entryPath} does not grant owner read/write/execute permissions yet.`,
+      { retriable: true, path: entryPath },
+    );
+  }
+}
+
+function createPrivateSubdirInsideHandle(
+  parentHandle: VerifiedDirectoryHandle,
+  entryPath: string,
+  childName: string,
+  exposure: number,
+): VerifiedDirectoryHandle {
+  assertDirectoryHandleIntact(parentHandle, 0o022);
+  let created = true;
+  try {
+    fs.mkdirSync(entryPath, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    created = false;
+  }
+  if (!created) {
+    ensureCloudSubdirOwnerBitsReady(entryPath, lstatIfPresent(entryPath));
+    return openVerifiedDirectoryHandle(entryPath, exposure, false)!;
+  }
+  const seen = lstatIfPresent(entryPath);
+  if (!seen || seen.isSymbolicLink() || !seen.isDirectory()) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+  if (process.platform === 'win32') {
+    return {
+      dirPath: path.join(parentHandle.dirPath, childName),
+      dev: seen.dev,
+      ino: seen.ino,
+      fd: undefined,
+    };
+  }
+  if ((seen.mode & 0o077) !== 0) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+  const mode = seen.mode & 0o777;
+  if (mode !== 0o700) {
+    if ((mode & 0o400) !== 0) {
+      const fd = openNoFollowDirectoryFd(entryPath);
+      try {
+        const fstat = fs.fstatSync(fd);
+        if (!fstat.isDirectory() || fstat.dev !== seen.dev || fstat.ino !== seen.ino) {
+          throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+        }
+        fs.fchmodSync(fd, 0o700);
+        const updated = fs.fstatSync(fd);
+        assertVerifiedDirectoryStats(updated, exposure, true);
+        return {
+          dirPath: path.join(parentHandle.dirPath, childName),
+          dev: updated.dev,
+          ino: updated.ino,
+          fd,
+        };
+      } catch (error) {
+        fs.closeSync(fd);
+        throw error;
+      }
+    }
+    assertDirectoryHandleIntact(parentHandle, 0o022);
+    const latest = lstatIfPresent(entryPath);
+    if (
+      !latest ||
+      latest.isSymbolicLink() ||
+      !latest.isDirectory() ||
+      latest.dev !== seen.dev ||
+      latest.ino !== seen.ino
+    ) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    fs.chmodSync(entryPath, 0o700);
+  }
+  const fd = openNoFollowDirectoryFd(entryPath);
+  try {
+    const fstat = fs.fstatSync(fd);
+    assertVerifiedDirectoryStats(fstat, exposure, true);
+    if (fstat.dev !== seen.dev || fstat.ino !== seen.ino) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    return {
+      dirPath: path.join(parentHandle.dirPath, childName),
+      dev: fstat.dev,
+      ino: fstat.ino,
+      fd,
+    };
+  } catch (error) {
+    fs.closeSync(fd);
+    throw error;
+  }
+}
+
+function openOrCreateVerifiedSubdir(
+  parentHandle: VerifiedDirectoryHandle,
+  entryPath: string,
+  childName: string,
+  exposure: number,
+  create: boolean,
+): VerifiedDirectoryHandle | undefined {
+  const existing = lstatIfPresent(entryPath);
+  if (!existing) {
+    if (!create) return undefined;
+    return createPrivateSubdirInsideHandle(parentHandle, entryPath, childName, exposure);
+  }
+  ensureCloudSubdirOwnerBitsReady(entryPath, existing);
+  return openVerifiedDirectoryHandle(entryPath, exposure, !create);
+}
+
+export function withCloudCredentialFileTarget<T>(
+  location: ConnectionLocation,
+  fileName: 'record.json' | 'attachment.json',
+  create: boolean,
+  writeOrRead: (filePath: string) => T,
+): T {
+  const ran = withAdmittedCredentialDirectoryHandle(location, create, ({ connHandle }) =>
+    writeOrRead(resolveInsideVerifiedHandle(connHandle, fileName)),
+  );
+  if (!ran.admitted) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+  return ran.value;
 }
 
 function admitCloudStateRoot(stateDir: string): boolean {
-  return admitCloudStateRootIdentity(stateDir) !== undefined;
-}
-
-function requireCloudStateRootIdentity(stateDir: string): VerifiedCloudStateRoot {
-  const verified = admitCloudStateRootIdentity(stateDir);
-  if (!verified) {
-    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
-  }
-  return verified;
-}
-
-function assertLockedCloudStateRoot(expected: VerifiedCloudStateRoot): void {
-  const current = admitCloudStateRootIdentity(expected.stateDir);
-  if (!current || current.dev !== expected.dev || current.ino !== expected.ino) {
-    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
-  }
-}
-
-function admitCloudStateRootIdentity(stateDir: string): VerifiedCloudStateRoot | undefined {
-  return withCredentialStoreSafety(() => {
-    const resolved = path.resolve(stateDir);
-    const status = lstatIfPresent(resolved);
-    if (!status) return undefined;
-    assertOwnedEntry(status, !status.isSymbolicLink() && status.isDirectory(), 0o022);
-    if (process.platform !== 'win32' && (status.mode & 0o700) !== 0o700) {
-      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
-    }
-    verifyDirectoryIdentityNoFollow(resolved, status);
-    return { stateDir: resolved, dev: status.dev, ino: status.ino };
-  });
+  const handle = openVerifiedDirectoryHandle(stateDir, 0o022, true);
+  if (!handle) return false;
+  closeVerifiedDirectoryHandle(handle);
+  return true;
 }
 
 function assertOwnedEntry(status: fs.Stats, correctKind: boolean, exposure: number): void {
@@ -331,13 +602,12 @@ export function writeCloudConnection(
   record: CloudConnectionRecord,
 ): void {
   assertCloudRecordSession(location, record);
-  if (!admitCloudCredentialDirectory(location, true)) {
-    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
-  }
-  publishFileSync({
-    destination: recordPath(location),
-    contents: JSON.stringify(record),
-    mode: 0o600,
+  withCloudCredentialFileTarget(location, 'record.json', true, (targetPath) => {
+    publishFileSync({
+      destination: targetPath,
+      contents: JSON.stringify(record),
+      mode: 0o600,
+    });
   });
 }
 

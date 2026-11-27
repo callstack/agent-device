@@ -253,24 +253,29 @@ test('a failed check after a channel switch records the new channel and drops th
   assert.equal(cache.checkedAt, '2026-03-31T10:00:00.000Z');
 });
 
-test('notifier and update worker skip creating a missing state root', async () => {
+test('notifier uses an independent cache when state root is absent, while worker skips creating missing root', async () => {
   vi.mocked(runCmdDetached).mockClear();
   const root = makeTempStateDir();
   cleanupPaths.push(root);
   const missingStateDir = path.join(root, 'absent-state');
+  const cacheHome = path.join(root, 'cache-home');
   const cachePath = path.join(missingStateDir, 'update-check.json');
 
   withStreamTty(process.stderr, true, () => {
     maybeRunUpgradeNotifier({
-      command: 'connect',
+      command: 'daemon',
       currentVersion: '0.11.3',
       stateDir: missingStateDir,
       flags: {},
+      env: { XDG_CACHE_HOME: cacheHome },
     });
   });
 
-  assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 0);
+  assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1);
   assert.equal(fs.existsSync(missingStateDir), false);
+  const scheduledCachePath = vi.mocked(runCmdDetached).mock.calls[0]?.[1]?.[3];
+  assert.ok(scheduledCachePath);
+  assert.equal(scheduledCachePath.startsWith(cacheHome), true);
 
   vi.stubGlobal(
     'fetch',

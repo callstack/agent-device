@@ -202,6 +202,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           currentVersion: version,
           stateDir: ctx.daemonPaths.baseDir,
           flags: ctx.effectiveFlags,
+          env: host.env,
         });
         await applySavedCloudAttachment(ctx);
         let transport = resolveRunTransport(deps, ctx.host, ctx.admitConnection);

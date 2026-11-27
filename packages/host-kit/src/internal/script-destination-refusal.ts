@@ -1,5 +1,9 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
+export class PrivateDirectoryUnsafeError extends AppError {}
+
+export class PrivateDirectoryInitializingError extends AppError {}
+
 /** The ways a step can be unsafe; `untrustedGroundWording` words each one for the caller. */
 export type ScriptAncestryExposure =
   | 'foreign_owned'

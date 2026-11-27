@@ -144,7 +144,7 @@ const STATE_ROOT_PROBLEM_BY_EXPOSURE: Record<
 export function admitDaemonStateRoot(options: {
   paths: DaemonPaths;
   mode: 'repair' | 'establish';
-  refuseWritableRoot?: boolean;
+  preserveNonWritableRoot?: boolean;
 }): void {
   const { baseDir } = options.paths;
   const repair = options.mode === 'repair';
@@ -160,7 +160,7 @@ export function admitDaemonStateRoot(options: {
     rootPath: baseDir,
     mode: options.mode,
     managedDirs: ['sessions', path.join('sessions', 'remote-scripts')],
-    refuseWritableRoot: options.refuseWritableRoot,
+    preserveNonWritableRoot: options.preserveNonWritableRoot,
   });
   if (admitted.status === 'refused')
     throw unsafeStateRoot(

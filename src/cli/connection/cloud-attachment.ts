@@ -20,6 +20,7 @@ import {
   readCloudCredentialJson,
   cloudConnectionUnavailable,
   readCurrentCloudConnection,
+  withCloudCredentialFileTarget,
   writeCloudConnection,
   withCloudConnectionOwner,
   type ConnectionLocation,
@@ -36,10 +37,11 @@ export function writeCloudAttachment(
 ): void {
   // The pending record makes a partial write unreadable to commands. Write directly so recovery
   // has only one credential file to remove, even if the writer dies mid-write.
-  admitCloudCredentialDirectory(location, true);
-  fs.writeFileSync(cloudAttachmentPath(location), JSON.stringify(attachment), {
-    flag: 'wx',
-    mode: 0o600,
+  withCloudCredentialFileTarget(location, 'attachment.json', true, (targetPath) => {
+    fs.writeFileSync(targetPath, JSON.stringify(attachment), {
+      flag: 'wx',
+      mode: 0o600,
+    });
   });
 }
 

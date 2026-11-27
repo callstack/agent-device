@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
+import { PrivateDirectoryInitializingError } from '@agent-device/host-kit/file';
 import { FOREIGN_UID, mkdtempForTestSync, serveHostOwnership } from '@agent-device/test-kit';
+import { writeCloudAttachment } from './cloud-attachment.ts';
 import {
   cloudConnectionDir,
   prepareCloudConnection,
@@ -207,5 +209,46 @@ test.skipIf(process.platform === 'win32')(
         details: expect.objectContaining({ reason: 'cloud_credential_store_unsafe' }),
       }),
     );
+  },
+);
+
+test('locked writeCloudAttachment refuses without recreating a vanished state root', async () => {
+  const parent = mkdtempForTestSync('cloud-attachment-locked-vanished-');
+  const stateDir = path.join(parent, 'state');
+  const location = { stateDir, session: 'locked-attachment-vanished' };
+
+  await expect(
+    withConnectionLock(stateDir, location.session, async () => {
+      fs.rmSync(stateDir, { recursive: true, force: true });
+      writeCloudAttachment(location, {
+        kind: 'agent-device-daemon',
+        daemonBaseUrl: 'https://daemon.example',
+        daemonAuthToken: 'secret-token',
+      });
+    }),
+  ).rejects.toMatchObject({
+    details: { reason: 'cloud_credential_store_unsafe' },
+  });
+  expect(fs.existsSync(stateDir)).toBe(false);
+});
+
+test.skipIf(process.platform === 'win32')(
+  'readCloudConnection waits and throws retriable PrivateDirectoryInitializingError if an unfinished 0o500 subdirectory stays unready',
+  () => {
+    const stateDir = path.join(mkdtempForTestSync('cloud-subdir-init-'), 'state');
+    const location = { stateDir, session: 'initializing-subdir' };
+    const connDir = cloudConnectionDir(location);
+    fs.mkdirSync(stateDir, { mode: 0o700 });
+    fs.chmodSync(stateDir, 0o700);
+    fs.mkdirSync(path.dirname(connDir), { mode: 0o700 });
+    fs.chmodSync(path.dirname(connDir), 0o700);
+    fs.mkdirSync(connDir, { mode: 0o500 });
+    fs.chmodSync(connDir, 0o500);
+
+    try {
+      expect(() => readCloudConnection(location)).toThrow(PrivateDirectoryInitializingError);
+    } finally {
+      fs.chmodSync(connDir, 0o700);
+    }
   },
 );

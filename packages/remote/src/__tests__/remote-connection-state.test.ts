@@ -373,3 +373,37 @@ test.skipIf(process.platform === 'win32')(
     assert.equal(fs.statSync(path.join(stateDir, 'remote-connections')).mode & 0o777, 0o700);
   },
 );
+
+test.skipIf(process.platform === 'win32')(
+  'writeRemoteConnectionState still allows a symlinked remote-connections directory owned by caller',
+  async () => {
+    const root = await mkdtempForTest('agent-device-connection-symlink-dir-');
+    const stateDir = path.join(root, 'state');
+    const outside = path.join(root, 'outside-remote');
+    fs.mkdirSync(stateDir, { mode: 0o700 });
+    fs.mkdirSync(outside, { mode: 0o700 });
+    fs.symlinkSync(outside, path.join(stateDir, 'remote-connections'));
+    const remoteConfigPath = path.join(root, 'remote.json');
+    fs.writeFileSync(remoteConfigPath, '{}');
+    const now = new Date().toISOString();
+
+    writeRemoteConnectionState({
+      stateDir,
+      state: {
+        version: 1,
+        session: 'symlink-qa',
+        remoteConfigPath,
+        remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+        tenant: 'tenant-a',
+        runId: 'run-a',
+        connectedAt: now,
+        updatedAt: now,
+      },
+    });
+
+    assert.equal(
+      readRemoteConnectionState({ stateDir, session: 'symlink-qa' })?.session,
+      'symlink-qa',
+    );
+  },
+);

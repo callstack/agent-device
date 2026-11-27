@@ -9,6 +9,8 @@ import {
 import { hostPathRules } from '../path-resolution.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  PrivateDirectoryInitializingError,
+  PrivateDirectoryUnsafeError,
   scriptAncestryFailure,
   scriptAncestryReason,
   type ScriptAncestryExposure,
@@ -24,6 +26,8 @@ export type ScriptDestinationTrust = Readonly<{
   privateAncestry?: boolean;
   /** Set for a private root: its ancestry refuses a group-writable directory this user owns too. */
   closedToOwnGroup?: boolean;
+  /** Allow following caller-owned symlinks while ensuring missing levels are created privately. */
+  allowOwnedSymlinks?: boolean;
 }>;
 
 /**
@@ -306,7 +310,7 @@ function walkSpelledParent(
       state = standOn(path.dirname(state.deepest), rest, trust, state.hops, refuse);
       continue;
     }
-    const step = stepIntoEntry(state, component, rest, trust, refuse);
+    const step = stepIntoEntry(state, component, rest, trust, refuse, create);
     if (step.ended === 'short') {
       const { deepest, missing, unresolvable } = step;
       // Nothing stands below here. A caller that creates makes that tail and is judged again; a step back out
@@ -349,9 +353,10 @@ function stepIntoEntry(
   rest: readonly string[],
   trust: ScriptDestinationTrust,
   refuse: RefuseAncestor,
+  create: boolean,
 ): EntryStep {
   const entry = path.join(state.deepest, component);
-  const stats = lstatEntry(entry);
+  let stats = lstatEntry(entry);
   if (stats === undefined) {
     return {
       ended: 'short',
@@ -362,9 +367,25 @@ function stepIntoEntry(
   }
   if (stats.isSymbolicLink()) return hopThroughLink(state, entry, stats, rest, trust, refuse);
   if (!stats.isDirectory()) refuse(entry, 'not_a_directory');
-  const authority = directoryAuthority(stats);
+  let authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
   if (exposure) refuse(entry, exposure, authority.uid === trust.uid);
+  if (
+    create &&
+    authority.uid === trust.uid &&
+    (authority.mode & 0o022) === 0 &&
+    (authority.mode & SCRIPT_DIR_MODE) !== SCRIPT_DIR_MODE
+  ) {
+    stats = waitForOwnerReadyDirectory(entry, stats);
+    authority = directoryAuthority(stats);
+    if ((authority.mode & SCRIPT_DIR_MODE) !== SCRIPT_DIR_MODE) {
+      throw new PrivateDirectoryInitializingError(
+        'COMMAND_FAILED',
+        `Private directory ${entry} does not grant owner read/write/execute permissions yet.`,
+        { retriable: true, path: entry },
+      );
+    }
+  }
   return {
     ended: 'stand',
     state: { deepest: entry, authority, queue: rest, hops: state.hops },
@@ -380,7 +401,10 @@ function hopThroughLink(
   trust: ScriptDestinationTrust,
   refuse: RefuseAncestor,
 ): EntryStep {
-  const exposure = untrustedLinkExposure({ uid: Number(stats.uid) }, state.authority, trust);
+  const exposure =
+    trust.allowOwnedSymlinks && (Number(stats.uid) === 0 || Number(stats.uid) === trust.uid)
+      ? undefined
+      : untrustedLinkExposure({ uid: Number(stats.uid) }, state.authority, trust);
   if (exposure) refuse(link, exposure);
   if (state.hops >= MAX_SCRIPT_PATH_LINK_HOPS) refuse(link, 'link_loop_exceeded');
   const target = fs.readlinkSync(link);
@@ -461,6 +485,7 @@ function createMissingLevel(
   name: string,
   trust: ScriptDestinationTrust,
 ): string {
+  verifyPhysicalParent(destination, parent, trust);
   const level = path.join(parent, name);
   let created = true;
   try {
@@ -481,12 +506,12 @@ function createMissingLevel(
     throw scriptAncestryFailure(destination, level, exposure, authority.uid === trust.uid);
   }
   if (created) {
-    // `mkdir` ANDs its mode with the umask, and a umask can take an OWNER bit away: umask 200 leaves this
-    // level 0500, where this call could not create the name below it. Prefer fchmod on an O_NOFOLLOW handle so
-    // a substituted link cannot receive the mode change; fall back inside the verified parent only under 0700
-    // where even the owner has no read bit yet.
+    // A directory swapped in before the first lstat with group/other bits cannot come from mkdir(0o700).
+    if (Number(seen.uid) !== trust.uid || (Number(seen.mode) & 0o077) !== 0) {
+      throw scriptAncestryFailure(destination, level, 'entry_appeared');
+    }
     if ((authority.mode & 0o777) !== SCRIPT_DIR_MODE) {
-      applyCreatedDirectoryMode(destination, level, seen);
+      applyCreatedDirectoryMode(destination, parent, level, seen, trust);
     }
     return level;
   }
@@ -499,10 +524,35 @@ function createMissingLevel(
     seen = waitForOwnerReadyDirectory(level, seen);
     authority = directoryAuthority(seen);
     if ((authority.mode & SCRIPT_DIR_MODE) !== SCRIPT_DIR_MODE) {
-      throw scriptAncestryFailure(destination, level, 'not_private', authority.uid === trust.uid);
+      throw new PrivateDirectoryInitializingError(
+        'COMMAND_FAILED',
+        `Private directory ${level} does not grant owner read/write/execute permissions yet.`,
+        { retriable: true, path: level },
+      );
     }
   }
   return level;
+}
+
+function verifyPhysicalParent(
+  destination: string,
+  parent: string,
+  trust: ScriptDestinationTrust,
+): fs.BigIntStats {
+  const seen = lstatEntry(parent);
+  if (seen === undefined || seen.isSymbolicLink() || !seen.isDirectory()) {
+    throw scriptAncestryFailure(
+      destination,
+      parent,
+      seen?.isSymbolicLink() ? 'planted_link' : 'not_a_directory',
+    );
+  }
+  const authority = directoryAuthority(seen);
+  const exposure = untrustedAncestryExposure(authority, trust);
+  if (exposure) {
+    throw scriptAncestryFailure(destination, parent, exposure, authority.uid === trust.uid);
+  }
+  return seen;
 }
 
 const INIT_WAIT_DELAY_MS = 10;
@@ -525,7 +575,13 @@ function waitForOwnerReadyDirectory(directory: string, initial: fs.BigIntStats):
   return current;
 }
 
-function applyCreatedDirectoryMode(destination: string, level: string, seen: fs.BigIntStats): void {
+function applyCreatedDirectoryMode(
+  destination: string,
+  parent: string,
+  level: string,
+  seen: fs.BigIntStats,
+  trust: ScriptDestinationTrust,
+): void {
   const mode = Number(seen.mode);
   const noFollowDirFlags =
     fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) | (fs.constants.O_NOFOLLOW ?? 0);
@@ -538,7 +594,13 @@ function applyCreatedDirectoryMode(destination: string, level: string, seen: fs.
     }
     try {
       const fstat = fs.fstatSync(fd, { bigint: true });
-      if (!fstat.isDirectory() || fstat.dev !== seen.dev || fstat.ino !== seen.ino) {
+      if (
+        !fstat.isDirectory() ||
+        fstat.dev !== seen.dev ||
+        fstat.ino !== seen.ino ||
+        Number(fstat.uid) !== trust.uid ||
+        (Number(fstat.mode) & 0o077) !== 0
+      ) {
         throw scriptAncestryFailure(destination, level, 'planted_link');
       }
       fs.fchmodSync(fd, SCRIPT_DIR_MODE);
@@ -547,13 +609,18 @@ function applyCreatedDirectoryMode(destination: string, level: string, seen: fs.
     }
     return;
   }
+  // Umask 0700 leaves a new directory 0000 without owner read access, so open(O_RDONLY) fails with
+  // EACCES; verify the admitted physical parent and matching non-shared inode first, chmod once, then verify.
+  verifyPhysicalParent(destination, parent, trust);
   const latest = lstatEntry(level);
   if (
     latest === undefined ||
     latest.isSymbolicLink() ||
     !latest.isDirectory() ||
     latest.dev !== seen.dev ||
-    latest.ino !== seen.ino
+    latest.ino !== seen.ino ||
+    Number(latest.uid) !== trust.uid ||
+    (Number(latest.mode) & 0o077) !== 0
   ) {
     throw scriptAncestryFailure(destination, level, 'planted_link');
   }
@@ -561,12 +628,126 @@ function applyCreatedDirectoryMode(destination: string, level: string, seen: fs.
   const fd = fs.openSync(level, noFollowDirFlags);
   try {
     const fstat = fs.fstatSync(fd, { bigint: true });
-    if (!fstat.isDirectory() || fstat.dev !== seen.dev || fstat.ino !== seen.ino) {
+    if (
+      !fstat.isDirectory() ||
+      fstat.dev !== seen.dev ||
+      fstat.ino !== seen.ino ||
+      Number(fstat.uid) !== trust.uid
+    ) {
       throw scriptAncestryFailure(destination, level, 'planted_link');
     }
   } finally {
     fs.closeSync(fd);
   }
+}
+
+export function ensurePrivateDirectoryWithAncestrySync(
+  directory: string,
+  options?: { allowOwnedSymlinks?: boolean },
+): void {
+  const allowOwnedSymlinks = options?.allowOwnedSymlinks === true;
+  const resolved = path.resolve(directory).replace(TRAILING_HOST_SEPARATORS, '');
+  const trust: ScriptDestinationTrust = {
+    ...scriptTrust({}),
+    closedToOwnGroup: !allowOwnedSymlinks,
+    allowOwnedSymlinks,
+  };
+  const existing = lstatEntry(resolved);
+  if (existing) {
+    if (existing.isSymbolicLink()) {
+      if (
+        !allowOwnedSymlinks ||
+        (Number(existing.uid) !== 0 && Number(existing.uid) !== trust.uid)
+      ) {
+        throw new PrivateDirectoryUnsafeError(
+          'COMMAND_FAILED',
+          `Refusing symbolic link in private directory path. (${resolved})`,
+          { path: resolved },
+        );
+      }
+      const target = fs.statSync(resolved);
+      if (!target.isDirectory() || (Number(target.uid) !== 0 && Number(target.uid) !== trust.uid)) {
+        throw new PrivateDirectoryUnsafeError(
+          'COMMAND_FAILED',
+          `Expected an owned directory. (${resolved})`,
+          {
+            path: resolved,
+          },
+        );
+      }
+      return;
+    }
+    if (!existing.isDirectory()) {
+      throw new PrivateDirectoryUnsafeError(
+        'COMMAND_FAILED',
+        `Expected a directory. (${resolved})`,
+        {
+          path: resolved,
+        },
+      );
+    }
+    let current = existing;
+    if (
+      Number(current.uid) === trust.uid &&
+      (Number(current.mode) & SCRIPT_DIR_MODE) !== SCRIPT_DIR_MODE
+    ) {
+      current = waitForOwnerReadyDirectory(resolved, current);
+      if ((Number(current.mode) & SCRIPT_DIR_MODE) !== SCRIPT_DIR_MODE) {
+        throw new PrivateDirectoryInitializingError(
+          'COMMAND_FAILED',
+          `Private directory ${resolved} does not grant owner read/write/execute permissions yet.`,
+          { retriable: true, path: resolved },
+        );
+      }
+    }
+    const flags =
+      fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) | (fs.constants.O_NOFOLLOW ?? 0);
+    let fd: number;
+    try {
+      fd = fs.openSync(resolved, flags);
+    } catch {
+      throw new PrivateDirectoryUnsafeError(
+        'COMMAND_FAILED',
+        `Private directory could not be verified safely. (${resolved})`,
+        { path: resolved },
+      );
+    }
+    try {
+      const fstat = fs.fstatSync(fd, { bigint: true });
+      if (!fstat.isDirectory() || fstat.dev !== current.dev || fstat.ino !== current.ino) {
+        throw new PrivateDirectoryUnsafeError(
+          'COMMAND_FAILED',
+          `Private directory changed while verifying. (${resolved})`,
+          { path: resolved },
+        );
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+    return;
+  }
+  if (!path.isAbsolute(resolved) || path.dirname(resolved) === resolved) return;
+  try {
+    const parent = walkSpelledParent(path.dirname(resolved), resolved, trust, true);
+    createMissingLevel(resolved, parent.deepest, path.basename(resolved), trust);
+  } catch (error) {
+    if (
+      error instanceof PrivateDirectoryInitializingError ||
+      error instanceof PrivateDirectoryUnsafeError
+    ) {
+      throw error;
+    }
+    if (scriptAncestryReason(error) !== undefined) {
+      throw new PrivateDirectoryUnsafeError('COMMAND_FAILED', (error as AppError).message, {
+        path: resolved,
+      });
+    }
+    throw error;
+  }
+}
+
+export function ensurePrivateChildWithAncestrySync(parentDir: string, childName: string): void {
+  ensurePrivateDirectoryWithAncestrySync(path.join(path.resolve(parentDir), childName));
 }
 
 /** Never all of a bare `/`. On POSIX `\` is a file-name character: `state\` is part of a name to judge. */
@@ -588,8 +769,8 @@ export function admitPrivateRoot(options: {
   mode: 'repair' | 'establish';
   /** Names below the root this caller traverses, judged by the same rule. */
   managedDirs?: readonly string[];
-  /** Refuse pre-existing group- or other-writable directories without modifying their permissions. */
-  refuseWritableRoot?: boolean;
+  /** Leave an owned root without group/other write bits (`0o755`/`0o750`) unchanged on connection admission. */
+  preserveNonWritableRoot?: boolean;
 }): PrivateRootAdmission {
   const trust: ScriptDestinationTrust = { ...scriptTrust({}), closedToOwnGroup: true };
   const root = options.rootPath.replace(TRAILING_HOST_SEPARATORS, '');
@@ -599,26 +780,17 @@ export function admitPrivateRoot(options: {
   try {
     const parent = walkSpelledParent(path.dirname(root), root, trust, create);
     const rootSeenBeforeCreate = lstatEntry(root);
-    if (
-      options.refuseWritableRoot &&
-      rootSeenBeforeCreate &&
-      !rootSeenBeforeCreate.isSymbolicLink() &&
-      rootSeenBeforeCreate.isDirectory() &&
-      Number(rootSeenBeforeCreate.uid) === trust.uid &&
-      (Number(rootSeenBeforeCreate.mode) & 0o022) !== 0
-    ) {
-      return { status: 'refused', component: root, exposure: 'not_private' };
-    }
     if (create && !rootSeenBeforeCreate)
       createMissingLevel(root, parent.deepest, path.basename(root), trust);
-    for (const directory of [
-      root,
-      ...(options.managedDirs ?? []).map((name) => path.join(root, name)),
-    ]) {
-      const fault = admitDirectory(directory, trust, options.refuseWritableRoot === true);
+    const rootFault = admitDirectory(root, trust, options.preserveNonWritableRoot === true);
+    if (rootFault) return { status: 'refused', component: root, exposure: rootFault };
+    for (const name of options.managedDirs ?? []) {
+      const directory = path.join(root, name);
+      const fault = admitDirectory(directory, trust, false);
       if (fault) return { status: 'refused', component: directory, exposure: fault };
     }
   } catch (error) {
+    if (error instanceof PrivateDirectoryInitializingError) throw error;
     return verdictForAncestryFault(error, create);
   }
   return { status: 'admitted' };
@@ -628,14 +800,33 @@ export function admitPrivateRoot(options: {
 function admitDirectory(
   directory: string,
   trust: ScriptDestinationTrust,
-  refuseWritable = false,
+  preserveNonWritable = false,
 ): ScriptAncestryExposure | undefined {
-  const seen = lstatEntry(directory);
+  let seen = lstatEntry(directory);
   if (seen === undefined) return undefined;
   if (seen.isSymbolicLink()) return 'planted_link';
   if (!seen.isDirectory()) return 'not_a_directory';
   if (Number(seen.uid) !== trust.uid) return 'foreign_owned';
-  if (refuseWritable && (Number(seen.mode) & 0o022) !== 0) return 'not_private';
+  if (
+    (Number(seen.mode) & 0o022) === 0 &&
+    (Number(seen.mode) & SCRIPT_DIR_MODE) !== SCRIPT_DIR_MODE
+  ) {
+    seen = waitForOwnerReadyDirectory(directory, seen);
+    if ((Number(seen.mode) & SCRIPT_DIR_MODE) !== SCRIPT_DIR_MODE) {
+      throw new PrivateDirectoryInitializingError(
+        'COMMAND_FAILED',
+        `Private directory ${directory} does not grant owner read/write/execute permissions yet.`,
+        { retriable: true, path: directory },
+      );
+    }
+  }
+  if (
+    preserveNonWritable &&
+    (Number(seen.mode) & 0o022) === 0 &&
+    (Number(seen.mode) & SCRIPT_DIR_MODE) === SCRIPT_DIR_MODE
+  ) {
+    return undefined;
+  }
   if (!(Number(seen.mode) & 0o077)) return undefined;
   // Only a change the host refuses for the directory's OWN owner is a fault (#4649).
   try {

@@ -118,5 +118,32 @@ test.skipIf(process.platform === 'win32')(
     fs.mkdirSync(childParent, { mode: 0o700 });
     ensurePrivateChildDirectorySync(childParent, 'only-child');
     expect(fs.statSync(path.join(childParent, 'only-child')).mode & 0o777).toBe(0o700);
+
+    const linkedTarget = path.join(root, 'owned-link-target');
+    fs.mkdirSync(linkedTarget, { mode: 0o700 });
+    const ownedLink = path.join(root, 'owned-link');
+    fs.symlinkSync(linkedTarget, ownedLink);
+    ensurePrivateDirectorySync(path.join(ownedLink, 'nested'), { allowOwnedSymlinks: true });
+    expect(fs.statSync(path.join(linkedTarget, 'nested')).mode & 0o777).toBe(0o700);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'ensurePrivateDirectorySync creates missing root under an owned sticky parent alias under umask 0700',
+  () => {
+    const root = fs.realpathSync(createTempRoot('host-kit-private-dir-alias-'));
+    const realSticky = path.join(root, 'real-sticky');
+    fs.mkdirSync(realSticky, { mode: 0o700 });
+    fs.chmodSync(realSticky, 0o1700);
+    const alias = path.join(root, 'tmp-alias');
+    fs.symlinkSync(realSticky, alias);
+    const targetViaAlias = path.join(alias, 'fresh-state');
+    const previousUmask = process.umask(0o700);
+    try {
+      ensurePrivateDirectorySync(targetViaAlias);
+    } finally {
+      process.umask(previousUmask);
+    }
+    expect(fs.statSync(path.join(realSticky, 'fresh-state')).mode & 0o777).toBe(0o700);
   },
 );

@@ -1,8 +1,12 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmdDetached } from '@agent-device/host-kit/command';
+import { ensurePrivateDirectorySync } from '@agent-device/host-kit/file';
+import { resolveHomeDirectory } from '@agent-device/host-kit/path-resolution';
 import { compareVersions } from '@agent-device/host-kit/version';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { writeStderr } from './process-exit.ts';
 
 const PACKAGE_NAME = 'agent-device';
@@ -28,6 +32,7 @@ export type UpgradeNotifierOptions = {
     json?: boolean;
     version?: boolean;
   };
+  env?: EnvMap;
 };
 
 type UpdateCheckWorkerOptions = {
@@ -38,11 +43,11 @@ type UpdateCheckWorkerOptions = {
 export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
   if (!shouldEnableUpgradeNotifier(options)) return;
 
-  const stateRoot = fs.lstatSync(options.stateDir, { throwIfNoEntry: false });
-  if (!stateRoot || !stateRoot.isDirectory()) return;
+  const cacheTarget = resolveUpgradeCacheTarget(options.stateDir, options.env);
+  if (!cacheTarget) return;
 
+  const { cachePath, independent } = cacheTarget;
   const now = Date.now();
-  const cachePath = path.join(options.stateDir, UPDATE_CHECK_CACHE_FILE);
   const cache = readUpdateCheckCache(cachePath);
 
   if (shouldShowUpgradeNotice(cache, options.currentVersion)) {
@@ -50,6 +55,7 @@ export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
       `Update available: ${PACKAGE_NAME} ${options.currentVersion} -> ${cache.latestVersion}. ` +
         `Run \`npm install -g ${PACKAGE_NAME}@${distTagFor(options.currentVersion)}\` to upgrade the CLI.\n`,
     );
+    if (independent) ensurePrivateCacheParent(cachePath);
     writeUpdateCheckCache(cachePath, {
       ...cache,
       prompted: true,
@@ -57,7 +63,33 @@ export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
   }
 
   if (shouldStartBackgroundCheck(cache, options.currentVersion, now)) {
+    if (independent) ensurePrivateCacheParent(cachePath);
     spawnBackgroundUpdateCheck(cachePath, options.currentVersion);
+  }
+}
+
+function resolveUpgradeCacheTarget(
+  stateDir: string,
+  env?: EnvMap,
+): { cachePath: string; independent: boolean } | undefined {
+  const stateRoot = fs.lstatSync(stateDir, { throwIfNoEntry: false });
+  if (stateRoot) {
+    if (!stateRoot.isDirectory()) return undefined;
+    return { cachePath: path.join(stateDir, UPDATE_CHECK_CACHE_FILE), independent: false };
+  }
+  const cacheBase = env?.XDG_CACHE_HOME?.trim() || path.join(resolveHomeDirectory(env), '.cache');
+  const stateHash = createHash('sha256').update(path.resolve(stateDir)).digest('hex').slice(0, 16);
+  return {
+    cachePath: path.join(cacheBase, PACKAGE_NAME, 'update-check', `${stateHash}.json`),
+    independent: true,
+  };
+}
+
+function ensurePrivateCacheParent(cachePath: string): void {
+  try {
+    ensurePrivateDirectorySync(path.dirname(cachePath), { allowOwnedSymlinks: true });
+  } catch {
+    // Best effort only.
   }
 }
 

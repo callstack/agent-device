@@ -50,7 +50,11 @@ export function resolveCommandConnection(
   const { host, flags, explicitFlagKeys } = options;
   const paths = resolveDaemonPaths(flags.stateDir, host);
   const rootMode = options.establishRoot ? 'establish' : 'repair';
-  admitDaemonStateRoot({ paths, mode: rootMode, refuseWritableRoot: true });
+  admitDaemonStateRoot({
+    paths,
+    mode: rootMode,
+    preserveNonWritableRoot: Boolean(options.establishRoot || options.claimForDisconnect),
+  });
   const request = { ...host, session: flags.session, remoteConfig: flags.remoteConfig };
   if (options.claimForDisconnect) {
     const defaults = claimRemoteConnectionDefaults({ ...request, stateDir: paths.baseDir });
@@ -172,7 +176,7 @@ function selectCommandRecord(options: {
   admitDaemonStateRoot({
     paths: daemonPaths,
     mode: options.establishRoot ? 'establish' : 'repair',
-    refuseWritableRoot: true,
+    preserveNonWritableRoot: Boolean(options.establishRoot),
   });
   const selected = readRemoteConnectionState({ stateDir: daemonPaths.baseDir, session });
   if (selected) requireLeasedConnectionSession(selected, requestedSession);

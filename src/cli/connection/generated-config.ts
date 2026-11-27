@@ -29,7 +29,7 @@ export function writeGeneratedRemoteConfig(options: {
   const configDir = path.join(options.stateDir, 'remote-connections', 'generated');
   const saved = findMatchingGeneratedProfile(options, configDir, normalized);
   if (saved) return saved;
-  ensurePrivateDirectorySync(configDir);
+  ensurePrivateDirectorySync(configDir, { allowOwnedSymlinks: true });
   const configPath = path.join(
     configDir,
     `${safeProviderName(options.provider)}-${profileHash(normalized)}.json`,

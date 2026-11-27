@@ -100,22 +100,49 @@ test('interactive non-JSON connect establishes a fresh state root privately befo
 });
 
 test.skipIf(process.platform === 'win32').each([0o775, 0o777])(
-  'connect and disconnect refuse a caller-owned %o state root before repair or lock without altering it',
+  'connect and disconnect repair a caller-owned %o state root to 0o700 and proceed',
   async (mode) => {
-    for (const args of [connectArgs, ['disconnect', '--session', sessionName, '--json']]) {
+    {
       const base = cloudEnv();
-      const stateDir = path.join(mkdtempForTestSync('cloud-cli-unsafe-root-'), 'state');
+      const stateDir = path.join(mkdtempForTestSync('cloud-cli-repair-connect-'), 'state');
       fs.mkdirSync(stateDir, { mode: 0o700 });
       fs.chmodSync(stateDir, mode);
       const fetchMock = stubCloudApi();
+      const result = await runCliCapture(connectArgs, {
+        env: { ...base, AGENT_DEVICE_STATE_DIR: stateDir },
+      });
+      assert.equal(result.code, null, result.stderr || result.stdout);
+      assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+      assert.equal(fetchMock.mock.calls.length, 1);
+    }
+    {
+      const base = cloudEnv();
+      const stateDir = path.join(mkdtempForTestSync('cloud-cli-repair-disconnect-'), 'state');
+      fs.mkdirSync(stateDir, { mode: 0o700 });
+      fs.chmodSync(stateDir, mode);
+      const result = await runCliCapture(['disconnect', '--session', sessionName, '--json'], {
+        env: { ...base, AGENT_DEVICE_STATE_DIR: stateDir },
+      });
+      assert.equal(result.code, null, result.stderr || result.stdout);
+      assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32').each([0o750, 0o755])(
+  'connect and disconnect preserve an owned non-writable %o state root',
+  async (mode) => {
+    for (const args of [connectArgs, ['disconnect', '--session', sessionName, '--json']]) {
+      const base = cloudEnv();
+      const stateDir = path.join(mkdtempForTestSync('cloud-cli-preserve-root-'), 'state');
+      fs.mkdirSync(stateDir, { mode: 0o700 });
+      fs.chmodSync(stateDir, mode);
+      stubCloudApi();
       const result = await runCliCapture(args, {
         env: { ...base, AGENT_DEVICE_STATE_DIR: stateDir },
       });
-      assert.equal(result.code, 1);
-      assert.equal(JSON.parse(result.stdout).error.details.reason, 'daemon_state_root_unsafe');
-      assert.equal(JSON.parse(result.stdout).error.details.problem, 'not-private');
+      assert.equal(result.code, null, result.stderr || result.stdout);
       assert.equal(fs.statSync(stateDir).mode & 0o777, mode);
-      assert.equal(fetchMock.mock.calls.length, 0);
     }
   },
 );

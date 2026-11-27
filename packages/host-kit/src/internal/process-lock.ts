@@ -138,6 +138,8 @@ type ProcessLockOptions = {
   owner: ProcessLockOwner;
   description?: string;
   ensureParentDir?: boolean;
+  assertParentIntact?: () => void;
+  resolveEntryPath?: (logicalPath: string) => string;
 };
 
 export function inspectProcessLock(lockDirPath: string): ProcessLockInspection {
@@ -178,21 +180,29 @@ function inspectProcessLockWith(
  * See docs/adr/0030-process-lock-exclusion.md for the migration contract.
  */
 export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAttempt {
+  params.assertParentIntact?.();
   if (params.ensureParentDir !== false) {
     fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
   }
-  const reading = readProcessLockOwner(path.join(params.lockDirPath, OWNER_FILE_NAME));
+  const bound = bindProcessLockPath(params);
+  const reading = readProcessLockOwner(path.join(bound.lockDirPath, OWNER_FILE_NAME));
   const liveness =
     reading.kind === 'owner' ? classifyOwnerLiveness({ owner: reading.owner }) : undefined;
-  return attemptProcessLock(params, {
+  return attemptProcessLock(bound, {
     standing: judgeStandingClaim(reading, liveness),
     judgeOwner: (owner) => classifyOwnerLiveness({ owner }),
     abandonedGuard: findAbandonedGuard(
-      params.lockDirPath,
+      bound.lockDirPath,
       (holder) => readHostProcessIdentityObservations([holder.pid]).get(holder.pid) ?? null,
     ),
     guardHolderStartTime: readCurrentOwnerIdentity().startTime,
   });
+}
+
+function bindProcessLockPath(params: ProcessLockOptions): ProcessLockOptions {
+  params.assertParentIntact?.();
+  if (!params.resolveEntryPath) return params;
+  return { ...params, lockDirPath: params.resolveEntryPath(params.lockDirPath) };
 }
 
 /** What a contender judged before it made an attempt, with every process probe already spent. */
@@ -210,6 +220,7 @@ function attemptProcessLock(
   evidence: AttemptEvidence,
 ): ProcessLockAttempt {
   const { lockDirPath } = params;
+  params.assertParentIntact?.();
   const judgment = evidence.standing;
   if (judgment.kind === 'live') return { status: 'busy', inspection: judgment.inspection };
   if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard, evidence.guardHolderStartTime)) {
@@ -221,6 +232,7 @@ function attemptProcessLock(
     (abandoned) => {
       if (abandoned.status === 'acquired') liveClaimTokens.delete(abandoned.claimToken);
     },
+    params.assertParentIntact,
   );
   if (outcome.status === 'acquired') {
     return { status: 'acquired', acquisition: outcome.acquisition };
@@ -236,9 +248,11 @@ function withMutationGuardHeld<Result>(
   lockDirPath: string,
   step: () => Result,
   abandon: (result: Result) => void,
+  assertParentIntact?: () => void,
 ): Result {
   let result: Result;
   try {
+    assertParentIntact?.();
     result = step();
   } catch (error) {
     try {
@@ -253,6 +267,7 @@ function withMutationGuardHeld<Result>(
     throw error;
   }
   try {
+    assertParentIntact?.();
     releaseReclaimMutex(lockDirPath);
   } catch (error) {
     abandon(result);
@@ -289,6 +304,7 @@ function publishClaim(
   ownerFilePath: string,
 ): GuardedAcquisitionOutcome {
   const { lockDirPath, owner } = params;
+  params.assertParentIntact?.();
   try {
     fs.mkdirSync(lockDirPath, { mode: 0o700 });
   } catch (error) {
@@ -298,6 +314,7 @@ function publishClaim(
   const claimToken = crypto.randomUUID();
   const claim: ProcessLockOwnerRecord = { ...owner, claimToken, claimIssuerId: CLAIM_ISSUER_ID };
   try {
+    params.assertParentIntact?.();
     // The umask narrows a created mode, so the owner-only mode is set exactly.
     fs.chmodSync(lockDirPath, 0o700);
     writeProcessLockOwner(ownerFilePath, claim);
@@ -402,7 +419,8 @@ export async function acquireProcessLockAcquisition(
   }
   do {
     throwIfCanceled(params.signal);
-    const attempt = attemptProcessLock(params, await gatherWaitEvidence(params, observe));
+    const bound = bindProcessLockPath(params);
+    const attempt = attemptProcessLock(bound, await gatherWaitEvidence(bound, observe));
     if (attempt.status === 'acquired') return attempt.acquisition;
     if (attempt.status === 'busy') params.onContention?.();
     const remaining = deadline - Date.now();
@@ -517,6 +535,7 @@ function createProcessLockAcquisition(
   let released = false;
   return Object.freeze({
     assertHeld() {
+      params.assertParentIntact?.();
       if (!active || readClaimOwnership(lockDirPath, claim) !== 'owned') {
         throw new AppError('COMMAND_FAILED', 'Process lock acquisition is no longer held', {
           lockDirPath,
@@ -528,6 +547,7 @@ function createProcessLockAcquisition(
       if (released) return;
       active = false;
       liveClaimTokens.delete(claim.claimToken!);
+      params.assertParentIntact?.();
       const ownership = readClaimOwnership(lockDirPath, claim);
       if (ownership === 'absent' || ownership === 'not-owner') {
         released = true;

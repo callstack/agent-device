@@ -51,7 +51,7 @@ async function runCatalogPreflight(
     env: host.env,
   });
   const paths = resolveDaemonPaths(flags.stateDir ?? defaults.flags.stateDir, host);
-  admitDaemonStateRoot({ paths, mode: 'repair', refuseWritableRoot: true });
+  admitDaemonStateRoot({ paths, mode: 'repair' });
   const { runCloudCatalog } = await import('./connection/cloud-catalog.ts');
   await runCloudCatalog({
     stateDir: paths.baseDir,

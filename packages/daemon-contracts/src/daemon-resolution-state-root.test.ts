@@ -210,18 +210,40 @@ test.skipIf(!posix || process.getuid?.() === 0)(
 // The repair #4649 asks for: an owned, real, safely-rooted root that is open only through its OWN bits is made
 // 0700 and admitted, on both modes. Neither mode creates anything below the root: the daemon makes its own names
 // when it needs them, and a state directory the daemon does not write into stays empty.
-test.skipIf(!posix).each([0o775, 0o777])(
-  'refuseWritableRoot leaves a caller-owned %o root unchanged and refuses before repair',
+test.skipIf(!posix).each([0o750, 0o755])(
+  'preserveNonWritableRoot leaves an owned %o root unchanged while repairing a writable managed dir',
   (mode) => {
-    const under = mkdtempForTestSync('state-admit-writable-preserve-');
+    const under = mkdtempForTestSync('state-admit-preserve-nonwritable-');
+    const root = makePrivateRoot(under, 'root');
+    const sessions = path.join(root, 'sessions');
+    fs.mkdirSync(sessions, { mode: 0o700 });
+    fs.chmodSync(sessions, 0o775);
+    fs.chmodSync(root, mode);
+
+    admitDaemonStateRoot({
+      paths: pathsOf(root),
+      mode: 'establish',
+      preserveNonWritableRoot: true,
+    });
+
+    expect(fs.statSync(root).mode & 0o777).toBe(mode);
+    expect(fs.statSync(sessions).mode & 0o777).toBe(0o700);
+  },
+);
+
+test.skipIf(!posix).each([0o775, 0o777])(
+  'preserveNonWritableRoot still repairs a caller-owned writable %o root to 0o700',
+  (mode) => {
+    const under = mkdtempForTestSync('state-admit-writable-repair-');
     const root = makePrivateRoot(under, 'writable');
     fs.chmodSync(root, mode);
 
-    const details = refusalOf(() =>
-      admitDaemonStateRoot({ paths: pathsOf(root), mode: 'establish', refuseWritableRoot: true }),
-    );
-    expect(details).toMatchObject({ problem: 'not-private', component: root });
-    expect(fs.statSync(root).mode & 0o777).toBe(mode);
+    admitDaemonStateRoot({
+      paths: pathsOf(root),
+      mode: 'establish',
+      preserveNonWritableRoot: true,
+    });
+    expect(fs.statSync(root).mode & 0o777).toBe(0o700);
   },
 );
 
