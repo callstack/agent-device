@@ -117,6 +117,7 @@ export function createDetachedAttempts<Value>(
     key: string,
     start: (signal: AbortSignal) => Promise<Value>,
   ): Attempt<Value> => {
+    const { promise: settled, resolve: settle } = Promise.withResolvers<void>();
     const attempt: Attempt<Value> = {
       status: 'pending',
       value: undefined as Value,
@@ -124,12 +125,8 @@ export function createDetachedAttempts<Value>(
       settledAtMs: now(),
       waitSpent: false,
       controller: new AbortController(),
-      settled: undefined as unknown as Promise<void>,
+      settled,
     };
-    let settle = () => {};
-    attempt.settled = new Promise<void>((resolve) => {
-      settle = resolve;
-    });
     attempts.set(key, attempt);
     const finish = (status: 'ready' | 'failed', outcome: Value | unknown) => {
       attempt.status = status;

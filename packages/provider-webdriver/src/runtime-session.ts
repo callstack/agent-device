@@ -268,12 +268,11 @@ export class WebDriverSessionManager {
    * map when the create failed and billed nothing.
    */
   private beginAllocation(lease: DeviceLease, req: LeaseLifecycleContext | undefined) {
-    let rentSession!: (session: WebDriverProviderSession) => void;
-    let refuseSession!: (error: unknown) => void;
-    const creation = new Promise<WebDriverProviderSession>((rent, refuse) => {
-      rentSession = rent;
-      refuseSession = refuse;
-    });
+    const {
+      promise: creation,
+      resolve: rentSession,
+      reject: refuseSession,
+    } = Promise.withResolvers<WebDriverProviderSession>();
     const entry: WebDriverLeaseEntry = { lease, creation, session: undefined, taken: undefined };
     this.entriesByLeaseId.set(lease.leaseId, entry);
     // Started after the publication above, so the create's answer can never arrive without an entry
@@ -348,10 +347,8 @@ export class WebDriverSessionManager {
   private take(entry: WebDriverLeaseEntry, by: 'release' | 'shutdown'): WebDriverLeaseTake {
     const taken = entry.taken;
     if (taken) return taken;
-    let reportDisposal!: (outcome: WebDriverDisposalOutcome) => void;
-    const disposal = new Promise<WebDriverDisposalOutcome>((report) => {
-      reportDisposal = report;
-    });
+    const { promise: disposal, resolve: reportDisposal } =
+      Promise.withResolvers<WebDriverDisposalOutcome>();
     const take: WebDriverLeaseTake = {
       by,
       providerSessionId: entry.session?.providerSessionId,

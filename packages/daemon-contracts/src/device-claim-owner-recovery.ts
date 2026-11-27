@@ -116,10 +116,7 @@ export function createOwnerScopedDeviceClaimReconciler(
     if (inspection?.status === 'retained') return inspection;
     const { settleWithin } = await import('@agent-device/host-kit/settle-within');
     const recovery = compose(claim.stateDir);
-    let resolveTracked!: () => void;
-    const trackedLifecycle = new Promise<void>((resolve) => {
-      resolveTracked = resolve;
-    });
+    const { promise: trackedLifecycle, resolve: resolveTracked } = Promise.withResolvers<void>();
     // Track from gateway composition through disposal settlement so a daemon close that starts
     // while reconciliation is still in flight still sees this recovery gateway.
     params.trackDisposal(trackedLifecycle);

@@ -75,11 +75,8 @@ async function runForegroundTakeover(
   let heartbeatError: unknown;
   let heartbeatRequest: Promise<void> | undefined;
   let released = false;
-  let finish: (() => void) | undefined;
-  const stopped = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  const stop = () => finish?.();
+  const { promise: stopped, resolve: finish } = Promise.withResolvers<void>();
+  const stop = () => finish();
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   const heartbeat = setInterval(() => {
@@ -89,7 +86,7 @@ async function runForegroundTakeover(
       .then(() => undefined)
       .catch((error: unknown) => {
         heartbeatError = error;
-        finish?.();
+        finish();
       })
       .finally(() => {
         heartbeatRequest = undefined;

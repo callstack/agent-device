@@ -210,10 +210,7 @@ function observeFirstWrite(output: AppLogOutputSink): {
   sink: AppLogOutputSink;
   written: Promise<void>;
 } {
-  let markWritten = noop;
-  const written = new Promise<void>((resolve) => {
-    markWritten = resolve;
-  });
+  const { promise: written, resolve: markWritten } = Promise.withResolvers<void>();
   const sink: AppLogOutputSink = {
     write: async (chunk) => {
       markWritten();

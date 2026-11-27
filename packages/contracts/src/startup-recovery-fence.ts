@@ -15,10 +15,7 @@ export async function runStartupRecoveryFence(
     await existing;
     return;
   }
-  let release!: () => void;
-  const fence = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: fence, resolve: release } = Promise.withResolvers<void>();
   startupRecoveryFences.set(scope, fence);
   try {
     await recover();

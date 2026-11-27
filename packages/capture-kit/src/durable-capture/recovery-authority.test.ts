@@ -47,7 +47,10 @@ test('acquisition winner leaves authority disposal to the caller', async () => {
 test('deadline abort disposes authority that becomes active after the caller has timed out', async () => {
   vi.useFakeTimers();
   try {
-    let resolveReattach!: (outcome: { status: 'active'; handle: AppLogLiveHandle }) => void;
+    const { promise: reattached, resolve: resolveReattach } = Promise.withResolvers<{
+      status: 'active';
+      handle: AppLogLiveHandle;
+    }>();
     const forceCleanup = vi.fn(async () => ({ status: 'cleaned' }) as const);
     const disposeControl = vi.fn(async () => {});
     const cleanupFailures = vi.fn();
@@ -61,10 +64,7 @@ test('deadline abort disposes authority that becomes active after the caller has
       },
       deadlineMs: 25,
       acquireControl: async () => ({
-        reattach: async () =>
-          await new Promise<{ status: 'active'; handle: AppLogLiveHandle }>((resolve) => {
-            resolveReattach = resolve;
-          }),
+        reattach: async () => await reattached,
         cleanup: async () => ({ status: 'already-missing' }),
         [Symbol.asyncDispose]: disposeControl,
       }),
@@ -107,9 +107,9 @@ test.each(['active', 'missing'] as const)(
       .spyOn(AbortSignal, 'any')
       .mockReturnValue(new AbortController().signal);
     try {
-      let resolveReattach!: (
-        outcome: { status: 'active'; handle: AppLogLiveHandle } | { status: 'missing' },
-      ) => void;
+      const { promise: reattached, resolve: resolveReattach } = Promise.withResolvers<
+        { status: 'active'; handle: AppLogLiveHandle } | { status: 'missing' }
+      >();
       const disposalOrder: string[] = [];
       const forceCleanup = vi.fn(async () => {
         disposalOrder.push('handle');
@@ -128,12 +128,7 @@ test.each(['active', 'missing'] as const)(
         },
         deadlineMs: 25,
         acquireControl: async () => ({
-          reattach: async () =>
-            await new Promise<
-              { status: 'active'; handle: AppLogLiveHandle } | { status: 'missing' }
-            >((resolve) => {
-              resolveReattach = resolve;
-            }),
+          reattach: async () => await reattached,
           cleanup: async () => ({ status: 'already-missing' as const }),
           [Symbol.asyncDispose]: disposeControl,
         }),
@@ -184,11 +179,12 @@ test('late handle cleanup failure does not skip control disposal when diagnostic
       throw reporterError;
     });
     const disposeControl = vi.fn(async () => {});
-    let resolveReattach!: (outcome: { status: 'active'; handle: AppLogLiveHandle }) => void;
-    let signalReattachStarted!: () => void;
-    const reattachStarted = new Promise<void>((resolve) => {
-      signalReattachStarted = resolve;
-    });
+    const { promise: reattached, resolve: resolveReattach } = Promise.withResolvers<{
+      status: 'active';
+      handle: AppLogLiveHandle;
+    }>();
+    const { promise: reattachStarted, resolve: signalReattachStarted } =
+      Promise.withResolvers<void>();
     const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
       displayName: 'app-log',
       envelope,
@@ -201,9 +197,7 @@ test('late handle cleanup failure does not skip control disposal when diagnostic
       acquireControl: async () => ({
         reattach: async () => {
           signalReattachStarted();
-          return await new Promise<{ status: 'active'; handle: AppLogLiveHandle }>((resolve) => {
-            resolveReattach = resolve;
-          });
+          return await reattached;
         },
         cleanup: async () => ({ status: 'already-missing' as const }),
         [Symbol.asyncDispose]: disposeControl,
@@ -258,11 +252,12 @@ test('aborted recovery does not skip control disposal when late handle diagnosti
     });
     const disposeControl = vi.fn(async () => {});
     let observedSignal: AbortSignal | undefined;
-    let resolveReattach!: (outcome: { status: 'active'; handle: AppLogLiveHandle }) => void;
-    let signalReattachStarted!: () => void;
-    const reattachStarted = new Promise<void>((resolve) => {
-      signalReattachStarted = resolve;
-    });
+    const { promise: reattached, resolve: resolveReattach } = Promise.withResolvers<{
+      status: 'active';
+      handle: AppLogLiveHandle;
+    }>();
+    const { promise: reattachStarted, resolve: signalReattachStarted } =
+      Promise.withResolvers<void>();
     const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
       displayName: 'app-log',
       envelope,
@@ -277,9 +272,7 @@ test('aborted recovery does not skip control disposal when late handle diagnosti
         return {
           reattach: async () => {
             signalReattachStarted();
-            return await new Promise<{ status: 'active'; handle: AppLogLiveHandle }>((resolve) => {
-              resolveReattach = resolve;
-            });
+            return await reattached;
           },
           cleanup: async () => ({ status: 'already-missing' as const }),
           [Symbol.asyncDispose]: disposeControl,
@@ -336,7 +329,9 @@ test.each(['deadline', 'cancellation'] as const)(
       const cleanupFailures = vi.fn(() => {
         throw new Error('cleanup diagnostic reporter failed');
       });
-      let resolveReattach!: (outcome: { status: 'missing' }) => void;
+      const { promise: reattached, resolve: resolveReattach } = Promise.withResolvers<{
+        status: 'missing';
+      }>();
       const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
         displayName: 'app-log',
         envelope,
@@ -347,10 +342,7 @@ test.each(['deadline', 'cancellation'] as const)(
         },
         deadlineMs: 25,
         acquireControl: async () => ({
-          reattach: async () =>
-            await new Promise<{ status: 'missing' }>((resolve) => {
-              resolveReattach = resolve;
-            }),
+          reattach: async () => await reattached,
           cleanup: async () => ({ status: 'already-missing' as const }),
           [Symbol.asyncDispose]: async () => {
             throw cleanupError;
@@ -392,11 +384,11 @@ test('request cancellation wins before the deadline and disposes late exact-owne
   const controller = new AbortController();
   const cancellation = new Error('request canceled');
   const disposeControl = vi.fn(async () => {});
-  let publishControl!: (control: {
+  const { promise: published, resolve: publishControl } = Promise.withResolvers<{
     reattach: () => Promise<{ status: 'missing' }>;
     cleanup: () => Promise<{ status: 'already-missing' }>;
     [Symbol.asyncDispose]: () => Promise<void>;
-  }) => void;
+  }>();
   let observedSignal: AbortSignal | undefined;
   let rejection: unknown;
   const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
@@ -410,9 +402,7 @@ test('request cancellation wins before the deadline and disposes late exact-owne
     deadlineMs: 10_000,
     acquireControl: async (_candidate, scope) => {
       observedSignal = scope.signal;
-      return await new Promise((resolve) => {
-        publishControl = resolve;
-      });
+      return await published;
     },
     onLateCleanupFailure: () => {},
   });
@@ -467,22 +457,13 @@ test.each(['cutoff', 'before-cutoff', 'caller-first'] as const)(
     vi.useFakeTimers();
     const caller = new AbortController();
     const cancellation = createRequestCanceledError();
-    let controlDisposed!: () => void;
-    const disposed = new Promise<void>((resolve) => {
-      controlDisposed = resolve;
-    });
+    const { promise: disposed, resolve: controlDisposed } = Promise.withResolvers<void>();
     const disposeControl = vi.fn(async () => {
       controlDisposed();
     });
     const forceCleanup = vi.fn(async () => ({ status: 'cleaned' }) as const);
-    let beginReattach!: () => void;
-    const reattaching = new Promise<void>((resolve) => {
-      beginReattach = resolve;
-    });
-    let releaseReattach!: () => void;
-    const release = new Promise<void>((resolve) => {
-      releaseReattach = resolve;
-    });
+    const { promise: reattaching, resolve: beginReattach } = Promise.withResolvers<void>();
+    const { promise: release, resolve: releaseReattach } = Promise.withResolvers<void>();
     let recoverySignal: AbortSignal | undefined;
     const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
       displayName: 'app-log',

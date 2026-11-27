@@ -94,10 +94,7 @@ export function heldKeyedLockKeys(locks: Map<string, Promise<unknown>>): string[
 }
 
 async function runInHeldFrame<T>(frame: LockFrame, task: () => Promise<T>): Promise<T> {
-  let markSettled!: () => void;
-  const settled = new Promise<void>((resolve) => {
-    markSettled = resolve;
-  });
+  const { promise: settled, resolve: markSettled } = Promise.withResolvers<void>();
   frame.descendants.add(settled);
   try {
     return await task();
@@ -244,16 +241,12 @@ function takeHold(
   key: string,
   signal: AbortSignal | undefined,
 ): Hold {
-  let markAcquired: () => void = () => {};
-  let rejectAcquired: (error: unknown) => void = () => {};
-  let release: () => void = () => {};
-  const acquired = new Promise<void>((resolve, reject) => {
-    markAcquired = resolve;
-    rejectAcquired = reject;
-  });
-  const released = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const {
+    promise: acquired,
+    resolve: markAcquired,
+    reject: rejectAcquired,
+  } = Promise.withResolvers<void>();
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
   const completion = acquireKeyedLock(
     locks,
     key,

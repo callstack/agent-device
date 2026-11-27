@@ -117,15 +117,13 @@ export function createAdapterHost(buildDelayMs = 0): AdapterFixture {
 
 class AdapterProcess implements SnapshotSourceProcess {
   readonly pid = 801;
-  readonly wait: Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  private resolveWait!: (result: { stdout: string; stderr: string; exitCode: number }) => void;
+  private readonly exit = Promise.withResolvers<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+  }>();
+  readonly wait = this.exit.promise;
   private alive = true;
-
-  constructor() {
-    this.wait = new Promise((resolve) => {
-      this.resolveWait = resolve;
-    });
-  }
 
   isAlive(): boolean {
     return this.alive;
@@ -133,7 +131,7 @@ class AdapterProcess implements SnapshotSourceProcess {
 
   signal(): void {
     this.alive = false;
-    this.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
+    this.exit.resolve({ stdout: '', stderr: '', exitCode: 0 });
   }
 
   readLog(): string {

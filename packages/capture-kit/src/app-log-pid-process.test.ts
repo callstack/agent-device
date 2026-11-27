@@ -4,15 +4,16 @@ import type {
   AppLogOutputSink,
   AppLogRuntimeHost,
 } from '@agent-device/contracts/app-log-runtime';
-import { deferred, processFixture } from './app-log-pid-process.fixtures.ts';
+import { processFixture } from './app-log-pid-process.fixtures.ts';
 import { createPidScopedAppLogProcess } from './app-log-pid-process.ts';
 
 describe('PID-scoped app-log process lifecycle', () => {
   test('retries output disposal after an unconfirmed finish', async () => {
     const output = outputFixture();
     output.dispose.mockRejectedValueOnce(new Error('Close unavailable'));
-    const started =
-      processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const started = processFixture(
+      Promise.withResolvers<{ stdout: string; stderr: string; exitCode: number }>(),
+    );
     const handle = await createPidScopedAppLogProcess({
       host: hostFixture(output.sink),
       backend: 'android',
@@ -30,9 +31,13 @@ describe('PID-scoped app-log process lifecycle', () => {
     expect(output.dispose).toHaveBeenCalledTimes(2);
   });
   test('cleans a later process that resolves after finish begins', async () => {
-    const initialExit = deferred<{ stdout: string; stderr: string; exitCode: number }>();
-    const laterExit = deferred<{ stdout: string; stderr: string; exitCode: number }>();
-    const laterStart = deferred<AppLogBackgroundProcess>();
+    const initialExit = Promise.withResolvers<{
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+    }>();
+    const laterExit = Promise.withResolvers<{ stdout: string; stderr: string; exitCode: number }>();
+    const laterStart = Promise.withResolvers<AppLogBackgroundProcess>();
     const initial = processFixture(initialExit);
     const later = processFixture(laterExit);
     const output = outputFixture();
@@ -98,7 +103,7 @@ describe('PID-scoped app-log process lifecycle', () => {
   });
 
   test('re-probes the app PID after an empty recovering observation', async () => {
-    const exit = deferred<{ stdout: string; stderr: string; exitCode: number }>();
+    const exit = Promise.withResolvers<{ stdout: string; stderr: string; exitCode: number }>();
     const started = processFixture(exit);
     const output = outputFixture();
     const resolvePid = vi.fn().mockResolvedValueOnce('').mockResolvedValueOnce('456');
@@ -254,8 +259,9 @@ describe('PID-scoped app-log capture after a failed PID poll', () => {
   }
 
   test('keeps the active stream and keeps polling after one rejected poll', async () => {
-    const started =
-      processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const started = processFixture(
+      Promise.withResolvers<{ stdout: string; stderr: string; exitCode: number }>(),
+    );
     const resolvePid = vi
       .fn<() => Promise<string>>()
       .mockResolvedValueOnce('123')
@@ -271,8 +277,9 @@ describe('PID-scoped app-log capture after a failed PID poll', () => {
   });
 
   test('starts the stream once a rejected waiting poll is followed by a PID', async () => {
-    const started =
-      processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const started = processFixture(
+      Promise.withResolvers<{ stdout: string; stderr: string; exitCode: number }>(),
+    );
     const resolvePid = vi
       .fn<() => Promise<string>>()
       .mockResolvedValueOnce('')

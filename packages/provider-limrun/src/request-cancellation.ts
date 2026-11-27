@@ -12,13 +12,11 @@ export function createLimrunRequestOperationDrain(): LimrunRequestOperationDrain
   const pending = new Set<Promise<void>>();
   return {
     wait: async <Value>(source: Promise<Value>, signal?: AbortSignal) => {
-      let settled!: () => void;
-      const completion = new Promise<void>((resolve) => {
-        settled = () => {
-          pending.delete(completion);
-          resolve();
-        };
-      });
+      const { promise: completion, resolve } = Promise.withResolvers<void>();
+      const settled = () => {
+        pending.delete(completion);
+        resolve();
+      };
       pending.add(completion);
       return await awaitWithSignal(source.finally(settled), signal);
     },

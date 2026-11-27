@@ -11,10 +11,7 @@ test('managed launch preparation consumes the same explicit startup budget as lo
     throw new Error('Managed launch reached local tooling');
   });
   appleRunnerTestHost.update({ runXcrun: localTool, runCmdBackground: localTool });
-  let finish!: () => void;
-  const exited = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
+  const { promise: exited, resolve: finish } = Promise.withResolvers<void>();
   const launcher: RunnerLauncher = {
     endpoint: { port: 8100, http: { url: 'https://instance.invalid/command' } },
     async launch() {
@@ -47,14 +44,8 @@ test('managed launch preparation consumes the same explicit startup budget as lo
 for (const operation of ['stop', 'release'] as const) {
   test(`${operation} cancels a pending launch and admits a subsequent generation`, async () => {
     let attempts = 0;
-    let entered!: () => void;
-    const launching = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    let finish!: () => void;
-    const exited = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
+    const { promise: launching, resolve: entered } = Promise.withResolvers<void>();
+    const { promise: exited, resolve: finish } = Promise.withResolvers<void>();
     const provider = createLaunchedAppleRunnerProvider(
       IOS_SIMULATOR,
       {
@@ -108,9 +99,8 @@ test('a failed termination stays owned and blocks replacement until termination 
       endpoint: { port: 8100, http: { url: 'https://instance.invalid/command' } },
       async launch() {
         attempts++;
-        const exited = new Promise<void>((resolve) => {
-          finish = resolve;
-        });
+        const { promise: exited, resolve } = Promise.withResolvers<void>();
+        finish = resolve;
         return {
           exited,
           output: (async function* () {
@@ -146,14 +136,8 @@ test('a failed termination stays owned and blocks replacement until termination 
 
 test('an output failure and failed termination remain observable without an unhandled rejection', async () => {
   let failTermination = true;
-  let failOutput!: () => void;
-  let finish!: () => void;
-  const outputFailure = new Promise<void>((resolve) => {
-    failOutput = resolve;
-  });
-  const exited = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
+  const { promise: outputFailure, resolve: failOutput } = Promise.withResolvers<void>();
+  const { promise: exited, resolve: finish } = Promise.withResolvers<void>();
   const provider = createLaunchedAppleRunnerProvider(
     IOS_SIMULATOR,
     {
@@ -204,9 +188,8 @@ test('retained reopen shares a generation and an exited generation flushes logs 
       endpoint: { port: server.port, http: { url: `http://127.0.0.1:${server.port}/command` } },
       async launch() {
         const generation = ++attempts;
-        const exited = new Promise<void>((resolve) => {
-          finish = resolve;
-        });
+        const { promise: exited, resolve } = Promise.withResolvers<void>();
+        finish = resolve;
         return {
           exited,
           output: (async function* () {
@@ -254,9 +237,8 @@ test('a canceled launch retains a generation whose termination failed before pub
       endpoint: { port: 8100, http: { url: 'https://instance.invalid/command' } },
       async launch() {
         attempts++;
-        const exited = new Promise<void>((resolve) => {
-          finish = resolve;
-        });
+        const { promise: exited, resolve } = Promise.withResolvers<void>();
+        finish = resolve;
         cancellation.abort(new Error('caller left'));
         return {
           exited,
@@ -300,9 +282,8 @@ test('an immediate output failure cannot publish a draining generation as ready'
       endpoint: { port: 8100, http: { url: 'https://instance.invalid/command' } },
       async launch() {
         const generation = ++attempts;
-        const exited = new Promise<void>((resolve) => {
-          finish = resolve;
-        });
+        const { promise: exited, resolve } = Promise.withResolvers<void>();
+        finish = resolve;
         return {
           exited,
           output: (async function* () {
@@ -342,10 +323,7 @@ for (const operation of ['abort', 'stop'] as const) {
       await import('../runner-session.ts');
     let failRegistered = true;
     const registered = (suffix: string, shouldFail: () => boolean) => {
-      let finish!: () => void;
-      const exited = new Promise<void>((resolve) => {
-        finish = resolve;
-      });
+      const { promise: exited, resolve: finish } = Promise.withResolvers<void>();
       return createLaunchedAppleRunnerProvider(
         { ...IOS_SIMULATOR, id: `${IOS_SIMULATOR.id}-${suffix}` },
         {
@@ -371,29 +349,17 @@ for (const operation of ['abort', 'stop'] as const) {
     const healthy = registered('healthy-stop', () => false);
     await failing.ensure({});
     await healthy.ensure({});
-    let enter!: () => void;
-    const entered = new Promise<void>((resolve) => {
-      enter = resolve;
-    });
-    let aborted!: () => void;
-    const canceled = new Promise<void>((resolve) => {
-      aborted = resolve;
-    });
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let finish!: () => void;
-    const exited = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
+    const { promise: entered, resolve: enter } = Promise.withResolvers<void>();
+    const { promise: canceled, resolve: aborted } = Promise.withResolvers<void>();
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    const { promise: exited, resolve: finish } = Promise.withResolvers<void>();
     let failTermination = true;
     const provider = createLaunchedAppleRunnerProvider(
       IOS_SIMULATOR,
       {
         endpoint: { port: 8100, http: { url: 'https://instance.invalid/command' } },
         async launch(_endpoint, signal) {
-          signal.addEventListener('abort', aborted, { once: true });
+          signal.addEventListener('abort', () => aborted(), { once: true });
           enter();
           await held;
           return {

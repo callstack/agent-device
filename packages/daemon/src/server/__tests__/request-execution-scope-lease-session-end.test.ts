@@ -56,10 +56,7 @@ function holdSessionLocks(
   sessionStore: SessionStore,
   name: string,
 ): { finish: () => void; held: Promise<void> } {
-  let finish!: () => void;
-  const running = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
+  const { promise: running, resolve: finish } = Promise.withResolvers<void>();
   const held = withRequestExecutionLockKeys(
     executionLocks,
     existingSessionExecutionLockKeys(name, sessionStore.get(name)!.device.id),
@@ -151,14 +148,11 @@ test.each([false, true])(
     const old = retainExecutionHost(sessionStore);
     const cleanup = vi.fn(async () => {});
     const { executionLocks, ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
-    let unlock!: () => void;
+    const { promise: unlocked, resolve: unlock } = Promise.withResolvers<void>();
     const held = withRequestExecutionLockKeys(
       executionLocks,
       existingSessionExecutionLockKeys(old.address, old.session.device.id),
-      async () =>
-        await new Promise<void>((resolve) => {
-          unlock = resolve;
-        }),
+      async () => await unlocked,
     );
     await settle();
     const ending = ender.end('lease-1', 'LEASE_RELEASED');
@@ -187,10 +181,7 @@ test('release ends a same-lease reopen published at a new address while cleanup 
   const cleanup = vi.fn(async () => {});
   const teardown = vi.fn(async () => {});
   const { executionLocks, ender } = leaseSessionEnd(sessionStore, teardown, cleanup);
-  let finishNativeOpen!: () => void;
-  const nativeOpen = new Promise<void>((resolve) => {
-    finishNativeOpen = resolve;
-  });
+  const { promise: nativeOpen, resolve: finishNativeOpen } = Promise.withResolvers<void>();
   const reopening = withRequestExecutionLockKeys(
     executionLocks,
     existingSessionExecutionLockKeys('reopened', old.session.device.id),
@@ -257,14 +248,11 @@ test('cancel preserves a retained host queued for cleanup for daemon shutdown', 
   const ref = retainExecutionHost(sessionStore);
   const cleanup = vi.fn(async () => {});
   const { executionLocks, ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
-  let unlock!: () => void;
+  const { promise: unlocked, resolve: unlock } = Promise.withResolvers<void>();
   const held = withRequestExecutionLockKeys(
     executionLocks,
     existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
-    async () =>
-      await new Promise<void>((resolve) => {
-        unlock = resolve;
-      }),
+    async () => await unlocked,
   );
   await settle();
   const ending = ender.end('lease-1', 'LEASE_EXPIRED');
@@ -283,13 +271,8 @@ test('cancel preserves a retained host queued for cleanup for daemon shutdown', 
 test('retry does not queue duplicate cleanup and shutdown drains a running retained-host stop', async () => {
   const sessionStore = makeSessionStore();
   retainExecutionHost(sessionStore);
-  let finish!: () => void;
-  const cleanup = vi.fn(
-    async () =>
-      await new Promise<void>((resolve) => {
-        finish = resolve;
-      }),
-  );
+  const { promise: finished, resolve: finish } = Promise.withResolvers<void>();
+  const cleanup = vi.fn(async () => await finished);
   const { ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
   const ending = ender.end('lease-1', 'LEASE_EXPIRED');
   await settle();
@@ -313,10 +296,7 @@ test('a request holding the device lock can end its lease ahead of a queued back
   const ref = retainExecutionHost(sessionStore);
   const cleanup = vi.fn(async () => {});
   const { executionLocks, ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
-  let release!: () => void;
-  const continueRequest = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: continueRequest, resolve: release } = Promise.withResolvers<void>();
   const request = withRequestExecutionLockKeys(
     executionLocks,
     existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
@@ -427,13 +407,11 @@ test('cancel stops a lease end still queued on the session locks from tearing do
 test('drain waits for a lease end whose teardown is already running', async () => {
   const sessionStore = makeSessionStore('agent-device-lease-end-drain-');
   await publishLeasedSession(sessionStore, 'leased', 'lease-1');
-  let finishTeardown!: () => void;
+  const { promise: teardown, resolve: finishTeardown } = Promise.withResolvers<void>();
   const teardownStarted = vi.fn();
   const { ender } = leaseSessionEnd(sessionStore, async () => {
     teardownStarted();
-    await new Promise<void>((resolve) => {
-      finishTeardown = resolve;
-    });
+    await teardown;
   });
 
   void ender.end('lease-1', 'LEASE_EXPIRED');

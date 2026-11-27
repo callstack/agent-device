@@ -25,14 +25,8 @@ test.each(['cleanup', 'expiry'] as const)(
     fs.mkdirSync(artifactPath);
     fs.writeFileSync(path.join(artifactPath, 'payload'), 'pending inventory archive');
     const runtime = createRuntimeStateHandle();
-    let start!: () => void;
-    const started = new Promise<void>((resolve) => {
-      start = resolve;
-    });
-    let finish!: () => void;
-    const stopped = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
+    const { promise: started, resolve: start } = Promise.withResolvers<void>();
+    const { promise: stopped, resolve: finish } = Promise.withResolvers<void>();
     let archivePath = '';
     let signal: AbortSignal | undefined;
     const runCmd = command.runCmd;
@@ -134,14 +128,8 @@ test('cancelling the archive builder preserves a second download waiting for its
   const expected = 'complete shared capture payload\n'.repeat(4096);
   fs.writeFileSync(path.join(artifactPath, 'payload'), expected);
   const runtime = createRuntimeStateHandle();
-  let continueArchive!: () => void;
-  const blocked = new Promise<void>((resolve) => {
-    continueArchive = resolve;
-  });
-  let archiveStarted!: () => void;
-  const started = new Promise<void>((resolve) => {
-    archiveStarted = resolve;
-  });
+  const { promise: blocked, resolve: continueArchive } = Promise.withResolvers<void>();
+  const { promise: started, resolve: archiveStarted } = Promise.withResolvers<void>();
   const runCmd = command.runCmd;
   const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
     archiveStarted();
@@ -205,27 +193,15 @@ test.each(['deadline-aborted', 'late-aborted'] as const)(
     const expected = Buffer.from('fresh archive payload');
     fs.writeFileSync(path.join(artifactPath, 'payload'), expected);
     const runtime = createRuntimeStateHandle();
-    let finishAborted!: () => void;
-    const settling = new Promise<void>((resolve) => {
-      finishAborted = resolve;
-    });
-    let aborted!: () => void;
-    const cancelled = new Promise<void>((resolve) => {
-      aborted = resolve;
-    });
-    let tarSucceeded!: () => void;
-    const succeeded = new Promise<void>((resolve) => {
-      tarSucceeded = resolve;
-    });
-    let tarStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      tarStarted = resolve;
-    });
+    const { promise: settling, resolve: finishAborted } = Promise.withResolvers<void>();
+    const { promise: cancelled, resolve: aborted } = Promise.withResolvers<void>();
+    const { promise: succeeded, resolve: tarSucceeded } = Promise.withResolvers<void>();
+    const { promise: started, resolve: tarStarted } = Promise.withResolvers<void>();
     let firstArchiveDir = '';
     const runCmd = command.runCmd;
     const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
       firstArchiveDir = path.dirname(String(args[1]?.[1]));
-      args[2]?.signal?.addEventListener('abort', aborted, { once: true });
+      args[2]?.signal?.addEventListener('abort', () => aborted(), { once: true });
       tarStarted();
       if (failure === 'late-aborted') {
         const result = await runCmd(...args);
@@ -346,14 +322,8 @@ test('disposing every archive waiter aborts the shared build and removes its tem
   fs.mkdirSync(artifactPath);
   fs.writeFileSync(path.join(artifactPath, 'payload'), 'cancelled archive payload');
   const runtime = createRuntimeStateHandle();
-  let continueArchive!: () => void;
-  const blocked = new Promise<void>((resolve) => {
-    continueArchive = resolve;
-  });
-  let archiveStarted!: () => void;
-  const started = new Promise<void>((resolve) => {
-    archiveStarted = resolve;
-  });
+  const { promise: blocked, resolve: continueArchive } = Promise.withResolvers<void>();
+  const { promise: started, resolve: archiveStarted } = Promise.withResolvers<void>();
   let archiveDir = '';
   let archiveSignal: AbortSignal | undefined;
   const runCmd = command.runCmd;

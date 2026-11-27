@@ -187,10 +187,7 @@ test('an expiry waits for the session lock a command of its own holds', async ()
     now: () => NOW,
   });
 
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
   const command = withKeyedLock(locks, 'session:default', async () => {
     await held;
   });
@@ -231,10 +228,7 @@ test('an expiry waits for the DEVICE lock a command on another session holds', a
 
   // Another session's command on the SAME device: no session-key overlap, so only the device key
   // can prove the expiry is not about to free a device that is under work.
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
   const command = withKeyedLock(locks, 'device:sim-1', async () => {
     await held;
   });
@@ -278,10 +272,7 @@ test('a command that re-stamped activity while the expiry queued cancels it', as
     now: () => NOW,
   });
 
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
   const command = withKeyedLock(locks, 'session:default', async () => {
     await held;
     // The command finishes and re-stamps the session. The store hands out the live record, so this
@@ -324,10 +315,7 @@ test('a session that moved to another device is fenced by that device, not the s
   // The sweep picks its lock pair from the session it found. A command on that session can replace
   // the record with one bound to a DIFFERENT device while the expiry is queued, and settling THAT
   // session under the swept device's lock would free a device nothing here holds.
-  let releaseCommand!: () => void;
-  const commandHeld = new Promise<void>((resolve) => {
-    releaseCommand = resolve;
-  });
+  const { promise: commandHeld, resolve: releaseCommand } = Promise.withResolvers<void>();
   const command = withKeyedLock(locks, 'session:default', async () => {
     await commandHeld;
     sessionStore.update(sessionStore.lookup('default')!, {
@@ -337,10 +325,7 @@ test('a session that moved to another device is fenced by that device, not the s
   });
 
   // A command on the NEW session's device is in flight the whole time.
-  let releaseDevice!: () => void;
-  const deviceHeld = new Promise<void>((resolve) => {
-    releaseDevice = resolve;
-  });
+  const { promise: deviceHeld, resolve: releaseDevice } = Promise.withResolvers<void>();
   const otherCommand = withKeyedLock(locks, 'device:sim-2', async () => {
     await deviceHeld;
   });
@@ -416,10 +401,7 @@ test('a settle that outruns its wait still finishes the release it started', asy
   const fixture = makeFixture('agent-device-idle-expiry-over-budget-');
   const { sessionStore } = fixture;
   const { deviceClaim } = await sessionWithLiveClaim(fixture);
-  let releaseSettle!: () => void;
-  const settleHeld = new Promise<void>((resolve) => {
-    releaseSettle = resolve;
-  });
+  const { promise: settleHeld, resolve: releaseSettle } = Promise.withResolvers<void>();
   let settleCalls = 0;
   // A clock that can move: the deferred retry is measured against this clock, so a frozen one would
   // answer "may a second teardown join the first?" with "the retry isn't due yet" and prove nothing.
@@ -483,10 +465,7 @@ test('a daemon beginning to leave does not start settling the next session', asy
     }),
   );
   const settledNames: string[] = [];
-  let releaseFirst!: () => void;
-  const firstHeld = new Promise<void>((resolve) => {
-    releaseFirst = resolve;
-  });
+  const { promise: firstHeld, resolve: releaseFirst } = Promise.withResolvers<void>();
 
   const controller = createSessionIdleExpiry({
     env: createTestHostEnvironment().env,
@@ -524,10 +503,7 @@ test('an over-budget expiry keeps the locks the release itself needs', async () 
   const { sessionStore } = fixture;
   const { deviceClaim } = await sessionWithLiveClaim(fixture);
   const locks = new Map<string, Promise<unknown>>();
-  let releaseSettle!: () => void;
-  const settleHeld = new Promise<void>((resolve) => {
-    releaseSettle = resolve;
-  });
+  const { promise: settleHeld, resolve: releaseSettle } = Promise.withResolvers<void>();
 
   const controller = createSessionIdleExpiry({
     env: createTestHostEnvironment().env,
@@ -574,10 +550,7 @@ test('an expiry that lands after its budget still reports the session it release
   const fixture = makeFixture('agent-device-idle-expiry-late-notify-');
   const { sessionStore } = fixture;
   await sessionWithLiveClaim(fixture);
-  let releaseSettle!: () => void;
-  const settleHeld = new Promise<void>((resolve) => {
-    releaseSettle = resolve;
-  });
+  const { promise: settleHeld, resolve: releaseSettle } = Promise.withResolvers<void>();
   const expired: string[] = [];
 
   const controller = createSessionIdleExpiry({
@@ -610,10 +583,7 @@ test('an expiry that lands after its budget still reports the session it release
 test('a stuck expiry does not leave the timer firing with no delay', async () => {
   const { sessionStore } = makeFixture('agent-device-idle-expiry-stuck-loop-');
   idleClaimedSession(sessionStore);
-  let releaseSettle!: () => void;
-  const settleHeld = new Promise<void>((resolve) => {
-    releaseSettle = resolve;
-  });
+  const { promise: settleHeld, resolve: releaseSettle } = Promise.withResolvers<void>();
   let sweeps = 0;
   let settles = 0;
   // A clock that runs: the retry window only becomes reachable if time moves, and the loop this test
@@ -674,10 +644,7 @@ test('a settle that outlives its window is retried a full window after it ends, 
     // one whose clock is in question. Fake timers because a deferral is a duration, and this measures
     // one that is longer than the settle that owes it.
     const WINDOW = 120;
-    let releaseSettle!: () => void;
-    const settleHeld = new Promise<void>((resolve) => {
-      releaseSettle = resolve;
-    });
+    const { promise: settleHeld, resolve: releaseSettle } = Promise.withResolvers<void>();
     let settles = 0;
     let settledAt = 0;
 

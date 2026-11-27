@@ -1,12 +1,16 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { AppLogBackgroundProcess } from '@agent-device/contracts/app-log-runtime';
 import { monitorPidScopedProcess } from './app-log-pid-monitor.ts';
-import { controlledSleeps, deferred, processFixture } from './app-log-pid-process.fixtures.ts';
+import { controlledSleeps, processFixture } from './app-log-pid-process.fixtures.ts';
 
 describe('PID-scoped app-log monitor', () => {
   test('rotates a live stream when the app PID changes', async () => {
-    const first = processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
-    const second = processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const first = processFixture(
+      Promise.withResolvers<{ stdout: string; stderr: string; exitCode: number }>(),
+    );
+    const second = processFixture(
+      Promise.withResolvers<{ stdout: string; stderr: string; exitCode: number }>(),
+    );
     const sleeps = controlledSleeps();
     const resolvePid = vi.fn(async () => '456');
     const startProcess = vi.fn(async () => second.process);

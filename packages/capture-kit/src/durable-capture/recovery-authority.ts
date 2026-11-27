@@ -53,10 +53,7 @@ export async function acquireDurableCaptureRecoveryAuthorityBeforeDeadline<
   params.scope.checkDeadline?.();
   const cutoffMs = Date.now() + params.deadlineMs;
   const controller = new AbortController();
-  let rejectDeadline: (error: DurableCaptureRecoveryDeadlineError) => void = () => {};
-  const deadline = new Promise<never>((_resolve, reject) => {
-    rejectDeadline = reject;
-  });
+  const { promise: deadline, reject: rejectDeadline } = Promise.withResolvers<never>();
   let stopListeningForCancellation = () => {};
   const cancellation = new Promise<never>((_resolve, reject) => {
     const rejectCancellation = () => {

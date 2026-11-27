@@ -498,10 +498,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     platform: LimrunPlatform,
     context?: LeaseLifecycleContext,
   ): LimrunLeaseOwner {
-    let report!: (create: LimrunCreateOutcome) => void;
-    const creation = new Promise<LimrunCreateOutcome>((settled) => {
-      report = settled;
-    });
+    const { promise: creation, resolve: report } = Promise.withResolvers<LimrunCreateOutcome>();
     const owner: LimrunLeaseOwner = {
       lease,
       platform,
@@ -626,10 +623,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const taken = owner.state;
     const settled = taken.phase === 'releasing' ? taken.settled : undefined;
     if (taken.phase === 'releasing' && !(settled?.cleanup === 'uncertain')) return taken.disposal;
-    let reportDisposal!: (outcome: LimrunDisposalOutcome) => void;
-    const disposal = new Promise<LimrunDisposalOutcome>((settledOutcome) => {
-      reportDisposal = settledOutcome;
-    });
+    const { promise: disposal, resolve: reportDisposal } =
+      Promise.withResolvers<LimrunDisposalOutcome>();
     owner.state = {
       phase: 'releasing',
       by,
