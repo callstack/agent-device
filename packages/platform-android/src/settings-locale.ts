@@ -3,15 +3,31 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatch, type ReasonTable } from '@agent-device/kernel/errors';
 import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError } from './adb-failure.ts';
+import { readAndroidSdkInt } from './device-sdk-int.ts';
+import type { PreparedAndroidAutomationHelper } from './automation-helper-artifact.ts';
 
-/** The `error.details.reason` a locale write states when the device kept another locale. */
+/** The `error.details.reason` values a locale write states when it refuses or fails. */
 const ANDROID_LOCALE_REASONS = {
   // The Android system locale list did not start with the requested locale after the update.
   localeNotApplied: { reason: 'locale-not-applied' },
+  // The helper package lists no base APK, or that APK's SHA-256 differs from the trusted manifest.
+  helperApkUnverified: { reason: 'locale-helper-apk-unverified' },
+  // Android before 8.0 can reuse a verified install path for another APK, so the shell route is refused.
+  apiLevelUnsupported: { reason: 'locale-api-level-unsupported' },
 } as const satisfies ReasonTable<'settings'>;
 
 /** The helper class that runs as the shell user through `app_process`; see its Javadoc. */
 const SYSTEM_LOCALE_COMMAND = 'com.callstack.agentdevice.snapshothelper.SystemLocaleCommand';
+
+/**
+ * The latest locale refusal of the helper APK, by snapshot-helper device key. The next locale
+ * command there inspects the install instead of trusting the shared install memo, which other
+ * helper commands keep using.
+ */
+const refusedLocaleInstalls = new Map<string, symbol>();
+
+/** Android 8.0 gives each install a random directory, so a verified base APK path names one APK. */
+const LOCALE_MIN_SDK = 26;
 
 /**
  * Sets the system locale list to one locale, a BCP 47 tag the settings contract already parsed.
@@ -25,10 +41,21 @@ export async function setAndroidLocale(
   state: string,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
+  await requireLocaleApiLevel(device, signal);
   const requested = state === SETTING_RESET_STATE ? await readAndroidDefaultLocale(device) : state;
   const { prepareAndroidAutomationHelper } = await import('./automation-helper-artifact.ts');
-  const prepared = await prepareAndroidAutomationHelper(device, signal);
-  const apkPath = await readInstalledApkPath(device, prepared.artifact.manifest.packageName);
+  const { getAndroidSnapshotHelperSessionDeviceKey } =
+    await import('./snapshot-helper-retirement.ts');
+  const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
+  const refusal = refusedLocaleInstalls.get(deviceKey);
+  const prepared = await prepareAndroidAutomationHelper(device, signal, {
+    inspectInstalled: refusal !== undefined,
+  });
+  // Only the inspected refusal is answered: a newer one keeps its recheck.
+  if (refusal !== undefined && refusedLocaleInstalls.get(deviceKey) === refusal) {
+    refusedLocaleInstalls.delete(deviceKey);
+  }
+  const apkPath = await readVerifiedHelperApkPath(device, prepared, signal);
   signal?.throwIfAborted();
   const result = await runAndroidShell(
     device,
@@ -68,16 +95,95 @@ async function readAndroidDefaultLocale(device: DeviceInfo): Promise<string> {
   });
 }
 
-/** The helper's base APK, which holds the class `app_process` loads. */
-async function readInstalledApkPath(device: DeviceInfo, packageName: string): Promise<string> {
-  const { readBaseApkPath } = await import('./helper-package-install.ts');
-  const result = await runAndroidShell(device, ['pm', 'path', packageName]);
-  const apkPath = readBaseApkPath(result.stdout);
-  if (apkPath !== undefined) return apkPath;
-  throw new AppError('COMMAND_FAILED', `Android reported no base APK path for ${packageName}.`, {
-    deviceId: device.id,
-    dispatched: 'no',
-    stdout: result.stdout,
+async function requireLocaleApiLevel(device: DeviceInfo, signal?: AbortSignal): Promise<void> {
+  const { sdkInt, result } = await readAndroidSdkInt(device, signal);
+  if (sdkInt === null) {
+    throw discloseDispatch(
+      androidAdbResultError('Failed to read the Android API level', result, {
+        deviceId: device.id,
+      }),
+      'no',
+    );
+  }
+  if (sdkInt >= LOCALE_MIN_SDK) return;
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    `settings locale needs Android 8.0 (API ${LOCALE_MIN_SDK}) or newer.`,
+    {
+      reason: ANDROID_LOCALE_REASONS.apiLevelUnsupported.reason,
+      deviceId: device.id,
+      sdkInt,
+      dispatched: 'no',
+    },
+  );
+}
+
+/**
+ * The helper's base APK, which `app_process` loads as the shell user. The install step may trust
+ * a cached decision or a higher installed versionCode, so this path proves its own bytes: the file
+ * that runs is the one whose SHA-256 matches the trusted manifest. Every failure here precedes the
+ * locale write, so it states `dispatched: no` and names a helper install that preparation completed.
+ */
+async function readVerifiedHelperApkPath(
+  device: DeviceInfo,
+  prepared: Pick<
+    PreparedAndroidAutomationHelper,
+    'adbProvider' | 'artifact' | 'deviceKey' | 'install'
+  >,
+  signal?: AbortSignal,
+): Promise<string> {
+  const { readBaseApkPath, readAndroidDeviceFileSha256 } =
+    await import('./helper-package-install.ts');
+  const { packageName, sha256: expectedSha256 } = prepared.artifact.manifest;
+  const notDispatched = (error: unknown): unknown => {
+    if (!(error instanceof AppError)) return error;
+    if (prepared.install.installed) {
+      error.details = {
+        ...error.details,
+        helperInstalled: true,
+        helperInstallReason: prepared.install.reason,
+      };
+    }
+    return discloseDispatch(error, 'no');
+  };
+  const refuse = (message: string, details: Record<string, unknown>): unknown => {
+    refusedLocaleInstalls.set(prepared.deviceKey, Symbol('locale helper refusal'));
+    return notDispatched(
+      new AppError('COMMAND_FAILED', message, {
+        ...details,
+        deviceId: device.id,
+        packageName,
+        reason: ANDROID_LOCALE_REASONS.helperApkUnverified.reason,
+        hint: `Retry the command so agent-device inspects and reinstalls its helper. If the device keeps a newer helper build, uninstall ${packageName} first.`,
+      }),
+    );
+  };
+  const paths = await runAndroidShell(device, ['pm', 'path', packageName], {
+    allowFailure: true,
+    signal,
+  });
+  if (paths.exitCode !== 0) {
+    throw notDispatched(
+      androidAdbResultError(`Failed to resolve the APK of ${packageName}`, paths, { packageName }),
+    );
+  }
+  const apkPath = readBaseApkPath(paths.stdout);
+  if (apkPath === undefined) {
+    throw refuse(`Android reported no base APK path for ${packageName}.`, {
+      stdout: paths.stdout,
+    });
+  }
+  let installedSha256: string;
+  try {
+    installedSha256 = await readAndroidDeviceFileSha256(prepared.adbProvider, apkPath, signal);
+  } catch (error) {
+    throw notDispatched(error);
+  }
+  if (installedSha256 === expectedSha256) return apkPath;
+  throw refuse(`The installed helper APK for ${packageName} does not match the helper manifest.`, {
+    apkPath,
+    expectedSha256,
+    installedSha256,
   });
 }
 

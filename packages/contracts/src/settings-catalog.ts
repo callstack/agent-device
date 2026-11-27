@@ -159,7 +159,7 @@ export const SETTINGS = {
     forms: [{ kind: 'value', placeholder: 'locale-id' }],
     app: 'input',
     appScope: { apple: 'device-level', mobile: 'device-level' },
-    help: 'Sets the device language and region from one locale id, such as en_IN or fr-CA, on iPhone and iPad simulators (AppleLanguages and AppleLocale) and Android (the system locale list). reset removes the simulator override, which leaves English with no region, and applies the system image default on Android. The response reports the locale held before. An iOS app reads the locale at launch, so relaunch it; Android applies it to running apps at once. --app is refused.',
+    help: 'Sets the device language and region from one locale id, such as en_IN or fr-CA, on iPhone and iPad simulators (AppleLanguages and AppleLocale) and Android 8.0 or newer (the system locale list). reset removes the simulator override, which leaves English with no region, and applies the system image default on Android. The response reports the locale held before. An iOS app reads the locale at launch, so relaunch it; Android applies it to running apps at once. --app is refused.',
   },
   faceid: {
     forms: [{ kind: 'choice', states: ['match', 'nonmatch', 'enroll', 'unenroll'] }],
