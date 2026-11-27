@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseConfig, REPO_ROOT, type PerfConfig } from './config.ts';
 import { collectMetadata } from './metadata.ts';
+import { assertAndroidReleaseFixture } from './fixture-preflight.mjs';
 import { writeRunOutput } from './report.ts';
 import {
   describeCoverage,
@@ -77,6 +78,10 @@ async function main(): Promise<void> {
   // The CLI and the iOS forced-backend probe run from the build.
   if (!fs.existsSync(path.join(REPO_ROOT, 'dist', 'src'))) {
     throw new Error('dist/ is missing — run `pnpm build` first.');
+  }
+  if (cfg.platform === 'android') {
+    // A dev-client build ignores the suite's deep links; fail before the first sample.
+    assertAndroidReleaseFixture({ serial: cfg.serial!, appId: cfg.appId });
   }
   const startedAt = new Date().toISOString();
   // Read before the run, so a checkout change during a long run cannot relabel it.

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { assertAndroidReleaseFixture } from './perf/fixture-preflight.mjs';
 
 const checkout = path.resolve(process.argv[2] ?? '.');
 const output = path.resolve(process.argv[3] ?? '.tmp/android-automation-benchmark.json');
@@ -10,6 +11,13 @@ const rounds = Number(process.env.BENCH_ROUNDS ?? 20);
 assert(Number.isInteger(rounds) && rounds > 0, 'BENCH_ROUNDS must be a positive integer');
 const serial = process.env.ANDROID_SERIAL;
 assert(serial, 'Set ANDROID_SERIAL to an exclusively owned emulator');
+try {
+  assertAndroidReleaseFixture({ serial, appId: 'com.callstack.agentdevicelab' });
+} catch (error) {
+  // The preflight message is already the whole diagnosis; a stack would bury it.
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(1);
+}
 const { createAgentDeviceClient } = await import(
   pathToFileURL(path.join(checkout, 'dist/src/index.js'))
 );

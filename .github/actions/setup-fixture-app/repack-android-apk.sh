@@ -45,7 +45,9 @@ apk_package_id() {
 apk_signer_digest() {
   local certificate
   certificate="$("$BUILD_TOOLS/apksigner" verify --print-certs "$1")" || return 1
-  printf '%s\n' "$certificate" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'
+  # build-tools 37 labels the digest line by signing scheme (for example `V3.0 Signer:`), so match
+  # the label suffix. Repeated digests from several schemes collapse to one per signer.
+  printf '%s\n' "$certificate" | sed -n 's/.*certificate SHA-256 digest: //p' | sort -u
 }
 
 SOURCE_APP_ID="$(apk_package_id "$APK")" || SOURCE_APP_ID=""
