@@ -3344,7 +3344,7 @@ agent-device trigger-app-event screenshot_taken '{"source":"qa"}'
 Change OS settings and app permissions.
 
 ```bash
-agent-device settings <wifi|bluetooth|airplane|mobile-data|keep-awake|location|animations> <on|off> | settings location set <lat> <lon> | settings appearance <light|dark|toggle> | settings text-size [extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large] | settings timezone <iana-zone|reset> | settings <faceid|touchid> <match|nonmatch|enroll|unenroll> | settings fingerprint <match|nonmatch> | settings clear-app-state [app-id] | settings reset-keychain clear | settings permission <grant|deny|reset> <all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> | settings permission <grant|deny|reset> photos [full|limited] | settings permission <grant|reset> <accessibility|screen-recording|input-monitoring> [--app <id-or-name>]
+agent-device settings <wifi|bluetooth|airplane|mobile-data|keep-awake|location|animations> <on|off> | settings location set <lat> <lon> | settings appearance <light|dark|toggle> | settings text-size [extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large] | settings timezone <iana-zone|reset> | settings locale <locale-id|reset> | settings <faceid|touchid> <match|nonmatch|enroll|unenroll> | settings fingerprint <match|nonmatch> | settings clear-app-state [app-id] | settings reset-keychain clear | settings permission <grant|deny|reset> <all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> | settings permission <grant|deny|reset> photos [full|limited] | settings permission <grant|reset> <accessibility|screen-recording|input-monitoring> [--app <id-or-name>]
 ```
 
 | Option               | What it does                                                                                                                                                                 |
@@ -3361,6 +3361,7 @@ agent-device settings mobile-data off
 agent-device settings location set 37.3349 -122.009
 agent-device settings animations off
 agent-device settings text-size accessibility-extra-large
+agent-device settings locale en_IN
 agent-device settings timezone Asia/Kolkata
 agent-device settings appearance dark
 agent-device settings faceid match
@@ -3388,6 +3389,13 @@ Device settings:
 * Pair `settings mobile-data on` with `settings wifi off` to move a session, such as a video stream, from Wi-Fi to cellular. On a multi-SIM device, or one without an active SIM, the command can fail even when the switch took effect.
 * `settings text-size` without a category reads the current size. It works on iPhone and iPad simulators and on Android. A running app picks up a new size only after `open <app> --relaunch`.
 
+Language and region:
+
+* `settings locale <locale-id>` sets the language and region together on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous locale as `previousLocale`.
+* A locale id is a language with an optional script and region, written with `-` or `_`, such as `en_IN`, `fr-CA`, or `zh-Hans-CN`. Extensions and variants are refused with `INVALID_ARGS` before anything changes.
+* On iOS simulators, a running app keeps its old locale until `open <app> --relaunch`. `settings locale reset` removes the override, which leaves English with no region. The reported `previousLocale` is a value `settings locale` accepts, and `previousLanguages` lists every preferred language.
+* On Android devices and emulators, running apps take the new locale at once. `settings locale reset` applies `ro.product.locale`, the locale the system image boots with.
+
 Time zone:
 
 * `settings timezone <iana-zone>` sets the time zone on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous time zone as `previousTimeZone`.
@@ -3409,7 +3417,7 @@ App state:
 Permissions:
 
 * On iOS and Android, `permission` applies to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. `--app` counts only on the command line; `AGENT_DEVICE_TARGET_APP` never retargets a settings change.
-* Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, `bluetooth`, or `timezone` takes no app).
+* Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, `bluetooth`, `locale`, or `timezone` takes no app).
 * On iOS simulators, targeting `notifications` with `grant`, `deny`, or `reset` returns `ios-notification-permission-unsupported`. Use `alert accept` or `alert dismiss` to answer the notification prompt.
 * On iOS simulators, the simulator decides which other permissions it can change and refuses the rest. `grant all` skips a refused service with a warning.
 * On Android, a permission group applies only the permissions the app declares. `full|limited` applies only to iOS `photos`.
@@ -5216,6 +5224,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `mobile-data-unreadable`                  | The device answered the mobile-data read-back with a value that is neither 0 nor 1.         |
 | `keep-awake-not-applied`                  | The device kept the screen turning off after `svc power stayon` accepted the request.       |
 | `keep-awake-unreadable`                   | The device answered the keep-awake read-back with a value that is not a stay-on mask.       |
+| `locale-not-applied`                      | The Android system locale list did not start with the requested locale after the update.    |
 | `time-zone-not-applied`                   | `persist.sys.timezone` did not hold the requested zone after `cmd alarm set-timezone`.      |
 | `setting_app_not_package`                 | The named app resolves to an intent such as `settings`, not to an installed package.        |
 | `app-no-data-container`                   | `clear-app-state` was refused because the installed app owns no data container.             |
@@ -6501,7 +6510,7 @@ Remote simulator logs do not include sender or process image paths. Filters that
 
 On iOS, `settings` supports `appearance`, `permission`, `location`, `wifi`, `airplane`, `faceid`, `touchid`, `text-size`, and `clear-app-state`, with the same arguments as a local simulator. You can also read the current text size.
 
-Wi-Fi and airplane settings change the status-bar appearance; they do not disconnect the simulator. `clear-app-state` stops your app and removes its data. Use `open` when you are ready to launch it again. `reset-keychain`, `mobile-data`, and `timezone` are unavailable on Limrun iOS. On Android, `settings mobile-data on|off` and `settings timezone <iana-zone|reset>` work as on a local device. Fold commands are unavailable on Limrun.
+Wi-Fi and airplane settings change the status-bar appearance; they do not disconnect the simulator. `clear-app-state` stops your app and removes its data. Use `open` when you are ready to launch it again. `reset-keychain`, `mobile-data`, `locale`, and `timezone` are unavailable on Limrun iOS. On Android, `settings mobile-data on|off`, `settings locale <locale-id|reset>`, and `settings timezone <iana-zone|reset>` work as on a local device. Fold commands are unavailable on Limrun.
 
 To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp). For Limrun, `artifacts` lists the network capture file only when you connect with `--provider-network-logs`; otherwise there are no provider artifacts to fetch.
 
@@ -7772,7 +7781,7 @@ The plugin refuses every other command with a reason that names the substitute. 
 * `type` refuses and points at `fill`, because Revyl enters text at a point rather than into the field the platform happens to focus.
 * `gesture pinch`, `rotate`, `transform`, `tap`, and `drag`, two-finger `gesture pan`, and `gesture pan --hold-ms` refuse, because Revyl has no multi-touch or held-drag action. `gesture swipe split-view-left|split-view-right|split-view-exit` refuses with `split_view_unavailable`, because a straight drag cannot enter or leave Split View.
 * `keyboard`, `clipboard`, `alert`, `fold`, `telephony`, and `tv-remote` are not supported.
-* The other `settings` refuse: `wifi`, `airplane`, `mobile-data`, `bluetooth`, `animations`, `text-size`, `timezone`, `faceid`, `touchid`, and `fingerprint`. Revyl’s devices refuse airplane mode, and the worker has no action for the rest.
+* The other `settings` refuse: `wifi`, `airplane`, `mobile-data`, `bluetooth`, `animations`, `text-size`, `locale`, `timezone`, `faceid`, `touchid`, and `fingerprint`. Revyl’s devices refuse airplane mode, and the worker has no action for the rest.
 * `reinstall` refuses, as described above.
 * `uninstall`, `apps`, `push`, `logs`, `network dump`, `artifacts`, and `recordings` are not supported by this version of the plugin.
 * `port reverse` is unavailable. Publish your app server at a public HTTPS URL instead of pointing Metro at `localhost`.
