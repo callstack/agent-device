@@ -12,12 +12,19 @@ import { expireRefFrame } from '../core/ref-frame.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
-const ANDROID_BLOCKING_MODAL_PATTERN = /\bis(?:n(?:'|&apos;|&#39;)?t| not)\s+responding\b/i;
-const ANDROID_CLOSE_APP_PATTERN = /^close app$/i;
+/**
+ * The framework ids of the ANR dialog's Close app and Wait buttons. They do not depend on the
+ * device language, and only the ANR dialog has Wait: the crash dialog also has Close app.
+ */
+const ANDROID_ANR_CLOSE_BUTTON_ID = 'android:id/aerr_close';
+const ANDROID_ANR_WAIT_BUTTON_ID = 'android:id/aerr_wait';
 const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
   'Wait for Android to recover, close the dialog, restart the app, or reboot the emulator, then retry.';
+/** `alert` is not stopped by this guard, and it presses the ANR dialog's buttons by their ids. */
+const ANDROID_FOREIGN_ANR_HINT =
+  'Run alert dismiss to close the app that is not responding, or alert accept to wait for it, then retry.';
 const ANDROID_BLOCKING_DIALOG_INSPECTION_WARNING =
   'Android blocking-dialog readiness could not be inspected; the command continued.';
 const ANDROID_BLOCKING_DIALOG_WARNING_TEXT_LIMIT = 240;
@@ -232,7 +239,7 @@ export async function ensureAndroidBlockingSystemDialogReady(params: {
     command,
     focus,
     message: `Android system dialog is blocking ${command}: ${formatAndroidBlockingDialogFocus(focus)}.`,
-    hint: ANDROID_BLOCKING_DIALOG_HINT,
+    hint: ANDROID_FOREIGN_ANR_HINT,
   });
 }
 
@@ -379,11 +386,16 @@ function findCloseAppButton(
   if (options.requireDialogSignal !== false && !containsBlockingDialog(nodes)) {
     return undefined;
   }
-  return nodes.filter(isTouchableDialogNode).find((node) => {
-    return (
-      readNodeTextParts(node).some((text) => ANDROID_CLOSE_APP_PATTERN.test(text)) && node.rect
-    );
-  });
+  return findTouchableDialogButton(nodes, ANDROID_ANR_CLOSE_BUTTON_ID);
+}
+
+function findTouchableDialogButton(
+  nodes: SnapshotNode[],
+  identifier: string,
+): SnapshotNode | undefined {
+  return nodes.find(
+    (node) => node.identifier === identifier && node.rect && isTouchableDialogNode(node),
+  );
 }
 
 /** A node the recovery tap can actually reach: present in the tree and not covered by a surface above it. */
@@ -439,31 +451,6 @@ function isProviderOwnedSession(session: SessionState): boolean {
   return Boolean(session.lease?.leaseProvider) || isActiveProviderDevice(session.device);
 }
 
-function readNodeText(node: {
-  label?: string;
-  value?: string | number | boolean | null;
-  identifier?: string;
-}): string {
-  return readNodeTextParts(node).join(' ').trim();
-}
-
-function readNodeTextParts(node: {
-  label?: string;
-  value?: string | number | boolean | null;
-  identifier?: string;
-}): string[] {
-  const parts = [node.label, node.identifier];
-  if (typeof node.value === 'string' && node.value.trim().length > 0) {
-    parts.push(node.value);
-  }
-  return parts
-    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
-    .map((part) => part.trim());
-}
-
 function containsBlockingDialog(nodes: SnapshotNode[]): boolean {
-  return nodes.filter(isTouchableDialogNode).some((node) => {
-    const text = readNodeText(node);
-    return text.length > 0 && ANDROID_BLOCKING_MODAL_PATTERN.test(text);
-  });
+  return findTouchableDialogButton(nodes, ANDROID_ANR_WAIT_BUTTON_ID) !== undefined;
 }

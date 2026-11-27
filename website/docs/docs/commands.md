@@ -955,6 +955,7 @@ agent-device alert dismiss
 Handle system alerts:
 
 - `alert` handles system alerts on iOS, macOS, and Android permission dialogs. On iOS it also covers app-owned modal popups and Safari's page prompts.
+- On Android, `alert` also handles the "isn't responding" (ANR) dialog in any device language: `dismiss` presses Close app, and `accept` presses Wait. While another app's ANR dialog has focus, commands that act on the screen are refused and their hint names `alert`.
 - Use `alert get` for a quick check, and `alert wait <short-ms>` only when a prompt may appear after async work. Do not use `settings permission` to answer a dialog already on screen; it is for setup before a flow.
 - `accept` and `dismiss` are sent once and never replayed, even if the response is lost. A closed alert does not prove that a permission was granted, so verify the app outcome.
 - `accept` picks the lasting grant, such as `Allow While Using App` over `Allow Once`, or "Allow all" on Android's partial-media sheet. On iOS, `dismiss` presses only a recognized decline button, such as `Cancel` or `Don't Allow`. iOS simulators also recognize these labels in the device's preferred languages; on physical iOS devices, tvOS, and visionOS the runner cannot read the OS strings, so it recognizes the system prompts' Simplified Chinese wording from a built-in table, at the rank of the English label each entry translates; wording the table does not cover stays unknown.
