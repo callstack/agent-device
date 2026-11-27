@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { runCliCapture } from './cli-capture.ts';
+import { cloudEnv, connectArgs, stubCloudApi } from './cli-cloud-session.fixtures.ts';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 /**
  * The admission `src/cli.ts` asks for once, where the invocation resolves its `DaemonPaths`, is what every
@@ -51,3 +56,46 @@ test('a CLI run repairs a state root the umask left open, and proceeds', async (
   assert.match(run.stdout, /"state": "stopped"/);
   assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
 });
+
+test.skipIf(process.platform === 'win32').each([
+  { command: 'connect', args: connectArgs },
+  { command: 'disconnect', args: ['disconnect', '--json'] },
+])('$command creates a missing state root privately under umask 002', async ({ args }) => {
+  const under = mkdtempForTestSync('agent-device-cli-state-root-fresh-');
+  const stateDir = path.join(under, 'state');
+  const env = { ...cloudEnv(), AGENT_DEVICE_STATE_DIR: stateDir };
+  stubCloudApi();
+
+  const previous = process.umask(0o002);
+  let run;
+  try {
+    run = await runCliCapture(args, { env });
+  } finally {
+    process.umask(previous);
+  }
+
+  assert.equal(run.code, null, run.stdout + run.stderr);
+  assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+});
+
+test.skipIf(process.platform === 'win32').each([0o750, 0o775])(
+  'connect tightens a pre-existing owned state root (mode %o) without replacing it',
+  async (mode) => {
+    const under = mkdtempForTestSync('agent-device-cli-state-root-existing-');
+    const stateDir = path.join(under, 'state');
+    fs.mkdirSync(stateDir);
+    fs.chmodSync(stateDir, mode);
+    fs.writeFileSync(path.join(stateDir, 'kept'), 'kept');
+    const { ino } = fs.statSync(stateDir);
+    stubCloudApi();
+
+    const run = await runCliCapture(connectArgs, {
+      env: { ...cloudEnv(), AGENT_DEVICE_STATE_DIR: stateDir },
+    });
+
+    assert.equal(run.code, null, run.stdout + run.stderr);
+    assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(stateDir).ino, ino);
+    assert.equal(fs.readFileSync(path.join(stateDir, 'kept'), 'utf8'), 'kept');
+  },
+);
