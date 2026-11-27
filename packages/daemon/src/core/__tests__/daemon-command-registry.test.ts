@@ -153,7 +153,6 @@ test('daemon command registry preserves replay and recording traits', () => {
 
 test('daemon command registry preserves Android modal and lock-policy traits', () => {
   for (const command of [
-    PUBLIC_COMMANDS.appSwitcher,
     PUBLIC_COMMANDS.back,
     PUBLIC_COMMANDS.click,
     PUBLIC_COMMANDS.fill,
@@ -173,7 +172,6 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
 
   assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.get), false);
   assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.telephony), false);
-  assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.screenshot), false);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.apps), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.capabilities), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.devices), true);

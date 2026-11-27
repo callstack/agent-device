@@ -799,10 +799,12 @@ test('fresh helper focus answers app guards while system windows retain ANR diag
       windowType: systemWindow ? '3' : '1',
     });
   });
-  const runAdb = vi.fn(async () => ({
+  const runAdb = vi.fn(async (_device: unknown, args: readonly string[]) => ({
     exitCode: 0,
     stderr: '',
-    stdout: 'mCurrentFocus=Window{1 u0 Application Not Responding: com.example.app}',
+    stdout: args.includes('processes')
+      ? '  *APP* UID 10146 ProcessRecord{9b0c5a1 4563:com.example.app/u0a146}\n    packageList={com.example.app}'
+      : 'mCurrentFocus=Window{1 u0 Application Not Responding: com.example.app}',
   }));
   const observer = createAndroidObservationAdapter({
     runAdb,
@@ -833,7 +835,7 @@ test('fresh helper focus answers app guards while system windows retain ANR diag
       const blocked = await observer.readBlockingDialog(device);
       assert.equal(blocked.status, 'dialog');
       if (blocked.status === 'dialog') assert.equal(blocked.focus.package, 'com.example.app');
-      assert.equal(runAdb.mock.calls.length, 1);
+      assert.equal(runAdb.mock.calls.length, 2);
     },
   );
 });

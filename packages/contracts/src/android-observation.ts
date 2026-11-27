@@ -4,7 +4,13 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /** Focus facts that are safe to pass between the daemon and an Android owner. */
 export type AndroidBlockingDialogFocus = Readonly<{
+  /**
+   * The package that owns the not-responding process. It is present only when the observer
+   * resolved exactly one owning package, so an absent package means foreign or unresolved.
+   */
   package?: string;
+  /** The not-responding process that the dialog names. A process name is not a package name. */
+  process?: string;
   focusedWindow: string;
   raw: string;
 }>;

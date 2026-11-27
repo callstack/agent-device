@@ -1,4 +1,5 @@
 import type {
+  AndroidBlockingDialogFocus,
   AndroidBlockingDialogObservation,
   AndroidObservationAdapter,
   AndroidObservationHost,
@@ -14,7 +15,9 @@ import {
   ANDROID_FOCUSED_WINDOW_MARKER,
   clearAndroidBlockingDialogObservation,
   parseAndroidComponent,
+  parseAndroidProcessRecords,
   readAndroidBlockingDialogFocus,
+  resolveAndroidProcessOwner,
 } from './app-parsers.ts';
 
 const WINDOW_DUMPS: readonly (readonly string[])[] = [
@@ -25,6 +28,9 @@ const ACTIVITY_DUMPS: readonly (readonly string[])[] = [
   ['dumpsys', 'activity', 'activities'],
   ['dumpsys', 'activity'],
 ];
+const PROCESS_DUMP: readonly string[] = ['dumpsys', 'activity', 'processes'];
+/** Only the ANR dialog has Wait; the crash dialog also has Close app. The id does not depend on the device language. */
+const ANR_WAIT_BUTTON_ID = 'android:id/aerr_wait';
 const FOCUS_LINE = new RegExp(
   `(?:${ANDROID_FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`,
   'gm',
@@ -47,7 +53,7 @@ export function createAndroidObservationAdapter(
 ): AndroidObservationAdapter {
   return Object.freeze({
     readAppState: async (device) => await readAppState(host, device),
-    readBlockingDialog: async (device) => await readBlockingDialog(host, device),
+    readBlockingDialog: async (device) => await observeBlockingDialog(host, device),
     async readAppFocus(device, appBundleId, options = {}) {
       const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
       const focus = await runAndroidAutomationHelper(device, { action: 'focus' });
@@ -149,6 +155,74 @@ async function readBlockingDialog(
     if (parsed.focusObserved) return clearAndroidBlockingDialogObservation(parsed.focusedPackage);
   }
   return { status: 'unknown' };
+}
+
+/**
+ * The blocking-dialog observation the daemon guard acts on. A dialog names the not-responding
+ * process, so its owning package is resolved here. A window probe that answers nothing gets one
+ * more bounded observation, because an ANR can be visible while no window dump answers.
+ */
+async function observeBlockingDialog(
+  host: AndroidObservationHost,
+  device: DeviceInfo,
+): Promise<AndroidBlockingDialogObservation> {
+  const read = createDumpReader(host, device);
+  const observation = await readBlockingDialog(host, device, read);
+  if (observation.status === 'dialog') {
+    return { status: 'dialog', focus: await withProcessOwner(observation.focus, read) };
+  }
+  if (observation.status === 'clear') return observation;
+  return await observeUnansweredBlockingDialog(host, device);
+}
+
+async function withProcessOwner(
+  focus: AndroidBlockingDialogFocus,
+  read: DumpReader,
+): Promise<AndroidBlockingDialogFocus> {
+  if (!focus.process) return focus;
+  const owner = resolveAndroidProcessOwner(
+    parseAndroidProcessRecords(await read(PROCESS_DUMP)),
+    focus.process,
+  );
+  return owner ? { ...focus, package: owner } : focus;
+}
+
+/**
+ * The accessibility snapshot shows a visible ANR dialog by its Wait button. The process dump then
+ * names the not-responding process. An ANR with no single not-responding process has no owner,
+ * so the guard refuses it.
+ */
+async function observeUnansweredBlockingDialog(
+  host: AndroidObservationHost,
+  device: DeviceInfo,
+): Promise<AndroidBlockingDialogObservation> {
+  let anrVisible: boolean;
+  try {
+    const nodes = await host.readSnapshotNodes(device);
+    anrVisible = nodes.some((node) => node.identifier === ANR_WAIT_BUTTON_ID);
+  } catch {
+    return { status: 'unknown' };
+  }
+  if (!anrVisible) return { status: 'unknown' };
+
+  const records = parseAndroidProcessRecords(await createDumpReader(host, device)(PROCESS_DUMP));
+  const notResponding = new Set(
+    records.filter((record) => record.notResponding).map((record) => record.process),
+  );
+  const processName = notResponding.size === 1 ? [...notResponding][0] : undefined;
+  if (!processName) {
+    return { status: 'dialog', focus: { focusedWindow: 'Application Not Responding', raw: '' } };
+  }
+  const owner = resolveAndroidProcessOwner(records, processName);
+  return {
+    status: 'dialog',
+    focus: {
+      process: processName,
+      ...(owner ? { package: owner } : {}),
+      focusedWindow: `Application Not Responding: ${processName}`,
+      raw: '',
+    },
+  };
 }
 
 function orderedDumps(device: DeviceInfo, question: Question): readonly (readonly string[])[] {

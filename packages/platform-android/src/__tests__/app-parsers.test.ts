@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseAndroidComponent,
   parseAndroidLaunchablePackages,
+  parseAndroidProcessRecords,
   parseAndroidResumedActivity,
   readAndroidBlockingDialogFocus,
 } from '../app-parsers.ts';
@@ -30,7 +31,7 @@ test('readAndroidBlockingDialogFocus preserves responding window text without re
     {
       focusObserved: true,
       focus: {
-        package: 'com.example.app',
+        process: 'com.example.app',
         focusedWindow: '123 u0 com.example.app/com.example.MainActivity Demo is not responding',
         raw: 'mCurrentFocus=Window{123 u0 com.example.app/com.example.MainActivity Demo is not responding}',
       },
@@ -101,4 +102,28 @@ test('parseAndroidResumedActivity ignores a stale last-resumed record', () => {
     ),
     null,
   );
+});
+
+test('parseAndroidProcessRecords reads process records, not PID mappings that name them', () => {
+  const dump = [
+    'ACTIVITY MANAGER RUNNING PROCESSES (dumpsys activity processes)',
+    '  All known processes:',
+    '  *APP* UID 10146 ProcessRecord{9b0c5a1 4563:com.example.app:remote/u0a146}',
+    '    user #0 uid=10146 gids={50146, 20146, 9997}',
+    '    packageList={com.example.app}',
+    '     crashing=false notResponding=true',
+    '  *PERS* UID 1000 ProcessRecord{1a2b3c4 812:system/1000}',
+    '    packageList={android, com.android.providers.settings}',
+    '  PID mappings:',
+    '    PID #4563: ProcessRecord{9b0c5a1 4563:com.example.app:remote/u0a146}',
+  ].join('\n');
+
+  assert.deepEqual(parseAndroidProcessRecords(dump), [
+    { process: 'com.example.app:remote', packages: ['com.example.app'], notResponding: true },
+    {
+      process: 'system',
+      packages: ['android', 'com.android.providers.settings'],
+      notResponding: false,
+    },
+  ]);
 });

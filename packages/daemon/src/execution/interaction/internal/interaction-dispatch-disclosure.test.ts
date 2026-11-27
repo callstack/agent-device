@@ -273,16 +273,20 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
       status: 'dialog',
       focus: { package: 'com.example.app', focusedWindow: 'Application Not Responding', raw: '' },
     }),
-    readSnapshotNodes: async () => [
-      {
-        index: 0,
-        ref: 'e0',
-        type: 'Button',
-        label: 'Close app',
-        identifier: 'android:id/aerr_close',
-        rect: { x: 10, y: 20, width: 100, height: 40 },
-      },
-    ],
+    // The dialog leaves once Close app is tapped.
+    readSnapshotNodes: async () =>
+      tap.mock.calls.length > 0
+        ? []
+        : [
+            {
+              index: 0,
+              ref: 'e0',
+              type: 'Button',
+              label: 'Close app',
+              identifier: 'android:id/aerr_close',
+              rect: { x: 10, y: 20, width: 100, height: 40 },
+            },
+          ],
     tap,
     openApp,
   };

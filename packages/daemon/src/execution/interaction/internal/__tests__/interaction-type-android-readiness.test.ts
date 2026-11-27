@@ -4,7 +4,8 @@ import { makeAndroidSession } from '../../../../__tests__/support/session-factor
 import { makeTestScreenRecordingResource } from '../../../../__tests__/support/screen-recording-live-handle.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import {
-  ANR_CLOSE_APP_TAP,
+  ANR_CLOSE_APP_TAP_EVENT,
+  ANR_DIALOG_CLEARED_EVENT,
   makeAnrDialogObservation,
 } from '../../../../__tests__/support/android-anr-observation.ts';
 import { handleInteractionCommands } from '../../index.ts';
@@ -50,7 +51,7 @@ async function typeWhileRecording(sessionName: string, observation: AndroidObser
 }
 
 test('another app ANR during recording refuses type and closes nothing', async () => {
-  const { observation, taps, openedApps } = makeAnrDialogObservation('com.example.other');
+  const { observation, events } = makeAnrDialogObservation('com.example.other');
 
   const response = await typeWhileRecording('type-foreign-anr', observation);
 
@@ -62,13 +63,12 @@ test('another app ANR during recording refuses type and closes nothing', async (
       hint: expect.stringContaining('Run alert dismiss'),
     },
   });
-  expect(taps).toEqual([]);
-  expect(openedApps).toEqual([]);
+  expect(events).toEqual([]);
   expect(mockTypeText).not.toHaveBeenCalled();
 });
 
 test('the session app ANR during recording is recovered before type', async () => {
-  const { observation, taps, openedApps } = makeAnrDialogObservation(APP);
+  const { observation, events } = makeAnrDialogObservation(APP);
 
   const response = await typeWhileRecording('type-app-anr', observation);
 
@@ -76,7 +76,7 @@ test('the session app ANR during recording is recovered before type', async () =
     ok: true,
     data: { warning: `Recovered Android app ANR before type: closed and relaunched ${APP}.` },
   });
-  expect(taps).toEqual([ANR_CLOSE_APP_TAP]);
-  expect(openedApps).toEqual([APP]);
+  // The relaunch waits until the dialog has left, after the process is gone.
+  expect(events).toEqual([ANR_CLOSE_APP_TAP_EVENT, ANR_DIALOG_CLEARED_EVENT, `open ${APP}`]);
   expect(mockTypeText).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello' }));
 });

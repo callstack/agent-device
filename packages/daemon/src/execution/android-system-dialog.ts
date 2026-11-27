@@ -154,6 +154,9 @@ async function recoverAppOwnedAndroidBlockingSystemDialog(
 
   const tapResult = await tapAndroidDialogButton(session, closeAppButton, observation);
   if (!tapResult.ok) return false;
+  // Android kills the process before it removes the dialog. A launch before that reaches the task
+  // that is about to die, so the relaunch waits until the dialog is gone.
+  if (!(await waitForCloseAppButtonToLeave(session, observation))) return false;
 
   await observation.openApp(session.device, session.appBundleId);
   const focused = await waitForAndroidAppFocus(session, session.appBundleId, observation);
@@ -185,6 +188,7 @@ function androidBlockingDialogError(params: {
     command,
     expectedPackage: session.appBundleId,
     focusedPackage: focus.package,
+    focusedProcess: focus.process,
     focusedWindow: focus.focusedWindow,
     rawFocus: focus.raw,
     hint,
@@ -246,6 +250,18 @@ function findCloseAppButton(nodes: SnapshotNode[]): SnapshotNode | undefined {
       node.rect &&
       !isSnapshotNodeInteractionBlocked(node),
   );
+}
+
+async function waitForCloseAppButtonToLeave(
+  session: SessionState,
+  observation: AndroidObservationAdapter,
+): Promise<boolean> {
+  for (let attempt = 0; attempt <= ANDROID_MODAL_POLL_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await sleep(ANDROID_MODAL_POLL_MS);
+    const nodes = await readAndroidSnapshotNodes(session, observation).catch(() => undefined);
+    if (nodes && !findCloseAppButton(nodes)) return true;
+  }
+  return false;
 }
 
 async function waitForAndroidAppFocus(
