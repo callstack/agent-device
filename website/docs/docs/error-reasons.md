@@ -898,6 +898,8 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
+| `remote_rpc_protocol_missing` | The checked RPC call named no RPC protocol. An intermediary that strips request headers causes this. |
+| `remote_rpc_protocol_mismatch` | The daemon or proxy speaks another RPC protocol than the caller; `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused. |
 | `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
 | `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
 | `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |

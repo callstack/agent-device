@@ -6,7 +6,9 @@ Accepted
 
 ## Rules at a glance
 
-- Before remote JSON-RPC requests, compare the daemon's `rpcProtocolVersion` from `/health`.
+- Before remote JSON-RPC requests, compare the daemon's `rpcProtocolVersion` from `/health`, or send them on the checked route, where the server makes that comparison.
+- The checked route refuses every precondition after authentication and before dispatch, with HTTP 409 and a typed `x-agent-device-refusal` header.
+- A client uses the checked route only when its connection opts in. It never resends a checked call and never falls back to `/rpc` after one.
 - Package `version` is diagnostic only and must not be used as a compatibility gate.
 - Allow a missing `rpcProtocolVersion` unless a later security or protocol decision explicitly retires legacy compatibility.
 - A persistent client may cache a successful probe if `/health` advertises an instance ID for the daemon endpoint and, for a proxy, for its upstream daemon.
@@ -51,6 +53,29 @@ A peer that advertises an instance ID must continue to honor the conditional RPC
 The reason is that older clients may hold a cached identity across a restart.
 Such clients must receive a pre-dispatch refusal before they retry a mutating command.
 
+### Checked RPC
+
+`POST /rpc/checked` takes the same authentication, body, and answer as `/rpc`.
+The client names its protocol in the mandatory `x-agent-device-rpc-protocol` header.
+The daemon or proxy authenticates the caller first.
+Then it compares that header with its own protocol, before it decodes anything that its own protocol defines.
+A missing header or another protocol gets HTTP 409, `x-agent-device-refusal: protocol-missing` or `protocol-mismatch`, and a JSON-RPC error.
+The error details name the refusing `service`, its `version`, and its `rpcProtocolVersion`, so the client can name who must upgrade.
+A proxy admits `/rpc` and the checked route through one path: body limit, authentication, tenant method rules, credential rewriting, and public-only stamping.
+A proxy checks its own protocol, then forwards to the daemon's checked route, which checks again.
+The proxy marks a forwarded daemon protocol refusal as `upstream-protocol-mismatch`.
+A call that records a session script (`scriptPublicationId`) needs the `script-artifacts` capability; the daemon reads that requirement from the request itself and refuses with `script-artifacts`.
+`/health` advertises `checked-rpc` on each link that serves the route.
+
+The route, not a header, is what makes the check safe.
+Released daemons and proxies answer an unknown route with 404 before dispatch, and they ignore unknown headers on `/rpc`.
+A 404 is still not proof of non-dispatch, because a gateway can answer for a command that ran.
+So a client does not discover the route.
+The connection opts in with `daemonRpc: "checked"`, which `connect` accepts only when `/health` advertises `checked-rpc` on every link.
+With the opt-in, a 404 is a typed failure with `dispatched: 'unknown'`, and the client does not resend.
+Flows with remote side effects before the command, such as artifact uploads and lease beats, keep the `/health` probe and the instance headers.
+A connect timeout before the socket connects is proof, inside the client, that nothing left; only then does the client run the `/health` recovery loop and send once.
+
 `rpcProtocolVersion` changes only when an older client and newer daemon, or a newer client and older daemon, cannot safely communicate over the HTTP RPC boundary for existing commands.
 Increment it for incompatible changes to:
 
@@ -77,6 +102,9 @@ This preference does not apply if the change also affects the shared transport c
 - **Do not check compatibility.** This maximizes compatibility.
   However, it fails later, after the client has sent an RPC payload that a remote daemon may parse incorrectly.
 - **Negotiate full schemas.** This is more precise, but it is too much machinery for the current JSON-RPC boundary.
+- **Persist the `/health` answer in the client state directory (#5134).** It saves the probe across CLI processes, but it adds a local trust boundary and cache rules, and a rollback to a daemon that ignores instance headers would dispatch on a stale view.
+- **Send the protocol as a header on `/rpc`.** Released daemons ignore unknown headers and dispatch anyway.
+- **Fall back to `/health` and `/rpc` after a 404 on the checked route.** A 404 can come after dispatch, so the fallback could run a command twice.
 
 ## Consequences
 

@@ -19,6 +19,14 @@ import {
   normalizeDaemonPublicOrigin,
   DAEMON_REQUEST_MAX_BYTES,
   DAEMON_INSTANCE_REASONS,
+  DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
+  DAEMON_HTTP_CHECKED_RPC_ROUTE,
+  DAEMON_HTTP_REFUSAL_HEADER,
+  DAEMON_HTTP_REFUSALS,
+  DAEMON_HTTP_RPC_PROTOCOL_HEADER,
+  DAEMON_RPC_PROTOCOL_VERSION,
+  checkedRpcProtocolRefusal,
+  checkedRpcProtocolRefusalError,
 } from '@agent-device/contracts/daemon-http';
 import {
   carriesUnbackedHostPathInstallSource,
@@ -190,7 +198,7 @@ async function handleProxyRequest(
     return new Response(new TextEncoder().encode('Not found'), { status: 404 });
   }
 
-  if (route !== '/rpc') return await handleDaemonRoute(request, route, options, instanceId);
+  if (!isRpcRoute(route)) return await handleDaemonRoute(request, route, options, instanceId);
 
   let rpcBody: string;
   try {
@@ -222,13 +230,15 @@ async function handleDaemonRoute(
   if (!caller) {
     return unauthorizedResponse(route, readJsonRpcId(rpcBody));
   }
+  const protocolRefusal = await refuseCheckedRpcProtocol(request, route, readJsonRpcId(rpcBody));
+  if (protocolRefusal) return protocolRefusal;
   if (caller.tenantId && !isRouteWithinTenant(route, caller.tenantId)) {
     return Response.json(
       { ok: false, error: 'Session is outside this tenant', code: 'UNAUTHORIZED' },
       { status: 401 },
     );
   }
-  if (caller.tenantId && route === '/rpc' && !isTenantStampedRpcMethod(rpcBody)) {
+  if (caller.tenantId && isRpcRoute(route) && !isTenantStampedRpcMethod(rpcBody)) {
     return tenantRpcMethodRefusedResponse(readJsonRpcId(rpcBody));
   }
 
@@ -331,6 +341,7 @@ async function proxyHealthResponse(
       upstream,
       instanceId,
       hostArch: await readHostCpuArch(),
+      capabilities: [DAEMON_HTTP_CHECKED_RPC_CAPABILITY],
     }),
   );
 }
@@ -422,7 +433,29 @@ function copyProxyResponseHeaders(
     if (value) headers.set(name, value);
   }
   if (!headers.has('x-request-id')) headers.set('x-request-id', resolveRequestId(request));
+  const refusal = forwardedCheckedRpcRefusal(upstreamResponse, route);
+  if (refusal) headers.set(DAEMON_HTTP_REFUSAL_HEADER, refusal);
   return headers;
+}
+
+/**
+ * The refusal header a checked call's 409 carries back through the proxy. A protocol refusal of the
+ * daemon behind the proxy says so, so the client names that daemon and not the proxy. Only the
+ * known values pass, and only on a 409 of the checked route.
+ */
+function forwardedCheckedRpcRefusal(upstreamResponse: Response, route: string): string | undefined {
+  if (route !== DAEMON_HTTP_CHECKED_RPC_ROUTE || upstreamResponse.status !== 409) return undefined;
+  switch (upstreamResponse.headers.get(DAEMON_HTTP_REFUSAL_HEADER)) {
+    case DAEMON_HTTP_REFUSALS.protocolMismatch:
+    case DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch:
+      return DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch;
+    case DAEMON_HTTP_REFUSALS.protocolMissing:
+      return DAEMON_HTTP_REFUSALS.protocolMissing;
+    case DAEMON_HTTP_REFUSALS.scriptArtifacts:
+      return DAEMON_HTTP_REFUSALS.scriptArtifacts;
+    default:
+      return undefined;
+  }
 }
 
 /** `content-length` stays off the preflight route because the proxy rewrites that body. */
@@ -604,8 +637,13 @@ function resolveProxyRoute(requestUrl: string): string {
   return pathname;
 }
 
+/** `/rpc` and the checked route share one admission: auth, tenant rules, credentials, stamping. */
+function isRpcRoute(route: string): boolean {
+  return route === '/rpc' || route === DAEMON_HTTP_CHECKED_RPC_ROUTE;
+}
+
 function isSupportedDaemonRoute(route: string, method: string): boolean {
-  if (route === '/rpc') return method === 'POST';
+  if (isRpcRoute(route)) return method === 'POST';
   if (isTransferRoute(route, method)) return true;
   if (isRequestDiagnosticsRoute(route)) return method === 'GET';
   return false;
@@ -672,10 +710,14 @@ function buildUpstreamHeaders(
     if (value?.trim()) headers.set(name, value);
   }
   if (tenantId) headers.set(DAEMON_HTTP_TENANT_HEADER, tenantId);
-  if (route === '/rpc' && !headers.has('content-type')) {
+  if (isRpcRoute(route) && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
-  if (route === '/rpc') {
+  if (route === DAEMON_HTTP_CHECKED_RPC_ROUTE) {
+    // The proxy admitted only its own protocol, so the daemon behind it checks that one again.
+    headers.set(DAEMON_HTTP_RPC_PROTOCOL_HEADER, String(DAEMON_RPC_PROTOCOL_VERSION));
+  }
+  if (isRpcRoute(route)) {
     headers.set(DAEMON_HTTP_NETWORK_ACCESS_HEADER, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
     for (const [name, value] of Object.entries(
       buildUpstreamInstancePreconditionHeaders(requestHeaders),
@@ -697,7 +739,7 @@ function resolveUpstreamBody(
   tenantId: string | undefined,
 ): BodyInit | null {
   if (request.method === 'GET' || request.method === 'HEAD') return null;
-  if (route === '/rpc') return rewriteRpcParams(rpcBody ?? '', upstreamToken, tenantId);
+  if (isRpcRoute(route)) return rewriteRpcParams(rpcBody ?? '', upstreamToken, tenantId);
   return request.body;
 }
 
@@ -811,7 +853,7 @@ function refuseStaleProxyInstance(
   rpcId: unknown,
   instanceId: string,
 ): Response | null {
-  if (route !== '/rpc') return null;
+  if (!isRpcRoute(route)) return null;
   const expectedInstanceId = request.headers.get(DAEMON_HTTP_INSTANCE_HEADER);
   if (expectedInstanceId === null || expectedInstanceId === instanceId) return null;
   return sendInstanceMismatch(rpcId);
@@ -832,8 +874,33 @@ function sendInstanceMismatch(rpcId: unknown): Response {
   );
 }
 
+/**
+ * Refuses an authenticated checked call whose RPC protocol header is absent or names another
+ * protocol, before the proxy reads anything its own protocol defines or forwards a byte.
+ */
+async function refuseCheckedRpcProtocol(
+  request: Request,
+  route: string,
+  rpcId: unknown,
+): Promise<Response | null> {
+  if (route !== DAEMON_HTTP_CHECKED_RPC_ROUTE) return null;
+  const refusal = checkedRpcProtocolRefusal(request.headers.get(DAEMON_HTTP_RPC_PROTOCOL_HEADER));
+  if (!refusal) return null;
+  const { readVersion } = await import('@agent-device/host-kit/version');
+  const error = normalizeError(
+    checkedRpcProtocolRefusalError(refusal, {
+      service: 'agent-device-proxy',
+      version: readVersion(),
+    }),
+  );
+  return Response.json(
+    { jsonrpc: '2.0', id: rpcId, error: { code: -32001, message: error.message, data: error } },
+    { status: 409, headers: { [DAEMON_HTTP_REFUSAL_HEADER]: refusal } },
+  );
+}
+
 function unauthorizedResponse(route: string, rpcId: unknown): Response {
-  if (route === '/rpc') {
+  if (isRpcRoute(route)) {
     return Response.json(
       {
         jsonrpc: '2.0',

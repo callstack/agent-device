@@ -49,6 +49,7 @@ const HTTP_RPC_ENVELOPE = 'packages/daemon/src/server/http/http-rpc-envelope.ts'
 const HTTP_RPC_METHODS = 'packages/daemon/src/server/http/http-rpc-methods.ts';
 const HTTP_AUTHORIZATION = 'packages/daemon/src/server/http/http-authorization.ts';
 const HTTP_INSTANCE_PRECONDITION = 'packages/daemon/src/server/http/http-instance-precondition.ts';
+const HTTP_CHECKED_RPC = 'packages/daemon/src/server/http/http-checked-rpc.ts';
 const UPLOAD_HTTP = 'packages/daemon/src/server/upload-http.ts';
 const ARTIFACT_HTTP = 'packages/daemon/src/server/downloadable-artifact-http.ts';
 const REQUEST_DIAGNOSTICS_HTTP = 'packages/daemon/src/server/request-diagnostics-http.ts';
@@ -93,6 +94,29 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'buildDaemonInstanceMismatchRpcResponse',
       ),
       ...from(HTTP_INSTANCE_PRECONDITION, 'refuseStaleDaemonInstance'),
+      // The checked RPC route (ADR 0006): the server refuses protocol skew before dispatch, with a
+      // typed refusal header the client reads in place of a `/health` probe.
+      ...from(
+        DAEMON_HTTP,
+        'DAEMON_HTTP_CHECKED_RPC_ROUTE',
+        'DAEMON_HTTP_CHECKED_RPC_CAPABILITY',
+        'DAEMON_HTTP_RPC_PROTOCOL_HEADER',
+        'DAEMON_HTTP_REFUSAL_HEADER',
+        'DAEMON_HTTP_REFUSALS',
+        'DaemonHttpRefusal',
+        'readDaemonRpcProtocolHeader',
+        'checkedRpcProtocolRefusal',
+        'checkedRpcProtocolRefusalError',
+      ),
+      ...from(
+        HTTP_CHECKED_RPC,
+        'refuseCheckedRpcProtocol',
+        'refuseUnservedCheckedRequest',
+        'sendCheckedRpcRefusal',
+        'readStableRpcFrame',
+      ),
+      ...from(HTTP_SERVER, 'DAEMON_HTTP_CAPABILITIES'),
+      ...from(DAEMON_PROXY, 'isRpcRoute', 'refuseCheckedRpcProtocol', 'forwardedCheckedRpcRefusal'),
       ...from(
         DAEMON_PROXY,
         'refuseStaleProxyInstance',

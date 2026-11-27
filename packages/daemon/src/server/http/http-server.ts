@@ -32,6 +32,8 @@ import {
   buildDaemonHealthPayload,
   normalizeDaemonPublicOrigin,
   nodeHttpRequestUrl,
+  DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
+  DAEMON_HTTP_CHECKED_RPC_ROUTE,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
@@ -81,8 +83,11 @@ import {
   type TenantTrustDecision,
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
+import { refuseCheckedRpcProtocol, refuseUnservedCheckedRequest } from './http-checked-rpc.ts';
 
 const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
+/** What this daemon serves over HTTP beyond the base RPC contract, as `/health` advertises it. */
+const DAEMON_HTTP_CAPABILITIES = ['script-artifacts', DAEMON_HTTP_CHECKED_RPC_CAPABILITY];
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
@@ -143,7 +148,7 @@ export async function createDaemonHttpServer(options: {
         JSON.stringify(
           buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
             instanceId,
-            capabilities: ['script-artifacts'],
+            capabilities: DAEMON_HTTP_CAPABILITIES,
             hostArch,
             leaseBackends,
           }),
@@ -224,7 +229,8 @@ export async function createDaemonHttpServer(options: {
       return;
     }
 
-    if (req.method !== 'POST' || req.url !== '/rpc') {
+    const checked = req.url === DAEMON_HTTP_CHECKED_RPC_ROUTE;
+    if (req.method !== 'POST' || (req.url !== '/rpc' && !checked)) {
       res.statusCode = 404;
       res.end('Not found');
       return;
@@ -243,6 +249,7 @@ export async function createDaemonHttpServer(options: {
         expectedToken: token,
         instanceId,
         handleRequest,
+        checked,
       }).catch((error: unknown) => {
         sendUnownedRpcRequestFailure(res, onUnownedRequestFailure, error);
       });
@@ -314,8 +321,15 @@ async function handleRpcRequest(params: {
   expectedToken: string | undefined;
   instanceId: string;
   handleRequest: DaemonInvokeFn;
+  /** The call came on the checked route, so its protocol and capability are checked before dispatch. */
+  checked: boolean;
 }): Promise<void> {
-  const { req, res, body, authHook, expectedToken, instanceId, handleRequest } = params;
+  const { req, res, body, authHook, expectedToken, instanceId, handleRequest, checked } = params;
+  // Ahead of the envelope checks: a caller on another protocol is told so before this build reads
+  // anything its own protocol defines, such as the method vocabulary.
+  if (checked && (await refuseCheckedRpcProtocol({ req, res, body, authHook, expectedToken }))) {
+    return;
+  }
   const validated = validateRpcRequestEnvelope(body);
   if (!validated.ok) {
     sendRpcRefusal(res, validated.refusal);
@@ -343,6 +357,17 @@ async function handleRpcRequest(params: {
       if (admission.outcome === 'rejected') {
         sendRpcRefusal(res, admission.refusal);
       }
+      return;
+    }
+    if (
+      checked &&
+      refuseUnservedCheckedRequest(
+        res,
+        validated.rpcRequest.id ?? null,
+        admission.daemonRequest,
+        DAEMON_HTTP_CAPABILITIES,
+      )
+    ) {
       return;
     }
 
