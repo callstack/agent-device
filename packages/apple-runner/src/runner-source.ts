@@ -62,14 +62,23 @@ type RunnerSourceFingerprintCacheEntry = {
 
 const runnerSourceFingerprintCache = new Map<string, RunnerSourceFingerprintCacheEntry>();
 
-export function computeRunnerSourceFingerprint(projectRoot: string): string {
+export function computeRunnerSourceFingerprint(
+  projectRoot: string,
+  layout: 'resolved' | 'packaged' = 'resolved',
+): string {
   const sourceRoots = [
     {
-      path: resolveAppleRunnerSourceRoot(projectRoot),
+      path:
+        layout === 'packaged'
+          ? path.join(projectRoot, PACKAGED_APPLE_RUNNER_SOURCE_ROOT)
+          : resolveAppleRunnerSourceRoot(projectRoot),
       ignoredDirectoryNames: RUNNER_SOURCE_IGNORED_DIR_NAMES,
     },
     {
-      path: resolveAppleSnapshotPresentationSourceRoot(projectRoot),
+      path:
+        layout === 'packaged'
+          ? path.join(projectRoot, PACKAGED_APPLE_SNAPSHOT_PRESENTATION_SOURCE_ROOT)
+          : resolveAppleSnapshotPresentationSourceRoot(projectRoot),
       ignoredDirectoryNames: SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES,
     },
   ];

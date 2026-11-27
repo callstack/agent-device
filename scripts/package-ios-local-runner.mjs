@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isReleaseVersion } from './release-version.mjs';
+import { computeRunnerSourceFingerprint } from '../packages/apple-runner/src/runner-source.ts';
 
 function sha256(file) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -115,6 +116,10 @@ function packageLocalRunner(version, derivedPath, xctestrunPath, outputDir) {
     throw new Error('Local runner requires a certified iOS simulator build');
   }
   validateXctestrunPaths(plist(sourceXctestrun));
+  if (!fs.existsSync('dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj')) {
+    throw new Error('Local runner requires the packaged Apple sources');
+  }
+  const runnerSourceFingerprint = computeRunnerSourceFingerprint(process.cwd(), 'packaged');
 
   const appPaths = new Set();
   for (const product of artifacts.productPaths) {
@@ -165,6 +170,7 @@ function packageLocalRunner(version, derivedPath, xctestrunPath, outputDir) {
       sdkName,
       sdkVersion,
       sdkBuildVersion,
+      runnerSourceFingerprint,
       xctestrun,
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');

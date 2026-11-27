@@ -524,7 +524,7 @@ export async function ensureXctestrunArtifact(
         }),
     });
   });
-  if (artifact.artifact === 'rebuilt') {
+  if (artifact.artifact === 'rebuilt' || artifact.cache === 'miss') {
     void evictStaleRunnerCachesBestEffort(derived);
   }
   return artifact;

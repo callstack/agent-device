@@ -99,6 +99,22 @@ jobs:
             "${RELEASE_ASSET_DIR}"
         shell: bash
 
+      - name: Upload runner assets to GitHub Release
+        env:
+          ARCHIVE_PATH: ${{ steps.package.outputs.archive_path }}
+          CHECKSUM_PATH: ${{ steps.package.outputs.checksum_path }}
+          MANIFEST_PATH: ${{ steps.package.outputs.manifest_path }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" \
+            "$ARCHIVE_PATH" \
+            "$CHECKSUM_PATH" \
+            "$MANIFEST_PATH" \
+            --clobber
+        shell: bash
+
       - name: Package local iOS simulator runner
         if: matrix.destination == 'iOS'
         id: local-package
@@ -114,25 +130,10 @@ jobs:
           if [[ -f scripts/package-ios-local-runner.mjs
             && "$GITHUB_REF" == "refs/tags/$RELEASE_TAG"
             && "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]; then
-            node scripts/package-ios-local-runner.mjs \
+            node scripts/package-apple-runner-source.mjs
+            node --experimental-strip-types scripts/package-ios-local-runner.mjs \
               "$RELEASE_VERSION" "$DERIVED_PATH" "$XCTESTRUN_PATH" "$RELEASE_ASSET_DIR"
           fi
-        shell: bash
-
-      - name: Upload runner assets to GitHub Release
-        env:
-          ARCHIVE_PATH: ${{ steps.package.outputs.archive_path }}
-          CHECKSUM_PATH: ${{ steps.package.outputs.checksum_path }}
-          MANIFEST_PATH: ${{ steps.package.outputs.manifest_path }}
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
-        run: |
-          set -euo pipefail
-          gh release upload "$RELEASE_TAG" \
-            "$ARCHIVE_PATH" \
-            "$CHECKSUM_PATH" \
-            "$MANIFEST_PATH" \
-            --clobber
         shell: bash
 
       - name: Upload local iOS simulator runner assets to GitHub Release

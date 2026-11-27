@@ -32,7 +32,7 @@ const expectedCacheMetadata: RunnerXctestrunCacheMetadata = {
   sdkBuildVersion: '24A94232',
 };
 
-it.each(['match', 'different toolchain', 'bad checksum'] as const)(
+it.each(['match', 'different toolchain', 'different source', 'bad checksum'] as const)(
   'certifies only matching, checksum-verified release products (%s)',
   async (outcome) => {
     const derived = await makeScratchDir();
@@ -55,6 +55,10 @@ it.each(['match', 'different toolchain', 'bad checksum'] as const)(
             version: expectedCacheMetadata.packageVersion,
             xcodeBuildVersion:
               outcome === 'different toolchain' ? 'other' : expectedCacheMetadata.xcodeBuildVersion,
+            runnerSourceFingerprint:
+              outcome === 'different source'
+                ? 'other'
+                : expectedCacheMetadata.runnerSourceFingerprint,
             sha256: createHash('sha256')
               .update(outcome === 'bad checksum' ? 'untrusted' : archive)
               .digest('hex'),
@@ -73,7 +77,7 @@ it.each(['match', 'different toolchain', 'bad checksum'] as const)(
       options: {},
       assertAdmitted: () => {},
     });
-    expect(fetch).toHaveBeenCalledTimes(outcome === 'different toolchain' ? 1 : 2);
+    expect(fetch).toHaveBeenCalledTimes(outcome.startsWith('different ') ? 1 : 2);
     if (outcome === 'match') {
       expect(result?.xctestrunPath).toContain(xctestrun);
       expect(extractRunnerReleaseArchive).toHaveBeenCalledOnce();

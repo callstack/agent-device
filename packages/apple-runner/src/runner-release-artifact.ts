@@ -3,11 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { resolveRunnerDerivedOverride } from './apple-runner-platform.ts';
 import type { RunnerXctestrunArtifact } from './runner-artifact.ts';
-import {
-  emitRunnerXctestrunDecision,
-  requireCertifiedRunnerCacheArtifacts,
-  writeRunnerCacheMetadataForArtifacts,
-} from './runner-cache.ts';
+import { emitRunnerXctestrunDecision, writeRunnerCacheMetadata } from './runner-cache.ts';
 import type { RunnerXctestrunCacheMetadata } from './runner-cache-metadata.ts';
 import {
   resolveRunnerCacheKey,
@@ -83,6 +79,7 @@ function readMatchingManifest(data: Buffer, expected: RunnerXctestrunCacheMetada
     manifest.sdkName !== expected.sdkName ||
     manifest.sdkVersion !== expected.sdkVersion ||
     manifest.sdkBuildVersion !== expected.sdkBuildVersion ||
+    manifest.runnerSourceFingerprint !== expected.runnerSourceFingerprint ||
     typeof manifest.sha256 !== 'string' ||
     !/^[a-f0-9]{64}$/.test(manifest.sha256) ||
     typeof manifest.xctestrun !== 'string' ||
@@ -160,21 +157,24 @@ export async function resolveReleasedXctestrunArtifact(params: {
   const staged = await stageRunnerReleaseArtifact(derived, expectedCacheMetadata, budget);
   if (!staged) return null;
   const { directory, xctestrunPath, productPaths } = staged;
+  let certified = false;
   try {
     assertAdmitted();
     budget?.signal?.throwIfAborted();
-    requireCertifiedRunnerCacheArtifacts(
-      await writeRunnerCacheMetadataForArtifacts(
+    const { buildRunnerCacheArtifactManifest } = await import('./runner-artifact-manifest.ts');
+    const built = buildRunnerCacheArtifactManifest(derived, xctestrunPath, productPaths);
+    if (!built.ok) {
+      emitRunnerXctestrunDecision('preserve', 'uncertifiable_products', {
         derived,
-        expectedCacheMetadata,
         xctestrunPath,
-        productPaths,
-      ),
-      derived,
-    );
-  } catch (error) {
-    await fs.rm(directory, { recursive: true, force: true });
-    throw error;
+        refusal: built.refusal,
+      });
+      return null;
+    }
+    writeRunnerCacheMetadata(derived, { ...expectedCacheMetadata, artifacts: built.artifacts });
+    certified = true;
+  } finally {
+    if (!certified) await fs.rm(directory, { recursive: true, force: true });
   }
   emitRunnerXctestrunDecision('reuse', 'release_artifact', { derived, xctestrunPath });
   return {
