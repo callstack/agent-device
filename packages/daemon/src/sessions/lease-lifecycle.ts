@@ -8,9 +8,15 @@ import type {
   LeaseLifecycleProvider,
   ProviderAppCatalog,
 } from '@agent-device/contracts/device';
-import { buildSessionLeaseFromRequest, type SessionLease } from '../core/lease-context.ts';
+import {
+  buildSessionLeaseFromRequest,
+  isBoundedCompositeRequest,
+  resolveLeaseScope,
+  type SessionLease,
+} from '../core/lease-context.ts';
 import { assertRequestLeaseAdmission } from './request-admission.ts';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { thrownBeforeDispatch } from '../execution/request-dispatch-disclosure.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
@@ -53,21 +59,26 @@ export async function releaseExpiredProviderLease(
   }
 }
 
+/**
+ * Ends the session of the request whose session lease expired, or refuses the request before that
+ * teardown. A composite is refused so it does not lose its session mid-run. A request that names
+ * that lease is refused so its client can reallocate and resend: the refusal says `dispatched: no`, so
+ * nothing of the request may run first. The lease expiry sweep ends that session instead.
+ */
 export async function cleanupExpiredLeasedSession(params: {
+  req: DaemonRequest;
   env: HostEnvironment['env'];
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
-  /** A composite request refuses an expired lease rather than tear its session down mid-run. */
-  refuseTeardown?: boolean;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
   if (
     !params.leaseRegistry.consumeExpiredLease(lease.leaseId, () => {
-      if (!params.refuseTeardown) return;
+      if (!refusesExpiredLeaseTeardown(params.req, lease.leaseId)) return;
       throw new AppError('UNAUTHORIZED', 'Lease is not active', {
         reason: LEASE_REASONS.notFound.reason,
         dispatched: 'no',
@@ -83,6 +94,15 @@ export async function cleanupExpiredLeasedSession(params: {
     params.env,
   );
   return true;
+}
+
+function refusesExpiredLeaseTeardown(req: DaemonRequest, expiredLeaseId: string): boolean {
+  return (
+    req.command === 'batch' ||
+    req.command === 'replay' ||
+    isBoundedCompositeRequest(req) ||
+    resolveLeaseScope(req).leaseId === expiredLeaseId
+  );
 }
 
 /**
@@ -137,11 +157,18 @@ export function admitRequestLeaseForLockedScope(params: {
   const { sessionName, sessionStore, leaseRegistry } = params;
   const ref = sessionStore.lookup(sessionName);
   const existingSession = ref?.session;
-  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
-    env: params.env,
-    providerAppCatalog: params.providerAppCatalog,
-    daemonPolicy: params.daemonPolicy,
-  });
+  // Admission runs before any handler, so its refusal says `dispatched: no`: a client that let
+  // admission check its lease (`lease-admission`) reallocates and resends on that refusal alone.
+  let activeLease: DeviceLease | undefined;
+  try {
+    activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
+      env: params.env,
+      providerAppCatalog: params.providerAppCatalog,
+      daemonPolicy: params.daemonPolicy,
+    });
+  } catch (error) {
+    throw thrownBeforeDispatch(error);
+  }
   if (!activeLease) return params.req;
 
   const nextReq = {

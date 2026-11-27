@@ -544,6 +544,19 @@ export function isInactiveLeaseError(error: unknown): boolean {
   );
 }
 
+/**
+ * Whether `error` is the daemon's lease-admission refusal: the lease is gone, and the request never
+ * reached a handler. A client that let admission check a reused lease (the `lease-admission`
+ * capability) reallocates and resends on this refusal alone.
+ */
+export function isUndispatchedInactiveLeaseRefusal(error: unknown): boolean {
+  return (
+    isInactiveLeaseError(error) &&
+    (error as Readonly<{ details?: Readonly<{ dispatched?: unknown }> }>).details?.dispatched ===
+      'no'
+  );
+}
+
 /** Whether `error` says the provider's device instance ended, which ends its lease. */
 export function isProviderInstanceEndedError(error: unknown): boolean {
   return (

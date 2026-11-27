@@ -66,6 +66,7 @@ import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
+import * as LeaseAdmission from './cli/commands/connection-lease-admission.ts';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -222,19 +223,22 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         logTailStopper = maybeStartDaemonLogTail(ctx);
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
         const commandProgress = createCommandProgressState();
-        const client = createAgentDeviceClient(buildClientConfig(ctx), {
-          host: ctx.host,
-          devicePin: ctx.devicePin,
-          transport: createCliDaemonTransport({
-            host,
-            command,
-            flags: ctx.effectiveFlags,
-            replayTestReporterRuntime,
-            commandProgress,
-            transport,
-          }),
+        const transportSetup = { host, command, replayTestReporterRuntime, commandProgress };
+        await LeaseAdmission.dispatchWithLeaseAdmission(ctx.leaseAdmission?.checked, transport, {
+          rematerialize: async (check) => await resolveRemoteContext(ctx, transport, check),
+          dispatch: async (send) => {
+            const client = createAgentDeviceClient(buildClientConfig(ctx), {
+              host: ctx.host,
+              devicePin: ctx.devicePin,
+              transport: createCliDaemonTransport({
+                ...transportSetup,
+                flags: ctx.effectiveFlags,
+                transport: send,
+              }),
+            });
+            await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
+          },
         });
-        await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
       } catch (error) {
         await handleRunCliFailure(error, ctx, logTailStopper);
       } finally {
@@ -369,6 +373,7 @@ type CliRunContext = {
   connectionMetadata: RemoteConnectionRequestMetadata | undefined;
   /** The device a proxy backend granted for the lease's device spec; `open` reports it. */
   leaseDevice?: LeaseDevice;
+  leaseAdmission?: { flagsBefore: CliFlags; checked?: LeaseAdmission.AdmissionCheckedLease };
   parsedBatchSteps: BatchStep[] | undefined;
   devicePin: DevicePin | undefined;
 };
@@ -471,6 +476,7 @@ async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
 async function resolveRemoteContext(
   ctx: CliRunContext,
   transport: CliDaemonTransport,
+  check?: LeaseAdmission.ReusedLeaseCheck,
 ): Promise<void> {
   if (ctx.command === 'batch') {
     if (ctx.positionals.length > 0) {
@@ -479,7 +485,7 @@ async function resolveRemoteContext(
     ctx.parsedBatchSteps = readBatchSteps(ctx.flags);
   }
 
-  if (shouldResolveRemoteAuth(ctx.command)) {
+  if (!check && shouldResolveRemoteAuth(ctx.command)) {
     const authResolution = await resolveRemoteAuthForCli({
       command: ctx.command,
       flags: ctx.effectiveFlags,
@@ -490,6 +496,7 @@ async function resolveRemoteContext(
   }
 
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
+    ctx.effectiveFlags = (ctx.leaseAdmission ??= { flagsBefore: ctx.effectiveFlags }).flagsBefore;
     // Lease allocate and heartbeat calls act on the remote before the command, so they go
     // health-first with the instance fences, never on the checked route.
     const materializationClient = createAgentDeviceClient(
@@ -511,7 +518,9 @@ async function resolveRemoteContext(
       positionals: ctx.positionals,
       batchSteps: ctx.parsedBatchSteps,
       forceRuntimePrepare: hasExplicitMetroRuntimeOverrides(ctx.explicitFlagKeys),
+      reusedLeaseCheck: check ?? { byAdmission: true },
     });
+    ctx.leaseAdmission.checked = materialized.admissionCheckedLease;
     ctx.effectiveFlags = materialized.flags;
     ctx.resolvedRuntime = materialized.runtime;
     ctx.connectionMetadata = materialized.connection;
@@ -550,6 +559,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     runId: currentFlags.runId,
     leaseId: currentFlags.leaseId,
     leaseBackend: currentFlags.leaseBackend,
+    leaseTtlMs: ctx.leaseAdmission?.checked?.leaseTtlMs,
     leaseProvider: connection?.leaseProvider,
     clientId: connection?.clientId,
     deviceKey: connection?.deviceKey,

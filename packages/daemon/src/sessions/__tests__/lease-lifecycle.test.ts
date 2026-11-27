@@ -63,6 +63,36 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
   expect(sessionStore.get('default')?.lease?.expiresAt).toBe(62_000);
 });
 
+// A client that let admission check its lease (`lease-admission`) reallocates and resends only on
+// this refusal, so it has to say that nothing ran.
+test('admitRequestLeaseForLockedScope refuses an unknown or expired lease before dispatch', () => {
+  let now = 1_000;
+  const leaseRegistry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
+  const expired = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  now += 20_000;
+
+  for (const leaseId of ['0'.repeat(32), expired.leaseId]) {
+    expect(() =>
+      admitRequestLeaseForLockedScope({
+        env: process.env,
+        req: makeRequest({
+          command: 'press',
+          positionals: ['100', '200'],
+          meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId },
+        }),
+        sessionName: 'default',
+        sessionStore: makeSessionStore('agent-device-lease-lifecycle-'),
+        leaseRegistry,
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'UNAUTHORIZED',
+        details: expect.objectContaining({ reason: 'LEASE_NOT_FOUND', dispatched: 'no' }),
+      }),
+    );
+  }
+});
+
 test('cleanupExpiredLeasedSession consumes expired lease and deletes the session after teardown', async () => {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
@@ -86,6 +116,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   const teardownSession = vi.fn(async () => {});
 
   const cleaned = await cleanupExpiredLeasedSession({
+    req: makeRequest({ command: 'snapshot' }),
     env: process.env,
     sessionName: 'default',
     sessionStore,
@@ -99,6 +130,44 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   );
   expect(sessionStore.get('default')).toBeUndefined();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+});
+
+// The refusal says `dispatched: no`, so the request that names the expired lease must not tear its
+// session down (recording, claim, runner) before the client reallocates; the expiry sweep does that.
+test('cleanupExpiredLeasedSession refuses a request naming the expired lease before any teardown', async () => {
+  let now = 1_000;
+  const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
+  const leaseRegistry = new LeaseRegistry({
+    defaultLeaseTtlMs: 10,
+    minLeaseTtlMs: 1,
+    now: () => now,
+  });
+  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const session = makeIosSession('default', {
+    lease: { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId },
+  });
+  sessionStore.publish('default', session);
+  now = 1_011;
+  const teardownSession = vi.fn(async () => {});
+
+  await expect(
+    cleanupExpiredLeasedSession({
+      req: makeRequest({
+        command: 'press',
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: lease.leaseId },
+      }),
+      env: process.env,
+      sessionName: 'default',
+      sessionStore,
+      leaseRegistry,
+      teardownSession,
+    }),
+  ).rejects.toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_NOT_FOUND', dispatched: 'no' },
+  });
+  expect(teardownSession).not.toHaveBeenCalled();
+  expect(sessionStore.get('default')).toBe(session);
 });
 
 test('releaseSessionLease releases with the stored session owner scope', async () => {

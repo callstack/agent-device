@@ -48,6 +48,8 @@ type ResolvedDaemonTransport = LoopbackTransport;
 type SendRequestOptions = {
   /** The host whose working directory and environment this request's client-side work reads. */
   host: HostEnvironment;
+  /** See `DaemonTransportOptions.leaseCheckedByAdmission`; rechecked against a replacement daemon. */
+  leaseCheckedByAdmission?: true;
   onProgress?: RequestProgressSink;
   /**
    * The caller's per-request cancellation (#3178). Aborted at or before a send attempt, nothing
@@ -512,7 +514,11 @@ async function sendRequestWithFallback(
       const port = remoteResendPort(info, req, statePaths, transport, timeoutMs, deadline, options);
       return info.checkedRpc
         ? await resend.sendCheckedRpcAfterConnectFailure(error, port)
-        : await resend.retryAfterRemoteInstanceMismatch(port, req.meta?.scriptPublicationId);
+        : await resend.retryAfterRemoteInstanceMismatch(
+            port,
+            req.meta?.scriptPublicationId,
+            options.leaseCheckedByAdmission,
+          );
     }
     if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
     const fallback = chooseAutoFallbackTransport(info, preference, transport);

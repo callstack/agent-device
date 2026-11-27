@@ -92,9 +92,11 @@ const DAEMON_STATE_ROOT_REASONS = {
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** Why this build refuses to send a request whose delivery the answering daemon cannot promise. */
-const DAEMON_CAPABILITY_REFUSAL_REASONS = {
+export const DAEMON_CAPABILITY_REFUSAL_REASONS = {
   // The remote daemon reports no script-artifacts capability, so it would record to its own disk.
   scriptArtifactsUnsupported: { reason: 'remote_script_artifacts_unsupported' },
+  // The daemon reports no lease-admission capability, so it cannot check a lease no heartbeat checked.
+  leaseAdmissionUnsupported: { reason: 'lease_admission_unsupported' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
@@ -322,8 +324,14 @@ export function resolveDaemonTransportPreference(
 
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
 // `checked-rpc`: the daemon's HTTP server serves the checked RPC route (ADR 0006). Every daemon that
-// serves it also serves `script-artifacts`.
-export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts', 'checked-rpc'] as const;
+// serves it also serves `script-artifacts`. `lease-admission`: request admission refuses an inactive or
+// unknown lease before dispatch with `dispatched: no`, so a client may skip its lease heartbeat.
+export const DAEMON_CAPABILITIES = [
+  'quiesce',
+  'script-artifacts',
+  'checked-rpc',
+  'lease-admission',
+] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
 /**
@@ -466,6 +474,20 @@ export function assertScriptArtifactsCapability(capabilities: readonly string[] 
     reason: DAEMON_CAPABILITY_REFUSAL_REASONS.scriptArtifactsUnsupported.reason,
     daemonRequestSent: false,
     hint: 'Upgrade the daemon that owns the session. Through a proxy, the upstream daemon must report the script-artifacts capability in its /health response.',
+  });
+}
+
+/**
+ * Refuses, before the send, a request whose reused lease no heartbeat checked, when the daemon does
+ * not report `lease-admission`. Such a daemon need not refuse an inactive lease before dispatch,
+ * so the caller checks the lease with a heartbeat and sends again.
+ */
+export function assertLeaseAdmissionCapability(capabilities: readonly string[] | undefined): void {
+  if (capabilities?.includes('lease-admission')) return;
+  throw new AppError('UNSUPPORTED_OPERATION', 'The daemon does not check leases at admission.', {
+    reason: DAEMON_CAPABILITY_REFUSAL_REASONS.leaseAdmissionUnsupported.reason,
+    daemonRequestSent: false,
+    dispatched: 'no',
   });
 }
 

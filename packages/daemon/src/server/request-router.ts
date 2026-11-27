@@ -625,7 +625,9 @@ const ERROR_TEXT_FIELDS: ReadonlySet<string> = new Set(['message', 'hint', 'caus
  * A backend error can quote the text a sensitive fill failed to type, or the altered text it read
  * back, which `redactFillFailureReadBack` replaces whole. Only that fill's own text is otherwise
  * redacted, and only in the error's text fields: `logPath`, `diagnosticId` and the other
- * daemon-owned fields come back as they are, and so does every other request's error.
+ * daemon-owned fields come back as they are, and so does every other request's error. The typed
+ * `details.reason` and `details.dispatched` are daemon vocabulary, never typed text, so a value
+ * that happens to equal one (`no`) cannot rewrite them.
  */
 function redactSensitiveFillTextInError(req: DaemonRequest, error: DaemonError): DaemonError {
   const text = sensitiveFillText(req);
@@ -635,14 +637,26 @@ function redactSensitiveFillTextInError(req: DaemonRequest, error: DaemonError):
   return Object.fromEntries(
     Object.entries(error).map(([field, value]) => [
       field,
-      ERROR_TEXT_FIELDS.has(field)
-        ? mapErrorStrings(
-            field === 'details' ? redactFillFailureReadBack(value, placeholder) : value,
-            replace,
+      field === 'details'
+        ? withTypedDetails(
+            mapErrorStrings(redactFillFailureReadBack(value, placeholder), replace),
+            error.details,
           )
-        : value,
+        : ERROR_TEXT_FIELDS.has(field)
+          ? mapErrorStrings(value, replace)
+          : value,
     ]),
   ) as DaemonError;
+}
+
+function withTypedDetails(redacted: unknown, original: DaemonError['details']): unknown {
+  if (!redacted || typeof redacted !== 'object' || !original) return redacted;
+  const { reason, dispatched } = original;
+  return {
+    ...redacted,
+    ...(reason === undefined ? {} : { reason }),
+    ...(dispatched === undefined ? {} : { dispatched }),
+  };
 }
 
 function mapErrorStrings(value: unknown, replace: (value: string) => string): unknown {

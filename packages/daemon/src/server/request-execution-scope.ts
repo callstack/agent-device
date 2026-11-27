@@ -469,7 +469,7 @@ export async function createRequestExecutionScope(params: {
             sessionName,
             sessionStore,
             leaseRegistry,
-            refuseTeardown: command === 'batch' || command === 'replay' || boundedStep,
+            req: scopedReq,
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,

@@ -51,7 +51,7 @@ function fillWithStdinText(
 
 function sendToWebSession(
   session: SessionState,
-  request: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>,
+  request: Pick<DaemonRequest, 'command' | 'positionals' | 'flags' | 'meta'>,
   fillFails?: (text: string) => Error,
   fillResult?: Record<string, unknown>,
 ) {
@@ -99,7 +99,7 @@ function sendToWebSession(
     token: 'test-token',
     session: session.name,
     ...request,
-    meta: { requestId: 'req-fill-text-stdin' },
+    meta: { requestId: 'req-fill-text-stdin', ...request.meta },
   });
   return { response, typed, sessionStore };
 }
@@ -224,6 +224,28 @@ test.each([
     if (!errored.ok) expect(errored.error.message).toBe(placeholder);
   },
 );
+
+// A lease-admission client resends only on `dispatched: no`, so a recorded value equal to it must not
+// rewrite the typed refusal.
+test('a --record-as value equal to a typed detail leaves the lease refusal readable', async () => {
+  const { response, typed } = sendToWebSession(
+    makeAuthoringSession('web', { device: WEB_DESKTOP_DEVICE }),
+    {
+      command: 'fill',
+      positionals: ['10', '20', 'no'],
+      flags: { textStdin: true, recordAs: 'CODE' },
+      meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: '0'.repeat(32) },
+    },
+  );
+
+  const result = await response;
+  expect(typed).toEqual([]);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe('UNAUTHORIZED');
+    expect(result.error.details).toMatchObject({ reason: 'LEASE_NOT_FOUND', dispatched: 'no' });
+  }
+});
 
 test('a short --text-stdin value is redacted from the error text but not from its log path', async () => {
   // `stdin` also appears in this request's id, which names its diagnostics file.

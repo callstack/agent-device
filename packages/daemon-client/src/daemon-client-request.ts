@@ -7,6 +7,11 @@ export type DaemonRequest = DaemonWireRequest;
 export type DaemonResponse = SharedDaemonResponse;
 export type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
   onProgress?: RequestProgressSink;
+  /**
+   * The request names a reused lease that no heartbeat checked, so the daemon must check it at
+   * admission. A daemon whose `/health` lacks `lease-admission` is refused before the send.
+   */
+  leaseCheckedByAdmission?: true;
 };
 
 /** What a client sends one daemon request through. */

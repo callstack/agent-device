@@ -62,8 +62,37 @@ Thus, whichever runs second finds the session gone.
 A close after a lease end has no session and ends no lease.
 If a client still stores that lease id, its next heartbeat finds the lease inactive.
 The client then allocates a new lease under a fresh id.
-The proxy is expected to be long-lived and self-serve.
-Recovery from a stale or expired device lease should not require a proxy restart.
+
+## Lease admission
+
+Request admission refuses a request that names an inactive or unknown lease.
+The refusal is `UNAUTHORIZED` with `details.reason: LEASE_NOT_FOUND` and `details.dispatched: no`.
+Every lease-admission refusal comes after authentication and tenant scoping, and before any handler runs.
+If the request names the expired lease of its session, the daemon refuses before it tears that session down.
+The lease expiry sweep ends that session later.
+A sensitive `fill` value never redacts `details.reason` or `details.dispatched`.
+A daemon that makes this refusal advertises the `lease-admission` capability on `/health`.
+A proxy forwards the capability of the daemon behind it in `upstream`.
+
+The CLI can reuse a stored lease without a heartbeat.
+It then marks the command as admission-checked and names the window that the heartbeat would have named.
+The daemon-client reads `lease-admission` from the `/health` check that the command already makes.
+If the capability is absent, the daemon-client refuses the command before the send with `lease_admission_unsupported`.
+It makes the same check again after an instance-mismatch refresh.
+If the only request of the command gets either refusal, the CLI materializes the connection again and sends the command once more.
+After `LEASE_NOT_FOUND`, the CLI allocates a new lease. After `lease_admission_unsupported`, it sends the heartbeat.
+The CLI does not resend on any other failure.
+
+These commands keep the heartbeat:
+
+- A command on a host-allocated `macos-app` lease.
+- A command on a lease whose provider has a runtime. A heartbeat runs its lifecycle hooks, such as the Limrun instance liveness check.
+- A command exempt from lease admission.
+- `install`, `reinstall`, and `install-from-source`, which can upload a local artifact before admission.
+- A command with `--save-script`.
+- A by-spec `open` that allocates fresh: the connection names no device, or the request names a device spec or a device selector.
+
+A by-spec `open` that names no spec or selector reuses the stored device without a heartbeat.
 
 ## Admitted request work
 

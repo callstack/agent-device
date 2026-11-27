@@ -27,6 +27,7 @@ import {
   resolveRequestedLeaseBackend,
   type LeaseLedger,
 } from './connection-lease-transaction.ts';
+import type { AdmissionCheckedLease, ReusedLeaseCheck } from './connection-lease-admission.ts';
 import {
   prepareRuntimeForCommand,
   selectCompatibleRuntime,
@@ -43,11 +44,14 @@ export async function materializeRemoteConnectionForCommand(options: {
   positionals?: string[];
   batchSteps?: BatchStep[];
   forceRuntimePrepare?: boolean;
+  reusedLeaseCheck?: ReusedLeaseCheck;
 }): Promise<{
   flags: CliFlags;
   runtime?: SessionRuntimeHints;
   connection?: RemoteConnectionRequestMetadata;
   leaseDevice?: LeaseDevice;
+  /** Set when the command's admission, not a heartbeat, checks the reused lease. */
+  admissionCheckedLease?: AdmissionCheckedLease;
 }> {
   const { command, flags, client, host } = options;
   if (!flags.remoteConfig) {
@@ -101,6 +105,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   // Unknown creation evidence permits discard before binding, but only confirmed creation permits
   // rollback after a later failure. A committed session record takes over either lease.
   const leaseLedger = createLeaseLedger();
+  let admissionCheckedLease: AdmissionCheckedLease | undefined;
   try {
     const acquired = await acquireConnectionLease({
       command,
@@ -109,9 +114,11 @@ export async function materializeRemoteConnectionForCommand(options: {
       nextFlags,
       positionals: options.positionals,
       leaseLedger,
+      reusedLeaseCheck: options.reusedLeaseCheck,
     });
     nextState = acquired.state;
     changed = changed || acquired.changed;
+    admissionCheckedLease = acquired.admissionCheckedLease;
 
     const runtimePreparation = await prepareRuntimeForCommand({
       command,
@@ -151,6 +158,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     runtime: nextRuntime,
     connection: buildRemoteConnectionRequestMetadata(nextState),
     leaseDevice: grantedLeaseDevice(nextState),
+    ...(admissionCheckedLease ? { admissionCheckedLease } : {}),
   };
 }
 
