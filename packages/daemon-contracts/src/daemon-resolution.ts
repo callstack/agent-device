@@ -501,6 +501,7 @@ export function assertLeaseAdmissionCapability(capabilities: readonly string[] |
 }
 
 type DaemonHealthIdentity = Readonly<{
+  service?: string;
   instanceId?: string;
   capabilities?: readonly DaemonCapability[];
 }>;
@@ -508,13 +509,15 @@ type DaemonHealthIdentity = Readonly<{
 /**
  * The capabilities of the daemon a remote `/health` answer describes. `lease-admission` counts only
  * when the answer names the instance of every link, the daemon and any proxy in front of it: the
- * instance fences then hold the next request to the daemon that reported it.
+ * instance fences then hold the next request to the daemon that reported it. A link that calls
+ * itself a proxy is never that daemon, so a proxy counts only through its upstream link.
  */
 export function remoteDaemonCapabilities(
   health: DaemonHealthIdentity & Readonly<{ upstream?: DaemonHealthIdentity }>,
 ): readonly DaemonCapability[] | undefined {
   const daemon = health.upstream ?? health;
-  if (health.instanceId && daemon.instanceId) return daemon.capabilities;
+  const namesDaemon = daemon.service !== 'agent-device-proxy';
+  if (namesDaemon && health.instanceId && daemon.instanceId) return daemon.capabilities;
   return daemon.capabilities?.filter((capability) => capability !== 'lease-admission');
 }
 

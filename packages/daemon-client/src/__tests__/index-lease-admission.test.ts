@@ -81,6 +81,10 @@ test.each([
     name: 'proxy that names no instance',
     health: { upstream: { instanceId: 'daemon', capabilities: LEASE_ADMISSION } },
   },
+  {
+    name: 'proxy that reports no upstream',
+    health: { service: 'agent-device-proxy', instanceId: 'proxy', capabilities: LEASE_ADMISSION },
+  },
 ])('a $name is refused before the send', async ({ health }) => {
   const { result, routes } = await sendAdmissionChecked(() => health);
 

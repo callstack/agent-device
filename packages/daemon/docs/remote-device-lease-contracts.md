@@ -85,6 +85,7 @@ The CLI can reuse a stored lease without a heartbeat.
 It then marks the command as admission-checked and names the window that the heartbeat would have named.
 The daemon-client reads `lease-admission` from the `/health` check that the command already makes.
 It accepts the capability only if that answer names the instance of the daemon, and of the proxy in front of it.
+If the answer is from `agent-device-proxy`, the capability counts only from its `upstream` link.
 If the capability is absent, the daemon-client refuses the command before the send with `lease_admission_unsupported`.
 It makes the same check again after an instance-mismatch refresh.
 An admission-checked command never takes the checked RPC route. On a checked connection (`daemonRpc: checked`) it is `GET /health`, then `POST /rpc`.

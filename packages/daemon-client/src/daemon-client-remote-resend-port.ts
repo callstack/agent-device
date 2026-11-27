@@ -8,9 +8,10 @@ import type { DaemonInfo } from './daemon-client-metadata.ts';
 export type RemoteResendHealth = {
   reachable: boolean;
   timedOut?: true;
+  service?: string;
   instanceId?: string;
   capabilities?: readonly DaemonCapability[];
-  upstream?: { instanceId?: string; capabilities?: readonly DaemonCapability[] };
+  upstream?: { service?: string; instanceId?: string; capabilities?: readonly DaemonCapability[] };
 };
 
 /** The transport's side of one failed send: how to probe, resend and refuse for that request. */
