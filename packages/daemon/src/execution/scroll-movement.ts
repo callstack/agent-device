@@ -4,7 +4,10 @@ import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { isMobilePlatform, type DeviceInfo } from '@agent-device/kernel/device';
-import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import {
+  buildSnapshotState,
+  snapshotPresentationOptionsFromFlags,
+} from '@agent-device/capture-kit/snapshot-state';
 import {
   readScrollEdgeState,
   scrollNoProgressHint,
@@ -13,7 +16,7 @@ import {
 } from '@agent-device/capture-kit/scroll-edge-state';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
-import type { Point, Rect } from '@agent-device/kernel/snapshot';
+import { buildSnapshotPresentationKey, type Point, type Rect } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -75,6 +78,14 @@ const SCROLL_MOVEMENT_SCHEDULE: ObservationSchedule = {
   budgetMs: 1_500,
 };
 
+/**
+ * The presentation every scroll read carries: `captureSurface` builds its tree with no snapshot
+ * flags, whatever the caller's last snapshot asked for.
+ */
+const SCROLL_READ_PRESENTATION_KEY = buildSnapshotPresentationKey(
+  snapshotPresentationOptionsFromFlags(undefined),
+);
+
 /** The pre-gesture surface, already in hand: no capture is spent to produce it. */
 export type ScrollSurfaceBaseline = Readonly<{
   signature: InteractionSurfaceSignature;
@@ -88,7 +99,8 @@ export type ScrollSurfaceBaseline = Readonly<{
 export type ScrollSurfaceBaselineAbsence =
   | 'stored-surface-unusable'
   | 'stored-surface-not-current'
-  | 'prior-gesture-unsettled';
+  | 'prior-gesture-unsettled'
+  | 'baseline-presentation-drift';
 
 /** Why this command owes no observation of its own effect. A reason, never text to match. */
 export type ScrollMovementInapplicability =
@@ -168,6 +180,12 @@ function freezeScrollSurfaceBaseline(session: SessionState): ScrollMovementPlan 
   if (!baseline) return { kind: 'unobservable', reason: 'stored-surface-unusable' };
   const staleness = storedSurfaceStaleness(session);
   if (staleness) return { kind: 'unobservable', reason: staleness };
+  // A stored tree of another presentation, such as the interactive-only one `snapshot -i` keeps, is
+  // never compared with the default tree a scroll reads (`surfacePairDrift`), so the read that would
+  // only find that out is not spent.
+  if (baseline.presentationKey !== SCROLL_READ_PRESENTATION_KEY) {
+    return { kind: 'unobservable', reason: 'baseline-presentation-drift' };
+  }
   return { kind: 'observe', baseline };
 }
 
