@@ -190,7 +190,7 @@ the AX server rejects a request that would return more than about 62 levels, so
 there the first request is rejected once and the lower-depth retry applies. Each
 acquisition allows two lower-depth retries, and recovery allows at most 64
 native requests within the existing capture deadline, checks foreground
-ownership on every request, and returns a failure when it cannot complete a
+ownership on every request (the check before acquisition covers the first), and returns a failure when it cannot complete a
 continuation. Budget exhaustion and malformed continuations use non-launch
 failure codes, so the route falls back without launch re-polling. At each native
 fragment boundary, an absent or invalid child count means unknown completeness

@@ -205,27 +205,31 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   return _automationEnabled != NULL && _automationEnabled();
 }
 
-- (BOOL)isPrimaryForegroundProcess:(pid_t)pid
+- (nullable id<AgentDeviceForegroundElement>)primaryForegroundApplication
 {
   Class<AgentDeviceForegroundElement> elementClass = (Class<AgentDeviceForegroundElement>)objc_lookUpClass("AXElement");
-  if (![elementClass respondsToSelector:@selector(primaryApp)]) return NO;
-  id<AgentDeviceForegroundElement> application = [elementClass primaryApp];
-  return [application respondsToSelector:@selector(pid)] &&
-      [application pid] == pid;
+  if (![elementClass respondsToSelector:@selector(primaryApp)]) return nil;
+  return [elementClass primaryApp];
+}
+
+static BOOL AgentDeviceApplicationHasPid(id<AgentDeviceForegroundElement> application, pid_t pid)
+{
+  return [application respondsToSelector:@selector(pid)] && [application pid] == pid;
+}
+
+- (BOOL)isPrimaryForegroundProcess:(pid_t)pid
+{
+  return AgentDeviceApplicationHasPid([self primaryForegroundApplication], pid);
 }
 
 // The snapshot API reports the frames of an app that runs in an iPadOS window relative to that
 // window, so its tree cannot be placed on the screen. AXRuntime reports the primary app's window and
 // the system app, which spans the screen, in one native space. A window that differs from the screen
 // is refused; a runtime that cannot report either frame keeps the capture.
-- (BOOL)primaryAppWindowDiffersFromScreen
+- (BOOL)windowOfApplicationDiffersFromScreen:(id<AgentDeviceForegroundElement>)application
 {
   Class<AgentDeviceForegroundElement> elementClass = (Class<AgentDeviceForegroundElement>)objc_lookUpClass("AXElement");
-  if (![elementClass respondsToSelector:@selector(primaryApp)] ||
-      ![elementClass respondsToSelector:@selector(systemApplication)]) {
-    return NO;
-  }
-  id<AgentDeviceForegroundElement> application = [elementClass primaryApp];
+  if (![elementClass respondsToSelector:@selector(systemApplication)]) return NO;
   id<AgentDeviceForegroundElement> system = [elementClass systemApplication];
   if (![application respondsToSelector:@selector(frame)] || ![system respondsToSelector:@selector(frame)]) {
     return NO;
@@ -428,19 +432,26 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   BOOL acquisitionTruncated = NO;
   SnapshotCaptureRecovery recovery = {0, 0, 0, 0};
   @try {
-    if (![self isPrimaryForegroundProcess:pid]) {
+    // One primary-app read answers both checks before acquisition.
+    id<AgentDeviceForegroundElement> application = [self primaryForegroundApplication];
+    if (!AgentDeviceApplicationHasPid(application, pid)) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-unverified", @"target app is not the primary foreground accessibility owner");
       finishRequestWatchdog(watchdog, watchdogState);
       return nil;
     }
-    if ([self primaryAppWindowDiffersFromScreen]) {
+    if ([self windowOfApplicationDiffersFromScreen:application]) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"app-window-not-full-screen", @"target app window does not fill the screen");
       finishRequestWatchdog(watchdog, watchdogState);
       return nil;
     }
+    // The check above covers the first request; every later request checks again, and so does the
+    // read after acquisition.
+    __block BOOL ownershipChecked = YES;
     snapshot = captureSnapshotTree((__bridge id)raw, maxDepth, maxNodes, nativeLevelsHint,
         ^id(id element, NSUInteger depth, NSUInteger nodes, NSError **captureError) {
-          if (![self isPrimaryForegroundProcess:pid]) {
+          BOOL checked = ownershipChecked;
+          ownershipChecked = NO;
+          if (!checked && ![self isPrimaryForegroundProcess:pid]) {
             if (captureError) *captureError = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorForegroundOwnerChanged
                 userInfo:@{NSLocalizedDescriptionKey: @"foreground owner changed during continuation"}];
             return nil;
