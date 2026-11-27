@@ -68,7 +68,6 @@ export async function sendCheckedRpcAfterConnectFailure(
 export async function retryAfterRemoteInstanceMismatch(
   port: RemoteResendPort,
   scriptPublicationId: string | undefined,
-  leaseCheckedByAdmission: boolean | undefined,
 ): Promise<DaemonResponse> {
   const { info } = port;
   await port.invalidateHealth();
@@ -86,7 +85,7 @@ export async function retryAfterRemoteInstanceMismatch(
   // A replacement daemon must still deliver the script that a remote recording asks for.
   if (scriptPublicationId) assertScriptArtifactsCapability(info.capabilities);
   // A replacement that cannot check the lease at admission gets the heartbeat path instead.
-  if (leaseCheckedByAdmission) assertLeaseAdmissionCapability(info.capabilities);
+  if (port.leaseCheckedByAdmission) assertLeaseAdmissionCapability(info.capabilities);
   try {
     return await port.resend(remainingMs);
   } catch (error) {

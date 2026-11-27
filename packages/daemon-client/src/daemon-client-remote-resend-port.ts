@@ -20,6 +20,8 @@ export type RemoteResendPort = {
   timeoutMs: number | undefined;
   deadline: number | undefined;
   signal: AbortSignal | undefined;
+  /** The request relies on admission to check its lease; a replacement must report `lease-admission`. */
+  leaseCheckedByAdmission?: true;
   /** Sends the request once more, with `timeoutMs` as its budget. */
   resend(timeoutMs: number | undefined): Promise<DaemonResponse>;
   /** A live `/health` read that refuses a skewed protocol. */

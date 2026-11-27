@@ -7,7 +7,7 @@
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   localRuntimeOwner,
@@ -257,7 +257,8 @@ test('a backend error carrying the value in details.reason or details.dispatched
     (text) =>
       new AppError('COMMAND_FAILED', 'could not type', {
         reason: `rejected-${text}`,
-        dispatched: text,
+        // A value outside the type, as an untrusted backend could write it.
+        dispatched: text as DispatchDisclosure,
       }),
   );
 
