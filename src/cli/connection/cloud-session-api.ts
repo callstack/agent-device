@@ -125,7 +125,7 @@ function parseCloudAppSource(value: string): { url: string } {
   if (!url || url.href.length > maxLength || url.username || url.password) {
     throw new AppError(
       'INVALID_ARGS',
-      '--app-url requires an HTTPS archive URL of at most 2048 ASCII characters without spaces, backslashes, credentials, a query, or a fragment.',
+      '--app-url requires an HTTPS archive URL of at most 2048 characters after URL encoding, without spaces, backslashes, credentials, a query, or a fragment.',
       { reason: CLOUD_SESSION_API_REASONS.appUrlFormat.reason },
     );
   }
