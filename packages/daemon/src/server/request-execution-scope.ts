@@ -251,9 +251,14 @@ export async function createRequestExecutionScope(params: {
       tenantScopedReq,
       resolveSessionScope(tenantScopedReq),
     );
+  const suiteHostSession = tenantScopedReq.internal?.suiteHostSession;
+  const coveredHostSession =
+    suiteHostSession && sessionStore.get(suiteHostSession) !== undefined
+      ? suiteHostSession
+      : undefined;
   let scopedReq = applyRequestCommandDefaults({
     ...tenantScopedReq,
-    internal: { ...tenantScopedReq.internal, webSession },
+    internal: { ...tenantScopedReq.internal, webSession, suiteHostSession: coveredHostSession },
   });
 
   const command = scopedReq.command;
@@ -591,12 +596,8 @@ function createRequestDeviceAccess(params: {
   runtimeBindings: RequestRuntimeBindings;
 } {
   const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
+  const coveredHostSession = params.req.internal?.suiteHostSession;
   const claimPolicy = resolveCommandDeviceClaimPolicy(params.command);
-  const suiteHostSession = params.req.internal?.suiteHostSession;
-  const coveredHostSession =
-    suiteHostSession && params.sessionStore.get(suiteHostSession) !== undefined
-      ? suiteHostSession
-      : undefined;
   const claimAdmission = createDeviceClaimAdmission({
     policy: claimPolicy,
     command: params.command,

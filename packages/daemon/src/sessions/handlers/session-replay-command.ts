@@ -34,7 +34,9 @@ import { buildRuntimeCaptureInput } from '../../core/snapshot-runtime-capture-in
 import type { BoundSnapshotCapture } from '../../core/snapshot-runtime-binding.ts';
 import { resolveObservationCapture } from '../../core/observation-capture.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
-import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
+import { onDelegatingLedger, recordEndedLease } from '../../core/request-ended-leases.ts';
+import { buildSessionLeaseFromRequest } from '../../core/lease-context.ts';
+import { releaseSessionLease } from '../lease-lifecycle.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';
 
@@ -141,7 +143,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       suiteHostSession: sessionName,
     },
   };
-  return await runReplayTestCommand({
+  const response = await runReplayTestCommand({
     ...splitReplayCommandRequest(suiteRequest),
     host,
     session: createReplaySession(sessionName, logPath, sessionStore, capture),
@@ -153,7 +155,6 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       await closeReplayTestSession({
         host,
         req,
-        suiteHostSession: sessionName,
         sessionName: testSessionName,
         logPath,
         sessionStore,
@@ -166,6 +167,14 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       }),
     ...(video ? { video } : {}),
   });
+  await releaseUnheldSuiteRequestLease({
+    req,
+    sessionName,
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider,
+  });
+  return response;
 };
 
 /**
@@ -310,7 +319,6 @@ export function createReplaySession(
 type ReplayTestSessionCleanupParams = Readonly<{
   host: HostEnvironment;
   req: DaemonRequest;
-  suiteHostSession: string;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
@@ -322,8 +330,35 @@ type ReplayTestSessionCleanupParams = Readonly<{
   platformResourceCleanup: PlatformResourceCleanup;
 }>;
 
+async function releaseUnheldSuiteRequestLease(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+}): Promise<void> {
+  const { req, sessionName, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
+  const admittedLease = req.internal?.admittedLease;
+  const requestLease = admittedLease ? buildSessionLeaseFromRequest(req, admittedLease) : undefined;
+  if (!requestLease) return;
+  if (req.internal?.endedLeases?.some((entry) => entry.leaseId === requestLease.leaseId)) {
+    return;
+  }
+  if (
+    sessionStore.listRefs().some((other) => other.session.lease?.leaseId === requestLease.leaseId)
+  ) {
+    return;
+  }
+  const { endedLeaseId } = await releaseSessionLease({
+    session: { name: sessionName, lease: requestLease },
+    leaseRegistry,
+    leaseLifecycleProvider,
+  });
+  if (endedLeaseId) recordEndedLease(req, endedLeaseId);
+}
+
 async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
-  const { req, suiteHostSession, sessionName, logPath, sessionStore } = params;
+  const { req, sessionName, logPath, sessionStore } = params;
   if (!sessionStore.get(sessionName)) return;
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
@@ -333,13 +368,9 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
         session: sessionName,
         command: 'close',
         positionals: [],
-        flags: req.flags?.leaseId ? { leaseId: req.flags.leaseId } : {},
+        flags: {},
         meta: req.meta,
-        internal: {
-          cleanupIntent: 'suite-owned-test-session',
-          suiteHostSession,
-          ...(req.internal?.admittedLease ? { admittedLease: req.internal.admittedLease } : {}),
-        },
+        internal: { cleanupIntent: 'suite-owned-test-session' },
       },
       req,
     ),

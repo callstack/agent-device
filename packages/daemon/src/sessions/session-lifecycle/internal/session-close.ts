@@ -143,9 +143,6 @@ function isSuiteAttemptSharedLease(params: {
   const { req, session, sessionName, sessionStore } = params;
   if (req.internal?.cleanupIntent !== 'suite-owned-test-session' || !session.lease) return false;
   const leaseId = session.lease.leaseId;
-  if (leaseId === req.flags?.leaseId || leaseId === req.internal?.admittedLease?.leaseId) {
-    return true;
-  }
   return sessionStore
     .listRefs()
     .some((other) => other.address !== sessionName && other.session.lease?.leaseId === leaseId);

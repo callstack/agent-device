@@ -426,15 +426,15 @@ test('test still refuses DEVICE_IN_USE when another session holds the device (#5
   }
 });
 
-test('suite attempt cleanup keeps a shared provider lease active when closing an attempt (#5129)', async () => {
-  const root = mkdtempForTestSync('agent-device-replay-test-lease-retention-');
-  const scriptPath = path.join(root, '01-case.ad');
-  fs.writeFileSync(scriptPath, 'context platform=ios\nopen "com.example.app"\n');
-  const sessionStore = makeSessionStore('agent-device-replay-test-lease-retention-');
+test('two-script test with a request lease and no open ends the lease once and reports endedLeases once (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-request-lease-end-');
+  fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nwait 1\n');
+  fs.writeFileSync(path.join(root, '02-second.ad'), 'context platform=ios\nwait 1\n');
+  const sessionStore = makeSessionStore('agent-device-replay-test-request-lease-end-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
     tenantId: 'proxy',
-    runId: 'run-5129',
+    runId: 'run-5129-request-only',
     leaseProvider: 'proxy',
     leaseBackend: 'ios-instance',
     clientId: 'client-5129',
@@ -474,7 +474,7 @@ test('suite attempt cleanup keeps a shared provider lease active when closing an
       },
       meta: {
         cwd: root,
-        requestId: 'suite-lease-retention-5129',
+        requestId: 'suite-request-lease-end-5129',
         leaseId: lease.leaseId,
         leaseBackend: lease.backend,
         leaseProvider: lease.leaseProvider,
@@ -488,7 +488,184 @@ test('suite attempt cleanup keeps a shared provider lease active when closing an
     expect(response.ok ? undefined : response.error).toBeUndefined();
     expect(response).toMatchObject({
       ok: true,
-      data: expect.objectContaining({ total: 1, passed: 1, failed: 0 }),
+      data: expect.objectContaining({
+        total: 2,
+        passed: 2,
+        failed: 0,
+        endedLeases: [{ leaseId: lease.leaseId, outcome: 'released' }],
+      }),
+    });
+    expect(releaseCalls).toEqual([lease.leaseId]);
+    expect(
+      leaseRegistry.getLease({
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        deviceKey: lease.deviceKey,
+      }),
+    ).toBeUndefined();
+    expect(sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('two-script test with wait then open ends the unheld request lease once without duplicate endedLeases (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-wait-then-open-');
+  fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nwait 1\n');
+  fs.writeFileSync(
+    path.join(root, '02-second.ad'),
+    'context platform=ios\nopen "com.example.app"\n',
+  );
+  const sessionStore = makeSessionStore('agent-device-replay-test-wait-then-open-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'proxy',
+    runId: 'run-5129-mixed',
+    leaseProvider: 'proxy',
+    leaseBackend: 'ios-instance',
+    clientId: 'client-5129',
+    deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
+  });
+  const releaseCalls: string[] = [];
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        async release(releasedLease) {
+          releaseCalls.push(releasedLease.leaseId);
+          return undefined;
+        },
+      },
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      flags: {
+        platform: 'ios',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        udid: IOS_SIMULATOR.id,
+      },
+      meta: {
+        cwd: root,
+        requestId: 'suite-mixed-lease-end-5129',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        deviceKey: lease.deviceKey,
+      },
+    });
+
+    expect(response.ok ? undefined : response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      ok: true,
+      data: expect.objectContaining({
+        total: 2,
+        passed: 2,
+        failed: 0,
+        endedLeases: [{ leaseId: lease.leaseId, outcome: 'released' }],
+      }),
+    });
+    expect(releaseCalls).toEqual([lease.leaseId]);
+    expect(sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('suite attempt cleanup keeps a shared provider lease active when an outer session holds it (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-lease-retention-');
+  fs.writeFileSync(path.join(root, '01-case.ad'), 'context platform=ios\nopen "com.example.app"\n');
+  fs.writeFileSync(path.join(root, '02-case.ad'), 'context platform=ios\nopen "com.example.app"\n');
+  const sessionStore = makeSessionStore('agent-device-replay-test-lease-retention-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'proxy',
+    runId: 'run-5129',
+    leaseProvider: 'proxy',
+    leaseBackend: 'ios-instance',
+    clientId: 'client-5129',
+    deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
+  });
+  const releaseCalls: string[] = [];
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        async release(releasedLease) {
+          releaseCalls.push(releasedLease.leaseId);
+          return undefined;
+        },
+      },
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const leaseFlags = {
+      platform: 'ios' as const,
+      leaseId: lease.leaseId,
+      leaseBackend: lease.backend,
+      udid: IOS_SIMULATOR.id,
+    };
+    const leaseMeta = {
+      cwd: root,
+      leaseId: lease.leaseId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      clientId: lease.clientId,
+      deviceKey: lease.deviceKey,
+    };
+    const outerOpen = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'open',
+      positionals: ['com.example.app'],
+      flags: leaseFlags,
+      meta: { ...leaseMeta, requestId: 'outer-open-lease-retention-5129' },
+    });
+    expect(outerOpen.ok ? undefined : outerOpen.error).toBeUndefined();
+
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      flags: leaseFlags,
+      meta: { ...leaseMeta, requestId: 'suite-lease-retention-5129' },
+    });
+
+    expect(response.ok ? undefined : response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      ok: true,
+      data: expect.objectContaining({ total: 2, passed: 2, failed: 0 }),
     });
     if (!response.ok) return;
     expect(response.data?.endedLeases).toBeUndefined();
@@ -504,7 +681,7 @@ test('suite attempt cleanup keeps a shared provider lease active when closing an
         deviceKey: lease.deviceKey,
       }),
     ).toBeDefined();
-    expect(sessionStore.listRefs()).toHaveLength(0);
+    expect(sessionStore.listRefs()).toHaveLength(1);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

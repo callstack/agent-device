@@ -307,7 +307,7 @@ export async function acquireTransientDeviceClaim(params: {
    * Unlike {@link acquireDeviceClaim}, this is not the session the record gets: a
    * command-scoped claim stays attributable to the command that took it.
    */
-  coveredBySession: string;
+  coveredBySession: string | readonly string[];
   /**
    * Whether the live claim under {@link coveredBySession} was taken by this request's
    * workspace rather than merely recorded under the same session string. Session
@@ -354,7 +354,7 @@ export async function acquireTransientDeviceClaim(params: {
 function inspectTransientLocalClaim(
   existing: InspectedDeviceClaim,
   params: {
-    coveredBySession: string;
+    coveredBySession: string | readonly string[];
     coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
     stateDir: string;
   },
@@ -369,7 +369,11 @@ function inspectTransientLocalClaim(
     return undefined;
   }
   if (claim.claimOwnerKind === 'open-session') {
-    return claim.session === params.coveredBySession && params.coveredClaimIsOwnedByRequest(claim)
+    const coveredSessions =
+      typeof params.coveredBySession === 'string'
+        ? [params.coveredBySession]
+        : params.coveredBySession;
+    return coveredSessions.includes(claim.session) && params.coveredClaimIsOwnedByRequest(claim)
       ? 'covered'
       : undefined;
   }

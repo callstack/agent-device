@@ -242,7 +242,7 @@ export function resolveSessionLeaseForRequest(params: {
   );
 }
 
-function closeReleaseRequest(session: SessionState) {
+function closeReleaseRequest(session: Pick<SessionState, 'lease'>) {
   const lease = session.lease!;
   return leaseScopeToReleaseRequest({
     leaseId: lease.leaseId,
@@ -298,7 +298,7 @@ export function inspectSessionProviderReleaseOnClose(params: {
  * `endedLeaseId` names the lease the close ended, including one that was already inactive.
  */
 export async function releaseSessionLease(params: {
-  session: SessionState;
+  session: Pick<SessionState, 'name' | 'lease'>;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
 }): Promise<{ endedLeaseId?: string; providerData?: Record<string, unknown> }> {
