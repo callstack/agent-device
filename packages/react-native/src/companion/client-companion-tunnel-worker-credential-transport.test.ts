@@ -72,6 +72,13 @@ function tolerateReset(socket: Duplex): void {
   socket.on('error', () => undefined);
 }
 
+/** Where a registration path moved: a constant, never a value taken from the request. */
+function movedTo(path: string | undefined): string | undefined {
+  if (path === REGISTER_PATH) return `${REGISTER_PATH}/moved`;
+  if (path === UNREGISTER_PATH) return `${UNREGISTER_PATH}/moved`;
+  return undefined;
+}
+
 /**
  * A loopback bridge whose registration answers `wsUrl(port)`, recording what reaches it and what
  * the companion sends on the socket. `moved` redirects each registration path once.
@@ -86,8 +93,9 @@ async function listenBridge(wsUrl: (port: number) => string, moved = false) {
   const server = http.createServer((req, res) => {
     received.push(`${req.url} ${req.headers.authorization}`);
     req.resume();
-    if (moved && !req.url!.endsWith('/moved')) {
-      res.writeHead(307, { location: `${req.url}/moved` }).end();
+    const location = moved ? movedTo(req.url) : undefined;
+    if (location) {
+      res.writeHead(307, { location }).end();
       return;
     }
     res.end(JSON.stringify({ ok: true, data: { ws_url: wsUrl(port) } }));
