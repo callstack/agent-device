@@ -61,8 +61,8 @@ export type LifecycleFixture = {
   directorySetups: string[];
   /** The socket each bridge connect attempt was for, in order, including one that has not returned. */
   connects: string[];
-  /** The pid of each target identity read, in order. */
-  identityReads: number[];
+  /** Each target identity read, in order, with how many requests the bridge had been sent by then. */
+  identityReads: Array<{ pid: number; requestsSent: number }>;
 };
 
 /**
@@ -179,7 +179,7 @@ export function createLifecycleFixture(
   const startedTargets: LifecycleFixture['startedTargets'] = [];
   const directorySetups: string[] = [];
   const connects: string[] = [];
-  const identityReads: number[] = [];
+  const identityReads: LifecycleFixture['identityReads'] = [];
   const realHost = createSnapshotSourceHost(createLiveTestHostEnvironment());
   const host: SnapshotSourceHost = {
     ...realHost,
@@ -192,7 +192,10 @@ export function createLifecycleFixture(
     },
     remove: async () => {},
     readTargetProcessStartTime: async (pid) => {
-      identityReads.push(pid);
+      identityReads.push({
+        pid,
+        requestsSent: sockets.reduce((sent, socket) => sent + socket.writes, 0),
+      });
       const startTime = options.targetStartTimes?.shift();
       return startTime === undefined ? 'target-start' : startTime;
     },

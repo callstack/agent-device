@@ -129,8 +129,9 @@ export class SnapshotBridgeManager {
       try {
         envelope = await this.exchange(session, input, deadline, turn);
       } catch (error) {
-        // A read that met a replaced or exited process fails as that, not as the bridge's refusal.
-        if (verifiedStartTime !== undefined) {
+        // A read that met a replaced or exited process fails as that, not as the bridge's refusal. A
+        // close keeps its own failure; a cancelled or expired request has no deadline left to read in.
+        if (verifiedStartTime !== undefined && !refusedByClose(this.closed, turn)) {
           await this.throwIfTargetReplaced(input.target, verifiedStartTime, deadline);
         }
         throw error;
