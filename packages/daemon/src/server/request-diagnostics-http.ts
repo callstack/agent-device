@@ -14,11 +14,9 @@
  * answers 404 — the route deliberately does not enumerate what exists.
  */
 
-import { once } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
-import { Writable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { finished } from 'node:stream';
 import { AppError, normalizeError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { isSafeSessionSegment } from '@agent-device/host-kit/session-paths';
@@ -28,7 +26,6 @@ import {
   type TenantSessionNamespace,
 } from '../core/session-tenant-scope.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
-import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
 
 const REQUEST_DIAGNOSTICS_CONTENT_TYPE = 'application/x-ndjson';
 
@@ -157,62 +154,18 @@ async function handleRequestDiagnostics(
     }
 
     const stream = fs.createReadStream(recordPath);
-    // A caller that hangs up has to end both the open wait and the read: `ready` never
-    // arrives once the socket is gone, and nothing will drain the record either.
-    const disconnect = responseDisconnectSignal(req, res);
-    // The 200 head goes out with the first byte of the record rather than before the
-    // read starts, so a first-read failure (EIO, a record removed under a Windows
-    // handle) still reaches the JSON error answer. That answer needs the response to
-    // outlive the read, so the response is written through this sink instead of being a
-    // pipeline stage, where any failure would destroy it first.
-    const sendHead = () => {
-      if (res.headersSent) return;
-      res.statusCode = 200;
-      res.setHeader('content-type', REQUEST_DIAGNOSTICS_CONTENT_TYPE);
-      res.setHeader('content-length', String(stats.size));
-    };
-    const body = new Writable({
-      write(chunk: Buffer, _encoding, callback) {
-        sendHead();
-        if (res.write(chunk)) {
-          callback();
-          return;
-        }
-        res.once('drain', callback);
-      },
+    // `pipe` only unpipes from a response that goes away, which would leave the record open.
+    finished(res, () => stream.destroy());
+    res.statusCode = 200;
+    res.setHeader('content-type', REQUEST_DIAGNOSTICS_CONTENT_TYPE);
+    res.setHeader('content-length', String(stats.size));
+    stream.on('error', (error) => {
+      failStreamedHttpResponse(res, error);
     });
-    try {
-      // `once` rejects with the stream's error, so an open failure (ENOENT, EACCES)
-      // lands here while the response is still unwritten.
-      if (stream.errored) throw stream.errored;
-      if (stream.pending) await once(stream, 'ready', { signal: disconnect });
-      await pipeline(stream, body, { signal: disconnect });
-      sendHead();
-      res.end();
-    } catch (error) {
-      // A caller that hangs up ends the read early on both sides, and the abort reason
-      // is the hang-up itself. A premature close whose response is already gone is the
-      // same event seen from the stream. Nothing is left to answer in either case.
-      // Any other failure is real: `failStreamedHttpResponse` answers a response that
-      // has not started, and truncates one already mid-body, which is the only honest
-      // signal left once bytes of the record are out.
-      if (disconnect.aborted || (isPrematureClose(error) && res.destroyed)) return;
-      throw error;
-    } finally {
-      stream.destroy();
-    }
+    stream.pipe(res);
   } catch (error) {
     failStreamedHttpResponse(res, error);
   }
-}
-
-function isPrematureClose(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === 'ERR_STREAM_PREMATURE_CLOSE'
-  );
 }
 
 async function statRecord(recordPath: string): Promise<fs.Stats | null> {
