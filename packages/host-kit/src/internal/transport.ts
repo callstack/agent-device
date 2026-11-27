@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { types } from 'node:util';
-import type { ClientRequest, IncomingMessage } from 'node:http';
+import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
 import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -37,11 +37,23 @@ export type NodeHttpRequester = Pick<typeof import('node:http'), 'request'>;
  * Resolves `.default`, not the namespace, so callers get the very same module
  * object a static `import http from 'node:http'` yields -- its `request`
  * property is mutable, which the transport tests rely on to stub requests.
+ *
+ * `credential: 'direct'` is for a request that carries a credential: over plain http (loopback
+ * only) it connects directly and never through an environment proxy, unless the caller names its
+ * own `agent`. The requester still calls the module's `request` at send time.
  */
-export async function loadNodeHttpRequester(protocol: string): Promise<NodeHttpRequester> {
-  return protocol === 'https:'
-    ? (await import('node:https')).default
-    : (await import('node:http')).default;
+export async function loadNodeHttpRequester(
+  protocol: string,
+  credential?: 'direct',
+): Promise<NodeHttpRequester> {
+  if (protocol === 'https:') return (await import('node:https')).default;
+  const http = (await import('node:http')).default;
+  if (credential !== 'direct') return http;
+  const agent = await (await import('../direct-http.ts')).loadDirectHttpAgent(protocol);
+  return {
+    request: ((options: RequestOptions, callback?: (res: IncomingMessage) => void) =>
+      http.request({ agent, ...options }, callback)) as NodeHttpRequester['request'],
+  };
 }
 
 export function readNodeHttpResponseBody(

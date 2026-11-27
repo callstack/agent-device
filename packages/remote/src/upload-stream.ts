@@ -108,10 +108,7 @@ async function streamFileToHttpRequestAttempt(options: {
   // This module sits in the CLI's eager import closure via the remote-artifact
   // upload client, but only a remote daemon ever uploads, so the HTTP stack
   // loads here rather than at import time.
-  const transport = await loadNodeHttpRequester(options.url.protocol);
-  const agent = await (
-    await import('@agent-device/host-kit/direct-http')
-  ).loadDirectHttpAgent(options.url.protocol);
+  const transport = await loadNodeHttpRequester(options.url.protocol, 'direct');
   const payloadSize = fs.statSync(options.payloadPath).size;
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
@@ -137,7 +134,6 @@ async function streamFileToHttpRequestAttempt(options: {
         method: options.method,
         path: options.url.pathname + options.url.search,
         headers,
-        agent,
         // Aborting destroys the request mid-stream, which is the only way to stop bytes that are
         // already piped at a device this client no longer holds the lease on.
         signal: watchdog.signal,

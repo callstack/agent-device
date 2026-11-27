@@ -159,10 +159,7 @@ async function requestRemoteArtifact<T>(
     materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
   },
 ): Promise<T> {
-  const transport = await loadNodeHttpRequester(params.artifactUrl.protocol);
-  const agent = await (
-    await import('@agent-device/host-kit/direct-http')
-  ).loadDirectHttpAgent(params.artifactUrl.protocol);
+  const transport = await loadNodeHttpRequester(params.artifactUrl.protocol, 'direct');
   await destination.prepare();
   return await new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -200,7 +197,6 @@ async function requestRemoteArtifact<T>(
         port: params.artifactUrl.port,
         method: 'GET',
         path: params.artifactUrl.pathname + params.artifactUrl.search,
-        agent,
         headers: {
           ...buildDaemonHttpAuthHeaders(params.token),
           ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),

@@ -25,7 +25,7 @@ const TRANSFER_FORWARDING_REASONS = {
 } as const satisfies ReasonTable<'proxy'>;
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
-/** Forwards one exchange over `node:http(s)`, without redirects or retries; plain http never takes an environment proxy. */
+/** Forwards one exchange over `node:http(s)`, without redirects or retries; plain http goes direct. */
 export function createNodeTransferFetch(): (request: Request) => Promise<Response> {
   return async (request) => {
     const exchange = openExchange(request.signal);
@@ -140,12 +140,8 @@ async function exchangeOverNodeHttp(
   exchange: TransferExchange,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const [transport, agent, { urlToHttpOptions }] = await untilAborted(exchange.signal, () =>
-    Promise.all([
-      loadNodeHttpRequester(url.protocol),
-      import('@agent-device/host-kit/direct-http').then((m) => m.loadDirectHttpAgent(url.protocol)),
-      import('node:url'),
-    ]),
+  const [transport, { urlToHttpOptions }] = await untilAborted(exchange.signal, () =>
+    Promise.all([loadNodeHttpRequester(url.protocol, 'direct'), import('node:url')]),
   );
   exchange.signal.throwIfAborted();
   const { auth: _auth, ...target } = urlToHttpOptions(url);
@@ -155,7 +151,6 @@ async function exchangeOverNodeHttp(
     path: `${url.pathname}${url.search}`,
     headers: Object.fromEntries(request.headers),
     signal: exchange.signal,
-    agent,
   };
   exchange.watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
   return await new Promise<Response>((resolve, reject) => {

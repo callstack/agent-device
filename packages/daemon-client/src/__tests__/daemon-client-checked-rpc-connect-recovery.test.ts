@@ -1,9 +1,9 @@
 // A checked call whose connection never opens is this client's own proof that nothing left. On fake
 // time: the first POST never connects, so the connect timer fires, the `/health` loop runs, and the
-// command is sent once more. `http.request` is replaced, so no real socket is involved.
+// command is sent once more. `https.request` is replaced, so no real socket is involved.
 
 import assert from 'node:assert/strict';
-import http from 'node:http';
+import https from 'node:https';
 import { EventEmitter } from 'node:events';
 import { afterEach, test, vi } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
@@ -26,7 +26,7 @@ function fakeResponse(): EventEmitter {
  */
 function firstCheckedConnectHangs(healthStatus = 200, healthProtocol = 3): Call[] {
   const calls: Call[] = [];
-  vi.spyOn(http, 'request').mockImplementation(((
+  vi.spyOn(https, 'request').mockImplementation(((
     options: { method?: string; path?: string },
     callback: (res: EventEmitter) => void,
   ) => {
@@ -72,14 +72,14 @@ function firstCheckedConnectHangs(healthStatus = 200, healthProtocol = 3): Call[
       },
     });
     return req;
-  }) as unknown as typeof http.request);
+  }) as unknown as typeof https.request);
   return calls;
 }
 
 /** Every checked POST is refused before it connects, while `/health` answers 503. */
 function checkedConnectRefused(): Call[] {
   const calls: Call[] = [];
-  vi.spyOn(http, 'request').mockImplementation(((
+  vi.spyOn(https, 'request').mockImplementation(((
     options: { method?: string; path?: string },
     callback: (res: EventEmitter) => void,
   ) => {
@@ -111,7 +111,7 @@ function checkedConnectRefused(): Call[] {
       },
     });
     return req;
-  }) as unknown as typeof http.request);
+  }) as unknown as typeof https.request);
   return calls;
 }
 
@@ -133,7 +133,7 @@ function driveFakeTime(): () => Promise<void> {
   };
 }
 
-const BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
+const BASE_URL = 'https://remote-mac.example.test:7777/agent-device';
 
 let tokenSeq = 0;
 /** A token of its own per test: the process health cache is keyed by it. */

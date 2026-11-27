@@ -152,18 +152,18 @@ const proxy = createDaemonProxy({
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
 daemon's `Response`. Abort the exchange when `request.signal` aborts. The request carries the
 upstream token and `redirect: 'manual'`: return a 3xx response as it is and never follow it. The
-proxy relays a 3xx, such as the daemon's `308` resume response, to its client unchanged.
+proxy relays a 3xx, such as the daemon's `308` resume response, to its client. It relays a
+`Location` only when it targets the daemon itself, moved onto the proxy's client-facing origin, and
+drops one that points elsewhere, has userinfo, or carries the upstream token. On
+`/rpc/checked`, a followed redirect would resend the call with the daemon token, possibly to the
+unchecked `/rpc`; the proxy refuses a checked answer that is a 3xx or reports `redirected`, but it
+cannot undo a request your transport already resent.
 
 `upstreamBaseUrl` must use https, or plain http to a loopback host, with or without
 `upstreamFetch`. With your own transport, give it a logical URL that meets this rule, such as
 `https://device-host-17.internal`, and route it inside the transport. For any other URL, the
 proxy sends nothing upstream and answers every request with `INVALID_ARGS`
 (`details.reason: "insecure_credential_transport"` on `/rpc`).
-
-Honor `request.redirect`. On `/rpc/checked` it is `'error'`: never follow a redirect there, because
-a followed redirect resends the call with the daemon token, possibly to the unchecked `/rpc`. The
-proxy refuses a checked answer that is a redirect or reports `redirected`, but it cannot undo a
-request your transport already resent.
 
 On transfer routes, the proxy bounds its wait for your transport and response body. It settles on
 your abort, your `upstreamTimeoutMs`, its 600-second aggregate and its demand-aware response-body

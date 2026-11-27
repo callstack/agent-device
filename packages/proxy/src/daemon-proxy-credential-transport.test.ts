@@ -5,6 +5,10 @@ import { afterEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
 import https from 'node:https';
 import type { AddressInfo } from 'node:net';
+import {
+  DAEMON_HTTP_RPC_PROTOCOL_HEADER,
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from '@agent-device/contracts/daemon-http';
 import { createDaemonProxy, type DaemonProxyUpstreamFetch } from './daemon-proxy.ts';
 
 async function listenLocal(server: http.Server): Promise<number> {
@@ -29,12 +33,18 @@ async function serve(handler: http.RequestListener): Promise<string> {
   return `http://127.0.0.1:${await listenLocal(server)}`;
 }
 
-const rpc = () =>
-  new Request('https://gateway.example.test/agent-device/rpc', {
+const rpc = (route = 'rpc', headers: Record<string, string> = {}) =>
+  new Request(`https://gateway.example.test/agent-device/${route}`, {
     method: 'POST',
-    headers: { authorization: 'Bearer client-secret', 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'agent-device.command', params: {} }),
+    headers: {
+      authorization: 'Bearer client-secret',
+      'content-type': 'application/json',
+      ...headers,
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'agent_device.command', params: {} }),
   });
+const checkedRpc = () =>
+  rpc('rpc/checked', { [DAEMON_HTTP_RPC_PROTOCOL_HEADER]: String(DAEMON_RPC_PROTOCOL_VERSION) });
 
 test.each([
   ['the default transport', undefined],
@@ -69,6 +79,7 @@ test.each([
 
     for (const request of [
       rpc(),
+      checkedRpc(),
       new Request('https://gateway.example.test/agent-device/health'),
       new Request('https://gateway.example.test/agent-device/artifacts/build', {
         headers: { authorization: 'Bearer client-secret' },
@@ -118,4 +129,66 @@ test('an upstream redirect is relayed, never followed, so its target receives no
   expect((await proxy.handle(rpc())).status).toBe(307);
 
   expect(reached).toEqual([]);
+});
+
+test.each([
+  ['a foreign origin', 'http://attacker.example/x?signature=secret', null],
+  ['userinfo', 'https://user:pass@daemon.example.test/artifacts/x', null],
+  ['the upstream token', '/artifacts/other?token=daemon-secret', null],
+  [
+    'the upstream daemon',
+    '/artifacts/other?part=2',
+    'https://gateway.example.test/agent-device/artifacts/other?part=2',
+  ],
+] as const)(
+  'a relayed Location that names %s is relayed only on the daemon itself',
+  async (_label, location, relayed) => {
+    const proxy = createDaemonProxy({
+      upstreamBaseUrl: 'https://daemon.example.test',
+      upstreamToken: 'daemon-secret',
+      clientToken: 'client-secret',
+      upstreamFetch: async () => new Response(null, { status: 307, headers: { location } }),
+    });
+
+    for (const request of [
+      rpc(),
+      new Request('https://gateway.example.test/agent-device/artifacts/build', {
+        headers: { authorization: 'Bearer client-secret' },
+      }),
+    ]) {
+      const response = await proxy.handle(request);
+      expect(response.status, request.url).toBe(307);
+      expect(response.headers.get('location'), request.url).toBe(relayed);
+    }
+  },
+);
+
+test('the default transports relay a daemon redirect with its target on every route', async () => {
+  const daemon = await serve((req, res) => {
+    req.resume();
+    res.statusCode = 307;
+    res.setHeader('location', `${req.url}-moved`);
+    res.end();
+  });
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: daemon,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'client-secret',
+  });
+
+  const transfer = await proxy.handle(
+    new Request('https://gateway.example.test/agent-device/artifacts/build', {
+      headers: { authorization: 'Bearer client-secret' },
+    }),
+  );
+  const command = await proxy.handle(rpc());
+
+  expect(transfer.status).toBe(307);
+  expect(transfer.headers.get('location')).toBe(
+    'https://gateway.example.test/agent-device/artifacts/build-moved',
+  );
+  expect(command.status).toBe(307);
+  expect(command.headers.get('location')).toBe(
+    'https://gateway.example.test/agent-device/rpc-moved',
+  );
 });

@@ -22,7 +22,7 @@ function recordingUpstream(respond: (request: Request) => Response | Promise<Res
 
 function tokenProxy(upstreamFetch: DaemonProxyUpstreamFetch) {
   return createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     clientToken: 'client-secret',
     upstreamFetch,
@@ -55,7 +55,7 @@ test('a checked call reaches the upstream checked route with the same rewriting 
 
   expect(response.status).toBe(200);
   const [forwarded] = upstream.requests;
-  expect(forwarded?.url).toBe('http://daemon.internal:4310/rpc/checked');
+  expect(forwarded?.url).toBe('https://daemon.internal:4310/rpc/checked');
   expect(forwarded?.headers.get('authorization')).toBe('Bearer daemon-secret');
   expect(forwarded?.headers.get(DAEMON_HTTP_RPC_PROTOCOL_HEADER)).toBe(PROTOCOL);
   expect(forwarded?.headers.get('x-agent-device-network-access')).toBe('public-only');
@@ -105,7 +105,7 @@ test.each(['rpc', 'rpc/checked'])(
   async (route) => {
     const upstream = recordingUpstream(() => Response.json({}));
     const proxy = createDaemonProxy({
-      upstreamBaseUrl: 'http://daemon.internal:4310',
+      upstreamBaseUrl: 'https://daemon.internal:4310',
       upstreamToken: 'daemon-secret',
       authenticate: () => ({ tenantId: 'tenant-a' }),
       upstreamFetch: upstream.fetch,

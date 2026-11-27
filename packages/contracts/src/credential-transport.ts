@@ -8,7 +8,7 @@ import { isLoopbackHostname } from './loopback-host.ts';
 /** Why a client refuses to send a credential before any request leaves. */
 const CREDENTIAL_TRANSPORT_REASONS = {
   // A credential would travel over plain http to a host that is not loopback, or to a URL that does
-  // not parse. `details.origin` names the refused destination when it parses.
+  // not parse. The refusal names the setting, never the destination.
   insecureTransport: { reason: 'insecure_credential_transport' },
 } as const satisfies ReasonTable<'remote connection'>;
 
@@ -20,7 +20,8 @@ export function isSecureCredentialDestination(url: URL): boolean {
 
 /**
  * Refuses a credential-bearing destination unless it is https or plain http to loopback. A URL
- * that does not parse is refused too. `subject` names the destination in the message.
+ * that does not parse is refused too. `subject` names the setting in the message; the destination
+ * itself is never named, so a refusal is safe on paths that must not disclose their endpoint.
  */
 export function assertSecureCredentialTransport(url: string | URL, subject: string): URL {
   const destination = typeof url === 'string' ? URL.parse(url) : url;
@@ -28,11 +29,10 @@ export function assertSecureCredentialTransport(url: string | URL, subject: stri
   throw new AppError(
     'INVALID_ARGS',
     destination
-      ? `${subject} must use https to send credentials to ${destination.host}; plain http is allowed only on loopback.`
+      ? `${subject} must use https to send credentials; plain http is allowed only on loopback.`
       : `${subject} is not a valid URL, so no credential is sent to it.`,
     {
       reason: CREDENTIAL_TRANSPORT_REASONS.insecureTransport.reason,
-      ...(destination ? { origin: destination.origin } : {}),
       hint: 'Use an https URL, or reach the host through a loopback tunnel or port forward, for example ssh -L 4310:127.0.0.1:4310 <host> and then http://127.0.0.1:4310.',
     },
   );
