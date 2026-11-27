@@ -232,6 +232,7 @@ function requireHarmonyPlainLaunchWord(word: string): void {
   throw new AppError('INVALID_ARGS', `Invalid HarmonyOS launch argument: ${word}`, {
     reason: HARMONY_LIFECYCLE_REFUSAL_REASONS.launchArgNotPlainWord.reason,
     launchArg: word,
+    dispatched: 'no',
     hint: 'Pass each HarmonyOS --launch-args entry as a plain word of letters, digits, and _@%+=:,./-.',
   });
 }

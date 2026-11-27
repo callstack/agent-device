@@ -431,7 +431,7 @@ test('openApplication refuses a launch arg that is not a plain word before any a
       ),
     ).rejects.toMatchObject({
       code: 'INVALID_ARGS',
-      details: { reason: 'launch-arg-not-a-plain-word', launchArg },
+      details: { reason: 'launch-arg-not-a-plain-word', launchArg, dispatched: 'no' },
     });
   }
   expect(hdc).not.toHaveBeenCalled();
