@@ -243,3 +243,93 @@ test('aborting the client request after a garbage collection aborts a pending au
   await authenticateAborted.promise;
   expect((await response).status).toBe(500);
 });
+
+/**
+ * A loopback daemon that takes a request and then stays quiet, after half an answer when `answers`.
+ * `closed` resolves when the proxy ends the exchange.
+ */
+async function quietDaemon(answers: 'nothing' | 'half') {
+  const received = signalled();
+  const closed = signalled();
+  const server = http.createServer((req, res) => {
+    res.on('close', closed.resolve);
+    req.resume().on('end', () => {
+      if (answers === 'half') res.writeHead(200).write('half');
+      received.resolve();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  onTestFinished(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    received: received.promise,
+    closed: closed.promise,
+  };
+}
+
+/** A proxy that reaches `upstreamBaseUrl` with its own transport, over plain http. */
+function proxyOverPlainHttp(upstreamBaseUrl: string, upstreamTimeoutMs?: number) {
+  return createDaemonProxy({
+    upstreamBaseUrl,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'client-secret',
+    ...(upstreamTimeoutMs === undefined ? {} : { upstreamTimeoutMs }),
+  });
+}
+
+const plainRoutes = {
+  rpc: (signal?: AbortSignal) =>
+    rpcRequest({ jsonrpc: '2.0', id: 3, method: 'agent-device.command' }, { signal }),
+  health: (signal?: AbortSignal) => new Request(`${PROXY_ORIGIN}/agent-device/health`, { signal }),
+  diagnostics: (signal?: AbortSignal) =>
+    new Request(`${PROXY_ORIGIN}/agent-device/sessions/default/requests/ref-1/diagnostics`, {
+      headers: { authorization: 'Bearer client-secret' },
+      signal,
+    }),
+};
+
+test.each([
+  ['rpc', 'nothing'],
+  ['rpc', 'half'],
+  ['health', 'nothing'],
+  ['diagnostics', 'nothing'],
+  ['diagnostics', 'half'],
+] as const)(
+  'aborting the client %s request ends its plain-http exchange, with %s answered',
+  async (route, answers) => {
+    const daemon = await quietDaemon(answers);
+    const client = new AbortController();
+    // Like an embedder, the test keeps its request while the proxy answers it.
+    const clientRequest = plainRoutes[route](client.signal);
+    const response = proxyOverPlainHttp(daemon.url).handle(clientRequest);
+    await daemon.received;
+    await collectGarbage();
+    client.abort();
+
+    await daemon.closed;
+    await (await response).body?.cancel().catch(() => undefined);
+  },
+);
+
+// The health probe keeps its own five-second bound instead of `upstreamTimeoutMs`.
+test.each([
+  ['rpc', 'nothing'],
+  ['rpc', 'half'],
+  ['diagnostics', 'nothing'],
+  ['diagnostics', 'half'],
+] as const)(
+  'upstreamTimeoutMs ends a quiet plain-http %s exchange, with %s answered',
+  async (route, answers) => {
+    const daemon = await quietDaemon(answers);
+    const clientRequest = plainRoutes[route]();
+    const response = proxyOverPlainHttp(daemon.url, 50).handle(clientRequest);
+    await daemon.received;
+    await collectGarbage();
+
+    await daemon.closed;
+    await (await response).body?.cancel().catch(() => undefined);
+  },
+);
