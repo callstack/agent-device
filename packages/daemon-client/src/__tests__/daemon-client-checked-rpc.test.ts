@@ -450,3 +450,68 @@ test('after a lease call whose /health answer cannot be pinned, the next command
     await daemon.close();
   }
 });
+
+test('after a stale-instance retry onto a daemon with no instance ID, the next open stays on /rpc', async () => {
+  // Starts as a daemon with an instance ID; then is replaced by an older one that reports none,
+  // rejects the old instance on /rpc, and does not serve the checked route.
+  let replaced = false;
+  const seen: string[] = [];
+  const server = http.createServer((req, res) => {
+    const instance = req.headers['x-agent-device-instance'];
+    seen.push(`${req.method} ${req.url}${typeof instance === 'string' ? ` @${instance}` : ''}`);
+    req.resume();
+    req.on('end', () => {
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/health') {
+        res.end(
+          JSON.stringify({
+            ok: true,
+            service: 'agent-device-daemon',
+            rpcProtocolVersion: 3,
+            ...(replaced ? {} : { instanceId: 'old' }),
+          }),
+        );
+        return;
+      }
+      if (req.url === '/rpc/checked') {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+      }
+      if (replaced && instance === 'old') {
+        res.statusCode = 409;
+        res.setHeader('x-agent-device-instance-mismatch', 'true');
+        res.end(
+          JSON.stringify({ jsonrpc: '2.0', id: 'x', error: { code: -32001, message: 'stale' } }),
+        );
+        return;
+      }
+      res.end(OK_ANSWER.body);
+    });
+  });
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const leaseCall = (command: string) =>
+    sendToDaemon({
+      session: 'default',
+      command,
+      positionals: [],
+      flags: { daemonBaseUrl: baseUrl, daemonRpc: 'checked', leaseId: 'lease-1' },
+    });
+  try {
+    await leaseCall('lease_allocate');
+    replaced = true;
+    await leaseCall('lease_heartbeat');
+    seen.length = 0;
+    const opened = await sendToDaemon({
+      session: 'default',
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { daemonBaseUrl: baseUrl, daemonRpc: 'checked', leaseId: 'lease-1' },
+    });
+
+    expect(opened).toMatchObject({ ok: true });
+    expect(seen).toEqual(['GET /health', 'POST /rpc']);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

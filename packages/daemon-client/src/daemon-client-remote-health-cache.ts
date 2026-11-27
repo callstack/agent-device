@@ -28,8 +28,18 @@ function isCacheableRemoteHealth(health: RemoteDaemonHealth): boolean {
   );
 }
 
+/**
+ * Records a `/health` answer: a pinned one is cached for reuse, and a reachable one that names no
+ * complete instance ID is remembered as unpinnable, so a later checked-eligible call stays
+ * health-first. Every reader goes through here: the ordinary probe and the stale-instance retry.
+ */
 export function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHealth): void {
-  if (!isCacheableRemoteHealth(health)) return;
+  if (!isCacheableRemoteHealth(health)) {
+    if (health.reachable) {
+      unpinnedRemoteIdentity = { baseUrl: info.baseUrl ?? '', token: info.token, pid: info.pid };
+    }
+    return;
+  }
   remoteHealthCache = {
     baseUrl: info.baseUrl ?? '',
     token: info.token,
@@ -72,10 +82,6 @@ export async function cachedRemoteHealth(
   }
   const generation = remoteHealthGeneration;
   const health = await probe();
-  if (generation !== remoteHealthGeneration) return health;
-  cacheRemoteDaemonHealth(info, health);
-  if (health.reachable && !isCacheableRemoteHealth(health)) {
-    unpinnedRemoteIdentity = { baseUrl: info.baseUrl ?? '', token: info.token, pid: info.pid };
-  }
+  if (generation === remoteHealthGeneration) cacheRemoteDaemonHealth(info, health);
   return health;
 }
