@@ -99,6 +99,23 @@ jobs:
             "${RELEASE_ASSET_DIR}"
         shell: bash
 
+      - name: Package local iOS simulator runner
+        if: matrix.destination == 'iOS'
+        id: local-package
+        env:
+          DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+          RELEASE_ASSET_DIR: ${{ github.workspace }}/.tmp/release-assets
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          XCTESTRUN_PATH: ${{ steps.package.outputs.xctestrun_path }}
+        run: |
+          set -euo pipefail
+          # Historical checkout refs may predate local runner packaging.
+          if [[ -f scripts/package-ios-local-runner.mjs ]]; then
+            node scripts/package-ios-local-runner.mjs \
+              "$RELEASE_VERSION" "$DERIVED_PATH" "$XCTESTRUN_PATH" "$RELEASE_ASSET_DIR"
+          fi
+        shell: bash
+
       - name: Upload runner assets to GitHub Release
         env:
           ARCHIVE_PATH: ${{ steps.package.outputs.archive_path }}
@@ -113,4 +130,16 @@ jobs:
             "$CHECKSUM_PATH" \
             "$MANIFEST_PATH" \
             --clobber
+        shell: bash
+
+      - name: Upload local iOS simulator runner assets to GitHub Release
+        if: steps.local-package.outputs.archive_path != ''
+        env:
+          ARCHIVE_PATH: ${{ steps.local-package.outputs.archive_path }}
+          MANIFEST_PATH: ${{ steps.local-package.outputs.manifest_path }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" "$ARCHIVE_PATH" "$MANIFEST_PATH" --clobber
         shell: bash
