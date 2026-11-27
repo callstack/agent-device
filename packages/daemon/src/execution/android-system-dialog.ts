@@ -1,6 +1,7 @@
 import type {
   AndroidBlockingDialogFocus,
   AndroidObservationAdapter,
+  AndroidSnapshotReadOptions,
 } from '@agent-device/contracts/android-observation';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -211,8 +212,9 @@ function formatAndroidBlockingDialogFocus(focus: AndroidBlockingDialogFocus): st
 async function readAndroidSnapshotNodes(
   session: SessionState,
   observation: AndroidObservationAdapter,
+  options?: AndroidSnapshotReadOptions,
 ): Promise<SnapshotNode[]> {
-  return await observation.readSnapshotNodes(session.device);
+  return await observation.readSnapshotNodes(session.device, options);
 }
 
 async function tapAndroidDialogButton(
@@ -269,7 +271,10 @@ async function waitForAnrDialogToLeave(
 ): Promise<boolean> {
   for (let attempt = 0; attempt <= ANDROID_MODAL_POLL_ATTEMPTS; attempt += 1) {
     if (attempt > 0) await sleep(ANDROID_MODAL_POLL_MS);
-    const nodes = await readAndroidSnapshotNodes(session, observation).catch(() => undefined);
+    // Inferring that Wait is absent needs a complete capture; a partial one is not cleared.
+    const nodes = await readAndroidSnapshotNodes(session, observation, {
+      requireComplete: true,
+    }).catch(() => undefined);
     if (nodes && !showsAnrDialog(nodes)) return true;
   }
   return false;

@@ -266,3 +266,52 @@ test('a sparse capture after Close app does not count as the ANR dialog gone', a
   // The relaunch waited past the sparse sample for the complete one.
   expect(capturesAtRelaunch).toEqual([3]);
 });
+
+test('a truncated capture that shows both ANR buttons still reaches the Close app tap', async () => {
+  vi.mocked(runAndroidAdb).mockReset();
+  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
+  // A node cap in a lower window truncates the whole tree; the dialog's buttons are still there.
+  const truncatedWithDialog = createAndroidSnapshotCapture(
+    {
+      nodes: [
+        {
+          index: 0,
+          type: 'Button',
+          label: 'Close app',
+          identifier: 'android:id/aerr_close',
+          hittable: true,
+          rect: { x: 40, y: 1800, width: 200, height: 80 },
+        },
+        {
+          index: 1,
+          type: 'Button',
+          label: 'Wait',
+          identifier: 'android:id/aerr_wait',
+          hittable: true,
+          rect: { x: 40, y: 1900, width: 200, height: 80 },
+        },
+      ],
+      truncated: true,
+      analysis: { rawNodeCount: 2, maxDepth: 0 },
+      androidSnapshot: { backend: 'android-helper' },
+      quality: { state: 'healthy', backend: 'android-helper' },
+    },
+    {
+      clickability: {
+        kind: 'exact',
+        provider: 'android-helper',
+        clickableByNodeIndex: new Map(),
+        longClickableByNodeIndex: new Map(),
+      },
+    },
+  );
+  vi.mocked(snapshotAndroid)
+    .mockReset()
+    .mockResolvedValueOnce(truncatedWithDialog as never)
+    .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
+
+  await expect(recoverAppAnr('anr-truncated-first-capture')).resolves.toMatchObject({
+    status: 'recovered',
+  });
+  expect(tappedPoints()).toEqual([{ x: 140, y: 1840 }]);
+});

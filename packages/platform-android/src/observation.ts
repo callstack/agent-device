@@ -63,7 +63,7 @@ export function createAndroidObservationAdapter(
       }
       return (await readAppState(host, device, read)).package === appBundleId;
     },
-    readSnapshotNodes: async (device) => await host.readSnapshotNodes(device),
+    readSnapshotNodes: async (device, options) => await host.readSnapshotNodes(device, options),
     async tap(device, x, y) {
       return await host.runAdb(
         device,

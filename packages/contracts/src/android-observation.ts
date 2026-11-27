@@ -35,6 +35,12 @@ export type AndroidObservationCommandResult = Readonly<{
   stderr: string;
 }>;
 
+/**
+ * `requireComplete` rejects a truncated or sparse capture. Only a reader that infers a node is
+ * absent sets it; a reader that looks for a present node can use a partial capture.
+ */
+export type AndroidSnapshotReadOptions = Readonly<{ requireComplete?: boolean }>;
+
 /** Raw Android mechanics supplied by root composition to the package-owned observer. */
 export type AndroidObservationHost = Readonly<{
   runAdb(
@@ -42,8 +48,10 @@ export type AndroidObservationHost = Readonly<{
     args: readonly string[],
     options?: Readonly<{ allowFailure?: boolean; timeoutMs?: number }>,
   ): Promise<AndroidObservationCommandResult>;
-  /** Rejects a truncated or sparse capture, so absent nodes are absent from the screen. */
-  readSnapshotNodes(device: DeviceInfo): Promise<SnapshotNode[]>;
+  readSnapshotNodes(
+    device: DeviceInfo,
+    options?: AndroidSnapshotReadOptions,
+  ): Promise<SnapshotNode[]>;
   openApp(device: DeviceInfo, appBundleId: string): Promise<void>;
 }>;
 
@@ -56,7 +64,10 @@ export type AndroidObservationAdapter = Readonly<{
     appBundleId: string,
     options?: Readonly<{ requireNoBlockingDialog?: boolean }>,
   ): Promise<boolean>;
-  readSnapshotNodes(device: DeviceInfo): Promise<SnapshotNode[]>;
+  readSnapshotNodes(
+    device: DeviceInfo,
+    options?: AndroidSnapshotReadOptions,
+  ): Promise<SnapshotNode[]>;
   tap(device: DeviceInfo, x: number, y: number): Promise<AndroidObservationCommandResult>;
   openApp(device: DeviceInfo, appBundleId: string): Promise<void>;
   readScreenSize(device: DeviceInfo): Promise<Readonly<{ width: number; height: number }>>;
