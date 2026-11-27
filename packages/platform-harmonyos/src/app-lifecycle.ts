@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { ShellWord } from '@agent-device/kernel/device-shell';
+import { shellQuoteIfNeeded, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type {
   OpenApplicationInput,
@@ -197,6 +197,8 @@ const HARMONY_LOCKED_SCREEN_LAUNCH_ERROR = /Error Code: ?10106102/;
 const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
   // --activity is not an ability name the module.json5 format can carry.
   invalidAbilityName: { reason: 'invalid-harmony-ability-name' },
+  // A --launch-args entry is not a plain word, so the device shell could parse it.
+  launchArgNotPlainWord: { reason: 'launch-arg-not-a-plain-word' },
 } as const satisfies ReasonTable<'open'>;
 
 /** Why a HarmonyOS open reports that the launched app did not take the foreground. */
@@ -216,19 +218,14 @@ function requireHarmonyAbilityName(ability: string): void {
   });
 }
 
-/**
- * A launch-arg word that survives `hdc shell` without device-shell parsing: per character the same
- * set the kernel's safe shell word trusts. Local copy — the platform layer cannot consume kernel
- * internals.
- */
-const HARMONY_PLAIN_WORD = /^[A-Za-z0-9_@%+=:,./-]+$/;
-
+// A word that needs no shell quoting reaches `aa start` as one literal operand whether or not hdc
+// quotes the elements it forwards.
 function requireHarmonyPlainLaunchWord(word: string): void {
-  if (HARMONY_PLAIN_WORD.test(word)) return;
+  if (shellQuoteIfNeeded(word) === word) return;
   throw new AppError('INVALID_ARGS', `Invalid HarmonyOS launch argument: ${word}`, {
-    reason: 'launch-arg-not-a-plain-word',
+    reason: HARMONY_LIFECYCLE_REFUSAL_REASONS.launchArgNotPlainWord.reason,
     launchArg: word,
-    hint: 'Each HarmonyOS --launch-args entry must be a plain word of letters, digits, and _@%+=:,./-, because hdc does not guarantee to quote every argument element.',
+    hint: 'Pass each HarmonyOS --launch-args entry as a plain word of letters, digits, and _@%+=:,./-.',
   });
 }
 

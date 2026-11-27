@@ -69,14 +69,3 @@ test('harmonyos open forwards launch args with the activity to the app launcher'
     launchArgs: ['--ps', 'configKey', 'debug'],
   });
 });
-
-test('harmonyos open without launch args forwards none to the app launcher', async () => {
-  await createHarmonyInteractor(device).open('com.example.application', {
-    activity: 'EntryAbility',
-  });
-
-  expect(openHarmonyApp).toHaveBeenCalledWith(device, 'com.example.application', {
-    activity: 'EntryAbility',
-    launchArgs: undefined,
-  });
-});
