@@ -321,7 +321,9 @@ export function resolveDaemonTransportPreference(
 }
 
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
-export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts'] as const;
+// `checked-rpc`: the daemon's HTTP server serves the checked RPC route (ADR 0006). Every daemon that
+// serves it also serves `script-artifacts`.
+export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts', 'checked-rpc'] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
 /**
