@@ -68,6 +68,12 @@ export const DAEMON_CLIENT_CONFIG_REASONS = {
   // The client named both a pinned daemon instance and a daemon base URL, which answer "which
   // daemon" two different ways.
   bindingWithBaseUrl: { reason: 'daemon_binding_with_remote_base_url' },
+  // The daemon server mode this client would start opens no listener its own transport preference
+  // will call, so the client starts, retires and quiesces nothing; `details.daemonServerMode` and
+  // `details.daemonTransport` are the two settings that cannot be satisfied together.
+  serverModeServesNoClientTransport: {
+    reason: 'daemon_server_mode_serves_no_client_transport',
+  },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {
@@ -129,6 +135,36 @@ export function daemonContendedError(): AppError {
     'Another process started a daemon while this one was starting.',
     {
       reason: DAEMON_UNAVAILABLE_REASONS.contended.reason,
+    },
+  );
+}
+
+/**
+ * The refusal when the server mode this client would start opens no listener its own transport
+ * preference will call. Nothing is started, retired or quiesced: the caller fixes one of the two
+ * settings instead of reading an unavailable endpoint for a daemon that was started and taken away
+ * again. `details` names both settings, because either one is the way out.
+ */
+export function daemonServerModeServesNoClientTransportError(
+  settings: Pick<DaemonClientSettings, 'serverMode' | 'transportPreference'>,
+): AppError {
+  const { serverMode, transportPreference } = settings;
+  const wantsHttp = transportPreference === 'http';
+  const listener = wantsHttp ? 'HTTP' : 'socket';
+  const serving = wantsHttp ? 'http' : 'socket';
+  return new AppError(
+    'INVALID_ARGS',
+    `A daemon started in server mode "${serverMode}" serves no ${listener} endpoint, and this client requires ${transportPreference} transport.`,
+    {
+      reason: DAEMON_CLIENT_CONFIG_REASONS.serverModeServesNoClientTransport.reason,
+      daemonTransport: transportPreference,
+      daemonServerMode: serverMode,
+      hint:
+        'Clear the server mode in every place it is set: `--daemon-server-mode` and ' +
+        '`AGENT_DEVICE_DAEMON_SERVER_MODE` each override the default, so one left behind still ' +
+        `starts this daemon. Or name the mode that answers ${transportPreference} transport ` +
+        `("${serving}" or "dual"), or the transport that mode does answer with ` +
+        '`--daemon-transport`.',
     },
   );
 }

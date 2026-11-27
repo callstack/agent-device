@@ -16,6 +16,7 @@ import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import { resolveLocalDaemonSettings } from './daemon-client-lifecycle.ts';
 import {
   assertDaemonPolicyMatches,
+  assertServerModeAnswersClientTransport,
   observeLocalDaemon,
   retireDaemonForTakeover,
   startLocalDaemon,
@@ -113,6 +114,10 @@ async function ensureOnce(
         stateDir: settings.paths.baseDir,
       });
     case 'replace':
+      // Asked before the first mutation of this branch: a replacement retires or quiesces the
+      // registered daemon, and a settings pair that cannot produce a usable daemon is not a reason to
+      // end one. The `reuse` and `connectDenied` answers above left it alone already.
+      assertServerModeAnswersClientTransport(settings);
       return decision.cause === 'unreachable'
         ? await replaceUnreachable(settings, info, onStart)
         : await replaceIncompatible(settings, info, onStart);

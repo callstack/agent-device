@@ -598,6 +598,7 @@ These reasons can come from more than one command.
 | `startup-stalled` | The daemon stayed registered and reachable but never reported the startup phase that follows. |
 | `startup-ceiling` | Startup passed the ceiling its own startup budget allows, so this client stopped waiting. |
 | `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer "which daemon" two different ways. |
+| `daemon_server_mode_serves_no_client_transport` | The daemon server mode this client would start opens no listener its own transport preference will call, so the client starts, retires and quiesces nothing; `details.daemonServerMode` and `details.daemonTransport` are the two settings that cannot be satisfied together. |
 | `daemon_startup_admission_closed` | Replay's admission gate is closed, so no new daemon startup is allowed. |
 | `daemon_private_state_unowned` | The private replay state dir does not resolve to the one this host sealed for that capability. |
 | `daemon_private_startup_unowned` | The observed process is not one of the startups this host launched and tracks. |
