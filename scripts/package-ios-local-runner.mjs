@@ -42,24 +42,28 @@ function validateXctestrunPaths(value, key) {
   } else if (value && typeof value === 'object') {
     for (const [name, item] of Object.entries(value)) validateXctestrunPaths(item, name);
   } else if (typeof value === 'string') {
-    if (productKeys.has(key)) {
-      const reference = /^__(?:TESTROOT|TESTHOST)__\/([^:]+)$/.exec(value);
-      if (!reference) throw new Error(`Non-relocatable xctestrun product reference: ${key}`);
-      requireSafeRelativePath(reference[1]);
-      return;
+    validateXctestrunPathValue(value, key);
+  }
+}
+
+function validateXctestrunPathValue(value, key) {
+  if (productKeys.has(key)) {
+    const reference = /^__(?:TESTROOT|TESTHOST)__\/([^:]+)$/.exec(value);
+    if (!reference) throw new Error(`Non-relocatable xctestrun product reference: ${key}`);
+    requireSafeRelativePath(reference[1]);
+    return;
+  }
+  for (const item of value.split(':')) {
+    // Xcode emits a /private prefix for a TESTROOT on the canonical macOS path.
+    const portable = item.replace(/^\/private(?=__TESTROOT__\/)/, '');
+    if (
+      portable.startsWith('/') &&
+      !(key === 'DYLD_INSERT_LIBRARIES' && portable === '/usr/lib/libRPAC.dylib')
+    ) {
+      throw new Error(`Absolute path in xctestrun: ${key}`);
     }
-    for (const item of value.split(':')) {
-      // Xcode emits a /private prefix for a TESTROOT on the canonical macOS path.
-      const portable = item.replace(/^\/private(?=__TESTROOT__\/)/, '');
-      if (
-        portable.startsWith('/') &&
-        !(key === 'DYLD_INSERT_LIBRARIES' && portable === '/usr/lib/libRPAC.dylib')
-      ) {
-        throw new Error(`Absolute path in xctestrun: ${key}`);
-      }
-      const reference = /^__[A-Z_]+__\/(.*)$/.exec(portable);
-      if (reference) requireSafeRelativePath(reference[1]);
-    }
+    const reference = /^__[A-Z_]+__\/(.*)$/.exec(portable);
+    if (reference) requireSafeRelativePath(reference[1]);
   }
 }
 
