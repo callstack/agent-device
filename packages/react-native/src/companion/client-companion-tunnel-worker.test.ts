@@ -507,15 +507,23 @@ test('metro companion worker exits after non-retryable registration failure', as
   assert.equal(registerAttempts, 1);
 });
 
-test.for(['http://bridge.invalid', 'http:'])(
+// A base without a host gains one from the appended path: `https://` would reach `https://api/...`.
+test.for(['http://bridge.invalid', 'http:', 'https://', 'https:'])(
   'metro companion worker never sends its bearer token to %s and exits',
   async (serverBaseUrl) => {
     const sent: unknown[] = [];
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       sent.push(input);
-      return new Response(null, { status: 500 });
+      return new Response(null, { status: 401 });
     });
-    cleanupTasks.push(async () => fetchSpy.mockRestore());
+    const requestSpy = vi.spyOn(http, 'request').mockImplementation(((target: unknown) => {
+      sent.push(target);
+      throw new Error('nothing may be sent');
+    }) as typeof http.request);
+    cleanupTasks.push(async () => {
+      fetchSpy.mockRestore();
+      requestSpy.mockRestore();
+    });
 
     const companion = startMetroCompanionWorker({
       bridgePort: 1,
@@ -528,6 +536,46 @@ test.for(['http://bridge.invalid', 'http:'])(
     assert.deepEqual(sent, []);
   },
 );
+
+test('metro companion worker reaches a loopback bridge directly, never through global fetch', async () => {
+  const received: string[] = [];
+  const registered = createDeferred<void>();
+  let bridgePort = 0;
+  let bridgeSocketRef: Duplex | null = null;
+  const bridgeServer = http.createServer((req, res) => {
+    received.push(`${req.url} ${req.headers.authorization}`);
+    req.resume();
+    if (req.url === '/api/metro/companion/register') {
+      writeSuccessfulRegistration(res, bridgePort);
+      return;
+    }
+    res.end('{}');
+  });
+  bridgeServer.on('upgrade', (req, socket) => {
+    bridgeSocketRef = socket;
+    if (acceptWebSocketUpgrade(req, socket)) registered.resolve();
+  });
+  cleanupTasks.push(() => closeLoopbackServer(bridgeServer));
+  cleanupTasks.push(async () => {
+    bridgeSocketRef?.destroy();
+  });
+  bridgePort = await listenOnLoopback(bridgeServer);
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
+  cleanupTasks.push(async () => fetchSpy.mockRestore());
+
+  const companion = startMetroCompanionWorker({
+    bridgePort,
+    localPort: 1,
+    unregisterPath: '/api/metro/companion/unregister',
+  });
+  await Promise.race([waitFor(registered.promise, 5_000, 'bridge socket'), companion.earlyExit]);
+  bridgeSocketRef!.destroy();
+  await companion.stop();
+
+  assert.equal(received[0], '/api/metro/companion/register Bearer test-token');
+  assert.ok(received.includes('/api/metro/companion/unregister Bearer test-token'), `${received}`);
+  assert.equal(fetchSpy.mock.calls.length, 0);
+});
 
 test('metro companion worker retries registration failures with retry-after delay', async () => {
   const bridgeSocketReady = createDeferred<void>();

@@ -48,6 +48,22 @@ test('stages a token-authenticated runner once and presents forwarded XCTest sna
   ).rejects.toThrow();
 });
 
+test('a loopback instance gets sync, launch and runner calls without global fetch', async () => {
+  const f = await fixture();
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
+  try {
+    await f.runner.createInteractor().snapshot({ appBundleId: 'com.apple.Preferences' });
+
+    expect(f.uploads.length).toBeGreaterThan(0);
+    expect(f.requests.filter((url) => url.endsWith('/xctest/run'))).toHaveLength(1);
+    expect(f.command).toMatchObject({ command: 'snapshot' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await f.runner.dispose();
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
 test('launches a Watch session with the watchOS runner and XCTest frameworks', async () => {
   const f = await fixture({ appleOs: 'watchos' });
   await f.runner.createInteractor().snapshot({ appBundleId: 'com.apple.NanoSettings' });

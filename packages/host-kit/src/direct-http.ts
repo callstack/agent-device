@@ -1,4 +1,5 @@
 import type { Agent, IncomingMessage } from 'node:http';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 // Loaded at send time by the code that sends a credential over plain http, never at module scope.
 
@@ -29,9 +30,23 @@ export function responseHeadersOf(res: IncomingMessage): Headers {
   return headers;
 }
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+// The silence `fetch` allows while it waits for response headers or the next body bytes. It
+// replaces the agent's 5 s timeout, which is for pooled sockets and would end a long command.
+const IDLE_TIMEOUT_MS = 300_000;
+
+const DIRECT_HTTP_REASONS = {
+  // A plain-http exchange with a loopback peer stayed silent for `details.timeoutMs`.
+  idleTimeout: { reason: 'direct_http_idle_timeout' },
+} as const satisfies ReasonTable<'remote connection'>;
+
 /**
  * Sends one Fetch request over `node:http` with `loadDirectHttpAgent`, for a plain-http
- * destination that receives a credential. It never follows a redirect: a 3xx is returned as is.
+ * destination that receives a credential. It never follows a redirect: a 3xx is returned as is, or
+ * fails the request that asks for `redirect: 'error'`. As with `fetch`, a failed exchange rejects
+ * with `TypeError('fetch failed')` carrying the cause. An abort ends the exchange with the signal's
+ * reason, and five silent minutes end it with a `direct_http_idle_timeout` error: the call rejects
+ * with it, or after the response, the body read does.
  */
 export async function fetchOverDirectHttp(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -42,9 +57,15 @@ export async function fetchOverDirectHttp(request: Request): Promise<Response> {
     loadDirectHttpAgent('http:'),
     import('node:stream'),
   ]);
-  const body = request.body ? Buffer.from(await request.arrayBuffer()) : undefined;
   request.signal.throwIfAborted();
   return await new Promise<Response>((resolve, reject) => {
+    let response: IncomingMessage | undefined;
+    const fail = (cause: unknown) => reject(new TypeError('fetch failed', { cause }));
+    const end = (reason: Error) => {
+      reject(reason);
+      response?.destroy(reason);
+      req.destroy();
+    };
     const req = http.request(
       {
         host: url.hostname.replace(/^\[(.*)\]$/, '$1'),
@@ -53,23 +74,70 @@ export async function fetchOverDirectHttp(request: Request): Promise<Response> {
         method: request.method,
         headers: Object.fromEntries(request.headers),
         agent,
-        signal: request.signal,
+        timeout: IDLE_TIMEOUT_MS,
       },
       (res) => {
+        response = res;
+        // The body stream reports an error to its reader; an unread body has no other listener.
+        res.on('error', () => undefined);
         const status = res.statusCode ?? 502;
-        const headers = responseHeadersOf(res);
+        if (request.redirect === 'error' && REDIRECT_STATUSES.has(status)) {
+          res.destroy();
+          fail(new Error('unexpected redirect'));
+          return;
+        }
         const nullBody = request.method === 'HEAD' || NULL_BODY_STATUSES.has(status);
         if (nullBody) res.resume();
         resolve(
           new Response(nullBody ? null : (Readable.toWeb(res) as ReadableStream<Uint8Array>), {
             status,
             statusText: res.statusMessage,
-            headers,
+            headers: responseHeadersOf(res),
           }),
         );
       },
     );
-    req.on('error', reject);
-    req.end(body);
+    req.on('timeout', () => {
+      end(
+        new AppError('COMMAND_FAILED', 'Plain-http request timed out waiting for the peer', {
+          reason: DIRECT_HTTP_REASONS.idleTimeout.reason,
+          timeoutMs: IDLE_TIMEOUT_MS,
+        }),
+      );
+    });
+    const abort = () => end(request.signal.reason as Error);
+    request.signal.addEventListener('abort', abort, { once: true });
+    // This listener also keeps `request` reachable while the exchange lives: its signal follows
+    // the caller's only that long.
+    req.once('close', () => request.signal.removeEventListener('abort', abort));
+    req.on('error', fail);
+    if (!request.body) {
+      req.end();
+      return;
+    }
+    // Read whole, so the request declares its length.
+    request.arrayBuffer().then(
+      (body) => req.end(Buffer.from(body)),
+      (error: unknown) => {
+        fail(error);
+        req.destroy();
+      },
+    );
   });
+}
+
+/**
+ * Sends one credential-bearing Fetch request. Plain http goes direct through
+ * `fetchOverDirectHttp`, so an environment proxy never reads the credential in cleartext; anything
+ * else goes through global `fetch`. The caller has already applied the credential transport rule.
+ * An injected `send` is the caller's own transport and carries every request.
+ */
+export async function fetchWithCredential(
+  input: string | URL,
+  init: RequestInit = {},
+  send?: typeof fetch,
+): Promise<Response> {
+  if (send) return await send(input, init);
+  if (new URL(input).protocol !== 'http:') return await fetch(input, init);
+  return await fetchOverDirectHttp(new Request(input, init));
 }

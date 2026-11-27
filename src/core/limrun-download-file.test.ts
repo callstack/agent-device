@@ -10,6 +10,7 @@ import { downloadLimrunFile } from './limrun-download-file.ts';
 const servers: http.Server[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -201,19 +202,111 @@ test.each(['default', 'typed', 'deadline'] as const)(
   },
 );
 
-test('a provider download URL over plain http off loopback never receives the bearer token', async () => {
-  const fetchSpy = vi.spyOn(globalThis, 'fetch');
-  try {
+async function download(url: string): Promise<string> {
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  await downloadLimrunFile({
+    url,
+    headers: { Authorization: 'Bearer instance-token' },
+    destinationPath,
+    timeoutMs: 5_000,
+  });
+  return destinationPath;
+}
+
+const insecure = { details: { reason: 'insecure_credential_transport' } };
+const refusedRedirect = { details: { reason: 'limrun_download_redirect_refused' } };
+const redirectTo = (location: string) => new Response(null, { status: 302, headers: { location } });
+
+const downloadHeaders: Array<Record<string, string>> = [
+  { Authorization: 'Bearer instance-token' },
+  {},
+];
+
+test.each(downloadHeaders)(
+  'a provider download URL over plain http off loopback is never requested, with headers %j',
+  async (headers) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const requestSpy = vi.spyOn(http, 'request');
+
     await expect(
       downloadLimrunFile({
-        url: 'http://limrun.invalid/files?name=recording.mp4',
-        headers: { Authorization: 'Bearer instance-token' },
+        url: 'http://limrun.invalid/files?signature=signed',
+        headers,
         destinationPath: path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4'),
         timeoutMs: 5_000,
       }),
-    ).rejects.toMatchObject({ details: { reason: 'insecure_credential_transport' } });
+    ).rejects.toMatchObject(insecure);
+
     expect(fetchSpy).not.toHaveBeenCalled();
-  } finally {
-    fetchSpy.mockRestore();
-  }
+    expect(requestSpy).not.toHaveBeenCalled();
+  },
+);
+
+test('an https download redirected to plain http off loopback sends nothing there', async () => {
+  const sent: string[] = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    sent.push(`${String(input)} ${init?.redirect}`);
+    return redirectTo('http://limrun.invalid/files?signature=signed');
+  });
+  const requestSpy = vi.spyOn(http, 'request');
+
+  await expect(download('https://limrun.example/files')).rejects.toMatchObject(refusedRedirect);
+
+  expect(sent).toEqual(['https://limrun.example/files manual']);
+  expect(requestSpy).not.toHaveBeenCalled();
+});
+
+test('a redirect off https to another origin is refused before its target is contacted', async () => {
+  const reached: string[] = [];
+  const target = new URL(
+    await serve((request, response) => {
+      reached.push(request.url ?? '');
+      response.end('payload');
+    }),
+  );
+  const origin = await serve((_request, response) => {
+    response.writeHead(307, { location: target.href }).end();
+  });
+
+  await expect(download(origin)).rejects.toMatchObject(refusedRedirect);
+
+  expect(reached).toEqual([]);
+});
+
+test('an https redirect to another origin is followed without the caller headers', async () => {
+  const sent: Array<[string, string | null]> = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    sent.push([String(input), new Headers(init?.headers).get('authorization')]);
+    return sent.length === 1
+      ? redirectTo('https://storage.example/clip?signature=signed')
+      : new Response('payload');
+  });
+
+  const destinationPath = await download('https://limrun.example/files');
+
+  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('payload');
+  expect(sent).toEqual([
+    ['https://limrun.example/files', 'Bearer instance-token'],
+    ['https://storage.example/clip?signature=signed', null],
+  ]);
+});
+
+test('a same-origin redirect is followed with the headers, at most five times', async () => {
+  const seen: string[] = [];
+  const url = await serve((request, response) => {
+    seen.push(`${request.url} ${request.headers.authorization}`);
+    if (seen.length === 1) response.writeHead(302, { location: '/clip' }).end();
+    else response.end('payload');
+  });
+
+  expect(fs.readFileSync(await download(url), 'utf8')).toBe('payload');
+  expect(seen.at(-1)).toBe('/clip Bearer instance-token');
+
+  let hops = 0;
+  const loop = await serve((_request, response) => {
+    hops += 1;
+    response.writeHead(302, { location: '/again' }).end();
+  });
+  await expect(download(loop)).rejects.toMatchObject(refusedRedirect);
+  expect(hops).toBe(6);
 });

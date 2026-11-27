@@ -4,6 +4,7 @@ import { createLimrunAppleToolProvider } from './limrun-ios-tools.ts';
 import { withAppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import { resolveIosSimulatorDeepLinkBundleId } from '@agent-device/platform-apple/app-resolution';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 
@@ -380,12 +381,40 @@ test('a provider API URL over plain http off loopback never receives the instanc
   const local = path.join(f.directory, 'push.apns');
   await fs.writeFile(local, '{}');
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  const requestSpy = vi.spyOn(http, 'request');
   try {
     const session = { ...f.session, apiUrl: 'http://limrun.invalid/v1/ios_test/api' };
     const tools = createLimrunAppleToolProvider(session, new AbortController().signal);
     await expect(tools.simulatorFiles.stageFile(local)).rejects.toMatchObject({
       details: { reason: 'insecure_credential_transport' },
     });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(requestSpy).not.toHaveBeenCalled();
+  } finally {
+    fetchSpy.mockRestore();
+    requestSpy.mockRestore();
+  }
+});
+
+test('loopback file requests and downloads never go through global fetch', async () => {
+  const f = await fixture({
+    containers: { 'com.example.app': { app: { 'Info.plist': plist('exp+example') } } },
+  });
+  const local = path.join(f.directory, 'push.apns');
+  await fs.writeFile(local, '{}');
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
+  try {
+    const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+    await (await tools.simulatorFiles.stageFile(local))[Symbol.asyncDispose]();
+    await expect(
+      tools.simulatorApps.readInfoPlist({
+        device: f.device,
+        bundleId: 'com.example.app',
+        timeoutMs: 5_000,
+      }),
+    ).resolves.toMatchObject({ CFBundleExecutable: 'Example' });
+
+    expect(f.storage.calls.map((call) => call.method)).toEqual(['PUT', 'DELETE', 'GET']);
     expect(fetchSpy).not.toHaveBeenCalled();
   } finally {
     fetchSpy.mockRestore();

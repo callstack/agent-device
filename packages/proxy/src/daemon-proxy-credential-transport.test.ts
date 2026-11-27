@@ -47,11 +47,13 @@ const checkedRpc = () =>
   rpc('rpc/checked', { [DAEMON_HTTP_RPC_PROTOCOL_HEADER]: String(DAEMON_RPC_PROTOCOL_VERSION) });
 
 test.each([
-  ['the default transport', undefined],
-  ['a custom transport', 'custom'],
+  ['the default transport', 'plain http off loopback', 'http://daemon.invalid:4310', undefined],
+  ['a custom transport', 'plain http off loopback', 'http://daemon.invalid:4310', 'custom'],
+  ['the default transport', 'a URL without a host', 'http://', undefined],
+  ['a custom transport', 'a URL without a host', 'http://', 'custom'],
 ] as const)(
-  '%s never sends the upstream token to plain http off loopback',
-  async (_label, transport) => {
+  '%s never sends the upstream token to %s',
+  async (_label, _destination, upstreamBaseUrl, transport) => {
     const sent: unknown[] = [];
     for (const spy of [
       vi.spyOn(globalThis, 'fetch'),
@@ -71,7 +73,7 @@ test.each([
           }
         : undefined;
     const proxy = createDaemonProxy({
-      upstreamBaseUrl: 'http://daemon.invalid:4310',
+      upstreamBaseUrl,
       upstreamToken: 'daemon-secret',
       clientToken: 'client-secret',
       ...(upstreamFetch ? { upstreamFetch } : {}),
@@ -87,9 +89,7 @@ test.each([
     ]) {
       const response = await proxy.handle(request);
       expect(response.status, request.url).toBe(400);
-      expect(await response.text(), request.url).toContain(
-        'plain http is allowed only on loopback',
-      );
+      expect(await response.text(), request.url).toContain('Proxy upstreamBaseUrl');
     }
     expect(sent).toEqual([]);
   },
@@ -105,7 +105,7 @@ test('an upstream redirect is relayed, never followed, so its target receives no
   const daemon = await serve((req, res) => {
     req.resume();
     res.statusCode = 307;
-    res.setHeader('location', `${target}${req.url}`);
+    res.setHeader('location', `${target}/redirected`);
     res.end();
   });
   // A logical https URL a transport routes internally: here, global fetch to a loopback daemon,
@@ -123,9 +123,10 @@ test('an upstream redirect is relayed, never followed, so its target receives no
       }),
   });
 
-  await (
-    await proxy.handle(new Request('https://gateway.example.test/agent-device/health'))
-  ).text();
+  const health = await proxy.handle(
+    new Request('https://gateway.example.test/agent-device/health'),
+  );
+  expect(health.status).toBe(500);
   expect((await proxy.handle(rpc())).status).toBe(307);
 
   expect(reached).toEqual([]);
@@ -134,11 +135,23 @@ test('an upstream redirect is relayed, never followed, so its target receives no
 test.each([
   ['a foreign origin', 'http://attacker.example/x?signature=secret', null],
   ['userinfo', 'https://user:pass@daemon.example.test/artifacts/x', null],
-  ['the upstream token', '/artifacts/other?token=daemon-secret', null],
+  ['the upstream token in its path', '/artifacts/daemon-secret', null],
+  ['the percent-encoded upstream token in its path', '/artifacts/daemon%2Dsecret', null],
+  ['a malformed path escape', '/artifacts/%E0%A4%A', null],
+  [
+    'the percent-encoded upstream token in its query',
+    '/artifacts/other?token=daemon%2Dsecret',
+    'https://gateway.example.test/agent-device/artifacts/other',
+  ],
+  [
+    'the upstream token in its fragment',
+    '/artifacts/other#daemon%2Dsecret',
+    'https://gateway.example.test/agent-device/artifacts/other',
+  ],
   [
     'the upstream daemon',
-    '/artifacts/other?part=2',
-    'https://gateway.example.test/agent-device/artifacts/other?part=2',
+    '/artifacts/other',
+    'https://gateway.example.test/agent-device/artifacts/other',
   ],
 ] as const)(
   'a relayed Location that names %s is relayed only on the daemon itself',
@@ -167,7 +180,7 @@ test('the default transports relay a daemon redirect with its target on every ro
   const daemon = await serve((req, res) => {
     req.resume();
     res.statusCode = 307;
-    res.setHeader('location', `${req.url}-moved`);
+    res.setHeader('location', '/artifacts/moved');
     res.end();
   });
   const proxy = createDaemonProxy({
@@ -185,10 +198,32 @@ test('the default transports relay a daemon redirect with its target on every ro
 
   expect(transfer.status).toBe(307);
   expect(transfer.headers.get('location')).toBe(
-    'https://gateway.example.test/agent-device/artifacts/build-moved',
+    'https://gateway.example.test/agent-device/artifacts/moved',
   );
   expect(command.status).toBe(307);
   expect(command.headers.get('location')).toBe(
-    'https://gateway.example.test/agent-device/rpc-moved',
+    'https://gateway.example.test/agent-device/artifacts/moved',
   );
+});
+
+test.each([
+  ['a 302 whose body claims health', () => Response.json({ ok: true }, { status: 302 })],
+  [
+    'an answer its transport reached through a redirect',
+    () => Object.defineProperty(Response.json({ ok: true }), 'redirected', { value: true }),
+  ],
+])('an upstream health answer that is %s reports the proxy unhealthy', async (_label, answer) => {
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'https://daemon.example.test',
+    upstreamToken: 'daemon-secret',
+    clientToken: 'client-secret',
+    upstreamFetch: async () => answer(),
+  });
+
+  const response = await proxy.handle(
+    new Request('https://gateway.example.test/agent-device/health'),
+  );
+
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ ok: false, code: 'COMMAND_FAILED' });
 });

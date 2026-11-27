@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import {
   AppError,
@@ -41,6 +43,7 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
 import { fetchWithTimeout, sendRunnerCommandOnce } from '../runner-transport.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { loadRealHostKitCapabilities } from '@agent-device/test-kit';
 
 // The real `resolveIosPhysicalDeviceControl` resolves the CoreDevice tunnel IP
 // through root-level tooling this package cannot reach; a fake control backed
@@ -335,4 +338,37 @@ test('a cancellation during route resolution discloses that the command was neve
     },
   );
   assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+});
+
+test('the real transport sends a loopback runner command around global fetch', async () => {
+  const hostKit = await loadRealHostKitCapabilities();
+  appleRunnerTestHost.update({ fetchWithCredential: hostKit.fetchWithCredential });
+  const received: string[] = [];
+  const runner = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => (body += String(chunk)));
+    req.on('end', () => {
+      received.push(`${req.url} ${req.headers['content-length']} ${body.length}`);
+      if (req.url === '/moved') res.writeHead(307, { location: '/target' }).end();
+      else res.end('{}');
+    });
+  });
+  await new Promise<void>((resolve) => runner.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${(runner.address() as AddressInfo).port}`;
+  const proxied = vi.fn().mockRejectedValue(new Error('proxied'));
+  vi.stubGlobal('fetch', proxied);
+
+  try {
+    const post = { method: 'POST', body: 'command' };
+    assert.equal((await fetchWithTimeout(`${origin}/command`, post, 5_000)).status, 200);
+    // The runner token travels in a header, so the redirect target gets nothing.
+    await assert.rejects(() => fetchWithTimeout(`${origin}/moved`, post, 5_000), TypeError);
+
+    assert.deepEqual(received, ['/command 7 7', '/moved 7 7']);
+    assert.equal(proxied.mock.calls.length, 0);
+  } finally {
+    vi.unstubAllGlobals();
+    runner.closeAllConnections();
+    await new Promise<void>((resolve) => runner.close(() => resolve()));
+  }
 });

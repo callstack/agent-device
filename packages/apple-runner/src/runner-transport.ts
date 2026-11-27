@@ -3,7 +3,7 @@ import {
   discloseDispatch,
   AppError,
 } from '@agent-device/kernel/errors';
-import { Deadline, resolveIosPhysicalDeviceControl } from './host.ts';
+import { Deadline, fetchWithCredential, resolveIosPhysicalDeviceControl } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createRunnerCommandRouteResolver,
@@ -161,8 +161,9 @@ export async function fetchWithTimeout(
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
-    // The token travels in a header, so a redirect must never carry it elsewhere.
-    return await fetch(url, { ...init, redirect: 'error', signal });
+    // The token travels in a header, so a redirect must never carry it elsewhere, and a
+    // plain-http send never goes through an environment proxy.
+    return await fetchWithCredential(url, { ...init, redirect: 'error', signal });
   } catch (error) {
     // `AbortSignal.timeout` rejects with a bare DOMException that no recovery rule can
     // read. Only a rejection carrying that signal's own reason is our deadline: a

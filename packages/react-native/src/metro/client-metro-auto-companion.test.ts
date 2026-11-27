@@ -1,6 +1,8 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
@@ -548,5 +550,50 @@ test('prepareMetroRuntime retries malformed retryable bridge responses after com
     assert.equal(fetchMock.mock.calls.length, 4);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a loopback bridge gets the bearer token directly, never through global fetch', async () => {
+  const projectRoot = mkdtempForTestSync('agent-device-metro-direct-bridge-');
+  fs.mkdirSync(path.join(projectRoot, 'node_modules'));
+  fs.writeFileSync(
+    path.join(projectRoot, 'package.json'),
+    JSON.stringify({ name: 'direct-bridge', dependencies: { 'react-native': '0.0.0-test' } }),
+  );
+  const received: string[] = [];
+  const bridge = http.createServer((req, res) => {
+    received.push(`${req.method} ${req.url} ${req.headers.authorization}`);
+    req.resume();
+    res.writeHead(401).end('{"ok":false}');
+  });
+  await new Promise<void>((resolve) => bridge.listen(0, '127.0.0.1', resolve));
+  // The dev server probe carries no credential and stays on global fetch.
+  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => {
+    return new Response('packager-status:running');
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  try {
+    await assert.rejects(() =>
+      prepareMetroRuntime(
+        {
+          projectRoot,
+          proxyBaseUrl: `http://127.0.0.1:${(bridge.address() as AddressInfo).port}`,
+          proxyBearerToken: 'shared-token',
+          bridgeScope: TEST_BRIDGE_SCOPE,
+          metroPort: 8081,
+          reuseExisting: true,
+          installDependenciesIfNeeded: false,
+        },
+        createTestHostEnvironment(),
+      ),
+    );
+
+    assert.deepEqual(received, ['POST /api/metro/bridge Bearer shared-token']);
+    assert.equal(JSON.stringify(fetchMock.mock.calls).includes('shared-token'), false);
+  } finally {
+    vi.unstubAllGlobals();
+    bridge.closeAllConnections();
+    await new Promise<void>((resolve) => bridge.close(() => resolve()));
   }
 });

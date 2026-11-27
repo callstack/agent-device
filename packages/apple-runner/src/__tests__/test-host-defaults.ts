@@ -104,6 +104,9 @@ export async function createAppleRunnerTestHostDefaults(): Promise<AppleRunnerHo
     isRecord,
     classifyBootFailure,
     bootFailureHint,
+    // An explicit network adapter: a suite that stubs global `fetch` observes every runner send.
+    // The real capability sends plain http around it.
+    fetchWithCredential: async (input, init) => await fetch(input, init),
     leaseOwnerStateDir: () => undefined,
     hasDeviceClaimAuthority: () => false,
   };

@@ -457,10 +457,11 @@ async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<M
   // Checked on the final URL, right before the bearer token is sent, and outside the retry.
   const bridgeUrl = `${input.baseUrl}/api/metro/bridge`;
   assertSecureCredentialTransport(bridgeUrl, 'Metro bridge URL');
+  const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
   let response: Response;
 
   try {
-    response = await fetch(bridgeUrl, {
+    response = await fetchWithCredential(bridgeUrl, {
       method: 'POST',
       headers: createProxyHeaders(input.baseUrl, input.bearerToken),
       body: JSON.stringify({

@@ -1,11 +1,11 @@
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { postCloudAuthJson } from '../cloud-auth-request.ts';
 
-// These tests use Node's own fetch against loopback servers, so they prove that no redirect is
-// followed by fetch itself and that a refused target never receives a request.
+// These tests send over the real transport to loopback servers, so they prove that the transport
+// follows no redirect itself and that a refused target never receives a request.
 
 type Received = { method?: string; path?: string; body: string; contentType?: string };
 /** A canned response. Routes are data, so no handler is ever chosen by the request path. */
@@ -14,6 +14,7 @@ type Route = { status: number; headers: Record<string, string>; body: string };
 const servers: http.Server[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -178,4 +179,14 @@ test('a cloud base URL over plain http off loopback is refused before anything i
 
   expect(refusal).toMatchObject({ details: { reason: 'insecure_credential_transport' } });
   expect(sent).toBe(0);
+});
+
+test('a loopback cloud is reached directly, never through global fetch and its proxy', async () => {
+  const cloud = await listen();
+  cloud.routes.set('/start', answer);
+  const proxied = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
+
+  expect(await post(cloud.origin)).toEqual({ accessToken: 'adc_agent' });
+  expect(cloud.received).toEqual([posted('/start')]);
+  expect(proxied).not.toHaveBeenCalled();
 });

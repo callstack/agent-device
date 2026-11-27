@@ -208,7 +208,7 @@
     "packages/daemon/src/server/http/http-checked-rpc.ts#refuseCheckedRpcCredential": "sha256:5594a47e90079eaf31eeb335c709451f8e60616511a4ec84d7248722a37b93ea",
     "packages/daemon/src/server/http/http-checked-rpc.ts#withUnregisteredTrackingId": "sha256:fffc54ad047879605f532801118868fd0aed1db38b74d671b65325551cc8fe0a",
     "packages/daemon/src/server/http/http-checked-rpc.ts#readFrameParams": "sha256:8ccdb4a3b91a585be7c1518d198f34f608905c62b8eba9aad12b62a4107f5f31",
-    "packages/proxy/src/checked-rpc-admission.ts#localCheckedRpcRefusal": "sha256:017a05ac5b415d33030a30c99529a9dd58bb19aeae5649d15a6e00740fe84d95",
+    "packages/proxy/src/checked-rpc-admission.ts#localCheckedRpcRefusal": "sha256:05188deadff5a2a1e09faaeb2a500af5499dafc8183d18e4290d88f23a24d408",
     "packages/proxy/src/checked-rpc-admission.ts#refusalResponse": "sha256:10872cc1096a6c3262de9a2dccfb1fa447b67107322894a7289116575de9b4b7",
     "packages/proxy/src/checked-rpc-admission.ts#localRequestId": "sha256:1bd486b7d70c727c2cab6330fc78f65e1922126be2e38d615f39c1b36acf9eb4",
     "packages/proxy/src/checked-rpc-admission.ts#readUpstreamRefusalDetails": "sha256:4789d8cffbee31ce2c3c33184751bd11498365aa72e7b37e3b46c432e941920c",

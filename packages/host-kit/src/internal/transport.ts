@@ -39,8 +39,10 @@ export type NodeHttpRequester = Pick<typeof import('node:http'), 'request'>;
  * property is mutable, which the transport tests rely on to stub requests.
  *
  * `credential: 'direct'` is for a request that carries a credential: over plain http (loopback
- * only) it connects directly and never through an environment proxy, unless the caller names its
- * own `agent`. The requester still calls the module's `request` at send time.
+ * only) it connects directly and never through an environment proxy. Call that requester as
+ * `request(options, callback)`, its only form. Its direct agent always replaces an `agent` among
+ * the options, because any other agent could route the credential through a proxy. It still calls
+ * the module's `request` at send time.
  */
 export async function loadNodeHttpRequester(
   protocol: string,
@@ -52,7 +54,7 @@ export async function loadNodeHttpRequester(
   const agent = await (await import('../direct-http.ts')).loadDirectHttpAgent(protocol);
   return {
     request: ((options: RequestOptions, callback?: (res: IncomingMessage) => void) =>
-      http.request({ agent, ...options }, callback)) as NodeHttpRequester['request'],
+      http.request({ ...options, agent }, callback)) as NodeHttpRequester['request'],
   };
 }
 

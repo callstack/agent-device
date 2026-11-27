@@ -12,6 +12,8 @@ import type { LimrunFileDownload } from '@agent-device/provider-limrun';
 import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
+const MAX_DOWNLOAD_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 // Why a Limrun file download did not land. The destination is removed on every failure, so each row
 // means "retry from the same URL", and `limrun_download_failed` adds that the transport itself broke.
@@ -22,6 +24,9 @@ const LIMRUN_DOWNLOAD_REASONS = {
   timeout: { reason: 'limrun_download_timeout' },
   // The transfer broke for a reason the service never answered with, kept in `details.cause`.
   failed: { reason: 'limrun_download_failed' },
+  // The download got a redirect it does not follow: off https to another origin, to a URL with a
+  // username or password or one that does not parse, or past the fifth hop. Nothing was sent there.
+  redirectRefused: { reason: 'limrun_download_redirect_refused' },
 } as const satisfies ReasonTable<'limrun'>;
 
 /**
@@ -30,19 +35,11 @@ const LIMRUN_DOWNLOAD_REASONS = {
  * same URL and never mistakes an earlier attempt's file for this one's.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
-  // The URL comes from the provider, and the headers carry its bearer token.
-  if (options.headers && Object.keys(options.headers).length > 0) {
-    assertSecureCredentialTransport(options.url, 'Limrun download URL');
-  }
   const timeout = AbortSignal.timeout(options.timeoutMs);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    const response = await fetch(options.url, {
-      method: 'GET',
-      headers: options.headers,
-      signal,
-    });
+    const response = await fetchDownload(options, signal);
     if (!response.ok) throw await httpFailure(response, options);
     if (!response.body) {
       throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
@@ -58,6 +55,43 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout, signal);
   }
+}
+
+/**
+ * Requests the download and follows its redirects itself. The URL comes from the provider and can
+ * be signed, and the headers carry its bearer token, so every hop meets the credential transport
+ * rule. A redirect is followed from https to https or on the same origin only, and the headers stay
+ * behind once it leaves the origin.
+ */
+async function fetchDownload(options: LimrunFileDownload, signal: AbortSignal): Promise<Response> {
+  const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+  let url = assertSecureCredentialTransport(options.url, 'Limrun download URL');
+  let headers = options.headers;
+  for (let redirects = 0; ; redirects += 1) {
+    const response = await fetchWithCredential(url.href, {
+      method: 'GET',
+      headers,
+      redirect: 'manual',
+      signal,
+    });
+    const location = response.headers.get('location');
+    if (!REDIRECT_STATUSES.has(response.status) || location === null) return response;
+    await response.body?.cancel().catch(() => undefined);
+    const target = URL.parse(location, url);
+    if (!target || !isFollowedRedirect(url, target) || redirects >= MAX_DOWNLOAD_REDIRECTS) {
+      throw new AppError('COMMAND_FAILED', 'Limrun download answered with a refused redirect', {
+        reason: LIMRUN_DOWNLOAD_REASONS.redirectRefused.reason,
+        statusCode: response.status,
+      });
+    }
+    if (target.origin !== url.origin) headers = {};
+    url = assertSecureCredentialTransport(target, 'Limrun download URL');
+  }
+}
+
+function isFollowedRedirect(from: URL, to: URL): boolean {
+  if (to.username || to.password) return false;
+  return (from.protocol === 'https:' && to.protocol === 'https:') || to.origin === from.origin;
 }
 
 async function httpFailure(response: Response, options: LimrunFileDownload): Promise<AppError> {

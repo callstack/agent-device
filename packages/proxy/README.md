@@ -130,8 +130,10 @@ Supply `upstreamFetch` if you need those Fetch behaviors or your own routing.
 
 A plain-http upstream is loopback, and the default transport reaches it directly over `node:http`
 on every route. An environment proxy (`HTTP_PROXY` with `NODE_USE_ENV_PROXY=1`) never sees the
-upstream token. An https upstream follows your runtime's environment-proxy settings: Node 26.11.1
-uses them when `NODE_USE_ENV_PROXY=1`, and Bun 1.4.2 Fetch uses them without that opt-in.
+upstream token. As with `fetch`, such a request ends after five minutes of silence from the daemon
+(transfer routes keep their own limits above). An https upstream follows your runtime's
+environment-proxy settings: Node 26.11.1 uses them when `NODE_USE_ENV_PROXY=1`, and Bun 1.4.2 Fetch
+uses them without that opt-in.
 
 By default, `/rpc`, `/health` and request diagnostics to an https upstream use global `fetch`.
 
@@ -153,11 +155,12 @@ const proxy = createDaemonProxy({
 daemon's `Response`. Abort the exchange when `request.signal` aborts. The request carries the
 upstream token and `redirect: 'manual'`: return a 3xx response as it is and never follow it. The
 proxy relays a 3xx, such as the daemon's `308` resume response, to its client. It relays a
-`Location` only when it targets the daemon itself, moved onto the proxy's client-facing origin, and
-drops one that points elsewhere, has userinfo, or carries the upstream token. On
-`/rpc/checked`, a followed redirect would resend the call with the daemon token, possibly to the
-unchecked `/rpc`; the proxy refuses a checked answer that is a 3xx or reports `redirected`, but it
-cannot undo a request your transport already resent.
+`Location` only when it targets the daemon itself, as a path on the proxy's client-facing origin
+without its query or fragment. It drops one that points elsewhere, has userinfo, or has the
+upstream token in its path. On `/rpc/checked`, a followed redirect would resend the call with the
+daemon token, possibly to the unchecked `/rpc`; the proxy refuses a checked answer that is a 3xx or
+reports `redirected`, but it cannot undo a request your transport already resent. `/health` refuses
+such an answer too: the proxy then answers `/health` with HTTP 500 and `ok: false`.
 
 `upstreamBaseUrl` must use https, or plain http to a loopback host, with or without
 `upstreamFetch`. With your own transport, give it a logical URL that meets this rule, such as

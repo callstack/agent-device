@@ -36,9 +36,9 @@ import {
  * proxy. Supply your own to reach the daemon over another transport, such as a WebSocket tunnel.
  * Abort the exchange when `request.signal` aborts. Every request carries `redirect: 'manual'`:
  * honor it by returning a 3xx as the response and never following it, because the request carries
- * the upstream token. The proxy relays a 3xx to its client, which applies its own redirect rules;
- * on the checked RPC route it refuses a 3xx or `redirected` answer instead, but it cannot undo a
- * resend the transport already made.
+ * the upstream token. The proxy relays a 3xx to its client, which applies its own redirect rules.
+ * On the checked RPC route and the health probe it refuses a 3xx or `redirected` answer instead,
+ * but it cannot undo a resend the transport already made.
  *
  * A custom transport owns its phase guarantees and must observe `request.signal` on every route.
  * On transfer routes, the proxy bounds its own response and body waits, even if the transport
@@ -123,6 +123,8 @@ type NormalizedProxyOptions = {
   authenticate: DaemonProxyAuthenticate | undefined;
   maxRpcBodyBytes: number;
   upstreamTimeoutMs: number | undefined;
+  /** Refuses an upstream base URL the token may not go to. Runs before any URL is built on it. */
+  admitUpstream: () => Promise<void>;
   upstreamFetch: DaemonProxyUpstreamFetch;
   upstreamTransport: (route: string, request: Request) => Promise<Response>;
 };
@@ -356,13 +358,23 @@ async function readUpstreamHealth(
   request: Request,
   options: NormalizedProxyOptions,
 ): Promise<unknown> {
+  // The bound starts with the probe, so it covers admission too.
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]);
+  await options.admitUpstream();
   const response = await options.upstreamFetch(
     forwardedRequest(request, buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
       method: 'GET',
       headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(UPSTREAM_HEALTH_TIMEOUT_MS)]),
+      signal,
     }),
   );
+  const { isRedirectAnswer } = await import('./upstream-response-relay.ts');
+  if (isRedirectAnswer(response)) {
+    await response.body?.cancel();
+    throw new AppError('COMMAND_FAILED', 'The daemon answered the health check with a redirect', {
+      hint: 'The proxy never follows a redirect. Point upstreamBaseUrl at the daemon itself.',
+    });
+  }
   const text = await response.text();
   try {
     return text ? JSON.parse(text) : { ok: response.ok, status: response.status };
@@ -379,6 +391,7 @@ async function forwardProxyRequest(params: {
   caller: ProxyCaller;
 }): Promise<Response> {
   const { request, route, options, rpcBody, caller } = params;
+  await options.admitUpstream();
   const body = resolveUpstreamBody(request, route, rpcBody, options.upstreamToken, caller.tenantId);
   const checked = route === DAEMON_HTTP_CHECKED_RPC_ROUTE;
   const upstreamUrl = buildUpstreamUrl(options.upstreamBaseUrl, route, request.url);
@@ -559,7 +572,7 @@ function rewriteUploadDirectUrl(
 }
 
 function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOptions {
-  const upstreamBaseUrl = normalizeBaseUrl(options.upstreamBaseUrl, 'upstreamBaseUrl');
+  const upstreamBaseUrl = normalizeUpstreamBaseUrl(options.upstreamBaseUrl);
   const upstreamToken = normalizeToken(options.upstreamToken, 'upstreamToken');
   const clientToken = options.authenticate
     ? undefined
@@ -573,16 +586,12 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
       },
     ));
   const customUpstreamFetch = options.upstreamFetch;
-  const sendUpstream: DaemonProxyUpstreamFetch =
+  const upstreamFetch: DaemonProxyUpstreamFetch =
     customUpstreamFetch ??
     (async (request) =>
       new URL(request.url).protocol === 'http:'
         ? await (await import('@agent-device/host-kit/direct-http')).fetchOverDirectHttp(request)
         : await fetch(request));
-  const upstreamFetch: DaemonProxyUpstreamFetch = async (request) => {
-    await admitUpstream();
-    return await sendUpstream(request);
-  };
   return {
     upstreamBaseUrl,
     publicOrigin:
@@ -594,10 +603,10 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     authenticate: options.authenticate,
     maxRpcBodyBytes: options.maxRpcBodyBytes ?? DEFAULT_MAX_RPC_BODY_BYTES,
     upstreamTimeoutMs: options.upstreamTimeoutMs,
+    admitUpstream,
     upstreamFetch,
     upstreamTransport: async (route, request) => {
       if (!isTransferRoute(route, request.method)) return upstreamFetch(request);
-      await admitUpstream();
       const { createNodeTransferFetch, settleUpstreamFetch } =
         await import('./transfer-transport.ts');
       return customUpstreamFetch
@@ -610,16 +619,12 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
   };
 }
 
-function normalizeBaseUrl(value: string, label: string): string {
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new Error('unsupported protocol');
-    }
-    return parsed.toString().replace(/\/+$/, '');
-  } catch (error) {
-    throw new AppError('INVALID_ARGS', `Invalid ${label}`, { [label]: value }, error);
-  }
+/**
+ * A URL that does not parse stays as given and never throws here: `admitUpstream` refuses it on
+ * every request, as it refuses any other URL the token may not go to.
+ */
+function normalizeUpstreamBaseUrl(value: string): string {
+  return URL.parse(value)?.toString().replace(/\/+$/, '') ?? value;
 }
 
 function normalizeToken(value: string, label: string): string {

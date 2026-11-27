@@ -163,11 +163,12 @@ export async function createLimrunIosRunner(
       const remainingMs = deadline?.remainingMs() ?? 120_000;
       const launchTimeoutMs = Math.max(1, Math.floor(Math.min(90_000, remainingMs * 0.75)));
       const launchSignal = AbortSignal.any([signal, AbortSignal.timeout(launchTimeoutMs)]);
+      const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
       response = await retryWithPolicy(
         async () => {
           runRequested = true;
           const result = await awaitWithSignal(
-            fetch(`${apiUrl}/xctest/run`, {
+            fetchWithCredential(`${apiUrl}/xctest/run`, {
               method: 'POST',
               headers: { ...headers, 'Content-Type': 'application/json' },
               body: JSON.stringify({

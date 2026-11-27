@@ -55,16 +55,22 @@ export async function postCloudAuthJson<T>(options: {
 export async function fetchCloudOnOneOrigin(
   requestUrl: URL,
   request: RequestInit,
-  // di-seam-approved: the same fetch-global seam as postCloudAuthJson's fetchImpl.
-  fetchImpl: typeof fetch = fetch,
+  // di-seam-approved: the same fetch-global seam as postCloudAuthJson's fetchImpl. Without it,
+  // plain http (loopback only) goes direct, never through an environment proxy.
+  fetchImpl?: typeof fetch,
 ): Promise<Response> {
   assertSecureCredentialTransport(requestUrl, 'Cloud base URL');
+  const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
   // One timeout covers the whole redirect chain.
   const signal = AbortSignal.timeout(HTTP_TIMEOUT_MS);
   let url = requestUrl;
   let init = request;
   for (let redirects = 0; ; redirects += 1) {
-    const response = await fetchImpl(url, { ...init, redirect: 'manual', signal });
+    const response = await fetchWithCredential(
+      url,
+      { ...init, redirect: 'manual', signal },
+      fetchImpl,
+    );
     if (!REDIRECT_STATUSES.has(response.status)) return response;
     await response.body?.cancel().catch(() => undefined);
     url = readRedirectTarget(response, url, requestUrl, redirects);

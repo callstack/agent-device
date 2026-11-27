@@ -4,6 +4,7 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { connectCommand } from '../commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../auth-session.ts';
@@ -24,6 +25,7 @@ vi.mock('../auth-session.ts', async (importOriginal) => ({
 }));
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -59,6 +61,10 @@ async function connectCloudAt(
       return answer();
     }),
   );
+  vi.spyOn(http, 'request').mockImplementation(((target: unknown) => {
+    urls.push(JSON.stringify(target));
+    throw new Error('nothing may be sent over plain http');
+  }) as typeof http.request);
   try {
     const refusal = await connectCloud(path.join(tempRoot, '.state')).then(
       () => assert.fail('expected connect cloud to be refused'),

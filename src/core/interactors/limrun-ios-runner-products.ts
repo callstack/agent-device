@@ -249,10 +249,11 @@ export async function uploadLimrunRunnerProducts(
     }
     const syncUrl = `${apiUrl}/sync`;
     assertSecureCredentialTransport(syncUrl, 'Limrun API URL');
+    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
     const stream = createGzip();
     const compression = pipeline(Readable.from(body()), stream, { signal }).catch(() => {});
     try {
-      const response = await fetch(syncUrl, {
+      const response = await fetchWithCredential(syncUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

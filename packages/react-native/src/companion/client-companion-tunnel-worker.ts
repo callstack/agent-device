@@ -82,12 +82,11 @@ async function registerCompanion(
   options: CompanionTunnelWorkerOptions,
 ): Promise<{ wsUrl: string }> {
   const registerPath = resolveRegisterPath(options);
-  const registerUrl = bearerDestination(
-    `${normalizeBaseUrl(options.serverBaseUrl)}${registerPath}`,
-  );
+  const registerUrl = bearerDestination(options.serverBaseUrl, registerPath);
+  const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
   let response: Response;
   try {
-    response = await fetch(registerUrl, {
+    response = await fetchWithCredential(registerUrl, {
       method: 'POST',
       headers: createHeaders(options.serverBaseUrl, options.bearerToken),
       body: JSON.stringify(buildCompanionPayload(options)),
@@ -163,9 +162,15 @@ function clampRetryDelay(delayMs: number): number {
   return Math.max(0, Math.min(COMPANION_REGISTER_MAX_RETRY_DELAY_MS, Math.ceil(delayMs)));
 }
 
-/** The final URL a bearer request goes to, or a refusal no retry can fix. */
-function bearerDestination(url: string): string {
+/**
+ * The final URL a bearer request goes to, or a refusal no retry can fix. The base must be a URL
+ * with a host on its own: appending a path can give one to a base without it (`https://` becomes
+ * `https://api/...`).
+ */
+function bearerDestination(serverBaseUrl: string, path: string): string {
   try {
+    assertSecureCredentialTransport(serverBaseUrl, 'Metro companion bridge URL');
+    const url = `${normalizeBaseUrl(serverBaseUrl)}${path}`;
     assertSecureCredentialTransport(url, 'Metro companion bridge URL');
     return url;
   } catch (error) {
@@ -184,10 +189,9 @@ async function unregisterCompanion(options: CompanionTunnelWorkerOptions): Promi
   const unregisterPath = resolveUnregisterPath(options);
   if (!unregisterPath) return;
   try {
-    const unregisterUrl = bearerDestination(
-      `${normalizeBaseUrl(options.serverBaseUrl)}${unregisterPath}`,
-    );
-    await fetch(unregisterUrl, {
+    const unregisterUrl = bearerDestination(options.serverBaseUrl, unregisterPath);
+    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+    await fetchWithCredential(unregisterUrl, {
       method: 'POST',
       headers: createHeaders(options.serverBaseUrl, options.bearerToken),
       body: JSON.stringify(buildCompanionPayload(options)),

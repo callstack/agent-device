@@ -89,6 +89,8 @@ export const appleRunnerHost: AppleRunnerHost = {
   shellQuote,
   emitDiagnostic,
   withDiagnosticTimer,
+  fetchWithCredential: async (...args) =>
+    await (await import('@agent-device/host-kit/direct-http')).fetchWithCredential(...args),
   retryWithPolicy,
   isEnvTruthy,
   deadlineFromTimeoutMs: (timeoutMs, nowMs) => Deadline.fromTimeoutMs(timeoutMs, nowMs),

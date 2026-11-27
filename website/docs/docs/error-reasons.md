@@ -818,6 +818,7 @@ These reasons can come from more than one command.
 | `limrun_download_http_error` | The service answered the download with an error status; `details.statusCode` and `details.body` carry its reply. |
 | `limrun_download_timeout` | The download passed its deadline; `details.timeoutMs` is that deadline. |
 | `limrun_download_failed` | The transfer broke for a reason the service never answered with, kept in `details.cause`. |
+| `limrun_download_redirect_refused` | The download got a redirect it does not follow: off https to another origin, to a URL with a username or password or one that does not parse, or past the fifth hop. Nothing was sent there. |
 
 ### Limrun provider
 
@@ -904,6 +905,7 @@ These reasons can come from more than one command.
 | `remote_rpc_protocol_missing` | The checked RPC call named no RPC protocol. An intermediary that strips request headers causes this. |
 | `remote_rpc_protocol_mismatch` | The daemon or proxy speaks a different RPC protocol from the caller. After authentication, `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused. |
 | `remote_checked_rpc_unsupported` | The connection sets `daemonRpc: checked`, but the remote does not serve checked RPC: `connect` found no `checked-rpc` capability in its `/health`, or a command got the route answered as unknown. A command is never resent, because an ingress may have answered for one that ran. Update the remote daemon or proxy, or remove `daemonRpc` from the connection. |
+| `direct_http_idle_timeout` | A plain-http exchange with a loopback peer stayed silent for `details.timeoutMs`. |
 | `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
 | `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
 | `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
