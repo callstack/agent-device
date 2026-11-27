@@ -13,6 +13,8 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>()),
   emitDiagnostic: vi.fn(),
 }));
+// Keyboard intro preparation has its own coverage in ios-simulator-keyboard.test.ts.
+vi.mock('../ios-simulator-keyboard.ts', () => ({ prepareIosSimulatorKeyboardIntros: vi.fn() }));
 vi.mock('../simulator.ts', () => ({ ensureBootedSimulator: vi.fn() }));
 import { ensureBootedSimulator } from '../simulator.ts';
 

@@ -72,6 +72,31 @@ test('normal launch prepares app accessibility through the instance-scoped simct
   expect(calls[launch]).toEqual(['launch', 'booted', 'com.example.app']);
 });
 
+test('a guest preference write that exits non-zero rejects through the Limrun adapter', async () => {
+  const f = await sessionWithClient({ code: 1, stdout: '', stderr: 'denied' });
+  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const write = ['spawn', f.device.id, 'defaults', 'write', 'com.apple.keyboard.preferences'];
+  await expect(
+    withAppleToolProvider(tools, () =>
+      runXcrun(buildSimctlArgsForDevice(f.device, [...write, 'DidShowContinuousPathIntroduction'])),
+    ),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { exitCode: 1, stderr: 'denied' } });
+});
+
+test('every open writes the keyboard intro keys through the Limrun adapter', async () => {
+  const { interactor, simctl } = await sessionWithClient();
+  for (let open = 0; open < 2; open += 1) {
+    simctl.mockClear();
+    await interactor.open('com.example.app');
+    const calls = simctl.mock.calls.map(([args]) => args);
+    expect(
+      calls
+        .filter((args) => args.includes('com.apple.keyboard.preferences'))
+        .map((args) => args[5]),
+    ).toEqual(['DidShowContinuousPathIntroduction', 'MultilingualKeyboardTip']);
+  }
+});
+
 test('a url open launches with arguments before opening the url', async () => {
   const { interactor, simctl } = await sessionWithClient();
   await interactor.open('com.example.app', {
