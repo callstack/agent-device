@@ -53,7 +53,7 @@ import {
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
 import { probeHarmonyForegroundBundle, readHarmonyAppState } from './app-state.ts';
-import { verifyHarmonyOpenForeground } from './app-lifecycle.ts';
+import { requireHarmonyPlainLaunchArgs, verifyHarmonyOpenForeground } from './app-lifecycle.ts';
 import {
   bindLocalDirectApplicationLifecycle,
   type DirectApplicationLifecycleParams,
@@ -153,13 +153,15 @@ function harmonyOpenVerifiedLifecycle(params: {
   });
   return {
     ...direct,
-    openApplication: async (input) =>
-      await verifyHarmonyOpenForeground(
+    openApplication: async (input) => {
+      requireHarmonyPlainLaunchArgs(input.execution.launchArgs);
+      return await verifyHarmonyOpenForeground(
         input,
         await direct.openApplication(input),
         params.device,
         params.signal,
-      ),
+      );
+    },
   };
 }
 

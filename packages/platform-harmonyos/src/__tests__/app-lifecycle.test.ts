@@ -155,20 +155,6 @@ test('openHarmonyApp keeps the module flag ahead of launch args on the bm dump r
   ]);
 });
 
-test('openHarmonyApp refuses a launch arg that is not a plain word before any hdc call', async () => {
-  for (const launchArg of [String.raw`$(id)"q"\c`, 'hello world', 'a;b', '']) {
-    await assert.rejects(
-      () => openHarmonyApp(DEVICE, 'com.example.application', { launchArgs: ['--ps', launchArg] }),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'INVALID_ARGS' &&
-        error.details?.reason === 'launch-arg-not-a-plain-word' &&
-        error.details?.launchArg === launchArg,
-    );
-  }
-  assert.equal(mockRunCmd.mock.calls.length, 0);
-});
-
 test('openHarmonyApp refuses an ability name outside the module grammar before any hdc call', async () => {
   for (const activity of ['Entry$(id)', 'Entry;reboot', 'Entry Ability', '1Entry', 'Entry"x', '']) {
     await assert.rejects(

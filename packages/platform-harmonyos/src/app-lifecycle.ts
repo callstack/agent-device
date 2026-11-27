@@ -197,7 +197,7 @@ const HARMONY_LOCKED_SCREEN_LAUNCH_ERROR = /Error Code: ?10106102/;
 const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
   // --activity is not an ability name the module.json5 format can carry.
   invalidAbilityName: { reason: 'invalid-harmony-ability-name' },
-  // A --launch-args entry is not a plain word, so the device shell could parse it.
+  // A HarmonyOS --launch-args entry is not a nonempty plain word of letters, digits, and _@%+=:,./-.
   launchArgNotPlainWord: { reason: 'launch-arg-not-a-plain-word' },
 } as const satisfies ReasonTable<'open'>;
 
@@ -218,8 +218,15 @@ function requireHarmonyAbilityName(ability: string): void {
   });
 }
 
-// A word that needs no shell quoting reaches `aa start` as one literal operand whether or not hdc
-// quotes the elements it forwards.
+/**
+ * Refuses a `--launch-args` entry that is not a nonempty plain word. Such a word needs no shell
+ * quoting, so it reaches `aa start` as one literal operand whether or not hdc quotes the elements
+ * it forwards. The open lifecycle runs this before any app operation, a relaunch force-stop included.
+ */
+export function requireHarmonyPlainLaunchArgs(launchArgs: readonly string[] | undefined): void {
+  for (const word of launchArgs ?? []) requireHarmonyPlainLaunchWord(word);
+}
+
 function requireHarmonyPlainLaunchWord(word: string): void {
   if (shellQuoteIfNeeded(word) === word) return;
   throw new AppError('INVALID_ARGS', `Invalid HarmonyOS launch argument: ${word}`, {
@@ -229,13 +236,12 @@ function requireHarmonyPlainLaunchWord(word: string): void {
   });
 }
 
-/** Launches a bundle's ability; each `launchArgs` entry must be a plain word and lands as one literal `aa start` argument. */
+/** Launches a bundle's ability; each `launchArgs` entry lands as one `aa start` argument, after the open lifecycle checked it. */
 export async function openHarmonyApp(
   device: DeviceInfo,
   bundleId: string,
   options?: { activity?: string; launchArgs?: string[]; signal?: AbortSignal },
 ): Promise<void> {
-  for (const word of options?.launchArgs ?? []) requireHarmonyPlainLaunchWord(word);
   if (options?.activity !== undefined) requireHarmonyAbilityName(options.activity);
   const launchTarget = options?.activity
     ? { ability: options.activity }

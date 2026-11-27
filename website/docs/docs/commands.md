@@ -615,7 +615,7 @@ agent-device capabilities --session checkout --json
 HarmonyOS support uses HDC and ArkUI `uitest`. On API 24 devices it supports lifecycle and HAP deployment, ArkUI snapshot/screenshot and selector reads, one-pointer touch and text actions, keyboard `enter`/`dismiss`, app logs, foreground app state, process RSS samples, and `settings clear-app-state`. Run `agent-device capabilities --platform harmonyos` for the command list of a selected device.
 
 - Gestures use one pointer. Multi-touch gestures and `gesture drag` return `UNSUPPORTED_OPERATION`.
-- `open --launch-args` appends each argument unchanged to the `aa start` command, such as `--launch-args --ps --launch-args configKey --launch-args debug` for a string extra. Each argument must be a plain word of letters, digits, and `_@%+=:,./-`; other arguments return `INVALID_ARGS` before the device is touched.
+- `open --launch-args` appends each argument unchanged to the `aa start` command, such as `--launch-args --ps --launch-args configKey --launch-args debug` for a string extra. Each argument must be a plain word of letters, digits, and `_@%+=:,./-`; other arguments return `INVALID_ARGS` before any app operation, such as a relaunch force-stop. Device selection can still query HDC.
 - Physical devices support whole-screen recording with `record start <path> --scope device` or `--scope system`, without `--fps`, `--quality`, or `--hide-touches`. Emulator recording is refused.
 - Not available: orientation, clipboard, alerts, network/audio capture, push and app-event delivery, React Native helpers, and trace capture. `settings` supports only `clear-app-state`. `perf memory sample` reports process RSS only.
 
