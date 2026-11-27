@@ -53,8 +53,8 @@ import {
   type RequestExecutionLockPlan,
 } from './request-binding.ts';
 import {
+  assertSessionDeviceUnheld,
   beginOpenDeviceWait,
-  findSessionDeviceConflict,
   readOpenWaitBudgetMs,
 } from '../sessions/open-device-contention-wait.ts';
 import {
@@ -592,10 +592,16 @@ function createRequestDeviceAccess(params: {
 } {
   const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
   const claimPolicy = resolveCommandDeviceClaimPolicy(params.command);
+  const suiteHostSession = params.req.internal?.suiteHostSession;
+  const coveredHostSession =
+    suiteHostSession && params.sessionStore.get(suiteHostSession) !== undefined
+      ? suiteHostSession
+      : undefined;
   const claimAdmission = createDeviceClaimAdmission({
     policy: claimPolicy,
     command: params.command,
     session: params.sessionName,
+    ...(coveredHostSession ? { coveredHostSession } : {}),
     workspace: params.workspace,
     callerCwd: params.callerCwd,
     resolveScopeRoot: resolveCallerScopeRoot,
@@ -627,19 +633,12 @@ function createRequestDeviceAccess(params: {
                 assertDaemonPolicyAdmitsDevice(daemonPolicy, device);
               }
               if (claimPolicy === 'require-owner' && !params.sessionStore.get(params.sessionName)) {
-                const refusal = findSessionDeviceConflict({
+                assertSessionDeviceUnheld({
                   req: params.req,
                   device,
                   sessionStore: params.sessionStore,
                   sessionName: params.sessionName,
                 });
-                if (refusal) {
-                  throw new AppError(
-                    refusal.error.code,
-                    refusal.error.message,
-                    refusal.error.details,
-                  );
-                }
               }
             }
           : undefined,

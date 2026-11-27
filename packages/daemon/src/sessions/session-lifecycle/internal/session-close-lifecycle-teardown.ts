@@ -46,6 +46,8 @@ export async function runSessionCloseTeardown(params: {
   clearRuntimeHints?: RuntimeHintClearOperation;
   cleanupFailures: SessionCleanupFailure[];
   repairArmed: boolean;
+  /** True when an enclosing `test` suite or outer session owns `session.lease`, so attempt close keeps it. */
+  leaseRetainedBySuite?: boolean;
   dispatchTargetedPlatformClose: PlatformCloseDispatcher;
   finalizeOrdinaryCloseScript(input: {
     req: DaemonRequest;
@@ -86,6 +88,7 @@ export async function runSessionCloseTeardown(params: {
     hasScreenRecording: Boolean(session.screenRecording),
     leaseWillEnd:
       Boolean(session.lease) &&
+      !params.leaseRetainedBySuite &&
       !(await attemptCleanup('lease_retention', async () =>
         inspectSessionLeaseRetainedOnClose({ session, leaseRegistry: params.leaseRegistry }),
       )),

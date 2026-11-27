@@ -134,6 +134,23 @@ async function prepareRepairClose(params: {
   };
 }
 
+function isSuiteAttemptSharedLease(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): boolean {
+  const { req, session, sessionName, sessionStore } = params;
+  if (req.internal?.cleanupIntent !== 'suite-owned-test-session' || !session.lease) return false;
+  const leaseId = session.lease.leaseId;
+  if (leaseId === req.flags?.leaseId || leaseId === req.internal?.admittedLease?.leaseId) {
+    return true;
+  }
+  return sessionStore
+    .listRefs()
+    .some((other) => other.address !== sessionName && other.session.lease?.leaseId === leaseId);
+}
+
 async function releaseProviderLeaseForClose(params: {
   shutdownPrepared: boolean;
   cleanupFailures: SessionCleanupFailure[];
@@ -435,6 +452,13 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
   } = params;
   const { address: sessionName } = ref;
+  const initialSession = sessionStore.requireCurrent(ref);
+  const leaseRetainedBySuite = isSuiteAttemptSharedLease({
+    req,
+    session: initialSession,
+    sessionName,
+    sessionStore,
+  });
   const cleanupFailures: SessionCleanupFailure[] = [];
   const {
     platformCloseError,
@@ -452,6 +476,7 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
     cleanupFailures,
     repairArmed: params.repairArmed,
+    leaseRetainedBySuite,
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
     platformResourceCleanup: params.platformResourceCleanup,
@@ -478,16 +503,18 @@ async function runCloseTeardownAndRelease(params: {
       throw claimBlockingError;
     }
   }
-  const leaseRelease = await releaseProviderLeaseForClose({
-    req,
-    session,
-    leaseRegistry,
-    leaseLifecycleProvider,
-    lifecycle,
-    shutdownPrepared,
-    cleanupFailures,
-    sessionName,
-  });
+  const leaseRelease = leaseRetainedBySuite
+    ? {}
+    : await releaseProviderLeaseForClose({
+        req,
+        session,
+        leaseRegistry,
+        leaseLifecycleProvider,
+        lifecycle,
+        shutdownPrepared,
+        cleanupFailures,
+        sessionName,
+      });
   if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;
   const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });

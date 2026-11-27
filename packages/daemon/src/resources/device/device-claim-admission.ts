@@ -46,6 +46,8 @@ export function createDeviceClaimAdmission(params: {
    * covered claim must also record this request's workspace.
    */
   session: string;
+  /** Outer `test` host session currently alive in this daemon whose session claim covers nested attempts. */
+  coveredHostSession?: string;
   workspace: string;
   /**
    * The caller's raw cwd when the request carried one, or nothing for a caller without a
@@ -97,6 +99,15 @@ export function createDeviceClaimAdmission(params: {
       // it; the same claim seen by any other request is a live owner.
       const held = result.conflict.claim;
       if (held && acquired.some((ownership) => ownership.ownerToken === held.ownerToken)) return;
+      if (
+        params.coveredHostSession !== undefined &&
+        result.conflict.classification === 'live' &&
+        held?.claimOwnerKind === 'open-session' &&
+        held.session === params.coveredHostSession &&
+        held.stateDir === params.stateDir
+      ) {
+        return;
+      }
       throw deviceClaimConflictError(device, result.conflict);
     }
   }

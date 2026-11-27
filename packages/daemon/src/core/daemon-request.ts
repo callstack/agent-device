@@ -73,6 +73,8 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   scriptDelivery?: ScriptDeliveryLedger;
   /** Authority minted only by the test suite for its own attempt-session cleanup. */
   cleanupIntent?: 'suite-owned-test-session';
+  /** Outer session address whose held device and lease a nested `test` attempt shares. */
+  suiteHostSession?: string;
 };
 
 /**

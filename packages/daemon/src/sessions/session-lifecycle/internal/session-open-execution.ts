@@ -562,17 +562,41 @@ async function acquireDeviceClaimForOwner(params: {
   switch (deviceClaimRuleForOwner(owner)) {
     case 'none':
       return { status: 'not-required' };
-    case 'ordinary':
-      return await acquireDeviceClaim({
+    case 'ordinary': {
+      const stateDir = sessionStore.resolveDaemonStateDir();
+      const acquired = await acquireDeviceClaim({
         device,
         session: sessionName,
         workspace: requestCwd(req, params.host),
-        stateDir: sessionStore.resolveDaemonStateDir(),
+        stateDir,
         env: params.host.env,
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,
       });
+      if (isBorrowedSuiteHostClaimConflict({ req, result: acquired, sessionStore, stateDir })) {
+        return { status: 'not-required' };
+      }
+      return acquired;
+    }
   }
+}
+
+function isBorrowedSuiteHostClaimConflict(params: {
+  req: DaemonRequest;
+  result: DeviceClaimAcquireResult;
+  sessionStore: SessionStore;
+  stateDir: string;
+}): boolean {
+  const { req, result, sessionStore, stateDir } = params;
+  const suiteHostSession = req.internal?.suiteHostSession;
+  if (!suiteHostSession || result.status !== 'conflict') return false;
+  const claim = result.conflict.claim;
+  if (!claim || result.conflict.classification !== 'live') return false;
+  return (
+    claim.session === suiteHostSession &&
+    claim.stateDir === stateDir &&
+    sessionStore.get(suiteHostSession) !== undefined
+  );
 }
 
 export async function openNewSessionWithDeviceClaim(params: {

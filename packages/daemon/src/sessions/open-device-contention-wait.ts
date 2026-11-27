@@ -125,15 +125,18 @@ export function beginOpenDeviceWait(params: {
 }
 
 /** The other session holding `deviceId`, or `undefined` when nothing stands between this open and
- * the device — including when this open's own session is what holds it. */
+ * the device — including when this open's own session or enclosing `test` host session holds it. */
 function findSessionHoldingDevice(
   sessionStore: SessionStore,
   deviceId: string,
-  sessionName: string,
+  sessionName: string | undefined,
+  suiteHostSession?: string,
 ): ReturnType<SessionStore['findByDevice']> {
   const inUse = sessionStore.findByDevice(deviceId);
-  if (!inUse || inUse.address === sessionName) return undefined;
-  return inUse;
+  if (!inUse) return undefined;
+  if (inUse.address !== sessionName && inUse.address !== suiteHostSession) return inUse;
+  if (suiteHostSession === undefined) return undefined;
+  return sessionStore.findByDeviceExcluding(deviceId, [sessionName, suiteHostSession]);
 }
 
 /**
@@ -147,15 +150,30 @@ export function findSessionDeviceConflict(params: {
   sessionName?: string;
 }): DaemonFailureResponse | undefined {
   const { req, device, sessionStore, sessionName } = params;
-  const inUse = sessionName
-    ? findSessionHoldingDevice(sessionStore, device.id, sessionName)
-    : sessionStore.findByDevice(device.id);
+  const inUse = findSessionHoldingDevice(
+    sessionStore,
+    device.id,
+    sessionName,
+    req.internal?.suiteHostSession,
+  );
   if (!inUse) return undefined;
   const attempt = describeOpenWaitForRefusal(req);
   if (isImplicitSessionScopeConflict(req, inUse.session)) {
     return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
   }
   return buildDeviceInUseBySessionError(inUse, device, attempt);
+}
+
+export function assertSessionDeviceUnheld(params: {
+  req: DaemonRequest;
+  device: DeviceInfo;
+  sessionStore: SessionStore;
+  sessionName?: string;
+}): void {
+  const refusal = findSessionDeviceConflict(params);
+  if (refusal) {
+    throw new AppError(refusal.error.code, refusal.error.message, refusal.error.details);
+  }
 }
 
 type LockedAttempt<Outcome> = { ran: true; outcome: Outcome } | { ran: false };
@@ -169,7 +187,8 @@ function createOpenDeviceWait(params: {
 }): OpenDeviceWait {
   const { req, sessionName, sessionStore, deviceId, budgetMs } = params;
   const deadline = Deadline.fromTimeoutMs(budgetMs);
-  const holder = () => findSessionHoldingDevice(sessionStore, deviceId, sessionName);
+  const holder = () =>
+    findSessionHoldingDevice(sessionStore, deviceId, sessionName, req.internal?.suiteHostSession);
 
   const waitForDeviceOutsideLocks = async (): Promise<void> => {
     for (;;) {

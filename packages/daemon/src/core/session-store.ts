@@ -221,7 +221,19 @@ export class SessionStore {
    * devices), with its address, or `undefined` if none is.
    */
   findByDevice(deviceId: string): SessionRef | undefined {
+    return this.findByDeviceExcluding(deviceId, []);
+  }
+
+  /**
+   * Like {@link findByDevice}, ignoring any session addresses in `excludedAddresses` (such as the
+   * caller's own session or the outer host session of a nested `test` run).
+   */
+  findByDeviceExcluding(
+    deviceId: string,
+    excludedAddresses: readonly (string | undefined)[],
+  ): SessionRef | undefined {
     for (const [address, entry] of this.sessions) {
+      if (excludedAddresses.includes(address)) continue;
       if (devicesOverlap(entry.current.device.id, deviceId)) return this.captureRef(address, entry);
     }
     return undefined;

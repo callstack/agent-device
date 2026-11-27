@@ -134,18 +134,26 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         },
       }
     : req;
+  const attemptReq: DaemonRequest = {
+    ...req,
+    internal: {
+      ...req.internal,
+      suiteHostSession: sessionName,
+    },
+  };
   return await runReplayTestCommand({
     ...splitReplayCommandRequest(suiteRequest),
     host,
     session: createReplaySession(sessionName, logPath, sessionStore, capture),
     createSession: (testSessionName, testLogPath) =>
       createReplaySession(testSessionName, testLogPath, sessionStore, capture),
-    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
+    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, attemptReq),
     dependencies: replayDaemonDependencies,
     cleanupSession: async (testSessionName) =>
       await closeReplayTestSession({
         host,
         req,
+        suiteHostSession: sessionName,
         sessionName: testSessionName,
         logPath,
         sessionStore,
@@ -302,6 +310,7 @@ export function createReplaySession(
 type ReplayTestSessionCleanupParams = Readonly<{
   host: HostEnvironment;
   req: DaemonRequest;
+  suiteHostSession: string;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
@@ -314,7 +323,7 @@ type ReplayTestSessionCleanupParams = Readonly<{
 }>;
 
 async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
-  const { req, sessionName, logPath, sessionStore } = params;
+  const { req, suiteHostSession, sessionName, logPath, sessionStore } = params;
   if (!sessionStore.get(sessionName)) return;
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
@@ -324,9 +333,13 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
         session: sessionName,
         command: 'close',
         positionals: [],
-        flags: {},
+        flags: req.flags?.leaseId ? { leaseId: req.flags.leaseId } : {},
         meta: req.meta,
-        internal: { cleanupIntent: 'suite-owned-test-session' },
+        internal: {
+          cleanupIntent: 'suite-owned-test-session',
+          suiteHostSession,
+          ...(req.internal?.admittedLease ? { admittedLease: req.internal.admittedLease } : {}),
+        },
       },
       req,
     ),

@@ -777,3 +777,40 @@ test('connect proxy stores no default for a spec key that names nothing', async 
   for (const key of LEASE_DEVICE_SPEC_KEYS) assert.equal(key in generated, false);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+test('proxy test allocates a device lease when none is active, while snapshot still requires open first (#5129)', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-test-allocate-');
+  const requests: LeaseAllocateRequest[] = [];
+
+  await assert.rejects(
+    materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
+      command: 'snapshot',
+      flags: { ...flags },
+      client: createTestClient({
+        listDevices: unexpectedCommandCall,
+        allocate: unexpectedCommandCall,
+      }),
+    }),
+    /No active proxy device lease for this session; run open first/,
+  );
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'test',
+    flags: { ...flags },
+    client: createTestClient({
+      listDevices: unexpectedCommandCall,
+      allocate: async (request) => {
+        requests.push(request);
+        return grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY, created: true });
+      },
+    }),
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(materialized.flags.leaseId, 'lease-1');
+  assert.equal(materialized.flags.udid, 'SIM-REMOTE');
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, 'lease-1');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
