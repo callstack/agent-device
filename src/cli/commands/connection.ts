@@ -83,6 +83,7 @@ export const connectCommand: ClientCommandHandler = async ({
     host,
   );
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
+  const checkedRpcTarget = await assertCheckedRpcServed(connectFlags, host);
   const context = resolveConnectContext({
     stateDir,
     flags: connectFlags,
@@ -104,6 +105,7 @@ export const connectCommand: ClientCommandHandler = async ({
     connectionMetadata,
     context,
     remoteConfigPath: resolved.remoteConfigPath,
+    checkedRpcTarget,
   });
   writeRemoteConnectionState({ stateDir, state });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
@@ -123,6 +125,19 @@ export const connectCommand: ClientCommandHandler = async ({
   );
   return true;
 };
+
+/**
+ * `daemonRpc: checked` skips the `/health` probe on later commands, so `connect` records it only
+ * when every link of the remote advertises `checked-rpc`, and only for the exact target it probed.
+ */
+async function assertCheckedRpcServed(
+  flags: CliFlags,
+  host: HostEnvironment,
+): Promise<string | undefined> {
+  if (flags.daemonRpc !== 'checked') return undefined;
+  const { assertRemoteServesCheckedRpc } = await import('@agent-device/daemon-client');
+  return await assertRemoteServesCheckedRpc(flags, host);
+}
 
 function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
   if (!provider || !flags.remoteConfig) return;
@@ -179,6 +194,8 @@ function buildConnectedState(options: {
   connectionMetadata?: RemoteConnectionRequestMetadata;
   context: ConnectContext;
   remoteConfigPath: string;
+  /** The fingerprint of the checked target `connect` probed and found served, when asked to. */
+  checkedRpcTarget?: string;
 }): RemoteConnectionState {
   const { flags, scope, connectionMetadata, context, remoteConfigPath } = options;
   const previous = shouldReusePreviousConnectionState(flags, context.previous)
@@ -198,7 +215,9 @@ function buildConnectedState(options: {
     session: context.session,
     remoteConfigPath,
     remoteConfigHash: context.remoteConfigHash,
-    daemon: context.daemon,
+    daemon: options.checkedRpcTarget
+      ? { ...context.daemon, checkedRpcTarget: options.checkedRpcTarget }
+      : context.daemon,
     tenant: scope.tenant,
     runId: scope.runId,
     ...leaseBinding,
@@ -320,18 +339,20 @@ function scopeConnectProfile(
     cwd: host.cwd,
     env: host.env,
   }).profile;
+  // The profile is the only source of `daemonRpc`; `connect` checks it before recording it.
+  const resolvedFlags = { ...resolved.flags, daemonRpc: profile.daemonRpc };
   if (!flags.remoteConfig || flags.session === undefined) {
-    return { flags: resolved.flags, connection: buildRemoteConnectionRequestMetadata(profile) };
+    return { flags: resolvedFlags, connection: buildRemoteConnectionRequestMetadata(profile) };
   }
   const scope = sessionLeaseScope(
-    { ...profile, leaseId: resolved.flags.leaseId, runId: profile.runId },
+    { ...profile, leaseId: resolvedFlags.leaseId, runId: profile.runId },
     flags.session,
   );
   return {
     flags:
-      resolved.flags.runId === profile.runId
-        ? { ...resolved.flags, runId: scope.runId }
-        : resolved.flags,
+      resolvedFlags.runId === profile.runId
+        ? { ...resolvedFlags, runId: scope.runId }
+        : resolvedFlags,
     connection: buildRemoteConnectionRequestMetadata({ ...profile, clientId: scope.clientId }),
   };
 }

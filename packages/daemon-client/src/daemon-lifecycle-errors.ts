@@ -128,6 +128,10 @@ export function remoteDaemonUnavailableError(params: {
   });
 }
 
+/** What a caller does about a remote daemon that answers nothing. */
+export const REMOTE_DAEMON_UNREACHABLE_HINT =
+  'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.';
+
 /** A daemon won a startup race that this caller may not settle by retiring it. */
 export function daemonContendedError(): AppError {
   return new AppError(

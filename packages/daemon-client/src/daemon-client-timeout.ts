@@ -212,7 +212,8 @@ function emitTimeoutDiagnostic(
       daemonLivenessConnectDenied: liveness?.denial,
       remoteResponseStarted: remoteProof.responseStarted,
       remoteHealthAnswered: remoteProof.healthAnswered,
-      daemonBaseUrl: info.baseUrl,
+      // A checked request's endpoint stays out of diagnostics, which reach debug output and logs.
+      ...(info.checkedRpc ? {} : { daemonBaseUrl: info.baseUrl }),
     },
   });
 }

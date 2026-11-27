@@ -117,6 +117,12 @@ export type AgentDeviceClientConfig = RemoteConnectionProfileFields &
      * {@link DaemonBinding}.
      */
     daemonBinding?: DaemonBinding;
+    /**
+     * The fingerprint of the checked RPC target `connect` approved. The CLI sets it from the
+     * connection record, and checked RPC then applies only to that exact target. SDK callers leave it
+     * unset.
+     */
+    daemonRpcTarget?: string;
     session?: string;
     lockPolicy?: DaemonLockPolicy;
     lockPlatform?: PlatformSelector;

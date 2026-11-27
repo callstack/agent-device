@@ -41,6 +41,11 @@ export type RemoteConnectionState = {
     baseUrl?: string;
     transport?: CliFlags['daemonTransport'];
     serverMode?: CliFlags['daemonServerMode'];
+    /**
+     * The fingerprint of the checked target `connect` probed and found served on every link. Only
+     * the fingerprint is kept; checked RPC applies to that exact target alone.
+     */
+    checkedRpcTarget?: string;
   };
   tenant: string;
   runId: string;
@@ -532,6 +537,7 @@ function remoteConnectionDefaults(
   }
   const profile = resolveConnectionProfile(state, options);
   const leaseScope = leaseScopeFromOptions(state);
+  const checkedRpcTarget = state.daemon?.checkedRpcTarget;
   return {
     runtime: state.runtime,
     connection: leaseScopeToConnectionMetadata(leaseScope),
@@ -546,6 +552,9 @@ function remoteConnectionDefaults(
       daemonAuthToken: profile.daemonAuthToken,
       daemonTransport: state.daemon?.transport ?? profile.daemonTransport,
       daemonServerMode: state.daemon?.serverMode ?? profile.daemonServerMode,
+      // Only the approval `connect` recorded; daemon-client checks it names this exact target.
+      daemonRpc: checkedRpcTarget ? 'checked' : undefined,
+      daemonRpcTarget: checkedRpcTarget,
       ...leaseScopeToCommandFlags(leaseScope),
       sessionIsolation: 'tenant',
       session: state.session,

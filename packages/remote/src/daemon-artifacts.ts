@@ -44,6 +44,18 @@ export type PreparedRemoteRequest = {
   clientArtifactPaths?: Record<string, string>;
 };
 
+/** The commands whose remote preparation can upload an artifact before their command RPC. */
+const ARTIFACT_UPLOAD_COMMANDS: ReadonlySet<string> = new Set([
+  'install',
+  'reinstall',
+  'install_source',
+]);
+
+/** Whether preparing this request for a remote daemon can upload an artifact before its RPC. */
+export function requestUploadsArtifacts(req: Pick<DaemonWireRequest, 'command'>): boolean {
+  return ARTIFACT_UPLOAD_COMMANDS.has(req.command);
+}
+
 export async function prepareRemoteRequestArtifacts(
   req: Omit<DaemonWireRequest, 'token'>,
   info: DaemonArtifactEndpoint,
@@ -93,6 +105,9 @@ async function prepareRemoteRequestArtifactsWithinBudget(
 
   flags = prepareRemoteScriptOutput(req, flags, clientArtifactPaths, host);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths, host);
+  if (!requestUploadsArtifacts(req)) {
+    return createPreparedRemoteRequest({ positionals, flags, installSource, clientArtifactPaths });
+  }
   const remoteInstallSource = await prepareRemoteInstallSource(
     req,
     info,

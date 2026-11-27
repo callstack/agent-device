@@ -3,9 +3,22 @@
 // production seam, where the liveness-gated recovery is decided; these assertions only fix wording.
 
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { resolveRequestTimeoutHint } from '../daemon-client-timeout.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { handleRequestTimeout, resolveRequestTimeoutHint } from '../daemon-client-timeout.ts';
+
+const { emitted } = vi.hoisted(() => ({ emitted: [] as Array<Record<string, unknown>> }));
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return {
+    ...actual,
+    emitDiagnostic: (event: Parameters<typeof actual.emitDiagnostic>[0]) => {
+      emitted.push({ phase: event.phase, ...(event.data as Record<string, unknown>) });
+    },
+  };
+});
 
 test('request timeout hint names an Apple runner only on a declared Apple platform', () => {
   // The hint used to derive its Apple claim partly from a host-wide `pkill` sweep that counted
@@ -236,4 +249,32 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
     }),
     'Verify the remote daemon URL, auth token, and remote host logs.',
   );
+});
+
+test('a checked request timeout keeps the endpoint out of its diagnostic', async () => {
+  const timeout = async (checkedRpc: boolean) => {
+    emitted.length = 0;
+    await handleRequestTimeout({
+      info: {
+        token: 't',
+        pid: 0,
+        baseUrl: 'https://user:secret@remote.example.test/private',
+        ...(checkedRpc ? { checkedRpc: true as const } : {}),
+      },
+      statePaths: resolveDaemonPaths(mkdtempForTestSync('checked-timeout-')),
+      remote: true,
+      retireUnresponsive: false,
+      timeoutMs: 1_000,
+      requestId: 'req-1',
+      command: 'session',
+      platform: undefined,
+      requestSent: true,
+      responseStarted: true,
+      readRemoteHealth: async () => ({ reachable: false }),
+    });
+    return emitted.find((event) => event.phase === 'daemon_request_timeout');
+  };
+
+  assert.equal((await timeout(true))?.daemonBaseUrl, undefined);
+  assert.ok((await timeout(false))?.daemonBaseUrl, 'the legacy diagnostic keeps its endpoint');
 });

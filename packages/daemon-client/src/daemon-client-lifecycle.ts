@@ -24,8 +24,18 @@ import {
   type DaemonServerMode,
   type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { DAEMON_CLIENT_CONFIG_REASONS } from './daemon-lifecycle-errors.ts';
+import { createHash } from 'node:crypto';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import {
+  buildDaemonHttpUrl,
+  DAEMON_HTTP_CHECKED_RPC_ROUTE,
+} from '@agent-device/contracts/daemon-http';
+import { requestUploadsArtifacts } from '@agent-device/remote/daemon-artifacts';
+import type { DaemonRpcMode } from '@agent-device/contracts/remote';
+import {
+  DAEMON_CLIENT_CONFIG_REASONS,
+  REMOTE_DAEMON_UNREACHABLE_HINT,
+} from './daemon-lifecycle-errors.ts';
 
 import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-contracts/session-repair-tombstone';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
@@ -56,6 +66,11 @@ export type DaemonClientSettings = {
   ownedStateDir?: OwnedReplayStateDir;
   remoteBaseUrl?: string;
   remoteAuthToken?: string;
+  /**
+   * The request goes on the checked RPC route without a `/health` probe: its connection sets
+   * `daemonRpc: checked`, and the request has no remote side effect before its command RPC.
+   */
+  remoteCheckedRpc?: true;
   /** See {@link DaemonBinding}. Present on a client that is pinned to one daemon instance. */
   daemonBinding?: DaemonBinding;
 };
@@ -128,8 +143,44 @@ export function resolveClientSettings(
     ownedStateDir,
     remoteBaseUrl: remote.remoteBaseUrl,
     remoteAuthToken: remote.authToken,
+    ...(remote.remoteBaseUrl &&
+    remote.daemonRpc === 'checked' &&
+    approvesCheckedRpcTarget(req.flags?.daemonRpcTarget, remote.remoteBaseUrl) &&
+    isStandaloneRemoteRequest(req)
+      ? { remoteCheckedRpc: true as const }
+      : {}),
     ...(daemonBinding ? { daemonBinding } : {}),
   };
+}
+
+/**
+ * Whether a remote request reaches the daemon with nothing before its command RPC that must land on
+ * the same daemon. An upload, and a lease allocate or heartbeat, keep the `/health` probe, so their
+ * instance ID pins what follows; every caller, the SDK included, gets this rule.
+ */
+function isStandaloneRemoteRequest(req: Omit<DaemonWireRequest, 'token'>): boolean {
+  return (
+    !requestUploadsArtifacts(req) &&
+    req.command !== INTERNAL_COMMANDS.leaseAllocate &&
+    req.command !== INTERNAL_COMMANDS.leaseHeartbeat
+  );
+}
+
+/**
+ * A fingerprint of the exact HTTP target a checked call is sent to, resolved by the same
+ * `buildDaemonHttpUrl` the transport sends with. `connect` records only this fingerprint.
+ */
+export function checkedRpcTargetFingerprint(remoteBaseUrl: string): string {
+  const target = buildDaemonHttpUrl(remoteBaseUrl, DAEMON_HTTP_CHECKED_RPC_ROUTE);
+  return createHash('sha256').update(target).digest('hex');
+}
+
+/**
+ * A connection's recorded approval holds only for the target it fingerprinted. An explicit SDK opt-in
+ * names no fingerprint and is taken as given.
+ */
+function approvesCheckedRpcTarget(recorded: string | undefined, remoteBaseUrl: string): boolean {
+  return recorded === undefined || recorded === checkedRpcTargetFingerprint(remoteBaseUrl);
 }
 
 /**
@@ -192,12 +243,20 @@ function resolveRemoteClientSettings(
   rawBaseUrl: string | undefined;
   remoteBaseUrl?: string;
   authToken?: string;
+  daemonRpc: DaemonRpcMode;
 } {
   const rawBaseUrl = req.flags?.daemonBaseUrl ?? env.AGENT_DEVICE_DAEMON_BASE_URL;
   const remoteBaseUrl = resolveRemoteDaemonBaseUrl(rawBaseUrl);
   const authToken = suppliedAuthToken ?? env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   validateRemoteDaemonTrust(remoteBaseUrl, authToken);
-  return { rawBaseUrl, remoteBaseUrl, authToken };
+  const daemonRpc = resolveDaemonRpcMode(req.flags?.daemonRpc);
+  return { rawBaseUrl, remoteBaseUrl, authToken, daemonRpc };
+}
+
+function resolveDaemonRpcMode(raw: string | undefined): DaemonRpcMode {
+  if (raw === undefined || raw === '') return 'health';
+  if (raw === 'health' || raw === 'checked') return raw;
+  throw new AppError('INVALID_ARGS', 'daemonRpc must be health or checked', { daemonRpc: raw });
 }
 
 function resolveTransportClientSettings(
@@ -285,6 +344,15 @@ async function ensureRemoteDaemon(
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
+  // The checked route makes the server refuse what `/health` would have: no probe goes first. A
+  // process that already read `/health` here, a lease call's for one, stays health-first: a pinned
+  // answer is reused, fenced and free, and one that could not be pinned is read again.
+  if (settings.remoteCheckedRpc) {
+    const { hasReadRemoteHealth } = await import('./daemon-client-remote-health-cache.ts');
+    if (!hasReadRemoteHealth(remoteInfo)) {
+      return { info: { ...remoteInfo, checkedRpc: true }, startedByClient: false };
+    }
+  }
   // The command's budget starts with the first probe, which already runs under it and its signal.
   const deadline = performance.now() + (healthRecovery?.budgetMs ?? 0);
   let health = await cachedRemoteDaemonHealth(
@@ -300,7 +368,8 @@ async function ensureRemoteDaemon(
       failedProbe: health,
       recovery: healthRecovery,
       deadline,
-      hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
+      hint: REMOTE_DAEMON_UNREACHABLE_HINT,
+      probe: async (probeMs, signal) => await cachedRemoteDaemonHealth(remoteInfo, probeMs, signal),
     });
   }
   remoteInfo.capabilities = (health.upstream ?? health).capabilities;

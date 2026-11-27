@@ -60,6 +60,7 @@ const PROGRESS_PROTOCOL = 'packages/daemon-contracts/src/request-progress-protoc
 const CLIENT_RPC = 'packages/daemon-client/src/daemon-client-rpc.ts';
 const CLIENT_PROGRESS = 'packages/daemon-client/src/daemon-client-progress.ts';
 const CLIENT_TRANSPORT = 'packages/daemon-client/src/daemon-client-transport.ts';
+const CLIENT_CHECKED_RPC = 'packages/daemon-client/src/daemon-client-checked-rpc.ts';
 const DAEMON_PROXY = 'packages/proxy/src/daemon-proxy.ts';
 const PROXY_CHECKED_RPC = 'packages/proxy/src/checked-rpc-admission.ts';
 const UPLOAD_CLIENT = 'packages/remote/src/upload-client.ts';
@@ -129,6 +130,19 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'localRequestId',
         'readUpstreamRefusalDetails',
         'UPSTREAM_REFUSAL_MAX_BYTES',
+      ),
+      // Consumer side of the checked route: which answers the client reads as a refusal, and the
+      // refusal metadata it validates before it names who must upgrade.
+      ...from(
+        CLIENT_CHECKED_RPC,
+        'isCheckedRpcOutcomeResponse',
+        'CheckedRpcOutcome',
+        'ReadHealthLink',
+        'readCheckedRpcOutcome',
+        'checkedRpcRefusalError',
+        'protocolMismatchError',
+        'readRefusalDetails',
+        'isJsonRpcAnswer',
       ),
       ...from(
         DAEMON_PROXY,

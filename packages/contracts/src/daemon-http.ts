@@ -173,13 +173,18 @@ export type CheckedRpcProtocolRefusal =
   | typeof DAEMON_HTTP_REFUSALS.protocolMismatch;
 
 /** Why a checked RPC call failed. */
-const DAEMON_CHECKED_RPC_REASONS = {
+export const DAEMON_CHECKED_RPC_REASONS = {
   // The checked RPC call named no RPC protocol. An intermediary that strips request headers causes
   // this.
   protocolMissing: { reason: 'remote_rpc_protocol_missing' },
   // The daemon or proxy speaks a different RPC protocol from the caller. After authentication,
   // `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused.
   protocolMismatch: { reason: 'remote_rpc_protocol_mismatch' },
+  // The connection sets `daemonRpc: checked`, but the remote does not serve checked RPC: `connect`
+  // found no `checked-rpc` capability in its `/health`, or a command got the route answered as
+  // unknown. A command is never resent, because an ingress may have answered for one that ran.
+  // Update the remote daemon or proxy, or remove `daemonRpc` from the connection.
+  routeUnsupported: { reason: 'remote_checked_rpc_unsupported' },
 } as const satisfies ReasonTable<'remote connection'>;
 
 /**
