@@ -91,7 +91,7 @@
     "packages/daemon/src/server/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:24b0fa6b1d965e5cf6503a4665148dc6360c56bf5a0ae710eeaa76a73a62c52a",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:cd2c0dda77d2bc434857aea07206a5491ce5f0b82cb86628569f607d6c2cebcf",
-    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:2e9e04df49fad2b57b258de3c4f23a4138b60158c4df5176bf2cab3a746ead0f",
+    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:9a40d0118d951ec1a676d505f52daa0befd881caeb439b609ee22c1330ff5566",
     "packages/daemon/src/server/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
@@ -354,7 +354,7 @@
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics",
-      "digest": "sha256:2e9e04df49fad2b57b258de3c4f23a4138b60158c4df5176bf2cab3a746ead0f",
+      "digest": "sha256:9a40d0118d951ec1a676d505f52daa0befd881caeb439b609ee22c1330ff5566",
       "rationale": "Stream piping only; same responses. The record now reaches the response through a pipeline that ends as soon as either side closes, so a caller that hangs up releases the file descriptor instead of leaking it, and the 200 head goes out with the first record byte so a first-read failure is still answered as JSON. A peer sees exactly what it did before: 200 with the same ndjson bytes, or the same JSON error statuses. Response lifetime and head timing are server-side decisions no request or response field carries."
     },
     {

@@ -191,10 +191,12 @@ async function handleRequestDiagnostics(
       res.end();
     } catch (error) {
       // A caller that hangs up ends the read early on both sides, and the abort reason
-      // is the hang-up itself. Nothing is left to answer, so that is a finished
-      // download, not a failure. Mid-body, once the head is out, the only honest signal
-      // left is the truncated transfer `failStreamedHttpResponse` leaves behind.
-      if (disconnect.aborted || isClientDisconnect(error)) return;
+      // is the hang-up itself. A premature close whose response is already gone is the
+      // same event seen from the stream. Nothing is left to answer in either case.
+      // Any other failure is real: `failStreamedHttpResponse` answers a response that
+      // has not started, and truncates one already mid-body, which is the only honest
+      // signal left once bytes of the record are out.
+      if (disconnect.aborted || (isPrematureClose(error) && res.destroyed)) return;
       throw error;
     } finally {
       stream.destroy();
@@ -204,7 +206,7 @@ async function handleRequestDiagnostics(
   }
 }
 
-function isClientDisconnect(error: unknown): boolean {
+function isPrematureClose(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&

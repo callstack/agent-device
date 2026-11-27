@@ -202,6 +202,73 @@ test('request diagnostics answers JSON when the record fails on its first read',
   });
 });
 
+test('a record that dies after the first chunk truncates the download', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir, server }) => {
+    writeRecord(sessionsDir, 'default', 'abc123', Buffer.alloc(8 * 1024 * 1024, 7));
+    let activeResponse: http.ServerResponse | undefined;
+    server.once('request', (_request, res) => {
+      activeResponse = res;
+    });
+    const createReadStream = fs.createReadStream;
+    let recordStream: fs.ReadStream | undefined;
+    const reads = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) => {
+      const stream = createReadStream(file, options);
+      recordStream = stream;
+      return stream;
+    });
+    const url = new URL(diagnosticsUrl(baseUrl, 'default', 'abc123'));
+    let status = 0;
+    let contentLength = 0;
+    let received = 0;
+    let completed = false;
+    let request: http.ClientRequest | undefined;
+    const closed = new Promise<void>((resolve) => {
+      request = http.request(
+        {
+          host: url.hostname,
+          port: url.port,
+          method: 'GET',
+          path: url.pathname,
+          headers: { authorization: 'Bearer daemon-secret' },
+        },
+        (response) => {
+          status = response.statusCode ?? 0;
+          contentLength = Number(response.headers['content-length'] ?? 0);
+          response.on('data', (chunk: Buffer) => {
+            received += chunk.length;
+            if (received === chunk.length) {
+              // The record goes away under the route once the head is out, with the
+              // caller still reading: the source ends early, which is no hang-up.
+              recordStream?.destroy();
+            }
+          });
+          response.on('end', () => {
+            completed = true;
+          });
+          response.on('error', () => {});
+          response.on('close', () => resolve());
+        },
+      );
+      request.on('error', () => {});
+      request.end();
+    });
+
+    try {
+      await withIO(closed, 'the truncated download to close');
+      request?.destroy();
+      assert.equal(status, 200, 'the head went out with the first chunk');
+      assert.ok(received > 0, 'the caller received part of the record');
+      assert.equal(completed, false, 'the body never completed');
+      assert.ok(received < contentLength, 'the body is short by design');
+      assert.ok(activeResponse?.destroyed, 'the response is destroyed, not left open');
+    } finally {
+      reads.mockRestore();
+    }
+  });
+});
+
 test('a caller that hangs up mid-download releases the record read stream', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
