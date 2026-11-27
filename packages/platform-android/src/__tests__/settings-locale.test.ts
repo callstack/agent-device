@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { prepareAndroidAutomationHelper } from '../automation-helper-artifact.ts';
 import { setAndroidSetting } from '../settings.ts';
 import {
   ensureAndroidSnapshotHelper,
@@ -12,6 +13,14 @@ import type { AndroidSnapshotHelperArtifact } from '../snapshot-helper-types.ts'
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb, type FakeAdbResponse } from './test-utils/fake-adb.ts';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
+
+vi.mock('../automation-helper-artifact.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../automation-helper-artifact.ts')>();
+  return {
+    ...actual,
+    prepareAndroidAutomationHelper: vi.fn(actual.prepareAndroidAutomationHelper),
+  };
+});
 
 const PACKAGE = 'com.callstack.agentdevice.snapshothelper';
 const VERSION_CODE = 13003;
@@ -222,7 +231,7 @@ test('a locale refusal keeps the snapshot install memo and makes the next locale
       });
 
       // The snapshot install step answers from its memo without touching the device.
-      const snapshotCalls: string[][] = [];
+      const snapshotCalls: (readonly string[])[] = [];
       const install = await ensureAndroidSnapshotHelper({
         adb: async (args) => {
           snapshotCalls.push(args);
@@ -242,6 +251,55 @@ test('a locale refusal keeps the snapshot install memo and makes the next locale
       expect(helper.launches).toEqual([]);
     },
     { versionCode: VERSION_CODE + 1, bytes: 'another-apk' },
+  );
+});
+
+test('a locale call that saw no refusal keeps a refusal recorded while it prepared the helper', async () => {
+  let pmPathFails = false;
+  await withHelperDevice(
+    async ({ calls, device, helper }) => {
+      await setAndroidSetting(device, 'locale', 'en-IN');
+      // A same-version APK with another digest replaces the helper behind the warm memo.
+      helper.files.set(APK, 'another-apk');
+
+      // Call A reads no refusal, then waits inside helper preparation.
+      let resume!: () => void;
+      const paused = new Promise<void>((resolve) => (resume = resolve));
+      let entered!: () => void;
+      const preparing = new Promise<void>((resolve) => (entered = resolve));
+      const actual = vi.mocked(prepareAndroidAutomationHelper).getMockImplementation()!;
+      vi.mocked(prepareAndroidAutomationHelper).mockImplementationOnce(async (...args) => {
+        entered();
+        await paused;
+        return await actual(...args);
+      });
+      const callA = setAndroidSetting(device, 'locale', 'de-DE');
+      await preparing;
+
+      // Call B refuses the APK and records a recheck.
+      await expect(setAndroidSetting(device, 'locale', 'de-DE')).rejects.toMatchObject({
+        details: { reason: 'locale-helper-apk-unverified' },
+      });
+
+      // Call A resumes and fails on the transport, so it answers no refusal.
+      pmPathFails = true;
+      resume();
+      await expect(callA).rejects.toMatchObject({ details: { adbFailure: 'device_offline' } });
+      pmPathFails = false;
+
+      // The next locale call still inspects the install, which reinstalls the helper.
+      const firstCall = calls.length;
+      await expect(setAndroidSetting(device, 'locale', 'de-DE')).resolves.toMatchObject({
+        locale: 'de-DE',
+      });
+      expect(calls.slice(firstCall).map((args) => args.join(' '))).toContain(VERSION_QUERY);
+    },
+    {
+      override: (args) =>
+        pmPathFails && args.join(' ') === `shell pm path ${PACKAGE}`
+          ? { stderr: 'error: device offline', exitCode: 1 }
+          : undefined,
+    },
   );
 });
 

@@ -20,11 +20,11 @@ const ANDROID_LOCALE_REASONS = {
 const SYSTEM_LOCALE_COMMAND = 'com.callstack.agentdevice.snapshothelper.SystemLocaleCommand';
 
 /**
- * Devices, by snapshot-helper device key, whose helper APK a locale command refused. The next
- * locale command there inspects the install instead of trusting the shared install memo, which
- * other helper commands keep using.
+ * The latest locale refusal of the helper APK, by snapshot-helper device key. The next locale
+ * command there inspects the install instead of trusting the shared install memo, which other
+ * helper commands keep using.
  */
-const refusedLocaleInstalls = new Set<string>();
+const refusedLocaleInstalls = new Map<string, symbol>();
 
 /** Android 8.0 gives each install a random directory, so a verified base APK path names one APK. */
 const LOCALE_MIN_SDK = 26;
@@ -47,10 +47,14 @@ export async function setAndroidLocale(
   const { getAndroidSnapshotHelperSessionDeviceKey } =
     await import('./snapshot-helper-retirement.ts');
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
+  const refusal = refusedLocaleInstalls.get(deviceKey);
   const prepared = await prepareAndroidAutomationHelper(device, signal, {
-    inspectInstalled: refusedLocaleInstalls.has(deviceKey),
+    inspectInstalled: refusal !== undefined,
   });
-  refusedLocaleInstalls.delete(deviceKey);
+  // Only the inspected refusal is answered: a newer one keeps its recheck.
+  if (refusal !== undefined && refusedLocaleInstalls.get(deviceKey) === refusal) {
+    refusedLocaleInstalls.delete(deviceKey);
+  }
   const apkPath = await readVerifiedHelperApkPath(device, prepared, signal);
   signal?.throwIfAborted();
   const result = await runAndroidShell(
@@ -143,7 +147,7 @@ async function readVerifiedHelperApkPath(
     return discloseDispatch(error, 'no');
   };
   const refuse = (message: string, details: Record<string, unknown>): unknown => {
-    refusedLocaleInstalls.add(prepared.deviceKey);
+    refusedLocaleInstalls.set(prepared.deviceKey, Symbol('locale helper refusal'));
     return notDispatched(
       new AppError('COMMAND_FAILED', message, {
         ...details,
