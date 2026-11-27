@@ -19,6 +19,13 @@ const ANDROID_LOCALE_REASONS = {
 /** The helper class that runs as the shell user through `app_process`; see its Javadoc. */
 const SYSTEM_LOCALE_COMMAND = 'com.callstack.agentdevice.snapshothelper.SystemLocaleCommand';
 
+/**
+ * Devices, by snapshot-helper device key, whose helper APK a locale command refused. The next
+ * locale command there inspects the install instead of trusting the shared install memo, which
+ * other helper commands keep using.
+ */
+const refusedLocaleInstalls = new Set<string>();
+
 /** Android 8.0 gives each install a random directory, so a verified base APK path names one APK. */
 const LOCALE_MIN_SDK = 26;
 
@@ -37,7 +44,13 @@ export async function setAndroidLocale(
   await requireLocaleApiLevel(device, signal);
   const requested = state === SETTING_RESET_STATE ? await readAndroidDefaultLocale(device) : state;
   const { prepareAndroidAutomationHelper } = await import('./automation-helper-artifact.ts');
-  const prepared = await prepareAndroidAutomationHelper(device, signal);
+  const { getAndroidSnapshotHelperSessionDeviceKey } =
+    await import('./snapshot-helper-retirement.ts');
+  const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
+  const prepared = await prepareAndroidAutomationHelper(device, signal, {
+    inspectInstalled: refusedLocaleInstalls.has(deviceKey),
+  });
+  refusedLocaleInstalls.delete(deviceKey);
   const apkPath = await readVerifiedHelperApkPath(device, prepared, signal);
   signal?.throwIfAborted();
   const result = await runAndroidShell(
@@ -117,7 +130,7 @@ async function readVerifiedHelperApkPath(
 ): Promise<string> {
   const { readBaseApkPath, readAndroidDeviceFileSha256 } =
     await import('./helper-package-install.ts');
-  const { packageName, versionCode, sha256: expectedSha256 } = prepared.artifact.manifest;
+  const { packageName, sha256: expectedSha256 } = prepared.artifact.manifest;
   const notDispatched = (error: unknown): unknown => {
     if (!(error instanceof AppError)) return error;
     if (prepared.install.installed) {
@@ -129,10 +142,8 @@ async function readVerifiedHelperApkPath(
     }
     return discloseDispatch(error, 'no');
   };
-  // The APK disproves the cached install decision, so the next helper command inspects the device.
-  const refuse = async (message: string, details: Record<string, unknown>): Promise<unknown> => {
-    const { forgetAndroidSnapshotHelperInstall } = await import('./snapshot-helper-install.ts');
-    forgetAndroidSnapshotHelperInstall({ deviceKey: prepared.deviceKey, packageName, versionCode });
+  const refuse = (message: string, details: Record<string, unknown>): unknown => {
+    refusedLocaleInstalls.add(prepared.deviceKey);
     return notDispatched(
       new AppError('COMMAND_FAILED', message, {
         ...details,
@@ -154,7 +165,7 @@ async function readVerifiedHelperApkPath(
   }
   const apkPath = readBaseApkPath(paths.stdout);
   if (apkPath === undefined) {
-    throw await refuse(`Android reported no base APK path for ${packageName}.`, {
+    throw refuse(`Android reported no base APK path for ${packageName}.`, {
       stdout: paths.stdout,
     });
   }
@@ -165,10 +176,11 @@ async function readVerifiedHelperApkPath(
     throw notDispatched(error);
   }
   if (installedSha256 === expectedSha256) return apkPath;
-  throw await refuse(
-    `The installed helper APK for ${packageName} does not match the helper manifest.`,
-    { apkPath, expectedSha256, installedSha256 },
-  );
+  throw refuse(`The installed helper APK for ${packageName} does not match the helper manifest.`, {
+    apkPath,
+    expectedSha256,
+    installedSha256,
+  });
 }
 
 function readKeyValueLines(output: string): Record<string, string> {

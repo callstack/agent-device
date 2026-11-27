@@ -4,7 +4,10 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { beforeEach, expect, test } from 'vitest';
 import { setAndroidSetting } from '../settings.ts';
-import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
+import {
+  ensureAndroidSnapshotHelper,
+  resetAndroidSnapshotHelperInstallCache,
+} from '../snapshot-helper-install.ts';
 import type { AndroidSnapshotHelperArtifact } from '../snapshot-helper-types.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb, type FakeAdbResponse } from './test-utils/fake-adb.ts';
@@ -46,6 +49,7 @@ async function withHelperDevice<T>(
     calls: (readonly string[])[];
     device: DeviceInfo;
     helper: HelperDevice;
+    artifact: AndroidSnapshotHelperArtifact;
   }) => Promise<T>,
   options: {
     versionCode?: number | undefined;
@@ -97,7 +101,7 @@ async function withHelperDevice<T>(
       }
       return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
     },
-    async ({ calls, device }) => await run({ calls, device, helper }),
+    async ({ calls, device }) => await run({ calls, device, helper, artifact }),
     {
       device: options.device,
       provider: {
@@ -204,6 +208,37 @@ test('settings locale refuses a newer installed helper APK whose digest the mani
           apkPath: APK,
         },
       });
+      expect(helper.launches).toEqual([]);
+    },
+    { versionCode: VERSION_CODE + 1, bytes: 'another-apk' },
+  );
+});
+
+test('a locale refusal keeps the snapshot install memo and makes the next locale call inspect the install', async () => {
+  await withHelperDevice(
+    async ({ calls, device, helper, artifact }) => {
+      await expect(setAndroidSetting(device, 'locale', 'en-IN')).rejects.toMatchObject({
+        details: { reason: 'locale-helper-apk-unverified' },
+      });
+
+      // The snapshot install step answers from its memo without touching the device.
+      const snapshotCalls: string[][] = [];
+      const install = await ensureAndroidSnapshotHelper({
+        adb: async (args) => {
+          snapshotCalls.push(args);
+          return { stdout: '', stderr: 'unexpected', exitCode: 1 };
+        },
+        artifact,
+        deviceKey: `android:${device.id}`,
+      });
+      expect(install).toMatchObject({ reason: 'current', installed: false });
+      expect(snapshotCalls).toEqual([]);
+
+      const firstCall = calls.length;
+      await expect(setAndroidSetting(device, 'locale', 'en-IN')).rejects.toMatchObject({
+        details: { reason: 'locale-helper-apk-unverified' },
+      });
+      expect(calls.slice(firstCall).map((args) => args.join(' '))).toContain(VERSION_QUERY);
       expect(helper.launches).toEqual([]);
     },
     { versionCode: VERSION_CODE + 1, bytes: 'another-apk' },

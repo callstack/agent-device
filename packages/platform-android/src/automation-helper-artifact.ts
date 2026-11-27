@@ -47,6 +47,7 @@ export function androidAutomationHelperIdentity(artifact: AndroidSnapshotHelperA
 export async function prepareAndroidAutomationHelper(
   device: DeviceInfo,
   signal?: AbortSignal,
+  options: { inspectInstalled?: boolean } = {},
 ): Promise<PreparedAndroidAutomationHelper> {
   signal?.throwIfAborted();
   const adbProvider = resolveAndroidAdbProvider(device);
@@ -68,6 +69,7 @@ export async function prepareAndroidAutomationHelper(
         adbProvider,
         artifact,
         deviceKey,
+        inspectInstalled: options.inspectInstalled,
         timeoutMs: HELPER_INSTALL_TIMEOUT_MS,
         signal,
       }),
