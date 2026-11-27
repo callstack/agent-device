@@ -168,6 +168,10 @@
       "types": "./src/daemon-command-surface.ts",
       "default": "./src/daemon-command-surface.ts"
     },
+    "./credential-transport": {
+      "types": "./src/credential-transport.ts",
+      "default": "./src/credential-transport.ts"
+    },
     "./daemon-http": {
       "types": "./src/daemon-http.ts",
       "default": "./src/daemon-http.ts"
@@ -307,6 +311,10 @@
     "./logs-runtime-plan": {
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
+    },
+    "./loopback-host": {
+      "types": "./src/loopback-host.ts",
+      "default": "./src/loopback-host.ts"
     },
     "./managed-web-backend": {
       "types": "./src/managed-web-backend.ts",

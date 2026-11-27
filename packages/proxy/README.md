@@ -128,14 +128,12 @@ On these routes:
 
 Supply `upstreamFetch` if you need those Fetch behaviors or your own routing.
 
-Environment-proxy routing depends on your runtime. In loopback checks, Node 22.12 ignores
-`HTTP_PROXY` and `HTTPS_PROXY` for both transports. Node 26.11.1 uses them when
-`NODE_USE_ENV_PROXY=1`. Bun 1.4.2 Fetch uses them without that opt-in, while the default transfer
-transport requires it. On Node 26.11.1 and Bun 1.4.2, `NO_PROXY=127.0.0.1` bypasses the proxy.
-If your Bun deployment needs proxy routing for transfers, set `NODE_USE_ENV_PROXY=1` or supply
-`upstreamFetch`.
+A plain-http upstream is loopback, and the default transport reaches it directly over `node:http`
+on every route. An environment proxy (`HTTP_PROXY` with `NODE_USE_ENV_PROXY=1`) never sees the
+upstream token. An https upstream follows your runtime's environment-proxy settings: Node 26.11.1
+uses them when `NODE_USE_ENV_PROXY=1`, and Bun 1.4.2 Fetch uses them without that opt-in.
 
-By default, `/rpc`, `/health` and request diagnostics use global `fetch`.
+By default, `/rpc`, `/health` and request diagnostics to an https upstream use global `fetch`.
 
 ### Reach the daemon over your own transport
 
@@ -144,7 +142,7 @@ host opened to your gateway:
 
 ```ts
 const proxy = createDaemonProxy({
-  upstreamBaseUrl: 'http://device-host-17.internal',
+  upstreamBaseUrl: 'https://device-host-17.internal',
   upstreamToken: daemonToken,
   clientToken,
   upstreamFetch: (request) => deviceHostTunnel.send(request),
@@ -153,9 +151,13 @@ const proxy = createDaemonProxy({
 
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
 daemon's `Response`. Abort the exchange when `request.signal` aborts. The request carries the
-upstream token, so your transport must keep it confidential. Without `upstreamFetch`,
-`upstreamBaseUrl` must use https, or plain http to a loopback host; the proxy refuses any other
-http URL at construction with `details.reason: "insecure_credential_transport"`.
+upstream token and `redirect: 'error'`; never follow a redirect with it.
+
+`upstreamBaseUrl` must use https, or plain http to a loopback host, with or without
+`upstreamFetch`. With your own transport, give it a logical URL that meets this rule, such as
+`https://device-host-17.internal`, and route it inside the transport. For any other URL, the
+proxy sends nothing upstream and answers every request with `INVALID_ARGS`
+(`details.reason: "insecure_credential_transport"` on `/rpc`).
 
 Honor `request.redirect`. On `/rpc/checked` it is `'error'`: never follow a redirect there, because
 a followed redirect resends the call with the daemon token, possibly to the unchecked `/rpc`. The
@@ -216,11 +218,11 @@ authenticate: async (request) => {
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `upstreamBaseUrl` | required | Base URL of the daemon's HTTP server. |
+| `upstreamBaseUrl` | required | Base URL of the daemon's HTTP server: https, or plain http to loopback. |
 | `upstreamToken` | required | The daemon's auth token. |
 | `clientToken` | required without `authenticate` | Token clients must send as their daemon auth token. |
 | `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
-| `upstreamFetch` | none | Sends one request to the daemon. Without it, transfer routes use `node:http(s)` and every other route uses the global `fetch`. |
+| `upstreamFetch` | none | Sends one request to the daemon. Without it, transfer routes use `node:http(s)`, a plain-http upstream uses `node:http` on every route, and other routes use the global `fetch`. |
 | `maxRpcBodyBytes` | 64 MiB, the daemon's own request limit | Larger `/rpc` bodies get a 400 response. |
 | `upstreamTimeoutMs` | none | Independent cap on one daemon request, including its body. `/health` keeps its separate five-second limit. Without this option, other requests last as long as the client waits, bounded by the client's command timeout and, on transfer routes, the 600-second forwarding aggregate. |
 

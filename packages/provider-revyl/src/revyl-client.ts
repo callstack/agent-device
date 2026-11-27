@@ -5,8 +5,8 @@ import {
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import { isLoopbackHostname } from '@agent-device/contracts/loopback-host';
 import fs from 'node:fs';
-import net from 'node:net';
 import { Readable } from 'node:stream';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type {
@@ -680,20 +680,6 @@ export function isRevylSessionGone(error: unknown): boolean {
   return (
     error instanceof AppError && error.details?.reason === REVYL_HTTP_REASONS.sessionGone.reason
   );
-}
-
-/** The loopback ranges, the same set the daemon client trusts for a local daemon. */
-const LOOPBACK_BLOCK_LIST = new net.BlockList();
-LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
-LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
-LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
-
-/** Whether a WHATWG-normalized hostname (IPv6 in brackets) names a loopback address. */
-function isLoopbackHostname(hostname: string): boolean {
-  if (hostname === 'localhost') return true;
-  const address = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
-  const family = net.isIP(address);
-  return family !== 0 && LOOPBACK_BLOCK_LIST.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }
 
 /** HTTPS everywhere; plain HTTP only on loopback, and never with credentials, query, or fragment. */

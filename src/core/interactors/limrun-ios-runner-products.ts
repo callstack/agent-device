@@ -13,6 +13,7 @@ import { createGzip } from 'node:zlib';
 import { extractArchiveSafely } from '@agent-device/host-kit/archive';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import { downloadLimrunFile } from '../limrun-download-file.ts';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 
 /** Stages the version-matched release runner, or an explicitly supplied development build. */
 export async function prepareLimrunRunnerProducts(input: {
@@ -249,18 +250,21 @@ export async function uploadLimrunRunnerProducts(
     const stream = createGzip();
     const compression = pipeline(Readable.from(body()), stream, { signal }).catch(() => {});
     try {
-      const response = await fetch(`${apiUrl}/sync`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/octet-stream',
-          'Content-Encoding': 'gzip',
-        },
-        body: Readable.toWeb(stream) as ReadableStream<Uint8Array>,
-        duplex: 'half',
-        signal,
-        redirect: 'error',
-      } as RequestInit & { duplex: 'half' });
+      const response = await fetch(
+        assertSecureCredentialTransport(`${apiUrl}/sync`, 'Limrun API URL'),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/octet-stream',
+            'Content-Encoding': 'gzip',
+          },
+          body: Readable.toWeb(stream) as ReadableStream<Uint8Array>,
+          duplex: 'half',
+          signal,
+          redirect: 'error',
+        } as RequestInit & { duplex: 'half' },
+      );
       if (!response.ok) {
         await response.body?.cancel();
         throw limrunRunnerError(

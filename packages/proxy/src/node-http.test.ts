@@ -149,7 +149,7 @@ test.each([undefined, 'https://public.example:8443'])(
   async (publicOrigin) => {
     let calls = 0;
     const server = createDaemonProxyServer({
-      upstreamBaseUrl: 'http://daemon',
+      upstreamBaseUrl: 'https://daemon',
       upstreamToken: 'daemon-secret',
       clientToken: 'client-secret',
       publicOrigin,
@@ -158,7 +158,7 @@ test.each([undefined, 'https://public.example:8443'])(
         return Response.json({
           uploadId: 'id',
           upload: {
-            url: 'http://daemon/upload/direct/id?part=1',
+            url: 'https://daemon/upload/direct/id?part=1',
             headers: { authorization: 'Bearer daemon-secret' },
           },
         });

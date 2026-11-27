@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpLeaseHeaders,
-  isSecureCredentialDestination,
 } from '@agent-device/contracts/daemon-http';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
 import {
@@ -318,7 +317,15 @@ async function requestUploadPreflight(options: {
     return undefined;
   }
 
-  return parseUploadPreflightResult(result.body);
+  const preflight = parseUploadPreflightResult(result.body);
+  if (preflight?.kind !== 'direct-upload') return preflight;
+  // A ticket can carry a credential in its headers, a cookie, or its query, so every ticket URL
+  // must be https or plain http to loopback. Any other ticket is not usable, and the upload takes
+  // the legacy route through the base URL the client already admitted.
+  const { isSecureCredentialDestination } =
+    await import('@agent-device/contracts/credential-transport');
+  const ticketUrl = URL.parse(preflight.url);
+  return ticketUrl && isSecureCredentialDestination(ticketUrl) ? preflight : undefined;
 }
 
 async function requestUploadControl(
@@ -331,13 +338,17 @@ async function requestUploadControl(
   watchdog.signal.throwIfAborted();
   watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
   try {
-    // Redirects could forward the daemon token, so these control requests never follow them.
-    const response = await fetch(url, {
+    // Redirects could forward the daemon token, so these control requests never follow them. Plain
+    // http (loopback only) goes direct, never through an environment proxy.
+    const request = new Request(url, {
       ...init,
       method: 'POST',
       redirect: 'error',
       signal: watchdog.signal,
     });
+    const response = await (url.protocol === 'http:'
+      ? (await import('@agent-device/host-kit/direct-http')).fetchOverDirectHttp(request)
+      : fetch(request));
     const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
     watchdog.signal.throwIfAborted();
     return { response, body };
@@ -372,28 +383,12 @@ function parseUploadPreflightResult(value: unknown): UploadPreflightResult | und
   if (!isStringRecord(headers)) {
     return undefined;
   }
-  // A ticket that would send a daemon credential over plain http off loopback is not usable; the
-  // upload takes the legacy route through the base URL the client already admitted.
-  if (carriesDaemonCredential(headers)) {
-    const ticketUrl = URL.parse(upload.url);
-    if (!ticketUrl || !isSecureCredentialDestination(ticketUrl)) return undefined;
-  }
   return {
     kind: 'direct-upload',
     uploadId: preflight.uploadId,
     url: upload.url,
     headers,
   };
-}
-
-const DAEMON_CREDENTIAL_HEADER_NAMES = new Set(
-  Object.keys(buildDaemonHttpAuthHeaders('credential')),
-);
-
-function carriesDaemonCredential(headers: Record<string, string>): boolean {
-  return Object.keys(headers).some((name) =>
-    DAEMON_CREDENTIAL_HEADER_NAMES.has(name.toLowerCase()),
-  );
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

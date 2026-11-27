@@ -14,10 +14,8 @@ import {
   stopAndRetireDaemon,
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import {
-  assertSecureCredentialTransport,
-  isLoopbackHostname,
-} from '@agent-device/contracts/daemon-http';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
+import { isLoopbackHostname } from '@agent-device/contracts/loopback-host';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,

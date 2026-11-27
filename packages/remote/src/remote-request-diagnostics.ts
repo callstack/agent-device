@@ -147,6 +147,9 @@ async function fetchRemoteRequestDiagnostics(params: {
   }
   try {
     const transport = await loadNodeHttpRequester(url.protocol);
+    const agent = await (
+      await import('@agent-device/host-kit/direct-http')
+    ).loadDirectHttpAgent(url.protocol);
     await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     return await new Promise<string | undefined>((resolve) => {
       let settled = false;
@@ -169,6 +172,7 @@ async function fetchRemoteRequestDiagnostics(params: {
           port: url.port,
           method: 'GET',
           path: url.pathname + url.search,
+          agent,
           headers: {
             ...buildDaemonHttpAuthHeaders(endpoint.token),
             ...buildDaemonHttpTenantHeaders(endpoint.tenantId),

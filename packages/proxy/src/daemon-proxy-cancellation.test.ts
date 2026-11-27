@@ -53,7 +53,7 @@ function abortObservingUpstream(): {
 
 function proxyWith(upstreamFetch: DaemonProxyUpstreamFetch) {
   return createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     clientToken: 'client-secret',
     upstreamFetch,
@@ -131,7 +131,7 @@ test('a health request handled by two proxies at once aborts both upstream probe
 test('a client leaving the Node adapter mid-response after a garbage collection aborts the upstream request', async () => {
   const upstreamAborted = signalled();
   const server = createDaemonProxyServer({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     clientToken: 'client-secret',
     upstreamFetch: async (request) => {
@@ -191,7 +191,7 @@ test('the upstream health probe has its own bound without upstreamTimeoutMs', as
 test('upstreamTimeoutMs still ends an rpc exchange after a garbage collection', async () => {
   const upstream = abortObservingUpstream();
   const proxy = createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     clientToken: 'client-secret',
     upstreamFetch: upstream.fetch,
@@ -217,7 +217,7 @@ test('aborting the client request after a garbage collection aborts a pending au
   const authenticateReceived = signalled();
   const authenticateAborted = signalled();
   const proxy = createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     upstreamFetch: async () => Response.json({}),
     authenticate: (request) =>

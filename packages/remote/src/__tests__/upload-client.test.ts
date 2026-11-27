@@ -382,7 +382,7 @@ test('uploadArtifact falls back to legacy upload when direct upload exceeds redi
   }
 });
 
-test('uploadArtifact never sends a credential-bearing ticket over plain http off loopback', async () => {
+test('uploadArtifact never uses a ticket over plain http off loopback, whatever carries its credential', async () => {
   const content = 'cleartext-ticket';
   const artifactPath = createTempFile('app.apk', content);
   const requests: string[] = [];
@@ -395,8 +395,8 @@ test('uploadArtifact never sends a credential-bearing ticket over plain http off
         cacheHit: false,
         uploadId: 'cleartext-ticket',
         upload: {
-          url: 'http://ticket.invalid/upload/direct/cleartext-ticket',
-          headers: { authorization: `Bearer ${TEST_TOKEN}` },
+          url: 'http://ticket.invalid/upload/direct/cleartext-ticket?signature=secret',
+          headers: {},
         },
       });
       return;

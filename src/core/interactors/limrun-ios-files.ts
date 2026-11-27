@@ -9,6 +9,7 @@ import {
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { downloadLimrunFile } from '../limrun-download-file.ts';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 
 type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 type Files = AppleToolProvider['simulatorFiles'];
@@ -63,7 +64,7 @@ export function createLimrunSimulatorFiles(
   };
   const request = async (method: string, url: URL, signal: AbortSignal, body?: Uint8Array) => {
     signal.throwIfAborted();
-    const response = await fetch(url, {
+    const response = await fetch(assertSecureCredentialTransport(url, 'Limrun API URL'), {
       method,
       headers: {
         Authorization: `Bearer ${session.token}`,

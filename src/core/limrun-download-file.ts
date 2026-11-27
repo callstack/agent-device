@@ -9,6 +9,7 @@ import {
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import type { LimrunFileDownload } from '@agent-device/provider-limrun';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
 
@@ -29,6 +30,10 @@ const LIMRUN_DOWNLOAD_REASONS = {
  * same URL and never mistakes an earlier attempt's file for this one's.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
+  // The URL comes from the provider, and the headers carry its bearer token.
+  if (options.headers && Object.keys(options.headers).length > 0) {
+    assertSecureCredentialTransport(options.url, 'Limrun download URL');
+  }
   const timeout = AbortSignal.timeout(options.timeoutMs);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {

@@ -2,7 +2,7 @@ import { expect, onTestFinished, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 
 const options = {
-  upstreamBaseUrl: 'http://daemon.internal:4310',
+  upstreamBaseUrl: 'https://daemon.internal:4310',
   upstreamToken: 'daemon-secret',
   clientToken: 'client-secret',
 };

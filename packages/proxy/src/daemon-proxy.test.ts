@@ -25,7 +25,7 @@ function recordingUpstream(respond: (request: Request) => Response | Promise<Res
 
 function proxyWith(upstreamFetch: DaemonProxyUpstreamFetch, maxRpcBodyBytes?: number) {
   return createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     clientToken: 'client-secret',
     upstreamFetch,
@@ -54,7 +54,7 @@ test('rpc reaches the daemon through the supplied upstream transport with the da
 
   expect(response.status).toBe(200);
   const [forwarded] = upstream.requests;
-  expect(forwarded?.url).toBe('http://daemon.internal:4310/rpc');
+  expect(forwarded?.url).toBe('https://daemon.internal:4310/rpc');
   expect(forwarded?.headers.get('authorization')).toBe('Bearer daemon-secret');
   const payload = (await response.json()) as { echo: { params: { token: string } } };
   expect(payload.echo.params.token).toBe('daemon-secret');
@@ -81,7 +81,7 @@ test.each([
     const timeout = vi.spyOn(AbortSignal, 'timeout');
     try {
       const proxy = createDaemonProxy({
-        upstreamBaseUrl: 'http://daemon.internal:4310',
+        upstreamBaseUrl: 'https://daemon.internal:4310',
         upstreamToken: 'daemon-secret',
         clientToken: 'client-secret',
         upstreamFetch: async () => Response.json({ jsonrpc: '2.0', id: 4, result: {} }),
@@ -268,7 +268,7 @@ test('an unsupported route answers a bare 404 without reaching the daemon', asyn
 function proxyAuthenticatingWith(upstreamFetch: DaemonProxyUpstreamFetch) {
   const seen: Request[] = [];
   const proxy = createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     upstreamFetch,
     authenticate: async (request) => {
@@ -393,7 +393,7 @@ function daemonTicketUpstream() {
 /** Admits `alice-key` from any of four credential headers, naming its own upload headers. */
 function proxyAuthenticatingByAnyCredential(upstreamFetch: DaemonProxyUpstreamFetch) {
   return createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: DAEMON_TOKEN,
     upstreamFetch,
     authenticate: (request): DaemonProxyAuthenticatedClient | null => {
@@ -488,7 +488,7 @@ test('with authenticate, a custom upload header passes authenticate on the direc
 test('an authenticate that never reads headers still yields a working ticket', async () => {
   const upstream = daemonTicketUpstream();
   const proxy = createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: DAEMON_TOKEN,
     upstreamFetch: upstream.fetch,
     authenticate: () => ({ tenantId: 'alice' }),
@@ -581,7 +581,7 @@ test('without authenticate, the tenant a client declares is forwarded unchanged'
 test('authenticate returning a tenantId the daemon rejects refuses the request before the daemon', async () => {
   const upstream = recordingUpstream(() => Response.json({ ok: true }));
   const proxy = createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamBaseUrl: 'https://daemon.internal:4310',
     upstreamToken: 'daemon-secret',
     upstreamFetch: upstream.fetch,
     authenticate: () => ({ tenantId: 'alice@example.com' }),
@@ -604,7 +604,7 @@ test.each(['http, https', 'HTTPS', 'http://evil.example/path?'])(
         ok: true,
         uploadId: 'abc',
         upload: {
-          url: 'http://daemon:4310/upload/direct/abc?part=1',
+          url: 'https://daemon:4310/upload/direct/abc?part=1',
           headers: { authorization: 'Bearer upstream-secret', 'content-type': 'application/zip' },
         },
       }),
@@ -639,11 +639,11 @@ test('fixed public origin rewrites a prefixed ticket and preserves its query', a
   const upstream = recordingUpstream(() =>
     Response.json({
       uploadId: 'abc',
-      upload: { url: 'http://daemon/upload/direct/abc?part=1', headers: {} },
+      upload: { url: 'https://daemon/upload/direct/abc?part=1', headers: {} },
     }),
   );
   const proxy = createDaemonProxy({
-    upstreamBaseUrl: 'http://daemon',
+    upstreamBaseUrl: 'https://daemon',
     upstreamToken: 'secret',
     clientToken: 'client',
     publicOrigin: 'https://PUBLIC.example:8443/',
@@ -685,27 +685,6 @@ test.each([
   ).toThrow();
 });
 
-test('the default transport refuses an upstream token for plain http off loopback at construction', () => {
-  let refusal: unknown;
-  try {
-    createDaemonProxy({
-      upstreamBaseUrl: 'http://daemon.internal:4310',
-      upstreamToken: 'secret',
-      clientToken: 'client',
-    });
-  } catch (error) {
-    refusal = error;
-  }
-  expect(refusal).toBeInstanceOf(AppError);
-  expect((refusal as AppError).details?.reason).toBe('insecure_credential_transport');
-
-  for (const upstreamBaseUrl of ['http://127.0.0.1:4310', 'https://daemon.internal']) {
-    expect(() =>
-      createDaemonProxy({ upstreamBaseUrl, upstreamToken: 'secret', clientToken: 'client' }),
-    ).not.toThrow();
-  }
-});
-
 test('malformed successful tickets fail without exposing upstream credentials', async () => {
   const upstream = recordingUpstream(() =>
     Response.json({ upload: { url: 'bad', headers: { authorization: 'secret' } } }),
@@ -734,7 +713,7 @@ test.each([
     Response.json({
       ok: true,
       uploadId,
-      upload: { url: `http://daemon${path}`, headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN) },
+      upload: { url: `https://daemon${path}`, headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN) },
     }),
   );
   const response = await proxyWith(upstream.fetch).handle(
@@ -760,7 +739,7 @@ test.each([400, 401, 503])(
           code: 'UPLOAD_FAILED',
           uploadId: 'abc',
           upload: {
-            url: 'http://daemon/upload/direct/abc',
+            url: 'https://daemon/upload/direct/abc',
             headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
           },
         },

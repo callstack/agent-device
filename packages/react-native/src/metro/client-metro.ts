@@ -21,7 +21,7 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import { assertSecureCredentialTransport } from '@agent-device/contracts/daemon-http';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import type {
   MetroBridgeDescriptor,
@@ -454,10 +454,15 @@ function isRetryableBridgeError(error: unknown): boolean {
 }
 
 async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<MetroBridgeResult> {
+  // Checked on the final URL, right before the bearer token is sent, and outside the retry.
+  const bridgeUrl = assertSecureCredentialTransport(
+    `${input.baseUrl}/api/metro/bridge`,
+    'Metro bridge URL',
+  );
   let response: Response;
 
   try {
-    response = await fetch(`${input.baseUrl}/api/metro/bridge`, {
+    response = await fetch(bridgeUrl, {
       method: 'POST',
       headers: createProxyHeaders(input.baseUrl, input.bearerToken),
       body: JSON.stringify({

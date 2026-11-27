@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
@@ -422,21 +422,30 @@ test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
   );
 });
 
-test('prepareMetroRuntime refuses a bridge bearer token over plain http off loopback', async () => {
-  await assert.rejects(
-    () =>
-      prepareMetroRuntime(
-        {
-          publicBaseUrl: 'https://sandbox.example.test',
-          proxyBaseUrl: 'http://proxy.example.test',
-          env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: TEST_TOKEN },
-        },
-        createTestHostEnvironment(),
-      ),
-    (error) =>
-      error instanceof AppError && error.details?.reason === 'insecure_credential_transport',
-  );
-});
+test.for(['http://proxy.example.test', 'http:'])(
+  'prepareMetroRuntime never sends a bridge bearer token to %s',
+  async (proxyBaseUrl) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      await assert.rejects(
+        () =>
+          prepareMetroRuntime(
+            {
+              publicBaseUrl: 'https://sandbox.example.test',
+              proxyBaseUrl,
+              env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: TEST_TOKEN },
+            },
+            createTestHostEnvironment(),
+          ),
+        (error) =>
+          error instanceof AppError && error.details?.reason === 'insecure_credential_transport',
+      );
+      assert.equal(fetchSpy.mock.calls.length, 0);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  },
+);
 
 test('prepareMetroRuntime falls back to daemon auth token for proxy auth', async () => {
   await assert.rejects(

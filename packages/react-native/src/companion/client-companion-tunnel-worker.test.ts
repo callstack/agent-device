@@ -5,7 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import {
   buildCompanionPayload,
   runCompanionTunnelProcessFromEnv,
@@ -506,6 +506,28 @@ test('metro companion worker exits after non-retryable registration failure', as
   assert.equal(exit.code, 0, `unexpected worker stderr: ${companion.readStderr()}`);
   assert.equal(registerAttempts, 1);
 });
+
+test.for(['http://bridge.invalid', 'http:'])(
+  'metro companion worker never sends its bearer token to %s and exits',
+  async (serverBaseUrl) => {
+    const sent: unknown[] = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      sent.push(input);
+      return new Response(null, { status: 500 });
+    });
+    cleanupTasks.push(async () => fetchSpy.mockRestore());
+
+    const companion = startMetroCompanionWorker({
+      bridgePort: 1,
+      localPort: 1,
+      serverBaseUrl,
+      unregisterPath: '/api/metro/companion/unregister',
+    });
+    await companion.waitForExit('worker exit after the bridge URL was refused');
+
+    assert.deepEqual(sent, []);
+  },
+);
 
 test('metro companion worker retries registration failures with retry-after delay', async () => {
   const bridgeSocketReady = createDeferred<void>();

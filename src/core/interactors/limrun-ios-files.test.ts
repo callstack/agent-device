@@ -374,3 +374,20 @@ test('concurrent metadata reads do not inherit another caller cancellation', asy
   f.storage.finishDownloads();
   await expect(second).resolves.toMatchObject({ CFBundleExecutable: 'Example' });
 });
+
+test('a provider API URL over plain http off loopback never receives the instance token', async () => {
+  const f = await fixture({});
+  const local = path.join(f.directory, 'push.apns');
+  await fs.writeFile(local, '{}');
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  try {
+    const session = { ...f.session, apiUrl: 'http://limrun.invalid/v1/ios_test/api' };
+    const tools = createLimrunAppleToolProvider(session, new AbortController().signal);
+    await expect(tools.simulatorFiles.stageFile(local)).rejects.toMatchObject({
+      details: { reason: 'insecure_credential_transport' },
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});

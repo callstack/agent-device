@@ -11,7 +11,7 @@ import {
 } from './daemon-proxy.ts';
 
 const options = {
-  upstreamBaseUrl: 'http://daemon.internal:4310',
+  upstreamBaseUrl: 'https://daemon.internal:4310',
   upstreamToken: 'daemon-secret',
   clientToken: 'client-secret',
 };
@@ -240,7 +240,7 @@ test('a custom transport receives every route family including transfers', async
     if (path === '/upload/preflight')
       return Response.json({
         uploadId: 'ticket',
-        upload: { url: 'http://daemon.internal:4310/upload/direct/ticket' },
+        upload: { url: 'https://daemon.internal:4310/upload/direct/ticket' },
       });
     if (path === '/rpc') return Response.json({ jsonrpc: '2.0', id: 1, result: { ok: true } });
     return new Response('custom answer');
@@ -285,7 +285,9 @@ test('a custom transport receives every route family including transfers', async
   ).toBe(true);
 });
 
-test('admitted transfers use Node while RPC and diagnostics use Fetch', async () => {
+// A plain-http upstream is loopback, and it goes direct over Node on every route, so neither a
+// patched global fetch nor an environment proxy sees its token.
+test('a plain-http upstream takes Node on every admitted route, never the global fetch', async () => {
   const daemon = await listen(
     http.createServer((req, res) => {
       req.resume();
@@ -331,8 +333,8 @@ test('admitted transfers use Node while RPC and diagnostics use Fetch', async ()
     );
     expect(response.status, path).toBe(200);
     await response.text();
-    expect(node.mock.calls.length, path).toBe(transfer ? 1 : 0);
-    expect(fetch.mock.calls.length, path).toBe(transfer ? 0 : 1);
+    expect(node.mock.calls.length, `${path} transfer=${transfer}`).toBe(1);
+    expect(fetch.mock.calls.length, path).toBe(0);
   }
   for (const [method, path] of [
     ['GET', '/upload'],

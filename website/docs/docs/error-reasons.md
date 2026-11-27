@@ -899,7 +899,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `insecure_credential_transport` | A daemon, proxy, host bridge, or cloud auth credential would travel over plain http to a host that is not loopback. `details.origin` names the refused destination. |
+| `insecure_credential_transport` | A credential would travel over plain http to a host that is not loopback, or to a URL that does not parse. `details.origin` names the refused destination when it parses. |
 | `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
 | `remote_rpc_protocol_missing` | The checked RPC call named no RPC protocol. An intermediary that strips request headers causes this. |
 | `remote_rpc_protocol_mismatch` | The daemon or proxy speaks a different RPC protocol from the caller. After authentication, `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused. |

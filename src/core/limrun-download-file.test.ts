@@ -200,3 +200,20 @@ test.each(['default', 'typed', 'deadline'] as const)(
     expect(fs.existsSync(destinationPath)).toBe(false);
   },
 );
+
+test('a provider download URL over plain http off loopback never receives the bearer token', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  try {
+    await expect(
+      downloadLimrunFile({
+        url: 'http://limrun.invalid/files?name=recording.mp4',
+        headers: { Authorization: 'Bearer instance-token' },
+        destinationPath: path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4'),
+        timeoutMs: 5_000,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'insecure_credential_transport' } });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});

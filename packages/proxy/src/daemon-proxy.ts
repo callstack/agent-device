@@ -12,7 +12,6 @@ import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
-  assertSecureCredentialTransport,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
   isTenantOwnedSessionName,
@@ -33,8 +32,10 @@ import {
 /**
  * Carries one request to the upstream daemon and resolves with its response. Without `upstreamFetch`
  * the proxy reaches the daemon over `node:http(s)` on artifact transfer routes and over the global
- * `fetch` on `/rpc`, health and diagnostics. Supply your own to reach the daemon over another
- * transport, such as a WebSocket tunnel. Abort the exchange when `request.signal` aborts.
+ * `fetch` on `/rpc`, health and diagnostics; plain http goes direct, never through an environment
+ * proxy. Supply your own to reach the daemon over another transport, such as a WebSocket tunnel.
+ * Abort the exchange when `request.signal` aborts. Every request carries `redirect: 'error'`:
+ * never follow a redirect, because the request carries the upstream token.
  *
  * A custom transport owns its phase guarantees and must observe `request.signal` on every route.
  * It must also honor `request.redirect`: the checked RPC route sets `'error'`, so the transport must
@@ -67,8 +68,9 @@ export type DaemonProxyAuthenticate = (
 
 export type DaemonProxyOptions = {
   /**
-   * Base URL of the upstream agent-device daemon HTTP server. Without `upstreamFetch` it must use
-   * https, or http on loopback, because every upstream request carries `upstreamToken`.
+   * Base URL of the upstream agent-device daemon HTTP server. It must use https, or plain http to
+   * loopback, because every upstream request carries `upstreamToken`; with `upstreamFetch` it is
+   * the logical URL your transport routes. Any other URL refuses every request before it is sent.
    */
   upstreamBaseUrl: string;
   /** Auth token of the upstream daemon. Never leaves the proxy. */
@@ -434,7 +436,7 @@ function keepAliveWith(owner: object, request: Request): Request {
 
 /** Builds a request for `owner` to send on, kept reachable for as long as `owner` is. */
 function forwardedRequest(owner: Request, url: string | URL, init: RequestInit): Request {
-  return keepAliveWith(owner, new Request(url, init));
+  return keepAliveWith(owner, new Request(url, { ...init, redirect: 'error' }));
 }
 
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
@@ -575,14 +577,28 @@ function rewriteUploadDirectUrl(
 function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOptions {
   const upstreamBaseUrl = normalizeBaseUrl(options.upstreamBaseUrl, 'upstreamBaseUrl');
   const upstreamToken = normalizeToken(options.upstreamToken, 'upstreamToken');
-  if (!options.upstreamFetch) {
-    assertSecureCredentialTransport(upstreamBaseUrl, 'Proxy upstreamBaseUrl');
-  }
   const clientToken = options.authenticate
     ? undefined
     : normalizeToken(options.clientToken ?? '', 'clientToken');
-  const upstreamFetch = options.upstreamFetch ?? ((request) => fetch(request));
+  // Loaded on the first upstream exchange, never at module scope: the proxy entry stays lean.
+  let upstreamAdmission: Promise<void> | undefined;
+  const admitUpstream = () =>
+    (upstreamAdmission ??= import('@agent-device/contracts/credential-transport').then(
+      ({ assertSecureCredentialTransport }) => {
+        assertSecureCredentialTransport(upstreamBaseUrl, 'Proxy upstreamBaseUrl');
+      },
+    ));
   const customUpstreamFetch = options.upstreamFetch;
+  const sendUpstream: DaemonProxyUpstreamFetch =
+    customUpstreamFetch ??
+    (async (request) =>
+      new URL(request.url).protocol === 'http:'
+        ? await (await import('@agent-device/host-kit/direct-http')).fetchOverDirectHttp(request)
+        : await fetch(request));
+  const upstreamFetch: DaemonProxyUpstreamFetch = async (request) => {
+    await admitUpstream();
+    return await sendUpstream(request);
+  };
   return {
     upstreamBaseUrl,
     publicOrigin:
@@ -597,6 +613,7 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     upstreamFetch,
     upstreamTransport: async (route, request) => {
       if (!isTransferRoute(route, request.method)) return upstreamFetch(request);
+      await admitUpstream();
       const { createNodeTransferFetch, settleUpstreamFetch } =
         await import('./transfer-transport.ts');
       return customUpstreamFetch

@@ -23,6 +23,7 @@ import type {
   MetroTunnelResponseMessage,
 } from './metro-tunnel-messages.ts';
 import { normalizeBaseUrl } from '../metro/base-url.ts';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 
 const COMPANION_REGISTER_TIMEOUT_MS = 5_000;
 const COMPANION_REGISTER_MAX_RETRY_DELAY_MS = 60_000;
@@ -81,9 +82,12 @@ async function registerCompanion(
   options: CompanionTunnelWorkerOptions,
 ): Promise<{ wsUrl: string }> {
   const registerPath = resolveRegisterPath(options);
+  const registerUrl = bearerDestination(
+    `${normalizeBaseUrl(options.serverBaseUrl)}${registerPath}`,
+  );
   let response: Response;
   try {
-    response = await fetch(`${normalizeBaseUrl(options.serverBaseUrl)}${registerPath}`, {
+    response = await fetch(registerUrl, {
       method: 'POST',
       headers: createHeaders(options.serverBaseUrl, options.bearerToken),
       body: JSON.stringify(buildCompanionPayload(options)),
@@ -159,6 +163,18 @@ function clampRetryDelay(delayMs: number): number {
   return Math.max(0, Math.min(COMPANION_REGISTER_MAX_RETRY_DELAY_MS, Math.ceil(delayMs)));
 }
 
+/** The final URL a bearer request goes to, or a refusal no retry can fix. */
+function bearerDestination(url: string): URL {
+  try {
+    return assertSecureCredentialTransport(url, 'Metro companion bridge URL');
+  } catch (error) {
+    throw new CompanionRegistrationError(
+      error instanceof Error ? error.message : String(error),
+      false,
+    );
+  }
+}
+
 function nextRetryDelay(currentDelayMs: number): number {
   return Math.min(currentDelayMs * 2, COMPANION_REGISTER_MAX_RETRY_DELAY_MS);
 }
@@ -167,7 +183,10 @@ async function unregisterCompanion(options: CompanionTunnelWorkerOptions): Promi
   const unregisterPath = resolveUnregisterPath(options);
   if (!unregisterPath) return;
   try {
-    await fetch(`${normalizeBaseUrl(options.serverBaseUrl)}${unregisterPath}`, {
+    const unregisterUrl = bearerDestination(
+      `${normalizeBaseUrl(options.serverBaseUrl)}${unregisterPath}`,
+    );
+    await fetch(unregisterUrl, {
       method: 'POST',
       headers: createHeaders(options.serverBaseUrl, options.bearerToken),
       body: JSON.stringify(buildCompanionPayload(options)),

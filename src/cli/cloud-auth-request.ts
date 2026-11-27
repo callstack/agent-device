@@ -1,5 +1,5 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { assertSecureCredentialTransport } from '@agent-device/contracts/daemon-http';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { readCloudJsonResponse } from './cloud-response.ts';
 
 const HTTP_TIMEOUT_MS = 15_000;
@@ -30,30 +30,47 @@ export async function postCloudAuthJson<T>(options: {
   // Passed to the response reader, which calls it on a status it would otherwise reject generically.
   classifyRejectedBody?: (parsed: unknown) => AppError | undefined;
 }): Promise<T> {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const requestUrl = new URL(options.pathName, options.baseUrl);
-  assertSecureCredentialTransport(requestUrl, 'AGENT_DEVICE_CLOUD_BASE_URL');
-  const post: RequestInit = {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(options.body),
-  };
+  const response = await fetchCloudOnOneOrigin(
+    new URL(options.pathName, options.baseUrl),
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(options.body),
+    },
+    options.fetchImpl,
+  );
+  return await readCloudJsonResponse<T>(response, {
+    invalidJsonMessage: `Cloud auth endpoint returned invalid JSON (${response.status}).`,
+    rejectedMessage: 'Cloud auth endpoint rejected the request.',
+    classifyRejectedBody: options.classifyRejectedBody,
+  });
+}
+
+/**
+ * Sends one credential-bearing cloud request and returns the final answer. The URL must be https,
+ * or plain http to loopback. A redirect is followed only to the same origin, at most three times,
+ * and never to a target with a username or password. A 301, 302 or 303 turns a POST into a GET
+ * without its body or headers; a GET keeps its headers on the same origin.
+ */
+export async function fetchCloudOnOneOrigin(
+  requestUrl: URL,
+  request: RequestInit,
+  // di-seam-approved: the same fetch-global seam as postCloudAuthJson's fetchImpl.
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  assertSecureCredentialTransport(requestUrl, 'Cloud base URL');
   // One timeout covers the whole redirect chain.
   const signal = AbortSignal.timeout(HTTP_TIMEOUT_MS);
   let url = requestUrl;
-  let init = post;
+  let init = request;
   for (let redirects = 0; ; redirects += 1) {
     const response = await fetchImpl(url, { ...init, redirect: 'manual', signal });
-    if (!REDIRECT_STATUSES.has(response.status)) {
-      return await readCloudJsonResponse<T>(response, {
-        invalidJsonMessage: `Cloud auth endpoint returned invalid JSON (${response.status}).`,
-        rejectedMessage: 'Cloud auth endpoint rejected the request.',
-        classifyRejectedBody: options.classifyRejectedBody,
-      });
-    }
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
     await response.body?.cancel().catch(() => undefined);
     url = readRedirectTarget(response, url, requestUrl, redirects);
-    if (GET_REDIRECT_STATUSES.has(response.status)) init = { method: 'GET' };
+    if (GET_REDIRECT_STATUSES.has(response.status) && init.method !== 'GET') {
+      init = { method: 'GET' };
+    }
   }
 }
 

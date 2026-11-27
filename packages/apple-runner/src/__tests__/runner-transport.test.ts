@@ -211,6 +211,26 @@ test('sendRunnerCommandOnce reaches the macOS host runner on loopback, never ove
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
+test('a forwarded runner route never sends its tokens over plain http off loopback', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const endpoint = {
+    ...RUNNER_ENDPOINT_FIXTURE,
+    http: { url: 'http://instance.invalid/command', headers: { Authorization: 'Bearer limrun' } },
+  };
+
+  await assert.rejects(
+    () => sendRunnerCommandOnce(iosSimulator, endpoint, { command: 'uptime' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'insecure_credential_transport');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(fetchMock.mock.calls.length, 0);
+});
+
 test('sendRunnerCommandOnce writes nothing for a device with no route, and says so', async () => {
   mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
   const fetchMock = vi.fn();

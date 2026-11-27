@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { assertSecureCredentialTransport, isLoopbackHostname } from './daemon-http.ts';
+import { assertSecureCredentialTransport } from './credential-transport.ts';
+import { isLoopbackHostname } from './loopback-host.ts';
 
 test('loopback hostnames are recognized in each spelling a base URL carries', () => {
   expect(isLoopbackHostname('LocalHost ')).toBe(true);
@@ -20,14 +21,19 @@ test.each([
   'http://[::1]:4310',
   'http://localhost:4310',
 ])('a credential may travel to %s', (url) => {
-  expect(() => assertSecureCredentialTransport(url, 'Remote daemon base URL')).not.toThrow();
+  expect(assertSecureCredentialTransport(url, 'Remote daemon base URL').href).toBe(
+    new URL(url).href,
+  );
 });
 
 test.each([
   'http://fleet.example.test/agent-device',
   'http://10.0.0.7:4310',
   'http://0.0.0.0:4310',
-])('a credential never travels over plain http to %s', (url) => {
+  'http://localhost.:4310',
+  'ws://127.0.0.1:4310',
+  'http:',
+])('a credential never travels to %s', (url) => {
   let refusal: unknown;
   try {
     assertSecureCredentialTransport(url, 'Remote daemon base URL');
@@ -36,8 +42,5 @@ test.each([
   }
   expect(refusal).toBeInstanceOf(AppError);
   expect((refusal as AppError).code).toBe('INVALID_ARGS');
-  expect((refusal as AppError).details).toMatchObject({
-    reason: 'insecure_credential_transport',
-    origin: new URL(url).origin,
-  });
+  expect((refusal as AppError).details?.reason).toBe('insecure_credential_transport');
 });
