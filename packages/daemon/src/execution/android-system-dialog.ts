@@ -12,8 +12,12 @@ import { expireRefFrame } from '../core/ref-frame.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
-/** The framework id of the ANR dialog's Close app button. It does not depend on the device language. */
+/**
+ * The framework ids of the ANR dialog's Close app and Wait buttons. They do not depend on the
+ * device language, and only the ANR dialog has Wait: the crash dialog also has Close app.
+ */
 const ANDROID_ANR_CLOSE_BUTTON_ID = 'android:id/aerr_close';
+const ANDROID_ANR_WAIT_BUTTON_ID = 'android:id/aerr_wait';
 const ANDROID_MODAL_POLL_MS = 500;
 const ANDROID_MODAL_POLL_ATTEMPTS = 12;
 const ANDROID_BLOCKING_DIALOG_HINT =
@@ -155,8 +159,8 @@ async function recoverAppOwnedAndroidBlockingSystemDialog(
   const tapResult = await tapAndroidDialogButton(session, closeAppButton, observation);
   if (!tapResult.ok) return false;
   // Android kills the process before it removes the dialog. A launch before that reaches the task
-  // that is about to die, so the relaunch waits until the dialog is gone.
-  if (!(await waitForCloseAppButtonToLeave(session, observation))) return false;
+  // that is about to die, so the relaunch waits until the ANR dialog is gone.
+  if (!(await waitForAnrDialogToLeave(session, observation))) return false;
 
   await observation.openApp(session.device, session.appBundleId);
   const focused = await waitForAndroidAppFocus(session, session.appBundleId, observation);
@@ -244,6 +248,8 @@ async function tapAndroidDialogButton(
  * this is the consumer side of that.
  */
 function findCloseAppButton(nodes: SnapshotNode[]): SnapshotNode | undefined {
+  // A Close app without the ANR's Wait button belongs to another dialog, such as a crash dialog.
+  if (!showsAnrDialog(nodes)) return undefined;
   return nodes.find(
     (node) =>
       node.identifier === ANDROID_ANR_CLOSE_BUTTON_ID &&
@@ -252,14 +258,19 @@ function findCloseAppButton(nodes: SnapshotNode[]): SnapshotNode | undefined {
   );
 }
 
-async function waitForCloseAppButtonToLeave(
+function showsAnrDialog(nodes: SnapshotNode[]): boolean {
+  return nodes.some((node) => node.identifier === ANDROID_ANR_WAIT_BUTTON_ID);
+}
+
+/** Only a snapshot that was read and shows no Wait button counts as the ANR dialog gone. */
+async function waitForAnrDialogToLeave(
   session: SessionState,
   observation: AndroidObservationAdapter,
 ): Promise<boolean> {
   for (let attempt = 0; attempt <= ANDROID_MODAL_POLL_ATTEMPTS; attempt += 1) {
     if (attempt > 0) await sleep(ANDROID_MODAL_POLL_MS);
     const nodes = await readAndroidSnapshotNodes(session, observation).catch(() => undefined);
-    if (nodes && !findCloseAppButton(nodes)) return true;
+    if (nodes && !showsAnrDialog(nodes)) return true;
   }
   return false;
 }

@@ -29,8 +29,9 @@ export const ANDROID_FOCUS_MARKERS = [
   'mResumedActivity:',
   'ResumedActivity:',
 ] as const;
-const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
-const ANDROID_PACKAGE_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
+/** A process name keeps its `:suffix`: `android:process=":worker"` runs as `<package>:worker`. */
+const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.:]+)/i;
+const ANDROID_PROCESS_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+(?::[A-Za-z0-9_.]+)?)/;
 const ANDROID_COMPONENT_PATTERN =
   /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/;
 
@@ -174,7 +175,7 @@ function parseAndroidBlockingDialogFromSegment(
     return null;
   }
   const focusedWindow = windowText.trim().replaceAll(/\s+/g, ' ');
-  const processName = ANDROID_PACKAGE_PATTERN.exec(focusedWindow)?.[1];
+  const processName = ANDROID_PROCESS_PATTERN.exec(focusedWindow)?.[1];
   return {
     ...(processName ? { process: processName } : {}),
     focusedWindow,
@@ -192,6 +193,8 @@ export type AndroidProcessRecord = {
 const ANDROID_PROCESS_RECORD_PATTERN =
   /^\s*\*[A-Z]+\*.*\bProcessRecord\{[0-9a-f]+ \d+:([^/\s}]+)\//;
 const ANDROID_PACKAGE_LIST_PATTERN = /^\s*packageList=\{([^}]*)\}/;
+/** Android 12 and later print `mNotResponding=true`; earlier versions print `notResponding=true`. */
+const ANDROID_NOT_RESPONDING_PATTERN = /(?:^|\s)m?notResponding=true\b/i;
 
 /**
  * Reads the process records of a `dumpsys activity processes` dump. A record starts at a
@@ -216,7 +219,7 @@ export function parseAndroidProcessRecords(text: string): AndroidProcessRecord[]
         .map((name) => name.trim())
         .filter(Boolean);
     }
-    if (/\bnotResponding=true\b/.test(line)) current.notResponding = true;
+    if (ANDROID_NOT_RESPONDING_PATTERN.test(line)) current.notResponding = true;
   }
   return records;
 }

@@ -104,16 +104,17 @@ test('parseAndroidResumedActivity ignores a stale last-resumed record', () => {
   );
 });
 
-test('parseAndroidProcessRecords reads process records, not PID mappings that name them', () => {
+test('parseAndroidProcessRecords reads both ANR flag spellings, not PID mappings', () => {
   const dump = [
     'ACTIVITY MANAGER RUNNING PROCESSES (dumpsys activity processes)',
     '  All known processes:',
     '  *APP* UID 10146 ProcessRecord{9b0c5a1 4563:com.example.app:remote/u0a146}',
     '    user #0 uid=10146 gids={50146, 20146, 9997}',
     '    packageList={com.example.app}',
-    '     crashing=false notResponding=true',
+    '     mCrashing=false null mNotResponding=true [com.android.server.am.AppNotRespondingDialog@ec3b7c1] bad=false',
     '  *PERS* UID 1000 ProcessRecord{1a2b3c4 812:system/1000}',
     '    packageList={android, com.android.providers.settings}',
+    '     crashing=false notResponding=true',
     '  PID mappings:',
     '    PID #4563: ProcessRecord{9b0c5a1 4563:com.example.app:remote/u0a146}',
   ].join('\n');
@@ -123,7 +124,7 @@ test('parseAndroidProcessRecords reads process records, not PID mappings that na
     {
       process: 'system',
       packages: ['android', 'com.android.providers.settings'],
-      notResponding: false,
+      notResponding: true,
     },
   ]);
 });

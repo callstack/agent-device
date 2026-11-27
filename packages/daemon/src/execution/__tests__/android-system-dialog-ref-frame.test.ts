@@ -26,9 +26,17 @@ test('android app-ANR recovery expires the ref frame before its recovery tap', a
     hittable: true,
     rect: { x: 20, y: 200, width: 120, height: 44 },
   };
+  const wait = {
+    index: 1,
+    type: 'Button',
+    label: 'Wait',
+    identifier: 'android:id/aerr_wait',
+    hittable: true,
+    rect: { x: 20, y: 260, width: 120, height: 44 },
+  };
   // First read: the dialog drives recovery. Next read: the dialog has left after Close app.
   vi.mocked(snapshotAndroid)
-    .mockResolvedValueOnce(makeAndroidSnapshotCapture([closeApp]) as never)
+    .mockResolvedValueOnce(makeAndroidSnapshotCapture([closeApp, wait]) as never)
     .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
   const observation: AndroidObservationAdapter = {

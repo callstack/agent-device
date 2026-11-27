@@ -159,6 +159,15 @@ test('collectively covered Close app is neither selected nor tapped', async () =
       label: "App isn't responding",
       rect: { x: 40, y: 180, width: 320, height: 60 },
     },
+    {
+      index: 6,
+      parentIndex: 0,
+      type: 'android.widget.Button',
+      label: 'Wait',
+      identifier: 'android:id/aerr_wait',
+      hittable: true,
+      rect: { x: 40, y: 500, width: 200, height: 80 },
+    },
   ];
   const capture = makeAndroidSnapshotCapture(nodes, {
     occlusionContext: {
@@ -168,6 +177,7 @@ test('collectively covered Close app is neither selected nor tapped', async () =
         [1, { group: 0, order: 1 }],
         [2, { group: 0, order: 2 }],
         [5, { group: 0, order: 3 }],
+        [6, { group: 0, order: 4 }],
       ]),
     },
   });

@@ -48,11 +48,16 @@ test('answers focus and blocking-dialog questions from one observation-bound dum
 const ANR_WINDOW_DUMP = (processName: string) =>
   `mCurrentFocus=Window{1 u0 Application Not Responding: ${processName}}`;
 
+/** The record shape of `dumpsys activity processes`; the flag line is from an Android 17 (API 37) emulator. */
 function processRecord(processName: string, packages: readonly string[], notResponding = false) {
   return [
     `  *APP* UID 10146 ProcessRecord{9b0c5a1 4563:${processName}/u0a146}`,
     `    packageList={${packages.join(', ')}}`,
-    ...(notResponding ? ['     crashing=false notResponding=true'] : []),
+    ...(notResponding
+      ? [
+          '     mCrashing=false null mNotResponding=true [com.android.server.am.AppNotRespondingDialog@ec3b7c1] bad=false',
+        ]
+      : []),
   ].join('\n');
 }
 
@@ -95,6 +100,28 @@ test('an ANR in a named app process is owned by the package that runs it', async
   });
 });
 
+test('an ANR in a private app process keeps its suffix through the owner lookup', async () => {
+  const host = hostFor(
+    new Map([
+      ['shell dumpsys window windows', ANR_WINDOW_DUMP('com.example.app:worker')],
+      [
+        'shell dumpsys activity processes',
+        [
+          processRecord('com.example.app', ['com.example.other']),
+          processRecord('com.example.app:worker', ['com.example.app']),
+        ].join('\n'),
+      ],
+    ]),
+  );
+
+  const observation = await createAndroidObservationAdapter(host).readBlockingDialog(device);
+
+  expect(observation).toMatchObject({
+    status: 'dialog',
+    focus: { package: 'com.example.app', process: 'com.example.app:worker' },
+  });
+});
+
 test('an ANR process that runs more than one package, or no known package, has no owner', async () => {
   const read = async (processes: string) =>
     await createAndroidObservationAdapter(
@@ -122,39 +149,68 @@ test('an ANR process that runs more than one package, or no known package, has n
   }
 });
 
-test('a visible ANR is identified by its not-responding process when no window dump answers', async () => {
+const ANR_DIALOG_NODES = [
+  { index: 0, ref: 'e0', identifier: 'android:id/aerr_close' },
+  { index: 1, ref: 'e1', identifier: 'android:id/aerr_wait' },
+];
+
+test('a visible ANR seen only after an unanswered window probe has no owner', async () => {
+  // Nothing links the visible dialog to the not-responding process, so the guard must refuse it.
   const host = hostFor(
     new Map([
       [
         'shell dumpsys activity processes',
         [
-          processRecord('com.example.app.worker', ['com.example.app'], true),
+          processRecord('com.example.app', ['com.example.app'], true),
           processRecord('com.example.other', ['com.example.other']),
         ].join('\n'),
       ],
     ]),
   );
-  vi.mocked(host.readSnapshotNodes).mockResolvedValue([
-    { index: 0, ref: 'e0', identifier: 'android:id/aerr_close' },
-    { index: 1, ref: 'e1', identifier: 'android:id/aerr_wait' },
-  ]);
+  vi.mocked(host.readSnapshotNodes).mockResolvedValue(ANR_DIALOG_NODES);
 
   await expect(createAndroidObservationAdapter(host).readBlockingDialog(device)).resolves.toEqual({
     status: 'dialog',
     focus: {
-      process: 'com.example.app.worker',
-      package: 'com.example.app',
-      focusedWindow: 'Application Not Responding: com.example.app.worker',
+      process: 'com.example.app',
+      focusedWindow: 'Application Not Responding: com.example.app',
       raw: '',
     },
   });
 });
 
-test('an unanswered window probe stays unknown when no ANR is visible', async () => {
-  const host = hostFor(new Map());
-  vi.mocked(host.readSnapshotNodes).mockResolvedValue([
-    { index: 0, ref: 'e0', identifier: 'android:id/aerr_close' },
-  ]);
+test('an unanswered window probe reads no snapshot when no process is not responding', async () => {
+  const host = hostFor(
+    new Map([
+      ['shell dumpsys activity processes', processRecord('com.example.app', ['com.example.app'])],
+    ]),
+  );
+  vi.mocked(host.readSnapshotNodes).mockResolvedValue(ANR_DIALOG_NODES);
+
+  await expect(createAndroidObservationAdapter(host).readBlockingDialog(device)).resolves.toEqual({
+    status: 'unknown',
+  });
+  expect(host.readSnapshotNodes).not.toHaveBeenCalled();
+});
+
+test('an unanswered window probe stays unknown when no ANR dialog is visible', async () => {
+  const host = hostFor(
+    new Map([
+      [
+        'shell dumpsys activity processes',
+        processRecord('com.example.app', ['com.example.app'], true),
+      ],
+    ]),
+  );
+  vi.mocked(host.readSnapshotNodes).mockResolvedValue([ANR_DIALOG_NODES[0]!]);
+
+  await expect(createAndroidObservationAdapter(host).readBlockingDialog(device)).resolves.toEqual({
+    status: 'unknown',
+  });
+});
+
+test('a dump that answers no focused window skips the unanswered-probe reads', async () => {
+  const host = hostFor(new Map([['shell dumpsys window windows', '  mCurrentFocus=null']]));
 
   await expect(createAndroidObservationAdapter(host).readBlockingDialog(device)).resolves.toEqual({
     status: 'unknown',
@@ -164,6 +220,7 @@ test('an unanswered window probe stays unknown when no ANR is visible', async ()
     expect.arrayContaining(['processes']),
     expect.anything(),
   );
+  expect(host.readSnapshotNodes).not.toHaveBeenCalled();
 });
 
 test('a clear blocking-dialog read names the package of the focused component only', async () => {
