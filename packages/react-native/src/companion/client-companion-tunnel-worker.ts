@@ -23,7 +23,10 @@ import type {
   MetroTunnelResponseMessage,
 } from './metro-tunnel-messages.ts';
 import { normalizeBaseUrl } from '../metro/base-url.ts';
-import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
+import {
+  assertSecureCredentialSocket,
+  assertSecureCredentialTransport,
+} from '@agent-device/contracts/credential-transport';
 
 const COMPANION_REGISTER_TIMEOUT_MS = 5_000;
 const COMPANION_REGISTER_MAX_RETRY_DELAY_MS = 60_000;
@@ -168,11 +171,32 @@ function clampRetryDelay(delayMs: number): number {
  * `https://api/...`).
  */
 function bearerDestination(serverBaseUrl: string, path: string): string {
-  try {
+  return refuseWithoutRetry(() => {
     assertSecureCredentialTransport(serverBaseUrl, 'Metro companion bridge URL');
     const url = `${normalizeBaseUrl(serverBaseUrl)}${path}`;
     assertSecureCredentialTransport(url, 'Metro companion bridge URL');
     return url;
+  });
+}
+
+/**
+ * Prepares the bridge socket. The registered URL is what admits this companion to the bridge, so it
+ * follows the credential transport rule: `wss`, or `ws` to loopback. A `ws` socket connects
+ * directly, because the global `WebSocket` hands its URL to an environment proxy.
+ */
+async function prepareBridgeSocket(wsUrl: string): Promise<() => WebSocket> {
+  const destination = refuseWithoutRetry(() =>
+    assertSecureCredentialSocket(wsUrl, 'Metro companion bridge socket URL'),
+  );
+  if (destination.protocol === 'https:') return () => new WebSocket(wsUrl);
+  const { Agent, WebSocket: DirectWebSocket } = await import('undici');
+  return () => new DirectWebSocket(wsUrl, { dispatcher: new Agent() }) as unknown as WebSocket;
+}
+
+/** Runs a transport check as part of registration: its refusal is one no retry can fix. */
+function refuseWithoutRetry<T>(check: () => T): T {
+  try {
+    return check();
   } catch (error) {
     throw new CompanionRegistrationError(
       error instanceof Error ? error.message : String(error),
@@ -510,12 +534,13 @@ export async function runCompanionTunnelWorker(
         registerRetryDelayMs = runtime.reconnectDelayMs ?? COMPANION_TUNNEL_RECONNECT_DELAY_MS;
         registered = true;
         activeRegistrationComplete = true;
+        const connectBridge = await prepareBridgeSocket(registration.wsUrl);
         if (shutdownRequested || !shouldKeepWorkerRunning(options)) {
           await unregisterActiveRegistration();
           registered = false;
           break;
         }
-        const bridgeSocket = new WebSocket(registration.wsUrl);
+        const bridgeSocket = connectBridge();
         activeBridgeSocket = bridgeSocket;
         bridgeSocket.binaryType = 'arraybuffer';
         try {

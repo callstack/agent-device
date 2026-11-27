@@ -37,3 +37,14 @@ export function assertSecureCredentialTransport(url: string | URL, subject: stri
     },
   );
 }
+
+/**
+ * The same rule for a WebSocket that carries a credential: `wss` counts as https, and `ws` as plain
+ * http, so loopback only. Returns the destination in that http(s) form.
+ */
+export function assertSecureCredentialSocket(url: string, subject: string): URL {
+  const destination = URL.parse(url);
+  if (destination?.protocol === 'wss:') destination.protocol = 'https:';
+  if (destination?.protocol === 'ws:') destination.protocol = 'http:';
+  return assertSecureCredentialTransport(destination ?? url, subject);
+}

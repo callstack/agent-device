@@ -5,6 +5,7 @@ import {
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { isLoopbackHostname } from '@agent-device/contracts/loopback-host';
 import fs from 'node:fs';
 import { Readable } from 'node:stream';
@@ -95,6 +96,9 @@ type RevylProviderReason =
  */
 type RevylRoute = 'session' | 'general';
 
+/** Sends one request that carries the API key or a presigned URL. */
+type RevylTransmit = (url: string | URL, init: RequestInit) => Promise<Response>;
+
 type RevylRequest = Readonly<{
   method: 'GET' | 'POST';
   path: string;
@@ -175,7 +179,12 @@ export type RevylClient = Readonly<{
 
 export function createRevylClient(options: RevylClientOptions): RevylClient {
   const backendUrl = resolveRevylBackendUrl(options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL);
-  const fetchImpl = options.fetch ?? fetch;
+  // Without an injected `fetch`, plain http (loopback only) goes direct, never through an
+  // environment proxy.
+  const transmit: RevylTransmit = async (url, init) => {
+    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+    return await fetchWithCredential(url, init, options.fetch);
+  };
   const baseHeaders = {
     Authorization: `Bearer ${options.apiKey}`,
     Accept: 'application/json',
@@ -187,7 +196,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
     const retry = request.retry ?? request.method === 'GET';
     const attempts = retry ? RETRY_DELAYS_MS.length + 1 : 1;
     for (let attempt = 1; ; attempt += 1) {
-      const outcome = await sendOnce(backendUrl, fetchImpl, baseHeaders, request);
+      const outcome = await sendOnce(backendUrl, transmit, baseHeaders, request);
       if (!isRetryable(request, outcome) || attempt >= attempts || request.signal?.aborted) {
         if (outcome instanceof Error) throw outcome;
         return outcome;
@@ -300,6 +309,8 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       });
     },
     async uploadSessionArtifact(uploadUrl, file, contentType, signal) {
+      // Revyl chooses this URL, and its signature is the credential.
+      assertSecureCredentialTransport(uploadUrl, 'Revyl upload URL');
       // Node streams a request body only in half-duplex mode, which the DOM `RequestInit` type omits.
       const init: RequestInit & { duplex: 'half' } = {
         method: 'PUT',
@@ -312,7 +323,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       };
       let response: Response;
       try {
-        response = await fetchImpl(uploadUrl, init);
+        response = await transmit(uploadUrl, init);
       } catch (error) {
         throw new AppError(
           'COMMAND_FAILED',
@@ -359,7 +370,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
 
 async function sendOnce(
   backendUrl: string,
-  fetchImpl: typeof fetch,
+  transmit: RevylTransmit,
   baseHeaders: Record<string, string>,
   request: RevylRequest,
 ): Promise<RevylResponse | Error> {
@@ -369,7 +380,7 @@ async function sendOnce(
   if (request.workerAction) headers['X-Revyl-Agent'] = REVYL_ATTRIBUTION;
   if (request.body !== undefined) headers['Content-Type'] = 'application/json';
   try {
-    const response = await fetchImpl(new URL(request.path, backendUrl), {
+    const response = await transmit(new URL(request.path, backendUrl), {
       method: request.method,
       headers,
       body: request.body === undefined ? undefined : JSON.stringify(request.body),
