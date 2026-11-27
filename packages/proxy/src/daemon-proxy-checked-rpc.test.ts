@@ -277,3 +277,35 @@ test('a checked call never follows an upstream redirect to /rpc', async () => {
     await new Promise<void>((resolve) => daemon.close(() => resolve()));
   }
 });
+
+test('an upstream refusal with an oversized version keeps the protocol 409 without its diagnostics', async () => {
+  const upstream = recordingUpstream(() =>
+    Response.json(
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        error: {
+          code: -32001,
+          message: 'skew',
+          data: {
+            details: {
+              service: 'agent-device-daemon',
+              version: `${'9'.repeat(60_000)}.0.0`,
+              rpcProtocolVersion: 99,
+            },
+          },
+        },
+      },
+      { status: 409, headers: { [DAEMON_HTTP_REFUSAL_HEADER]: 'protocol-mismatch' } },
+    ),
+  );
+  const response = await tokenProxy(upstream.fetch).handle(checkedRequest(COMMAND));
+
+  expect(response.status).toBe(409);
+  expect(response.headers.get(DAEMON_HTTP_REFUSAL_HEADER)).toBe('upstream-protocol-mismatch');
+  const text = await response.text();
+  expect(text.length).toBeLessThan(2_000);
+  const details = (JSON.parse(text) as { error: { data: { details: Record<string, unknown> } } })
+    .error.data.details;
+  expect(details).toEqual({ reason: 'remote_rpc_protocol_mismatch', dispatched: 'no' });
+});

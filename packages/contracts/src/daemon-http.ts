@@ -217,8 +217,10 @@ export function readCheckedRpcRefusalSide(details: unknown): CheckedRpcRefusalSi
   if (!details || typeof details !== 'object') return undefined;
   const { service, version, rpcProtocolVersion } = details as Record<string, unknown>;
   if (service !== 'agent-device-daemon' && service !== 'agent-device-proxy') return undefined;
+  // The whole string is capped first, at the length the `/health` reader allows a version.
   if (
     typeof version !== 'string' ||
+    version.length > 64 ||
     !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]{1,48})?$/.test(version)
   ) {
     return undefined;
