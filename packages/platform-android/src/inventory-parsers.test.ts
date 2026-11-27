@@ -4,8 +4,8 @@ import {
   isAndroidEmulatorSerial,
   normalizeAndroidDeviceName,
   parseAndroidAvdList,
-  parseAndroidDeviceDescription,
   parseAndroidDeviceEntries,
+  parseAndroidDeviceProps,
   parseAndroidEmulatorAvdNameOutput,
   androidFeatureListDeclares,
   parseAndroidTargetFromCharacteristics,
@@ -52,11 +52,17 @@ test('Android AVD list parser keeps AVD names and drops emulator log lines', () 
   );
 });
 
-test('Android description parser reads the model and OS version lines and skips unset props', () => {
-  assert.deepEqual(parseAndroidDeviceDescription('sdk_gphone16k_arm64\r\n17\r\n'), {
-    model: 'sdk_gphone16k_arm64',
-    osVersion: '17',
-  });
-  assert.deepEqual(parseAndroidDeviceDescription('\n16\n'), { osVersion: '16' });
-  assert.deepEqual(parseAndroidDeviceDescription(''), {});
+test('Android props parser reads one line per property in order and skips unset props', () => {
+  assert.deepEqual(
+    parseAndroidDeviceProps('1\r\nPixel_9\r\n\r\nsdk_gphone16k_arm64\r\n17\r\nemulator\r\n'),
+    {
+      'sys.boot_completed': '1',
+      'ro.boot.qemu.avd_name': 'Pixel_9',
+      'ro.product.model': 'sdk_gphone16k_arm64',
+      'ro.build.version.release': '17',
+      'ro.build.characteristics': 'emulator',
+    },
+  );
+  assert.deepEqual(parseAndroidDeviceProps('\n\n\n\n16\n'), { 'ro.build.version.release': '16' });
+  assert.deepEqual(parseAndroidDeviceProps(''), {});
 });
