@@ -5,7 +5,10 @@
 // owns as a `RemoteResendPort`, declared below both in `daemon-client-remote-resend-port.ts`.
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
-import { CheckedRpcConnectFailure } from './daemon-client-checked-rpc.ts';
+import {
+  CheckedRpcConnectFailure,
+  undispatchedWithoutEndpoint,
+} from './daemon-client-checked-rpc.ts';
 import { cacheRemoteDaemonHealth } from './daemon-client-remote-health-cache.ts';
 import { recoverRemoteDaemonHealth } from './daemon-client-remote-health-recovery.ts';
 import type { RemoteResendPort } from './daemon-client-remote-resend-port.ts';
@@ -32,7 +35,7 @@ export async function sendCheckedRpcAfterConnectFailure(
   await port.invalidateHealth();
   if (!error.timedOut) {
     throw remoteDaemonUnavailableError({
-      daemonBaseUrl: port.info.baseUrl,
+      daemonBaseUrl: undefined,
       attempts: 1,
       hint: REMOTE_DAEMON_UNREACHABLE_HINT,
     });
@@ -50,9 +53,11 @@ export async function sendCheckedRpcAfterConnectFailure(
       probe: port.probeHealth,
     });
   } catch (recoveryError) {
-    // The caller's abort ends the recovery, and the caller hears its own typed cancellation.
+    // The caller's abort ends the recovery, and the caller hears its own typed cancellation. Every
+    // other recovery failure, protocol skew included, comes before the resend: nothing left, and
+    // the error names no endpoint.
     port.refuseIfAborted();
-    throw recoveryError;
+    throw undispatchedWithoutEndpoint(recoveryError);
   }
   port.refuseIfAborted();
   return await port.resend(port.timeoutMs);

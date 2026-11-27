@@ -33,6 +33,11 @@ export function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHe
   };
 }
 
+/** Whether this process holds an instance-pinned `/health` answer for this daemon identity. */
+export function holdsPinnedRemoteHealth(info: DaemonInfo): boolean {
+  return remoteHealthCache !== undefined && matchesRemoteIdentity(remoteHealthCache, info);
+}
+
 export function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
   remoteHealthGeneration += 1;
   if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {

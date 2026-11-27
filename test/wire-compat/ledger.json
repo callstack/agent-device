@@ -260,9 +260,9 @@
     "packages/daemon-client/src/daemon-client-checked-rpc.ts#isCheckedRpcOutcomeResponse": "sha256:75fb9f3444a3f8f4a762811ba7cbe02d92a39ed4e55483ea0cf7f029e5720a3e",
     "packages/daemon-client/src/daemon-client-checked-rpc.ts#CheckedRpcOutcome": "sha256:8aa7e58307417460bb54938f6bbbd340254e14ffbbaf2093272996909592f7be",
     "packages/daemon-client/src/daemon-client-checked-rpc.ts#ReadHealthLink": "sha256:86a9e6f1ebdaecca3ddaa16081c221321c01c684b70197961ecd71a3f54a464f",
-    "packages/daemon-client/src/daemon-client-checked-rpc.ts#readCheckedRpcOutcome": "sha256:95c2757f5ad08d488b2e373af65d22422f1953b40f079fd56c2f3e7655a6589d",
-    "packages/daemon-client/src/daemon-client-checked-rpc.ts#checkedRpcRefusalError": "sha256:30cbda341fa43b02e0121b0520c6a9dab6dd7aff2f99974ecbe49b7661dbad93",
-    "packages/daemon-client/src/daemon-client-checked-rpc.ts#protocolMismatchError": "sha256:e56950b0227f839d70db1af54887270dc571ed4ac3593cc37b158bef133b0912",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#readCheckedRpcOutcome": "sha256:476b6638b99bc2d9abd8a45e881c2d7bdffdb07e9fcfb484d7bd249d3af0af94",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#checkedRpcRefusalError": "sha256:eb18282eae11aea1a06d826afbc50afe123969504addaeb9cb7bb7001e089a9c",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#protocolMismatchError": "sha256:ae7a834278884658edf41c146f8b89adfa46021af0ffc2763c44ac94ea38be6a",
     "packages/daemon-client/src/daemon-client-checked-rpc.ts#readRefusalDetails": "sha256:41309e8fe57616e93848c93b36e8fb665a737f87d013243c6f6f1949e9f87215",
     "packages/daemon-client/src/daemon-client-checked-rpc.ts#isJsonRpcAnswer": "sha256:ecbf4226264fe3d3b551f89a075729df477e5c3b183dc2a761123c7229f4fe99"
   },

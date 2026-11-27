@@ -110,6 +110,12 @@ export type AgentDeviceDaemonTransport = (
 export type AgentDeviceClientConfig = RemoteConnectionProfileFields &
   CloudProviderProfileFields & {
     /** See `DaemonLifecycle`. */
+    /**
+     * The fingerprint of the checked RPC target `connect` approved. The CLI sets it from the
+     * connection record, and checked RPC then applies only to that exact target. SDK callers leave it
+     * unset.
+     */
+    daemonRpcTarget?: string;
     daemonLifecycle?: DaemonLifecycle;
     /**
      * Pins this client to one daemon instance: every request addresses that instance, authenticates

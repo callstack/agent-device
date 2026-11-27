@@ -43,6 +43,8 @@ export type CliFlags = CloudProviderProfileFields &
     daemonServerMode?: DaemonServerMode;
     /** No CLI token: the connection `connect` recorded sets it. */
     daemonRpc?: DaemonRpcMode;
+    /** No CLI token: the fingerprint of the checked target `connect` approved. */
+    daemonRpcTarget?: string;
     proxyHost?: string;
     proxyPort?: number;
     publicOrigin?: string;

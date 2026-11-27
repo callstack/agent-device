@@ -15,7 +15,6 @@ import {
   connectionPlatformMatchesSelection,
   narrowConnectionPlatform,
   writeRemoteConnectionState,
-  buildRemoteConnectionDaemonState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
@@ -84,7 +83,7 @@ export const connectCommand: ClientCommandHandler = async ({
     host,
   );
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
-  const checkedRpcBaseUrl = await assertCheckedRpcServed(connectFlags, host);
+  const checkedRpcTarget = await assertCheckedRpcServed(connectFlags, host);
   const context = resolveConnectContext({
     stateDir,
     flags: connectFlags,
@@ -106,7 +105,7 @@ export const connectCommand: ClientCommandHandler = async ({
     connectionMetadata,
     context,
     remoteConfigPath: resolved.remoteConfigPath,
-    checkedRpcBaseUrl,
+    checkedRpcTarget,
   });
   writeRemoteConnectionState({ stateDir, state });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
@@ -129,7 +128,7 @@ export const connectCommand: ClientCommandHandler = async ({
 
 /**
  * `daemonRpc: checked` skips the `/health` probe on later commands, so `connect` records it only
- * when every link of the remote advertises `checked-rpc`, and only for the base URL it probed.
+ * when every link of the remote advertises `checked-rpc`, and only for the exact target it probed.
  */
 async function assertCheckedRpcServed(
   flags: CliFlags,
@@ -195,8 +194,8 @@ function buildConnectedState(options: {
   connectionMetadata?: RemoteConnectionRequestMetadata;
   context: ConnectContext;
   remoteConfigPath: string;
-  /** The base URL `connect` probed and found serving checked RPC, when it was asked to. */
-  checkedRpcBaseUrl?: string;
+  /** The fingerprint of the checked target `connect` probed and found served, when asked to. */
+  checkedRpcTarget?: string;
 }): RemoteConnectionState {
   const { flags, scope, connectionMetadata, context, remoteConfigPath } = options;
   const previous = shouldReusePreviousConnectionState(flags, context.previous)
@@ -216,14 +215,8 @@ function buildConnectedState(options: {
     session: context.session,
     remoteConfigPath,
     remoteConfigHash: context.remoteConfigHash,
-    daemon: options.checkedRpcBaseUrl
-      ? {
-          ...context.daemon,
-          // Sanitized exactly as `baseUrl` is, so later commands compare like with like.
-          checkedRpcBaseUrl: buildRemoteConnectionDaemonState({
-            daemonBaseUrl: options.checkedRpcBaseUrl,
-          })?.baseUrl,
-        }
+    daemon: options.checkedRpcTarget
+      ? { ...context.daemon, checkedRpcTarget: options.checkedRpcTarget }
       : context.daemon,
     tenant: scope.tenant,
     runId: scope.runId,

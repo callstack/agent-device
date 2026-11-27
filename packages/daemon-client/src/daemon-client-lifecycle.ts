@@ -24,7 +24,13 @@ import {
   type DaemonServerMode,
   type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
+import { createHash } from 'node:crypto';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import {
+  buildDaemonHttpUrl,
+  DAEMON_HTTP_CHECKED_RPC_ROUTE,
+} from '@agent-device/contracts/daemon-http';
+import { requestUploadsArtifacts } from '@agent-device/remote/daemon-artifacts';
 import type { DaemonRpcMode } from '@agent-device/contracts/remote';
 import {
   DAEMON_CLIENT_CONFIG_REASONS,
@@ -137,7 +143,10 @@ export function resolveClientSettings(
     ownedStateDir,
     remoteBaseUrl: remote.remoteBaseUrl,
     remoteAuthToken: remote.authToken,
-    ...(remote.remoteBaseUrl && remote.daemonRpc === 'checked' && isStandaloneRemoteRequest(req)
+    ...(remote.remoteBaseUrl &&
+    remote.daemonRpc === 'checked' &&
+    approvesCheckedRpcTarget(req.flags?.daemonRpcTarget, remote.remoteBaseUrl) &&
+    isStandaloneRemoteRequest(req)
       ? { remoteCheckedRpc: true as const }
       : {}),
     ...(daemonBinding ? { daemonBinding } : {}),
@@ -145,16 +154,33 @@ export function resolveClientSettings(
 }
 
 /**
- * Whether a remote request reaches the daemon with nothing before its command RPC. An install may
- * upload an artifact, under lease beats, before its RPC, so it keeps the `/health` probe and the
- * instance headers that pin that RPC to the daemon holding the upload.
+ * Whether a remote request reaches the daemon with nothing before its command RPC that must land on
+ * the same daemon. An upload, and a lease allocate or heartbeat, keep the `/health` probe, so their
+ * instance ID pins what follows; every caller, the SDK included, gets this rule.
  */
 function isStandaloneRemoteRequest(req: Omit<DaemonWireRequest, 'token'>): boolean {
   return (
-    req.command !== PUBLIC_COMMANDS.install &&
-    req.command !== PUBLIC_COMMANDS.reinstall &&
-    req.command !== INTERNAL_COMMANDS.installSource
+    !requestUploadsArtifacts(req) &&
+    req.command !== INTERNAL_COMMANDS.leaseAllocate &&
+    req.command !== INTERNAL_COMMANDS.leaseHeartbeat
   );
+}
+
+/**
+ * A fingerprint of the exact HTTP target a checked call is sent to, resolved by the same
+ * `buildDaemonHttpUrl` the transport sends with. `connect` records only this fingerprint.
+ */
+export function checkedRpcTargetFingerprint(remoteBaseUrl: string): string {
+  const target = buildDaemonHttpUrl(remoteBaseUrl, DAEMON_HTTP_CHECKED_RPC_ROUTE);
+  return createHash('sha256').update(target).digest('hex');
+}
+
+/**
+ * A connection's recorded approval holds only for the target it fingerprinted. An explicit SDK opt-in
+ * names no fingerprint and is taken as given.
+ */
+function approvesCheckedRpcTarget(recorded: string | undefined, remoteBaseUrl: string): boolean {
+  return recorded === undefined || recorded === checkedRpcTargetFingerprint(remoteBaseUrl);
 }
 
 /**
@@ -318,9 +344,14 @@ async function ensureRemoteDaemon(
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
-  // The checked route makes the server refuse what `/health` would have: no probe goes first.
-  if (settings.remoteCheckedRpc)
-    return { info: { ...remoteInfo, checkedRpc: true }, startedByClient: false };
+  // The checked route makes the server refuse what `/health` would have: no probe goes first. A
+  // process that already holds an instance-pinned answer uses it instead, fenced and free.
+  if (settings.remoteCheckedRpc) {
+    const { holdsPinnedRemoteHealth } = await import('./daemon-client-remote-health-cache.ts');
+    if (!holdsPinnedRemoteHealth(remoteInfo)) {
+      return { info: { ...remoteInfo, checkedRpc: true }, startedByClient: false };
+    }
+  }
   // The command's budget starts with the first probe, which already runs under it and its signal.
   const deadline = performance.now() + (healthRecovery?.budgetMs ?? 0);
   let health = await cachedRemoteDaemonHealth(

@@ -243,6 +243,7 @@ export function refuseOversizedDaemonRequest(payload: string, requestId: string 
     maxBytes: DAEMON_REQUEST_MAX_BYTES,
     requestId,
     daemonRequestSent: false,
+    dispatched: 'no',
     hint: 'Split the replay suite or flow into smaller runs.',
   });
 }
@@ -293,6 +294,7 @@ export function incompatibleRemoteProtocolError(
       supportedRpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
       remoteRpcProtocolVersion: link.rpcProtocolVersion,
       upgradeSide,
+      dispatched: 'no',
       hint: 'Retry after the upgrade. This check runs before any command is sent.',
     },
   );

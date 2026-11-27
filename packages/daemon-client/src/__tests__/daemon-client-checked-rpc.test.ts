@@ -14,8 +14,14 @@ import {
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
 import { assertRemoteServesCheckedRpc, sendToDaemon } from '../index.ts';
+import { checkedRpcTargetFingerprint } from '../daemon-client-lifecycle.ts';
 
-type Seen = { method: string; url: string; protocol: string | undefined };
+type Seen = {
+  method: string;
+  url: string;
+  protocol: string | undefined;
+  instance: string | undefined;
+};
 type Answer = { status?: number; headers?: Record<string, string>; body: string };
 
 const OK_ANSWER: Answer = {
@@ -23,21 +29,28 @@ const OK_ANSWER: Answer = {
 };
 
 /** A remote daemon that records every request and answers RPCs with `answer`. */
-async function remoteDaemon(answer: Answer = OK_ANSWER) {
+async function remoteDaemon(answer: Answer = OK_ANSWER, pinned = false) {
   const seen: Seen[] = [];
   const server = http.createServer((req, res) => {
     const protocol = req.headers[DAEMON_HTTP_RPC_PROTOCOL_HEADER];
+    const instance = req.headers['x-agent-device-instance'];
     seen.push({
       method: req.method ?? '',
       url: req.url ?? '',
       protocol: typeof protocol === 'string' ? protocol : undefined,
+      instance: typeof instance === 'string' ? instance : undefined,
     });
     req.resume();
     req.on('end', () => {
-      if (req.url === '/health') {
+      if (req.url?.endsWith('/health')) {
         res.setHeader('content-type', 'application/json');
         res.end(
-          JSON.stringify({ ok: true, service: 'agent-device-daemon', rpcProtocolVersion: 3 }),
+          JSON.stringify({
+            ok: true,
+            service: 'agent-device-daemon',
+            rpcProtocolVersion: 3,
+            ...(pinned ? { instanceId: 'daemon-1' } : {}),
+          }),
         );
         return;
       }
@@ -257,9 +270,18 @@ test.each([
     health: {
       service: 'agent-device-proxy',
       capabilities: ['checked-rpc'],
-      upstream: { capabilities: ['checked-rpc'] },
+      upstream: { service: 'agent-device-daemon', capabilities: ['checked-rpc'] },
     },
     served: true,
+  },
+  {
+    name: 'a proxy whose upstream is another proxy',
+    health: {
+      service: 'agent-device-proxy',
+      capabilities: ['checked-rpc'],
+      upstream: { service: 'agent-device-proxy', capabilities: ['checked-rpc'] },
+    },
+    served: false,
   },
 ])(
   'assertRemoteServesCheckedRpc accepts only when $name proves checked-rpc on every link',
@@ -274,8 +296,8 @@ test.each([
         { daemonBaseUrl: baseUrl },
         createTestHostEnvironment(),
       );
-      // A served remote resolves to the base URL it probed: the one `connect` records.
-      if (served) await expect(verdict).resolves.toBe(baseUrl);
+      // A served remote resolves to the fingerprint of the exact checked target `connect` records.
+      if (served) await expect(verdict).resolves.toBe(checkedRpcTargetFingerprint(baseUrl));
       else
         await expect(verdict).rejects.toMatchObject({
           details: { reason: 'remote_checked_rpc_unsupported', dispatched: 'no' },
@@ -305,4 +327,108 @@ test('the connect probe is refused by remote trust validation before any request
   } finally {
     requests.mockRestore();
   }
+});
+
+test('checked RPC goes only to the exact target connect fingerprinted', async () => {
+  const daemon = await remoteDaemon();
+  try {
+    const approved = `${daemon.baseUrl}/agent-device`;
+    const target = checkedRpcTargetFingerprint(approved);
+    const send = async (daemonBaseUrl: string) => {
+      daemon.seen.length = 0;
+      await sendToDaemon(
+        sessionList(daemonBaseUrl, { daemonRpc: 'checked', daemonRpcTarget: target }),
+      );
+      return routes(daemon.seen);
+    };
+
+    expect(await send(approved)).toEqual(['POST /agent-device/rpc/checked']);
+    // The same prefix with a query `token`: the route resolves at the origin root, a target
+    // connect never probed, so the command goes health-first.
+    expect(await send(`${approved}?token=x`)).toEqual(['GET /health', 'POST /rpc']);
+    expect(await send(daemon.baseUrl)).toEqual(['GET /health', 'POST /rpc']);
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('a lease heartbeat goes health-first under checked RPC, and the next command reuses its fenced answer', async () => {
+  const daemon = await remoteDaemon(OK_ANSWER, true);
+  try {
+    await sendToDaemon({
+      session: 'default',
+      command: 'lease_heartbeat',
+      positionals: [],
+      flags: { daemonBaseUrl: daemon.baseUrl, daemonRpc: 'checked', leaseId: 'lease-1' },
+    });
+    await sendToDaemon(sessionList(daemon.baseUrl, { daemonRpc: 'checked' }));
+
+    expect(routes(daemon.seen)).toEqual(['GET /health', 'POST /rpc', 'POST /rpc']);
+    expect(daemon.seen[2]?.instance).toBe('daemon-1');
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('no checked failure names the endpoint, and an unknown refusal value never reaches the error', async () => {
+  const errors: unknown[] = [];
+  const capture = async (run: () => Promise<unknown>) => {
+    errors.push(await run().catch((error: unknown) => error));
+  };
+  for (const answer of [
+    { status: 404, body: 'Not found' },
+    {
+      status: 409,
+      headers: { [DAEMON_HTTP_REFUSAL_HEADER]: 'protocol-missing' },
+      body: '{}',
+    },
+    {
+      status: 409,
+      headers: { [DAEMON_HTTP_REFUSAL_HEADER]: 'http://10.0.0.1/secret-refusal' },
+      body: '{}',
+    },
+    {
+      status: 409,
+      headers: { [DAEMON_HTTP_REFUSAL_HEADER]: 'protocol-mismatch' },
+      body: JSON.stringify({
+        error: {
+          data: {
+            details: { service: 'agent-device-daemon', version: '9.0.0', rpcProtocolVersion: 99 },
+          },
+        },
+      }),
+    },
+  ]) {
+    const daemon = await remoteDaemon(answer);
+    try {
+      await capture(() => sendToDaemon(sessionList(daemon.baseUrl, { daemonRpc: 'checked' })));
+    } finally {
+      await daemon.close();
+    }
+  }
+  await capture(() =>
+    assertRemoteServesCheckedRpc(
+      { daemonBaseUrl: 'http://127.0.0.1:9/' },
+      createTestHostEnvironment(),
+    ),
+  );
+  await capture(() =>
+    assertRemoteServesCheckedRpc(
+      { daemonBaseUrl: 'ftp://user:pw@127.0.0.1/x' },
+      createTestHostEnvironment(),
+    ),
+  );
+  await capture(() => assertRemoteServesCheckedRpc({}, createTestHostEnvironment()));
+
+  expect(errors).toHaveLength(7);
+  for (const error of errors) {
+    expect(error).toBeInstanceOf(Error);
+    expect(JSON.stringify((error as { details?: unknown }).details)).not.toMatch(
+      /127\.0\.0\.1|10\.0\.0\.1/,
+    );
+  }
+  expect(errors[2]).toMatchObject({ details: { refusal: 'unknown' } });
+  expect(errors[6]).toMatchObject({
+    details: { reason: 'remote_checked_rpc_unsupported', dispatched: 'no' },
+  });
 });

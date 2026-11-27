@@ -88,7 +88,7 @@ test('a CLI run builds one transport, shared by the remote-materialization clien
   }
 });
 
-test('checked RPC holds only for the base URL connect validated; another endpoint goes health-first', async () => {
+test('a connection that recorded checked RPC passes the approved target fingerprint with every request', async () => {
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
   const remoteConfig = path.join(project, 'remote.json');
@@ -101,20 +101,16 @@ test('checked RPC holds only for the base URL connect validated; another endpoin
       session: 'checked-endpoint',
       remoteConfigPath: remoteConfig,
       remoteConfigHash: hashRemoteConfigFile(remoteConfig),
-      daemon: {
-        baseUrl: 'http://127.0.0.1:7001',
-        transport: 'http',
-        checkedRpcBaseUrl: 'http://127.0.0.1:7001',
-      },
+      daemon: { baseUrl: 'http://127.0.0.1:7001', transport: 'http', checkedRpcTarget: 'fp-7001' },
       tenant: 'tenant',
       runId: 'run-checked',
       connectedAt: now,
       updatedAt: now,
     },
   });
-  const sent: Array<{ daemonBaseUrl?: string; daemonRpc?: string }> = [];
+  const sent: Array<{ daemonRpc?: string; daemonRpcTarget?: string }> = [];
   const transportForHost = vi.fn(() => async (req: Omit<DaemonRequest, 'token'>) => {
-    sent.push({ daemonBaseUrl: req.flags?.daemonBaseUrl, daemonRpc: req.flags?.daemonRpc });
+    sent.push({ daemonRpc: req.flags?.daemonRpc, daemonRpcTarget: req.flags?.daemonRpcTarget });
     return { ok: true, data: { sessions: [] } } satisfies DaemonResponse;
   });
   const host = { env: { HOME: home, PATH: process.env.PATH }, cwd: project };
@@ -123,32 +119,15 @@ test('checked RPC holds only for the base URL connect validated; another endpoin
   }) as never);
   vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-  const run = async (extra: string[]) =>
-    await runCli(
-      [
-        'session',
-        'list',
-        '--session',
-        'checked-endpoint',
-        '--state-dir',
-        stateDir,
-        '--json',
-        ...extra,
-      ],
-      { sendToDaemon: vi.fn(), transportForHost },
-      host,
-    );
 
-  await run([]);
-  await run(['--daemon-base-url', 'http://127.0.0.1:7002']);
-  // The same endpoint, spelled with a trailing slash, is still the validated one.
-  await run(['--daemon-base-url', 'http://127.0.0.1:7001/']);
+  await runCli(
+    ['session', 'list', '--session', 'checked-endpoint', '--state-dir', stateDir, '--json'],
+    { sendToDaemon: vi.fn(), transportForHost },
+    host,
+  );
 
-  assert.deepEqual(sent, [
-    { daemonBaseUrl: 'http://127.0.0.1:7001', daemonRpc: 'checked' },
-    { daemonBaseUrl: 'http://127.0.0.1:7002', daemonRpc: undefined },
-    { daemonBaseUrl: 'http://127.0.0.1:7001/', daemonRpc: 'checked' },
-  ]);
+  // daemon-client sends checked only when this fingerprint names the request's own target.
+  assert.deepEqual(sent, [{ daemonRpc: 'checked', daemonRpcTarget: 'fp-7001' }]);
 });
 
 test('a connection that recorded checked RPC without a probed endpoint never applies it to a later URL', async () => {
@@ -172,9 +151,9 @@ test('a connection that recorded checked RPC without a probed endpoint never app
       updatedAt: now,
     },
   });
-  const sent: Array<{ daemonRpc?: string }> = [];
+  const sent: Array<{ daemonRpc?: string; daemonRpcTarget?: string }> = [];
   const transportForHost = vi.fn(() => async (req: Omit<DaemonRequest, 'token'>) => {
-    sent.push({ daemonRpc: req.flags?.daemonRpc });
+    sent.push({ daemonRpc: req.flags?.daemonRpc, daemonRpcTarget: req.flags?.daemonRpcTarget });
     return { ok: true, data: { sessions: [] } } satisfies DaemonResponse;
   });
   // The endpoint arrives later, through the environment.
@@ -198,5 +177,5 @@ test('a connection that recorded checked RPC without a probed endpoint never app
     host,
   );
 
-  assert.deepEqual(sent, [{ daemonRpc: undefined }]);
+  assert.deepEqual(sent, [{ daemonRpc: undefined, daemonRpcTarget: undefined }]);
 });

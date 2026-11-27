@@ -41,8 +41,11 @@ export type RemoteConnectionState = {
     baseUrl?: string;
     transport?: CliFlags['daemonTransport'];
     serverMode?: CliFlags['daemonServerMode'];
-    /** The sanitized URL `connect` probed and found serving checked RPC on every link. */
-    checkedRpcBaseUrl?: string;
+    /**
+     * The fingerprint of the checked target `connect` probed and found served on every link. Only
+     * the fingerprint is kept; checked RPC applies to that exact target alone.
+     */
+    checkedRpcTarget?: string;
   };
   tenant: string;
   runId: string;
@@ -224,8 +227,6 @@ type RemoteConnectionDefaults = {
   connection?: RemoteConnectionRequestMetadata;
   /** Set only by {@link claimRemoteConnectionDefaults}: the record it claimed, or `null` for none. */
   claimed?: RemoteConnectionState | null;
-  /** The endpoint `connect` validated for checked RPC, read from the record alone. */
-  checkedRpcBaseUrl?: string;
 };
 
 const REMOTE_CONNECTION_STATE_REASONS = {
@@ -396,24 +397,6 @@ export function writeRemoteConnectionState(options: {
   writeJsonFile(activeConnectionStatePath(options.stateDir), { session: options.state.session });
 }
 
-/** Checked RPC holds only for the recorded URL `connect` probed; any other endpoint goes health-first. */
-export function bindCheckedRpcToValidatedEndpoint(
-  flags: CliFlags,
-  checkedRpcBaseUrl: string | undefined,
-  env: Readonly<Record<string, string | undefined>>,
-): CliFlags {
-  if (flags.daemonRpc !== 'checked') return flags;
-  try {
-    const effective = sanitizeDaemonBaseUrl(
-      flags.daemonBaseUrl ?? env.AGENT_DEVICE_DAEMON_BASE_URL,
-    );
-    if (effective !== undefined && effective === checkedRpcBaseUrl) return flags;
-  } catch {
-    // An unparsable endpoint is refused later by the client's own base URL validation.
-  }
-  return { ...flags, daemonRpc: undefined };
-}
-
 export function buildRemoteConnectionDaemonState(
   flags: Pick<
     CliFlags,
@@ -554,11 +537,10 @@ function remoteConnectionDefaults(
   }
   const profile = resolveConnectionProfile(state, options);
   const leaseScope = leaseScopeFromOptions(state);
-  const checkedRpcBaseUrl = state.daemon?.checkedRpcBaseUrl;
+  const checkedRpcTarget = state.daemon?.checkedRpcTarget;
   return {
     runtime: state.runtime,
     connection: leaseScopeToConnectionMetadata(leaseScope),
-    ...(checkedRpcBaseUrl ? { checkedRpcBaseUrl } : {}),
     flags: {
       ...profile,
       remoteConfig: state.remoteConfigPath,
@@ -570,7 +552,9 @@ function remoteConnectionDefaults(
       daemonAuthToken: profile.daemonAuthToken,
       daemonTransport: state.daemon?.transport ?? profile.daemonTransport,
       daemonServerMode: state.daemon?.serverMode ?? profile.daemonServerMode,
-      daemonRpc: checkedRpcBaseUrl ? 'checked' : undefined,
+      // Only the approval `connect` recorded; daemon-client checks it names this exact target.
+      daemonRpc: checkedRpcTarget ? 'checked' : undefined,
+      daemonRpcTarget: checkedRpcTarget,
       ...leaseScopeToCommandFlags(leaseScope),
       sessionIsolation: 'tenant',
       session: state.session,

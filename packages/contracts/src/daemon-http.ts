@@ -173,7 +173,7 @@ export type CheckedRpcProtocolRefusal =
   | typeof DAEMON_HTTP_REFUSALS.protocolMismatch;
 
 /** Why a checked RPC call failed. */
-const DAEMON_CHECKED_RPC_REASONS = {
+export const DAEMON_CHECKED_RPC_REASONS = {
   // The checked RPC call named no RPC protocol. An intermediary that strips request headers causes
   // this.
   protocolMissing: { reason: 'remote_rpc_protocol_missing' },

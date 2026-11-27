@@ -270,7 +270,10 @@ function daemonHealthEndpoint(info: DaemonInfo): string | null {
   return daemonHttpEndpoint(info, 'health');
 }
 
-function daemonHttpEndpoint(info: DaemonInfo, route: string): string | null {
+function daemonHttpEndpoint(
+  info: DaemonInfo,
+  route: 'health' | 'rpc' | typeof DAEMON_HTTP_CHECKED_RPC_ROUTE,
+): string | null {
   return info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, route)
     : info.httpPort
@@ -856,7 +859,7 @@ async function sendHttpRequest(
       },
       (res) => {
         if (checkedRpc?.isCheckedRpcOutcomeResponse(res.statusCode, res.headers ?? {})) {
-          void checkedRpc.readCheckedRpcOutcome(res, info, readHealthLink).then((outcome) => {
+          void checkedRpc.readCheckedRpcOutcome(res, readHealthLink).then((outcome) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
             if (outcome.kind === 'answer') handleBody(outcome.body);
             else rejectOnce(outcome.error);

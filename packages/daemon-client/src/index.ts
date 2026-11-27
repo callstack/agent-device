@@ -467,35 +467,40 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
 /**
  * Refuses `daemonRpc: checked` unless the remote endpoint advertises the `checked-rpc` capability in
  * `/health`, and, when it is a proxy, so does the daemon behind it. The probe goes through the same
- * base URL and trust validation as every remote request, and resolves to the base URL it probed:
- * the one endpoint `connect` records checked RPC for. `undefined` means no remote was named.
+ * base URL and trust validation as every remote request. It resolves to the fingerprint of the exact
+ * target a checked call will reach, which is all `connect` records. No error it raises names the
+ * endpoint.
  */
 export async function assertRemoteServesCheckedRpc(
   flags: Pick<DaemonRequest['flags'] & object, 'daemonBaseUrl'> & { daemonAuthToken?: string },
   host: HostEnvironment,
-): Promise<string | undefined> {
-  const [{ resolveClientSettings }, { assertHealthServesCheckedRpc }] = await Promise.all([
+): Promise<string> {
+  const [lifecycle, checked] = await Promise.all([
     import('./daemon-client-lifecycle.ts'),
     import('./daemon-client-checked-rpc.ts'),
   ]);
-  const settings = resolveClientSettings(
-    {
-      session: 'default',
-      command: 'connect',
-      positionals: [],
-      flags: { daemonBaseUrl: flags.daemonBaseUrl },
-    },
-    flags.daemonAuthToken,
-    host,
-  );
-  if (!settings.remoteBaseUrl) return undefined;
-  const info: DaemonInfo = {
-    token: settings.remoteAuthToken ?? '',
-    pid: 0,
-    baseUrl: settings.remoteBaseUrl,
-  };
-  assertHealthServesCheckedRpc(await readRemoteDaemonHealth(info), info);
-  return settings.remoteBaseUrl;
+  try {
+    const settings = lifecycle.resolveClientSettings(
+      {
+        session: 'default',
+        command: 'connect',
+        positionals: [],
+        flags: { daemonBaseUrl: flags.daemonBaseUrl },
+      },
+      flags.daemonAuthToken,
+      host,
+    );
+    if (!settings.remoteBaseUrl) throw checked.checkedRpcWithoutEndpointError();
+    const info: DaemonInfo = {
+      token: settings.remoteAuthToken ?? '',
+      pid: 0,
+      baseUrl: settings.remoteBaseUrl,
+    };
+    checked.assertHealthServesCheckedRpc(await readRemoteDaemonHealth(info));
+    return lifecycle.checkedRpcTargetFingerprint(settings.remoteBaseUrl);
+  } catch (error) {
+    throw checked.withoutEndpoint(error);
+  }
 }
 
 /** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */

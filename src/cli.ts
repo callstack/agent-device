@@ -59,7 +59,6 @@ import {
   claimRemoteConnectionDefaults,
   remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
-  bindCheckedRpcToValidatedEndpoint,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
@@ -426,11 +425,7 @@ async function resolveRunContextOrExit(
       remoteConfig: flags.remoteConfig,
     });
     const effectiveFlags = connectionDefaults
-      ? bindCheckedRpcToValidatedEndpoint(
-          mergeConnectionFlags(flags, connectionDefaults.flags, explicitFlagKeys),
-          connectionDefaults.checkedRpcBaseUrl,
-          base.host.env,
-        )
+      ? mergeConnectionFlags(flags, connectionDefaults.flags, explicitFlagKeys)
       : flags;
     return {
       ...base,
@@ -549,6 +544,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     daemonTransport: currentFlags.daemonTransport,
     daemonServerMode: currentFlags.daemonServerMode,
     daemonRpc: currentFlags.daemonRpc,
+    daemonRpcTarget: currentFlags.daemonRpcTarget,
     tenant: currentFlags.tenant,
     sessionIsolation: currentFlags.sessionIsolation,
     runId: currentFlags.runId,

@@ -24,7 +24,7 @@ function fakeResponse(): EventEmitter {
  * The first checked POST hangs before its socket connects. `/health` answers with `healthStatus`
  * (and an instance ID, so a usable answer is cached); every other request answers.
  */
-function firstCheckedConnectHangs(healthStatus = 200): Call[] {
+function firstCheckedConnectHangs(healthStatus = 200, healthProtocol = 3): Call[] {
   const calls: Call[] = [];
   vi.spyOn(http, 'request').mockImplementation(((
     options: { method?: string; path?: string },
@@ -53,7 +53,7 @@ function firstCheckedConnectHangs(healthStatus = 200): Call[] {
             ? JSON.stringify({
                 ok: true,
                 service: 'agent-device-daemon',
-                rpcProtocolVersion: 3,
+                rpcProtocolVersion: healthProtocol,
                 instanceId: 'daemon-1',
               })
             : JSON.stringify({
@@ -96,6 +96,13 @@ function driveFakeTime(): () => Promise<void> {
 
 const BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
 
+let tokenSeq = 0;
+/** A token of its own per test: the process health cache is keyed by it. */
+function freshToken(): string {
+  tokenSeq += 1;
+  return `remote-secret-${tokenSeq}`;
+}
+
 function sessionList(daemonRpc?: 'checked') {
   return {
     session: 'default',
@@ -111,10 +118,11 @@ afterEach(() => {
 });
 
 test('a checked connect timeout runs the /health loop, then sends exactly once more', async () => {
+  const authToken = freshToken();
   const calls = firstCheckedConnectHangs();
   const stopDriving = driveFakeTime();
   try {
-    const response = await sendToDaemon(sessionList('checked'), { authToken: 'remote-secret' });
+    const response = await sendToDaemon(sessionList('checked'), { authToken });
 
     assert.equal(response.ok, true);
     assert.deepEqual(
@@ -132,23 +140,20 @@ test('a checked connect timeout runs the /health loop, then sends exactly once m
   }
 });
 
-test('a cached /health answer never stands in for the recovery probe after a checked connect timeout', async () => {
+test('a process holding an instance-pinned /health answer sends the next command fenced on /rpc, with no probe', async () => {
   const calls = firstCheckedConnectHangs();
   const stopDriving = driveFakeTime();
+  const authToken = freshToken();
   try {
-    // A health-first command in this process caches a usable `/health` answer.
-    await sendToDaemon(sessionList(), { authToken: 'remote-secret' });
+    // A health-first command in this process pins the daemon instance.
+    await sendToDaemon(sessionList(), { authToken });
     calls.length = 0;
-    const response = await sendToDaemon(sessionList('checked'), { authToken: 'remote-secret' });
+    const response = await sendToDaemon(sessionList('checked'), { authToken });
 
     assert.equal(response.ok, true);
     assert.deepEqual(
       calls.map(({ method, path }) => `${method} ${path}`),
-      [
-        'POST /agent-device/rpc/checked',
-        'GET /agent-device/health',
-        'POST /agent-device/rpc/checked',
-      ],
+      ['POST /agent-device/rpc'],
     );
   } finally {
     await stopDriving();
@@ -162,7 +167,7 @@ test('an abort during checked connect recovery rejects with the typed cancellati
   setTimeout(() => controller.abort(), 6_000);
   try {
     const outcome = await sendToDaemon(sessionList('checked'), {
-      authToken: 'remote-secret',
+      authToken: freshToken(),
       signal: controller.signal,
     }).then(
       () => undefined,
@@ -175,16 +180,17 @@ test('an abort during checked connect recovery rejects with the typed cancellati
 });
 
 test('a concurrent call that refills the health cache during recovery never stands in for its probe', async () => {
+  const authToken = freshToken();
   const calls = firstCheckedConnectHangs();
   const stopDriving = driveFakeTime();
   // Lands after the connect timeout (3 s) and before the recovery probe (4 s).
   const concurrent = new Promise<void>((resolve) => {
     setTimeout(() => {
-      void sendToDaemon(sessionList(), { authToken: 'remote-secret' }).then(() => resolve());
+      void sendToDaemon(sessionList(), { authToken }).then(() => resolve());
     }, 3_500);
   });
   try {
-    const response = await sendToDaemon(sessionList('checked'), { authToken: 'remote-secret' });
+    const response = await sendToDaemon(sessionList('checked'), { authToken });
     await concurrent;
 
     assert.equal(response.ok, true);
@@ -193,6 +199,24 @@ test('a concurrent call that refills the health cache during recovery never stan
     const probes = routes.slice(1, resend).filter((route) => route === 'GET /agent-device/health');
     // One probe is the concurrent call's own; the recovery made a live one of its own.
     assert.equal(probes.length, 2, routes.join(', '));
+  } finally {
+    await stopDriving();
+  }
+});
+
+test('recovery that finds protocol skew proves nothing left and names no endpoint', async () => {
+  firstCheckedConnectHangs(200, 99);
+  const stopDriving = driveFakeTime();
+  try {
+    const outcome = await sendToDaemon(sessionList('checked'), { authToken: freshToken() }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    assert.ok(outcome instanceof Error, `unexpected outcome: ${String(outcome)}`);
+    const details = (outcome as { details?: Record<string, unknown> }).details;
+    assert.equal(details?.dispatched, 'no');
+    assert.equal(details?.daemonBaseUrl, undefined);
+    assert.equal(details?.remoteRpcProtocolVersion, 99);
   } finally {
     await stopDriving();
   }

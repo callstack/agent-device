@@ -3,7 +3,7 @@
 // on those paths, so a command that gets its answer never pays for it.
 import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseUnclassifiedDispatch } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import {
   DAEMON_CHECKED_RPC_REASONS,
@@ -12,7 +12,6 @@ import {
   DAEMON_HTTP_REFUSALS,
 } from '@agent-device/contracts/daemon-http';
 import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { incompatibleRemoteProtocolError } from './daemon-client-rpc.ts';
 import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
 import { remoteDaemonUnavailableError } from './daemon-lifecycle-errors.ts';
@@ -99,7 +98,6 @@ type CheckedRpcOutcome = { kind: 'answer'; body: string } | { kind: 'refused'; e
  */
 export async function readCheckedRpcOutcome(
   res: IncomingMessage,
-  info: DaemonInfo,
   readLink: ReadHealthLink,
 ): Promise<CheckedRpcOutcome> {
   const notFound = res.statusCode === 404;
@@ -110,29 +108,23 @@ export async function readCheckedRpcOutcome(
   if (notFound) {
     return body !== undefined && isJsonRpcAnswer(body)
       ? { kind: 'answer', body }
-      : { kind: 'refused', error: checkedRpcUnsupportedError(info, 'unknown') };
+      : { kind: 'refused', error: checkedRpcUnsupportedError('unknown') };
   }
   return {
     kind: 'refused',
-    error: checkedRpcRefusalError(
-      String(res.headers[DAEMON_HTTP_REFUSAL_HEADER]),
-      body,
-      info,
-      readLink,
-    ),
+    error: checkedRpcRefusalError(String(res.headers[DAEMON_HTTP_REFUSAL_HEADER]), body, readLink),
   };
 }
 
 function checkedRpcRefusalError(
   refusal: string,
   body: string | undefined,
-  info: DaemonInfo,
   readLink: ReadHealthLink,
 ): AppError {
   switch (refusal) {
     case DAEMON_HTTP_REFUSALS.protocolMismatch:
     case DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch:
-      return protocolMismatchError(refusal, body, info, readLink);
+      return protocolMismatchError(refusal, body, readLink);
     case DAEMON_HTTP_REFUSALS.protocolMissing:
       return new AppError(
         'COMMAND_FAILED',
@@ -140,17 +132,16 @@ function checkedRpcRefusalError(
         {
           reason: DAEMON_CHECKED_RPC_REASONS.protocolMissing.reason,
           dispatched: 'no',
-          daemonBaseUrl: info.baseUrl,
           hint: 'An ingress between this client and the remote removes the x-agent-device-rpc-protocol header. Fix that ingress, or remove daemonRpc from the connection profile.',
         },
       );
     default:
       // A refusal this build does not know proves nothing about dispatch: the reply is unreadable,
-      // and the transport discloses it like any reply it cannot read. It is never resent.
+      // and the transport discloses it like any reply it cannot read. It is never resent, and its
+      // value, which any intermediary can set, never reaches the error.
       return new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
         reason: DAEMON_TRANSPORT_REASONS.replyInvalid.reason,
-        refusal,
-        daemonBaseUrl: info.baseUrl,
+        refusal: 'unknown',
       });
   }
 }
@@ -163,7 +154,6 @@ function checkedRpcRefusalError(
 function protocolMismatchError(
   refusal: string,
   body: string | undefined,
-  info: DaemonInfo,
   readLink: ReadHealthLink,
 ): AppError {
   const link = readLink(readRefusalDetails(body));
@@ -174,19 +164,19 @@ function protocolMismatchError(
   if (typeof link.rpcProtocolVersion !== 'number' || !Number.isInteger(link.rpcProtocolVersion)) {
     return new AppError('COMMAND_FAILED', 'Remote daemon RPC protocol is incompatible', {
       ...typed,
-      daemonBaseUrl: info.baseUrl,
       hint: 'Upgrade agent-device so this client and the remote speak the same RPC protocol.',
     });
   }
   const upgrade = incompatibleRemoteProtocolError(
-    info.baseUrl ?? '',
+    '',
     { ...link, rpcProtocolVersion: link.rpcProtocolVersion },
     refusal === DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch
       ? { service: 'agent-device-proxy' }
       : undefined,
   );
+  const { daemonBaseUrl: _endpoint, ...upgradeDetails } = upgrade.details ?? {};
   return new AppError(upgrade.code, upgrade.message, {
-    ...upgrade.details,
+    ...upgradeDetails,
     ...typed,
     service: link.service,
     version: link.version,
@@ -195,28 +185,58 @@ function protocolMismatchError(
 }
 
 /** The typed failure when the remote does not serve checked RPC. A command is never resent. */
-function checkedRpcUnsupportedError(info: DaemonInfo, dispatched: 'no' | 'unknown'): AppError {
+function checkedRpcUnsupportedError(
+  dispatched: 'no' | 'unknown',
+  hint = UNSUPPORTED_HINT,
+): AppError {
   return new AppError('COMMAND_FAILED', 'The remote does not serve checked RPC', {
     reason: DAEMON_CHECKED_RPC_REASONS.routeUnsupported.reason,
     dispatched,
-    daemonBaseUrl: info.baseUrl,
-    hint: UNSUPPORTED_HINT,
+    hint,
   });
 }
 
 /**
- * Refuses `daemonRpc: checked` at `connect` unless every link the command RPC crosses advertises the
- * `checked-rpc` capability in `health`. A proxy proves its daemon only through `upstream`: one with no readable
- * `upstream` is refused, never taken for a direct daemon.
+ * The same failure without the endpoint: no error raised at the checked connect or send boundary
+ * names the daemon URL, which can carry a credential. The code, message, typed reason, dispatch and
+ * validated upgrade details stay; the cause, which may quote the URL, does not.
  */
-export function assertHealthServesCheckedRpc(health: RemoteDaemonHealth, info: DaemonInfo): void {
-  if (!health.reachable) {
-    throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts: 1 });
+export function withoutEndpoint(error: unknown): unknown {
+  if (!(error instanceof AppError)) return error;
+  const { daemonBaseUrl: _endpoint, ...details } = error.details ?? {};
+  return new AppError(error.code, error.message, details);
+}
+
+/** A failure that proves nothing left, without the endpoint. */
+export function undispatchedWithoutEndpoint(error: unknown): unknown {
+  const scrubbed = withoutEndpoint(error);
+  return scrubbed instanceof AppError ? discloseUnclassifiedDispatch(scrubbed, 'no') : scrubbed;
+}
+
+/**
+ * Refuses `daemonRpc: checked` at `connect` unless every link the command RPC crosses advertises the
+ * `checked-rpc` capability in `health`. A proxy proves its daemon only through `upstream`, which must
+ * identify as a daemon: no upstream, or another proxy behind it, is refused rather than guessed at.
+ */
+export function assertHealthServesCheckedRpc(health: RemoteDaemonHealth): void {
+  if (!health.reachable)
+    throw remoteDaemonUnavailableError({ daemonBaseUrl: undefined, attempts: 1 });
+  const proxied = health.service === 'agent-device-proxy';
+  if (proxied && health.upstream?.service !== 'agent-device-daemon') {
+    throw checkedRpcUnsupportedError('no');
   }
-  const links = health.service === 'agent-device-proxy' ? [health, health.upstream] : [health];
+  const links = proxied ? [health, health.upstream] : [health];
   if (links.every((link) => link?.capabilities?.includes(DAEMON_HTTP_CHECKED_RPC_CAPABILITY)))
     return;
-  throw checkedRpcUnsupportedError(info, 'no');
+  throw checkedRpcUnsupportedError('no');
+}
+
+/** The refusal for a checked profile that resolves no daemon base URL at `connect`. */
+export function checkedRpcWithoutEndpointError(): AppError {
+  return checkedRpcUnsupportedError(
+    'no',
+    'daemonRpc checked needs a daemon base URL. Set daemonBaseUrl in the profile, or remove daemonRpc.',
+  );
 }
 
 function readRefusalDetails(body: string | undefined): Record<string, unknown> {

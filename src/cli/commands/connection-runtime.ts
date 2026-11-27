@@ -97,7 +97,6 @@ export async function materializeRemoteConnectionForCommand(options: {
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
   let changed = !existingState;
-  let leasePrepared = false;
 
   // Unknown creation evidence permits discard before binding, but only confirmed creation permits
   // rollback after a later failure. A committed session record takes over either lease.
@@ -113,7 +112,6 @@ export async function materializeRemoteConnectionForCommand(options: {
     });
     nextState = acquired.state;
     changed = changed || acquired.changed;
-    leasePrepared = acquired.leasePrepared;
 
     const runtimePreparation = await prepareRuntimeForCommand({
       command,
@@ -149,8 +147,6 @@ export async function materializeRemoteConnectionForCommand(options: {
       leaseBackend: nextState.leaseBackend,
       platform: nextState.platform ?? nextFlags.platform,
       target: nextState.target ?? nextFlags.target,
-      // A command that follows a lease allocate or heartbeat goes health-first, fenced to that daemon.
-      ...(leasePrepared ? { daemonRpc: undefined } : {}),
     },
     runtime: nextRuntime,
     connection: buildRemoteConnectionRequestMetadata(nextState),
