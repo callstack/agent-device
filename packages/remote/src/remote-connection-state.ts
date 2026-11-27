@@ -15,7 +15,7 @@ import {
   type DeviceTarget,
   type PublicPlatform,
 } from '@agent-device/kernel/device';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { ensurePrivateDirectorySync, publishFileSync } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
@@ -409,7 +409,7 @@ export function writeRemoteConnectionState(options: {
     stateDir: options.stateDir,
     session: options.state.session,
   });
-  fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
+  ensurePrivateDirectorySync(path.dirname(statePath));
   writeJsonFile(statePath, {
     ...options.state,
     leaseProvider: canonicalLeaseProvider(options.state.leaseProvider),

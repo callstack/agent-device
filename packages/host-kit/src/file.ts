@@ -1,4 +1,7 @@
+import fs from 'node:fs';
 import type { Stats } from 'node:fs';
+import path from 'node:path';
+import { lstatIfPresent } from './internal/verified-file.ts';
 
 export {
   isAtomicPublishTemporaryPath,
@@ -41,4 +44,29 @@ export {
 export function outputFileIdentity(stat: Stats): string {
   const inode = `${stat.dev}:${stat.ino}`;
   return stat.isDirectory() ? inode : `${inode}:${stat.size}:${stat.mtimeMs}`;
+}
+
+/**
+ * Creates missing directory levels privately (`0o700` on POSIX) without modifying any
+ * pre-existing directory's permissions. Does not restrict Windows ACLs (POSIX-only privacy
+ * model per `docs/agents/security.md`).
+ */
+export function ensurePrivateDirectorySync(directory: string): void {
+  const resolved = path.resolve(directory);
+  if (lstatIfPresent(resolved)) return;
+  const parent = path.dirname(resolved);
+  if (parent !== resolved && !lstatIfPresent(parent)) {
+    ensurePrivateDirectorySync(parent);
+  }
+  let created = false;
+  try {
+    fs.mkdirSync(resolved, { mode: 0o700 });
+    created = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+  // Windows chmod only toggles the read-only attribute; avoid claiming ACL restriction there.
+  if (created && process.platform !== 'win32') {
+    fs.chmodSync(resolved, 0o700);
+  }
 }
