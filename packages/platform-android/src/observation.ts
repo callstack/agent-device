@@ -29,8 +29,6 @@ const ACTIVITY_DUMPS: readonly (readonly string[])[] = [
   ['dumpsys', 'activity'],
 ];
 const PROCESS_DUMP: readonly string[] = ['dumpsys', 'activity', 'processes'];
-/** Only the ANR dialog has Wait; the crash dialog also has Close app. The id does not depend on the device language. */
-const ANR_WAIT_BUTTON_ID = 'android:id/aerr_wait';
 const FOCUS_LINE = new RegExp(
   `(?:${ANDROID_FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`,
   'gm',
@@ -43,7 +41,6 @@ const PERMISSION_PACKAGES = new Set([
 ]);
 
 const DUMP_OBSERVATION_BUDGET_MS = 10_000;
-const NO_FOCUS_LINE = /^\s*mCurrentFocus=null\s*$/m;
 
 type Question = 'foreground' | 'blockingDialog';
 type DumpReader = (words: readonly string[]) => Promise<string>;
@@ -160,8 +157,7 @@ async function readBlockingDialog(
 
 /**
  * The blocking-dialog observation the daemon guard acts on. A dialog names the not-responding
- * process, so its owning package is resolved here. A window probe that answers nothing gets one
- * more bounded observation, because an ANR can be visible while no window dump answers.
+ * process, so its owning package is resolved here.
  */
 async function observeBlockingDialog(
   host: AndroidObservationHost,
@@ -172,9 +168,7 @@ async function observeBlockingDialog(
   if (observation.status === 'dialog') {
     return { status: 'dialog', focus: await withProcessOwner(observation.focus, read) };
   }
-  if (observation.status === 'clear') return observation;
-  if (await answeredNoFocus(device, read)) return observation;
-  return await observeUnansweredBlockingDialog(host, device, read);
+  return observation;
 }
 
 async function withProcessOwner(
@@ -187,54 +181,6 @@ async function withProcessOwner(
     focus.process,
   );
   return owner ? { ...focus, package: owner } : focus;
-}
-
-/** `mCurrentFocus=null` answers that no window has focus, so no ANR dialog can have it. */
-async function answeredNoFocus(device: DeviceInfo, read: DumpReader): Promise<boolean> {
-  for (const args of orderedDumps(device, 'blockingDialog')) {
-    if (NO_FOCUS_LINE.test(await read(args))) return true;
-  }
-  return false;
-}
-
-/**
- * A window probe that answered nothing cannot link a visible ANR window to its process. The
- * process dump shows whether any process is not responding, and only then the accessibility
- * snapshot shows whether an ANR dialog (its Wait button) is visible. Such a dialog has no owner,
- * so the guard refuses the command and recovery never taps it. The process dump spends what is
- * left of the same observation budget, so a probe that timed out adds no read.
- */
-async function observeUnansweredBlockingDialog(
-  host: AndroidObservationHost,
-  device: DeviceInfo,
-  read: DumpReader,
-): Promise<AndroidBlockingDialogObservation> {
-  const notResponding = new Set(
-    parseAndroidProcessRecords(await read(PROCESS_DUMP))
-      .filter((record) => record.notResponding)
-      .map((record) => record.process),
-  );
-  if (notResponding.size === 0) return { status: 'unknown' };
-
-  let anrVisible: boolean;
-  try {
-    const nodes = await host.readSnapshotNodes(device);
-    anrVisible = nodes.some((node) => node.identifier === ANR_WAIT_BUTTON_ID);
-  } catch {
-    return { status: 'unknown' };
-  }
-  if (!anrVisible) return { status: 'unknown' };
-  const processName = notResponding.size === 1 ? [...notResponding][0] : undefined;
-  return {
-    status: 'dialog',
-    focus: {
-      ...(processName ? { process: processName } : {}),
-      focusedWindow: processName
-        ? `Application Not Responding: ${processName}`
-        : 'Application Not Responding',
-      raw: '',
-    },
-  };
 }
 
 function orderedDumps(device: DeviceInfo, question: Question): readonly (readonly string[])[] {

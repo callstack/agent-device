@@ -187,14 +187,11 @@ function parseAndroidBlockingDialogFromSegment(
 export type AndroidProcessRecord = {
   process: string;
   packages: string[];
-  notResponding: boolean;
 };
 
 const ANDROID_PROCESS_RECORD_PATTERN =
   /^\s*\*[A-Z]+\*.*\bProcessRecord\{[0-9a-f]+ \d+:([^/\s}]+)\//;
 const ANDROID_PACKAGE_LIST_PATTERN = /^\s*packageList=\{([^}]*)\}/;
-/** Android 12 and later print `mNotResponding=true`; earlier versions print `notResponding=true`. */
-const ANDROID_NOT_RESPONDING_PATTERN = /(?:^|\s)m?notResponding=true\b/i;
 
 /**
  * Reads the process records of a `dumpsys activity processes` dump. A record starts at a
@@ -207,7 +204,7 @@ export function parseAndroidProcessRecords(text: string): AndroidProcessRecord[]
   for (const line of text.split('\n')) {
     const recordMatch = ANDROID_PROCESS_RECORD_PATTERN.exec(line);
     if (recordMatch?.[1]) {
-      current = { process: recordMatch[1], packages: [], notResponding: false };
+      current = { process: recordMatch[1], packages: [] };
       records.push(current);
       continue;
     }
@@ -219,7 +216,6 @@ export function parseAndroidProcessRecords(text: string): AndroidProcessRecord[]
         .map((name) => name.trim())
         .filter(Boolean);
     }
-    if (ANDROID_NOT_RESPONDING_PATTERN.test(line)) current.notResponding = true;
   }
   return records;
 }

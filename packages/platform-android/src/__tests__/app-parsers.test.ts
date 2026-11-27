@@ -104,7 +104,7 @@ test('parseAndroidResumedActivity ignores a stale last-resumed record', () => {
   );
 });
 
-test('parseAndroidProcessRecords reads both ANR flag spellings, not PID mappings', () => {
+test('parseAndroidProcessRecords reads process records, not PID mappings that name them', () => {
   const dump = [
     'ACTIVITY MANAGER RUNNING PROCESSES (dumpsys activity processes)',
     '  All known processes:',
@@ -120,11 +120,10 @@ test('parseAndroidProcessRecords reads both ANR flag spellings, not PID mappings
   ].join('\n');
 
   assert.deepEqual(parseAndroidProcessRecords(dump), [
-    { process: 'com.example.app:remote', packages: ['com.example.app'], notResponding: true },
+    { process: 'com.example.app:remote', packages: ['com.example.app'] },
     {
       process: 'system',
       packages: ['android', 'com.android.providers.settings'],
-      notResponding: true,
     },
   ]);
 });

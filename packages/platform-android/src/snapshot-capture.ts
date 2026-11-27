@@ -81,6 +81,14 @@ export function androidSnapshotViewportFromHelperMetadata(
 }
 
 /** The sole adapter from Android acquisition into daemon snapshot publication. */
+/**
+ * A truncated or sparse capture can miss nodes that are on screen, so it cannot show that a node
+ * is absent. A failed presentation resolves as an empty capture that is both.
+ */
+export function isCompleteAndroidSnapshotCapture(capture: AndroidSnapshotCapture): boolean {
+  return capture.truncated !== true && capture.quality?.state !== 'sparse';
+}
+
 export function androidSnapshotPublicationInput(
   capture: AndroidSnapshotCapture,
 ): AndroidSnapshotPublicationInput {

@@ -42,6 +42,7 @@ export type AndroidObservationHost = Readonly<{
     args: readonly string[],
     options?: Readonly<{ allowFailure?: boolean; timeoutMs?: number }>,
   ): Promise<AndroidObservationCommandResult>;
+  /** Rejects a truncated or sparse capture, so absent nodes are absent from the screen. */
   readSnapshotNodes(device: DeviceInfo): Promise<SnapshotNode[]>;
   openApp(device: DeviceInfo, appBundleId: string): Promise<void>;
 }>;

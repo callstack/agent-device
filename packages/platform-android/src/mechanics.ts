@@ -276,6 +276,7 @@ export {
 export {
   androidSnapshotPublicationInput,
   createAndroidSnapshotCapture,
+  isCompleteAndroidSnapshotCapture,
   type AndroidSnapshotCapture,
   type AndroidSnapshotPublicationInput,
 } from './snapshot-capture.ts';

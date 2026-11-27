@@ -10,11 +10,13 @@ import {
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
   isAndroidPermissionPackage,
+  isCompleteAndroidSnapshotCapture,
   openAndroidApp,
   runAndroidAdb,
   snapshotAndroid,
 } from '@agent-device/platform-android/mechanics';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { AppError } from '@agent-device/kernel/errors';
 
 /** The Android observation port: package policy over mechanics, so suite mocks on `@agent-device/platform-android/mechanics` answer every read. */
 const mechanicsObservationHost: AndroidObservationHost = Object.freeze({
@@ -24,6 +26,12 @@ const mechanicsObservationHost: AndroidObservationHost = Object.freeze({
   },
   async readSnapshotNodes(device) {
     const rawSnapshot = await snapshotAndroid(device, { interactiveOnly: false });
+    if (!isCompleteAndroidSnapshotCapture(rawSnapshot)) {
+      throw new AppError('COMMAND_FAILED', 'Android snapshot capture was incomplete', {
+        truncated: rawSnapshot.truncated === true,
+        quality: rawSnapshot.quality?.state,
+      });
+    }
     return buildSnapshotState(androidSnapshotPublicationInput(rawSnapshot), undefined).nodes;
   },
   async openApp(device, appBundleId) {

@@ -8,7 +8,11 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   return { ...actual, snapshotAndroid: vi.fn(), runAndroidAdb: vi.fn() };
 });
 
-import { runAndroidAdb, snapshotAndroid } from '@agent-device/platform-android/mechanics';
+import {
+  createAndroidSnapshotCapture,
+  runAndroidAdb,
+  snapshotAndroid,
+} from '@agent-device/platform-android/mechanics';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
 import { androidObservationPolicyFixture as androidObservation } from '../../__tests__/support/android-observation-fixture.ts';
@@ -190,4 +194,75 @@ test('collectively covered Close app is neither selected nor tapped', async () =
     message: expect.stringContaining('Automatic recovery failed'),
   });
   expect(tappedPoints()).toEqual([]);
+});
+
+test('a sparse capture after Close app does not count as the ANR dialog gone', async () => {
+  vi.mocked(runAndroidAdb).mockReset();
+  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
+  // A presentation that misses its deadline resolves as an empty, truncated, sparse capture.
+  const failedPresentation = createAndroidSnapshotCapture(
+    {
+      nodes: [],
+      truncated: true,
+      analysis: { rawNodeCount: 0, maxDepth: 0 },
+      androidSnapshot: { backend: 'android-helper' },
+      quality: { state: 'sparse', backend: 'android-helper' },
+    },
+    {
+      clickability: {
+        kind: 'exact',
+        provider: 'android-helper',
+        clickableByNodeIndex: new Map(),
+        longClickableByNodeIndex: new Map(),
+      },
+    },
+  );
+  vi.mocked(snapshotAndroid)
+    .mockReset()
+    .mockResolvedValueOnce(
+      makeAndroidSnapshotCapture([
+        {
+          index: 0,
+          type: 'Button',
+          label: 'Close app',
+          identifier: 'android:id/aerr_close',
+          hittable: true,
+          rect: { x: 40, y: 1800, width: 200, height: 80 },
+        },
+        {
+          index: 1,
+          type: 'Button',
+          label: 'Wait',
+          identifier: 'android:id/aerr_wait',
+          hittable: true,
+          rect: { x: 40, y: 1900, width: 200, height: 80 },
+        },
+      ]) as never,
+    )
+    .mockResolvedValueOnce(failedPresentation as never)
+    .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
+  const capturesAtRelaunch: number[] = [];
+  const observation: AndroidObservationAdapter = {
+    ...appAnrObservation,
+    openApp: async () => {
+      capturesAtRelaunch.push(vi.mocked(snapshotAndroid).mock.calls.length);
+    },
+  };
+
+  vi.useFakeTimers();
+  try {
+    const recovery = ensureAndroidBlockingSystemDialogReady({
+      session: makeAndroidSession('anr-sparse-leave-sample', { appBundleId: APP }),
+      command: 'press',
+      phase: 'before-command',
+      observation,
+    });
+    await vi.runAllTimersAsync();
+    await expect(recovery).resolves.toMatchObject({ status: 'recovered' });
+  } finally {
+    vi.useRealTimers();
+  }
+
+  // The relaunch waited past the sparse sample for the complete one.
+  expect(capturesAtRelaunch).toEqual([3]);
 });
