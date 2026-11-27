@@ -39,6 +39,7 @@ const EXPECTATIONS: {
   shake: { method: 'shake', input: {} },
   lockScreen: { method: 'lockScreen', input: {} },
   unlockScreen: { method: 'unlockScreen', input: {} },
+  lockScreenStatus: { method: 'lockScreenStatus', input: {} },
   volumeUp: { method: 'volumeUp', input: {} },
   volumeDown: { method: 'volumeDown', input: {} },
   power: { method: 'power', input: {} },

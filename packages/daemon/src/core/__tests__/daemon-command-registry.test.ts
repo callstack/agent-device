@@ -11,6 +11,7 @@ import {
   isLeaseAdmissionExempt,
   resolveSessionlessLeaseAdmissionExemption,
   shouldBlockForInvalidRecording,
+  leavesDeviceUntouched,
   shouldGuardAndroidBlockingDialog,
   shouldLockSessionExecution,
   shouldPreferExplicitDeviceOverExistingSession,
@@ -172,6 +173,14 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
 
   assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.get), false);
   assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.telephony), false);
+  // lock-screen status only reads the lock state, so no dialog recovery may tap or relaunch first.
+  for (const action of ['lock', 'unlock']) {
+    assert.equal(leavesDeviceUntouched(makeRequest(PUBLIC_COMMANDS.lockScreen, [action])), false);
+  }
+  for (const action of ['status', 'STATUS']) {
+    assert.equal(leavesDeviceUntouched(makeRequest(PUBLIC_COMMANDS.lockScreen, [action])), true);
+  }
+  assert.equal(leavesDeviceUntouched(makeRequest(PUBLIC_COMMANDS.screenshot)), false);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.apps), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.capabilities), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.devices), true);

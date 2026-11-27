@@ -112,6 +112,11 @@ export function shouldGuardAndroidBlockingDialog(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.androidBlockingDialogGuard === true;
 }
 
+/** Whether the request must not change the device, so no Android dialog recovery runs for it. */
+export function leavesDeviceUntouched(req: DaemonRequest): boolean {
+  return getDaemonCommandDescriptor(req.command)?.leavesDeviceUntouched?.(req) === true;
+}
+
 /**
  * Whether the request only observes the device: no step of it dispatches an action or changes state.
  * It reads the descriptor's declared effect: a recorded command's recording effect, otherwise an

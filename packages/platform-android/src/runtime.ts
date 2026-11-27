@@ -390,6 +390,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           shake: androidShakeFact(device),
           lockScreen: androidLockScreenFact(device),
           unlockScreen: androidLockScreenFact(device),
+          lockScreenStatus: androidLockScreenFact(device),
           ...androidHardwareButtonFacts(device),
         }),
         ...androidFoldableFacts(device),

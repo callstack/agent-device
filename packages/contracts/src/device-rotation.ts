@@ -220,10 +220,11 @@ export function parseHardwareButtonPositionals(positionals: readonly string[]): 
 // join their eager closures (scripts/__tests__/eager-closure-budgets.ts).
 
 /**
- * The `lock-screen` actions, in command order. Each selects one system-button cell, the way
- * `keyboard <status|dismiss|enter>` selects a keyboard-family cell.
+ * The `lock-screen` actions, in command order. Each selects one runtime cell, the way
+ * `keyboard <status|dismiss|enter>` selects a keyboard-family cell: `lock` and `unlock` select a
+ * system-button cell, and `status` the `lockScreenStatus` read, which changes nothing.
  */
-export const LOCK_SCREEN_ACTIONS = ['lock', 'unlock'] as const;
+export const LOCK_SCREEN_ACTIONS = ['lock', 'unlock', 'status'] as const;
 export type LockScreenAction = (typeof LOCK_SCREEN_ACTIONS)[number];
 
 /** The lock states a `lock-screen` result reports, each read back from the device. */

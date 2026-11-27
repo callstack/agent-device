@@ -65,6 +65,12 @@ test('resolver commands classify per selected subaction', () => {
   assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['dismiss'])), 'may-invalidate');
   assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['enter'])), 'may-invalidate');
   assert.equal(resolveRefFrameEffect(makeRequest('keyboard', ['return'])), 'may-invalidate');
+  // lock-screen: status reads the lock state; lock and unlock change it.
+  assert.equal(resolveRefFrameEffect(makeRequest('lock-screen', ['status'])), 'preserve');
+  assert.equal(resolveRefFrameEffect(makeRequest('lock-screen', ['STATUS'])), 'preserve');
+  assert.equal(resolveRefFrameEffect(makeRequest('lock-screen', ['lock'])), 'may-invalidate');
+  assert.equal(resolveRefFrameEffect(makeRequest('lock-screen', ['unlock'])), 'may-invalidate');
+  assert.equal(resolveRefFrameEffect(makeRequest('lock-screen')), 'may-invalidate');
   // alert: get/wait read, accept/dismiss mutate.
   assert.equal(resolveRefFrameEffect(makeRequest('alert')), 'preserve');
   assert.equal(resolveRefFrameEffect(makeRequest('alert', ['get'])), 'preserve');

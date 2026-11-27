@@ -44,6 +44,8 @@ export function runnerResultFor(sent: Pick<RunnerCommand, 'command' | 'orientati
       return { x: 0, y: 0, x2: 390, y2: 844 };
     case 'rotate':
       return { orientation: sent.orientation };
+    case 'lockScreenStatus':
+      return { locked: true };
     case 'scroll':
     case 'desktopScroll':
       return { referenceWidth: 390, referenceHeight: 844 };

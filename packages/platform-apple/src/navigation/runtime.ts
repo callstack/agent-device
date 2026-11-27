@@ -24,6 +24,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import {
   SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+  LOCK_SCREEN_STATUS_INTERACTOR_OPERATIONS,
   systemButtonRuntimeOperationFacts,
 } from '@agent-device/contracts/system-button-runtime';
 import {
@@ -264,6 +265,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
       shake: appleShakeFact(device),
       lockScreen: appleLockScreenFact(device),
       unlockScreen: appleLockScreenFact(device),
+      lockScreenStatus: appleLockScreenFact(device),
       // Power is the family denial: Apple exposes no public power/lock button press to XCUITest,
       // on any kind or OS, so no cell overrides it.
       volumeUp: appleVolumeButtonFact(device),
@@ -295,6 +297,7 @@ const APPLE_NAVIGATION_INTERACTOR_OPERATIONS: readonly InteractorOperationDefini
   [
     ...BACK_INTERACTOR_OPERATIONS,
     ...SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+    ...LOCK_SCREEN_STATUS_INTERACTOR_OPERATIONS,
     ...ORIENTATION_INTERACTOR_OPERATIONS,
     ...TV_REMOTE_INTERACTOR_OPERATIONS,
     ...KEYBOARD_INTERACTOR_OPERATIONS,

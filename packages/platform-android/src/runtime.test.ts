@@ -246,7 +246,7 @@ test('Android admits the hardware-button facts on phones and tablets and refuses
 });
 
 test('Android admits the lock-screen facts on phones and tablets and refuses a TV target', async () => {
-  const cells = ['lockScreen', 'unlockScreen'] as const;
+  const cells = ['lockScreen', 'unlockScreen', 'lockScreenStatus'] as const;
   for (const runtimeDevice of [
     ANDROID_EMULATOR,
     { ...ANDROID_EMULATOR, kind: 'device' as const },

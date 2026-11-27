@@ -1,4 +1,4 @@
-import { LOCK_SCREEN_REASONS } from '@agent-device/contracts/device';
+import { LOCK_SCREEN_REASONS, type LockScreenState } from '@agent-device/contracts/device';
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
@@ -10,6 +10,7 @@ import { readAndroidCurrentUserId } from './permission-grant-state.ts';
 /** The Android-only `lock-screen` reasons; the shared ones are in LOCK_SCREEN_REASONS. */
 const ANDROID_LOCK_SCREEN_REASONS = {
   // dumpsys reported no keyguard state, or no lock type for the foreground user, so nothing was sent.
+  // `status` reports it when there is no keyguard state.
   stateUnreadable: { reason: 'lock-screen-state-unreadable' },
   // The screen lock is set to None, so there is no lock screen to show; nothing was sent.
   lockScreenDisabled: { reason: 'lock-screen-disabled' },
@@ -30,8 +31,10 @@ const LOCK_AFTER_TIMEOUT_CAP_MS = 60_000;
 
 const SECURE_LOCK_HINT =
   'unlock never enters a credential. Unlock the device by hand, or remove its screen lock in Settings > Security, then retry.';
-const STATE_UNREADABLE_HINT =
-  'Check adb shell dumpsys window, adb shell dumpsys lock_settings, and adb shell am get-current-user; if the device is still booting, retry once it reports a user.';
+const LOCK_SETTINGS_UNREADABLE_HINT =
+  'Check adb shell dumpsys lock_settings and adb shell am get-current-user; if the device is still booting, retry once it reports a user.';
+const KEYGUARD_UNREADABLE_HINT =
+  'Check that adb shell dumpsys window prints isKeyguardShowing; if the device is still booting, retry once it does.';
 const LOCK_DISABLED_HINT =
   'Set a screen lock other than None in Settings > Security > Screen lock (Swipe needs no credential), then retry.';
 const LOCK_UNVERIFIED_HINT = 'Android raised no keyguard after KEYCODE_SLEEP.';
@@ -100,13 +103,27 @@ export async function unlockAndroidScreen(
   });
 }
 
+/**
+ * The lock state `dumpsys window` reports: `locked` while the keyguard shows. It is the same read
+ * that `lockAndroidScreen` and `unlockAndroidScreen` verify against, and it sends nothing. A dump
+ * without a keyguard state refuses instead of guessing.
+ */
+export async function readAndroidLockScreenState(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<LockScreenState> {
+  return (await readKeyguardBeforeDispatch(device, signal)) ? 'locked' : 'unlocked';
+}
+
 /** The keyguard state before anything is sent; a dump without one refuses instead of guessing. */
 async function readKeyguardBeforeDispatch(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<boolean> {
   const showing = await readAndroidKeyguardShowing(device, signal);
-  if (showing === undefined) throw stateUnreadable(device, 'the keyguard state');
+  if (showing === undefined) {
+    throw stateUnreadable(device, 'the keyguard state', KEYGUARD_UNREADABLE_HINT);
+  }
   return showing;
 }
 
@@ -160,12 +177,12 @@ async function refuseSecureLock(
   );
 }
 
-function stateUnreadable(device: DeviceInfo, what: string): AppError {
+function stateUnreadable(device: DeviceInfo, what: string, hint: string): AppError {
   return new AppError('COMMAND_FAILED', `Unable to read ${what} of ${device.name}`, {
     deviceId: device.id,
     reason: ANDROID_LOCK_SCREEN_REASONS.stateUnreadable.reason,
     dispatched: 'no',
-    hint: STATE_UNREADABLE_HINT,
+    hint,
   });
 }
 
@@ -187,7 +204,11 @@ async function readLockSettingsBeforeDispatch(
   const block = userId === undefined ? undefined : userBlock(stdout, userId);
   const type = block === undefined ? undefined : /^\s*CredentialType:\s*(\S+)/m.exec(block)?.[1];
   if (type === undefined) {
-    throw stateUnreadable(device, 'the screen lock type of the foreground user');
+    throw stateUnreadable(
+      device,
+      'the screen lock type of the foreground user',
+      LOCK_SETTINGS_UNREADABLE_HINT,
+    );
   }
   return {
     credentialType: type === '-1' ? 'none' : type.toLowerCase(),

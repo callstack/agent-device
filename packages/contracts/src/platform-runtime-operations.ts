@@ -29,7 +29,10 @@ import type { TelephonyRuntimeOperations } from './telephony-runtime.ts';
 import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
-import type { SystemButtonRuntimeOperations } from './system-button-runtime.ts';
+import type {
+  LockScreenStatusRuntimeOperations,
+  SystemButtonRuntimeOperations,
+} from './system-button-runtime.ts';
 import type { AppEventRuntimeOperations } from './app-event-runtime.ts';
 import type { ReadableSetting } from './settings-catalog.ts';
 import type { SettingsRuntimeOperations } from './settings-runtime.ts';
@@ -86,6 +89,7 @@ export type PlatformRuntimeOperations = AccessibilityAuditRuntimeOperations &
   KeyboardRuntimeOperations &
   ClipboardRuntimeOperations &
   SystemButtonRuntimeOperations &
+  LockScreenStatusRuntimeOperations &
   AppEventRuntimeOperations &
   SettingsRuntimeOperations &
   AlertRuntimeOperations &
@@ -134,9 +138,11 @@ export const shakeRuntimeUse = defineUse({ required: ['shake'] });
 // `lock-screen`'s cells: the parsed action names exactly one of them, as a hardware-button name does.
 export const lockScreenRuntimeUse = defineUse({ required: ['lockScreen'] });
 export const unlockScreenRuntimeUse = defineUse({ required: ['unlockScreen'] });
+export const lockScreenStatusRuntimeUse = defineUse({ required: ['lockScreenStatus'] });
 export const lockScreenRuntimePlanUses = Object.freeze([
   lockScreenRuntimeUse,
   unlockScreenRuntimeUse,
+  lockScreenStatusRuntimeUse,
 ] as const);
 // `hardware-button`'s cells (ADR 0019 §9): the daemon admits and binds exactly the one the parsed
 // positional names, never all of them (#3848).

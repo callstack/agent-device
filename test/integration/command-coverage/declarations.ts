@@ -1502,8 +1502,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     iosSimulator: iosSimulator.contract(
       'test/integration/provider-scenarios/ios-lock-screen.test.ts',
-      'Provider-backed integration iOS lock-screen sends lockScreen and unlockScreen to the runner without activating the app',
-      'the iOS simulator leaf sends the lock and unlock runner commands without activating the session app',
+      'Provider-backed integration iOS lock-screen sends lockScreen, unlockScreen, and lockScreenStatus to the runner without activating the app',
+      'the iOS simulator leaf sends the lock, unlock, and status runner commands without activating the session app',
     ),
     macos: macos.contract(
       APPLE_LOCK_SCREEN_FACT_EVIDENCE.path,

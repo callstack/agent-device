@@ -50,6 +50,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'keyboardStatus',
   'listApps',
   'lockScreen',
+  'lockScreenStatus',
   'longPressPoint',
   'materializeAppSource',
   'mediaFastForward',

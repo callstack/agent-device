@@ -5,6 +5,7 @@
  * implementation seam for selected Android use; host-bound adb wiring is supplied separately by
  * the root composition module.
  */
+import type { LockScreenState } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export {
@@ -410,6 +411,15 @@ export async function lockAndroidScreen(
 ): Promise<void> {
   const { lockAndroidScreen: lock } = await import('./lock-screen.ts');
   await lock(device, signal);
+}
+
+/** Deferred like {@link lockAndroidScreen}. */
+export async function readAndroidLockScreenState(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<LockScreenState> {
+  const { readAndroidLockScreenState: read } = await import('./lock-screen.ts');
+  return await read(device, signal);
 }
 
 /** Deferred like {@link lockAndroidScreen}. */

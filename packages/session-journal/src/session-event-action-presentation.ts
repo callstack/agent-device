@@ -53,7 +53,7 @@ export function buildStructuredActionSummary(action: SessionAction): string | un
     case PUBLIC_COMMANDS.hardwareButton:
       return buildHardwareButtonActionSummary(result);
     case PUBLIC_COMMANDS.lockScreen:
-      return buildLockScreenActionSummary(result);
+      return buildLockScreenActionSummary(action.positionals[0], result);
     case PUBLIC_COMMANDS.orientation:
       return buildOrientationActionSummary(result);
     case PUBLIC_COMMANDS.fold:
@@ -281,8 +281,15 @@ function buildHardwareButtonActionSummary(result: Record<string, unknown>): stri
   return button === undefined ? 'Pressed hardware button' : `Pressed hardware button ${button}`;
 }
 
-function buildLockScreenActionSummary(result: Record<string, unknown>): string {
+/** `status` reads the state, so its summary reports it; lock and unlock report the change. */
+function buildLockScreenActionSummary(
+  action: string | undefined,
+  result: Record<string, unknown>,
+): string {
   const state = readEnum(result.state, LOCK_SCREEN_STATES);
+  if (action?.toLowerCase() === 'status') {
+    return state === undefined ? 'Read the lock screen state' : `The screen is ${state}`;
+  }
   if (state === undefined) return 'Changed the lock screen';
   return state === 'locked' ? 'Locked the screen' : 'Unlocked the screen';
 }

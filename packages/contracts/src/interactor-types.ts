@@ -4,7 +4,7 @@ import type { KeyboardReturnKey } from './keyboard.ts';
 import type { ElementTextTarget } from './element-text-target.ts';
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
-import type { DeviceRotation } from './device-rotation.ts';
+import type { DeviceRotation, LockScreenState } from './device-rotation.ts';
 import type { FillUnconfirmedVerification } from './fill-evidence.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
@@ -469,6 +469,12 @@ export type Interactor = {
    * asks for a PIN, pattern, password, or passcode is refused with `lock-screen-secure`.
    */
   unlockScreen?(): Promise<void>;
+  /**
+   * Optional (parity with `lockScreen`): reads whether the device shows its lock screen, through
+   * the same state the owner's `lockScreen` and `unlockScreen` verify against, and changes nothing.
+   * A state the owner cannot read throws; it is never guessed as unlocked.
+   */
+  lockScreenStatus?(): Promise<LockScreenState>;
   /**
    * Optional (parity with `home`): presses the physical volume-up key once, a control phone
    * owners with a volume button carry. An owner without it leaves it undefined; its fact refuses

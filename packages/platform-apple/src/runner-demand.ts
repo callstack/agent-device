@@ -104,6 +104,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   actionButton: 'runner',
   lockScreen: 'runner',
   unlockScreen: 'runner',
+  lockScreenStatus: 'runner',
   tvRemote: 'runner',
   keyboardDismiss: 'runner',
   keyboardEnter: 'runner',

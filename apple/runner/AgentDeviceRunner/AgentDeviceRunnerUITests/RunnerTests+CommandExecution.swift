@@ -600,6 +600,8 @@ extension RunnerTests {
       return Response(ok: true, data: DataPayload(message: command.command.rawValue))
     case .lockScreen, .unlockScreen:
       return executeLockScreenCommand(command.command)
+    case .lockScreenStatus:
+      return executeLockScreenStatusCommand()
     case .keyboardDismiss, .keyboardStatus:
       var status: RunnerKeyboardStatus?
       withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {

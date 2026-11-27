@@ -46,6 +46,29 @@ private final class LockScreenScript {
 }
 
 extension RunnerTests {
+  func testLockScreenStatusReadsAnyNonzeroLockStateAsLocked() {
+    for state: UInt64 in [1, 2] {
+      let response = lockScreenStatusResponse(.success(state))
+      XCTAssertTrue(response.ok)
+      XCTAssertEqual(response.data?.locked, true)
+    }
+  }
+
+  func testLockScreenStatusReadsAZeroLockStateAsUnlocked() {
+    let response = lockScreenStatusResponse(.success(0))
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(response.data?.locked, false)
+  }
+
+  func testLockScreenStatusRefusesAnUnreadableState() {
+    let response = lockScreenStatusResponse(
+      .failure(LockScreenNotifyError("Unable to read com.apple.springboard.lockstate"))
+    )
+    XCTAssertFalse(response.ok)
+    XCTAssertNil(response.data?.locked)
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.observationUnavailable)
+  }
+
   func testLockScreenLeavesAnAlreadyLockedScreenAlone() {
     let script = LockScreenScript(reads: [.locked])
     let response = executeLockScreenTransition(lock: true, steps: script.steps)

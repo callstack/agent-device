@@ -307,12 +307,16 @@ describe('system command interface', () => {
     ).toEqual(['sleep']);
   });
 
-  test('lock-screen reader and writer take exactly one lock or unlock action', () => {
+  test('lock-screen reader and writer take exactly one lock, unlock, or status action', () => {
     expect(lockScreenCliReader(['lock'], flags({ platform: 'android' }))).toEqual({
       platform: 'android',
       action: 'lock',
     });
     expect(lockScreenCliReader(['Unlock'], flags())).toEqual({ action: 'unlock' });
+    expect(lockScreenCliReader(['status'], flags())).toEqual({ action: 'status' });
+    expect(
+      lockScreenDaemonWriter({ action: 'status' } as Record<string, unknown>).positionals,
+    ).toEqual(['status']);
     expect(
       lockScreenDaemonWriter({ action: 'unlock' } as Record<string, unknown>).positionals,
     ).toEqual(['unlock']);

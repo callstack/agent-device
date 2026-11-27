@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { assertRpcError } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 import { createRecordingAppleToolProvider } from './providers.ts';
 
-test('Provider-backed integration iOS lock-screen sends lockScreen and unlockScreen to the runner without activating the app', async () => {
+test('Provider-backed integration iOS lock-screen sends lockScreen, unlockScreen, and lockScreenStatus to the runner without activating the app', async () => {
   const ok = { stdout: '', stderr: '', exitCode: 0 };
   const tool = createRecordingAppleToolProvider({
     simctl: async (args) => {
@@ -20,13 +21,15 @@ test('Provider-backed integration iOS lock-screen sends lockScreen and unlockScr
     },
   });
   const runnerCommands: string[] = [];
+  // Successive lockScreenStatus answers: locked, unlocked, then one without a lock state.
+  const statusAnswers: Record<string, unknown>[] = [{ locked: true }, { locked: false }, {}];
   const daemon = await createProviderScenarioHarness({
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
     appleRunnerProvider: () => ({
       hasLiveSession: () => true,
       runCommand: async (_device, command) => {
         runnerCommands.push(command.command);
-        return {};
+        return command.command === 'lockScreenStatus' ? statusAnswers.shift()! : {};
       },
     }),
     appleToolProvider: () => tool.provider,
@@ -47,8 +50,32 @@ test('Provider-backed integration iOS lock-screen sends lockScreen and unlockScr
       state: 'unlocked',
       message: 'Unlocked the screen',
     });
-    // Activating the session app would dismiss the lock screen the first command shows.
-    assert.deepEqual(runnerCommands, ['lockScreen', 'unlockScreen']);
+    assert.deepEqual(await daemon.client().command.lockScreen({ action: 'status', ...selection }), {
+      action: 'lock-screen',
+      state: 'locked',
+      message: 'The screen is locked',
+    });
+    assert.deepEqual(await daemon.client().command.lockScreen({ action: 'status', ...selection }), {
+      action: 'lock-screen',
+      state: 'unlocked',
+      message: 'The screen is unlocked',
+    });
+    // An answer without a lock state is an error, never unlocked.
+    assertRpcError(
+      await daemon.callCommand('lock-screen', ['status'], selection),
+      500,
+      'COMMAND_FAILED',
+      /no lock state/,
+    );
+    // Activating the session app would dismiss the lock screen the first command shows, and the
+    // lock screen a status read reports on.
+    assert.deepEqual(runnerCommands, [
+      'lockScreen',
+      'unlockScreen',
+      'lockScreenStatus',
+      'lockScreenStatus',
+      'lockScreenStatus',
+    ]);
     assert.deepEqual(
       tool.calls.filter((call) => call.includes('launch')),
       [],

@@ -57,6 +57,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   keyboardStatus: 'repeatable',
   listApps: 'repeatable',
   lockScreen: 'mutates',
+  lockScreenStatus: 'repeatable',
   longPressPoint: 'mutates',
   materializeAppSource: 'repeatable',
   mediaFastForward: 'mutates',

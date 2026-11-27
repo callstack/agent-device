@@ -57,6 +57,7 @@ agent-device back
 agent-device orientation landscape-left
 agent-device hardware-button volume-up
 agent-device lock-screen lock
+agent-device lock-screen status
 agent-device fold half-open
 agent-device telephony sms 5551234 "Your code is 1234"
 agent-device device status --platform android --serial emulator-5554
@@ -362,10 +363,10 @@ Exact behavior: `agent-device help hardware-button`.
 
 <!-- generated:command lock-screen -->
 
-Lock or unlock the device screen.
+Lock, unlock, or read the lock state of the device screen.
 
 ```bash
-agent-device lock-screen <lock|unlock>
+agent-device lock-screen <lock|unlock|status>
 ```
 
 Supported targets: [Lock screen](/docs/capabilities#system-and-hardware).
@@ -388,6 +389,7 @@ Exact behavior: `agent-device help lock-screen`.
 - `hardware-button` presses a key once and reports the press, not what the OS did with it. Android presses every key. A physical iPhone or iPad presses volume only, iOS simulators refuse every key, and TV targets point you to `tv-remote`.
 - On Android, `power` toggles the screen. After a press that turns the screen off, later commands can hit a locked screen; use `hardware-button wake`, or `lock-screen unlock` to dismiss the lock screen too.
 - `lock-screen` returns once the device reports the lock state, in `state`. `lock` leaves a locked screen alone. Android verifies with the keyguard state that `dumpsys window` reports. On a device with a PIN, pattern, or password and "Power button instantly locks" off, the keyguard appears only after "Lock after screen timeout", so `lock` waits that long too: at least 5 s, which Android applies even to a shorter setting, and at most one minute. iOS simulators verify with SpringBoard's lock state and, for `lock`, a lock screen surface. On iOS, a dark screen is woken with the lock button first: `unlock` then swipes up and needs the screen on, and `lock` presses again if the screen woke unlocked. `unlock` lands on the app that was in front, not on the Home Screen. On Android it always sends the wake event, which leaves a screen that is on unchanged.
+- `lock-screen status` reports `state: locked` or `state: unlocked` and changes nothing. It reads the same state that `lock` and `unlock` verify against: the keyguard state from `dumpsys window` on Android, and SpringBoard's lock state on iOS simulators. On iOS, a dark screen that is not locked is `unlocked`. A state the device does not report is an error, never `unlocked`: on Android, `lock-screen-state-unreadable`.
 - The session app is not activated, so check the result with `screenshot`. On iOS, an app-scoped command such as `snapshot` brings the session app back to the front, which can dismiss the lock screen.
 - `lock-screen unlock` never enters a credential. A PIN, pattern, password, or passcode lock fails with `lock-screen-secure`; on Android nothing is sent (`dispatched: no`). `lock-screen-unverified` means the device still reports the previous state. On Android, `lock` on a screen lock set to None fails with `lock-screen-disabled` and sends nothing (`dispatched: no`), because there is no lock screen to show. `lock-screen-state-unreadable` means `dumpsys` reported no keyguard state or no lock type for the foreground user, and nothing was sent.
 

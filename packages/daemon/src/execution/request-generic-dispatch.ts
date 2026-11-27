@@ -20,6 +20,7 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import { expireRefFrame } from '../core/ref-frame.ts';
 import {
   resolveRefFrameEffect,
+  leavesDeviceUntouched,
   shouldGuardAndroidBlockingDialog,
 } from '../core/daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
@@ -59,11 +60,7 @@ export async function dispatchGenericCommand(params: {
   const session = sessionStore.requireCurrent(sessionRef);
   const platformCommand = req.command;
 
-  const commandReadiness = await ensureGenericCommandReady(
-    session,
-    platformCommand,
-    params.androidObservation,
-  );
+  const commandReadiness = await ensureGenericCommandReady(session, req, params.androidObservation);
   if (commandReadiness.response) return commandReadiness.response;
   // #1638: freeze the settled diff's baseline before anything can mutate the
   // screen or the stored snapshot — including the Android dialog preflight.
@@ -85,7 +82,7 @@ export async function dispatchGenericCommand(params: {
   if ('response' in settlePlan) return settlePlan.response;
   const preflightReadiness = await ensureNoAndroidBlockingDialogReady(
     session,
-    platformCommand,
+    req,
     params.androidObservation,
   );
   if ('response' in preflightReadiness) return preflightReadiness.response;
@@ -159,7 +156,7 @@ async function finalizeGenericCommand(params: {
   const { req, ref, sessionStore, command } = params;
   const postflightReadiness = await ensureNoAndroidBlockingDialogReady(
     sessionStore.requireCurrent(ref),
-    command,
+    req,
     params.androidObservation,
     'after-command',
   );
@@ -266,11 +263,16 @@ type GenericCommandReadiness = {
 
 async function ensureNoAndroidBlockingDialogReady(
   session: SessionState,
-  platformCommand: string,
+  req: DaemonRequest,
   observation: AndroidObservationAdapter | undefined,
   phase: 'before-command' | 'after-command' = 'before-command',
 ): Promise<AndroidDialogReadiness> {
-  if (session.device.platform !== 'android' || !shouldGuardAndroidBlockingDialog(platformCommand)) {
+  const platformCommand = req.command;
+  if (
+    session.device.platform !== 'android' ||
+    !shouldGuardAndroidBlockingDialog(platformCommand) ||
+    leavesDeviceUntouched(req)
+  ) {
     return { status: 'clear' };
   }
   if (isActiveProviderDevice(session.device)) {
@@ -290,7 +292,7 @@ async function ensureNoAndroidBlockingDialogReady(
 
 async function ensureGenericCommandReady(
   session: SessionState,
-  platformCommand: string,
+  req: DaemonRequest,
   observation: AndroidObservationAdapter | undefined,
 ): Promise<GenericCommandReadiness> {
   // No support gate survives here. R56 migrated `app-switcher`, the last generic-route descriptor
@@ -302,7 +304,8 @@ async function ensureGenericCommandReady(
     session.device.platform !== 'android' ||
     isActiveProviderDevice(session.device) ||
     !session.screenRecording ||
-    platformCommand === 'record'
+    req.command === 'record' ||
+    leavesDeviceUntouched(req)
   ) {
     return {};
   }

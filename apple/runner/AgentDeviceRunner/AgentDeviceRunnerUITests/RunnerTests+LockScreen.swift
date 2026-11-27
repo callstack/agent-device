@@ -70,6 +70,35 @@ extension RunnerTests {
 #endif
   }
 
+  /// Reads SpringBoard's lock state and changes nothing. Only the lock state decides the answer, so
+  /// a screen SpringBoard has blanked while unlocked is unlocked.
+  func executeLockScreenStatusCommand() -> Response {
+#if os(iOS) && targetEnvironment(simulator)
+    return lockScreenStatusResponse(springboardNotifyState(Self.springboardLockStateNotification))
+#else
+    return Response(ok: false, error: ErrorPayload(
+      code: RunnerWireErrorCode.hardwareControlUnavailable,
+      message: "lockScreenStatus is supported only on iPhone and iPad simulators",
+      hint: "lock-screen status reads iPhone and iPad simulators and Android phones and tablets."
+    ))
+#endif
+  }
+
+  /// The `lockScreenStatus` answer for one read of `com.apple.springboard.lockstate`: any nonzero
+  /// state is locked. An unreadable state is an error, never unlocked.
+  func lockScreenStatusResponse(_ lockState: Result<UInt64, LockScreenNotifyError>) -> Response {
+    switch lockState {
+    case .success(let locked):
+      return Response(ok: true, data: DataPayload(message: "lockScreenStatus", locked: locked != 0))
+    case .failure(let error):
+      return Response(ok: false, error: ErrorPayload(
+        code: RunnerWireErrorCode.observationUnavailable,
+        message: error.message,
+        hint: "Take a screenshot to see whether the lock screen is up."
+      ))
+    }
+  }
+
   /// The transition rules, independent of the device. The verification window starts only after
   /// the dispatch returned, and every wait is followed by a read, so a state SpringBoard reached
   /// during the last wait is never reported as a failure.

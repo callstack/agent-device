@@ -1,4 +1,8 @@
-import type { HARDWARE_BUTTON_NAME_LABELS, HardwareButton } from './device-rotation.ts';
+import type {
+  HARDWARE_BUTTON_NAME_LABELS,
+  HardwareButton,
+  LockScreenState,
+} from './device-rotation.ts';
 import {
   requireInteractorMethod,
   type InteractorOperationDefinition,
@@ -14,7 +18,9 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
  * mute, the explicit sleep/wake events, and the media keys. `shake` is the one cell that is a
  * device motion rather than a key: it shares the family's shape, one argumentless dispatch that
  * returns nothing. `lockScreen` and `unlockScreen` are the two cells `lock-screen` selects; each
- * returns only once the device reports the requested lock state, and throws otherwise. What
+ * returns only once the device reports the requested lock state, and throws otherwise. The third
+ * `lock-screen` cell, `lockScreenStatus`, returns the lock state, so it is not a button: its
+ * operation and binder sit below the family, and its fact is built with the family's. What
  * varies between them is which
  * owners carry the control, and that is the fact table's job, not a per-button module's: a
  * button joins this list and its owners state a cell.
@@ -119,14 +125,19 @@ export type SystemButtonRuntimeOperationFacts = Readonly<{
 export type SystemButtonRuntimeOperationFactsInput = Readonly<
   { unsupported: RuntimeOperationUnavailability } & {
     [Button in SystemButton]?: RuntimeOperationFact;
-  }
+  } & { lockScreenStatus?: RuntimeOperationFact }
 >;
 
+/**
+ * Builds the family's cells and the `lockScreenStatus` read beside them: an owner names that read
+ * where it names `lockScreen` and `unlockScreen`, and omission refuses it like a button.
+ */
 export function systemButtonRuntimeOperationFacts(
   input: SystemButtonRuntimeOperationFactsInput,
-): SystemButtonRuntimeOperationFacts {
-  const facts = {} as Record<SystemButton, RuntimeOperationFact>;
+): SystemButtonRuntimeOperationFacts & LockScreenStatusRuntimeOperationFacts {
+  const facts = {} as Record<SystemButton | 'lockScreenStatus', RuntimeOperationFact>;
   for (const button of SYSTEM_BUTTONS) facts[button] = input[button] ?? input.unsupported;
+  facts.lockScreenStatus = input.lockScreenStatus ?? input.unsupported;
   return Object.freeze(facts);
 }
 
@@ -221,6 +232,55 @@ export function bindSystemButton<Button extends SystemButton>(
     Pick<SystemButtonRuntimeOperations, Button>
   >;
 }
+
+/**
+ * `lock-screen status`: reads the lock state the `lockScreen` and `unlockScreen` cells verify
+ * against, and changes nothing. It takes the same input as a press, but returns the state, so it
+ * is a cell of its own rather than a system button.
+ */
+export type LockScreenStatusRuntimeOperations = Readonly<{
+  lockScreenStatus(input: SystemButtonInput): Promise<LockScreenState>;
+}>;
+
+export type LockScreenStatusRuntimeOperationFacts = Readonly<{
+  lockScreenStatus: RuntimeOperationFact;
+}>;
+
+const LOCK_SCREEN_STATUS_LABEL = 'lock-screen status';
+
+/**
+ * Captures one selected owner's interactor authority and reads the lock state through it. Facts
+ * admit the read only for owners whose interactor implements it, so a missing method at read time
+ * is a runtime-contract error, never an unlocked answer.
+ */
+export function bindLockScreenStatus(
+  signal: AbortSignal,
+  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
+): LockScreenStatusRuntimeOperations {
+  return Object.freeze({
+    lockScreenStatus: async (input: SystemButtonInput): Promise<LockScreenState> => {
+      signal.throwIfAborted();
+      const interactor = await resolveInteractor({
+        ...input.execution,
+        appBundleId: input.options?.appBundleId,
+        signal,
+      });
+      return await requireInteractorMethod(
+        interactor.lockScreenStatus,
+        LOCK_SCREEN_STATUS_LABEL,
+      ).call(interactor);
+    },
+  });
+}
+
+/** The lock state read's row for the interactor-operation adapters. */
+export const LOCK_SCREEN_STATUS_INTERACTOR_OPERATIONS = [
+  {
+    operation: 'lockScreenStatus',
+    label: LOCK_SCREEN_STATUS_LABEL,
+    bind: bindLockScreenStatus,
+  },
+] as const satisfies readonly InteractorOperationDefinition<LockScreenStatusRuntimeOperations>[];
 
 /** The family's rows for the interactor-operation adapters: one fact, one bind call. */
 export const SYSTEM_BUTTON_INTERACTOR_OPERATIONS = [

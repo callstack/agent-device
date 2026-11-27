@@ -16,7 +16,11 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
 
 import { runAndroidShell } from './adb.ts';
 import { pressAndroidHardwareButton } from './input-actions.ts';
-import { lockAndroidScreen, unlockAndroidScreen } from './lock-screen.ts';
+import {
+  lockAndroidScreen,
+  readAndroidLockScreenState,
+  unlockAndroidScreen,
+} from './lock-screen.ts';
 import { readAndroidCurrentUserId } from './permission-grant-state.ts';
 import { ANDROID_EMULATOR } from './runtime.fixtures.ts';
 
@@ -85,6 +89,29 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+test.each([
+  [true, 'locked'],
+  [false, 'unlocked'],
+] as const)('status reads isKeyguardShowing=%s as %s and sends nothing', async (showing, state) => {
+  stubDevice({ keyguardReads: [showing] });
+  await expect(readAndroidLockScreenState(ANDROID_EMULATOR, undefined)).resolves.toBe(state);
+  expect(shellCommands()).toEqual(['dumpsys window']);
+  expect(mockPress).not.toHaveBeenCalled();
+});
+
+test('status refuses a dump without a keyguard state instead of reporting unlocked', async () => {
+  mockShell.mockResolvedValue({ stdout: 'WINDOW MANAGER POLICY STATE\n', stderr: '', exitCode: 0 });
+  await expect(readAndroidLockScreenState(ANDROID_EMULATOR, undefined)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'lock-screen-state-unreadable',
+      dispatched: 'no',
+      hint: expect.stringContaining('isKeyguardShowing'),
+    },
+  });
+  expect(mockPress).not.toHaveBeenCalled();
 });
 
 test('lock leaves a keyguard that is already showing alone', async () => {

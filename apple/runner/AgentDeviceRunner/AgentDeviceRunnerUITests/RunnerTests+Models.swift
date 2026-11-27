@@ -27,6 +27,8 @@ enum CommandType: String, Codable, CaseIterable {
   case volumeDown
   case lockScreen
   case unlockScreen
+  /// Reads SpringBoard's lock state, the one `lockScreen` and `unlockScreen` verify, and changes nothing.
+  case lockScreenStatus
   case keyboardDismiss
   case keyboardReturn
   case keyboardStatus
@@ -341,6 +343,11 @@ extension Command {
     case .actionButton, .volumeUp, .volumeDown, .lockScreen, .unlockScreen:
       return .presentedSurfaceMutation
 
+    // The lock state belongs to the system too: activating the session app first would dismiss the
+    // lock screen this read reports on. It changes nothing, so it may be replayed.
+    case .lockScreenStatus:
+      return .presentedSurfaceQuery
+
     case .querySelector:
       return .selectorResolution
 
@@ -561,6 +568,8 @@ struct DataPayload: Codable {
   /// The wording that return key carries, verbatim, so a localized or an app's custom key stays
   /// readable. Absent when the key carries none, or there is no key to read.
   var keyboardReturnKeyLabel: String?
+  /// SpringBoard's lock state on a `lockScreenStatus` answer: true while the lock screen is up.
+  var locked: Bool?
   var orientation: String?
   var gestureFallback: String?
   var gestureFallbackMessage: String?

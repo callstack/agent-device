@@ -15,6 +15,7 @@ import {
   appSwitcherRuntimeUse,
   homeRuntimeUse,
   lockScreenRuntimeUse,
+  lockScreenStatusRuntimeUse,
   mediaFastForwardRuntimeUse,
   mediaNextRuntimeUse,
   mediaPlayPauseRuntimeUse,
@@ -415,4 +416,62 @@ test('lock-screen rejects an unavailable exact-owner fact before binding', async
   });
   expect(harness.bindDevice).not.toHaveBeenCalled();
   expect(harness.press).not.toHaveBeenCalled();
+});
+
+// lock-screen status binds only the lockScreenStatus cell and reports the state the owner read,
+// whichever it is: nothing is pressed.
+test.each([
+  ['locked', 'The screen is locked'],
+  ['unlocked', 'The screen is unlocked'],
+] as const)('lock-screen status reports the %s state the owner read', async (state, message) => {
+  const read = vi.fn(async () => state);
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    device: { ...deviceShape(androidPhone), providerMode: 'local' },
+    operations: systemButtonRuntimeOperationFacts({
+      unsupported: unavailable,
+      lockScreenStatus: available,
+    }) as RuntimeFacts<PlatformRuntimeOperations>['operations'],
+  };
+  const binding = {
+    device: androidPhone,
+    owner: localRuntimeOwner(androidPhone.platform),
+    facts,
+    operations: { lockScreenStatus: read },
+    [Symbol.asyncDispose]: async () => {},
+  } satisfies DeviceBinding<PlatformRuntimeOperations>;
+  const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
+  const bindDevice = vi.fn(async (_device, use) =>
+    narrowDeviceBinding(binding, use),
+  ) as unknown as BindDeviceRuntime;
+
+  const resolved = await resolveBoundSystemButtonRuntime('lock-screen', {
+    platformServices: daemonPlatformServicesFixture(),
+    device: androidPhone,
+    positionals: ['status'],
+    inspectFacts,
+    bindDevice,
+  });
+
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(bindDevice).toHaveBeenCalledWith(androidPhone, lockScreenStatusRuntimeUse);
+  const session = makeSession('system-button-runtime', { device: androidPhone });
+  expect(
+    await resolved.execute({
+      session,
+      sessionName: session.name,
+      logPath: '/tmp/daemon.log',
+      command: 'lock-screen',
+      request: {
+        command: 'lock-screen',
+        positionals: ['status'],
+        token: 't',
+        session: session.name,
+      },
+      positionals: ['status'],
+      out: undefined,
+      dispatchContext: {},
+    }),
+  ).toEqual({ action: 'lock-screen', state, message });
+  expect(read).toHaveBeenCalledTimes(1);
 });
