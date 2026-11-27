@@ -84,9 +84,7 @@ export function isCheckedRpcOutcomeResponse(
  * What a checked call's 404 or refusal 409 means. `answer` is a JSON-RPC body the daemon wrote, which the
  * caller reads like any other answer. `refused` is final: nothing is resent.
  */
-type CheckedRpcOutcome =
-  | { kind: 'answer'; body: string }
-  | { kind: 'refused'; error: AppError };
+type CheckedRpcOutcome = { kind: 'answer'; body: string } | { kind: 'refused'; error: AppError };
 
 /**
  * Reads a checked call's 404, or its 409 that carries a refusal header. That 409 is a refusal made
