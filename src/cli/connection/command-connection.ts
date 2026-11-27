@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
   admitDaemonStateRoot,
   resolveDaemonPaths,
@@ -56,6 +57,11 @@ export function resolveCommandConnection(
     const defaults = claimRemoteConnectionDefaults({ ...request, stateDir: paths.baseDir });
     const merged = mergeConnectionFlags(flags, defaults.flags, explicitFlagKeys);
     const effectiveFlags = legacyDisconnectFlags(defaults.claimed, paths.baseDir, merged, options);
+    // The saved profile can name another root, which the disconnect handler locks.
+    const lockPaths = resolveDaemonPaths(effectiveFlags.stateDir, host);
+    if (!fs.existsSync(lockPaths.baseDir)) {
+      admitDaemonStateRoot({ paths: lockPaths, mode: 'establish' });
+    }
     return {
       daemonPaths: paths,
       effectiveFlags,

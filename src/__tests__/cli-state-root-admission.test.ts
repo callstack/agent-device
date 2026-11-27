@@ -57,26 +57,68 @@ test('a CLI run repairs a state root the umask left open, and proceeds', async (
   assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
 });
 
+async function runUnderUmask002(...run: Parameters<typeof runCliCapture>) {
+  const previous = process.umask(0o002);
+  try {
+    return await runCliCapture(...run);
+  } finally {
+    process.umask(previous);
+  }
+}
+
 test.skipIf(process.platform === 'win32').each([
   { command: 'connect', args: connectArgs },
   { command: 'disconnect', args: ['disconnect', '--json'] },
 ])('$command creates a missing state root privately under umask 002', async ({ args }) => {
   const under = mkdtempForTestSync('agent-device-cli-state-root-fresh-');
-  const stateDir = path.join(under, 'state');
-  const env = { ...cloudEnv(), AGENT_DEVICE_STATE_DIR: stateDir };
+  const parent = path.join(under, 'parent');
+  const stateDir = path.join(parent, 'state');
   stubCloudApi();
 
-  const previous = process.umask(0o002);
-  let run;
-  try {
-    run = await runCliCapture(args, { env });
-  } finally {
-    process.umask(previous);
-  }
+  const run = await runUnderUmask002(args, {
+    env: { ...cloudEnv(), AGENT_DEVICE_STATE_DIR: stateDir },
+  });
 
   assert.equal(run.code, null, run.stdout + run.stderr);
+  assert.equal(fs.statSync(parent).mode & 0o777, 0o700);
   assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
 });
+
+test.skipIf(process.platform === 'win32')(
+  'disconnect creates a missing state root named by the saved profile privately under umask 002',
+  async () => {
+    const under = mkdtempForTestSync('agent-device-cli-state-root-profile-');
+    const connectionStateDir = path.join(under, 'state');
+    const parent = path.join(under, 'parent');
+    const profileStateDir = path.join(parent, 'state');
+    const profile = path.join(under, 'remote.json');
+    fs.writeFileSync(
+      profile,
+      JSON.stringify({
+        stateDir: profileStateDir,
+        daemonBaseUrl: 'https://daemon.example/',
+        tenant: 'tenant',
+        runId: 'run',
+        platform: 'ios',
+      }),
+    );
+    const env = { HOME: under, AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'daemon-token' };
+    const flags = ['--state-dir', connectionStateDir, '--remote-config', profile];
+    const connect = await runCliCapture(['connect', '--session', 'demo', ...flags, '--json'], {
+      env,
+    });
+    assert.equal(connect.code, null, connect.stdout + connect.stderr);
+    assert.equal(fs.existsSync(parent), false);
+
+    const run = await runUnderUmask002(['disconnect', '--session', 'demo', '--json'], {
+      env: { ...env, AGENT_DEVICE_STATE_DIR: connectionStateDir },
+    });
+
+    assert.equal(run.code, null, run.stdout + run.stderr);
+    assert.equal(fs.statSync(parent).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(profileStateDir).mode & 0o777, 0o700);
+  },
+);
 
 test.skipIf(process.platform === 'win32').each([0o750, 0o775])(
   'connect tightens a pre-existing owned state root (mode %o) without replacing it',
