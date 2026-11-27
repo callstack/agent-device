@@ -233,6 +233,16 @@ test('a relayed path that leaves the local base URL is refused, over HTTP and so
   assert.deepEqual([local.received, other.received], [[], []]);
 });
 
+test('a relayed absolute path on the local base origin is served', async () => {
+  const local = await listenLocalServer();
+  const bridge = await relayingBridge(local.origin);
+
+  const answer = await bridge.relay(httpRequest(`${local.origin}/index.bundle`));
+
+  assert.equal(answer.status, 200);
+  assert.deepEqual(local.received, ['/index.bundle -']);
+});
+
 test.each([
   ['authorization', 'Bearer app'],
   ['cookie', 'session=app'],

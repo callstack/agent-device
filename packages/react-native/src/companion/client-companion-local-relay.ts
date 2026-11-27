@@ -12,11 +12,11 @@ const CREDENTIAL_HEADERS = [
   'x-agent-device-token',
 ];
 
-/** The URL a relayed request goes to: a path on the local base's origin, and nothing else. */
+/** The URL a relayed request goes to: its path resolved on the local base, on that origin only. */
 export function relayTarget(localBaseUrl: string, requestPath: string): URL {
   const base = new URL(`${normalizeBaseUrl(localBaseUrl)}/`);
   const target = URL.parse(requestPath, base);
-  if (URL.canParse(requestPath) || target?.origin !== base.origin) {
+  if (!target || target.origin !== base.origin) {
     throw new AppError(
       'INVALID_ARGS',
       'The Metro companion refuses a relayed path that leaves the local base URL.',
