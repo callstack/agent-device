@@ -28,6 +28,7 @@ import {
   type TenantSessionNamespace,
 } from '../core/session-tenant-scope.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
+import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
 
 const REQUEST_DIAGNOSTICS_CONTENT_TYPE = 'application/x-ndjson';
 
@@ -158,13 +159,7 @@ async function handleRequestDiagnostics(
     const stream = fs.createReadStream(recordPath);
     // A caller that hangs up has to end both the open wait and the read: `ready` never
     // arrives once the socket is gone, and nothing will drain the record either.
-    const disconnect = new AbortController();
-    const abortOnDisconnect = () => disconnect.abort();
-    // The response is not a pipeline stage, so its own failures have to end the read:
-    // a socket that errors or goes away mid-write would otherwise leave the record
-    // reading into a response that can never drain.
-    res.once('close', abortOnDisconnect);
-    res.once('error', abortOnDisconnect);
+    const disconnect = responseDisconnectSignal(req, res);
     // The 200 head goes out with the first byte of the record rather than before the
     // read starts, so a first-read failure (EIO, a record removed under a Windows
     // handle) still reaches the JSON error answer. That answer needs the response to
@@ -190,8 +185,8 @@ async function handleRequestDiagnostics(
       // `once` rejects with the stream's error, so an open failure (ENOENT, EACCES)
       // lands here while the response is still unwritten.
       if (stream.errored) throw stream.errored;
-      if (stream.pending) await once(stream, 'ready', { signal: disconnect.signal });
-      await pipeline(stream, body, { signal: disconnect.signal });
+      if (stream.pending) await once(stream, 'ready', { signal: disconnect });
+      await pipeline(stream, body, { signal: disconnect });
       sendHead();
       res.end();
     } catch (error) {
@@ -199,11 +194,9 @@ async function handleRequestDiagnostics(
       // is the hang-up itself. Nothing is left to answer, so that is a finished
       // download, not a failure. Mid-body, once the head is out, the only honest signal
       // left is the truncated transfer `failStreamedHttpResponse` leaves behind.
-      if (disconnect.signal.aborted || isClientDisconnect(error)) return;
+      if (disconnect.aborted || isClientDisconnect(error)) return;
       throw error;
     } finally {
-      res.removeListener('close', abortOnDisconnect);
-      res.removeListener('error', abortOnDisconnect);
       stream.destroy();
     }
   } catch (error) {
