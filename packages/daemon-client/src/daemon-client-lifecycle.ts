@@ -345,10 +345,11 @@ async function ensureRemoteDaemon(
     baseUrl: settings.remoteBaseUrl,
   };
   // The checked route makes the server refuse what `/health` would have: no probe goes first. A
-  // process that already holds an instance-pinned answer uses it instead, fenced and free.
+  // process that already read `/health` here, a lease call's for one, stays health-first: a pinned
+  // answer is reused, fenced and free, and one that could not be pinned is read again.
   if (settings.remoteCheckedRpc) {
-    const { holdsPinnedRemoteHealth } = await import('./daemon-client-remote-health-cache.ts');
-    if (!holdsPinnedRemoteHealth(remoteInfo)) {
+    const { hasReadRemoteHealth } = await import('./daemon-client-remote-health-cache.ts');
+    if (!hasReadRemoteHealth(remoteInfo)) {
       return { info: { ...remoteInfo, checkedRpc: true }, startedByClient: false };
     }
   }

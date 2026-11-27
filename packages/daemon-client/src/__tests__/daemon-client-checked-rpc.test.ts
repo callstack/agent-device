@@ -432,3 +432,21 @@ test('no checked failure names the endpoint, and an unknown refusal value never 
     details: { reason: 'remote_checked_rpc_unsupported', dispatched: 'no' },
   });
 });
+
+test('after a lease call whose /health answer cannot be pinned, the next command stays health-first', async () => {
+  // A daemon that reports no instance ID: its answer is reachable but never cached.
+  const daemon = await remoteDaemon(OK_ANSWER, false);
+  try {
+    await sendToDaemon({
+      session: 'default',
+      command: 'lease_heartbeat',
+      positionals: [],
+      flags: { daemonBaseUrl: daemon.baseUrl, daemonRpc: 'checked', leaseId: 'lease-1' },
+    });
+    await sendToDaemon(sessionList(daemon.baseUrl, { daemonRpc: 'checked' }));
+
+    expect(routes(daemon.seen)).toEqual(['GET /health', 'POST /rpc', 'GET /health', 'POST /rpc']);
+  } finally {
+    await daemon.close();
+  }
+});
