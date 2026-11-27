@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import {
   attachSnapshotClickabilityEvidence,
@@ -81,6 +82,18 @@ export function androidSnapshotViewportFromHelperMetadata(
 }
 
 /** The sole adapter from Android acquisition into daemon snapshot publication. */
+/**
+ * A truncated or sparse capture can miss nodes that are on screen, so it cannot show that a node
+ * is absent. A failed presentation resolves as an empty capture that is both.
+ */
+export function requireCompleteAndroidSnapshotCapture(capture: AndroidSnapshotCapture): void {
+  if (capture.truncated !== true && capture.quality?.state !== 'sparse') return;
+  throw new AppError('COMMAND_FAILED', 'Android snapshot capture was incomplete', {
+    truncated: capture.truncated === true,
+    quality: capture.quality?.state,
+  });
+}
+
 export function androidSnapshotPublicationInput(
   capture: AndroidSnapshotCapture,
 ): AndroidSnapshotPublicationInput {

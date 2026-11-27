@@ -1,15 +1,8 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { afterEach, test, expect, vi } from 'vitest';
+import { afterEach, beforeEach, test, expect, vi } from 'vitest';
 
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { createTouchCommandSurface } from '../../__tests__/support/touch-command-surface-fake.ts';
-const testCreateCommandSurface = createTouchCommandSurface();
-
-let snapshotCalls = 0;
-let snapshotMode: 'blocking-dialog' | 'throws' = 'blocking-dialog';
-
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
@@ -20,118 +13,30 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
-import { androidObservationPolicyFixture as androidObservation } from '../../__tests__/support/android-observation-fixture.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
+import {
+  ANR_CLOSE_APP_TAP_EVENT,
+  ANR_DIALOG_CLEARED_EVENT,
+  makeAnrDialogObservation,
+} from '../../__tests__/support/android-anr-observation.ts';
+import type { SessionStore } from '../../core/session-store.ts';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
+// A screen recording does not change how the generic route treats an Android "isn't responding"
+// dialog: the session app's own ANR is recovered, and another app's ANR is refused untouched.
+
+const APP = 'com.android.settings';
 const providerAdmission = providerDeviceAdmissionFixture();
 
+beforeEach(() => gestureRuntimeSpies.scrollDirection.mockClear());
 afterEach(() => providerAdmission.setActive([]));
 
-vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  const capture = (nodes: RawSnapshotNode[]) =>
-    actual.createAndroidSnapshotCapture(
-      {
-        nodes,
-        analysis: { rawNodeCount: nodes.length, maxDepth: 0 },
-        androidSnapshot: { backend: 'android-helper' },
-        quality: { state: 'healthy', backend: 'android-helper' },
-      },
-      {
-        clickability: {
-          kind: 'exact',
-          provider: 'android-helper',
-          clickableByNodeIndex: new Map(),
-          longClickableByNodeIndex: new Map(),
-        },
-      },
-    );
-  return {
-    ...actual,
-    snapshotAndroid: vi.fn(async () => {
-      snapshotCalls += 1;
-      if (snapshotMode === 'throws') {
-        throw new AppError(
-          'COMMAND_FAILED',
-          'Android snapshot helper is unavailable: helper artifact is missing',
-          { hint: 'Run `pnpm build:android` to build the Android snapshot helper.' },
-        );
-      }
-      if (snapshotCalls === 1) {
-        return capture([
-          {
-            index: 0,
-            type: 'android.widget.TextView',
-            label: 'Process system is not responding',
-            rect: { x: 50, y: 400, width: 500, height: 80 },
-          },
-          {
-            index: 1,
-            type: 'android.widget.Button',
-            label: 'Close app',
-            identifier: 'android:id/aerr_close',
-            rect: { x: 100, y: 600, width: 220, height: 80 },
-          },
-          {
-            index: 2,
-            type: 'android.widget.Button',
-            label: 'Wait',
-            identifier: 'android:id/aerr_wait',
-            rect: { x: 100, y: 700, width: 220, height: 80 },
-          },
-        ]);
-      }
-      return capture([]);
-    }),
-    openAndroidApp: vi.fn(async () => {}),
-    getAndroidAppState: vi.fn(async () => ({ package: 'com.android.settings' })),
-    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
-  };
-});
-
-const execCalls: string[][] = [];
-
-const modalObservation: AndroidObservationAdapter = {
-  ...androidObservation,
-  readAppState: async () => ({ package: 'com.android.settings' }),
-  readBlockingDialog: async () => ({ status: 'clear' as const }),
-  readAppFocus: async () => true,
-  async tap(device, x, y) {
-    execCalls.push([
-      '-s',
-      device.id,
-      'shell',
-      'input',
-      'tap',
-      String(Math.round(x)),
-      String(Math.round(y)),
-    ]);
-    return { stdout: '', stderr: '', exitCode: 0 };
-  },
-  async openApp(device, appBundleId) {
-    const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
-    await openAndroidApp(device, appBundleId);
-  },
-};
-
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return {
-    ...actual,
-    runCmd: vi.fn(async (_cmd: string, args: string[]) => {
-      execCalls.push(args);
-      return { stdout: '', stderr: '', exitCode: 0 };
-    }),
-  };
-});
-
-function makeAndroidSession(name: string): SessionState {
+function makeRecordingAndroidSession(name: string): SessionState {
   const session: SessionState = {
     name,
     createdAt: Date.now(),
-    appBundleId: 'com.android.settings',
+    appBundleId: APP,
     actions: [],
     device: {
       platform: 'android',
@@ -151,122 +56,79 @@ function makeAndroidSession(name: string): SessionState {
   return session;
 }
 
-test('generic Android gesture commands dismiss blocking system dialogs during recording', async () => {
-  snapshotCalls = 0;
-  snapshotMode = 'blocking-dialog';
-  execCalls.length = 0;
-  gestureRuntimeSpies.scrollDirection.mockClear();
-
-  const sessionStore = makeSessionStore('agent-device-router-android-modal-');
-  sessionStore.publish('default', makeAndroidSession('default'));
-
-  const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
-
+async function scrollWhileRecording(params: {
+  sessionStore: SessionStore;
+  observation: AndroidObservationAdapter;
+  requestId: string;
+}) {
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: createTouchCommandSurface(),
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
-    sessionStore,
+    sessionStore: params.sessionStore,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
     deviceRuntimeGateway: gestureDeviceRuntimeGateway,
-    androidObservation: modalObservation,
+    androidObservation: params.observation,
   });
-
-  const response = await handler({
+  return await handler({
     token: 'test-token',
     session: 'default',
     command: 'scroll',
     positionals: ['down', '0.55'],
-    meta: { requestId: 'req-android-modal' },
+    meta: { requestId: params.requestId },
   });
+}
 
-  expect(response.ok).toBe(true);
-  // R43: `scroll` reaches the device through its bound operation, and R58 retired the dispatcher
-  // it used to reach — the bound call count below is the whole execution record.
-  expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
-  expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
-    direction: 'down',
-    options: { amount: 0.55 },
-  });
-  expect(execCalls).toEqual([['-s', 'emulator-5554', 'shell', 'input', 'tap', '210', '640']]);
-  expect(openAndroidApp).toHaveBeenCalledWith(
-    expect.objectContaining({ id: 'emulator-5554' }),
-    'com.android.settings',
-  );
-  expect(snapshotCalls).toBe(2);
-});
-
-test('generic Android gesture commands continue when recording dialog inspection fails', async () => {
-  snapshotCalls = 0;
-  snapshotMode = 'throws';
-  execCalls.length = 0;
-  gestureRuntimeSpies.scrollDirection.mockClear();
-  // The owner's own result is what the readiness warning has to merge with, so the bound
-  // operation carries it now that the dispatcher no longer executes this command.
-  gestureRuntimeSpies.scrollDirection.mockResolvedValueOnce({
-    report: { warning: 'The platform response already carried a warning.' },
-  });
-
+test('another app ANR during recording refuses scroll and closes nothing', async () => {
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
-  sessionStore.publish('default', makeAndroidSession('default'));
+  sessionStore.publish('default', makeRecordingAndroidSession('default'));
+  const { observation, events } = makeAnrDialogObservation('com.example.other');
 
-  const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
-  vi.mocked(openAndroidApp).mockClear();
-
-  const handler = createRequestHandler({
-    host: createTestHostEnvironment(),
-    createCommandSurface: testCreateCommandSurface,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    token: 'test-token',
+  const response = await scrollWhileRecording({
     sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    trackDownloadableArtifact: () => 'artifact-id',
-    deviceRuntimeGateway: gestureDeviceRuntimeGateway,
-    androidObservation: modalObservation,
+    observation,
+    requestId: 'req-android-modal-foreign',
   });
 
-  const response = await handler({
-    token: 'test-token',
-    session: 'default',
-    command: 'scroll',
-    positionals: ['down', '0.55'],
-    meta: { requestId: 'req-android-modal-inspection-failed' },
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: expect.stringContaining('Android system dialog is blocking scroll'),
+      hint: expect.stringContaining('Run alert dismiss'),
+    },
   });
-
-  expect(response.ok).toBe(true);
-  // R43: `scroll` reaches the device through its bound operation, and R58 retired the dispatcher
-  // it used to reach — the bound call count below is the whole execution record.
-  expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
-  expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
-    direction: 'down',
-    options: { amount: 0.55 },
-  });
-  expect(execCalls).toEqual([]);
-  expect(openAndroidApp).not.toHaveBeenCalled();
-  expect(snapshotCalls).toBe(1);
-  if (response.ok) {
-    expect(response.data?.warning).toMatch(
-      /Android blocking-dialog readiness could not be inspected.*command continued/i,
-    );
-    expect(response.data?.warning).toContain('pnpm build:android');
-    expect(response.data?.warning).toContain('The platform response already carried a warning.');
-  }
+  expect(events).toEqual([]);
+  expect(gestureRuntimeSpies.scrollDirection).not.toHaveBeenCalled();
 });
 
-test('generic Android gesture commands skip local dialog recovery for provider devices', async () => {
-  snapshotCalls = 0;
-  snapshotMode = 'blocking-dialog';
-  execCalls.length = 0;
-  gestureRuntimeSpies.scrollDirection.mockClear();
+test('the session app ANR during recording is recovered before scroll', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-android-modal-');
+  sessionStore.publish('default', makeRecordingAndroidSession('default'));
+  const { observation, events } = makeAnrDialogObservation(APP);
 
+  const response = await scrollWhileRecording({
+    sessionStore,
+    observation,
+    requestId: 'req-android-modal-app',
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { warning: `Recovered Android app ANR before scroll: closed and relaunched ${APP}.` },
+  });
+  // The relaunch waits until the dialog has left, after the process is gone.
+  expect(events).toEqual([ANR_CLOSE_APP_TAP_EVENT, ANR_DIALOG_CLEARED_EVENT, `open ${APP}`]);
+  expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
+});
+
+test('generic Android commands skip local dialog recovery for provider devices', async () => {
   const sessionStore = makeSessionStore('agent-device-router-android-modal-provider-');
-  const session = makeAndroidSession('default');
+  const session = makeRecordingAndroidSession('default');
   sessionStore.publish('default', session);
-
   const runtime: ProviderDeviceRuntime = {
     provider: 'webdriver-fake',
     leaseLifecycle: {},
@@ -276,36 +138,17 @@ test('generic Android gesture commands skip local dialog recovery for provider d
     shutdown: async () => {},
   };
   providerAdmission.setActive([runtime]);
+  const { observation, events } = makeAnrDialogObservation('com.example.other');
+  const readBlockingDialog = vi.spyOn(observation, 'readBlockingDialog');
 
-  const handler = createRequestHandler({
-    host: createTestHostEnvironment(),
-    createCommandSurface: testCreateCommandSurface,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    token: 'test-token',
+  const response = await scrollWhileRecording({
     sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    trackDownloadableArtifact: () => 'artifact-id',
-    deviceRuntimeGateway: gestureDeviceRuntimeGateway,
-    androidObservation: modalObservation,
-  });
-
-  const response = await handler({
-    token: 'test-token',
-    session: 'default',
-    command: 'scroll',
-    positionals: ['down', '0.55'],
-    meta: { requestId: 'req-android-modal-provider' },
+    observation,
+    requestId: 'req-android-modal-provider',
   });
 
   expect(response.ok).toBe(true);
-  // R43: `scroll` reaches the device through its bound operation, and R58 retired the dispatcher
-  // it used to reach — the bound call count below is the whole execution record.
   expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
-  expect(gestureRuntimeSpies.scrollDirection.mock.calls[0]?.[0]).toMatchObject({
-    direction: 'down',
-    options: { amount: 0.55 },
-  });
-  expect(execCalls).toEqual([]);
-  expect(snapshotCalls).toBe(0);
+  expect(readBlockingDialog).not.toHaveBeenCalled();
+  expect(events).toEqual([]);
 });

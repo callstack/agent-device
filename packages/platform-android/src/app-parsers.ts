@@ -2,6 +2,7 @@ import type { AndroidBlockingDialogObservation } from '@agent-device/contracts/a
 
 export type AndroidBlockingDialogFocus = {
   package?: string;
+  process?: string;
   focusedWindow: string;
   raw: string;
 };
@@ -28,8 +29,9 @@ export const ANDROID_FOCUS_MARKERS = [
   'mResumedActivity:',
   'ResumedActivity:',
 ] as const;
-const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
-const ANDROID_PACKAGE_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
+/** A process name keeps its `:suffix`: `android:process=":worker"` runs as `<package>:worker`. */
+const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.:]+)/i;
+const ANDROID_PROCESS_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+(?::[A-Za-z0-9_.]+)?)/;
 const ANDROID_COMPONENT_PATTERN =
   /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/;
 
@@ -157,10 +159,10 @@ function parseAndroidBlockingDialogFromSegment(
   const windowText = segment.split('}')[0]?.trim() ?? segment.trim();
   const anrMatch = ANDROID_ANR_TITLE_PATTERN.exec(windowText);
   if (anrMatch) {
-    const packageName = anrMatch[1];
+    const processName = anrMatch[1];
     return {
-      package: packageName,
-      focusedWindow: `Application Not Responding: ${packageName}`,
+      process: processName,
+      focusedWindow: `Application Not Responding: ${processName}`,
       raw,
     };
   }
@@ -173,10 +175,61 @@ function parseAndroidBlockingDialogFromSegment(
     return null;
   }
   const focusedWindow = windowText.trim().replaceAll(/\s+/g, ' ');
-  const packageName = ANDROID_PACKAGE_PATTERN.exec(focusedWindow)?.[1];
+  const processName = ANDROID_PROCESS_PATTERN.exec(focusedWindow)?.[1];
   return {
-    ...(packageName ? { package: packageName } : {}),
+    ...(processName ? { process: processName } : {}),
     focusedWindow,
     raw,
   };
+}
+
+/** One process record of a `dumpsys activity processes` dump. */
+export type AndroidProcessRecord = {
+  process: string;
+  packages: string[];
+};
+
+const ANDROID_PROCESS_RECORD_PATTERN =
+  /^\s*\*[A-Z]+\*.*\bProcessRecord\{[0-9a-f]+ \d+:([^/\s}]+)\//;
+const ANDROID_PACKAGE_LIST_PATTERN = /^\s*packageList=\{([^}]*)\}/;
+
+/**
+ * Reads the process records of a `dumpsys activity processes` dump. A record starts at a
+ * `*APP*`-style line, and its `packageList` names the packages that run in that process. Other
+ * lines that mention a ProcessRecord (PID mappings, home process) do not start a record.
+ */
+export function parseAndroidProcessRecords(text: string): AndroidProcessRecord[] {
+  const records: AndroidProcessRecord[] = [];
+  let current: AndroidProcessRecord | undefined;
+  for (const line of text.split('\n')) {
+    const recordMatch = ANDROID_PROCESS_RECORD_PATTERN.exec(line);
+    if (recordMatch?.[1]) {
+      current = { process: recordMatch[1], packages: [] };
+      records.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const packageList = ANDROID_PACKAGE_LIST_PATTERN.exec(line)?.[1];
+    if (packageList !== undefined) {
+      current.packages = packageList
+        .split(/[,\s]+/)
+        .map((name) => name.trim())
+        .filter(Boolean);
+    }
+  }
+  return records;
+}
+
+/**
+ * The one package that owns `processName`, or undefined when no record names the process or its
+ * records name more than one package. An undefined owner must not be treated as the session app.
+ */
+export function resolveAndroidProcessOwner(
+  records: readonly AndroidProcessRecord[],
+  processName: string,
+): string | undefined {
+  const owners = new Set(
+    records.filter((record) => record.process === processName).flatMap((record) => record.packages),
+  );
+  return owners.size === 1 ? [...owners][0] : undefined;
 }

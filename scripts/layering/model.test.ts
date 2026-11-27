@@ -195,12 +195,6 @@ const RECORDED_IMPORT_TYPE_CASES = [
     'BoundTouchExecutor',
   ],
   [
-    'packages/daemon/src/execution/interaction/internal/interaction.ts',
-    'packages/contracts/src/android-observation.ts',
-    '@agent-device/contracts/android-observation',
-    'AndroidObservationAdapter',
-  ],
-  [
     'packages/daemon/src/core/snapshot-runtime-binding.ts',
     'packages/contracts/src/focus-runtime.ts',
     '@agent-device/contracts/focus-runtime',
@@ -226,7 +220,7 @@ const RECORDED_IMPORT_TYPE_CASES = [
   ],
 ] as const;
 
-test('the nine recorded TSImportType shapes resolve with source-side symbols', () => {
+test('the eight recorded TSImportType shapes resolve with source-side symbols', () => {
   const cases = RECORDED_IMPORT_TYPE_CASES;
   const sources = new Map<string, string>();
   const exports = new Map<string, string>();

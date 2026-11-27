@@ -616,8 +616,25 @@ function androidPackageAdbResult(
     androidPackageDumpsysAdbResult(args) ??
     androidLaunchablePackagesAdbResult(args) ??
     androidInstalledPackagesAdbResult(key) ??
+    androidProcessesAdbResult(key) ??
     androidForegroundReadAdbResult(key, dumpsysWindow)
   );
+}
+
+/** Each scripted app runs in a process named after its package, as Android does by default. */
+function androidProcessesAdbResult(key: string): AndroidAdbResult | undefined {
+  if (key !== 'shell dumpsys activity processes') return undefined;
+  const packages = ['com.android.settings', 'com.android.systemui', 'com.example.demo'];
+  return {
+    stdout: packages
+      .flatMap((packageName, index) => [
+        `  *APP* UID 1014${index} ProcessRecord{9b0c5a${index} 456${index}:${packageName}/u0a14${index}}`,
+        `    packageList={${packageName}}`,
+      ])
+      .join('\n'),
+    stderr: '',
+    exitCode: 0,
+  };
 }
 
 /**

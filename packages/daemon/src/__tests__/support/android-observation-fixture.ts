@@ -10,6 +10,7 @@ import {
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
   isAndroidPermissionPackage,
+  requireCompleteAndroidSnapshotCapture,
   openAndroidApp,
   runAndroidAdb,
   snapshotAndroid,
@@ -22,8 +23,9 @@ const mechanicsObservationHost: AndroidObservationHost = Object.freeze({
     const result = await runAndroidAdb(device, args, options);
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
   },
-  async readSnapshotNodes(device) {
+  async readSnapshotNodes(device, options) {
     const rawSnapshot = await snapshotAndroid(device, { interactiveOnly: false });
+    if (options?.requireComplete) requireCompleteAndroidSnapshotCapture(rawSnapshot);
     return buildSnapshotState(androidSnapshotPublicationInput(rawSnapshot), undefined).nodes;
   },
   async openApp(device, appBundleId) {

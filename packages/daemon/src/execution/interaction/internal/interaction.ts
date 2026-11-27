@@ -16,17 +16,14 @@ import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runt
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { normalizeError } from '@agent-device/kernel/errors';
-import {
-  ensureAndroidBlockingSystemDialogReady,
-  recoverAndroidBlockingSystemDialog,
-} from '../../android-system-dialog.ts';
+import { ensureAndroidBlockingSystemDialogReady } from '../../android-system-dialog.ts';
 import { dispatchGestureViaRuntime, dispatchSwipeViaRuntime } from './interaction-gesture.ts';
 import {
   parseTypeTextRequest,
   resolveBoundTypeTextRuntime,
   type TypeTextRequest,
 } from '../../type-text-runtime.ts';
-import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export async function handleInteractionCommands(
   params: InteractionRouteInput & {
@@ -118,56 +115,14 @@ async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<Da
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return bound.response;
-  const recordingRecovery = await recoverAndroidRecordingDialogForType(
-    session,
-    params.androidObservation,
-  );
-  if (recordingRecovery.response) return recordingRecovery.response;
 
-  return await runTypeTextViaRuntime(params, session, {
-    typeText: () => bound.typeText(request, context),
-    recordingRecoveryWarning: recordingRecovery.warning,
-  });
-}
-
-type AndroidRecordingDialogRecovery = {
-  response?: DaemonResponse;
-  warning?: string;
-};
-
-async function recoverAndroidRecordingDialogForType(
-  session: SessionState,
-  observation:
-    | import('@agent-device/contracts/android-observation').AndroidObservationAdapter
-    | undefined,
-): Promise<AndroidRecordingDialogRecovery> {
-  if (session.device.platform === 'android' && session.screenRecording) {
-    const androidRecoveryResult = await recoverAndroidBlockingSystemDialog({
-      session,
-      observation,
-    });
-    if (androidRecoveryResult.status === 'failed') {
-      return {
-        response: errorResponse(
-          'COMMAND_FAILED',
-          'Android system dialog blocked the recording session',
-        ),
-      };
-    }
-    if (androidRecoveryResult.status === 'unknown') {
-      return { warning: androidRecoveryResult.warning };
-    }
-  }
-  return {};
+  return await runTypeTextViaRuntime(params, session, () => bound.typeText(request, context));
 }
 
 async function runTypeTextViaRuntime(
   params: InteractionRouteInput,
   session: SessionState,
-  {
-    typeText,
-    recordingRecoveryWarning,
-  }: { typeText: () => Promise<Record<string, unknown>>; recordingRecoveryWarning?: string },
+  typeText: () => Promise<Record<string, unknown>>,
 ): Promise<DaemonResponse> {
   const { req, sessionStore } = params;
   const actionStartedAt = Date.now();
@@ -190,7 +145,7 @@ async function runTypeTextViaRuntime(
     });
     const actionFinishedAt = Date.now();
     const responseData: Record<string, unknown> = { ...result };
-    appendTypeReadinessWarnings(responseData, recordingRecoveryWarning, readiness);
+    appendTypeReadinessWarnings(responseData, readiness);
     return finalizeTouchInteraction({
       ref: params.sessionRef!,
       sessionStore,
@@ -209,13 +164,9 @@ async function runTypeTextViaRuntime(
 
 function appendTypeReadinessWarnings(
   responseData: Record<string, unknown>,
-  recordingRecoveryWarning: string | undefined,
   readiness: Awaited<ReturnType<typeof ensureAndroidBlockingSystemDialogReady>>,
 ): void {
-  const warnings = [
-    typeof responseData.warning === 'string' ? responseData.warning : undefined,
-    recordingRecoveryWarning,
-  ];
+  const warnings = [typeof responseData.warning === 'string' ? responseData.warning : undefined];
   if (readiness.status === 'recovered') warnings.push(readiness.warning);
   const composedWarning = warnings
     .filter((warning): warning is string => typeof warning === 'string' && warning.length > 0)
