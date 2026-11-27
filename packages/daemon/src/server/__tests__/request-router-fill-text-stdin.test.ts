@@ -225,25 +225,50 @@ test.each([
   },
 );
 
-// A lease-admission client resends only on `dispatched: no`, so a recorded value equal to it must not
-// rewrite the typed refusal.
-test('a --record-as value equal to a typed detail leaves the lease refusal readable', async () => {
-  const { response, typed } = sendToWebSession(
+// A lease-admission client resends only on `dispatched: no`, so a recorded value that occurs in a
+// daemon-owned detail must not rewrite the typed refusal.
+test.each(['no', 'NOT'])(
+  'a --record-as value %s inside a typed detail leaves the lease refusal readable',
+  async (value) => {
+    const { response, typed } = sendToWebSession(
+      makeAuthoringSession('web', { device: WEB_DESKTOP_DEVICE }),
+      {
+        command: 'fill',
+        positionals: ['10', '20', value],
+        flags: { textStdin: true, recordAs: 'CODE' },
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: '0'.repeat(32) },
+      },
+    );
+
+    const result = await response;
+    expect(typed).toEqual([]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNAUTHORIZED');
+      expect(result.error.details).toMatchObject({ reason: 'LEASE_NOT_FOUND', dispatched: 'no' });
+    }
+  },
+);
+
+test('a backend error carrying the value in details.reason or details.dispatched keeps it redacted', async () => {
+  const { response } = fillWithStdinText(
     makeAuthoringSession('web', { device: WEB_DESKTOP_DEVICE }),
-    {
-      command: 'fill',
-      positionals: ['10', '20', 'no'],
-      flags: { textStdin: true, recordAs: 'CODE' },
-      meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: '0'.repeat(32) },
-    },
+    { recordAs: 'PASSWORD' },
+    (text) =>
+      new AppError('COMMAND_FAILED', 'could not type', {
+        reason: `rejected-${text}`,
+        dispatched: text,
+      }),
   );
 
   const result = await response;
-  expect(typed).toEqual([]);
   expect(result.ok).toBe(false);
+  expect(JSON.stringify(result)).not.toContain(SECRET);
   if (!result.ok) {
-    expect(result.error.code).toBe('UNAUTHORIZED');
-    expect(result.error.details).toMatchObject({ reason: 'LEASE_NOT_FOUND', dispatched: 'no' });
+    expect(result.error.details).toMatchObject({
+      reason: 'rejected-${PASSWORD}',
+      dispatched: '${PASSWORD}',
+    });
   }
 });
 

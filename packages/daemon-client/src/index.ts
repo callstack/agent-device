@@ -99,6 +99,7 @@ async function sendToDaemonOnHost(
     host,
     options.daemonLifecycle,
     options.daemonBinding,
+    options.leaseCheckedByAdmission,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),

@@ -114,7 +114,11 @@ test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and
     assert.equal(typeof healthPayload.version, 'string');
     assert.equal(healthPayload.rpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
     // A remote client skips its lease heartbeat only for a daemon that says admission checks leases.
-    assert.deepEqual(healthPayload.capabilities, ['script-artifacts', 'lease-admission']);
+    assert.deepEqual(healthPayload.capabilities, [
+      'script-artifacts',
+      'checked-rpc',
+      'lease-admission',
+    ]);
 
     const command = await callRpc(port, {
       jsonrpc: '2.0',

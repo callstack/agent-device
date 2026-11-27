@@ -14,6 +14,7 @@ const LEASE_ADMISSION = ['script-artifacts', 'lease-admission'];
 async function sendAdmissionChecked(
   health: () => Record<string, unknown>,
   onRpc?: (res: http.ServerResponse) => boolean,
+  flags: Record<string, unknown> = {},
 ) {
   const routes: string[] = [];
   const server = http.createServer((req, res) => {
@@ -36,6 +37,7 @@ async function sendAdmissionChecked(
         flags: {
           daemonBaseUrl: `http://127.0.0.1:${await listenOnLoopback(server)}`,
           stateDir: path.join(root, 'state'),
+          ...flags,
         },
         meta: { tenantId: 'proxy', runId: 'run', leaseId: 'a'.repeat(32) },
       },
@@ -101,4 +103,16 @@ test('a replacement daemon without lease admission is refused before the resend'
     details: { reason: 'lease_admission_unsupported', daemonRequestSent: false, dispatched: 'no' },
   });
   expect(routes).toEqual(['/health', '/rpc', '/health']);
+});
+
+// The checked route reads no `/health`, which is where `lease-admission` is reported.
+test('an admission-checked request on a checked connection goes health-first', async () => {
+  const { result, routes } = await sendAdmissionChecked(
+    () => ({ instanceId: 'daemon', capabilities: [...LEASE_ADMISSION, 'checked-rpc'] }),
+    undefined,
+    { daemonRpc: 'checked' },
+  );
+
+  expect(result).toMatchObject({ ok: true });
+  expect(routes).toEqual(['/health', '/rpc']);
 });

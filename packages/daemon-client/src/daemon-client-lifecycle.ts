@@ -68,7 +68,8 @@ export type DaemonClientSettings = {
   remoteAuthToken?: string;
   /**
    * The request goes on the checked RPC route without a `/health` probe: its connection sets
-   * `daemonRpc: checked`, and the request has no remote side effect before its command RPC.
+   * `daemonRpc: checked`, the request has no remote side effect before its command RPC, and nothing
+   * about it has to be read from `/health`.
    */
   remoteCheckedRpc?: true;
   /** See {@link DaemonBinding}. Present on a client that is pinned to one daemon instance. */
@@ -105,6 +106,7 @@ export function resolveClientSettings(
   host: HostEnvironment,
   daemonLifecycle: DaemonLifecycle = 'managed',
   daemonBinding: DaemonBinding | undefined = undefined,
+  leaseCheckedByAdmission?: true,
 ): DaemonClientSettings {
   const explicitStateDir = resolveExplicitStateDir(req, host.env);
   const remote = resolveRemoteClientSettings(req, suppliedAuthToken, host.env);
@@ -146,7 +148,9 @@ export function resolveClientSettings(
     ...(remote.remoteBaseUrl &&
     remote.daemonRpc === 'checked' &&
     approvesCheckedRpcTarget(req.flags?.daemonRpcTarget, remote.remoteBaseUrl) &&
-    isStandaloneRemoteRequest(req)
+    isStandaloneRemoteRequest(req) &&
+    // An unchecked lease needs `lease-admission`, which only `/health` reports.
+    !leaseCheckedByAdmission
       ? { remoteCheckedRpc: true as const }
       : {}),
     ...(daemonBinding ? { daemonBinding } : {}),

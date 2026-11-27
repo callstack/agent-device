@@ -66,7 +66,7 @@ import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
-import * as LeaseAdmission from './cli/commands/connection-lease-admission.ts';
+import type * as LeaseAdmission from './cli/commands/connection-lease-admission.ts';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -224,7 +224,9 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
         const commandProgress = createCommandProgressState();
         const transportSetup = { host, command, replayTestReporterRuntime, commandProgress };
-        await LeaseAdmission.dispatchWithLeaseAdmission(ctx.leaseAdmission?.checked, transport, {
+        const { dispatchWithLeaseAdmission } =
+          await import('./cli/commands/connection-lease-admission.ts');
+        await dispatchWithLeaseAdmission(ctx.leaseAdmission?.checked, transport, {
           rematerialize: async (check) => await resolveRemoteContext(ctx, transport, check),
           dispatch: async (send) => {
             const client = createAgentDeviceClient(buildClientConfig(ctx), {

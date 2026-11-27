@@ -70,7 +70,7 @@ The refusal is `UNAUTHORIZED` with `details.reason: LEASE_NOT_FOUND` and `detail
 Every lease-admission refusal comes after authentication and tenant scoping, and before any handler runs.
 If the request names the expired lease of its session, the daemon refuses before it tears that session down.
 The lease expiry sweep ends that session later.
-A sensitive `fill` value never redacts `details.reason` or `details.dispatched`.
+A sensitive `fill` value never redacts a typed `details.dispatched` or a shared lease `details.reason`. Any other value in those fields stays redacted.
 A daemon that makes this refusal advertises the `lease-admission` capability on `/health`.
 A proxy forwards the capability of the daemon behind it in `upstream`.
 
@@ -79,6 +79,7 @@ It then marks the command as admission-checked and names the window that the hea
 The daemon-client reads `lease-admission` from the `/health` check that the command already makes.
 If the capability is absent, the daemon-client refuses the command before the send with `lease_admission_unsupported`.
 It makes the same check again after an instance-mismatch refresh.
+An admission-checked command never takes the checked RPC route. On a checked connection (`daemonRpc: checked`) it is `GET /health`, then `POST /rpc`.
 If the only request of the command gets either refusal, the CLI materializes the connection again and sends the command once more.
 After `LEASE_NOT_FOUND`, the CLI allocates a new lease. After `lease_admission_unsupported`, it sends the heartbeat.
 The CLI does not resend on any other failure.
