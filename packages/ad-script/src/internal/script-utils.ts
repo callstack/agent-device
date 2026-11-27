@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { appendScreenshotScriptFlags } from '@agent-device/contracts/capture';
-import { splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
+import { splitRecordedRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 
 const SCRIPT_RUNTIME_PLATFORMS = {
   ios: true,
@@ -16,8 +16,9 @@ function isScriptRuntimePlatform(
 }
 
 /**
- * #1076 versioned refs: a recorded ref positional may carry a `~s<generation>`
- * pin from the client that issued it (`@e12~s3`). Generations are meaningless
+ * #1076 versioned refs: a recorded ref positional may carry a generation pin
+ * (`@e12-s3`, or the retired whole-token `@e12~s3` spelling from a script saved
+ * before the pin separator changed). Generations are meaningless
  * outside the session that minted them — a replayed script runs against a NEW
  * session with its own generation counter — so replay parsing and script
  * writing strip well-formed suffixes and IGNORE the generation instead of
@@ -27,7 +28,7 @@ function isScriptRuntimePlatform(
  */
 export function stripRecordedRefGeneration(token: string): string {
   if (!token.startsWith('@')) return token;
-  const split = splitRefGenerationSuffix(token);
+  const split = splitRecordedRefGenerationSuffix(token);
   return split?.base ?? token;
 }
 
@@ -234,7 +235,7 @@ type DivergenceActionLabelInput = {
  */
 export function formatDivergenceActionLabel(action: DivergenceActionLabelInput): string {
   if (!TYPED_TEXT_COMMANDS.has(action.command)) {
-    const values = (action.positionals ?? []).map((value) => formatScriptArg(value));
+    const values = action.positionals.map((value) => formatScriptArg(value));
     return [action.command, ...values].join(' ');
   }
   const targetTokens = divergenceTypingTargetTokens(action);
@@ -249,7 +250,7 @@ export function formatDivergenceActionLabel(action: DivergenceActionLabelInput):
  */
 function divergenceTypingTargetTokens(action: DivergenceActionLabelInput): string[] {
   if (action.command === 'type') return [];
-  const positionals = action.positionals ?? [];
+  const positionals = action.positionals;
   const first = positionals[0];
   if (first === undefined) return [];
   if (first.startsWith('@')) return [first];
@@ -268,7 +269,7 @@ export function appendScriptSeriesFlags(
   parts: string[],
   action: Pick<SessionAction, 'command' | 'flags'>,
 ): void {
-  const flags = action.flags ?? {};
+  const flags = action.flags;
   if (isClickLikeCommand(action.command)) {
     if (typeof flags.count === 'number') parts.push('--count', String(flags.count));
     if (typeof flags.intervalMs === 'number') parts.push('--interval-ms', String(flags.intervalMs));
@@ -326,40 +327,40 @@ export function appendRuntimeHintFlags(
 }
 
 export function appendRecordActionScriptArgs(parts: string[], action: SessionAction): void {
-  const [subcommand, ...rest] = action.positionals ?? [];
+  const [subcommand, ...rest] = action.positionals;
   if (subcommand) {
     parts.push(formatScriptArgQuoteIfNeeded(subcommand));
   }
   for (const positional of rest) {
     parts.push(formatScriptArg(positional));
   }
-  if (typeof action.flags?.fps === 'number') {
+  if (typeof action.flags.fps === 'number') {
     parts.push('--fps', String(action.flags.fps));
   }
-  if (typeof action.flags?.quality === 'number' || typeof action.flags?.quality === 'string') {
+  if (typeof action.flags.quality === 'number' || typeof action.flags.quality === 'string') {
     parts.push('--quality', String(action.flags.quality));
   }
-  if (action.flags?.hideTouches) {
+  if (action.flags.hideTouches) {
     parts.push('--hide-touches');
   }
 }
 
 export function appendSnapshotActionScriptArgs(parts: string[], action: SessionAction): void {
-  if (action.flags?.snapshotInteractiveOnly) parts.push('-i');
-  if (typeof action.flags?.snapshotDepth === 'number') {
+  if (action.flags.snapshotInteractiveOnly) parts.push('-i');
+  if (typeof action.flags.snapshotDepth === 'number') {
     parts.push('-d', String(action.flags.snapshotDepth));
   }
-  if (action.flags?.snapshotScope) {
+  if (action.flags.snapshotScope) {
     parts.push('-s', formatScriptArg(action.flags.snapshotScope));
   }
-  if (action.flags?.snapshotRaw) parts.push('--raw');
+  if (action.flags.snapshotRaw) parts.push('--raw');
 }
 
 export function appendScreenshotActionScriptArgs(parts: string[], action: SessionAction): void {
-  for (const positional of action.positionals ?? []) {
+  for (const positional of action.positionals) {
     parts.push(formatScriptArg(positional));
   }
-  const cropOn = action.flags?.screenshotCropOn;
+  const cropOn = action.flags.screenshotCropOn;
   if (typeof cropOn === 'string' && cropOn.length > 0) {
     parts.push('--crop-on', formatScriptArgQuoteIfNeeded(cropOn));
   }
@@ -371,7 +372,7 @@ export function appendRuntimeActionScriptArgs(
   action: SessionAction,
   options: { includeAllPositionals?: boolean } = {},
 ): void {
-  const positionals = action.positionals ?? [];
+  const positionals = action.positionals;
   const selectedPositionals = options.includeAllPositionals ? positionals : positionals.slice(0, 1);
   for (const positional of selectedPositionals) {
     parts.push(formatScriptArgQuoteIfNeeded(positional));
@@ -380,8 +381,8 @@ export function appendRuntimeActionScriptArgs(
 }
 
 export function appendGenericActionScriptArgs(parts: string[], action: SessionAction): void {
-  for (const positional of action.positionals ?? []) {
-    // wait @ref: recorded refs may carry a `~s<generation>` pin (#1076);
+  for (const positional of action.positionals) {
+    // wait @ref: recorded refs may carry a `-s<generation>` pin (#1076);
     // scripts store the plain ref (see stripRecordedRefGeneration).
     parts.push(
       formatScriptArg(
@@ -389,13 +390,13 @@ export function appendGenericActionScriptArgs(parts: string[], action: SessionAc
       ),
     );
   }
-  if (action.command === 'fold' && action.flags?.keyframes !== undefined) {
+  if (action.command === 'fold' && action.flags.keyframes !== undefined) {
     parts.push('--keyframes', formatScriptArg(action.flags.keyframes));
   }
-  if (action.command === 'scroll' && typeof action.flags?.until === 'string') {
+  if (action.command === 'scroll' && typeof action.flags.until === 'string') {
     parts.push('--until', formatScriptArg(action.flags.until));
   }
-  if (action.command === 'scroll' && typeof action.flags?.maxPasses === 'number') {
+  if (action.command === 'scroll' && typeof action.flags.maxPasses === 'number') {
     parts.push('--max-passes', String(action.flags.maxPasses));
   }
   if (action.command === 'wait') {

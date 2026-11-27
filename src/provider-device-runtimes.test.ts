@@ -28,7 +28,10 @@ vi.mock('@limrun/api', () => ({
 }));
 
 vi.mock('@limrun/api/ios-client', () => ({
-  createInstanceClient: vi.fn(async () => ({ disconnect: limrun.iosDisconnect })),
+  createInstanceClient: vi.fn(async () => ({
+    deviceInfo: { model: 'iPhone' },
+    disconnect: limrun.iosDisconnect,
+  })),
 }));
 
 test('Limrun retries an expired provider lease persisted by a daemon before restart', async (t) => {

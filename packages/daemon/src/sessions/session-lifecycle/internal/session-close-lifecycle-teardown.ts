@@ -13,7 +13,7 @@ import {
   type SessionCleanupFailure,
 } from '../../session-teardown.ts';
 import type { PlatformResourceCleanup } from '../../../core/platform-resource-cleanup.ts';
-import { hasRuntimeTransportHints, runtimeHintValues } from '../../session-runtime.ts';
+import { requiresRuntimeHintsClear, runtimeHintsClearInput } from '../../session-runtime.ts';
 import type {
   CloseRuntime,
   CloseRuntimeWithRuntimeHintClear,
@@ -102,16 +102,10 @@ export async function runSessionCloseTeardown(params: {
   const platformCloseError = repairArmed
     ? undefined
     : await dispatchTargetedPlatformClose({ req, session, logPath, lifecycle });
-  if (
-    clearRuntimeHints &&
-    session.appBundleId &&
-    hasRuntimeTransportHints(configuredRuntimeHints)
-  ) {
+  const runtimeHintsClear = runtimeHintsClearInput(configuredRuntimeHints, session.appBundleId);
+  if (clearRuntimeHints && requiresRuntimeHintsClear(runtimeHintsClear)) {
     await attemptCleanup('runtime_hints', async () => {
-      await clearRuntimeHints({
-        appId: session.appBundleId,
-        values: runtimeHintValues(configuredRuntimeHints),
-      });
+      await clearRuntimeHints(runtimeHintsClear);
     });
   }
   const finalization = await attemptCleanup(

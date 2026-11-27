@@ -5,7 +5,9 @@ import type {
   AuditFinding,
   AuditFindingKind,
   AuditResult,
+  AuditScreenReaderOrder,
   AuditSizeUnit,
+  SnapshotScreenReaderOrderEvidence,
 } from '@agent-device/contracts/capture';
 import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import { isNativeIosSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
@@ -148,8 +150,41 @@ function countSharedNames(
  * tap facts off their nodes, so the helper's retained clickability evidence is folded back onto
  * the nodes first; platforms that publish no tap fact audit the nodes as captured.
  */
-export function auditSnapshotState(snapshot: SnapshotState, context: AuditContext): AuditResult {
-  return auditSnapshot(withRetainedTapFacts(snapshot), context);
+export async function auditSnapshotState(
+  snapshot: SnapshotState,
+  context: AuditContext,
+): Promise<AuditResult> {
+  const { readSnapshotScreenReaderOrderEvidence } = await import('@agent-device/contracts/capture');
+  const audit = auditSnapshot(withRetainedTapFacts(snapshot), context);
+  const evidence = await readSnapshotScreenReaderOrderEvidence(snapshot);
+  if (!evidence) return audit;
+  const screenReaderOrder = estimatedScreenReaderOrder(snapshot, evidence);
+  if (!screenReaderOrder) return audit;
+  return {
+    ...audit,
+    screenReaderOrder,
+    limitations: [...audit.limitations, SCREEN_READER_ORDER_LIMITATION],
+  };
+}
+
+const SCREEN_READER_ORDER_LIMITATION =
+  "The screen-reader order is estimated from TalkBack 16.2's rules, not observed. It leaves out auto-scroll, scrolling past the screen, the order across windows, and web content.";
+
+/** The producer's TalkBack order estimate as refs, without windows that hold no stop. */
+function estimatedScreenReaderOrder(
+  snapshot: SnapshotState,
+  evidence: SnapshotScreenReaderOrderEvidence,
+): AuditScreenReaderOrder | undefined {
+  const refByIndex = new Map(
+    snapshot.nodes.flatMap((node) => (node.ref ? [[node.index, `@${node.ref}`] as const] : [])),
+  );
+  const windows = evidence.windows.flatMap(({ nodeIndexes, omittedStops }) => {
+    const refs = nodeIndexes.flatMap((index) => refByIndex.get(index) ?? []);
+    const omitted = omittedStops + nodeIndexes.length - refs.length;
+    if (refs.length === 0 && omitted === 0) return [];
+    return [{ refs, ...(omitted > 0 ? { omittedStops: omitted } : {}) }];
+  });
+  return windows.length > 0 ? { estimatedFrom: 'talkback-16.2', windows } : undefined;
 }
 
 function withRetainedTapFacts(snapshot: SnapshotState): readonly SnapshotNode[] {

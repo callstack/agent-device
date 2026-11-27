@@ -1,5 +1,7 @@
 import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { readFillTargetFromPositionals } from '@agent-device/selectors/interaction-positionals';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { activateCompleteRefFrame, expireRefFrame } from '../../../core/ref-frame.ts';
 import { STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
@@ -136,7 +138,7 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   activateCompleteRefFrame(session);
   sessionStore.publish(sessionName, session);
 
-  const stale = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s2', 'hello']);
+  const stale = await runInteraction(sessionStore, sessionName, 'fill', ['@e1-s2', 'hello']);
   expect(stale?.ok).toBe(false);
   if (stale && !stale.ok) {
     expect(stale.error.code).toBe('COMMAND_FAILED');
@@ -148,7 +150,7 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   }
   expect(mockFillPoint).not.toHaveBeenCalled();
 
-  const current = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s3', 'hello']);
+  const current = await runInteraction(sessionStore, sessionName, 'fill', ['@e1-s3', 'hello']);
   expect(current?.ok).toBe(true);
   if (current?.ok) {
     expect(current.data?.warning).toBeUndefined();
@@ -220,4 +222,55 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   if (internal?.ok) {
     expect(internal.data?.warning).toBeUndefined();
   }
+});
+
+test('fill positionals sent straight to the daemon keep the refusal readFillTargetFromPositionals reports', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'fill-target-missing';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+
+  // Missing target (unset REF), bare ref, non-target words, and unknown selector key all get
+  // the exact decoder refusal without echoing any positional, with or without --record-as / --text-stdin.
+  const cases = [
+    [['hunter2'], 'fill_target_missing'],
+    [['', 'hunter2'], 'fill_target_missing'],
+    [['e5', 'hunter2'], undefined],
+    [['Email', 'hunter2'], undefined],
+    [['button=Email', 'hunter2'], undefined],
+    [['label=pw secret', 'hunter2'], undefined],
+  ] as const;
+
+  for (const [positionals, reason] of cases) {
+    let cliError: unknown;
+    try {
+      readFillTargetFromPositionals([...positionals]);
+    } catch (error) {
+      cliError = error;
+    }
+    expect(cliError, positionals.join(' ')).toBeInstanceOf(AppError);
+    const cli = normalizeError(cliError);
+    for (const flags of [undefined, { recordAs: 'PASSWORD' }, { textStdin: true }]) {
+      const response = await runInteraction(
+        sessionStore,
+        sessionName,
+        'fill',
+        [...positionals],
+        flags,
+      );
+      expect(response?.ok).toBe(false);
+      if (response && !response.ok) {
+        expect(response.error).toMatchObject({
+          code: 'INVALID_ARGS',
+          message: cli.message,
+          hint: cli.hint,
+          details: { dispatched: 'no', ...(reason === undefined ? {} : { reason }) },
+        });
+        expect(response.error.details?.reason, positionals.join(' ')).toBe(reason);
+        expect(JSON.stringify(response.error), positionals.join(' ')).not.toMatch(
+          /hunter2|pw secret|Email|\be5\b|\bbutton\b/,
+        );
+      }
+    }
+  }
+  expect(mockFillPoint).not.toHaveBeenCalled();
 });

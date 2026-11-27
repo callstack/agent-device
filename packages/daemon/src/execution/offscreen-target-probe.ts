@@ -19,24 +19,36 @@ export async function confirmIosOffscreenTargetVisible(params: {
   rootViewport: Rect | null;
   querySelector: QuerySelectorRuntimeOperations['querySelector'];
   execution: SnapshotRuntimeExecution;
+  /**
+   * When set, probes this exact requested `id`/`label` selector with the lean hittability probe
+   * (no hittable preference among duplicates) and requires `matchCount === 1` before rescuing.
+   */
+  exactSelector?: Readonly<{ key: 'id' | 'label'; value: string }>;
 }): Promise<Rect | null> {
-  const { session, node, rootViewport, querySelector, execution } = params;
-  const selector = deriveDirectIosNodeSelector(node);
+  const { session, node, rootViewport, querySelector, execution, exactSelector } = params;
+  const selector = exactSelector ?? deriveDirectIosNodeSelector(node);
   if (!selector) return null;
-  let found: boolean;
-  let nodeReading: Awaited<ReturnType<typeof querySelector>>['node'];
+  let result: Awaited<ReturnType<typeof querySelector>>;
   try {
-    ({ found, node: nodeReading } = await querySelector({
+    result = await querySelector({
       selector,
+      ...(exactSelector ? { probe: 'hittability' as const } : {}),
       ...(session.appBundleId === undefined
         ? {}
         : { options: { appBundleId: session.appBundleId } }),
       execution,
-    }));
+    });
   } catch {
     return null;
   }
-  if (!found || !nodeReading?.rect) return null;
-  const probe = { rect: nodeReading.rect, hittable: nodeReading.hittable === true };
+  if (exactSelector) {
+    const reading = result.hittability;
+    if (reading?.matchCount !== 1 || reading.hittable !== true || !reading.rect) return null;
+    return isConfirmedOnScreenProbe({ rect: reading.rect, hittable: true }, rootViewport)
+      ? reading.rect
+      : null;
+  }
+  if (!result.found || !result.node?.rect) return null;
+  const probe = { rect: result.node.rect, hittable: result.node.hittable === true };
   return isConfirmedOnScreenProbe(probe, rootViewport) ? probe.rect : null;
 }

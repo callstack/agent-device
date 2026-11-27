@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import {
   admitPrivateRoot,
@@ -73,7 +74,7 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
       'INVALID_ARGS',
       `State dir "${value}" is relative and no working directory was given.`,
       {
-        reason: 'relative_state_dir_without_cwd',
+        reason: DAEMON_STATE_ROOT_REASONS.relativeWithoutCwd.reason,
       },
     );
   }
@@ -86,6 +87,14 @@ const DAEMON_STATE_ROOT_REASONS = {
   // The state directory, or a directory above it, is not private to your account; `details.fix`
   // says how to fix it.
   unsafe: { reason: 'daemon_state_root_unsafe' },
+  // The state dir is a relative path and the caller gave no working directory to resolve it from.
+  relativeWithoutCwd: { reason: 'relative_state_dir_without_cwd' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
+
+/** Why this build refuses to send a request whose delivery the answering daemon cannot promise. */
+const DAEMON_CAPABILITY_REFUSAL_REASONS = {
+  // The remote daemon reports no script-artifacts capability, so it would record to its own disk.
+  scriptArtifactsUnsupported: { reason: 'remote_script_artifacts_unsupported' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
@@ -250,6 +259,56 @@ export function resolveDaemonServerMode(raw: string | undefined): DaemonServerMo
   return 'socket';
 }
 
+/**
+ * Whether a daemon started in `mode` answers a client that requires `preference`.
+ *
+ * The two vocabularies name the same two loopback listeners from opposite sides: the mode chooses
+ * which listeners the daemon opens (`socket` opens no HTTP listener, `http` opens no socket
+ * listener, `dual` opens both), and the preference states which one the client will call. `auto`
+ * accepts either listener, so every mode answers it. A pair that does not answer is a configuration
+ * no daemon can satisfy, so a client decides it before it starts, replaces, or quiesces one.
+ */
+export function serverModeAnswersTransport(
+  mode: DaemonServerMode,
+  preference: DaemonTransportPreference,
+): boolean {
+  if (preference === 'auto') return true;
+  return preference === 'http' ? mode !== 'socket' : mode !== 'http';
+}
+
+const LOOPBACK_BLOCK_LIST = new net.BlockList();
+LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
+LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
+LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
+
+/**
+ * Whether a daemon base URL addresses this machine. A caller on a non-loopback daemon drives devices
+ * hosted elsewhere, so it must not read this machine's state to answer a question about them.
+ */
+export function daemonBaseUrlIsLocal(raw: string | undefined): boolean {
+  if (!raw) return true;
+  let hostname: string;
+  try {
+    hostname = new URL(raw).hostname;
+  } catch {
+    // An unusable base URL is refused when the transport resolves it; treat it as remote here.
+    return false;
+  }
+  return isLoopbackHostname(hostname);
+}
+
+/** Whether an address names this machine: `localhost` or a loopback literal. */
+export function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, '$1');
+  if (normalized === 'localhost') return true;
+  if (net.isIPv4(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv4');
+  if (net.isIPv6(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv6');
+  return false;
+}
+
 export function resolveDaemonTransportPreference(
   raw: string | undefined,
 ): DaemonTransportPreference {
@@ -262,7 +321,9 @@ export function resolveDaemonTransportPreference(
 }
 
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
-export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts'] as const;
+// `checked-rpc`: the daemon's HTTP server serves the checked RPC route (ADR 0006). Every daemon that
+// serves it also serves `script-artifacts`.
+export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts', 'checked-rpc'] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
 /**
@@ -315,9 +376,6 @@ export function readDaemonOwnership(value: unknown): DaemonOwnership {
 /** Stop if idle: refuses while the detached daemon holds work. */
 export const DAEMON_QUIESCE_COMMAND = 'daemon_quiesce';
 
-/** The reason a daemon gives every request it refuses once it has begun to leave. */
-export const DAEMON_SHUTTING_DOWN_REASON = 'daemon_shutting_down';
-
 /** Why a daemon refuses a lifecycle request: one entry per rule the admission seam enforces. */
 export const DAEMON_LIFECYCLE_REASONS = {
   // The daemon still holds work, so it refused to leave; `details` counts that work.
@@ -326,14 +384,28 @@ export const DAEMON_LIFECYCLE_REASONS = {
   instanceMismatch: { reason: 'daemon-instance-mismatch' },
   // A live host process owns this daemon and ends it through its own `close()`.
   ownerEmbedded: { reason: 'daemon-owner-embedded' },
+  // The daemon has begun to leave, so it refuses every new request; retry against a new daemon.
+  shuttingDown: { reason: 'daemon_shutting_down' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**
- * The refusal for a `daemon.json` whose owner field this build cannot place. No daemon answers it: a
- * runtime always knows whether it owns itself, so `unknown` is a verdict about a file, and only a reader
- * can reach it.
+ * Why a reader of `daemon.json` (`daemon stop`, a client replacing its daemon, a replay's cleanup)
+ * leaves a registered daemon in place. No daemon answers these: they are verdicts the reader reaches.
  */
-export const DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON = 'daemon-owner-unrecognized';
+export const DAEMON_RETIREMENT_REASONS = {
+  /**
+   * A runtime always knows whether it owns itself, so an owner this build cannot place is a verdict
+   * about a file, and only a reader can reach it.
+   */
+  // The daemon record states an owner this build cannot prove, so `daemon stop` signaled nothing
+  // and a client did not replace that daemon. Stop the process by its own means and remove its
+  // daemon.json, or update agent-device if a newer build wrote the record.
+  ownerUnrecognized: { reason: 'daemon-owner-unrecognized' },
+  // A daemon was asked to retire, by `daemon stop`, by a client replacing it, or by cleanup after a
+  // replay, and the retirement could not be confirmed: its ownership, lock, record or cleanup stayed
+  // unresolved. `details.retirement` says which; state and diagnostics stay in the state directory.
+  retirementUnconfirmed: { reason: 'daemon_retirement_unconfirmed' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** The daemon instance a lifecycle request is addressed to; any other instance refuses it. */
 export type DaemonLifecycleFence = Readonly<{
@@ -391,7 +463,7 @@ export function readDaemonLifecycleFence(input: unknown): DaemonLifecycleFence |
 export function assertScriptArtifactsCapability(capabilities: readonly string[] | undefined): void {
   if (capabilities?.includes('script-artifacts')) return;
   throw new AppError('INVALID_ARGS', 'The remote daemon cannot deliver session scripts.', {
-    reason: 'remote_script_artifacts_unsupported',
+    reason: DAEMON_CAPABILITY_REFUSAL_REASONS.scriptArtifactsUnsupported.reason,
     daemonRequestSent: false,
     hint: 'Upgrade the daemon that owns the session. Through a proxy, the upstream daemon must report the script-artifacts capability in its /health response.',
   });

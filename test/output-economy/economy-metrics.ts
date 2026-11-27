@@ -1,8 +1,8 @@
 export type EconomySample = { text: string } | { data: unknown };
 
-// Rendered @ref token grammar (optionally generation-pinned, e.g. `@e12~s3`).
+// Rendered @ref token grammar (optionally generation-pinned, e.g. `@e12-s3`).
 // Shared so ref counting and the routine-workflow oracle agree on what a ref is.
-export const REF_TOKEN_PATTERN = /@e\d+(?:~s\d+)?/g;
+export const REF_TOKEN_PATTERN = /@e\d+(?:-s\d+)?/g;
 
 export type EconomyMetrics = {
   bytes: number;

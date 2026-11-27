@@ -34,7 +34,7 @@ extension RunnerTests {
     // untyped record error, so the iOS typed path and the macOS generic path are both pinned (#2728).
     let typed = RunnerTests.recordingBootstrapError(from: .unresolvedWindow)
     XCTAssertEqual(
-      (typed as? RunnerAppScreenCaptureFailure)?.rawValue,
+      (typed as? RunnerAppScreenCaptureFailure)?.wireCode,
       "APP_SCREEN_WINDOW_UNRESOLVED"
     )
 
@@ -91,7 +91,7 @@ extension RunnerTests {
     ) { error in
       thrown = error
       XCTAssertEqual(
-        (error as? RunnerAppScreenCaptureFailure)?.rawValue,
+        (error as? RunnerAppScreenCaptureFailure)?.wireCode,
         "APP_SCREEN_WINDOW_UNRESOLVED",
         "the thrown bootstrap error is the refusal the capture returned"
       )

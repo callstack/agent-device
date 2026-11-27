@@ -362,7 +362,7 @@ const SAFE_ACTION_FLAG_SPECS: Record<string, SafeFlagSpec> = {
 };
 
 function buildSafeActionFlags(action: SessionAction): Record<string, unknown> | undefined {
-  const flags = (action.flags ?? {}) as Record<string, unknown>;
+  const flags = action.flags as Record<string, unknown>;
   const safeFlags: Record<string, unknown> = {};
   const commandFlagSpec = Object.hasOwn(SAFE_ACTION_FLAG_SPECS, action.command)
     ? SAFE_ACTION_FLAG_SPECS[action.command]

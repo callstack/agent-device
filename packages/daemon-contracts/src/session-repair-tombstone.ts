@@ -1,6 +1,12 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+
+/** Why this tombstone reader refuses to trust the marker on disk. */
+const REPAIR_EVIDENCE_REFUSAL_REASONS = {
+  // The repair tombstone file exists but does not parse into a valid marker.
+  invalid: { reason: 'repair_evidence_invalid' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**
  * ADR 0012 decision 6, R7 (C5a): a reaped repair session leaves this bounded
@@ -72,7 +78,7 @@ function parseRepairTombstone(raw: string, tombstonePath: string): RepairSession
     throw new AppError(
       'COMMAND_FAILED',
       'Repair evidence could not be inspected.',
-      { reason: 'repair_evidence_invalid', path: tombstonePath },
+      { reason: REPAIR_EVIDENCE_REFUSAL_REASONS.invalid.reason, path: tombstonePath },
       error instanceof Error ? error : undefined,
     );
   }

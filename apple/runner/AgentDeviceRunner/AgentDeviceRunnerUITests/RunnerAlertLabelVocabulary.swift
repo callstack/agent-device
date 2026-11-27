@@ -10,8 +10,12 @@ struct RunnerAlertLabelVocabulary {
   static let english = RunnerAlertLabelVocabulary(translations: [])
 
   private let sources: [String: [String]]
+  /// The rows as they were handed in, before the initializer's guards: what the table (or the OS
+  /// read) actually claims, for tests that compare the vocabulary against its own sources.
+  let rows: [(english: String, localized: String)]
 
   init(translations: [(english: String, localized: String)]) {
+    self.rows = translations
     var sources: [String: [String]] = [:]
     for translation in translations where RunnerAlertButtonChoice.action(of: translation.english, wholeLabel: true) != nil {
       sources[Self.normalized(translation.localized), default: []].append(translation.english)
@@ -29,6 +33,37 @@ struct RunnerAlertLabelVocabulary {
   private static func normalized(_ label: String) -> String {
     label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
   }
+}
+
+extension RunnerAlertLabelVocabulary {
+  /// The system prompts' buttons in the languages the built-in table covers, for the devices
+  /// whose OS string files the runner process cannot read. A simulated OS reads its own strings
+  /// instead, so this table is the only vocabulary a physical device has.
+  static let device = RunnerAlertLabelVocabulary(translations: deviceTranslations)
+
+  /// The built-in translations behind `device`. Each entry pairs the system prompt's English
+  /// button label with one language's wording of it, so the localized label ranks exactly like
+  /// the English original; the initializer's guards (#3627) drop an entry that would claim both
+  /// actions. A row's wording needs device evidence, so the table grows only with a label a
+  /// device really shows.
+  static let deviceTranslations: [(english: String, localized: String)] = [
+    // Notification and privacy prompts.
+    ("Allow", "允许"),
+    ("Don’t Allow", "不允许"),
+    // App Tracking Transparency. iOS words the decline button two ways: iOS 26–27's zh_CN
+    // ships 要求App不追踪 and iOS 18.1's zh_CN (a physical iPhone 12 Pro Max, 2026-11-24)
+    // ships 要求App不跟踪; the table carries both, so either device wording resolves.
+    ("Ask App Not to Track", "要求App不追踪"),
+    ("Ask App Not to Track", "要求App不跟踪"),
+    // Location.
+    ("Allow While Using App", "使用App时允许"),
+    ("Allow Once", "允许一次"),
+    // General-purpose prompt buttons.
+    ("OK", "好"),
+    ("Cancel", "取消"),
+    // SpringBoard's launch confirmation.
+    ("Open", "打开")
+  ]
 }
 
 #if os(iOS) && targetEnvironment(simulator)
@@ -81,6 +116,8 @@ extension RunnerAlertLabelVocabulary {
 }
 #else
 extension RunnerAlertLabelVocabulary {
-  static let system = english
+  /// A device keeps its OS string files from the runner process, so its vocabulary is the
+  /// built-in table.
+  static let system = device
 }
 #endif

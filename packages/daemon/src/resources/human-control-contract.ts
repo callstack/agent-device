@@ -3,12 +3,18 @@ import type {
   HumanControlHoldOptions,
   HumanControlHoldScope,
 } from '@agent-device/contracts/client';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   normalizeDeviceKey,
   normalizeLeaseBackend,
   normalizeLeaseProvider,
 } from './lease-registry-scope.ts';
+
+const HUMAN_CONTROL_REASONS = {
+  // A human holds the device, so state-changing commands are refused while the hold is active;
+  // retry after it is released.
+  active: { reason: 'human_control_active' },
+} as const satisfies ReasonTable<'human control'>;
 
 export const HUMAN_CONTROL_HTTP_PREFIX = '/admin/human-control/holds';
 
@@ -88,7 +94,7 @@ export function humanControlActiveError(hold: HumanControlHold): AppError {
     'DEVICE_IN_USE',
     'A human is interacting with this simulator or device; agent interactions are temporarily disabled.',
     {
-      reason: 'human_control_active',
+      reason: HUMAN_CONTROL_REASONS.active.reason,
       blockedBy: 'human_control',
       holdId: hold.id,
       deviceKey: hold.scope.deviceKey,

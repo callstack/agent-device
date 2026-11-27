@@ -1,5 +1,5 @@
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import {
   APP_LOG_RESOURCE_KIND,
   type AppLogRuntimeHost,
@@ -92,19 +92,30 @@ export function createProviderAppLogOperations<
     codec: options.codec,
     reattach: async (descriptor, context) => {
       if (!ownsDescriptor(descriptor, context.sessionId)) {
-        return { status: 'unreattachable', reason: 'descriptor-invalid', message: mismatch };
+        return {
+          status: 'unreattachable',
+          reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
+          message: mismatch,
+        };
       }
       const reconnected = await options.reconnect(descriptor, signal);
       if (reconnected.status === 'missing') return { status: 'missing' };
       if (reconnected.status === 'ownership-lost') {
-        return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+        return {
+          status: 'unreattachable',
+          reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+        };
       }
       return { status: 'active', handle: await startPoller(reconnected.reader, descriptor) };
     },
     cleanup: async (descriptor, context) =>
       ownsDescriptor(descriptor, context.sessionId)
         ? { status: 'cleaned' }
-        : { status: 'cleanup-pending', reason: 'ownership-fence-lost', message: mismatch },
+        : {
+            status: 'cleanup-pending',
+            reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+            message: mismatch,
+          },
   });
   return Object.freeze({
     appLogInspect: async () => ({ backend: options.backend }),

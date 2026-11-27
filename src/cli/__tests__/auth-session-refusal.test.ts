@@ -35,7 +35,7 @@ function writeStoredSession(stateDir: string): void {
   writeCliSession({
     stateDir,
     session: {
-      version: 1,
+      version: 2,
       id: 'session-refusal',
       cloudBaseUrl: 'https://cloud.example',
       refreshCredential: 'adc_refresh_stored',

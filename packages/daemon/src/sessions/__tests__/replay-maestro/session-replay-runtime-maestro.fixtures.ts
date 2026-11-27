@@ -74,7 +74,7 @@ async function runReplayFixture(params: {
   files?: Record<string, string>;
   flags?: CommandFlags;
   invoke?: DaemonInvokeFn;
-  sessionPlatform?: 'android' | 'ios';
+  sessionPlatform?: 'android' | 'ios' | 'ipados';
 }): Promise<{
   response: DaemonResponse;
   calls: CapturedInvocation[];

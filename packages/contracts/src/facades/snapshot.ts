@@ -12,6 +12,8 @@ export {
 } from '../snapshot-scope.ts';
 export {
   snapshotStateProvenance,
+  systemSurfaceBundleId,
+  androidSnapshotSystemSurface,
   isSnapshotBackend,
   usesMobileSnapshotPresentation,
   inheritPostGestureOutcome,

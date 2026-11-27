@@ -125,7 +125,7 @@ extension RunnerTests {
       )
     }
     let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
-#if os(iOS)
+#if os(iOS) || os(watchOS)
     // A managed XCTest host can override TMPDIR outside the app container.
     // The returned tmp/ path must resolve inside the runner's data container.
     let temporaryDirectory = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
@@ -507,9 +507,9 @@ extension RunnerTests {
 
   @MainActor
   func applyInteractionStabilizationIfNeeded() {
-    if mainOwned.needsPostSnapshotInteractionDelay {
-      sleepFor(postSnapshotInteractionDelay)
-      mainOwned.needsPostSnapshotInteractionDelay = false
+    if let readyUptime = mainOwned.postSnapshotInteractionReadyUptime {
+      sleepFor(readyUptime - ProcessInfo.processInfo.systemUptime)
+      mainOwned.postSnapshotInteractionReadyUptime = nil
     }
     if let window = firstInteractionWindow {
       sleepFor(window.readyUptime - ProcessInfo.processInfo.systemUptime)
@@ -539,6 +539,14 @@ extension RunnerTests {
     func attributedToActivation() -> FirstInteractionWindow {
       FirstInteractionWindow(readyUptime: readyUptime, origin: .activation)
     }
+  }
+
+  /// Start the post-snapshot settling window. Measured from now, so the time the caller spends
+  /// getting back to us counts towards it instead of being charged twice.
+  @MainActor
+  func beginPostSnapshotInteractionStabilization() {
+    mainOwned.postSnapshotInteractionReadyUptime =
+      ProcessInfo.processInfo.systemUptime + postSnapshotInteractionDelay
   }
 
   /// Start the post-activation settling window. Measured from now, so the time the caller spends

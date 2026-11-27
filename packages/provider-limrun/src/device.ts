@@ -3,6 +3,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 
+export type LimrunIosModel = 'iphone' | 'ipad' | 'watch';
 export type LimrunPlatform = 'ios' | 'android';
 
 export const LIMRUN_PROVIDER = 'limrun';
@@ -84,36 +85,4 @@ export function parseLimrunDeviceId(
 
 function limrunDeviceId(platform: LimrunPlatform, leaseId: string): string {
   return `${LIMRUN_DEVICE_ID_PREFIX}:${platform}:${leaseId}`;
-}
-
-/**
- * Whether `device` is one Limrun app logs recognize: an id this module itself would have built,
- * on the device shape that id's platform implies. Shared by both the owner module
- * (`app-log-runtime.ts`) and its facts module (`facts-runtime.ts`) so device-identity support
- * has exactly one definition regardless of which one asks.
- */
-export function isSupportedLimrunAppLogDevice(device: DeviceInfo): boolean {
-  const parsed = parseLimrunDeviceId(device.id);
-  if (!parsed || device.target !== 'mobile') return false;
-  return parsed.platform === 'ios'
-    ? isSupportedLimrunIosDevice(device)
-    : isSupportedLimrunAndroidDevice(device);
-}
-
-function isSupportedLimrunIosDevice(device: DeviceInfo): boolean {
-  return (
-    device.platform === 'apple' &&
-    device.appleOs === 'ios' &&
-    device.kind === 'simulator' &&
-    device.iosPhysicalDeviceBackend === undefined
-  );
-}
-
-function isSupportedLimrunAndroidDevice(device: DeviceInfo): boolean {
-  return (
-    device.platform === 'android' &&
-    device.appleOs === undefined &&
-    device.kind === 'emulator' &&
-    device.iosPhysicalDeviceBackend === undefined
-  );
 }

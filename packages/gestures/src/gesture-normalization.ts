@@ -126,7 +126,7 @@ const PUBLIC_GESTURE_SYNTAX: Record<GestureSyntaxKey, PublicGestureSyntax> = {
   },
   'gesture pinch': {
     max: 3,
-    usage: 'gesture pinch accepts at most 3 arguments: scale [x] [y]',
+    usage: 'gesture pinch accepts at most 3 arguments: scale [x y | element]',
   },
   'gesture rotate': {
     max: 3,
@@ -316,10 +316,11 @@ export function gesturePayloadFromPositionals(
     }
     case 'pinch': {
       assertGestureArity('gesture pinch', args);
+      const element = pinchElementArgument(args);
       return readGesturePayload({
         kind,
         scale: Number(args[0]),
-        origin: optionalOrigin(args[1], args[2]),
+        ...(element === undefined ? { origin: optionalOrigin(args[1], args[2]) } : { element }),
       });
     }
     case 'rotate': {
@@ -377,6 +378,12 @@ export function dragGesturePayloadFromPositionals(
   return payload.kind === 'drag' ? payload : undefined;
 }
 
+/** Reads the element a recorded `gesture pinch <scale> <element>` line targets, if any. */
+export function pinchElementFromPositionals(positionals: readonly string[]): string | undefined {
+  if (positionals[0] !== 'pinch') return undefined;
+  return pinchElementArgument(positionals.slice(1));
+}
+
 /** Serializes structured gesture input for `.ad` recordings. */
 export function gesturePayloadToPositionals(input: GesturePayload): string[] {
   switch (input.kind) {
@@ -394,7 +401,9 @@ export function gesturePayloadToPositionals(input: GesturePayload): string[] {
     case 'swipe':
       return [input.kind, input.preset];
     case 'pinch':
-      return compact([input.kind, input.scale, input.origin?.x, input.origin?.y]);
+      return input.element === undefined
+        ? compact([input.kind, input.scale, input.origin?.x, input.origin?.y])
+        : [input.kind, String(input.scale), input.element];
     case 'rotate':
       return input.origin
         ? compact([input.kind, input.degrees, input.origin.x, input.origin.y])
@@ -468,6 +477,12 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
     case 'swipe':
       return { gesture: { intent: 'fling', preset: input.preset } };
     case 'pinch':
+      if (input.element !== undefined) {
+        throw new AppError(
+          'INVALID_ARGS',
+          'gesture pinch elements must be resolved before coordinate normalization',
+        );
+      }
       return {
         gesture: { intent: 'pinch', origin: input.origin, scale: input.scale },
       };
@@ -504,6 +519,9 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
 
 /** Converts every public gesture payload into the runtime's semantic command shape. */
 export function normalizeGestureCommandInput(input: GesturePayload): GestureCommandInput {
+  if (input.kind === 'pinch' && input.element !== undefined) {
+    return { intent: 'pinch', element: input.element, scale: input.scale };
+  }
   if (input.kind !== 'drag') return normalizePublicGesture(input).gesture;
   return {
     intent: 'drag',
@@ -534,6 +552,19 @@ function readPositionalPoints(args: readonly string[]): Point[] {
 
 function optionalPositionNumber(value: string | undefined): number | undefined {
   return value === undefined ? undefined : Number(value);
+}
+
+/** `gesture pinch <scale> <element>`: one non-numeric argument after the scale names a @ref or selector. */
+function pinchElementArgument(args: readonly string[]): string | undefined {
+  const candidate = args[1];
+  if (candidate === undefined || Number.isFinite(Number(candidate))) return undefined;
+  if (args.length > 2) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'gesture pinch takes x y or one element after the scale, not both',
+    );
+  }
+  return candidate;
 }
 
 function optionalOrigin(x: string | undefined, y: string | undefined): Point | undefined {

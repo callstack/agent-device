@@ -41,6 +41,13 @@ extension RunnerTests {
     }
   }
 
+  func testReplacementMismatchHintNamesAnOverlayOnlyForAnEmptyReadBack() {
+    XCTAssertTrue(Self.replacementMismatchHint(observedText: "").contains("overlay"))
+    XCTAssertFalse(Self.replacementMismatchHint(observedText: "ada").contains("overlay"))
+    XCTAssertFalse(Self.replacementMismatchHint(observedText: nil).contains("overlay"))
+    XCTAssertTrue(Self.replacementMismatchHint(observedText: "").contains("--delay-ms"))
+  }
+
   func testReplacementDisclosesNonLiteralValuesWithoutInferringCorrectness() {
     let cases: [(String, String, String)] = [
       ("", "000629177", "00 062 91 77"),

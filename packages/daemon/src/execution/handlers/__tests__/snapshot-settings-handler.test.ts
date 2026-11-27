@@ -392,6 +392,35 @@ test('settings usage hint documents canonical faceid states', async () => {
   }
 });
 
+// Positionals sent straight to the daemon skip the CLI reader, so the parse refusal must keep its
+// typed details and --app hint on this route too.
+test('settings permission with an app id in the mode slot keeps the --app hint', async () => {
+  const sessionStore = makeSessionStore();
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('default', 'settings', {
+      positionals: ['permission', 'deny', 'notifications', 'com.example.app'],
+    }),
+    sessionName: 'default',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.hint).toBe('Pass the app with --app com.example.app.');
+    expect(response.error.details).toMatchObject({
+      reason: 'setting_permission_app_positional',
+      dispatched: 'no',
+      permission: 'notifications',
+      app: 'com.example.app',
+    });
+  }
+});
+
 // #3179: an app-scoped change can name an app the session never opened. The app rides the request
 // input; the owner receives it as the resolved app id whether or not a session is bound.
 test('settings permission grant targets an explicit app with no session app bound', async () => {
@@ -661,6 +690,124 @@ test('settings iOS location set refuses a named app before reaching the owner', 
   }
 });
 
+test.each([
+  {
+    positionals: ['timezone', 'America/New_York'],
+    state: 'America/New_York',
+    message: 'Time zone set to America/New_York',
+  },
+  {
+    positionals: ['timezone', 'RESET'],
+    state: 'reset',
+    message: 'Time zone reset to the device default',
+  },
+])('settings $positionals reaches the owner as the parsed value', async (row) => {
+  const sessionStore = makeSessionStore();
+  const sessionName = `ios-${row.positionals[0]}-${row.state}`;
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: row.positionals }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok && response.data).toMatchObject({ state: row.state, message: row.message });
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({
+    setting: row.positionals[0],
+    state: row.state,
+  });
+});
+
+test('settings timezone refuses an invalid zone and a tvOS leaf before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  sessionStore.publish('ios-tz-invalid', makeSession('ios-tz-invalid', iosSimulatorDevice));
+  sessionStore.publish('tvos-tz', makeSession('tvos-tz', tvOsSimulatorDevice));
+
+  const invalid = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('ios-tz-invalid', 'settings', {
+      positionals: ['timezone', '+05:30'],
+    }),
+    sessionName: 'ios-tz-invalid',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+  const tvos = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('tvos-tz', 'settings', { positionals: ['timezone', 'Asia/Kolkata'] }),
+    sessionName: 'tvos-tz',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(invalid?.ok === false && invalid.error.code).toBe('INVALID_ARGS');
+  expect(tvos?.ok === false && tvos.error.code).toBe('UNSUPPORTED_OPERATION');
+  expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
+test.each([
+  { positionals: ['locale', 'fr_ca'], state: 'fr-CA', message: 'Locale set to fr-CA' },
+  {
+    positionals: ['locale', 'RESET'],
+    state: 'reset',
+    message: 'Locale reset to the device default',
+  },
+])('settings $positionals reaches the owner as the parsed value', async (row) => {
+  const sessionStore = makeSessionStore();
+  const sessionName = `ios-${row.positionals[0]}-${row.state}`;
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: row.positionals }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok && response.data).toMatchObject({ state: row.state, message: row.message });
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({
+    setting: row.positionals[0],
+    state: row.state,
+  });
+});
+
+test('settings locale refuses an invalid id and a tvOS leaf before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  sessionStore.publish('ios-locale-invalid', makeSession('ios-locale-invalid', iosSimulatorDevice));
+  sessionStore.publish('tvos-locale', makeSession('tvos-locale', tvOsSimulatorDevice));
+
+  const invalid = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('ios-locale-invalid', 'settings', {
+      positionals: ['locale', 'en-u-nu-thai'],
+    }),
+    sessionName: 'ios-locale-invalid',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+  const tvos = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest('tvos-locale', 'settings', { positionals: ['locale', 'en_IN'] }),
+    sessionName: 'tvos-locale',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(invalid?.ok === false && invalid.error.code).toBe('INVALID_ARGS');
+  expect(tvos?.ok === false && tvos.error.code).toBe('UNSUPPORTED_OPERATION');
+  expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
 // A macOS permission is a host-level TCC grant, so naming an app is refused rather than dropped.
 test('settings mobile-data reaches the Android owner as an on/off mutation', async () => {
   const sessionStore = makeSessionStore();
@@ -680,34 +827,37 @@ test('settings mobile-data reaches the Android owner as an on/off mutation', asy
   expect(fixtureSettingsMutations.at(-1)).toMatchObject({ setting: 'mobile-data', state: 'off' });
 });
 
-test.each(['mobile-data', 'bluetooth'])(
-  'settings Android %s refuses a named app before reaching the owner',
-  async (setting) => {
-    const sessionStore = makeSessionStore();
-    const sessionName = `android-${setting}-app-refused`;
-    sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+test.each([
+  ['mobile-data', 'off'],
+  ['keep-awake', 'off'],
+  ['bluetooth', 'off'],
+  ['locale', 'en_IN'],
+  ['timezone', 'Asia/Kolkata'],
+])('settings Android %s refuses a named app before reaching the owner', async (setting, state) => {
+  const sessionStore = makeSessionStore();
+  const sessionName = `android-${setting}-app-refused`;
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
-    const response = await handleSnapshotCommands({
-      createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
-      req: snapshotRequest(sessionName, 'settings', {
-        positionals: [setting, 'off'],
-        input: { app: 'com.example.app' },
-      }),
-      sessionName,
-      logPath: '/tmp/daemon.log',
-      sessionStore,
-    });
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: [setting, state],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
 
-    expect(response?.ok).toBe(false);
-    expect(fixtureSettingsMutations).toHaveLength(0);
-    if (response && !response.ok) {
-      expect(response.error.code).toBe('INVALID_ARGS');
-      expect(response.error.details?.reason).toBe('setting_app_not_consumed');
-      expect(response.error.details?.dispatched).toBe('no');
-    }
-  },
-);
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+    expect(response.error.details?.dispatched).toBe('no');
+  }
+});
 
 test('settings macOS permission grant refuses a named app before reaching the owner', async () => {
   const sessionStore = makeSessionStore();

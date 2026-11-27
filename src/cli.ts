@@ -1,5 +1,5 @@
-import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
-import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
+import { parseRawArgs, usage, usageForCommand, usageForUnknownCommand } from './cli/parser/args.ts';
+import { formatUnknownCommandMessage } from './cli/parser/command-suggestions.ts';
 import {
   asAppError,
   AppError,
@@ -56,6 +56,7 @@ import {
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
+  claimRemoteConnectionDefaults,
   remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
@@ -294,8 +295,8 @@ async function parseCliInputOrExit(
       writeStdout(commandHelp);
       return exitAfterFlush(0);
     }
-    await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
-    writeStdout(`${await usage()}\n`);
+    await printHumanError(new AppError('INVALID_ARGS', formatUnknownCommandMessage(helpTarget)));
+    writeStdout(await usageForUnknownCommand(helpTarget));
     return exitAfterFlush(1);
   }
 
@@ -489,11 +490,16 @@ async function resolveRemoteContext(
   }
 
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
-    const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
-      host: ctx.host,
-      devicePin: ctx.devicePin,
-      transport: createClientDaemonTransport(transport),
-    });
+    // Lease allocate and heartbeat calls act on the remote before the command, so they go
+    // health-first with the instance fences, never on the checked route.
+    const materializationClient = createAgentDeviceClient(
+      { ...buildClientConfig(ctx), daemonRpc: undefined },
+      {
+        host: ctx.host,
+        devicePin: ctx.devicePin,
+        transport: createClientDaemonTransport(transport),
+      },
+    );
     const { materializeRemoteConnectionForCommand } =
       await import('./cli/commands/connection-runtime.ts');
     const materialized = await materializeRemoteConnectionForCommand({
@@ -537,6 +543,8 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     daemonAuthToken: currentFlags.daemonAuthToken,
     daemonTransport: currentFlags.daemonTransport,
     daemonServerMode: currentFlags.daemonServerMode,
+    daemonRpc: currentFlags.daemonRpc,
+    daemonRpcTarget: currentFlags.daemonRpcTarget,
     tenant: currentFlags.tenant,
     sessionIsolation: currentFlags.sessionIsolation,
     runId: currentFlags.runId,
@@ -654,6 +662,7 @@ async function dispatchCliCommand(
       replayTestReporterRuntime,
       commandProgress,
       leaseDevice: ctx.leaseDevice,
+      claimedConnection: ctx.connectionDefaults?.claimed,
     })
   ) {
     return;
@@ -715,13 +724,6 @@ function isDebugRequested(argv: string[]): boolean {
   }
 }
 
-function formatUnknownHelpTargetMessage(helpTarget: string): string {
-  const hint = suggestCommandFor(helpTarget);
-  return hint
-    ? `Unknown command: ${helpTarget}. Did you mean ${hint}?`
-    : `Unknown command: ${helpTarget}`;
-}
-
 function formatUnhandledCommandMessage(command: string): string {
   if (isKnownCliCommandName(command)) {
     // Registered-but-unhandled means catalog/dispatch drift — make it visible
@@ -778,11 +780,7 @@ function resolveActiveConnectionDefaults(options: {
   stateDir: string;
   session: string | undefined;
   remoteConfig?: string;
-}): {
-  flags: Partial<CliFlags>;
-  runtime?: SessionRuntimeHints;
-  connection?: RemoteConnectionRequestMetadata;
-} | null {
+}) {
   if (
     options.command === 'connect' ||
     options.command === 'connection' ||
@@ -790,15 +788,16 @@ function resolveActiveConnectionDefaults(options: {
   ) {
     return null;
   }
-  const defaults = resolveRemoteConnectionDefaults({
+  const request = {
     stateDir: options.stateDir,
     session: options.session,
     remoteConfig: options.remoteConfig,
     cwd: options.host.cwd,
     env: options.host.env,
-    validateRemoteConfigHash: options.command !== 'disconnect',
-  });
-  return defaults;
+  };
+  return options.command === 'disconnect'
+    ? claimRemoteConnectionDefaults(request)
+    : resolveRemoteConnectionDefaults(request);
 }
 
 // A command that cannot take a session runs on no remote connection. Reading, authenticating or

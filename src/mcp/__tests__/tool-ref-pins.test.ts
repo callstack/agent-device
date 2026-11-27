@@ -21,7 +21,7 @@ test('ref-pin store keeps per-ref provenance across snapshot and find captures',
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined);
   assert.deepEqual(pinned, {
     session: 'demo',
-    ref: '@e37~s500012',
+    ref: '@e37-s500012',
   });
 });
 
@@ -39,7 +39,7 @@ test('ref-pin store pins the find-issued ref to the find generation', () => {
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
   assert.deepEqual(pinned, {
     session: 'demo',
-    ref: '@e5~s500013',
+    ref: '@e5-s500013',
   });
 });
 
@@ -62,8 +62,8 @@ test('ref-pin store pins every listed ref from a find list response', () => {
   const first = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
   const second = pins.pinInput('press', { session: 'demo', ref: '@e9' }, undefined);
 
-  assert.deepEqual(first, { session: 'demo', ref: '@e5~s500014' });
-  assert.deepEqual(second, { session: 'demo', ref: '@e9~s500014' });
+  assert.deepEqual(first, { session: 'demo', ref: '@e5-s500014' });
+  assert.deepEqual(second, { session: 'demo', ref: '@e9-s500014' });
 });
 
 test('ref-pin store pins ambiguous mutation candidates issued by an error', () => {
@@ -82,7 +82,7 @@ test('ref-pin store pins ambiguous mutation candidates issued by an error', () =
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
   assert.deepEqual(pinned, {
     session: 'demo',
-    ref: '@e5~s500014',
+    ref: '@e5-s500014',
   });
 });
 
@@ -99,11 +99,11 @@ test('ref-pin store pins wait refs and get targets from the per-ref map', () => 
   const wait = pins.pinInput('wait', { session: 'demo', ref: '@e2' }, undefined);
   const get = pins.pinInput('get', { session: 'demo', format: 'text', ref: '@e37' }, undefined);
 
-  assert.deepEqual(wait, { session: 'demo', ref: '@e2~s500012' });
+  assert.deepEqual(wait, { session: 'demo', ref: '@e2-s500012' });
   assert.deepEqual(get, {
     session: 'demo',
     format: 'text',
-    ref: '@e37~s500012',
+    ref: '@e37-s500012',
   });
 });
 
@@ -118,7 +118,7 @@ test('ref-pin store merges digest-level snapshot refs too', () => {
   );
 
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e9' }, undefined);
-  assert.deepEqual(pinned, { session: 'demo', ref: '@e9~s41' });
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e9-s41' });
 });
 
 // --- #1101 --settle: interaction responses re-pin from the settled diff ---
@@ -164,12 +164,12 @@ test('ref-pin store merges per-ref pins from a settle response diff', () => {
     undefined,
   );
 
-  assert.deepEqual(first, { session: 'demo', ref: '@e2~s7' });
-  assert.deepEqual(second, { session: 'demo', ref: '@e4~s8' });
+  assert.deepEqual(first, { session: 'demo', ref: '@e2-s7' });
+  assert.deepEqual(second, { session: 'demo', ref: '@e4-s8' });
   assert.deepEqual(untouched, {
     session: 'demo',
     format: 'text',
-    ref: '@e37~s7',
+    ref: '@e37-s7',
   });
 });
 
@@ -198,7 +198,7 @@ test('ref-pin store merges digest-level settled refs too', () => {
   );
 
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e4' }, undefined);
-  assert.deepEqual(pinned, { session: 'demo', ref: '@e4~s9' });
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e4-s9' });
 });
 
 test('ref-pin store merges per-ref pins from a settle response unchanged-interactive tail', () => {
@@ -227,7 +227,7 @@ test('ref-pin store merges per-ref pins from a settle response unchanged-interac
   );
 
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e1' }, undefined);
-  assert.deepEqual(pinned, { session: 'demo', ref: '@e1~s9' });
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e1-s9' });
 });
 
 test('ref-pin store leaves pins untouched for plain interaction responses', () => {
@@ -244,8 +244,8 @@ test('ref-pin store leaves pins untouched for plain interaction responses', () =
   const first = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
   const second = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
 
-  assert.deepEqual(first, { session: 'demo', ref: '@e2~s7' });
-  assert.deepEqual(second, { session: 'demo', ref: '@e2~s7' });
+  assert.deepEqual(first, { session: 'demo', ref: '@e2-s7' });
+  assert.deepEqual(second, { session: 'demo', ref: '@e2-s7' });
 });
 
 // --- ADR 0012 decision 2: resolution diagnostics are never ref-issued/pinned ---
@@ -281,8 +281,8 @@ test('ref-pin store never pins resolution.winnerDiagnostic/alternatives', () => 
   const e3 = pins.pinInput('press', { session: 'demo', ref: '@e3' }, undefined);
   const diag = pins.pinInput('press', { session: 'demo', ref: '@diag-e3' }, undefined);
 
-  assert.deepEqual(e2, { session: 'demo', ref: '@e2~s7' });
-  assert.deepEqual(e3, { session: 'demo', ref: '@e3~s7' });
+  assert.deepEqual(e2, { session: 'demo', ref: '@e2-s7' });
+  assert.deepEqual(e3, { session: 'demo', ref: '@e3-s7' });
   assert.deepEqual(diag, { session: 'demo', ref: '@diag-e3' });
 });
 
@@ -343,7 +343,7 @@ test('ref-pin store scopes by state dir so same-named sessions never cross-polli
   assert.deepEqual(originalState, {
     session: 'demo',
     stateDir: '/state/a',
-    ref: '@e2~s500012',
+    ref: '@e2-s500012',
   });
 });
 
@@ -377,10 +377,10 @@ test('ref-pin store never rewrites refs that already carry a suffix and never pi
     'demo',
   );
 
-  const alreadyPinned = pins.pinInput('press', { session: 'demo', ref: '@e2~s3' }, undefined);
+  const alreadyPinned = pins.pinInput('press', { session: 'demo', ref: '@e2-s3' }, undefined);
   const missingAt = pins.pinInput('press', { session: 'demo', ref: 'e2' }, undefined);
 
-  assert.deepEqual(alreadyPinned, { session: 'demo', ref: '@e2~s3' });
+  assert.deepEqual(alreadyPinned, { session: 'demo', ref: '@e2-s3' });
   assert.deepEqual(missingAt, { session: 'demo', ref: 'e2' });
 });
 
@@ -397,7 +397,7 @@ test('ref-pin store bounds retained pins per scope', () => {
   const last = pins.pinInput('press', { session: 'demo', ref: '@e1001' }, undefined);
 
   assert.deepEqual(first, { session: 'demo', ref: '@e0' });
-  assert.deepEqual(last, { session: 'demo', ref: '@e1001~s1' });
+  assert.deepEqual(last, { session: 'demo', ref: '@e1001-s1' });
 });
 
 // --- ADR 0012 migration step 2: replay divergence is a ref-issuing error ---
@@ -433,7 +433,7 @@ test('ref-pin store merges divergence screen refs and pins them for later inputs
   pins.mergeErrorDetails(replayDivergenceDetails(), undefined, 'demo');
 
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined);
-  assert.deepEqual(pinned, { session: 'demo', ref: '@e5~s12' });
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e5-s12' });
 });
 
 test('ref-pin store leaves existing pins untouched for an error without a divergence', () => {
@@ -448,7 +448,7 @@ test('ref-pin store leaves existing pins untouched for an error without a diverg
   pins.mergeErrorDetails({ code: 'INVALID_ARGS', message: 'bad selector' }, undefined, 'demo');
 
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
-  assert.deepEqual(pinned, { session: 'demo', ref: '@e2~s7' });
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e2-s7' });
 });
 
 test('ref-pin store leaves existing pins untouched for a mutating find without refsGeneration', () => {
@@ -463,10 +463,10 @@ test('ref-pin store leaves existing pins untouched for a mutating find without r
   pins.mergeCommandResult('find', { ref: '@e2' }, undefined, 'demo');
 
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined);
-  assert.deepEqual(pinned, { session: 'demo', ref: '@e2~s7' });
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e2-s7' });
 });
 
-test('ref-pin store pins audit finding refs to the audit generation and keeps other pins', () => {
+test('ref-pin store pins audit finding and screen-reader order refs to the audit generation and keeps other pins', () => {
   const pins = makeStore();
   const checks = { snapshot: 'complete' } as const;
 
@@ -499,6 +499,7 @@ test('ref-pin store pins audit finding refs to the audit generation and keeps ot
       },
       checks,
       limitations: [],
+      screenReaderOrder: { estimatedFrom: 'talkback-16.2', windows: [{ refs: ['@e5'] }] },
       refsGeneration: 9,
     } satisfies AuditSnapshotCommandResult,
     undefined,
@@ -507,15 +508,19 @@ test('ref-pin store pins audit finding refs to the audit generation and keeps ot
 
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined), {
     session: 'demo',
-    ref: '@e2~s9',
+    ref: '@e2-s9',
   });
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e3' }, undefined), {
     session: 'demo',
-    ref: '@e3~s9',
+    ref: '@e3-s9',
+  });
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e5' }, undefined), {
+    session: 'demo',
+    ref: '@e5-s9',
   });
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined), {
     session: 'demo',
-    ref: '@e37~s7',
+    ref: '@e37-s7',
   });
 });
 
@@ -542,7 +547,7 @@ test('ref-pin store leaves pins untouched for an audit without findings', () => 
 
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined), {
     session: 'demo',
-    ref: '@e2~s7',
+    ref: '@e2-s7',
   });
 });
 
@@ -586,11 +591,11 @@ test('ref-pin store merges per-ref pins from a scroll settle diff', () => {
   // republished keeps its older snapshot pin, so the daemon still warns on it.
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e4' }, undefined), {
     session: 'demo',
-    ref: '@e4~s8',
+    ref: '@e4-s8',
   });
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined), {
     session: 'demo',
-    ref: '@e37~s7',
+    ref: '@e37-s7',
   });
 });
 
@@ -620,7 +625,7 @@ test('ref-pin store merges per-ref pins from a back settle tail', () => {
 
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e6' }, undefined), {
     session: 'demo',
-    ref: '@e6~s12',
+    ref: '@e6-s12',
   });
 });
 
@@ -642,7 +647,7 @@ test('ref-pin store leaves pins untouched for a scroll with no settle payload', 
 
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined), {
     session: 'demo',
-    ref: '@e2~s7',
+    ref: '@e2-s7',
   });
 });
 
@@ -663,7 +668,7 @@ test('ref-pin store pins every member of a comma-separated ref plan from one sna
   const pinned = pins.pinInput('press', { session: 'demo', ref: '@e13,@e14,@e15,@e16' }, undefined);
   assert.deepEqual(pinned, {
     session: 'demo',
-    ref: '@e13~s500020,@e14~s500020,@e15~s500020,@e16~s500020',
+    ref: '@e13-s500020,@e14-s500020,@e15-s500020,@e16-s500020',
   });
 });
 
@@ -678,10 +683,10 @@ test('ref-pin store pins a repeated plan member twice and leaves unknown members
   );
 
   const repeated = pins.pinInput('press', { session: 'demo', ref: '@e1,@e2,@e1' }, undefined);
-  assert.deepEqual(repeated, { session: 'demo', ref: '@e1~s6,@e2~s6,@e1~s6' });
+  assert.deepEqual(repeated, { session: 'demo', ref: '@e1-s6,@e2-s6,@e1-s6' });
 
   const unknownMember = pins.pinInput('press', { session: 'demo', ref: '@e1,@e99' }, undefined);
-  assert.deepEqual(unknownMember, { session: 'demo', ref: '@e1~s6,@e99' });
+  assert.deepEqual(unknownMember, { session: 'demo', ref: '@e1-s6,@e99' });
 });
 
 test('ref-pin store pins the unpinned members of a partly pinned plan', () => {
@@ -694,6 +699,6 @@ test('ref-pin store pins the unpinned members of a partly pinned plan', () => {
     'demo',
   );
 
-  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e13~s4,@e14' }, undefined);
-  assert.deepEqual(pinned, { session: 'demo', ref: '@e13~s4,@e14~s500021' });
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e13-s4,@e14' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e13-s4,@e14-s500021' });
 });

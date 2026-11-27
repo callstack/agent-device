@@ -24,8 +24,10 @@ If an interactive snapshot has only the application root or another sparse shape
 **Acquisition.** XCTest stays the iOS automation runner.
 Route eligible local iPhone and iPad Simulator snapshots through the host AX bridge.
 A provider iOS Simulator uses the same reader through the runner's `snapshotBridge` command.
-tvOS and visionOS Simulators, the macOS host, physical devices, custom-action captures, and interactions keep their existing owners.
-Physical devices should get a non-XCTest semantic backend only if Apple exposes a supported channel.
+tvOS and visionOS Simulators, the macOS host, physical devices, custom-action captures, and interactions do not use the host AX bridge.
+This amendment changes the scope for iOS physical devices: they still do not use the host AX bridge, but they now use the runner's private-AX tier. Other physical devices get a non-XCTest semantic backend only if Apple exposes a supported channel.
+On an iOS physical device, the runner's private-AX tier is the recovery for a tree that XCTest's recursive snapshot rejects, as it is for a runner-read iOS Simulator.
+It asks XCTest's own AX client for depth-capped snapshots and continues from the frontier nodes, so it needs no other channel. The AX server's depth limit is per request. A request that names an explicit raw depth gets that depth only, with no continuation.
 An observe-only capture skips the route and uses the provider's capture, because it must not activate the app or start work.
 
 **Fallback.** If bridge acquisition fails without cancellation, or presentation fails, use one typed XCTest fallback with explicit source residue.
@@ -56,7 +58,11 @@ A placed iPad window publishes screen space in points, because its viewport, its
 The acquisition's `reported`, `derived`, or `missing` viewport evidence survives the runner boundary and capture transformations.
 Only `reported` establishes the screen origin for capture-derived input.
 A root-derived validation box preserves readable fallback trees but cannot upgrade unknown origin evidence.
-A private-AX root is `reported` only when it is exactly the screen frame at the origin and AXRuntime reports the target as the primary app that fills that screen.
+A private-AX root is `reported` only when it is exactly the full-screen proof frame at the origin.
+When AXRuntime reports the target as the primary app that fills the screen, the proof frame is that screen frame.
+When AXRuntime reports the target windowed or not primary, there is no proof frame.
+When the AXRuntime probe proves nothing, the proof frame is the sole XCTest screen in native portrait points. That is always the case on a physical device, where AXRuntime reports no app to the runner. No window smaller than the screen can equal that frame.
+When the sole screen cannot be measured, or it is wider than it is tall, there is no proof frame, so the origin stays unknown.
 Element mutations, mutating find, Maestro selector geometry, and snapshot-derived gesture bounds refuse an unknown origin with `window-origin-unknown` and `dispatched: no` before input.
 Independent native queries and authored screen coordinates retain their own authorities.
 
@@ -71,6 +77,7 @@ If the proof fails or a host is present, use the runner for that capture without
 
 Decision history: #3801 permits acquisition overflow from system alerts at large Dynamic Type sizes. Presentation clips it with one `regular-geometry-clipped` quality note instead of failing the capture.
 Decision history: #4654 states that the fold policy is producer evidence. The Apple runner compiles its policy per runtime — the projection cursor on iPhone/iPad, plain viewport intersection on tvOS and visionOS — and the host revalidation of an already presented payload reuses that policy instead of its own default, because the tvOS focus effect scales a focused cell past its row by design.
+Decision history: until 2026-11 the runner compiled its private-AX tier for iOS Simulators only. On a physical iPhone, XCTest rejected a deep screen, because the per-request depth limit applies to XCTest on a device too. The tier uses no Simulator facility, so it now serves iOS physical devices as well. On a device, AXRuntime reports no app to the runner, so a recovered root could not establish a screen origin and ref presses refused with `window-origin-unknown`. The sole XCTest screen now supplies the screen frame when AXRuntime reports nothing.
 
 ## Rationale
 

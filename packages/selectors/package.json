@@ -48,6 +48,10 @@
       "types": "./src/interaction-error.ts",
       "default": "./src/interaction-error.ts"
     },
+    "./interaction-offscreen": {
+      "types": "./src/interaction-offscreen.ts",
+      "default": "./src/interaction-offscreen.ts"
+    },
     "./interaction-positionals": {
       "types": "./src/interaction-positionals.ts",
       "default": "./src/interaction-positionals.ts"

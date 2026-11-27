@@ -161,7 +161,7 @@ test('handleFindCommands list returns every match without acting', async () => {
   // Inspection only: nothing was clicked, focused, or filled.
   expect(invokeCalls).toHaveLength(0);
   // Ref-issuing: the response carries the generation and the partial frame
-  // authorizes EVERY listed body, so any `@eN~sG` from the list can drive the
+  // authorizes EVERY listed body, so any `@eN-sG` from the list can drive the
   // next command (a plain `@eN` still requires a complete frame by design —
   // the MCP/CLI layers pin from `matches` + `refsGeneration`).
   expect(typeof response.data?.refsGeneration).toBe('number');

@@ -12,13 +12,19 @@ import {
   isHostScopedDeviceOf,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   resolveDaemonPolicyCommandName,
   type DaemonPolicy,
   type DaemonPolicyCapability,
 } from '@agent-device/daemon-contracts/daemon-policy-file';
 import type { DaemonRequest } from './daemon-request.ts';
+
+const DAEMON_POLICY_REASONS = {
+  // The daemon operator's policy denies this command, device, capability, or lease; `details.rule`
+  // names which.
+  denied: { reason: 'DAEMON_POLICY_DENIED' },
+} as const satisfies ReasonTable<'daemon policy'>;
 
 /**
  * ADR 0029 enforcement: every request the daemon admits, including `batch` steps and `replay`
@@ -181,7 +187,7 @@ function policyDenied(
 ): AppError {
   return new AppError('UNAUTHORIZED', message, {
     ...details,
-    reason: 'DAEMON_POLICY_DENIED',
+    reason: DAEMON_POLICY_REASONS.denied.reason,
     rule,
     policyDigest: policy.digest,
     retriable: false,

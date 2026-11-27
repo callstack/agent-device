@@ -27,16 +27,29 @@ export function parseAndroidDeviceEntries(rawOutput: string): AndroidDeviceEntry
   return devices;
 }
 
-/** Reads the model and OS version lines printed by the inventory description probe, in order. */
-export function parseAndroidDeviceDescription(rawOutput: string): {
-  model?: string;
-  osVersion?: string;
-} {
-  const [model, osVersion] = rawOutput.split(/\r?\n/).map((line) => line.trim());
-  return {
-    ...(model ? { model } : {}),
-    ...(osVersion ? { osVersion } : {}),
-  };
+/** The properties discovery reads for a running device, in the order its probe prints them. */
+export const ANDROID_INVENTORY_PROPS = [
+  'sys.boot_completed',
+  'ro.boot.qemu.avd_name',
+  'persist.sys.avd_name',
+  'ro.product.model',
+  'ro.build.version.release',
+  'ro.build.characteristics',
+] as const;
+
+export type AndroidDeviceProps = Readonly<
+  Partial<Record<(typeof ANDROID_INVENTORY_PROPS)[number], string>>
+>;
+
+/** One line per property in ANDROID_INVENTORY_PROPS order; `getprop` prints an unset one as empty. */
+export function parseAndroidDeviceProps(rawOutput: string): AndroidDeviceProps {
+  const lines = rawOutput.split(/\r?\n/);
+  return Object.fromEntries(
+    ANDROID_INVENTORY_PROPS.flatMap((prop, index) => {
+      const value = lines[index]?.trim();
+      return value ? [[prop, value]] : [];
+    }),
+  );
 }
 
 /** avdmanager restricts AVD names to these characters; other stdout lines are emulator logging. */

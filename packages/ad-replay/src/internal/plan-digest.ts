@@ -47,8 +47,8 @@ function buildCanonicalPlan(params: {
 function canonicalizeAction(action: SessionAction, line: number | null): unknown {
   return {
     command: action.command,
-    positionals: action.positionals ?? [],
-    flags: action.flags ?? {},
+    positionals: action.positionals,
+    flags: action.flags,
     runtime: action.runtime ?? null,
     targetEvidence: action.targetEvidence ?? null,
     targetEvidences: action.targetEvidences ?? null,

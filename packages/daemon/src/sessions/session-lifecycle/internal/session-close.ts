@@ -28,7 +28,7 @@ import type { SessionCleanupFailure } from '../../session-teardown.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
-import { hasRuntimeTransportHints } from '../../session-runtime.ts';
+import { requiresRuntimeHintsClear, runtimeHintsClearInput } from '../../session-runtime.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -323,8 +323,9 @@ export async function handleSessionCloseCommands(
     device: session.device,
     clearRuntimeHints:
       req.internal?.closeAppOnly !== true &&
-      Boolean(session.appBundleId) &&
-      hasRuntimeTransportHints(sessionStore.getRuntimeHints(sessionName)),
+      requiresRuntimeHintsClear(
+        runtimeHintsClearInput(sessionStore.getRuntimeHints(sessionName), session.appBundleId),
+      ),
     inspectFacts: params.inspectFacts,
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,

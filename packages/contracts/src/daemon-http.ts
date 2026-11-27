@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 
 // The daemon HTTP wire vocabulary shared by the daemon server, the remote
 // proxy, and every client that talks to them: the base path, the tenant, lease
@@ -137,6 +138,134 @@ export const DAEMON_REQUEST_MAX_BYTES = 64 * 1024 * 1024;
 export const DAEMON_HTTP_INSTANCE_HEADER = 'x-agent-device-instance';
 export const DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER = 'x-agent-device-upstream-instance';
 export const DAEMON_HTTP_INSTANCE_MISMATCH_HEADER = 'x-agent-device-instance-mismatch';
+
+/** Why a daemon, the proxy, or a client refuses a request addressed to another daemon instance. */
+export const DAEMON_INSTANCE_REASONS = {
+  // The daemon or proxy behind the remote URL was replaced since the client last read its health,
+  // so it refused a request addressed to the earlier instance. The client refreshes health and
+  // resends at most once; this reaches the caller when that resend is refused too.
+  instanceMismatch: { reason: 'remote_instance_mismatch' },
+} as const satisfies ReasonTable<'remote connection'>;
+
+/**
+ * The checked RPC route (ADR 0006). It takes the same auth, body and answer as `/rpc`, and the
+ * server itself refuses a call on another RPC protocol before it dispatches anything. A server that
+ * predates the route answers 404 before dispatch.
+ */
+export const DAEMON_HTTP_CHECKED_RPC_ROUTE = '/rpc/checked';
+/** The `/health` capability of a daemon or proxy that serves the checked route. */
+export const DAEMON_HTTP_CHECKED_RPC_CAPABILITY = 'checked-rpc';
+/** The caller's `DAEMON_RPC_PROTOCOL_VERSION`. The checked route refuses a call without it. */
+export const DAEMON_HTTP_RPC_PROTOCOL_HEADER = 'x-agent-device-rpc-protocol';
+/** Which checked-route precondition refused a call. It comes only on a 409, before dispatch. */
+export const DAEMON_HTTP_REFUSAL_HEADER = 'x-agent-device-refusal';
+export const DAEMON_HTTP_REFUSALS = {
+  /** The call named no readable RPC protocol. */
+  protocolMissing: 'protocol-missing',
+  /** The daemon or proxy that answered speaks another RPC protocol. */
+  protocolMismatch: 'protocol-mismatch',
+  /** A proxy forwards the protocol refusal of the daemon behind it. */
+  upstreamProtocolMismatch: 'upstream-protocol-mismatch',
+} as const;
+/** The refusals a checked call's own protocol header can earn. */
+export type CheckedRpcProtocolRefusal =
+  | typeof DAEMON_HTTP_REFUSALS.protocolMissing
+  | typeof DAEMON_HTTP_REFUSALS.protocolMismatch;
+
+/** Why a checked RPC call failed. */
+export const DAEMON_CHECKED_RPC_REASONS = {
+  // The checked RPC call named no RPC protocol. An intermediary that strips request headers causes
+  // this.
+  protocolMissing: { reason: 'remote_rpc_protocol_missing' },
+  // The daemon or proxy speaks a different RPC protocol from the caller. After authentication,
+  // `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused.
+  protocolMismatch: { reason: 'remote_rpc_protocol_mismatch' },
+  // The connection sets `daemonRpc: checked`, but the remote does not serve checked RPC: `connect`
+  // found no `checked-rpc` capability in its `/health`, or a command got the route answered as
+  // unknown. A command is never resent, because an ingress may have answered for one that ran.
+  // Update the remote daemon or proxy, or remove `daemonRpc` from the connection.
+  routeUnsupported: { reason: 'remote_checked_rpc_unsupported' },
+} as const satisfies ReasonTable<'remote connection'>;
+
+/**
+ * The protocol refusal of a checked call on this build, or `undefined` when its protocol matches. A
+ * header that is absent or not a plain integer is `protocol-missing`.
+ */
+export function checkedRpcProtocolRefusal(
+  headerValue: unknown,
+): CheckedRpcProtocolRefusal | undefined {
+  if (typeof headerValue !== 'string' || !/^[0-9]{1,9}$/.test(headerValue)) {
+    return DAEMON_HTTP_REFUSALS.protocolMissing;
+  }
+  return Number(headerValue) === DAEMON_RPC_PROTOCOL_VERSION
+    ? undefined
+    : DAEMON_HTTP_REFUSALS.protocolMismatch;
+}
+
+/**
+ * The JSON-RPC id a checked-route refusal echoes: a bounded correlation token or a safe integer.
+ * Anything else, such as an object, a URL or a long string, is answered as `null`.
+ */
+export function checkedRpcRefusalId(id: unknown): string | number | null {
+  if (typeof id === 'number') return Number.isSafeInteger(id) ? id : null;
+  return typeof id === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(id) ? id : null;
+}
+
+/** The refusing side of a protocol refusal, named in the `/health` vocabulary. */
+export type CheckedRpcRefusalSide = Pick<
+  DaemonHealthPayload,
+  'service' | 'version' | 'rpcProtocolVersion'
+>;
+
+/** The refusing side a protocol refusal names, or `undefined` unless every value is bounded and valid. */
+export function readCheckedRpcRefusalSide(details: unknown): CheckedRpcRefusalSide | undefined {
+  if (!details || typeof details !== 'object') return undefined;
+  const { service, version, rpcProtocolVersion } = details as Record<string, unknown>;
+  if (service !== 'agent-device-daemon' && service !== 'agent-device-proxy') return undefined;
+  // The whole string is capped first, at the length the `/health` reader allows a version.
+  if (
+    typeof version !== 'string' ||
+    version.length > 64 ||
+    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]{1,48})?$/.test(version)
+  ) {
+    return undefined;
+  }
+  if (typeof rpcProtocolVersion !== 'number' || !Number.isSafeInteger(rpcProtocolVersion)) {
+    return undefined;
+  }
+  return { service, version, rpcProtocolVersion };
+}
+
+/**
+ * The JSON-RPC body of a protocol refusal, built from local values only: the refusal's reason,
+ * `dispatched: 'no'`, a bounded id, and the refusing side when the caller passed authentication.
+ */
+export function buildCheckedRpcProtocolRefusal(
+  id: unknown,
+  refusal: CheckedRpcProtocolRefusal | typeof DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch,
+  side?: CheckedRpcRefusalSide,
+) {
+  const missing = refusal === DAEMON_HTTP_REFUSALS.protocolMissing;
+  const message = missing
+    ? `Checked RPC requires the ${DAEMON_HTTP_RPC_PROTOCOL_HEADER} header`
+    : 'The remote speaks a different RPC protocol from the caller';
+  const reason = missing
+    ? DAEMON_CHECKED_RPC_REASONS.protocolMissing.reason
+    : DAEMON_CHECKED_RPC_REASONS.protocolMismatch.reason;
+  return {
+    jsonrpc: '2.0' as const,
+    id: checkedRpcRefusalId(id),
+    error: {
+      code: -32001,
+      message,
+      data: {
+        code: 'COMMAND_FAILED',
+        message,
+        details: { reason, dispatched: 'no', ...side },
+      },
+    },
+  };
+}
 
 export function buildDaemonInstanceMismatchRpcResponse<Id>(
   id: Id,

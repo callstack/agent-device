@@ -3,6 +3,7 @@ export { assertResolvedAppsFilter, resolveAppsFilter } from '../app-inventory.ts
 export type { AppsFilter } from '../app-inventory.ts';
 export type { AppStateCommandResult } from '../app-state.ts';
 export {
+  DEVICE_CLAIM_CONFLICT_REASONS,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   WEB_DESKTOP_DEVICE,
   countDeviceInventoryByGroup,
@@ -53,8 +54,18 @@ export {
   HARDWARE_BUTTON_NAME_LABELS,
   HARDWARE_BUTTON_USAGE,
   parseHardwareButtonPositionals,
+  LOCK_SCREEN_ACTIONS,
+  LOCK_SCREEN_REASONS,
+  LOCK_SCREEN_STATES,
+  LOCK_SCREEN_USAGE,
+  parseLockScreenPositionals,
 } from '../device-rotation.ts';
-export type { HardwareButton, HardwareButtonName } from '../device-rotation.ts';
+export type {
+  HardwareButton,
+  HardwareButtonName,
+  LockScreenAction,
+  LockScreenState,
+} from '../device-rotation.ts';
 export {
   TELEPHONY_ACTIONS,
   TELEPHONY_CALL_ACTIONS,

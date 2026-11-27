@@ -1,3 +1,5 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
+
 export const ALERT_POLL_INTERVAL_MS = 300;
 /**
  * The minimum budget for a retry of `alert accept` or `alert dismiss` through the XCTest runner.
@@ -32,25 +34,15 @@ export const ALERT_ACTION_RETRY_MS = 2_000;
 export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
 
 /**
- * `alert wait` was given a window longer than the command can honour. The request envelope is a
- * timer too, and it is armed above the window with the daemon-result margin, so past that ceiling
- * the wait would be cut off mid-window or misfire at 1 ms. The command refuses the window before
- * anything runs, with `details.maxWaitWindowMs` naming what it will accept; it never shortens the
- * window the caller asked for.
- */
-export const ALERT_WAIT_WINDOW_TOO_LONG_REASON = 'alert-wait-window-too-long';
-
-/**
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
  * Both Apple backends state it in typed form — the XCTest runner as this `ErrorPayload.code`
  * (surfacing as `details.runnerErrorCode`, like `RUNNER_BUSY`, without changing the wire error
- * code), the macOS helper as details.reason — and so does the tree-based Android acting leg
- * (through the shared driver), as this `details.reason` paired with `dispatched:
- * 'no'`. Retry and the fallback hint key on these, never on the message text: a transport,
- * runner or helper failure must never read as an absent alert.
+ * code), the macOS helper as `ALERT_REFUSAL_REASONS.notFound` in details.reason — and so does the
+ * tree-based Android acting leg (through the shared driver), as that `details.reason` paired with
+ * `dispatched: 'no'`. Retry and the fallback hint key on these, never on the message text: a
+ * transport, runner or helper failure must never read as an absent alert.
  */
 export const ALERT_NOT_FOUND_RUNNER_CODE = 'ALERT_NOT_FOUND';
-export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 
 /**
  * The Apple XCUITest runner could not complete required alert acquisition: a query failed,
@@ -60,22 +52,49 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
 
 /**
- * The acting leg's confirm budget ran out after a press landed without settling whether the
- * alert is gone: the dialog was seen standing again after the press ("did not dismiss"), or no
- * post-press read ever resolved to an answer ("could not be confirmed"). Typed so a caller can
- * tell "a press went out and the screen never proved it worked" from absence or an
- * unresolvable capture. The lookup never answers with it — a budget ends its loop, it does not
- * cancel a started capture — so a quiet screen is always `alert-not-found`.
+ * The alert family's refusals. The tree-based acting leg raises most of them through the shared
+ * tree driver in `capture-kit/alert-tree-driver.ts`: before anything was pressed (no alert, no
+ * candidate, or no single choice), and after a press the confirm window never settled. The
+ * pre-press rows answer with `dispatched: 'no'`; callers branch on `error.details.reason` instead
+ * of the prose.
  */
-export const ALERT_WINDOW_EXPIRED_REASON = 'alert-window-expired';
-
-/**
- * `alert wait` saw no actionable alert within its window and no stronger typed failure applies. A
- * backend that ends the window on a typed refusal, such as the Apple runner's `ALERT_UNRESOLVED`
- * for an unreadable prompt, reports that refusal instead. A caller tells a timed-out wait from a
- * transport failure by reason, not by message.
- */
-export const ALERT_WAIT_TIMEOUT_REASON = 'alert-wait-timeout';
+export const ALERT_REFUSAL_REASONS = {
+  // No alert was visible to `alert accept` or `alert dismiss`, from the tree-based driver or the
+  // macOS helper, so nothing was pressed. Retry once the alert shows, or inspect `snapshot -i`.
+  notFound: { reason: 'alert-not-found' },
+  /**
+   * A backend that ends the window on a typed refusal, such as the Apple runner's
+   * `ALERT_UNRESOLVED` for an unreadable prompt, reports that refusal instead. A caller tells a
+   * timed-out wait from a transport failure by reason, not by message.
+   */
+  // `alert wait` saw no actionable alert within its window.
+  waitTimeout: { reason: 'alert-wait-timeout' },
+  /**
+   * The acting leg (`alert accept|dismiss`) refuses after seeing an alert: the visible buttons
+   * name no single choice for the asked-for action. `dispatched: 'no'` states the refusal ran
+   * before any press.
+   */
+  // The sheet's buttons name no single choice for the asked-for action.
+  buttonUndecided: { reason: 'alert_button_undecided' },
+  /**
+   * The acting leg refuses before it has a candidate at all: the capture was alert-shaped but
+   * unresolvable (degraded buttons, competing sheets, an unverifiable owner). This is not absence —
+   * reporting `alert-not-found` over it would state more than the capture supports — and confirming
+   * a dismissal must never accept such a capture as proof of absence.
+   */
+  // The capture is alert-shaped but resolves to no single alert.
+  captureUndecided: { reason: 'alert_capture_undecided' },
+  /**
+   * The confirm budget ran out after a press landed without settling whether the alert is gone:
+   * the dialog was seen standing again after the press ("did not dismiss"), or no post-press read
+   * ever resolved to an answer ("could not be confirmed"). Typed so a caller can tell "a press
+   * went out and the screen never proved it worked" from absence or an unresolvable capture. The
+   * lookup never answers with it — a budget ends its loop, it does not cancel a started capture —
+   * so a quiet screen is always `alert-not-found`.
+   */
+  // A press went out but the confirm window never settled whether the alert is gone.
+  windowExpired: { reason: 'alert-window-expired' },
+} as const satisfies ReasonTable<'alert'>;
 
 /** What an `alert get` capture resolved to, typed so clients switch on states, not messages. */
 export type AlertStatusKind = 'visible' | 'none' | 'undecided';
@@ -199,22 +218,6 @@ export function selectRankedAlertButtonByRole<
   if (!first || (second && second.rank === first.rank)) return null;
   return first.button;
 }
-
-/**
- * The reason a tree-based acting leg (`alert accept|dismiss`) refuses after seeing an alert: the
- * visible buttons name no single choice for the asked-for action. Callers branch on
- * `error.details.reason` instead of the prose; `dispatched: 'no'` states the refusal ran before
- * any press.
- */
-export const ALERT_BUTTON_UNDECIDED_REASON = 'alert_button_undecided';
-
-/**
- * The reason a tree-based acting leg refuses before it has a candidate at all: the capture was
- * alert-shaped but unresolvable (degraded buttons, competing sheets, an unverifiable owner).
- * This is not absence — reporting `alert-not-found` over it would state more than the capture
- * supports — and confirming a dismissal must never accept such a capture as proof of absence.
- */
-export const ALERT_CAPTURE_UNDECIDED_REASON = 'alert_capture_undecided';
 
 export const ALERT_ACTIONS = ['get', 'accept', 'dismiss', 'wait'] as const;
 export type AlertAction = (typeof ALERT_ACTIONS)[number];

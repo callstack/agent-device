@@ -1,3 +1,4 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
 import { resolveBoundFocusRuntime } from './focus-runtime.ts';
 import { resolveBoundScrollRuntime } from './scroll-runtime.ts';
@@ -16,6 +17,11 @@ import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundFoldRuntime } from './fold-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+
+const GENERIC_ROUTE_REASONS = {
+  // The command reached the generic route, which has no runtime execution for it.
+  runtimeMissing: { reason: 'generic-route-runtime-missing' },
+} as const satisfies ReasonTable<'daemon runtime'>;
 
 /**
  * The generic route's runtime-owned leaves (ADR 0019). Each one admits its own exact owner facts
@@ -42,7 +48,7 @@ export async function resolveGenericRuntimeExecution(
   if (isSystemButtonRouteCommand(params.req.command)) {
     return await resolveBoundSystemButtonRuntime(params.req.command, {
       device: params.session.device,
-      // Only `hardware-button` reads these; the resolver owns the arity refusal for a miss.
+      // Only `hardware-button` and `lock-screen` read these; their resolvers own the arity refusal.
       positionals: params.req.positionals,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
@@ -136,7 +142,7 @@ export async function resolveGenericRuntimeExecution(
         response: errorResponse(
           'COMMAND_FAILED',
           `${params.req.command} has no runtime execution on the generic route`,
-          { reason: 'generic-route-runtime-missing' },
+          { reason: GENERIC_ROUTE_REASONS.runtimeMissing.reason },
         ),
       };
   }

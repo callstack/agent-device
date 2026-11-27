@@ -33,6 +33,12 @@ extension RunnerTests {
           )
         target.litPanelSurface = self.litPanelState.surface
         target.refusesSystemAlertSubstitution = context.observation != nil
+        // Snapshot commands skip `executePrepared`, which starts every other command without a
+        // cached screen size, so a display change between snapshots is read again.
+        self.mainOwned.soleDisplayPortraitSize = nil
+        if self.requestLitPanel == nil {
+          target.soleScreenSize = self.commandSoleScreenSize()
+        }
         return .capture(
           target,
           systemSurface: context.systemSurface,
@@ -167,7 +173,7 @@ extension RunnerTests {
         timeout: 1,
         timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
-        self.mainOwned.needsPostSnapshotInteractionDelay = true
+        self.beginPostSnapshotInteractionStabilization()
       }
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_FAILED=%@", String(describing: error))

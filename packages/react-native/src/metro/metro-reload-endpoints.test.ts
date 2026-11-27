@@ -1,6 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parsePort, resolveMetroReloadEndpoints } from './metro-reload-endpoints.ts';
+import {
+  isMetroTargetBound,
+  parsePort,
+  resolveMetroReloadEndpoints,
+} from './metro-reload-endpoints.ts';
 
 test('a Metro port is a whole number from 1 to 65535', () => {
   assert.equal(parsePort('8082', 8081), 8082);
@@ -8,6 +12,26 @@ test('a Metro port is a whole number from 1 to 65535', () => {
   for (const value of ['8081oops', '80.5', '0', '65536', '-1']) {
     assert.throws(() => parsePort(value, 8081), /Invalid Metro port/, value);
   }
+});
+
+test('nothing named counts as no binding, a blank value included', () => {
+  assert.equal(isMetroTargetBound({}), false);
+  assert.equal(isMetroTargetBound({ runtime: {} }), false);
+  // `parsePort` reads an empty port as absent, and so does this: an empty flag must reach discovery
+  // rather than resolving to the default address.
+  assert.equal(isMetroTargetBound({ metroPort: '' }), false);
+  assert.equal(isMetroTargetBound({ metroPort: '  ' }), false);
+  assert.equal(isMetroTargetBound({ metroHost: '   ' }), false);
+  assert.equal(isMetroTargetBound({ bundleUrl: '' }), false);
+});
+
+test('any one named address is a binding, from a flag or from the session', () => {
+  assert.equal(isMetroTargetBound({ metroPort: 8082 }), true);
+  assert.equal(isMetroTargetBound({ metroPort: '8082' }), true);
+  assert.equal(isMetroTargetBound({ metroHost: '10.0.0.5' }), true);
+  assert.equal(isMetroTargetBound({ bundleUrl: 'http://10.0.0.5:8082/index.bundle' }), true);
+  assert.equal(isMetroTargetBound({ runtime: { metroPort: 8082 } }), true);
+  assert.equal(isMetroTargetBound({ runtime: { bundleUrl: 'http://10.0.0.5:8082' } }), true);
 });
 
 test('reload endpoint resolution prioritizes explicit flags, then session runtime hints, then defaults', () => {

@@ -1,0 +1,4 @@
+# 5055 part-b replay: open an already-foreground target under a 3s request deadline
+context platform=harmonyos
+open com.sankuai.dianping
+close

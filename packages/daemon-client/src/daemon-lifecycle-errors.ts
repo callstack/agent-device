@@ -4,7 +4,7 @@ import type { DaemonIdentity } from '@agent-device/contracts/client';
 import {
   DAEMON_LIFECYCLE_REASONS,
   embeddedCloseHint,
-  DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+  DAEMON_RETIREMENT_REASONS,
   type DaemonLifecycleCensus,
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -14,6 +14,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo, DaemonTakeoverCause } from './daemon-client-metadata.ts';
+import type { LoopbackConnectDenial } from './daemon-client-loopback-probe.ts';
 import { resolveLocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 
 // The ways an explicit lifecycle stops short of a usable daemon, as this client judges it. A busy
@@ -45,8 +46,17 @@ export const DAEMON_UNAVAILABLE_REASONS = {
   bindingMismatch: { reason: 'daemon-binding-mismatch' },
   // The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names.
   policyMismatch: { reason: 'DAEMON_POLICY_MISMATCH' },
-  // The daemon process ended before it registered a reachable endpoint.
+  // The daemon process ended before it registered a reachable endpoint, for a cause other than a
+  // denied loopback listen.
   startupExited: { reason: 'startup-exited' },
+  // The daemon process ended because the host refused its loopback listen, as a sandbox around the
+  // launching command does.
+  startupListenDenied: { reason: 'startup-listen-denied' },
+  // The host refused this client's loopback connect to the registered daemon with `EPERM` or `EACCES`,
+  // as a sandbox around it does; `details.daemon` names the daemon left alone. A refusal found after a
+  // request was written also records `details.daemonRequestSent`, because that request may have run. A
+  // connect that failed with another errno is ordinary unreachability.
+  connectDenied: { reason: 'daemon-connect-denied' },
   // The daemon stayed registered and reachable but never reported the startup phase that follows.
   startupStalled: { reason: 'startup-stalled' },
   // Startup passed the ceiling its own startup budget allows, so this client stopped waiting.
@@ -58,6 +68,12 @@ export const DAEMON_CLIENT_CONFIG_REASONS = {
   // The client named both a pinned daemon instance and a daemon base URL, which answer "which
   // daemon" two different ways.
   bindingWithBaseUrl: { reason: 'daemon_binding_with_remote_base_url' },
+  // The daemon server mode this client would start opens no listener its own transport preference
+  // will call, so the client starts, retires and quiesces nothing; `details.daemonServerMode` and
+  // `details.daemonTransport` are the two settings that cannot be satisfied together.
+  serverModeServesNoClientTransport: {
+    reason: 'daemon_server_mode_serves_no_client_transport',
+  },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {
@@ -112,6 +128,10 @@ export function remoteDaemonUnavailableError(params: {
   });
 }
 
+/** What a caller does about a remote daemon that answers nothing. */
+export const REMOTE_DAEMON_UNREACHABLE_HINT =
+  'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.';
+
 /** A daemon won a startup race that this caller may not settle by retiring it. */
 export function daemonContendedError(): AppError {
   return new AppError(
@@ -119,6 +139,36 @@ export function daemonContendedError(): AppError {
     'Another process started a daemon while this one was starting.',
     {
       reason: DAEMON_UNAVAILABLE_REASONS.contended.reason,
+    },
+  );
+}
+
+/**
+ * The refusal when the server mode this client would start opens no listener its own transport
+ * preference will call. Nothing is started, retired or quiesced: the caller fixes one of the two
+ * settings instead of reading an unavailable endpoint for a daemon that was started and taken away
+ * again. `details` names both settings, because either one is the way out.
+ */
+export function daemonServerModeServesNoClientTransportError(
+  settings: Pick<DaemonClientSettings, 'serverMode' | 'transportPreference'>,
+): AppError {
+  const { serverMode, transportPreference } = settings;
+  const wantsHttp = transportPreference === 'http';
+  const listener = wantsHttp ? 'HTTP' : 'socket';
+  const serving = wantsHttp ? 'http' : 'socket';
+  return new AppError(
+    'INVALID_ARGS',
+    `A daemon started in server mode "${serverMode}" serves no ${listener} endpoint, and this client requires ${transportPreference} transport.`,
+    {
+      reason: DAEMON_CLIENT_CONFIG_REASONS.serverModeServesNoClientTransport.reason,
+      daemonTransport: transportPreference,
+      daemonServerMode: serverMode,
+      hint:
+        'Clear the server mode in every place it is set: `--daemon-server-mode` and ' +
+        '`AGENT_DEVICE_DAEMON_SERVER_MODE` each override the default, so one left behind still ' +
+        `starts this daemon. Or name the mode that answers ${transportPreference} transport ` +
+        `("${serving}" or "dual"), or the transport that mode does answer with ` +
+        '`--daemon-transport`.',
     },
   );
 }
@@ -137,7 +187,7 @@ export function daemonRetirementUnconfirmedError(
   paths: DaemonPaths,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
-    reason: 'daemon_retirement_unconfirmed',
+    reason: DAEMON_RETIREMENT_REASONS.retirementUnconfirmed.reason,
     retirement,
     hint: retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
   });
@@ -220,6 +270,41 @@ export function daemonBusyError(
   });
 }
 
+/**
+ * The answer to a loopback endpoint the host refused, whether the daemon's listen or a client's
+ * connect. One owner for both: a sandboxed agent reads it to ask for host access instead of giving up.
+ */
+export const DAEMON_LOOPBACK_DENIED_HINT =
+  'The host denied agent-device a loopback port on 127.0.0.1 (connect or listen EPERM or EACCES). ' +
+  'A sandbox around this command likely blocks local ports and simulator access. Run agent-device ' +
+  "outside the sandbox: allow the agent-device command in the agent's sandbox rules, or rerun it " +
+  'with host access (escalated permissions).';
+
+/**
+ * The refusal when the host denied this client's connect to the registered daemon. The daemon keeps
+ * running: this client saw nothing of it, so it replaced, retired and signaled nothing.
+ */
+export function daemonConnectDeniedError(params: {
+  info: DaemonInfo;
+  denial: LoopbackConnectDenial;
+  stateDir: string;
+}): AppError {
+  const { info, denial, stateDir } = params;
+  return new AppError(
+    'COMMAND_FAILED',
+    `The host denied this client a connect to the daemon's loopback endpoint on 127.0.0.1:${denial.port}.`,
+    {
+      reason: DAEMON_UNAVAILABLE_REASONS.connectDenied.reason,
+      stateDir,
+      daemon: daemonIdentityOf(info),
+      transport: denial.transport,
+      port: denial.port,
+      errno: denial.errno,
+      hint: DAEMON_LOOPBACK_DENIED_HINT,
+    },
+  );
+}
+
 /** Refuses replacement when the record cannot prove a detached owner. */
 function daemonRecordOwnerUnrecognizedError(params: {
   info: DaemonIdentity;
@@ -230,7 +315,7 @@ function daemonRecordOwnerUnrecognizedError(params: {
     'COMMAND_FAILED',
     'This daemon record states an owner this version cannot read, so this client did not replace it.',
     {
-      reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+      reason: DAEMON_RETIREMENT_REASONS.ownerUnrecognized.reason,
       stateDir,
       daemon: daemonIdentityOf(info),
       hint: `Update agent-device if the record comes from a newer build. Otherwise check what owns pid ${info.pid}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`,

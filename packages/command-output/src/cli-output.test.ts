@@ -50,6 +50,7 @@ const FORMATTER_COMMANDS = [
   'fill',
   'find',
   'fold',
+  'gesture',
   'get',
   'hardware-button',
   'home',
@@ -58,6 +59,7 @@ const FORMATTER_COMMANDS = [
   'install-from-source',
   'is',
   'keyboard',
+  'lock-screen',
   'logs',
   'longpress',
   'metro',
@@ -76,6 +78,7 @@ const FORMATTER_COMMANDS = [
   'shake',
   'shutdown',
   'snapshot',
+  'swipe',
   'telephony',
   'tv-remote',
   'viewport',
@@ -236,6 +239,18 @@ describe('the two stdout contracts in one run', () => {
     );
     expect(output.text).toBe('General');
     expect(output.stderr).toContain(`Warning: ${REPAIR_WARNING}`);
+  });
+
+  test('find focus/type routes a non-hittable target hint through warnings without polluting stdout', async () => {
+    const hint =
+      'The resolved element reports hittable: false, so this focus may have had no visible effect.';
+    const output = await render(
+      'find',
+      { message: 'Focused (60, 40)', x: 60, y: 40, targetHittable: false, hint },
+      { query: 'Continue', action: 'focus' },
+    );
+    expect(output.text).toBe('Focused (60, 40)');
+    expect(output.stderr).toBe(`Warning: ${hint}\n`);
   });
 
   test('is prints the disclosure after its verdict on stdout', async () => {

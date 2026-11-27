@@ -1,13 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
+import {
+  createClaimRecoveryDisposalTracker,
   createOwnerScopedDeviceClaimReconciler,
   type OwnerScopedClaimRecovery,
 } from './device-claim-owner-recovery.ts';
+import { createRecoveryPlatformScope } from './recovery-platform-scope.ts';
 import type { DeviceClaim } from './device-claims.ts';
 import { resolveDeviceClaimPath } from './device-claim-paths.ts';
 import { writeDeviceClaim } from './device-claim-store.ts';
@@ -17,6 +23,7 @@ function fixture(
   reconcile: OwnerScopedClaimRecovery['reconcile'],
   failureCount: 1 | 2,
   failureDetails: Record<string, unknown> = {},
+  disposeAfter: Promise<void> = Promise.resolve(),
 ) {
   const stateDir = mkdtempForTestSync('claim-recovery-dispose-');
   const claim: DeviceClaim = {
@@ -65,6 +72,7 @@ function fixture(
   const reconcileOnce = vi.fn(reconcile);
   const emit = vi.fn();
   const dispose = vi.fn(async () => {
+    await disposeAfter;
     throw cleanupError;
   });
   const recovery = createOwnerScopedDeviceClaimReconciler({
@@ -77,6 +85,7 @@ function fixture(
       throw new Error('the supplied recovery owns composition');
     },
     composeRecovery: () => ({ reconcile: reconcileOnce, dispose }),
+    trackDisposal: () => {},
   });
   const claimPath = resolveDeviceClaimPath(claim.deviceKey, env);
   const claimBytes = fs.readFileSync(claimPath, 'utf8');
@@ -320,3 +329,240 @@ test.each([
     expect(f.dispose).toHaveBeenCalledOnce();
   },
 );
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const DISPOSE_BUDGET_MS = 5_000;
+
+test.each(['reconciled', 'retained', 'primary-error'] as const)(
+  'a %s outcome survives disposal outliving its budget, and the late failure is still observed',
+  async (outcome) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const primary = new AppError('DEVICE_IN_USE', 'reconciliation refused', {
+      reason: 'primary-refusal',
+    });
+    const retained = { status: 'retained', reason: 'screen-recording-owner-mismatch' } as const;
+    let releaseDispose!: () => void;
+    const f = fixture(
+      async () => {
+        if (outcome === 'primary-error') throw primary;
+        return outcome === 'retained' ? retained : { status: 'reconciled' };
+      },
+      1,
+      {},
+      new Promise<void>((resolve) => {
+        releaseDispose = resolve;
+      }),
+    );
+    const settlement = settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env);
+    const expectation =
+      outcome === 'primary-error'
+        ? expect(settlement).rejects.toBe(primary)
+        : expect(settlement).resolves.toEqual(
+            outcome === 'retained'
+              ? retained
+              : { status: 'retained', reason: 'recovery-dispose-pending' },
+          );
+
+    await vi.advanceTimersByTimeAsync(DISPOSE_BUDGET_MS);
+    await expectation;
+    expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
+    expect(f.emit).toHaveBeenCalledOnce();
+    expect(f.emit).toHaveBeenCalledWith({
+      level: 'warn',
+      phase: 'device_claim_recovery_dispose_pending',
+      data: {
+        deviceKey: f.claim.deviceKey,
+        ownerSession: f.claim.session,
+        budgetMs: DISPOSE_BUDGET_MS,
+        ...(outcome === 'retained' ? { retainedReason: retained.reason } : {}),
+      },
+    });
+
+    releaseDispose();
+    await vi.waitFor(() => expect(f.emit).toHaveBeenCalledTimes(2));
+    expect(f.emit).toHaveBeenLastCalledWith({
+      level: 'error',
+      phase: 'device_claim_recovery_dispose_failed',
+      data: expect.objectContaining({
+        deviceKey: f.claim.deviceKey,
+        afterBudget: true,
+        ...(outcome === 'retained' ? { retainedReason: retained.reason } : {}),
+        error: expect.objectContaining({
+          details: expect.objectContaining({ reason: 'platform-owner-shutdown-failed' }),
+        }),
+      }),
+    });
+    expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
+    expect(f.dispose).toHaveBeenCalledOnce();
+  },
+);
+
+test('a late disposal failure after a non-debug request flush is still persisted to the log file', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const stateDir = mkdtempForTestSync('claim-recovery-late-flush-');
+  const logPath = path.join(stateDir, 'request.ndjson');
+  const claim: DeviceClaim = {
+    schemaVersion: 3,
+    claimOwnerKind: 'open-session',
+    deviceKey: 'local:android:none:emulator-5554',
+    device: { family: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+    session: 'owner-session',
+    workspace: '/worktrees/dead',
+    stateDir,
+    ownerPid: 999_999_999,
+    ownerStartTime: 'dead-start',
+    ownerToken: 'claim-token',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
+  const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+  writeDeviceClaim(claim, env);
+  let rejectDispose!: (error: unknown) => void;
+  const disposePromise = new Promise<void>((_resolve, reject) => {
+    rejectDispose = reject;
+  });
+  const reconcile = createOwnerScopedDeviceClaimReconciler({
+    scope: createRecoveryPlatformScope(),
+    composeGateway: () => {
+      throw new Error('composeRecovery replaces gateway construction');
+    },
+    composeRecovery: () => ({
+      reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
+      dispose: async () => await disposePromise,
+    }),
+    trackDisposal: () => {},
+  });
+
+  await withDiagnosticsScope(
+    { session: 'default', requestId: 'req-late-flush', command: 'open', debug: false, logPath },
+    async () => {
+      const settlement = settleVerifiedOrphanedClaim(claim, reconcile, env);
+      await vi.advanceTimersByTimeAsync(DISPOSE_BUDGET_MS);
+      await expect(settlement).resolves.toEqual({
+        status: 'retained',
+        reason: 'app-log-cleanup-pending',
+      });
+      flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+
+  const readPhases = () =>
+    fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> });
+
+  expect(readPhases().map((entry) => entry.phase)).toEqual([
+    'device_claim_recovery_dispose_pending',
+  ]);
+
+  rejectDispose(
+    new AppError('COMMAND_FAILED', 'Delayed owner shutdown failed', {
+      reason: 'platform-owner-shutdown-failed',
+    }),
+  );
+
+  await vi.waitFor(() => {
+    const entries = readPhases();
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'device_claim_recovery_dispose_failed',
+          data: expect.objectContaining({
+            afterBudget: true,
+            retainedReason: 'app-log-cleanup-pending',
+          }),
+        }),
+      ]),
+    );
+  });
+});
+
+test('a post-budget disposal is handed to trackDisposal and logs settled on late fulfillment', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const stateDir = mkdtempForTestSync('claim-recovery-late-settled-');
+  const logPath = path.join(stateDir, 'request.ndjson');
+  const claim: DeviceClaim = {
+    schemaVersion: 3,
+    claimOwnerKind: 'open-session',
+    deviceKey: 'local:android:none:emulator-5554',
+    device: { family: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+    session: 'owner-session',
+    workspace: '/worktrees/dead',
+    stateDir,
+    ownerPid: 999_999_999,
+    ownerStartTime: 'dead-start',
+    ownerToken: 'claim-token',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
+  const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+  writeDeviceClaim(claim, env);
+  let resolveDispose!: () => void;
+  const disposePromise = new Promise<void>((resolve) => {
+    resolveDispose = resolve;
+  });
+  const disposals = createClaimRecoveryDisposalTracker();
+  const track = vi.fn(disposals.track);
+  const reconcile = createOwnerScopedDeviceClaimReconciler({
+    scope: createRecoveryPlatformScope(),
+    composeGateway: () => {
+      throw new Error('composeRecovery replaces gateway construction');
+    },
+    composeRecovery: () => ({
+      reconcile: async () => ({ status: 'reconciled' }),
+      dispose: async () => await disposePromise,
+    }),
+    trackDisposal: track,
+  });
+
+  await withDiagnosticsScope(
+    { session: 'default', requestId: 'req-late-settled', command: 'open', debug: false, logPath },
+    async () => {
+      const settlement = settleVerifiedOrphanedClaim(claim, reconcile, env);
+      await vi.advanceTimersByTimeAsync(DISPOSE_BUDGET_MS);
+      await expect(settlement).resolves.toEqual({
+        status: 'retained',
+        reason: 'recovery-dispose-pending',
+      });
+      flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+
+  expect(track).toHaveBeenCalledOnce();
+  let drained = false;
+  const draining = disposals.drain().then(() => {
+    drained = true;
+  });
+  await Promise.resolve();
+  expect(drained).toBe(false);
+
+  resolveDispose();
+  await draining;
+  expect(drained).toBe(true);
+
+  const entries = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map(
+      (line) =>
+        JSON.parse(line) as { level: string; phase: string; data?: Record<string, unknown> },
+    );
+  expect(entries).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        level: 'info',
+        phase: 'device_claim_recovery_dispose_settled',
+        data: expect.objectContaining({
+          deviceKey: claim.deviceKey,
+          afterBudget: true,
+        }),
+      }),
+    ]),
+  );
+});

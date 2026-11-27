@@ -1,5 +1,6 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { describeAcceptedValues } from '@agent-device/kernel/source-value';
 import {
   assertCommandPositionalArity,
   getCommandSchema,
@@ -18,7 +19,12 @@ import {
   normalizeCliCommandAlias,
   retiredCliCommandMessage,
 } from '@agent-device/command-registry/cli-command-aliases';
-import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
+import {
+  formatUnknownCommandMessage,
+  formatUnknownFlagMessage,
+  hasSingleCommandSuggestion,
+  UNKNOWN_COMMAND_POINTER,
+} from './command-suggestions.ts';
 
 type ParsedArgs = {
   command: string | null;
@@ -177,11 +183,7 @@ export function finalizeParsedArgs(
   // This ensures "Unknown command" errors take precedence over flag validation errors
   // However, skip this check if --help is provided, since cli.ts will handle it gracefully
   if (parsed.command && !isKnownCliCommandName(parsed.command) && !flags.help) {
-    const hint = suggestCommandFor(parsed.command);
-    const message = hint
-      ? `Unknown command: ${parsed.command}. Did you mean ${hint}?`
-      : `Unknown command: ${parsed.command}`;
-    throw new AppError('INVALID_ARGS', message);
+    throw new AppError('INVALID_ARGS', formatUnknownCommandMessage(parsed.command));
   }
 
   const disallowed = parsed.providedFlags.filter(
@@ -306,7 +308,7 @@ function parseFlagValue(
   }
   if (definition.type === 'enum') {
     if (!definition.enumValues?.includes(value)) {
-      throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
+      throw invalidFlagValue(definition, token, value);
     }
     return { value, consumeNext: inlineValue === undefined };
   }
@@ -314,14 +316,12 @@ function parseFlagValue(
     throw new AppError('INVALID_ARGS', `Flag ${token} requires a value.`);
   }
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
-  }
-  if (typeof definition.min === 'number' && parsed < definition.min) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
-  }
-  if (typeof definition.max === 'number' && parsed > definition.max) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
+  if (
+    !Number.isFinite(parsed) ||
+    (typeof definition.min === 'number' && parsed < definition.min) ||
+    (typeof definition.max === 'number' && parsed > definition.max)
+  ) {
+    throw invalidFlagValue(definition, token, value);
   }
   return {
     value: definition.type === 'int' ? Math.floor(parsed) : parsed,
@@ -331,6 +331,31 @@ function parseFlagValue(
 
 function labelForFlag(token: string): string {
   return token.replace(/^-+/, '');
+}
+
+/** Why the parser refused a flag value before any command ran. */
+const FLAG_VALUE_REFUSAL_REASONS = {
+  // The value is not a number, falls outside the flag's range, or is not one of its enum values.
+  invalid: { reason: 'flag_value_invalid' },
+} as const satisfies ReasonTable<'command flags'>;
+
+function invalidFlagValue(definition: FlagDefinition, token: string, value: string): AppError {
+  // An int flag takes any number in range and floors it, so `--timeout 1.5` is accepted.
+  const accepted =
+    definition.type === 'int'
+      ? `${describeAcceptedValues({ ...definition, type: 'number' })} (rounded down to an integer)`
+      : describeAcceptedValues(definition);
+  return new AppError(
+    'INVALID_ARGS',
+    `Invalid ${labelForFlag(token)}: ${value}. Expected ${accepted}.`,
+    {
+      reason: FLAG_VALUE_REFUSAL_REASONS.invalid.reason,
+      flag: token,
+      ...(definition.type === 'enum'
+        ? { allowed: definition.enumValues }
+        : { min: definition.min, max: definition.max }),
+    },
+  );
 }
 
 function looksLikeFlagToken(value: string): boolean {
@@ -495,6 +520,16 @@ export async function usage(): Promise<string> {
 export async function usageForCommand(command: string): Promise<string | null> {
   const { buildCommandUsageText } = await import('../../commands/schema/cli-help.ts');
   return buildCommandUsageText(normalizeCommandAlias(command));
+}
+
+/**
+ * What a help read for an unknown name prints after its error line: the short
+ * pointer when the suggestion names one command, the root decision card when it
+ * lists several candidates or none.
+ */
+export async function usageForUnknownCommand(command: string): Promise<string> {
+  if (hasSingleCommandSuggestion(command)) return UNKNOWN_COMMAND_POINTER;
+  return `${await usage()}\n`;
 }
 
 /** The one-line synopsis of a command or alias, or `null` for an unknown or retired name. */

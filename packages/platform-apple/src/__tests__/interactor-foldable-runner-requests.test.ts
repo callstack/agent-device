@@ -43,6 +43,10 @@ const DUO_SIMULATOR: DeviceInfo = { ...IOS_SIMULATOR, name: 'iPhone Duo' };
 type InteractorDrive = readonly [DeviceInfo, (interactor: Interactor) => Promise<unknown>];
 
 const INTERACTOR_SITES: Record<string, InteractorDrive> = {
+  'ios-foldable.interactions-gesture-viewport.display': [
+    DUO_SIMULATOR,
+    (i) => i.gestureViewport!('display'),
+  ],
   'ios-foldable.interactions-tap.synthesized': [DUO_SIMULATOR, (i) => i.tap(10, 20)],
   'ios-foldable.interactor-snapshot.lit-panel': [
     DUO_SIMULATOR,

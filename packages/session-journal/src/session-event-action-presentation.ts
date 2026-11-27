@@ -4,6 +4,7 @@ import {
   HARDWARE_BUTTON_NAMES,
   ORIENTATION_REQUESTS,
   TELEPHONY_ACTIONS,
+  LOCK_SCREEN_STATES,
 } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { isTvRemoteButton } from '@agent-device/contracts/tv-remote';
@@ -51,6 +52,8 @@ export function buildStructuredActionSummary(action: SessionAction): string | un
       return buildBackActionSummary(result);
     case PUBLIC_COMMANDS.hardwareButton:
       return buildHardwareButtonActionSummary(result);
+    case PUBLIC_COMMANDS.lockScreen:
+      return buildLockScreenActionSummary(result);
     case PUBLIC_COMMANDS.orientation:
       return buildOrientationActionSummary(result);
     case PUBLIC_COMMANDS.fold:
@@ -122,6 +125,8 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
       });
     case PUBLIC_COMMANDS.hardwareButton:
       return compactDetails({ button: readEnum(result.button, HARDWARE_BUTTON_NAMES) });
+    case PUBLIC_COMMANDS.lockScreen:
+      return compactDetails({ state: readEnum(result.state, LOCK_SCREEN_STATES) });
     case PUBLIC_COMMANDS.gesture:
     case PUBLIC_COMMANDS.swipe:
       return buildGestureActionDetails(result);
@@ -274,6 +279,12 @@ function buildKeyboardActionDetails(result: Record<string, unknown>): Record<str
 function buildHardwareButtonActionSummary(result: Record<string, unknown>): string {
   const button = readEnum(result.button, HARDWARE_BUTTON_NAMES);
   return button === undefined ? 'Pressed hardware button' : `Pressed hardware button ${button}`;
+}
+
+function buildLockScreenActionSummary(result: Record<string, unknown>): string {
+  const state = readEnum(result.state, LOCK_SCREEN_STATES);
+  if (state === undefined) return 'Changed the lock screen';
+  return state === 'locked' ? 'Locked the screen' : 'Unlocked the screen';
 }
 
 function buildTvRemoteActionSummary(result: Record<string, unknown>): string {

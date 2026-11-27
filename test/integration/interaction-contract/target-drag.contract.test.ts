@@ -224,3 +224,51 @@ test(
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
+
+test(
+  scenario('settleObservation'),
+  async () => {
+    const before = runnerPresentedDragEndpointsNodes();
+    const after = before.map((node) =>
+      node.identifier === 'destination'
+        ? { ...node, identifier: 'dropped', label: 'Dropped' }
+        : node,
+    );
+    await withIosContractDaemon(
+      [
+        runnerSnapshotEntry(before),
+        runnerGestureViewportEntry(),
+        runnerSnapshotEntry(before),
+        runnerSnapshotEntry(before),
+        runnerGestureEntry(),
+        { ...runnerSnapshotEntry(after), repeat: true },
+      ],
+      async (daemon) => {
+        const baseline = assertRpcOk(await daemon.callCommand('snapshot'));
+        const data = assertRpcOk(
+          await daemon.callCommand(
+            'gesture',
+            [],
+            { settle: true, settleQuietMs: 25, timeoutMs: 2_000 },
+            { input: { kind: 'drag', source: 'id="source"', destination: 'id="destination"' } },
+          ),
+        );
+        assert.equal(data.kind, 'drag');
+        const settle = data.settle as
+          | import('@agent-device/contracts/interaction').SettleObservation
+          | undefined;
+        assert.ok(settle?.settled, JSON.stringify(settle));
+        assert.ok(settle.waitedMs >= 25);
+        assert.equal(settle.timeoutMs, 2_000);
+        assert.ok(
+          settle.diff?.lines.some(
+            (line) => line.kind === 'added' && line.text.includes('Dropped') && line.ref,
+          ),
+        );
+        assert.ok(typeof settle.refsGeneration === 'number');
+        assert.notEqual(settle.refsGeneration, baseline.refsGeneration);
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);

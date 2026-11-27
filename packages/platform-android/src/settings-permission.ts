@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { shellFragment } from '@agent-device/kernel/device-shell';
 import {
   parsePermissionAction,
   parsePermissionTarget,
@@ -10,6 +11,7 @@ import {
   type PermissionAction,
 } from '@agent-device/contracts/settings-catalog';
 import { runAndroidShell } from './adb.ts';
+import { resolveScopedAndroidAdbBackgroundTransport } from './adb-executor.ts';
 import { androidAdbResultError } from './adb-failure.ts';
 import { readAndroidSdkInt } from './device-sdk-int.ts';
 import {
@@ -218,11 +220,17 @@ async function setAllAndroidPermissions(
   const applied: string[] = [];
   const warnings: string[] =
     requested.length === 0 ? [`${appPackage} declares no permissions, so none was changed.`] : [];
-  for (const unit of allPermissionUnits(requested)) {
-    await applyAllPermissionUnit(
-      { device, appPackage, action, userArgs, grants, applied, warnings },
-      unit,
-    );
+  const ctx: AllUnitContext = {
+    device,
+    appPackage,
+    action,
+    userArgs,
+    grants,
+    applied,
+    warnings,
+  };
+  for (const step of groupAllPermissionSteps(allPermissionUnits(requested))) {
+    await applyAllPermissionStep(ctx, step);
   }
   return {
     permission: 'all',
@@ -241,11 +249,43 @@ type AllUnitContext = {
   warnings: string[];
 };
 
-/** One declared-permission unit: strict appops for notifications, best-effort pm otherwise. */
-async function applyAllPermissionUnit(ctx: AllUnitContext, unit: AllPermissionUnit): Promise<void> {
-  if (unit.kind === 'notification') return await applyAllNotificationsUnit(ctx);
-  if (unit.kind === 'photos') return await applyAllPhotosUnit(ctx);
-  return await applyAllPmUnit(ctx, unit.value);
+type AllPermissionStep =
+  | { kind: 'photos' }
+  | { kind: 'notification' }
+  | { kind: 'pm-batch'; values: readonly string[] };
+
+/**
+ * Merges consecutive `pm` units into one batch step while keeping notification and photos units
+ * in their exact declared positions, so order, warnings, and stop-on-failure boundaries stay identical.
+ */
+function groupAllPermissionSteps(units: readonly AllPermissionUnit[]): AllPermissionStep[] {
+  const steps: AllPermissionStep[] = [];
+  let pendingPm: string[] = [];
+  const flushPm = () => {
+    if (pendingPm.length === 0) return;
+    steps.push({ kind: 'pm-batch', values: pendingPm });
+    pendingPm = [];
+  };
+  for (const unit of units) {
+    if (unit.kind === 'pm') {
+      pendingPm.push(unit.value);
+    } else {
+      flushPm();
+      steps.push(unit);
+    }
+  }
+  flushPm();
+  return steps;
+}
+
+/** One declared-permission step: strict appops for notifications, photos probe, or batched pm. */
+async function applyAllPermissionStep(ctx: AllUnitContext, step: AllPermissionStep): Promise<void> {
+  if (step.kind === 'notification') return await applyAllNotificationsUnit(ctx);
+  if (step.kind === 'photos') return await applyAllPhotosUnit(ctx);
+  if (step.values.length === 1 && ctx.action !== 'reset') {
+    return await applyAllPmUnit(ctx, step.values[0]!);
+  }
+  return await applyAllPmBatch(ctx, step.values);
 }
 
 // Notifications self-clears its reset flags inside `setAndroidNotificationPermission`, so it
@@ -294,6 +334,82 @@ async function applyAllPmUnit(ctx: AllUnitContext, permission: string): Promise<
     return;
   }
   await finishAllUnit(ctx, permission);
+}
+
+async function applyAllPmBatch(ctx: AllUnitContext, permissions: readonly string[]): Promise<void> {
+  const { appPackage, action, userArgs } = ctx;
+  const pmAction: 'grant' | 'revoke' = action === 'grant' ? 'grant' : 'revoke';
+  const clearFlags = action === 'reset';
+  const batch = await import('./settings-permission-batch.ts');
+  const chunks = batch.chunkAndroidPmBatch({
+    pmAction,
+    clearFlags,
+    userArgs,
+    appPackage,
+    permissions,
+    skipPhrases: ANDROID_PM_SKIP_PHRASE_LIST,
+    marker: batch.createAndroidPmBatchMarker(),
+  });
+
+  for (const chunk of chunks) {
+    await applyAllPmBatchChunk(ctx, batch, pmAction, clearFlags, chunk);
+  }
+}
+
+async function applyAllPmBatchChunk(
+  ctx: AllUnitContext,
+  batch: typeof import('./settings-permission-batch.ts'),
+  pmAction: 'grant' | 'revoke',
+  clearFlags: boolean,
+  chunk: readonly string[],
+): Promise<void> {
+  const { device, appPackage, userArgs, warnings } = ctx;
+  const marker = batch.createAndroidPmBatchMarker();
+  const script = batch.buildAndroidPmBatchScript({
+    pmAction,
+    clearFlags,
+    userArgs,
+    appPackage,
+    permissions: chunk,
+    skipPhrases: ANDROID_PM_SKIP_PHRASE_LIST,
+    marker,
+  });
+  // Host adb has no per-call timeout; only scoped remote providers need a capped batch timeout above their 30 s single-call default.
+  const timeoutMs =
+    resolveScopedAndroidAdbBackgroundTransport(device).mode === 'transport-composed'
+      ? batch.androidPmBatchTimeoutMs(chunk.length, clearFlags)
+      : undefined;
+  const batchResult = await runAndroidShell(device, [shellFragment(script)], {
+    allowFailure: true,
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  });
+  const { records, partialStdout, partialStderr } = batch.parseAndroidPmBatchOutput(
+    batchResult.stdout,
+    marker,
+    chunk.length,
+  );
+  for (const record of records) {
+    const permission = chunk[record.index]!;
+    const outcome = classifyPmResult(pmAction, appPackage, permission, record);
+    if (outcome.kind === 'skipped') {
+      warnings.push(`Skipped ${permission} for ${appPackage}: ${outcome.detail}`);
+    } else {
+      // For `reset`, `clear-permission-flags` already ran inside the batch right after exit 0.
+      recordAppliedPermission(ctx, permission);
+    }
+  }
+  if (records.length < chunk.length) {
+    const failedPermission = chunk[records.length]!;
+    throw androidAdbResultError(
+      `Failed to ${pmAction} Android permission ${failedPermission} for ${appPackage}`,
+      {
+        exitCode: batchResult.exitCode !== 0 ? batchResult.exitCode : 1,
+        stdout: partialStdout,
+        stderr: partialStderr + batchResult.stderr,
+      },
+      { appPackage, permission: failedPermission },
+    );
+  }
 }
 
 /** The shared `applied`/relaunch-warning accounting every unit records once it lands. */
@@ -364,13 +480,17 @@ type AndroidPmSkipReason =
   | 'unknown-permission'
   | 'role-managed';
 
-const ANDROID_PM_SKIP_PATTERNS: ReadonlyArray<readonly [RegExp, AndroidPmSkipReason]> = [
-  [/not a changeable permission/, 'not-changeable'],
-  [/has not requested permission/, 'not-requested'],
-  [/is not a runtime permission/, 'not-runtime-permission'],
-  [/unknown permission/, 'unknown-permission'],
-  [/managed by role/, 'role-managed'],
+const ANDROID_PM_SKIP_PHRASES: ReadonlyArray<readonly [string, AndroidPmSkipReason]> = [
+  ['not a changeable permission', 'not-changeable'],
+  ['has not requested permission', 'not-requested'],
+  ['is not a runtime permission', 'not-runtime-permission'],
+  ['unknown permission', 'unknown-permission'],
+  ['managed by role', 'role-managed'],
 ];
+
+const ANDROID_PM_SKIP_PHRASE_LIST: readonly string[] = ANDROID_PM_SKIP_PHRASES.map(
+  ([phrase]) => phrase,
+);
 
 /**
  * The one place `pm` stderr is read to decide whether a refusal is skippable. Every other
@@ -378,7 +498,7 @@ const ANDROID_PM_SKIP_PATTERNS: ReadonlyArray<readonly [RegExp, AndroidPmSkipRea
  */
 function classifyAndroidPmSkip(stderr: string): AndroidPmSkipReason | undefined {
   const text = stderr.toLowerCase();
-  return ANDROID_PM_SKIP_PATTERNS.find(([pattern]) => pattern.test(text))?.[1];
+  return ANDROID_PM_SKIP_PHRASES.find(([phrase]) => text.includes(phrase))?.[1];
 }
 
 type AndroidPmUnitOutcome =
@@ -392,6 +512,22 @@ type AndroidPmSkipAttempt = {
   detail: string;
 };
 
+function classifyPmResult(
+  pmAction: 'grant' | 'revoke',
+  appPackage: string,
+  permission: string,
+  result: Readonly<{ exitCode: number; stdout: string; stderr: string }>,
+): AndroidPmUnitOutcome {
+  if (result.exitCode === 0) return { kind: 'applied' };
+  const reason = classifyAndroidPmSkip(result.stderr);
+  if (reason) return { kind: 'skipped', reason, detail: firstStderrLine(result.stderr) };
+  throw androidAdbResultError(
+    `Failed to ${pmAction} Android permission ${permission} for ${appPackage}`,
+    result,
+    { appPackage, permission },
+  );
+}
+
 async function tryPmUnit(
   device: DeviceInfo,
   pmAction: 'grant' | 'revoke',
@@ -404,14 +540,7 @@ async function tryPmUnit(
     ['pm', pmAction, ...userArgs, appPackage, permission],
     { allowFailure: true },
   );
-  if (result.exitCode === 0) return { kind: 'applied' };
-  const reason = classifyAndroidPmSkip(result.stderr);
-  if (reason) return { kind: 'skipped', reason, detail: firstStderrLine(result.stderr) };
-  throw androidAdbResultError(
-    `Failed to ${pmAction} Android permission ${permission} for ${appPackage}`,
-    result,
-    { appPackage, permission },
-  );
+  return classifyPmResult(pmAction, appPackage, permission, result);
 }
 
 async function tryPhotosUnit(

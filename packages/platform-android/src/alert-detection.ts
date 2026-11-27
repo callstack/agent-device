@@ -52,10 +52,19 @@ export function isAndroidPermissionPackage(packageName: string): boolean {
 const ANDROID_SYSTEM_DIALOG_PACKAGES = new Set(['android', 'com.android.systemui']);
 const ANDROID_ALERT_ID_PATTERN =
   /^android:id\/(?:alertTitle|message|button[123]|parentPanel|buttonPanel|contentPanel)$/i;
-const ANDROID_ALERT_BUTTON_ID_PATTERN = /^android:id\/button[123]$/i;
+/** AlertDialog's buttons, and the ANR dialog's (`AppNotRespondingDialog`) Close app and Wait. */
+const ANDROID_ALERT_BUTTON_ID_PATTERN = /^android:id\/(?:button[123]|aerr_(?:close|wait))$/i;
 const ANDROID_PERMISSION_ID_PATTERN = /(?:^|:)id\/permission_/i;
 const ANDROID_BLOCKING_DIALOG_PATTERN =
   /\b(?:is(?:n't| not) responding|keeps stopping|has stopped|close app|app info)\b/i;
+/**
+ * The ANR dialog's buttons by framework id, which does not depend on the device language: dismiss
+ * presses Close app and accept presses Wait.
+ */
+const ANDROID_ANR_BUTTON_ROLES: ReadonlyMap<string, AlertButtonRole> = new Map([
+  ['android:id/aerr_close', 'dismiss'],
+  ['android:id/aerr_wait', 'accept'],
+]);
 
 /** The AlertController panel that holds a dialog's title, message, and buttons, under the platform or an AppCompat package. */
 export function isAndroidAlertPanelIdentifier(identifier: string | null): boolean {
@@ -295,6 +304,8 @@ function classifyAndroidAlertButtonById(
   if (/(?:^|:)id\/button1$/i.test(identifier)) return 'accept';
   if (/(?:^|:)id\/button2$/i.test(identifier)) return 'dismiss';
   if (/(?:^|:)id\/button3$/i.test(identifier)) return 'neutral';
+  const anrRole = ANDROID_ANR_BUTTON_ROLES.get(identifier);
+  if (anrRole) return anrRole;
   if (ANDROID_GRANT_ID_SHAPE.test(identifier)) return UNDECLARED_GRANT;
   return null;
 }
@@ -376,7 +387,8 @@ function isAndroidSystemDialogNode(node: RawSnapshotNode): boolean {
   const packageName = node.bundleId ?? '';
   return (
     ANDROID_SYSTEM_DIALOG_PACKAGES.has(packageName) &&
-    ANDROID_BLOCKING_DIALOG_PATTERN.test(readNodeText(node))
+    (ANDROID_BLOCKING_DIALOG_PATTERN.test(readNodeText(node)) ||
+      ANDROID_ANR_BUTTON_ROLES.has(node.identifier ?? ''))
   );
 }
 

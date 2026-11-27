@@ -81,6 +81,8 @@ const RUNNER_TRANSPORT_METHODS: Record<
   actionButton: { invoke: (i) => i.actionButton!(), runnerCommand: 'actionButton' },
   volumeUp: { invoke: (i) => i.volumeUp!(), runnerCommand: 'volumeUp' },
   volumeDown: { invoke: (i) => i.volumeDown!(), runnerCommand: 'volumeDown' },
+  lockScreen: { invoke: (i) => i.lockScreen!(), runnerCommand: 'lockScreen' },
+  unlockScreen: { invoke: (i) => i.unlockScreen!(), runnerCommand: 'unlockScreen' },
   tvRemote: { invoke: (i) => i.tvRemote!('select'), runnerCommand: 'remotePress' },
   keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
   keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },
@@ -335,6 +337,22 @@ test('a message-less runner capture leaves its disclosures to the verdict', asyn
   assert.equal('warnings' in result, false);
   assert.deepEqual(result.quality?.customActions, coverage);
   assert.deepEqual(result.quality?.collapsedLeafIndexes, [1]);
+});
+
+test('a runner system-surface capture carries provenance without duplicating the disclosure warning', async () => {
+  const systemSurface = { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' } as const;
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({
+      ...runnerResultFor({ command: 'snapshot' }),
+      systemSurface,
+    }),
+  });
+
+  const result = presentedSnapshot(await interactor.snapshot());
+
+  assert.deepEqual(result.systemSurface, systemSurface);
+  assert.equal('warnings' in result, false);
 });
 
 test('macOS app snapshots preserve runner nodes outside the iOS presentation engine', async () => {

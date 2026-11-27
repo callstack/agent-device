@@ -1,6 +1,14 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { validateRecordedInputVariableName } from '@agent-device/ad-script';
+
+const FILL_RECORDING_REASONS = {
+  // `fill --record-as` needs an armed script recording; open a session with `--save-script` first.
+  recordAsRequiresArmedRecording: { reason: 'fill_record_as_requires_armed_recording' },
+  // `fill --text-stdin` needs `--record-as` or `--no-record` while a recording is armed, so the
+  // stdin text stays out of the script.
+  textStdinUnparameterizedRecording: { reason: 'fill_text_stdin_unparameterized_recording' },
+} as const satisfies ReasonTable<'fill'>;
 
 export function assertRecordedFillParameterization(params: {
   flags: CommandFlags | undefined;
@@ -23,7 +31,7 @@ export function assertRecordedFillParameterization(params: {
     throw new AppError(
       'INVALID_ARGS',
       'fill --record-as requires an armed script recording. Start a fresh session with open --save-script, then retry the fill.',
-      { reason: 'fill_record_as_requires_armed_recording' },
+      { reason: FILL_RECORDING_REASONS.recordAsRequiresArmedRecording.reason },
     );
   }
 }
@@ -42,6 +50,6 @@ function assertStdinFillNotRecordedLiterally(params: {
   throw new AppError(
     'INVALID_ARGS',
     'fill --text-stdin needs --record-as <VAR> or --no-record while script recording is armed, so the stdin text is not published in the script.',
-    { reason: 'fill_text_stdin_unparameterized_recording' },
+    { reason: FILL_RECORDING_REASONS.textStdinUnparameterizedRecording.reason },
   );
 }

@@ -4,7 +4,7 @@ import {
   type DeviceIdentity,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 
 const DEFAULT_UNDURABLE_CLEANUP_TTL_MS = 5 * 60_000;
 
@@ -55,7 +55,7 @@ export function createDurableCaptureAdmissionLedger(
         'COMMAND_FAILED',
         `The existing ${options.displayName.toLowerCase()} resource has process-local unconfirmed ownership`,
         {
-          reason: 'cleanup-unconfirmed',
+          reason: DURABLE_RESOURCE_REASONS.cleanupUnconfirmed.reason,
           hint: `Do not start a replacement in this daemon process: ${block.reason}`,
         },
       );

@@ -48,8 +48,8 @@ export function androidSystemDialogXml(): string {
     rootNode(packageName),
     textNode(1, 'Demo isn&apos;t responding', 'android:id/alertTitle', packageName),
     textNode(2, 'Do you want to close it?', 'android:id/message', packageName),
-    buttonNode(3, 'Close app', 'android:id/button2', '[52,612][180,664]', packageName),
-    buttonNode(4, 'Wait', 'android:id/button1', '[210,612][338,664]', packageName),
+    buttonNode(3, 'Close app', 'android:id/aerr_close', '[52,612][180,664]', packageName),
+    buttonNode(4, 'Wait', 'android:id/aerr_wait', '[210,612][338,664]', packageName),
     '  </node>',
   ]);
 }

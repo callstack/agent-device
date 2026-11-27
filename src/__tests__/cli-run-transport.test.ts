@@ -9,6 +9,9 @@ import {
 import { runCli } from '../cli.ts';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon-client';
 import { makeTempWorkspace } from '@agent-device/test-kit';
+import type { RemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+type RemoteConnectionDaemon = NonNullable<RemoteConnectionState['daemon']>;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -83,4 +86,96 @@ test('a CLI run builds one transport, shared by the remote-materialization clien
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a connection that recorded checked RPC passes the approved target fingerprint with every request', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = path.join(project, 'remote.json');
+  fs.writeFileSync(remoteConfig, JSON.stringify({ daemonRpc: 'checked' }), 'utf8');
+  const now = new Date().toISOString();
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'checked-endpoint',
+      remoteConfigPath: remoteConfig,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfig),
+      daemon: { baseUrl: 'http://127.0.0.1:7001', transport: 'http', checkedRpcTarget: 'fp-7001' },
+      tenant: 'tenant',
+      runId: 'run-checked',
+      connectedAt: now,
+      updatedAt: now,
+    },
+  });
+  const sent: Array<{ daemonRpc?: string; daemonRpcTarget?: string }> = [];
+  const transportForHost = vi.fn(() => async (req: Omit<DaemonRequest, 'token'>) => {
+    sent.push({ daemonRpc: req.flags?.daemonRpc, daemonRpcTarget: req.flags?.daemonRpcTarget });
+    return { ok: true, data: { sessions: [] } } satisfies DaemonResponse;
+  });
+  const host = { env: { HOME: home, PATH: process.env.PATH }, cwd: project };
+  vi.spyOn(process, 'exit').mockImplementation((() => {
+    throw new ProcessExit();
+  }) as never);
+  vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+  await runCli(
+    ['session', 'list', '--session', 'checked-endpoint', '--state-dir', stateDir, '--json'],
+    { sendToDaemon: vi.fn(), transportForHost },
+    host,
+  );
+
+  // daemon-client sends checked only when this fingerprint names the request's own target.
+  assert.deepEqual(sent, [{ daemonRpc: 'checked', daemonRpcTarget: 'fp-7001' }]);
+});
+
+test('a connection that recorded checked RPC without a probed endpoint never applies it to a later URL', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = path.join(project, 'remote.json');
+  fs.writeFileSync(remoteConfig, JSON.stringify({ daemonRpc: 'checked' }), 'utf8');
+  const now = new Date().toISOString();
+  // A direct-provider connection carries checked mode, but no daemon URL was probed or recorded.
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'checked-provider',
+      remoteConfigPath: remoteConfig,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfig),
+      daemon: { transport: 'http', rpc: 'checked' } as RemoteConnectionDaemon,
+      tenant: 'tenant',
+      runId: 'run-provider',
+      connectedAt: now,
+      updatedAt: now,
+    },
+  });
+  const sent: Array<{ daemonRpc?: string; daemonRpcTarget?: string }> = [];
+  const transportForHost = vi.fn(() => async (req: Omit<DaemonRequest, 'token'>) => {
+    sent.push({ daemonRpc: req.flags?.daemonRpc, daemonRpcTarget: req.flags?.daemonRpcTarget });
+    return { ok: true, data: { sessions: [] } } satisfies DaemonResponse;
+  });
+  // The endpoint arrives later, through the environment.
+  const host = {
+    env: {
+      HOME: home,
+      PATH: process.env.PATH,
+      AGENT_DEVICE_DAEMON_BASE_URL: 'http://127.0.0.1:7003',
+    },
+    cwd: project,
+  };
+  vi.spyOn(process, 'exit').mockImplementation((() => {
+    throw new ProcessExit();
+  }) as never);
+  vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+  await runCli(
+    ['session', 'list', '--session', 'checked-provider', '--state-dir', stateDir, '--json'],
+    { sendToDaemon: vi.fn(), transportForHost },
+    host,
+  );
+
+  assert.deepEqual(sent, [{ daemonRpc: undefined, daemonRpcTarget: undefined }]);
 });

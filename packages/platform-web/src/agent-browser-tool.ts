@@ -18,7 +18,7 @@ import {
   hostProcessId,
   readProcessStartTime,
 } from '@agent-device/host-kit/process';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
 import {
@@ -314,3 +314,32 @@ export function mapManagedAgentBrowserError(error: unknown): AppError {
         : 'Run `agent-device web setup` to install the managed web backend.',
   });
 }
+
+/**
+ * Why the managed `agent-browser` backend's answer cannot be trusted. The backend runs and prints
+ * JSON; these rows are the shapes that JSON can have which prove the round trip went wrong, and
+ * the text-entry refusals the entry's own verdict gives.
+ */
+export const AGENT_BROWSER_REFUSAL_REASONS = {
+  // The batch call for a text entry answered with something other than its one echoed entry.
+  textEntryResultUnusable: { reason: 'text-entry-result-unusable' },
+  // The backend ran the fill or type entry and the page refused it.
+  textEntryFailed: { reason: 'text-entry-failed' },
+  // Every snapshot ref failed to measure, so the capture's refs belong to no live nodes.
+  snapshotRefsUnmeasurable: { reason: 'snapshot-refs-unmeasurable' },
+  // The batch call answered with something that is not an entry list.
+  batchResultNotAList: { reason: 'batch-result-not-a-list' },
+  // The batch answer has a different entry count than the commands that were sent.
+  entryCount: { reason: 'entry-count' },
+  // A batch answer entry is not an entry shape this backend publishes.
+  entryShape: { reason: 'entry-shape' },
+  // A batch answer entry echoes a different command than the one that was sent.
+  entryCommand: { reason: 'entry-command' },
+} as const satisfies ReasonTable<'web backend'>;
+
+/** The refusal shape a batch answer can take, as the provider's batch parser reads it. */
+export type AgentBrowserBatchRefusal =
+  | typeof AGENT_BROWSER_REFUSAL_REASONS.batchResultNotAList.reason
+  | typeof AGENT_BROWSER_REFUSAL_REASONS.entryCount.reason
+  | typeof AGENT_BROWSER_REFUSAL_REASONS.entryShape.reason
+  | typeof AGENT_BROWSER_REFUSAL_REASONS.entryCommand.reason;

@@ -6,12 +6,16 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
-import { SessionStore } from '../../../core/session-store.ts';
+import { SessionStore, type StoredRuntimeHints } from '../../../core/session-store.ts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import {
+  type AppliedRuntimeHints,
   hasRuntimeTransportHints,
+  mayClearRemovedRuntimeTransportHints,
   maybeClearRemovedRuntimeTransportHints,
-  shouldClearRemovedRuntimeTransportHints,
+  replacedAppliedRuntimeTransport,
+  RUNTIME_HINTS_REASONS,
+  storedRuntimeHintsForApp,
   tryResolveOpenRuntimeHints,
 } from '../../session-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -23,7 +27,17 @@ type OpenCommandDetails = {
   appBundleId?: string;
   appName?: string;
   runtime: SessionRuntimeHints | undefined;
+  replacedRuntimeHints?: ReplacedRuntimeHints;
 };
+
+/**
+ * Applied hints that this open replaces with new transport hints, paired with the admitted clear.
+ * The open clears them after its launch succeeds, unless it binds the new hints to the same app.
+ */
+export type ReplacedRuntimeHints = Readonly<{
+  applied: AppliedRuntimeHints;
+  clear: ClearRuntimeHints;
+}>;
 
 export type PreparedOpenCommandDetailsResult =
   | { type: 'response'; response: DaemonResponse }
@@ -34,8 +48,11 @@ type ClearRuntimeHints = (input: RuntimeHintsApplicationInput) => Promise<void>;
 
 export type ResolvedOpenRuntimeHintPlan = Readonly<{
   runtime: SessionRuntimeHints | undefined;
-  previousRuntime: SessionRuntimeHints | undefined;
+  /** The stored hints this open found, with the app they are bound to. */
+  previous: StoredRuntimeHints | undefined;
   replacedStoredRuntime: boolean;
+  // Admission may require an apply or clear operation that the open then skips because of the
+  // app the hints are bound to: the target app is resolved only after admission.
   applyRuntimeHints: boolean;
   clearRemovedRuntimeHints: boolean;
 }>;
@@ -117,17 +134,17 @@ export function resolveOpenRuntimeHintPlan(params: {
 }): OpenRuntimeHintPlanResult {
   const runtimeResult = tryResolveOpenRuntimeHints(params);
   if (!runtimeResult.ok) return { type: 'response', response: runtimeResult };
-  const { runtime, previousRuntime, replacedStoredRuntime } = runtimeResult.data;
+  const { runtime, previous, replacedStoredRuntime } = runtimeResult.data;
   return {
     type: 'plan',
     plan: {
       runtime,
-      previousRuntime,
+      previous,
       replacedStoredRuntime,
       applyRuntimeHints: hasRuntimeTransportHints(runtime),
-      clearRemovedRuntimeHints: shouldClearRemovedRuntimeTransportHints({
+      clearRemovedRuntimeHints: mayClearRemovedRuntimeTransportHints({
         replacedStoredRuntime,
-        previousRuntime,
+        previous,
         runtime,
         session: params.existingSession,
       }),
@@ -184,6 +201,13 @@ export async function prepareOpenCommandDetails(params: {
     existingAppBundleId: existingSession?.appBundleId,
     foreground,
   });
+  const policy = {
+    replacedStoredRuntime: runtimeHintPlan.replacedStoredRuntime,
+    previous: runtimeHintPlan.previous,
+    runtime: runtimeHintPlan.runtime,
+    session: existingSession,
+  };
+  let replacedRuntimeHints: ReplacedRuntimeHints | undefined;
   if (runtimeHintPlan.clearRemovedRuntimeHints) {
     if (!clearRuntimeHints) {
       // prepareApplicationOpen above may already have booted the device — a device-reaching
@@ -193,18 +217,14 @@ export async function prepareOpenCommandDetails(params: {
         'COMMAND_FAILED',
         'Runtime hint clear operation was not admitted for this open.',
         {
-          reason: 'runtime-hints-operation-missing',
+          reason: RUNTIME_HINTS_REASONS.operationMissing.reason,
           dispatched: 'unknown',
         },
       );
     }
-    await maybeClearRemovedRuntimeTransportHints({
-      replacedStoredRuntime: runtimeHintPlan.replacedStoredRuntime,
-      previousRuntime: runtimeHintPlan.previousRuntime,
-      runtime: runtimeHintPlan.runtime,
-      session: existingSession,
-      clearRuntimeHints,
-    });
+    await maybeClearRemovedRuntimeTransportHints({ ...policy, clearRuntimeHints });
+    const applied = replacedAppliedRuntimeTransport(policy);
+    if (applied) replacedRuntimeHints = { applied, clear: clearRuntimeHints };
   }
 
   return {
@@ -212,7 +232,14 @@ export async function prepareOpenCommandDetails(params: {
     details: {
       appBundleId,
       appName,
-      runtime: runtimeHintPlan.runtime,
+      runtime: runtimeHintPlan.replacedStoredRuntime
+        ? runtimeHintPlan.runtime
+        : storedRuntimeHintsForApp(
+            runtimeHintPlan.runtime,
+            runtimeHintPlan.previous?.appId,
+            appBundleId,
+          ),
+      replacedRuntimeHints,
     },
   };
 }

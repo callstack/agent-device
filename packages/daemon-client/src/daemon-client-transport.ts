@@ -6,7 +6,6 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
-  assertScriptArtifactsCapability,
   readDaemonCapabilities,
   type DaemonPaths,
   type DaemonTransportPreference,
@@ -19,23 +18,33 @@ import {
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
+  DAEMON_HTTP_CHECKED_RPC_ROUTE,
+  DAEMON_HTTP_RPC_PROTOCOL_HEADER,
   DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+  DAEMON_INSTANCE_REASONS,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
+  type DaemonHealthPayload,
 } from '@agent-device/contracts/daemon-http';
 import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
+  incompatibleRemoteProtocolError,
   refuseOversizedDaemonRequest,
 } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { readVersion } from '@agent-device/host-kit/version';
+import type { RemoteResendPort } from './daemon-client-remote-resend-port.ts';
+import type {
+  DaemonProbeVerdict,
+  LoopbackConnectDenial,
+  LoopbackTransport,
+} from './daemon-client-loopback-probe.ts';
 
-type ResolvedDaemonTransport = 'socket' | 'http';
+type ResolvedDaemonTransport = LoopbackTransport;
 type SendRequestOptions = {
   /** The host whose working directory and environment this request's client-side work reads. */
   host: HostEnvironment;
@@ -53,6 +62,8 @@ type SendRequestOptions = {
    * how an attach client and the quiesce request itself time out.
    */
   timeoutRecovery?: 'retire-unresponsive' | 'none';
+  /** A checked call's connect that fails or stalls rejects as a `CheckedRpcConnectFailure`. */
+  trackCheckedConnect?: true;
 };
 
 /**
@@ -183,60 +194,57 @@ type RemoteDaemonHealthLink = Pick<
   'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'capabilities'
 >;
 
-export async function canConnect(
+export async function probeDaemonReachability(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
   probeTimeoutMs?: number,
-): Promise<boolean> {
+): Promise<DaemonProbeVerdict> {
   const deadline = Date.now() + (probeTimeoutMs ?? Number.POSITIVE_INFINITY);
   const transport = chooseTransport(info, preference);
   const fallback = chooseAutoFallbackTransport(info, preference, transport);
   const firstBudget = (deadline - Date.now()) / (fallback ? 2 : 1);
-  if (await canConnectWithTransport(info, transport, firstBudget)) return Date.now() < deadline;
-  return fallback
-    ? (await canConnectWithTransport(info, fallback, deadline - Date.now())) &&
-        Date.now() < deadline
-    : false;
+  const first = await probeTransportEndpoint(info, transport, firstBudget);
+  if (first.reachable) return { reachable: Date.now() < deadline };
+  if (!fallback) return first;
+  const second = await probeTransportEndpoint(info, fallback, deadline - Date.now());
+  if (second.reachable) return answeredWithinDeadline(deadline, first.denial);
+  // One refused leg is enough to withhold a death verdict: the client cannot read the other leg's
+  // silence as proof while the host has shown it refuses this daemon's endpoints.
+  return { reachable: false, denial: first.denial ?? second.denial };
 }
 
-async function canConnectWithTransport(
+/**
+ * A leg that answered after the deadline is not a reachable daemon, but a refusal the other leg
+ * reported is still evidence this client holds. It travels with the verdict, so a late answer
+ * cannot turn a refused endpoint back into a dead daemon.
+ */
+function answeredWithinDeadline(
+  deadline: number,
+  denial?: LoopbackConnectDenial,
+): DaemonProbeVerdict {
+  return Date.now() < deadline ? { reachable: true } : { reachable: false, denial };
+}
+
+async function probeTransportEndpoint(
   info: DaemonInfo,
   transport: ResolvedDaemonTransport,
   timeoutMs: number,
-): Promise<boolean> {
-  return transport === 'http'
-    ? await canConnectHttp(info, timeoutMs)
-    : await canConnectSocket(info.port, timeoutMs);
-}
-
-export function canConnectSocket(
-  port: number | undefined,
-  timeoutMs = LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
-): Promise<boolean> {
-  if (!port || timeoutMs <= 0) return Promise.resolve(false);
-  return new Promise((resolve) => {
-    let settled = false;
-    const socket = net.createConnection({ host: '127.0.0.1', port }, () => {
-      finish(true);
-    });
-    const finish = (reachable: boolean) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve(reachable);
-    };
-    socket.setTimeout(Math.min(LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS, Math.ceil(timeoutMs)));
-    socket.on('timeout', () => {
-      finish(false);
-    });
-    socket.on('error', () => {
-      finish(false);
-    });
+): Promise<DaemonProbeVerdict> {
+  // Loaded here, never at module scope: no client entry surface pays for a verdict it only reads on a
+  // probe (`scripts/__tests__/eager-closure-budgets.ts`).
+  const { probeHttpEndpoint, probeLoopbackPort } =
+    await import('./daemon-client-loopback-probe.ts');
+  if (transport !== 'http') return await probeLoopbackPort(info.port, 'socket', timeoutMs);
+  const endpoint = daemonHealthEndpoint(info);
+  if (!endpoint) return { reachable: false };
+  return await probeHttpEndpoint({
+    endpoint,
+    headers: info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {},
+    timeoutMs: Math.min(
+      info.baseUrl ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
+      timeoutMs,
+    ),
   });
-}
-
-function canConnectHttp(info: DaemonInfo, timeoutMs: number): Promise<boolean> {
-  return readDaemonHttpHealth(info, timeoutMs).then((health) => health.reachable);
 }
 
 export async function readRemoteDaemonHealth(
@@ -249,29 +257,23 @@ export async function readRemoteDaemonHealth(
   // Every link a command RPC crosses has to speak the client's protocol: a proxy that reports a
   // skewed daemon behind it fails here, before the RPC, exactly like a skewed proxy does.
   const incompatible = [health, health.upstream].find(
-    (link) =>
+    (link): link is RemoteDaemonHealthLink & { rpcProtocolVersion: number } =>
       typeof link?.rpcProtocolVersion === 'number' &&
       link.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION,
   );
-  if (incompatible) {
-    throw new AppError('COMMAND_FAILED', 'Remote daemon RPC protocol is incompatible', {
-      daemonBaseUrl: info.baseUrl,
-      clientVersion: readVersion(),
-      remoteVersion: incompatible.version,
-      remoteService: incompatible.service,
-      supportedRpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
-      remoteRpcProtocolVersion: incompatible.rpcProtocolVersion,
-      hint: 'Upgrade agent-device on the client or remote host so both support the same daemon RPC protocol.',
-    });
-  }
-  return health;
+  if (!incompatible) return health;
+  const proxy = incompatible === health.upstream ? { service: health.service } : undefined;
+  throw incompatibleRemoteProtocolError(info.baseUrl, incompatible, proxy);
 }
 
 function daemonHealthEndpoint(info: DaemonInfo): string | null {
   return daemonHttpEndpoint(info, 'health');
 }
 
-function daemonHttpEndpoint(info: DaemonInfo, route: 'health' | 'rpc'): string | null {
+function daemonHttpEndpoint(
+  info: DaemonInfo,
+  route: 'health' | 'rpc' | typeof DAEMON_HTTP_CHECKED_RPC_ROUTE,
+): string | null {
   return info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, route)
     : info.httpPort
@@ -373,8 +375,8 @@ function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' |
 
 function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
   return {
-    service: typeof parsed.service === 'string' ? parsed.service : undefined,
-    version: typeof parsed.version === 'string' ? parsed.version : undefined,
+    service: isHealthService(parsed.service) ? parsed.service : undefined,
+    version: readHealthVersion(parsed.version),
     rpcProtocolVersion:
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
@@ -383,6 +385,27 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
       ? {}
       : { capabilities: readDaemonCapabilities(parsed.capabilities) }),
   };
+}
+
+// The remote picks what /health says and agents read the refusal built from it, so only a service
+// the contract names and a version-shaped string are kept; anything else reads as absent.
+const HEALTH_SERVICES: Readonly<Record<DaemonHealthPayload['service'], true>> = {
+  'agent-device-daemon': true,
+  'agent-device-proxy': true,
+};
+const HEALTH_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const HEALTH_VERSION_MAX_LENGTH = 64;
+
+function isHealthService(value: unknown): value is DaemonHealthPayload['service'] {
+  return typeof value === 'string' && Object.hasOwn(HEALTH_SERVICES, value);
+}
+
+function readHealthVersion(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    value.length <= HEALTH_VERSION_MAX_LENGTH &&
+    HEALTH_VERSION.test(value)
+    ? value
+    : undefined;
 }
 
 export async function sendRequest(
@@ -423,9 +446,17 @@ async function recoverFromTimeout(
   return await handleRequestTimeout({
     info,
     statePaths,
+    remote: isRemoteDaemon(info),
     retireUnresponsive: options.timeoutRecovery !== 'none',
+    timeoutMs: expiredBudget,
+    requestId: req.meta?.requestId,
+    command: req.command,
+    platform: req.flags?.platform,
+    session: req.session,
+    action: req.positionals?.[0],
     requestSent: error.details.daemonRequestSent !== false,
-    ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
+    responseStarted: error.details.remoteResponseStarted === true,
+    readRemoteHealth: (budgetMs) => readDaemonHttpHealth(info, budgetMs, options.signal),
   });
 }
 
@@ -433,6 +464,10 @@ async function recoverFromTimeout(
  * One of the transport's own failures, with whether it happened after the request left this
  * process (the daemon may have run it). A lost connection or a timeout records
  * `daemonRequestSent`; a reply that could not be read or parsed was always sent.
+ *
+ * A `daemon-connect-denied` is usually a pre-send finding and is left alone. Only the one a timeout
+ * produced carries `daemonRequestSent`, and that one has to reach the disclosure seam too: the request
+ * was written before the host refused the probe, so the caller must still be told it may have run.
  */
 function classifyTransportFailure(
   error: unknown,
@@ -446,7 +481,9 @@ function classifyTransportFailure(
     case DAEMON_TRANSPORT_REASONS.replyInvalid.reason:
       return { failure: error, sent: true };
     default:
-      return undefined;
+      // A refusal this module did not produce, from the timeout route, states for itself that the
+      // request left this process. It gets the same disclosure: the daemon may have run it.
+      return error.details?.daemonRequestSent === true ? { failure: error, sent: true } : undefined;
   }
 }
 
@@ -464,18 +501,18 @@ async function sendRequestWithFallback(
   // that begins after the abort must not send either — every attempt starts behind this check.
   refuseAbortedRequest(options.signal, req.meta?.requestId);
   try {
-    return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
+    return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, {
+      ...options,
+      trackCheckedConnect: info.checkedRpc,
+    });
   } catch (error) {
-    if (info.baseUrl && isRemoteInstanceMismatch(error)) {
-      return await retryAfterRemoteInstanceMismatch(
-        info,
-        req,
-        statePaths,
-        timeoutMs,
-        deadline,
-        transport,
-        options,
-      );
+    // Loaded only on these failures: the two remote resend rules live in one module.
+    if (info.checkedRpc || (info.baseUrl && isRemoteInstanceMismatch(error))) {
+      const resend = await import('./daemon-client-remote-resend.ts');
+      const port = remoteResendPort(info, req, statePaths, transport, timeoutMs, deadline, options);
+      return info.checkedRpc
+        ? await resend.sendCheckedRpcAfterConnectFailure(error, port)
+        : await resend.retryAfterRemoteInstanceMismatch(port, req.meta?.scriptPublicationId);
     }
     if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
     const fallback = chooseAutoFallbackTransport(info, preference, transport);
@@ -484,62 +521,39 @@ async function sendRequestWithFallback(
   }
 }
 
-async function retryAfterRemoteInstanceMismatch(
+/** What the resend rules may do for one failed request: every transport power they use, bound to it. */
+function remoteResendPort(
   info: DaemonInfo,
   req: DaemonWireRequest,
   statePaths: DaemonPaths,
+  transport: ResolvedDaemonTransport,
   timeoutMs: number | undefined,
   deadline: number | undefined,
-  transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
-): Promise<DaemonResponse> {
-  await invalidateRemoteDaemonHealth(info);
-  const probeTimeoutMs = remainingRemoteRequestTimeoutMs(req, timeoutMs, deadline);
-  const health = await readRemoteDaemonHealth(info, probeTimeoutMs, options.signal);
-  refuseAbortedRequest(options.signal, req.meta?.requestId);
-  const remainingMs = remainingRemoteRequestTimeoutMs(
-    req,
+): RemoteResendPort {
+  return {
+    info,
     timeoutMs,
     deadline,
-    health.timedOut ? probeTimeoutMs : undefined,
-  );
-  if (!health.reachable) {
-    const { remoteDaemonUnavailableError } = await import('./daemon-lifecycle-errors.ts');
-    throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts: 1 });
-  }
-  info.remoteInstanceId = health.instanceId;
-  info.remoteUpstreamInstanceId = health.upstream?.instanceId;
-  info.capabilities = (health.upstream ?? health).capabilities;
-  (await loadRemoteHealthCache()).cacheRemoteDaemonHealth(info, health);
-  // A replacement daemon must still deliver the script that a remote recording asks for.
-  if (req.meta?.scriptPublicationId) assertScriptArtifactsCapability(info.capabilities);
-  try {
-    return await sendRequestWithTransport(info, req, statePaths, remainingMs, transport, options);
-  } catch (error) {
-    if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
-    throw error;
-  }
-}
-
-function remainingRemoteRequestTimeoutMs(
-  req: DaemonWireRequest,
-  timeoutMs: number | undefined,
-  deadline: number | undefined,
-  timedOutProbeMs?: number,
-): number | undefined {
-  if (deadline === undefined || timeoutMs === undefined) return undefined;
-  const remainingMs = deadline - performance.now();
-  // A probe capped by the request can expire before the monotonic clock catches up to its timer.
-  if (
-    remainingMs > 0 &&
-    (timedOutProbeMs === undefined || timedOutProbeMs > REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS)
-  )
-    return remainingMs;
-  throw requestTimeoutError(timeoutMs, req.meta?.requestId, false);
+    signal: options.signal,
+    resend: async (budgetMs) =>
+      await sendRequestWithTransport(info, req, statePaths, budgetMs, transport, options),
+    readHealth: async (probeMs) => await readRemoteDaemonHealth(info, probeMs, options.signal),
+    // Live reads only: another call may refill the cache while recovery waits.
+    probeHealth: async (probeMs, signal) => await readRemoteDaemonHealth(info, probeMs, signal),
+    invalidateHealth: async () => await invalidateRemoteDaemonHealth(info),
+    refuseIfAborted: () => refuseAbortedRequest(options.signal, req.meta?.requestId),
+    budgetSpent: () => requestTimeoutError(timeoutMs ?? 0, req.meta?.requestId, false),
+    isTransportFailure: isRemoteTransportFailure,
+    healthProbeTimeoutMs: REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS,
+  };
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'remote_instance_mismatch';
+  return (
+    error instanceof AppError &&
+    error.details?.reason === DAEMON_INSTANCE_REASONS.instanceMismatch.reason
+  );
 }
 
 function isRemoteTransportFailure(error: unknown): boolean {
@@ -638,7 +652,7 @@ function handleTransportError(
     phase: 'daemon_request_socket_error',
     data: {
       requestId,
-      message: err instanceof Error ? (err as Error).message : String(err),
+      message: err instanceof Error ? err.message : String(err),
     },
   });
   return new AppError(
@@ -747,36 +761,15 @@ function requestTimeoutError(
   timeoutMs: number,
   requestId: string | undefined,
   daemonRequestSent: boolean,
+  remoteResponseStarted?: boolean,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     reason: DAEMON_TRANSPORT_REASONS.timeout.reason,
     timeoutMs,
     requestId,
     daemonRequestSent,
+    ...(remoteResponseStarted ? { remoteResponseStarted: true } : {}),
   });
-}
-
-// The fields a timed-out request is described by, read once so a socket and an HTTP timeout cannot
-// describe the same request differently.
-type TimeoutRequestFields = Omit<
-  Parameters<typeof handleRequestTimeout>[0],
-  'info' | 'statePaths' | 'retireUnresponsive' | 'requestSent'
->;
-
-function timeoutRequestContext(
-  req: DaemonWireRequest,
-  remote: boolean,
-  timeoutMs: number,
-): TimeoutRequestFields {
-  return {
-    remote,
-    timeoutMs,
-    requestId: req.meta?.requestId,
-    command: req.command,
-    platform: req.flags?.platform,
-    session: req.session,
-    action: req.positionals?.[0],
-  };
 }
 
 function buildRemoteInstancePreconditionHeaders(info: DaemonInfo): Record<string, string> {
@@ -802,7 +795,8 @@ async function sendHttpRequest(
   timeoutMs: number | undefined,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  const rpcEndpoint = daemonHttpEndpoint(info, 'rpc');
+  const checked = info.baseUrl !== undefined && info.checkedRpc === true;
+  const rpcEndpoint = daemonHttpEndpoint(info, checked ? DAEMON_HTTP_CHECKED_RPC_ROUTE : 'rpc');
   if (!rpcEndpoint) throw daemonEndpointUnavailableError('http');
   const rpcUrl = new URL(rpcEndpoint);
   const rpcPayload = JSON.stringify(buildHttpRpcPayload(req, { includeTokenParam: !info.baseUrl }));
@@ -815,6 +809,8 @@ async function sendHttpRequest(
     Object.assign(headers, buildDaemonHttpAuthHeaders(info.token));
     Object.assign(headers, buildRemoteInstancePreconditionHeaders(info));
   }
+  if (checked) headers[DAEMON_HTTP_RPC_PROTOCOL_HEADER] = String(DAEMON_RPC_PROTOCOL_VERSION);
+  const checkedRpc = checked ? await import('./daemon-client-checked-rpc.ts') : undefined;
   const transport = await loadNodeHttpRequester(rpcUrl.protocol);
   const callerSignal = options.signal;
   refuseAbortedRequest(callerSignal, req.meta?.requestId);
@@ -823,8 +819,12 @@ async function sendHttpRequest(
     let settled = false;
     // Set when the request was handed to the OS (`finish`), never for a connection that failed first.
     let requestSent = false;
+    // Set when a 2xx progress stream opened on `/rpc`, proving the remote URL and auth token.
+    let responseStarted = false;
+    let connectWatch: ReturnType<NonNullable<typeof checkedRpc>['watchCheckedRpcConnect']>;
     const detachCallerAbort = (): void => {
       if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
+      connectWatch?.stop();
     };
     const resolveOnce = (response: DaemonResponse | PromiseLike<DaemonResponse>): void => {
       if (settled) return;
@@ -858,18 +858,30 @@ async function sendHttpRequest(
         headers,
       },
       (res) => {
-        if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
+        if (checkedRpc?.isCheckedRpcOutcomeResponse(res.statusCode, res.headers ?? {})) {
+          void checkedRpc.readCheckedRpcOutcome(res, readHealthLink).then((outcome) => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            if (outcome.kind === 'answer') handleBody(outcome.body);
+            else rejectOnce(outcome.error);
+          }, rejectOnce);
+          return;
+        }
+        // The checked route sends no instance headers, so a mismatch answer there is never resent.
+        if (!checked && isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
           res.resume();
           if (timeoutHandle) clearTimeout(timeoutHandle);
           rejectOnce(
             new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
-              reason: 'remote_instance_mismatch',
+              reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
               daemonBaseUrl: info.baseUrl,
             }),
           );
           return;
         }
         if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
+          if (res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 300) {
+            responseStarted = true;
+          }
           readDaemonHttpProgressResponse(res, {
             req,
             onProgress: options.onProgress,
@@ -908,7 +920,9 @@ async function sendHttpRequest(
     const timeoutHandle =
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
-            rejectOnce(requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent));
+            rejectOnce(
+              requestTimeoutError(timeoutMs, req.meta?.requestId, requestSent, responseStarted),
+            );
             request.destroy();
           }, timeoutMs)
         : undefined;
@@ -937,8 +951,21 @@ async function sendHttpRequest(
       // from emitting a `daemon_request_socket_error` diagnostic; a genuine transport error still
       // arrives before the settle and rejects.
       if (settled) return;
+      if (connectWatch?.unconnected()) return rejectOnce(connectWatch.failure(false));
       rejectOnce(handleTransportError(err, req.meta?.requestId, remote, requestSent));
     });
+
+    if (options.trackCheckedConnect && checkedRpc) {
+      connectWatch = checkedRpc.watchCheckedRpcConnect(
+        request,
+        REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS,
+        () => {
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          rejectOnce(connectWatch?.failure(true));
+          request.destroy();
+        },
+      );
+    }
 
     request.on('finish', () => {
       requestSent = true;

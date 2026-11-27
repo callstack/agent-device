@@ -20,12 +20,13 @@ import type {
   LaunchConfirmationUnansweredReason,
   OpenApplicationOutcome,
   OpenApplicationTiming,
+  OpenForegroundVerification,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { requestCwd } from '../../../core/context.ts';
-import type { SessionRef, SessionState } from '../../../core/session-state.ts';
+import type { SessionRef, SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
@@ -35,13 +36,17 @@ import {
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import {
   AppError,
+  asAppError,
   createRequestCanceledError,
   readDispatchDisclosure,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../../core/session-store.ts';
 import {
+  bindStoredRuntimeHintsToApp,
   countConfiguredRuntimeHints,
   openApplicationRuntimeHints,
+  runtimeHintsClearInput,
   setSessionRuntimeHintsForOpen,
 } from '../../session-runtime.ts';
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
@@ -54,6 +59,7 @@ import {
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import {
   prepareOpenCommandDetails,
+  type ReplacedRuntimeHints,
   type ResolvedOpenRuntimeHintPlan,
 } from './session-open-prepare.ts';
 import { findSessionDeviceConflict } from '../../open-device-contention-wait.ts';
@@ -73,6 +79,11 @@ import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
+
+const OPEN_CLAIM_REASONS = {
+  // The device lost the claim this open was made with; close the session and open the device again.
+  claimLost: { reason: 'claim-lost-during-open' },
+} as const satisfies ReasonTable<'open'>;
 
 export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>
@@ -129,6 +140,30 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim, req: DaemonR
   );
 }
 
+/**
+ * After the launch, the app the new hints bind to is the only one that keeps native hints. The
+ * open already succeeded, so a failed removal from the replaced app becomes a warning, as close
+ * treats its own clear as cleanup.
+ */
+async function clearReplacedRuntimeHints(
+  replaced: ReplacedRuntimeHints | undefined,
+  openedAppId: string | undefined,
+): Promise<string | undefined> {
+  if (!replaced || replaced.applied.appId === openedAppId) return undefined;
+  try {
+    await replaced.clear(runtimeHintsClearInput(replaced.applied, undefined));
+    return undefined;
+  } catch (error) {
+    const message = asAppError(error).message;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'open_replaced_runtime_hints_clear_failed',
+      data: { appId: replaced.applied.appId, error: message },
+    });
+    return `The earlier runtime hints could not be removed from ${replaced.applied.appId}: ${message}`;
+  }
+}
+
 /** What the caller's `open` output says about the launch-confirmation probe on this outcome. */
 function launchConfirmationReport(
   outcome: OpenApplicationOutcome,
@@ -176,6 +211,33 @@ function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnanswere
   );
 }
 
+/** What the caller's `open` output says when the probe never read one foreground app. */
+function openProbeUnreadableWarning(): string {
+  return (
+    'The launch dispatch succeeded, but the foreground probe could not read the device within 5s ' +
+    '(open-foreground-probe-unreadable). This claims nothing about whether the app reached the ' +
+    'foreground; check the device connection, then run the open again.'
+  );
+}
+
+/** What the caller's `open` output says when the launched app never held the foreground. */
+function openNotForegroundWarning(verification: OpenForegroundVerification): string {
+  const read =
+    verification.state === 'other-foreground'
+      ? `HarmonyOS read that the foreground app stayed "${verification.foregroundPackage}"`
+      : 'HarmonyOS read no mission in the foreground';
+  return (
+    `The launch dispatch succeeded, but ${read} within 5s of the launch ` +
+    '(open-not-foreground). A lock screen over the device is a typical cause. Unlock the device, ' +
+    'then run the open again.'
+  );
+}
+
+/** What the caller's `open` output says when the app already held the foreground at open time. */
+function alreadyForegroundWarning(): string {
+  return 'App was already foreground; open re-activated it without restarting. Use --relaunch to restart.';
+}
+
 // Default-on for emulators, opt-in via --test-ime on real devices; --no-test-ime forces off.
 function shouldActivateAndroidTestIme(device: DeviceInfo, req: DaemonRequest): boolean {
   if (device.platform !== 'android') return false;
@@ -218,7 +280,7 @@ export async function renewOpenSessionClaim(
     'DEVICE_IN_USE',
     `${device.name} no longer holds the claim this open was made with.`,
     {
-      reason: 'claim-lost-during-open',
+      reason: OPEN_CLAIM_REASONS.claimLost.reason,
       deviceKey: ownership.deviceKey,
       hint: 'Close this session and open the device again to claim it.',
     },
@@ -237,7 +299,8 @@ export async function completeOpenCommand(params: {
   appName?: string;
   surface: SessionSurface;
   appBundleId?: string;
-  runtimeHints: ReturnType<SessionStore['getRuntimeHints']>;
+  runtimeHints: SessionRuntimeHints | undefined;
+  replacedRuntimeHints?: ReplacedRuntimeHints;
   lifecycle: OpenApplicationRuntime;
   applyRuntimeHints?: RuntimeHintApplyOperation;
   existingRef?: SessionRef;
@@ -258,6 +321,7 @@ export async function completeOpenCommand(params: {
     surface,
     appBundleId,
     runtimeHints,
+    replacedRuntimeHints,
     lifecycle,
     applyRuntimeHints,
     existingRef,
@@ -320,7 +384,10 @@ export async function completeOpenCommand(params: {
       if (!effectsConfirmedOrUndispatched) markUnconfirmedRelaunch();
       throw error;
     });
-  sessionAppBundleId = outcome.appBundleId ?? sessionAppBundleId;
+  // One id feeds the session and the hint binding, so a later open compares one resolution. Each
+  // platform reports the prepared id back when there is one; Android reports the app it saw for a
+  // target without one, such as a deep link with no current app.
+  sessionAppBundleId ??= outcome.appBundleId;
   const timing: OpenTiming = { ...outcome.timing };
   const preparedSelection = markSelectionBootOccurred(selection);
   const startupSample = openTarget
@@ -336,6 +403,10 @@ export async function completeOpenCommand(params: {
   }
 
   requireOpenSessionAdmission(sessionStore, sessionName, openDispatchRef);
+  const replacedRuntimeHintsWarning = await clearReplacedRuntimeHints(
+    replacedRuntimeHints,
+    sessionAppBundleId,
+  );
   if (existingRef) {
     markDeferredInteractionOutcome({
       session: sessionStore.requireCurrent(existingRef),
@@ -378,6 +449,7 @@ export async function completeOpenCommand(params: {
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim, req));
   }
+  if (replacedRuntimeHintsWarning) appendResponseWarning(openResult, replacedRuntimeHintsWarning);
   if (outcome.launchConfirmation === 'unanswered') {
     appendResponseWarning(
       openResult,
@@ -386,6 +458,18 @@ export async function completeOpenCommand(params: {
   }
   if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
     appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
+  }
+  const foregroundVerification = outcome.timing.foregroundVerification;
+  if (foregroundVerification) {
+    appendResponseWarning(
+      openResult,
+      foregroundVerification.state === 'probe-failed'
+        ? openProbeUnreadableWarning()
+        : openNotForegroundWarning(foregroundVerification),
+    );
+  }
+  if (outcome.alreadyForeground) {
+    appendResponseWarning(openResult, alreadyForegroundWarning());
   }
   const nextRef = publishOpenSession({
     req,
@@ -401,8 +485,11 @@ export async function completeOpenCommand(params: {
   sessionStore.clearCloseEffectsUnconfirmed(nextRef);
   const nextSession = sessionStore.requireCurrent(nextRef);
   markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
-  if (req.runtime !== undefined)
-    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints);
+  if (req.runtime !== undefined) {
+    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, sessionAppBundleId);
+  } else if (runtimeHints) {
+    bindStoredRuntimeHintsToApp(sessionStore, sessionName, sessionAppBundleId);
+  }
   applyOrdinaryScriptRecordingOpenOutcome({
     session: nextSession,
     existingSession: existingRef ? nextSession : undefined,
@@ -597,6 +684,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       appBundleId: details.details.appBundleId,
       appName: details.details.appName,
       runtimeHints: details.details.runtime,
+      replacedRuntimeHints: details.details.replacedRuntimeHints,
       lifecycle,
       applyRuntimeHints,
       surface,

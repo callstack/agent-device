@@ -44,6 +44,18 @@ export type PreparedRemoteRequest = {
   clientArtifactPaths?: Record<string, string>;
 };
 
+/** The commands whose remote preparation can upload an artifact before their command RPC. */
+const ARTIFACT_UPLOAD_COMMANDS: ReadonlySet<string> = new Set([
+  'install',
+  'reinstall',
+  'install_source',
+]);
+
+/** Whether preparing this request for a remote daemon can upload an artifact before its RPC. */
+export function requestUploadsArtifacts(req: Pick<DaemonWireRequest, 'command'>): boolean {
+  return ARTIFACT_UPLOAD_COMMANDS.has(req.command);
+}
+
 export async function prepareRemoteRequestArtifacts(
   req: Omit<DaemonWireRequest, 'token'>,
   info: DaemonArtifactEndpoint,
@@ -93,6 +105,9 @@ async function prepareRemoteRequestArtifactsWithinBudget(
 
   flags = prepareRemoteScriptOutput(req, flags, clientArtifactPaths, host);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths, host);
+  if (!requestUploadsArtifacts(req)) {
+    return createPreparedRemoteRequest({ positionals, flags, installSource, clientArtifactPaths });
+  }
   const remoteInstallSource = await prepareRemoteInstallSource(
     req,
     info,
@@ -542,6 +557,8 @@ async function downloadResponseArtifacts(
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
   const recording = isRecordStop(req) ? recordingDelivery() : undefined;
+  const dropped: DroppedArtifact[] = [];
+  const delivery = { nextData, nextArtifacts, recording, dropped };
   for (const artifact of artifacts) {
     if (isSessionScriptArtifact(artifact)) {
       await scripts?.publish(artifact, nextData, nextArtifacts);
@@ -551,33 +568,58 @@ async function downloadResponseArtifacts(
       nextArtifacts.push(artifact);
       continue;
     }
-    if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
-    const destination = resolveMaterializedArtifactPath(artifact, req, host);
-    const materializedPath = await downloadRemoteArtifact({
-      ...endpoint,
-      artifactId: artifact.artifactId,
-      destinationPath: destination.path,
-      requestScope: req.meta,
-      // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
-      // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
-      // racing the response headers (a directory destination must never be `rm`'d wholesale; see
-      // `downloadRemoteArtifact`).
-      isDirectory: recording === undefined && artifact.artifactType === 'test-artifacts',
-      stagedFile: recording !== undefined,
-    });
-    recording?.add(artifact.field, materializedPath, destination.fallback);
-    // Directory artifacts download into a caller-owned root, then atomically publish their one
-    // top-level entry beneath it. Use the path the download actually published rather than the
-    // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
-    nextData[artifact.field] = materializedPath;
-    nextArtifacts.push({
-      ...artifact,
-      localPath: materializedPath,
-    });
+    await downloadOneArtifact(endpoint, req, host, artifact, delivery);
   }
   nextData.artifacts = nextArtifacts;
   recording?.report(nextData);
+  if (dropped.length > 0) discloseDroppedArtifacts(nextData, dropped);
   return { ok: true, data: nextData };
+}
+
+async function downloadOneArtifact(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  host: HostEnvironment,
+  artifact: DaemonArtifact & { artifactId: string },
+  {
+    nextData,
+    nextArtifacts,
+    recording,
+    dropped,
+  }: {
+    nextData: Record<string, unknown>;
+    nextArtifacts: DaemonArtifact[];
+    recording: { add(field: string, written: string, fallback: boolean): void } | undefined;
+    dropped: DroppedArtifact[];
+  },
+): Promise<void> {
+  if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) return;
+  const destination = resolveMaterializedArtifactPath(artifact, req, host);
+  if (!destination || destination.path.includes('\0')) {
+    dropped.push({ field: artifact.field, reason: 'artifact_name_invalid' });
+    return;
+  }
+  const materializedPath = await downloadRemoteArtifact({
+    ...endpoint,
+    artifactId: artifact.artifactId,
+    destinationPath: destination.path,
+    requestScope: req.meta,
+    // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
+    // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
+    // racing the response headers (a directory destination must never be `rm`'d wholesale; see
+    // `downloadRemoteArtifact`).
+    isDirectory: recording === undefined && artifact.artifactType === 'test-artifacts',
+    stagedFile: recording !== undefined,
+  });
+  recording?.add(artifact.field, materializedPath, destination.fallback);
+  // Directory artifacts download into a caller-owned root, then atomically publish their one
+  // top-level entry beneath it. Use the path the download actually published rather than the
+  // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
+  nextData[artifact.field] = materializedPath;
+  nextArtifacts.push({
+    ...artifact,
+    localPath: materializedPath,
+  });
 }
 
 const RECORDING_DESTINATION_REASONS = {
@@ -648,8 +690,27 @@ function isClientOwnedResponseField(field: string): boolean {
     field === 'artifacts' ||
     field === 'savedScript' ||
     field === 'scriptDeliveryFailure' ||
+    field === 'droppedArtifacts' ||
     field === 'warnings'
   );
+}
+
+/** A response artifact the client did not download, and why. */
+type DroppedArtifact = { field: string; reason: 'artifact_name_invalid' };
+
+/**
+ * Adds the artifacts this client dropped, and one warning for each, to a response body. The action
+ * keeps its own outcome; only the dropped artifacts are missing from `artifacts`.
+ */
+function discloseDroppedArtifacts(data: Record<string, unknown>, dropped: DroppedArtifact[]): void {
+  data.droppedArtifacts = dropped;
+  data.warnings = [
+    ...(Array.isArray(data.warnings) ? data.warnings : []),
+    ...dropped.map(
+      ({ field }) =>
+        `The remote artifact for ${JSON.stringify(field)} was not downloaded: its name cannot be a file name.`,
+    ),
+  ];
 }
 
 // Only a successfully published version can name a caller's savedScript destination.
@@ -684,12 +745,13 @@ function isRecordStop(req: DaemonWireRequest): boolean {
 /**
  * A path from this request wins. A record stop without one can use only a plain name in cwd.
  * Trace and perf stop or report can still use an echoed destination from an earlier request.
+ * A NUL in a response file name cannot provide a fallback destination.
  */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
   req: DaemonWireRequest,
   host: HostEnvironment,
-): { path: string; fallback: boolean } {
+): { path: string; fallback: boolean } | undefined {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
   if (hasNonEmptyString(requestedPath)) return { path: requestedPath, fallback: false };
   if (isRecordStop(req)) {
@@ -697,18 +759,31 @@ function resolveMaterializedArtifactPath(
     if (hasNonEmptyString(requested)) {
       return { path: resolveAbsoluteClientPath(requested, req.meta?.cwd, host), fallback: false };
     }
+    if (typeof artifact.fileName === 'string' && artifact.fileName.includes('\0')) return undefined;
     const fileName = localFileName(artifact.fileName) ?? `recording-${crypto.randomUUID()}`;
     return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: true };
   }
   if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return { path: artifact.localPath, fallback: false };
   }
-  const responseName = path.basename(artifact.fileName?.trim() ?? '');
+  const fallbackPath = resolveOrdinaryArtifactFallbackPath(artifact, req.meta?.cwd ?? host.cwd);
+  return fallbackPath ? { path: fallbackPath, fallback: false } : undefined;
+}
+
+function resolveOrdinaryArtifactFallbackPath(
+  artifact: DaemonArtifact,
+  cwd: string,
+): string | undefined {
+  const { fileName: rawName = '' }: { fileName?: unknown } = artifact;
+  if (typeof rawName !== 'string' || rawName.includes('\0')) return undefined;
+  const pathRules = process.platform === 'win32' ? path.win32 : path.posix;
+  const responseName = pathRules.basename(rawName.trim());
   const fileName =
     responseName && responseName !== '.' && responseName !== '..'
       ? responseName
-      : `${path.basename(artifact.field)}-${Date.now()}`;
-  return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: false };
+      : `${pathRules.basename(artifact.field)}-${Date.now()}`;
+  if (pathRules === path.win32 && /^[a-z]:/i.test(fileName)) return undefined;
+  return pathRules.resolve(cwd, fileName);
 }
 
 function localFileName(value: unknown): string | undefined {

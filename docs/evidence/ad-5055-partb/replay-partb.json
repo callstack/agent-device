@@ -1,0 +1,55 @@
+{
+  "success": false,
+  "error": {
+    "code": "REPLAY_DIVERGENCE",
+    "message": "Daemon request deadline exceeded",
+    "hint": "Check completed steps and the current device state before retrying the timed-out operation.",
+    "diagnosticId": "mwu5xy7a-e5cc8bac",
+    "logPath": "<state-dir>/sessions/cwd_e93f14f237f7fd4f_harmonyos/requests/619fa17961d1bd2f.ndjson",
+    "diagnosticsRecord": {
+      "session": "cwd:e93f14f237f7fd4f:harmonyos",
+      "requestId": "619fa17961d1bd2f"
+    },
+    "details": {
+      "reason": "daemon_request_timeout",
+      "replayPath": "docs/evidence/ad-5055-partb.ad",
+      "step": 1,
+      "action": "open",
+      "positionals": ["<arg>"],
+      "artifactPaths": [],
+      "divergence": {
+        "version": 1,
+        "kind": "action-failure",
+        "step": {
+          "index": 1,
+          "source": {
+            "path": "docs/evidence/ad-5055-partb.ad",
+            "line": 3
+          }
+        },
+        "action": "open \"com.sankuai.dianping\"",
+        "cause": {
+          "code": "COMMAND_FAILED",
+          "message": "request canceled",
+          "hint": "The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended."
+        },
+        "screen": {
+          "state": "unavailable",
+          "reason": "request-canceled",
+          "hint": "Post-failure snapshot skipped after request cancellation; the original replay failure is unaffected."
+        },
+        "suggestions": [],
+        "suggestionCount": 0,
+        "resume": {
+          "allowed": true,
+          "from": 1,
+          "planDigest": "1441344a058088e24f82ae2b6732d95d5e8010fe65e36e372239398b7650314b",
+          "alternateFrom": 2
+        },
+        "repairHint": "manual"
+      },
+      "causeReason": "request_canceled",
+      "timeoutMs": 3000
+    }
+  }
+}

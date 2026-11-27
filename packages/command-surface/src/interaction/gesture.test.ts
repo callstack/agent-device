@@ -61,13 +61,13 @@ describe('gesture command projection', () => {
 
   test('parses and writes selector/ref drag input without positional reinterpretation', () => {
     const input = gestureCliReaders.gesture(
-      ['drag', 'id="drag-source"', '@e2~s42', '700', '600', '200'],
+      ['drag', 'id="drag-source"', '@e2-s42', '700', '600', '200'],
       NO_FLAGS,
     );
     expect(input).toEqual({
       kind: 'drag',
       source: 'id="drag-source"',
-      destination: '@e2~s42',
+      destination: '@e2-s42',
       sourceHoldMs: 700,
       moveMs: 600,
       destinationHoldMs: 200,

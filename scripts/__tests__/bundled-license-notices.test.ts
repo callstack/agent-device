@@ -325,6 +325,28 @@ test.each(['0.4.4', '0.4.5'])(
   },
 );
 
+test('a bundled TalkBack port carries its source notices and the Apache license', async () => {
+  const [sourceNotices, apacheLicense] = await Promise.all([
+    fs.readFile(new URL('../../LICENSES/talkback.txt', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../../LICENSES/Apache-2.0.txt', import.meta.url), 'utf8'),
+  ]);
+  const port = 'packages/platform-android/src/screen-reader-order.ts';
+  const root = await fixture({
+    'input.ts': `export { value } from './${port}';`,
+    [port]: 'export const value = process.env.FIXTURE_NUMBER;',
+    'LICENSES/talkback.txt': sourceNotices,
+    'LICENSES/Apache-2.0.txt': apacheLicense,
+  });
+  await bundle(root);
+  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.match(
+    notices,
+    /^talkback@229212fdf5842191d0a93fc95d9ca1423b346866 \(Apache-2\.0\): \[1\], \[2\]$/m,
+  );
+  assert.ok(notices.includes(sourceNotices.trim()));
+  assert.ok(notices.includes(apacheLicense.replaceAll('\r\n', '\n').trim()));
+});
+
 // A project that genuinely bundles nothing keeps getting the generic notice: the content policy that
 // holds the published CLI to naming somebody is the publish gate's, not this formatter's. Pinning it
 // here keeps a future "reject the placeholder" edit at the formatter from breaking an empty build.

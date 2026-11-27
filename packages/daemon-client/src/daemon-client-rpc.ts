@@ -17,7 +17,11 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
+import {
+  DAEMON_REQUEST_MAX_BYTES,
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from '@agent-device/contracts/daemon-http';
+import { readVersion } from '@agent-device/host-kit/version';
 import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
@@ -239,6 +243,59 @@ export function refuseOversizedDaemonRequest(payload: string, requestId: string 
     maxBytes: DAEMON_REQUEST_MAX_BYTES,
     requestId,
     daemonRequestSent: false,
+    dispatched: 'no',
     hint: 'Split the replay suite or flow into smaller runs.',
   });
+}
+
+/** Who must upgrade so every link speaks the client's protocol. Client-local: never serialized. */
+type ProtocolUpgradeSide = 'remote' | 'client' | 'client-and-proxy';
+
+/** The `/health` link whose advertised RPC protocol differs from the client's. */
+type SkewedHealthLink = Readonly<{
+  service?: string;
+  version?: string;
+  rpcProtocolVersion: number;
+}>;
+
+/**
+ * The refusal for a remote link on another RPC protocol. It names both versions and the side to
+ * upgrade. `proxy` carries the proxy's service when the skewed link is the daemon behind it.
+ */
+export function incompatibleRemoteProtocolError(
+  daemonBaseUrl: string,
+  link: SkewedHealthLink,
+  proxy: Readonly<{ service?: string }> | undefined,
+): AppError {
+  const clientVersion = readVersion();
+  const upgradeSide: ProtocolUpgradeSide =
+    link.rpcProtocolVersion < DAEMON_RPC_PROTOCOL_VERSION
+      ? 'remote'
+      : proxy
+        ? 'client-and-proxy'
+        : 'client';
+  const service = link.service ?? 'daemon';
+  const proxyName = proxy?.service ?? 'the proxy';
+  const remote = proxy ? `the ${service} behind ${proxyName}` : `the remote ${service}`;
+  const upgradeTarget = {
+    remote: proxy ? remote : 'the remote host',
+    client: 'this client',
+    'client-and-proxy': `this client and on ${proxyName}`,
+  }[upgradeSide];
+  const remoteVersion = link.version ? `runs ${link.version}` : 'does not report its version';
+  return new AppError(
+    'COMMAND_FAILED',
+    `Remote daemon RPC protocol is incompatible: this client runs agent-device ${clientVersion} (RPC protocol ${DAEMON_RPC_PROTOCOL_VERSION}); ${remote} ${remoteVersion} (RPC protocol ${link.rpcProtocolVersion}). Upgrade agent-device on ${upgradeTarget}.`,
+    {
+      daemonBaseUrl,
+      clientVersion,
+      remoteVersion: link.version,
+      remoteService: link.service,
+      supportedRpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
+      remoteRpcProtocolVersion: link.rpcProtocolVersion,
+      upgradeSide,
+      dispatched: 'no',
+      hint: 'Retry after the upgrade. This check runs before any command is sent.',
+    },
+  );
 }

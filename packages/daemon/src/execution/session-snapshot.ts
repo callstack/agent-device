@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs, AppError } from '@agent-device/kernel/errors';
+import { splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import {
   activatePartialRefFrame,
@@ -8,7 +9,9 @@ import {
   refFrameEpoch,
   refFrameScope,
   refFrameState,
+  REF_FRAME_REASONS,
 } from '../core/ref-frame.ts';
+import type { RefFrameOrigin } from '../core/ref-frame-slot.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 
@@ -35,7 +38,7 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
   if (session.snapshot !== snapshot) {
     // #1076 versioned refs: every tree replacement advances the session's
     // snapshot generation, so refs pinned to an earlier generation
-    // (`@e12~s3`) can be diagnosed precisely.
+    // (`@e12-s3`) can be diagnosed precisely.
     session.snapshotGeneration = nextSnapshotGeneration(session.snapshotGeneration);
   }
   session.snapshot = snapshot;
@@ -73,7 +76,7 @@ export function setCommandSnapshot(
  * Advance `snapshotGeneration` (#1076 versioned refs). The FIRST bump of a
  * session lifetime seeds at a random 6-digit base instead of 1: a reopened
  * session restarts its counter, so a per-lifetime count starting at 1 would
- * let a stale `@e1~s1` pin from the previous lifetime silently read as
+ * let a stale `@e1-s1` pin from the previous lifetime silently read as
  * current. With a seeded base, cross-lifetime collisions are ~1e-6 instead of
  * common — the protection is probabilistic (seeded), NOT identity-based.
  * Within a lifetime the counter stays strictly monotonic (+1 per replacement),
@@ -83,11 +86,11 @@ function nextSnapshotGeneration(current: number | undefined): number {
   return current === undefined ? randomInt(100_000, 1_000_000) : current + 1;
 }
 
-/** Plain ref body: strip a leading `@` and any `~s<n>` generation suffix. */
+/** Plain ref body: strip a leading `@` and any `-s<n>` generation suffix. */
 function normalizeRefBody(ref: string): string {
   const withoutAt = ref.startsWith('@') ? ref.slice(1) : ref;
-  const suffix = withoutAt.indexOf('~');
-  return suffix === -1 ? withoutAt : withoutAt.slice(0, suffix);
+  const split = splitRefGenerationSuffix(withoutAt);
+  return split ? split.base : withoutAt;
 }
 
 /**
@@ -97,8 +100,16 @@ function normalizeRefBody(ref: string): string {
  * epoch — a plain ref then requires a complete frame, and a pinned ref outside
  * the set is rejected. An empty partial result does not supersede existing
  * authority (it leaves the frame untouched), so a useful prior frame survives.
+ *
+ * `origin` records which publication issued the frame (ADR 0014 amendment): the
+ * settle path passes `settle-diff` so a later plain-ref refusal can name the
+ * diff as the replacement; every other partial publication keeps `partial`.
  */
-export function markSessionPartialRefsIssued(session: SessionState, refs: Iterable<string>): void {
+export function markSessionPartialRefsIssued(
+  session: SessionState,
+  refs: Iterable<string>,
+  origin: RefFrameOrigin = 'partial',
+): void {
   const scope = new Set<string>();
   for (const ref of refs) {
     const body = normalizeRefBody(ref);
@@ -114,7 +125,7 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
   // depend on ancestors, siblings and viewport outside the emitted subset, so the whole
   // tree is kept while the issuance set bounds authority) and the frozen epoch that keeps
   // a later read-only capture from invalidating a correct pin from this frame.
-  activatePartialRefFrame(session, scope);
+  activatePartialRefFrame(session, scope, origin);
 }
 
 /**
@@ -139,7 +150,9 @@ export function issueSettleRefs(
   if (!ref || !settle?.diff) return undefined;
   const session = sessionStore.resolveCurrent(ref);
   if (!session) return undefined;
-  markSessionPartialRefsIssued(session, collectSettleIssuedRefBodies(settle));
+  // The settle-diff origin is what lets a later plain-ref refusal (#4571) name this
+  // diff as the replacement instead of pointing at a generic recapture.
+  markSessionPartialRefsIssued(session, collectSettleIssuedRefBodies(settle), 'settle-diff');
   return session.snapshotGeneration;
 }
 
@@ -238,7 +251,7 @@ function collectSettleIssuedRefBodies(settle: SettleObservation): string[] {
 }
 
 /**
- * Warning for a ref pinned to a generation (`@e12~s3`) whose epoch no longer
+ * Warning for a ref pinned to a generation (`@e12-s3`) whose epoch no longer
  * matches the session's current ref-frame epoch (`refFrameEpoch`) — NOT the
  * latest observation generation. A read-only capture bumps the observation
  * counter without re-issuing the frame, so the two can diverge; the warning
@@ -270,7 +283,7 @@ export function unissuedRefReadError(
   const scope = refFrameScope(session);
   const currentGeneration = refFrameEpoch(session);
   return new AppError('COMMAND_FAILED', `Ref @${refBody} was not issued by the current ref frame`, {
-    reason: 'ref_not_issued',
+    reason: REF_FRAME_REASONS.notIssued.reason,
     ref: `@${refBody}`,
     ...(currentGeneration !== undefined ? { currentGeneration } : {}),
     scope: scope === 'all' ? 'all' : Array.from(scope),

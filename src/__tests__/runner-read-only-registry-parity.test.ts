@@ -49,6 +49,8 @@ const REGISTRY_COUNTERPART: Record<RunnerName, RegistryRequest> = {
   actionButton: { command: 'action-button' },
   volumeUp: { command: 'hardware-button', positionals: ['volume-up'] },
   volumeDown: { command: 'hardware-button', positionals: ['volume-down'] },
+  lockScreen: { command: 'lock-screen', positionals: ['lock'] },
+  unlockScreen: { command: 'lock-screen', positionals: ['unlock'] },
   keyboardDismiss: { command: 'keyboard', positionals: ['dismiss'] },
   keyboardReturn: { command: 'keyboard', positionals: ['enter'] },
   // The new runner read pairs with the registry's own read leg, so the parity check below compares

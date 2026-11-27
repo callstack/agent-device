@@ -2,11 +2,17 @@ import type { ComposeDaemonRuntimeDeps } from './daemon-runtime-deps.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
+  createClaimRecoveryDisposalTracker,
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
-import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
+import {
+  asAppError,
+  AppError,
+  normalizeError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
@@ -23,6 +29,7 @@ import {
 } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { assertDaemonPolicyAllowsCapability } from '../../core/daemon-policy.ts';
 import { installInteractorResolution } from '../../core/interactor-resolution.ts';
+import { RUNTIME_GATEWAY_REASONS } from '../../core/runtime-admission.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   createExpiredProviderLeaseReleaser,
@@ -37,7 +44,7 @@ import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
 import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
-import { runtimeHintValues } from '../../sessions/session-runtime.ts';
+import { runtimeHintsClearInput } from '../../sessions/session-runtime.ts';
 import {
   closeDaemonServers,
   teardownDaemonSessionForShutdown,
@@ -94,6 +101,12 @@ import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
 
+const DAEMON_REGISTRATION_REASONS = {
+  // Another daemon holds this state directory, or its registration could not be proven free, so
+  // this daemon did not start; `details.status` says which.
+  refused: { reason: 'daemon_registration_refused' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
+
 const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const LEASE_EXPIRY_SWEEP_INTERVAL_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
@@ -146,8 +159,9 @@ export type DaemonRuntimeController = {
 };
 
 /**
- * Thrown by {@link startDaemonRuntime} when the daemon must not run: its policy is unusable or
- * another daemon owns the state dir. `details.exitCode` is the code the executable exits with.
+ * Thrown by {@link startDaemonRuntime} when the daemon must not run: its policy is unusable,
+ * another daemon owns the state dir, or the host denied its loopback listen. `details.exitCode` is
+ * the code the executable exits with.
  */
 export function daemonStartupExitCode(error: unknown): number {
   const exitCode = asAppError(error).details?.exitCode;
@@ -258,7 +272,7 @@ async function startDaemonRuntimeOnHost(
   const applicationLifecycle = deviceRuntimeGateway.applicationLifecycle;
   if (!applicationLifecycle) {
     throw new AppError('COMMAND_FAILED', 'Platform lifecycle gateway is not configured.', {
-      reason: 'runtime-gateway-missing',
+      reason: RUNTIME_GATEWAY_REASONS.missing.reason,
     });
   }
   installProviderDeviceAdmission(deps.providerDeviceAdmission);
@@ -319,6 +333,7 @@ async function startDaemonRuntimeOnHost(
   }, LEASE_EXPIRY_SWEEP_INTERVAL_MS);
   leaseExpirySweep.unref();
   rollback.onRollback(() => clearInterval(leaseExpirySweep));
+  const claimRecoveryDisposals = createClaimRecoveryDisposalTracker();
   const dispatchRequest = createRequestHandler({
     host,
     logPath,
@@ -337,6 +352,7 @@ async function startDaemonRuntimeOnHost(
     // The facts the deps declare at the top level, offered to the router from that one place.
     deviceRuntimeGateway,
     claimRecoveryGateway: deps.claimRecoveryGateway,
+    trackClaimRecoveryDisposal: claimRecoveryDisposals.track,
     platformResourceCleanup: deps.platformResourceCleanup,
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
@@ -404,7 +420,10 @@ async function startDaemonRuntimeOnHost(
   const settleIdleExpiredSession = async (ref: SessionRef): Promise<void> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     const sessionName = ref.address;
-    const runtimeHints = runtimeHintValues(sessionStore.getRuntimeHints(sessionName));
+    const runtimeHints = runtimeHintsClearInput(
+      sessionStore.getRuntimeHints(sessionName),
+      session.appBundleId,
+    );
     await teardownSessionResources({
       appLog: 'run',
       ref,
@@ -540,7 +559,7 @@ async function startDaemonRuntimeOnHost(
   const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
   if (acquisition.status !== 'acquired') {
     throw new AppError('COMMAND_FAILED', `Daemon registration ${acquisition.status}.`, {
-      reason: 'daemon_registration_refused',
+      reason: DAEMON_REGISTRATION_REASONS.refused.reason,
       status: acquisition.status,
       exitCode: DAEMON_STARTUP_EXIT_CODES[acquisition.status],
     });
@@ -685,6 +704,7 @@ async function startDaemonRuntimeOnHost(
     createOwnerScopedDeviceClaimReconciler({
       scope: createRecoveryPlatformScope(),
       composeGateway: deps.claimRecoveryGateway,
+      trackDisposal: claimRecoveryDisposals.track,
     }),
     baseDir,
     env,
@@ -797,18 +817,24 @@ async function startDaemonRuntimeOnHost(
       },
     );
     expiredProviderLeaseReleaser.shutdown();
-    try {
-      const ownerClose = await settleWithin(
-        () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
-        options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
-      );
-      platformOwners = ownerClose.kind === 'deadline' ? 'pending' : 'closed';
-    } catch (error) {
-      platformOwners = 'failed';
-      await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
-        error: normalizeError(error),
-      });
-    }
+    let gatewayShutdownFailed = false;
+    const ownerClose = await settleWithin(
+      () =>
+        withDaemonDiagnosticsScope({ logPath }, async () => {
+          await Promise.resolve()
+            .then(async () => await deviceRuntimeGateway.shutdown())
+            .catch(async (error: unknown) => {
+              gatewayShutdownFailed = true;
+              await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
+                error: normalizeError(error),
+              });
+            });
+          await claimRecoveryDisposals.drain();
+        }),
+      options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
+    );
+    platformOwners =
+      ownerClose.kind === 'deadline' ? 'pending' : gatewayShutdownFailed ? 'failed' : 'closed';
     const plugins = await pluginClose.close();
     for (const failure of plugins.failed) {
       await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', {

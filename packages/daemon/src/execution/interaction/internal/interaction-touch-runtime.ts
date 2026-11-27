@@ -28,6 +28,7 @@ import {
   runWithAndroidDialogReadinessCheck,
   type RefAdmissionContext,
 } from './interaction-touch-android-readiness.ts';
+import type { AndroidBlockingDialogReadinessResult } from '../../android-system-dialog.ts';
 import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import {
   buildCorroboratedTapResponseData,
@@ -67,8 +68,14 @@ export async function dispatchRuntimeInteraction<
       extra: Record<string, unknown>;
     };
     run(runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>): Promise<TResult>;
-    /** May return a warning to append to the successful response (e.g. a pending Android permission dialog). */
-    afterRun?(result: TResult): Promise<string | undefined>;
+    /**
+     * May return a warning to append to the successful response (e.g. a pending Android permission
+     * dialog). `readiness` is the Android readiness read taken before the dispatch.
+     */
+    afterRun?(
+      result: TResult,
+      readiness: AndroidBlockingDialogReadinessResult,
+    ): Promise<string | undefined>;
     buildPayloads(
       result: TResult,
     ): InteractionResponsePayloads | Promise<InteractionResponsePayloads>;
@@ -91,9 +98,9 @@ export async function dispatchRuntimeInteraction<
       session,
       params.req.command,
       { refContext: options.refContext },
-      async () => {
+      async (readiness) => {
         const result = await options.run(runtime);
-        afterRunWarning = await options.afterRun?.(result);
+        afterRunWarning = await options.afterRun?.(result, readiness);
         return result;
       },
       params.androidObservation,

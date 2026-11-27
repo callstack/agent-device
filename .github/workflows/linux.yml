@@ -58,37 +58,51 @@ jobs:
         run: node --experimental-strip-types scripts/device-lane-impact.ts replay-linux linux-command-evidence
 
       # Unbounded, this step could not fail — it could only stall. On 2026-08-19 a slow mirror
-      # held apt past the job's 30-minute budget on four main-branch runs and several unrelated
-      # PRs, which reported as a red check on branches that never ran a line of project code.
-      # On 2026-10-22 it recurred: the step took 20-60s normally, but 10 of 73 runs hit the
-      # 6-minute backstop. The Azure mirror appears to be a pull-through cache. A package nobody
-      # else requested recently (poppler-data, fonts-urw-base35, pulled in by gnome-calculator)
-      # is fetched from a slow upstream on first request, and the download crawls or stalls. The
-      # retry that warmed the mirror then succeeded in seconds, which is why re-runs were green.
-      # Three bounds fix that: the downloaded .debs are cached so most runs never ask the mirror
-      # for them, a download that does stall is dropped and retried under a per-attempt deadline
-      # (apt resumes with the files already fetched), and `timeout-minutes` stays as the
-      # backstop. dpkg itself never runs under a deadline.
-      - name: Restore Linux desktop package archives
-        id: apt-archives
+      # held apt past the job's 30-minute budget. On 2026-10-22 a pull-through mirror crawled on
+      # packages nobody else had requested recently (poppler-data, fonts-urw-base35, pulled in by
+      # gnome-calculator). In November 2026 the index refresh itself became the failure: a slow
+      # archive.ubuntu.com mirror could not serve the ~41 MB of indexes within the deadline.
+      #
+      # The cache holds the Ubuntu package lists of the last refresh and the archives that apt
+      # selected for PACKAGES from them. A run verifies the signatures, list digests and archive
+      # hashes, resolves PACKAGES against those lists and installs only when the plan needs no
+      # download, so it never asks a mirror for anything. A miss, a failed check, a plan that
+      # needs a download (a changed package list or runner image) or a failed install discards
+      # the restored set, refreshes into empty job-private directories and saves a new entry.
+      # The key is unique per run attempt, so restore-keys load the newest entry and a refreshed
+      # set replaces a stale one.
+      #
+      # Every install runs with --no-download, so the network is reached only inside a bounded
+      # phase. Worst case: cached install lock wait 60s, refresh 2 x (60s + 5s kill grace),
+      # download 2 x (75s + 5s), final install lock wait 60s. That is 410s of the 540s step,
+      # which leaves 130s for dpkg (2-5s per run in CI), the checks and the cache copy. dpkg
+      # itself never runs under a deadline.
+      - name: Restore Linux desktop packages
         if: steps.impact.outputs.run != 'false'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
         with:
-          path: ~/apt-archives
-          key: apt-archives-${{ runner.os }}-${{ hashFiles('.github/workflows/linux.yml') }}
-          restore-keys: apt-archives-${{ runner.os }}-
+          path: ~/apt-cache
+          key: apt-cache-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: apt-cache-${{ runner.os }}-
 
       - name: Install Linux desktop dependencies
+        id: apt-install
         if: steps.impact.outputs.run != 'false'
-        timeout-minutes: 6
+        timeout-minutes: 9
         run: |
           set -euo pipefail
+          CACHE="$HOME/apt-cache"
+          KEYRING=/usr/share/keyrings/ubuntu-archive-keyring.gpg
           APT_OPTS=(
             -o Acquire::Retries=2
             -o Acquire::http::Timeout=15
             -o Acquire::https::Timeout=15
             # The runner's own unattended-upgrades timer holds the dpkg lock; wait, don't hang.
             -o DPkg::Lock::Timeout=60
+            # Job-private lists and archives: the runner's periodic index update cannot change the
+            # plan between download and install, and a fallback never reuses a restored archive.
+            -o "Dir::State::Lists=$CACHE/lists/"
+            -o "Dir::Cache::Archives=$CACHE/archives/"
           )
           PACKAGES=(
             xvfb
@@ -102,40 +116,111 @@ jobs:
             gnome-calculator
             wmctrl
           )
-          # Retry a network phase under a per-attempt deadline.
+          stamp() { printf 'APT %s (UTC): %s\n' "$1" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; }
+          all_installed() {
+            local missing
+            missing="$(dpkg-query -W -f='${db:Status-Status} ${Package}\n' "${PACKAGES[@]}" 2>&1 | grep -v '^installed ' || true)"
+            [ -z "$missing" ] || { printf 'Not installed:\n%s\n' "$missing"; return 1; }
+          }
+          # apt trusts a list by the presence of InRelease and an archive by its file name and size,
+          # so check the restored set: only InRelease and plain Packages lists, each InRelease
+          # against the Ubuntu keyring, each list against its signed digest, and each archive
+          # against the SHA-256 of the record whose escaped file name apt looks up.
+          # This runs in an if condition, where errexit is off, so every command checks its status.
+          verify_restored() {
+            local signed extra name suite path sha
+            signed="$(mktemp -d)" || return 1
+            extra="$(find "$CACHE/lists" -mindepth 1 ! -name '*_InRelease' ! -name '*_Packages' ! -path "$CACHE/lists/partial")" || return 1
+            [ -z "$extra" ] || { printf 'Unexpected list files:\n%s\n' "$extra"; return 1; }
+            compgen -G "$CACHE/lists/*_InRelease" > /dev/null && compgen -G "$CACHE/archives/*.deb" > /dev/null || return 1
+            for list in "$CACHE"/lists/*_InRelease; do
+              gpgv --quiet --keyring "$KEYRING" --output "$signed/${list##*/}" "$list" 2> /dev/null || { echo "Unverified: $list"; return 1; }
+            done
+            for list in "$CACHE"/lists/*_Packages; do
+              name="${list##*/}"
+              suite="${name#*_dists_}"
+              suite="${suite%%_*}"
+              path="$(tr _ / <<< "${name#*_dists_"$suite"_}")" || return 1
+              sha="$(sha256sum "$list")" || return 1
+              grep -qE "^ ${sha%% *} +[0-9]+ $path\$" "$signed/${name%%_dists_*}_dists_${suite}_InRelease" || { echo "Unverified: $list"; return 1; }
+            done
+            # apt stores an archive as Package_Version_Architecture.deb, escaping % and : in the version.
+            awk '/^Package:/{p=$2} /^Architecture:/{a=$2} /^Version:/{v=$2; gsub(/%/, "%25", v); gsub(/:/, "%3a", v)}
+              /^SHA256:/{print $2 " " p "_" v "_" a ".deb"}' "$CACHE"/lists/*_Packages > "$signed/records" || return 1
+            for deb in "$CACHE"/archives/*.deb; do
+              sha="$(sha256sum "$deb")" || return 1
+              grep -qxF "${sha%% *} ${deb##*/}" "$signed/records" || { echo "Unverified: $deb"; return 1; }
+            done
+            stamp "verified $(compgen -G "$CACHE/lists/*_Packages" | wc -l) lists and $(compgen -G "$CACHE/archives/*.deb" | wc -l) archives"
+          }
+          # Succeeds when apt can install PACKAGES from the archive directory without a download.
+          offline_plan() {
+            local uris
+            uris="$(sudo apt-get install -qq --print-uris --no-install-recommends "${APT_OPTS[@]}" "${PACKAGES[@]}")" || return 1
+            [ -z "$uris" ] || { printf 'Archives to download:\n%s\n' "$uris"; return 1; }
+          }
+          install_offline() {
+            sudo apt-get install -y --no-install-recommends --no-download "${APT_OPTS[@]}" "${PACKAGES[@]}"
+          }
+          # Retry a network phase under a per-attempt deadline. An attempt passes only when its check passes too.
           apt_bounded() {
-            local seconds="$1"
-            shift
-            for attempt in 1 2 3; do
-              printf 'APT %s attempt %s start (UTC): %s\n' "$1" "$attempt" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              if sudo timeout --kill-after=5 "$seconds" apt-get "$@" "${APT_OPTS[@]}"; then
+            local seconds="$1" check="$2"
+            shift 2
+            for attempt in 1 2; do
+              stamp "$1 attempt $attempt start"
+              if sudo timeout --kill-after=5 "$seconds" apt-get "$@" "${APT_OPTS[@]}" && "$check"; then
                 return 0
               fi
             done
-            echo "::error::apt-get $1 did not finish within ${seconds}s on 3 attempts"
+            echo "::error::apt-get $1 did not finish within ${seconds}s on 2 attempts"
             return 1
           }
-          mkdir -p ~/apt-archives
-          sudo cp -n ~/apt-archives/*.deb /var/cache/apt/archives/ 2>/dev/null || true
-          apt_bounded 30 update
-          apt_bounded 75 install -y --no-install-recommends --download-only "${PACKAGES[@]}"
-          printf 'APT install start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${PACKAGES[@]}"
-          printf 'APT install complete (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          # Drop archives for versions the index no longer offers so the cache cannot grow.
-          sudo apt-get autoclean -q
-          rm -f ~/apt-archives/*.deb
-          # An unmatched glob stays literal and fails cp under set -e when the runner image already has every package.
-          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
-            cp /var/cache/apt/archives/*.deb ~/apt-archives/
+          if all_installed > /dev/null; then
+            exit 0
+          fi
+          mkdir -p "$CACHE/lists/partial" "$CACHE/archives/partial"
+          stamp "cached install start"
+          cached_dpkg=false
+          if verify_restored && offline_plan && cached_dpkg=true && install_offline && all_installed; then
+            stamp "cached install complete"
+            exit 0
+          fi
+          echo "::notice::The cached Linux desktop packages cannot install the package set; refreshing the apt index."
+          # A killed or failed dpkg run leaves a journal that makes apt refuse every later command.
+          # Packages whose dependency that run never unpacked stay unconfigured, so this exits nonzero.
+          if [ "$cached_dpkg" = true ]; then
+            sudo dpkg --configure -a || true
+          fi
+          sudo rm -rf "$CACHE"
+          mkdir -p "$CACHE/lists/partial" "$CACHE/archives/partial"
+          apt_bounded 60 true update
+          if [ "$cached_dpkg" = true ]; then
+            # On a broken system apt resolves only the named packages, so name what --fix-broken would install.
+            mapfile -t -O "${#PACKAGES[@]}" PACKAGES < <(sudo apt-get install --fix-broken -s -qq "${APT_OPTS[@]}" | awk '/^Inst /{print $2}')
+          fi
+          apt_bounded 75 offline_plan install -y --no-install-recommends --download-only "${PACKAGES[@]}"
+          stamp "install start"
+          install_offline
+          all_installed
+          stamp "install complete"
+          sudo rm -rf "$CACHE/lists/partial" "$CACHE/lists/lock" "$CACHE/archives/partial" "$CACHE/archives/lock"
+          sudo chown -R "$(id -u):$(id -g)" "$CACHE"
+          # Save only Ubuntu lists, the ones verify_restored can check. After a repair the set holds only
+          # what the repair fetched, so the next run's plan needs a download and that run saves a full set.
+          for list in "$CACHE"/lists/*_InRelease; do
+            gpgv --quiet --keyring "$KEYRING" "$list" 2> /dev/null || rm -f "${list%InRelease}"*
+          done
+          find "$CACHE/lists" -mindepth 1 ! -name '*_InRelease' ! -name '*_Packages' -delete
+          if compgen -G "$CACHE/archives/*.deb" > /dev/null; then
+            echo "save=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Save Linux desktop package archives
-        if: steps.impact.outputs.run != 'false' && steps.apt-archives.outputs.cache-hit != 'true'
+      - name: Save Linux desktop packages
+        if: steps.impact.outputs.run != 'false' && steps.apt-install.outputs.save == 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
         with:
-          path: ~/apt-archives
-          key: apt-archives-${{ runner.os }}-${{ hashFiles('.github/workflows/linux.yml') }}
+          path: ~/apt-cache
+          key: apt-cache-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Start Xvfb and D-Bus
         if: steps.impact.outputs.run != 'false'

@@ -13,7 +13,9 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
  * the rest are the phone hardware keys the `hardware-button` command names — volume, power,
  * mute, the explicit sleep/wake events, and the media keys. `shake` is the one cell that is a
  * device motion rather than a key: it shares the family's shape, one argumentless dispatch that
- * returns nothing. What varies between them is which
+ * returns nothing. `lockScreen` and `unlockScreen` are the two cells `lock-screen` selects; each
+ * returns only once the device reports the requested lock state, and throws otherwise. What
+ * varies between them is which
  * owners carry the control, and that is the fact table's job, not a per-button module's: a
  * button joins this list and its owners state a cell.
  */
@@ -22,6 +24,8 @@ export const SYSTEM_BUTTONS = [
   'appSwitcher',
   'actionButton',
   'shake',
+  'lockScreen',
+  'unlockScreen',
   'volumeUp',
   'volumeDown',
   'power',
@@ -46,6 +50,8 @@ export const SYSTEM_BUTTON_LABELS = {
   appSwitcher: 'app-switcher',
   actionButton: 'action-button',
   shake: 'shake',
+  lockScreen: 'lock-screen lock',
+  unlockScreen: 'lock-screen unlock',
   volumeUp: 'volume-up',
   volumeDown: 'volume-down',
   power: 'power',
@@ -156,7 +162,9 @@ const ANDROID_HARDWARE_BUTTON_CELLS = SYSTEM_BUTTONS.filter(
     button !== 'home' &&
     button !== 'appSwitcher' &&
     button !== 'actionButton' &&
-    button !== 'shake',
+    button !== 'shake' &&
+    button !== 'lockScreen' &&
+    button !== 'unlockScreen',
 ) satisfies readonly HardwareButton[];
 
 type HardwareCellsCoverCommandVocabulary =
@@ -235,6 +243,16 @@ export const SYSTEM_BUTTON_INTERACTOR_OPERATIONS = [
     operation: 'shake',
     label: SYSTEM_BUTTON_LABELS.shake,
     bind: (signal, resolve) => bindSystemButton('shake', signal, resolve),
+  },
+  {
+    operation: 'lockScreen',
+    label: SYSTEM_BUTTON_LABELS.lockScreen,
+    bind: (signal, resolve) => bindSystemButton('lockScreen', signal, resolve),
+  },
+  {
+    operation: 'unlockScreen',
+    label: SYSTEM_BUTTON_LABELS.unlockScreen,
+    bind: (signal, resolve) => bindSystemButton('unlockScreen', signal, resolve),
   },
   {
     operation: 'volumeUp',

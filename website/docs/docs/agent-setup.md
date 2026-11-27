@@ -41,6 +41,7 @@ For React Native JavaScript heap growth, heap snapshots, allocation hotspots, or
 For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to profiling or debugging evidence, read `agent-device help react-native`.
 
 Use MCP tools or the CLI in the integrated terminal.
+Run each agent-device call as its own command. When your host runs commands in a sandbox and allows `agent-device` by command name, do not chain it with `;`, `&&`, or `|`, and do not quote its binary path, or the host's allow rule misses the call and it cannot reach the daemon or the device.
 If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the command the same way the user would from a normal terminal session and run that absolute path instead. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`.
 Do not silently fall back to `npx -y agent-device@latest`; ask or use an exact version.
 MCP exposes structured tools backed by the agent-device client; it does not expose generic shell execution.
@@ -53,6 +54,8 @@ Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` r
 ## MCP server
 
 `agent-device mcp` starts the stdio MCP server. It exposes installed CLI commands as tools. Some local workflows are CLI-only and have no MCP tool.
+
+For Metro preparation and reload, run `agent-device help metro` in your terminal for the commands and required options. In a Node.js integration, use `client.metro.prepare(options)` or `client.metro.reload()` from your host code.
 
 Each tool declares a display title and separate read-only and destructive hints. A read-only tool changes no device, app, session, or host state: no device boot, foreground change, or artifact write. Observation and evidence tools that can cause these changes declare a write effect without a destructive hint. This includes `apps` and `appstate`, whose readiness checks can boot a device. Tools that can replace or delete existing data, or dispatch arbitrary app actions, declare a destructive effect; for example, `clipboard` can replace text and `find` can click. These hints help your client present permissions; they do not enforce access controls. Idempotence stays at MCP's default (`idempotentHint: false`).
 

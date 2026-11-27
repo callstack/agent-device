@@ -87,6 +87,7 @@ export type HoverOptions = DeviceCommandBaseOptions &
   SettleCommandOptions;
 
 export type SwipeOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions &
   PostGestureStabilizationOptions & {
     from: { x: number; y: number };
     to: { x: number; y: number };
@@ -96,29 +97,35 @@ export type SwipeOptions = DeviceCommandBaseOptions &
   };
 
 export type GestureOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions &
   (GesturePayload | (SwipeGesturePayload & PostGestureStabilizationOptions));
 
-export type PanOptions = DeviceCommandBaseOptions & {
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-  pointerCount?: GesturePointerCount;
-  durationMs?: number;
-  /** Hold the contact at (x, y) this long before the move starts. */
-  holdMs?: number;
-};
+export type PanOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions & {
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+    pointerCount?: GesturePointerCount;
+    durationMs?: number;
+    /** Hold the contact at (x, y) this long before the move starts. */
+    holdMs?: number;
+  };
 
-export type DragOptions = DeviceCommandBaseOptions & Omit<DragGesturePayload, 'kind'>;
+export type DragOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions &
+  Omit<DragGesturePayload, 'kind'>;
 
-export type FlingOptions = DeviceCommandBaseOptions & {
-  direction: ScrollDirection;
-  x: number;
-  y: number;
-  distance?: number;
-};
+export type FlingOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions & {
+    direction: ScrollDirection;
+    x: number;
+    y: number;
+    distance?: number;
+  };
 
 export type SwipeGestureOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions &
   Omit<SwipeGesturePayload, 'kind'> &
   PostGestureStabilizationOptions;
 
@@ -145,22 +152,28 @@ export type FillOptions = DeviceCommandBaseOptions &
     verify?: boolean;
   };
 
-export type PinchOptions = DeviceCommandBaseOptions & {
-  scale: number;
-  x?: number;
-  y?: number;
-};
+export type PinchOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions & {
+    scale: number;
+    x?: number;
+    y?: number;
+  };
 
-export type RotateGestureOptions = DeviceCommandBaseOptions & {
-  degrees: number;
-  x?: number;
-  y?: number;
-};
+export type RotateGestureOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions & {
+    degrees: number;
+    x?: number;
+    y?: number;
+  };
 
-export type TransformGestureOptions = DeviceCommandBaseOptions & TransformGestureParams;
+export type TransformGestureOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions &
+  TransformGestureParams;
 
 /** Touches 2 to 5 points and holds them for `holdMs`; `count` repeats the same contacts. */
-export type TapGestureOptions = DeviceCommandBaseOptions & Omit<TapGesturePayload, 'kind'>;
+export type TapGestureOptions = DeviceCommandBaseOptions &
+  SettleCommandOptions &
+  Omit<TapGesturePayload, 'kind'>;
 
 export type ScrollOptions = DeviceCommandBaseOptions &
   SettleCommandOptions &

@@ -550,6 +550,36 @@ test('setIosSetting reset-keychain resets the whole simulator keychain', async (
   );
 });
 
+test.for([
+  ['wifi', 'off'],
+  ['airplane', 'on'],
+] as const)(
+  'setIosSetting %s %s warns that only the status bar changed',
+  async ([setting, state]) => {
+    await withFakeAppleTool(
+      (args) => {
+        if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+        if (args[0] === 'simctl' && args[1] === 'status_bar') return '';
+        return unexpectedArgs(args);
+      },
+      async () => {
+        const result = await setIosSetting(
+          IOS_TEST_SIMULATOR,
+          setting,
+          state,
+          undefined,
+          undefined,
+          process.env,
+        );
+        assert.ok(Array.isArray(result?.warnings));
+        assert.equal(result.warnings.length, 1);
+        assert.match(result.warnings[0], new RegExp(`^settings ${setting} `));
+        assert.match(result.warnings[0], /status bar/);
+      },
+    );
+  },
+);
+
 test('setIosSetting reset-keychain rejects unsupported state', async () => {
   await withFakeAppleTool(
     (args) => {
@@ -582,7 +612,7 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
   await withFakeAppleTool(
     (args) => {
       if (isSimctlListApps(args)) return INSTALLED_APPS_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 revoke notifications com.example.app') {
+      if (args.join(' ') === 'simctl privacy sim-1 revoke camera com.example.app') {
         return { stderr: 'Failed to revoke access\nOperation not permitted', exitCode: 1 };
       }
       return unexpectedArgs(args);
@@ -596,13 +626,13 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
             'deny',
             'com.example.app',
             {
-              permissionTarget: 'notifications',
+              permissionTarget: 'camera',
             },
             process.env,
           ),
         {
           code: 'UNSUPPORTED_OPERATION',
-          message: /does not support setting notifications permission/i,
+          message: /does not support setting camera permission/i,
         },
       );
       assert.deepEqual(calls.at(-1), [
@@ -610,7 +640,7 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
         'privacy',
         'sim-1',
         'revoke',
-        'notifications',
+        'camera',
         'com.example.app',
       ]);
     },

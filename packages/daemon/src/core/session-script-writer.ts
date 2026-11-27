@@ -3,9 +3,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { dragGesturePayloadFromPositionals } from '@agent-device/gestures/gesture-normalization';
+import {
+  dragGesturePayloadFromPositionals,
+  pinchElementFromPositionals,
+} from '@agent-device/gestures/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { recordedSelectorExpression } from '@agent-device/selectors';
 import {
   inferFillText,
@@ -39,6 +42,12 @@ import {
   toActivePublicationFailure,
   validateActivePublicationActions,
 } from './session-script-active-publication.ts';
+
+const SCRIPT_WRITE_REASONS = {
+  // Writing the session script failed; check the target path and its permissions, then record
+  // again.
+  writeFailed: { reason: 'script_write_failed' },
+} as const satisfies ReasonTable<'script recording'>;
 
 /**
  * `{ written: true; path }` — committed. `{ written: false }` (no `error`) — intentionally not
@@ -246,18 +255,28 @@ function handleSessionScriptWriteFailure(params: {
 }
 
 function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
-  const detail = error instanceof Error ? error.message : String(error);
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+  return toScriptWriteFailure(
+    error,
+    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}`,
     {
-      reason: 'script_write_failed',
+      reason: SCRIPT_WRITE_REASONS.writeFailed.reason,
       ...(scriptPath ? { path: scriptPath } : {}),
       hint: 'Check the target path and its permissions, then re-record with open --save-script.',
     },
     error,
   );
+}
+
+/** An AppError passes through; any other failure is wrapped with its message appended. */
+function toScriptWriteFailure(
+  error: unknown,
+  message: string,
+  details: Record<string, unknown>,
+  cause?: unknown,
+): AppError {
+  if (error instanceof AppError) return error;
+  const detail = error instanceof Error ? error.message : String(error);
+  return new AppError('COMMAND_FAILED', `${message}: ${detail}`, details, cause);
 }
 
 /**
@@ -268,11 +287,9 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
  * message and hint so the two are distinguishable to the agent.
  */
 function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
-  const detail = error instanceof Error ? error.message : String(error);
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+  return toScriptWriteFailure(
+    error,
+    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}`,
     {
       hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
     },
@@ -394,19 +411,24 @@ function buildOptimizedActions(
 function assertNoUnresolvedRefFallback(action: SessionAction): void {
   const drag =
     action.command === 'gesture'
-      ? dragGesturePayloadFromPositionals(action.positionals ?? [])
+      ? dragGesturePayloadFromPositionals(action.positionals)
       : undefined;
   if (drag) {
     assertNoUnresolvedDragEndpoint(drag);
     return;
   }
-  if (!isSelectorTargetingCommand(action.command)) return;
+  const pinchElement =
+    action.command === 'gesture' ? pinchElementFromPositionals(action.positionals) : undefined;
+  if (!pinchElement && !isSelectorTargetingCommand(action.command)) return;
   const refPositional =
-    action.command === 'get' ? action.positionals?.[1] : action.positionals?.[0];
+    pinchElement ?? (action.command === 'get' ? action.positionals[1] : action.positionals[0]);
   if (!refPositional?.startsWith('@')) return;
+  const step = pinchElement
+    ? `gesture ${action.positionals.join(' ')}`
+    : `${action.command} ${refPositional}`;
   throw new AppError(
     'COMMAND_FAILED',
-    `Cannot write recorded step "${action.command} ${refPositional}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
+    `Cannot write recorded step "${step}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
   );
 }
 
@@ -434,7 +456,7 @@ function readSelectorChainExpression(action: SessionAction): string | undefined 
   const selectorChain =
     Array.isArray(action.result?.selectorChain) &&
     action.result.selectorChain.every((entry) => typeof entry === 'string')
-      ? (action.result.selectorChain as string[])
+      ? action.result.selectorChain
       : [];
   return recordedSelectorExpression(selectorChain);
 }
@@ -448,8 +470,7 @@ function optimizeFillAction(
   selectorExpr: string,
 ): SessionAction | undefined {
   // `''` is the explicit clear request, so only a fill that recorded no text argument is skipped.
-  const recordedText =
-    typeof action.result?.text === 'string' || (action.positionals?.length ?? 0) > 1;
+  const recordedText = typeof action.result?.text === 'string' || action.positionals.length > 1;
   return recordedText
     ? { ...action, positionals: [selectorExpr, inferFillText(action)] }
     : undefined;
@@ -459,7 +480,7 @@ function optimizeLongPressAction(action: SessionAction, selectorExpr: string): S
   const durationMs =
     typeof action.result?.durationMs === 'number'
       ? String(action.result.durationMs)
-      : readLongPressDurationFromPositionals(action.positionals ?? []);
+      : readLongPressDurationFromPositionals(action.positionals);
   return {
     ...action,
     positionals: durationMs ? [selectorExpr, durationMs] : [selectorExpr],
@@ -467,7 +488,7 @@ function optimizeLongPressAction(action: SessionAction, selectorExpr: string): S
 }
 
 function optimizeGetAction(action: SessionAction, selectorExpr: string): SessionAction | undefined {
-  const sub = action.positionals?.[0];
+  const sub = action.positionals[0];
   return sub === 'text' || sub === 'attrs'
     ? { ...action, positionals: [sub, selectorExpr] }
     : undefined;
@@ -507,14 +528,14 @@ function formatScript(
   appendCompleteSentinel: boolean,
 ): string {
   const lines: string[] = [];
-  const kind = session.device.kind ? ` kind=${session.device.kind}` : '';
+  const kind = ` kind=${session.device.kind}`;
   const theme = 'unknown';
   lines.push(
     // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
     `context platform=${publicPlatformString(session.device)} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=${theme}`,
   );
   for (const action of actions) {
-    if (action.flags?.noRecord) continue;
+    if (action.flags.noRecord) continue;
     lines.push(...formatTargetAnnotationLines(action));
     // Replay interpolates the written positionals, flags, and runtime hints; only the
     // placeholders the recorder inserted stay live.
@@ -548,10 +569,10 @@ function formatSpecialActionLine(parts: string[], action: SessionAction): string
 }
 
 function formatClickLikeActionLine(parts: string[], action: SessionAction): string | undefined {
-  const first = action.positionals?.[0];
+  const first = action.positionals[0];
   if (!first) return undefined;
   if (first.startsWith('@')) {
-    // Recorded refs may carry a `~s<generation>` pin (#1076); scripts store the
+    // Recorded refs may carry a `-s<generation>` pin (#1076); scripts store the
     // plain ref — generations are meaningless outside the minting session.
     parts.push(formatScriptArg(stripRecordedRefGeneration(first)));
     appendRefLabel(parts, action);
@@ -567,7 +588,7 @@ function formatClickLikeActionLine(parts: string[], action: SessionAction): stri
 }
 
 function formatFillActionLine(parts: string[], action: SessionAction): string | undefined {
-  const ref = action.positionals?.[0];
+  const ref = action.positionals[0];
   if (!ref?.startsWith('@')) return undefined;
   parts.push(formatScriptArg(stripRecordedRefGeneration(ref)));
   appendRefLabel(parts, action);
@@ -581,8 +602,8 @@ function formatFillActionLine(parts: string[], action: SessionAction): string | 
 }
 
 function formatGetActionLine(parts: string[], action: SessionAction): string | undefined {
-  const sub = action.positionals?.[0];
-  const ref = action.positionals?.[1];
+  const sub = action.positionals[0];
+  const ref = action.positionals[1];
   if (!sub || !ref) return undefined;
   parts.push(formatScriptArg(sub));
   parts.push(formatScriptArg(stripRecordedRefGeneration(ref)));

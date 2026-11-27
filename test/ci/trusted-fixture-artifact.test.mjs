@@ -320,7 +320,7 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
       'if [ "${2:-}" = --print-certs ]; then',
       '  digest="$TEST_SOURCE_DIGEST"',
       '  if [ "$3" = "$TEST_REPACK_OUTPUT" ]; then digest="$TEST_OUTPUT_DIGEST"; fi',
-      String.raw`  printf "Signer #1 certificate SHA-256 digest: %s\n" "$digest"`,
+      '  printf "%s certificate SHA-256 digest: %s\\n" "${TEST_SIGNER_LABEL:-Signer #1}" "$digest"',
       'fi',
       '',
     ].join('\n'),
@@ -384,6 +384,25 @@ test('Android APK repack signs the output and preserves its package id', (t) => 
   const mismatch = runRepack(mismatchedOutput, 'different-digest');
   assert.notEqual(mismatch.status, 0);
   assert.match(mismatch.stderr, /did not preserve the source signing certificate/);
+
+  // build-tools 37 labels each digest line by the scheme that carried the signer, for example
+  // `V3.0 Signer:`. One repack check must accept both label shapes: it passes on a matching
+  // digest and still fails on a differing one.
+  const schemeLabelMatch = runRepack(
+    path.join(tempRoot, 'output', 'scheme-label.apk'),
+    'source-digest',
+    {
+      TEST_SIGNER_LABEL: 'V3.0 Signer:',
+    },
+  );
+  assert.equal(schemeLabelMatch.status, 0, schemeLabelMatch.stderr);
+  const schemeLabelMismatch = runRepack(
+    path.join(tempRoot, 'output', 'scheme-label-mismatched.apk'),
+    'different-digest',
+    { TEST_SIGNER_LABEL: 'V3.0 Signer:' },
+  );
+  assert.notEqual(schemeLabelMismatch.status, 0);
+  assert.match(schemeLabelMismatch.stderr, /did not preserve the source signing certificate/);
 
   const unpinned = runRepack(path.join(tempRoot, 'output', 'unpinned.apk'), 'source-digest', {
     AGENT_DEVICE_ANDROID_BUILD_TOOLS: '',

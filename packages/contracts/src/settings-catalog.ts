@@ -52,6 +52,9 @@ export const TEXT_SIZE_CATEGORIES = [
 
 export const APPEARANCE_ACTIONS = ['light', 'dark', 'toggle'] as const;
 
+/** The state a `value` setting takes to hand the value back to the device's own default. */
+export const SETTING_RESET_STATE = 'reset';
+
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 export type MobilePermissionTarget = (typeof MOBILE_PERMISSION_TARGETS)[number];
@@ -81,6 +84,8 @@ export type SettingForm = Readonly<
       modes?: readonly PermissionMode[];
     }
   | { kind: 'app-id' }
+  /** One value the setting validates itself, or {@link SETTING_RESET_STATE}. */
+  | { kind: 'value'; placeholder: string }
 >;
 
 export type SettingDefinition = Readonly<{
@@ -117,6 +122,12 @@ export const SETTINGS = {
     appScope: { mobile: 'device-level' },
     help: 'Android only. Runs svc data and reports the stored mobileData state, or fails with mobile-data-not-applied or mobile-data-unreadable. Multi-SIM read-back is not covered yet, and --app is refused.',
   },
+  'keep-awake': {
+    forms: [{ kind: 'on-off' }],
+    app: 'input',
+    appScope: { mobile: 'device-level' },
+    help: 'Android holds its screen on while the device charges (svc power stayon true writes the charging mask, false clears it and does not restore a mask a user set), so a device on battery can still sleep; the write survives a reboot and outlives the session, so run off when the hold ends. --app is refused.',
+  },
   location: {
     forms: [
       { kind: 'on-off', appScope: { apple: 'app-scoped', mobile: 'device-level' } },
@@ -137,6 +148,18 @@ export const SETTINGS = {
     forms: [{ kind: 'choice', states: TEXT_SIZE_CATEGORIES }],
     readable: true,
     help: 'Reads the preferred text size without a category and applies one with it, on iPhone and iPad simulators (simctl content size) and Android (system font_scale). Android has no ladder of its own: a read names the nearest rung and reports the multiplier as platformValue. A running app adopts a new size at its next configuration change, so relaunch it.',
+  },
+  timezone: {
+    forms: [{ kind: 'value', placeholder: 'iana-zone' }],
+    app: 'input',
+    appScope: { apple: 'device-level', mobile: 'device-level' },
+    help: 'Sets the device time zone from an IANA name, such as Asia/Kolkata, on iPhone and iPad simulators (sets TZ in simulator launchd; applies only to apps launched afterwards and is lost when the simulator reboots; the status bar keeps the host time) and Android (the system time zone, with automatic time zone turned off). reset hands it back to the device default: the host Mac time zone on a simulator, and automatic time zone on Android, which applies the network zone a moment later. The response reports the time zone held before. --app is refused.',
+  },
+  locale: {
+    forms: [{ kind: 'value', placeholder: 'locale-id' }],
+    app: 'input',
+    appScope: { apple: 'device-level', mobile: 'device-level' },
+    help: 'Sets the device language and region from one locale id, such as en_IN or fr-CA, on iPhone and iPad simulators (AppleLanguages and AppleLocale) and Android 8.0 or newer (the system locale list). reset removes the simulator override, which leaves English with no region, and applies the system image default on Android. The response reports the locale held before. An iOS app reads the locale at launch, so relaunch it; Android applies it to running apps at once. --app is refused.',
   },
   faceid: {
     forms: [{ kind: 'choice', states: ['match', 'nonmatch', 'enroll', 'unenroll'] }],
@@ -166,14 +189,19 @@ export const SETTINGS = {
       {
         kind: 'permission',
         actions: PERMISSION_ACTIONS,
-        targets: MOBILE_PERMISSION_TARGETS,
+        targets: MOBILE_PERMISSION_TARGETS.filter((target) => target !== 'photos'),
+      },
+      {
+        kind: 'permission',
+        actions: PERMISSION_ACTIONS,
+        targets: ['photos'],
         modes: PERMISSION_MODES,
       },
       { kind: 'permission', actions: ['grant', 'reset'], targets: MACOS_PERMISSION_TARGETS },
     ],
     app: 'input',
     appScope: { apple: 'app-scoped', mobile: 'app-scoped', 'macos-host': 'device-level' },
-    help: 'Changes a permission of the --app app or the session app. An iOS simulator, local or Limrun, resolves --app to an installed bundle id or display name, and Android to an installed package. On Android, deny|reset of a held permission kills a running app; the response reports priorGrantState and warns, and open <app> --relaunch restores it. Android needs a resolvable foreground user and changes nothing without one. On the macOS host, grant|reset change the host TCC grants for the three desktop targets and take no --app.',
+    help: 'Changes a permission of the --app app or the session app. An iOS simulator, local or Limrun, resolves --app to an installed bundle id or display name, and Android to an installed package. On iOS simulators, settings permission refuses an explicit notifications target. Use alert accept or alert dismiss to answer the notification prompt. On Android, deny|reset of a held permission kills a running app; the response reports priorGrantState and warns, and open <app> --relaunch restores it. Android needs a resolvable foreground user and changes nothing without one. On the macOS host, grant|reset change the host TCC grants for the three desktop targets and take no --app.',
   },
 } as const satisfies Record<string, SettingDefinition>;
 

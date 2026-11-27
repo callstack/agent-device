@@ -97,6 +97,8 @@ export const interactionCliOutputFormatters = withSettleCapableNotes({
   longpress: messageOutput,
   hover: messageOutput,
   scroll: messageOutput,
+  swipe: messageOutput,
+  gesture: messageOutput,
   get: ({ input, result }) =>
     getCliOutput({
       result: result as CommandRequestResult,

@@ -6,6 +6,7 @@ import {
   createRequestCanceledError,
   malformedRequestDetails,
   normalizeError,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { AsyncResource } from 'node:async_hooks';
 import net from 'node:net';
@@ -26,6 +27,7 @@ import {
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
+import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 
 import {
   serializeDaemonProgressEnvelope,
@@ -230,14 +232,35 @@ export function listenHttpServer(server: HttpServer): Promise<number> {
   return listenLoopbackServer(server, 'Failed to bind HTTP server');
 }
 
+const DAEMON_LISTEN_REASONS = {
+  // The host refused the daemon's loopback listen with EPERM or EACCES, as a sandbox around the
+  // launching command does; `details.code` holds the errno code.
+  denied: { reason: 'daemon_listen_denied' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
+
+const LISTEN_DENIED_CODES: ReadonlySet<string> = new Set(['EPERM', 'EACCES']);
+
 function listenLoopbackServer(
   server: net.Server | HttpServer,
   errorMessage: string,
 ): Promise<number> {
   return new Promise((resolve, reject) => {
-    server.once('error', reject);
+    const onError = (error: NodeJS.ErrnoException) => {
+      if (!error.code || !LISTEN_DENIED_CODES.has(error.code)) {
+        reject(error);
+        return;
+      }
+      reject(
+        new AppError('COMMAND_FAILED', `${errorMessage}: listen ${error.code} on 127.0.0.1`, {
+          reason: DAEMON_LISTEN_REASONS.denied.reason,
+          code: error.code,
+          exitCode: DAEMON_STARTUP_EXIT_CODES.listenDenied,
+        }),
+      );
+    };
+    server.once('error', onError);
     server.listen(0, '127.0.0.1', () => {
-      server.off('error', reject);
+      server.off('error', onError);
       const address = server.address();
       if (typeof address === 'object' && address?.port) {
         resolve(address.port);

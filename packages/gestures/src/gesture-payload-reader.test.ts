@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { readGesturePayload } from './gesture-payload-reader.ts';
+import { AppError } from '@agent-device/kernel/errors';
 
 test('structured gesture input rejects durations outside the planner range', () => {
   const cases = [
@@ -48,6 +49,65 @@ test('rotate does not accept velocity', () => {
   });
 });
 
+test('drag refuses coordinate endpoints and carries the held pan that makes the move', () => {
+  const refusal = (source: string, destination: string, timing: Record<string, number> = {}) => {
+    try {
+      readGesturePayload({ kind: 'drag', source, destination, ...timing });
+    } catch (error) {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      const { reason, endpoint, pan } = error.details ?? {};
+      return { reason, endpoint, pan };
+    }
+    assert.fail(`expected drag ${source} -> ${destination} to be refused`);
+  };
+  const reason = 'drag_endpoint_is_coordinates';
+
+  // gesture drag "170 1595" "540 160" 1200 800 600: the pan keeps the hold and the move time.
+  assert.deepEqual(
+    refusal('170 1595', '540 160', { sourceHoldMs: 1200, moveMs: 800, destinationHoldMs: 600 }),
+    {
+      reason,
+      endpoint: 'source',
+      pan: { x: 170, y: 1595, dx: 370, dy: -1435, durationMs: 800, holdMs: 1200 },
+    },
+  );
+  assert.deepEqual(refusal('170,1595', '540,160'), {
+    reason,
+    endpoint: 'source',
+    pan: { x: 170, y: 1595, dx: 370, dy: -1435, durationMs: 500, holdMs: 800 },
+  });
+  assert.deepEqual(refusal('id="row-1"', '540 160'), {
+    reason,
+    endpoint: 'destination',
+    pan: undefined,
+  });
+  // Unquoted coordinates split into bare numbers, and an invalid moveMs: the endpoints are
+  // still named, without a pan.
+  assert.deepEqual(
+    refusal('170', '1595', { sourceHoldMs: 540, moveMs: 15, destinationHoldMs: 1200 }),
+    {
+      reason,
+      endpoint: 'source',
+      pan: undefined,
+    },
+  );
+  // A selector whose value is a number stays a selector.
+  assert.equal(
+    readGesturePayload({ kind: 'drag', source: 'label="170"', destination: '@e2' }).kind,
+    'drag',
+  );
+  // An empty or blank segment is no coordinate, so these are left to the selector checks.
+  for (const endpoint of [',', '170,', '170 , ']) {
+    assert.equal(
+      readGesturePayload({ kind: 'drag', source: endpoint, destination: '@e2' }).kind,
+      'drag',
+      endpoint,
+    );
+  }
+  assert.deepEqual(refusal('170,', '540 160'), { reason, endpoint: 'destination', pan: undefined });
+});
+
 test('drag requires two non-empty targets and validates each timing phase', () => {
   for (const input of [
     { kind: 'drag', source: '', destination: 'id="drop-target"' },
@@ -68,13 +128,13 @@ test('drag requires two non-empty targets and validates each timing phase', () =
     readGesturePayload({
       kind: 'drag',
       source: 'id="drag-source"',
-      destination: '@e2~s42',
+      destination: '@e2-s42',
       destinationHoldMs: 0,
     }),
     {
       kind: 'drag',
       source: 'id="drag-source"',
-      destination: '@e2~s42',
+      destination: '@e2-s42',
       sourceHoldMs: undefined,
       moveMs: undefined,
       destinationHoldMs: 0,
@@ -168,6 +228,20 @@ test('tap-only inputs are refused on other gesture kinds', () => {
     code: 'INVALID_ARGS',
     message: 'holdMs is supported only for gesture tap and gesture pan',
   });
+});
+
+test('element is refused on gesture kinds other than pinch', () => {
+  assert.throws(() => readGesturePayload({ kind: 'rotate', degrees: 30, element: '@e1' }), {
+    code: 'INVALID_ARGS',
+    message: 'element is supported only for gesture pinch',
+  });
+});
+
+test('pinch refuses an element together with an origin', () => {
+  assert.throws(
+    () => readGesturePayload({ kind: 'pinch', scale: 2, element: '@e17', origin: { x: 1, y: 2 } }),
+    { code: 'INVALID_ARGS', message: 'gesture pinch takes an element or an origin, not both' },
+  );
 });
 
 test('pan accepts a hold before the move', () => {

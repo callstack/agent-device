@@ -1,10 +1,20 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DaemonRetirementResult } from './daemon-registration-owner.ts';
+
+/**
+ * Why `daemon stop` reports a retirement it could not prove. The owner is the retirement watchdog:
+ * the observation never came back the way the rule needs.
+ */
+const DAEMON_STOP_REASONS = {
+  // The stop could not confirm the daemon exited: the process stayed alive after the signal, the
+  // signal failed, or its start time or identity could not be verified.
+  exitUnconfirmed: { reason: 'daemon_exit_unconfirmed' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 import {
   DAEMON_LIFECYCLE_REASONS,
   embeddedCloseHint,
-  DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+  DAEMON_RETIREMENT_REASONS,
   type DaemonPaths,
   type ObservedDaemonIdentity,
 } from './daemon-resolution.ts';
@@ -115,7 +125,7 @@ export function ownerRefusal(
         hint: embeddedCloseHint(pid),
       }
     : {
-        reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+        reason: DAEMON_RETIREMENT_REASONS.ownerUnrecognized.reason,
         hint: 'Nothing was signaled. Check what owns that process, then repair the record: stop it by its own means and remove its daemon.json so a daemon can register again.',
       };
 }
@@ -142,7 +152,10 @@ function daemonRetirementError(
       pid: info.pid,
       processStartTime: info.startTime,
       reason:
-        refusal?.reason ?? (failure ? 'daemon_exit_unconfirmed' : 'daemon_retirement_unconfirmed'),
+        refusal?.reason ??
+        (failure
+          ? DAEMON_STOP_REASONS.exitUnconfirmed.reason
+          : DAEMON_RETIREMENT_REASONS.retirementUnconfirmed.reason),
       terminationReason: failure?.reason,
       signal: failure?.signal,
       retirement,

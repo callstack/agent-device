@@ -100,10 +100,12 @@ export async function assertLifecycleAndSystem(context: LiveContext): Promise<vo
   await assertElementText(context, 'id="automation-appearance"', 'dark');
   await runStep(context, 'restore light appearance', ['settings', 'appearance', 'light']);
   await assertElementText(context, 'id="automation-appearance"', 'light');
+  await assertTimeZoneRoundTrip(context);
+  await assertLocaleRoundTrip(context);
   verifyCommand(
     context,
     C.settings,
-    'permission reset/deny/grant and appearance dark/light all produce durable evidence',
+    'permission reset/deny/grant, appearance dark/light, time zone set/reset, and locale set/reset all produce durable evidence',
   );
 
   // XCUIDevice models physical device orientation, which is intentionally not
@@ -340,4 +342,29 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
 function appleCaptureCount(result: { json?: any }): number {
   const backends = result.json?.data?.snapshotDiagnostics?.stats?.backends ?? {};
   return Number(backends['apple-runner'] ?? 0) + Number(backends['simulator-ax-bridge'] ?? 0);
+}
+
+/** Each write reports what it set, and reset reports what it cleared. */
+async function assertTimeZoneRoundTrip(context: LiveContext): Promise<void> {
+  const zone = await runStep(context, 'set Asia/Kolkata time zone', [
+    'settings',
+    'timezone',
+    'Asia/Kolkata',
+  ]);
+  assert.equal(zone.json?.data?.timeZone, 'Asia/Kolkata', JSON.stringify(zone.json));
+  const zoneReset = await runStep(context, 'reset time zone', ['settings', 'timezone', 'reset']);
+  assert.equal(
+    zoneReset.json?.data?.previousTimeZone,
+    'Asia/Kolkata',
+    JSON.stringify(zoneReset.json),
+  );
+}
+
+/** Each write reports what it set, and reset reports what it cleared. */
+async function assertLocaleRoundTrip(context: LiveContext): Promise<void> {
+  const locale = await runStep(context, 'set en_IN locale', ['settings', 'locale', 'en_IN']);
+  assert.equal(locale.json?.data?.locale, 'en-IN', JSON.stringify(locale.json));
+  const localeReset = await runStep(context, 'reset locale', ['settings', 'locale', 'reset']);
+  assert.equal(localeReset.json?.data?.locale, null, JSON.stringify(localeReset.json));
+  assert.equal(localeReset.json?.data?.previousLocale, 'en-IN', JSON.stringify(localeReset.json));
 }

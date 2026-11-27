@@ -1,4 +1,5 @@
 import {
+  APP_DEVICE_REASONS,
   IOS_SAFARI_BUNDLE_ID,
   isDeepLinkTarget,
   isWebUrl,
@@ -32,7 +33,7 @@ export function resolveRequestedOpenSurface(params: {
       throw new AppError(
         'INVALID_ARGS',
         `This session holds ${device.hostApp.bundleId} as its own device, so it opens only the app surface. Use a new --session for --surface ${surface}.`,
-        { reason: 'app-device-scope', bundleId: device.hostApp.bundleId },
+        { reason: APP_DEVICE_REASONS.scope.reason, bundleId: device.hostApp.bundleId },
       );
     }
     return surface;

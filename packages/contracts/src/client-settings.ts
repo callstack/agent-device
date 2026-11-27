@@ -7,6 +7,7 @@ import type {
   PermissionAction,
   PermissionMode,
   SETTINGS,
+  SETTING_RESET_STATE,
   SettingName,
 } from './settings-catalog.ts';
 
@@ -19,7 +20,9 @@ type FormState<Form> = Form extends { kind: 'on-off' }
   ? 'on' | 'off'
   : Form extends { kind: 'choice'; states: readonly (infer State)[] }
     ? State
-    : never;
+    : Form extends { kind: 'value' }
+      ? typeof SETTING_RESET_STATE | (string & {})
+      : never;
 
 type SettingState<Name extends SettingName> = FormState<(typeof SETTINGS)[Name]['forms'][number]>;
 
@@ -36,7 +39,10 @@ type StateOnlySettingOptions = {
       : { setting: Name; state: SettingState<Name> });
 }[StateOnlySetting];
 
-/** Switches that change the whole Android device; naming an app is refused with `setting_app_not_consumed`. */
+/**
+ * Settings that change the whole device on Android and wherever else they run; naming an app is
+ * refused with `setting_app_not_consumed`.
+ */
 type DeviceLevelToggleSetting = {
   [Name in SettingName]: (typeof SETTINGS)[Name] extends {
     app: 'input';
@@ -53,6 +59,26 @@ type DeviceLevelToggleOptions = {
     app?: string;
   };
 }[DeviceLevelToggleSetting];
+
+/** The permission targets whose catalog form declares `modes`; no other target takes a mode. */
+type ModedPermissionTarget = Extract<
+  (typeof SETTINGS)['permission']['forms'][number],
+  { modes: readonly string[] }
+>['targets'][number];
+
+type PermissionUpdateOptions = DeviceCommandBaseOptions & {
+  setting: 'permission';
+  state: PermissionAction;
+  /**
+   * The app the permission changes, by bundle id, package name, or app name, resolved as `open`
+   * resolves it: an iOS simulator, local or Limrun, matches display names and accepts only an
+   * installed bundle id, and Android accepts only an installed package and refuses a name that
+   * resolves to an intent with `setting_app_not_package`. Without it the session app is used;
+   * no app has to be running or open. macOS permissions are host-level TCC grants, so naming an
+   * app there is refused.
+   */
+  app?: string;
+};
 
 export type SettingsUpdateOptions =
   | StateOnlySettingOptions
@@ -75,18 +101,14 @@ export type SettingsUpdateOptions =
       longitude: number;
       app?: string;
     })
-  | (DeviceCommandBaseOptions & {
-      setting: 'permission';
-      state: PermissionAction;
-      permission: PermissionTarget;
-      mode?: PermissionMode;
-      /**
-       * The app the permission changes, by bundle id, package name, or app name, resolved as `open`
-       * resolves it: an iOS simulator, local or Limrun, matches display names and accepts only an
-       * installed bundle id, and Android accepts only an installed package and refuses a name that
-       * resolves to an intent with `setting_app_not_package`. Without it the session app is used;
-       * no app has to be running or open. macOS permissions are host-level TCC grants, so naming an
-       * app there is refused.
-       */
-      app?: string;
+  | (PermissionUpdateOptions & { permission: ModedPermissionTarget; mode?: PermissionMode })
+  | (PermissionUpdateOptions & {
+      permission: Exclude<PermissionTarget, ModedPermissionTarget>;
+      mode?: never;
     });
+
+/** Call input for a permission that has not been narrowed to one target. */
+export type ModeFreePermissionUpdateOptions = PermissionUpdateOptions & {
+  permission: PermissionTarget;
+  mode?: never;
+};

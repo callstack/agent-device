@@ -1,5 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogRuntimeHost,
   AppLogRuntimeOperations,
@@ -10,6 +10,7 @@ import {
   type RuntimeFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import {
   appLogSessionArtifactsMatch,
@@ -62,7 +63,7 @@ function bindAppleAppLogs(
       ) {
         return {
           status: 'unreattachable',
-          reason: 'descriptor-invalid',
+          reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
           message: 'Apple app-log descriptor does not match the bound device or owning session',
         };
       }
@@ -74,7 +75,7 @@ function bindAppleAppLogs(
         ? await cleanupManagedAppLogProcess(host, descriptor.pidPath)
         : {
             status: 'cleanup-pending',
-            reason: 'ownership-fence-lost',
+            reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
             message: 'Apple app-log descriptor does not match the bound device or owning session',
           },
   });
@@ -99,7 +100,7 @@ function appleAppLogFacts(device: DeviceInfo): RuntimeFacts<AppLogRuntimeOperati
     isIosFamily(device) && device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest'
       ? ({
           available: false,
-          reason: 'unsupported-device-backend',
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
           hint: APPLE_XCTEST_LOGS_HINT,
         } as const)
       : available;

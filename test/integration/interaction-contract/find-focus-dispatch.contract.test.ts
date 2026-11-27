@@ -1,18 +1,36 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
+import { FIND_NO_MATCH_HINT } from '@agent-device/selectors';
 import { KEYBOARD_COVERED_BAND_RECT, keyboardCoveredTabBarSnapshot } from '@agent-device/test-kit';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { FIND_FOCUS_DISPATCH_COVERAGE } from './find-focus-dispatch.coverage.ts';
-import { fullyTiledParentSnapshot } from './fixtures.ts';
 import {
+  closedDrawerSnapshot,
+  fullyTiledParentSnapshot,
+  nonHittableButtonSnapshot,
+} from './fixtures.ts';
+import {
+  runnerQuerySelectorEntry,
   runnerSnapshotEntry,
   runnerTapEntry,
   runnerTypeEntry,
   withIosContractDaemon,
 } from './daemon-harness.ts';
+import {
+  APPLICATION_NODE,
+  coveredFormTree,
+  fieldFillingCellTree,
+  labelBesideFieldTree,
+  labelledWrapperTree,
+  namedFieldBesideSiblingTree,
+  nonHittableRowTree,
+  partlyTiledCardTree,
+  twinFormTree,
+  twoFieldsTree,
+} from './find-focus-dispatch.fixtures.ts';
 
 // ADR 0011 Layer 3, find-focus-dispatch path: mutating `find <locator> focus` and the focus leg of
 // `find <locator> type`. These run over the daemon harness because the seam lives in the daemon's
@@ -148,13 +166,11 @@ test(
 );
 
 test(
-  'find-focus-dispatch promotion: a non-hittable label retargets the dispatch to the hittable ancestor row',
+  scenario('nonHittable'),
   async () => {
     // Discriminating, not decorative: the label's own center is (140,195), the row's is (200,200).
     // Retargeting `findAct.promotion` away from `hittable-ancestor-below-root` dispatches at the
-    // label and this fails. Title deliberately outside the coverage manifest: the promotion half runs
-    // while the annotation half stays the `nonHittable` waiver's debt, and the gate forbids a
-    // manifest entry on a waived cell.
+    // label and this fails. The promoted row is hittable, so the response carries no annotation.
     await withIosContractDaemon(
       [runnerSnapshotEntry(nonHittableRowTree()), runnerTapEntry({})],
       async (daemon) => {
@@ -162,8 +178,168 @@ test(
           await daemon.callCommand('find', ['label', 'Notifications', 'focus']),
         );
         assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 200 });
+        assert.equal(data.targetHittable, undefined);
       },
     );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'nonHittable')[1]!,
+  async () => {
+    // The root itself: nothing to promote to, so the focused node keeps `hittable: false`.
+    const tree = nonHittableButtonSnapshot().nodes;
+    const entries = [runnerSnapshotEntry(tree), runnerTapEntry({})];
+    await withIosContractDaemon([...entries, ...entries, runnerTypeEntry({})], async (daemon) => {
+      const focused = assertRpcOk(await daemon.callCommand('find', ['label', 'Continue', 'focus']));
+      const typed = assertRpcOk(
+        await daemon.callCommand('find', ['label', 'Continue', 'type', 'hello']),
+      );
+      assert.deepEqual({ x: focused.x, y: focused.y }, { x: 60, y: 40 });
+      assert.equal(typed.text, 'hello');
+      for (const data of [focused, typed]) {
+        assert.equal(data.targetHittable, false);
+        assert.match(String(data.hint), /reports hittable: false, so this focus may have had no/);
+      }
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+// A closed drawer item sits wholly left of the root viewport. A regular iOS capture never carries
+// such a node, so these scenarios read with --raw, as a caller reaching one does.
+const RAW = { snapshotRaw: true };
+const DRAWER_TREE = closedDrawerSnapshot().nodes;
+
+test(
+  scenario('offscreen'),
+  async () => {
+    // The live read finds nothing, so the rescue cannot overturn the verdict, and the transcript
+    // holds no tap or type entry.
+    const entries = [
+      runnerSnapshotEntry(DRAWER_TREE),
+      runnerQuerySelectorEntry({ found: false, matchCount: 0 }),
+    ];
+    await withIosContractDaemon([...entries, ...entries], async (daemon) => {
+      for (const action of [['focus'], ['type', 'hello']]) {
+        const error = assertRpcError(
+          await daemon.callCommand('find', ['label', 'Explore', ...action], RAW),
+          500,
+          'COMMAND_FAILED',
+          /Ref @e2 is off-screen and not safe to focus/,
+        );
+        const details = readErrorDetails(error);
+        assert.equal(details.reason, 'offscreen_ref');
+        assert.equal(details.ref, 'e2');
+        assert.deepEqual(details.rect, DRAWER_TREE[1]!.rect);
+        assert.equal(details.dispatched, 'no');
+        assert.match(String(error.hint), new RegExp(`re-run find to ${action[0]}`));
+      }
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'offscreen')[1]!,
+  async () => {
+    // The #1542 rescue: a stale bulk tree says off-screen and non-hittable while the live probe
+    // confirms a single match on screen and hittable, so focus lands at the live rect without a
+    // stale non-hittable warning.
+    const staleDrawerTree = DRAWER_TREE.map((node) =>
+      node.index === 1 ? { ...node, hittable: false } : node,
+    );
+    const liveRect = { x: 20, y: 240, width: 300, height: 50 };
+    await withIosContractDaemon(
+      [
+        runnerSnapshotEntry(staleDrawerTree),
+        runnerQuerySelectorEntry({
+          found: true,
+          matchCount: 1,
+          hittable: true,
+          rect: liveRect,
+        }),
+        runnerTapEntry({}),
+      ],
+      async (daemon, transcript) => {
+        const data = assertRpcOk(
+          await daemon.callCommand('find', ['label', 'Explore', 'focus'], RAW),
+        );
+        assert.deepEqual({ x: data.x, y: data.y }, { x: 170, y: 265 });
+        assert.equal(data.targetHittable, undefined);
+        assert.equal(data.hint, undefined);
+        const queryCall = transcript.calls.find(
+          (call) => call.command === 'ios.runner.querySelector',
+        );
+        const queryReq = queryCall?.request as Record<string, unknown> | undefined;
+        assert.equal(queryReq?.hittabilityProbe, true);
+        assert.equal(queryReq?.selectorKey, 'label');
+        assert.equal(queryReq?.selectorValue, 'Explore');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'offscreen')[2]!,
+  async () => {
+    // The ranking still runs before the refusal: an on-screen twin after the drawer item wins
+    // without any live read.
+    const twin = { ...DRAWER_TREE[1]!, index: 2, rect: { x: 20, y: 400, width: 300, height: 50 } };
+    await withIosContractDaemon(
+      [runnerSnapshotEntry([...DRAWER_TREE, twin]), runnerTapEntry({})],
+      async (daemon) => {
+        const data = assertRpcOk(
+          await daemon.callCommand('find', ['label', 'Explore', 'focus'], RAW),
+        );
+        assert.deepEqual({ x: data.x, y: data.y }, { x: 170, y: 425 });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'offscreen')[3]!,
+  async () => {
+    // A duplicate match on the derived label/id must fail closed so find type cannot rescue onto
+    // a different control sharing the same label.
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(DRAWER_TREE), runnerQuerySelectorEntry({ found: true, matchCount: 2 })],
+      async (daemon) => {
+        const error = assertRpcError(
+          await daemon.callCommand('find', ['label', 'Explore', 'type', 'hello'], RAW),
+          500,
+          'COMMAND_FAILED',
+          /Ref @e2 is off-screen and not safe to focus/,
+        );
+        const details = readErrorDetails(error);
+        assert.equal(details.reason, 'offscreen_ref');
+        assert.equal(details.dispatched, 'no');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  scenarioNames(FIND_FOCUS_DISPATCH_COVERAGE, 'offscreen')[4]!,
+  async () => {
+    // A role-qualified query cannot be re-verified by an id/label-only probe; transcript has no
+    // querySelector, tap, or type entry so any rescue attempt fails assertComplete.
+    await withIosContractDaemon([runnerSnapshotEntry(DRAWER_TREE)], async (daemon) => {
+      const error = assertRpcError(
+        await daemon.callCommand('find', ['role=button label="Explore"', 'type', 'example'], RAW),
+        500,
+        'COMMAND_FAILED',
+        /Ref @e2 is off-screen and not safe to focus/,
+      );
+      const details = readErrorDetails(error);
+      assert.equal(details.reason, 'offscreen_ref');
+      assert.equal(details.dispatched, 'no');
+    });
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
@@ -596,7 +772,12 @@ test(
     // no-match refusal. A candidate-disclosure or message change here fails this scenario, which
     // is the cell's own evidence rather than the `disambiguation` scenario's.
     await withIosContractDaemon(
-      [runnerSnapshotEntry(twinFormTree()), runnerSnapshotEntry(KEYBOARD_TREE)],
+      [
+        runnerSnapshotEntry(twinFormTree()),
+        runnerSnapshotEntry(KEYBOARD_TREE),
+        runnerSnapshotEntry(KEYBOARD_TREE),
+        runnerSnapshotEntry(KEYBOARD_TREE),
+      ],
       async (daemon) => {
         const ambiguous = assertRpcError(
           await daemon.callCommand('find', ['label', 'Form', 'focus']),
@@ -609,12 +790,29 @@ test(
           '@e3 [button] "Form"',
         ]);
 
-        assertRpcError(
-          await daemon.callCommand('find', ['label', 'Nowhere', 'focus']),
-          500,
-          'COMMAND_FAILED',
-          /find did not match any element/,
-        );
+        // A bare find is a click. Click and focus share resolveFindMatch, so this row also pins the
+        // click no-match: neither sends anything. The read-only `exists` row takes the selector
+        // runtime instead and must refuse the same way. Only the click hint points at the read form.
+        const noMatchHints: unknown[] = [];
+        for (const args of [
+          ['label', 'Nowhere', 'focus'],
+          ['Nowhere'],
+          ['label', 'Nowhere', 'exists'],
+        ]) {
+          const noMatch = assertRpcError(
+            await daemon.callCommand('find', args),
+            500,
+            'COMMAND_FAILED',
+            /find did not match any element/,
+          );
+          assert.equal(readErrorDetails(noMatch).dispatched, 'no');
+          noMatchHints.push(noMatch.hint);
+        }
+        const [focusHint, clickHint, existsHint] = noMatchHints;
+        assert.equal(focusHint, FIND_NO_MATCH_HINT);
+        assert.equal(existsHint, FIND_NO_MATCH_HINT);
+        assert.ok(typeof clickHint === 'string' && clickHint.startsWith(FIND_NO_MATCH_HINT));
+        assert.match(clickHint, /find text "\.\.\." exists/);
       },
     );
   },
@@ -657,226 +855,4 @@ function readErrorDetails(error: Record<string, unknown>): Record<string, unknow
   const details = error.details;
   assert.ok(details && typeof details === 'object', 'the error carries typed details');
   return details as Record<string, unknown>;
-}
-
-const APPLICATION_NODE = {
-  index: 0,
-  type: 'Application',
-  rect: { x: 0, y: 0, width: 400, height: 800 },
-};
-
-function labelledWrapperTree(): unknown[] {
-  return [
-    APPLICATION_NODE,
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Other',
-      label: 'Email',
-      rect: { x: 20, y: 100, width: 360, height: 80 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'TextField',
-      rect: { x: 32, y: 130, width: 336, height: 40 },
-      hittable: true,
-    },
-  ];
-}
-
-function fieldFillingCellTree(): unknown[] {
-  return [
-    APPLICATION_NODE,
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Cell',
-      label: 'Email',
-      rect: { x: 0, y: 100, width: 400, height: 44 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'TextField',
-      rect: { x: 16, y: 100, width: 368, height: 44 },
-      hittable: true,
-    },
-  ];
-}
-
-function labelBesideFieldTree(): unknown[] {
-  return [
-    APPLICATION_NODE,
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Other',
-      rect: { x: 20, y: 100, width: 360, height: 80 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'StaticText',
-      label: 'Email',
-      rect: { x: 32, y: 100, width: 336, height: 24 },
-      hittable: false,
-    },
-    {
-      index: 3,
-      parentIndex: 1,
-      type: 'TextField',
-      rect: { x: 32, y: 130, width: 336, height: 40 },
-      hittable: true,
-    },
-  ];
-}
-
-function namedFieldBesideSiblingTree({ enabled }: { enabled: boolean }): unknown[] {
-  return [
-    APPLICATION_NODE,
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Other',
-      rect: { x: 20, y: 100, width: 360, height: 160 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'TextView',
-      label: 'Notes',
-      enabled,
-      rect: { x: 32, y: 130, width: 336, height: 40 },
-      hittable: false,
-    },
-    {
-      index: 3,
-      parentIndex: 1,
-      type: 'TextField',
-      label: 'Title',
-      rect: { x: 32, y: 200, width: 336, height: 40 },
-      hittable: true,
-    },
-  ];
-}
-
-function twoFieldsTree(): unknown[] {
-  return [
-    APPLICATION_NODE,
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Other',
-      label: 'Address',
-      rect: { x: 20, y: 100, width: 360, height: 160 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'TextField',
-      label: 'Street',
-      rect: { x: 32, y: 130, width: 336, height: 40 },
-      hittable: true,
-    },
-    {
-      index: 3,
-      parentIndex: 1,
-      type: 'TextField',
-      label: 'City',
-      rect: { x: 32, y: 200, width: 336, height: 40 },
-      hittable: true,
-    },
-  ];
-}
-
-function partlyTiledCardTree(): unknown[] {
-  return [
-    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Link',
-      label: 'Card',
-      rect: { x: 20, y: 100, width: 360, height: 200 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'Button',
-      label: 'Action',
-      rect: { x: 20, y: 180, width: 360, height: 40 },
-      hittable: true,
-    },
-  ];
-}
-
-function nonHittableRowTree(): unknown[] {
-  return [
-    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Cell',
-      rect: { x: 40, y: 160, width: 320, height: 80 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'StaticText',
-      label: 'Notifications',
-      rect: { x: 60, y: 180, width: 160, height: 30 },
-      hittable: false,
-    },
-  ];
-}
-
-function coveredFormTree(): unknown[] {
-  return [
-    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Form',
-      rect: { x: 16, y: 790, width: 140, height: 44 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 0,
-      type: 'TabBar',
-      rect: { x: 0, y: 760, width: 390, height: 84 },
-      hittable: true,
-    },
-  ];
-}
-
-function twinFormTree(): unknown[] {
-  return [
-    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Form',
-      rect: { x: 40, y: 200, width: 120, height: 44 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Form',
-      rect: { x: 240, y: 200, width: 120, height: 44 },
-      hittable: true,
-    },
-  ];
 }

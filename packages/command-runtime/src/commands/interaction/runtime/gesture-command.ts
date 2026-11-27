@@ -4,10 +4,13 @@ import type {
   GestureContactCount,
   GestureIntent,
   GestureSemanticInput,
+  TargetedPinchGestureInput,
 } from '@agent-device/contracts/gesture-plan-types';
 import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
+import { recordedSelectorExpression } from '@agent-device/selectors';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { successText } from '@agent-device/kernel/success-text';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
@@ -15,7 +18,7 @@ import {
   type BackendResultEnvelope,
   type RuntimeCommand,
 } from '../../runtime-types.ts';
-import { assertSupportedInteractionSurface } from './resolution.ts';
+import { assertSupportedInteractionSurface, resolveInteractionTarget } from './resolution.ts';
 import {
   dragCommand,
   resolveGestureViewport,
@@ -27,7 +30,14 @@ type CoordinateGestureCommandOptions = CommandContext & {
   gesture: GestureSemanticInput;
 };
 
-export type GestureCommandOptions = CoordinateGestureCommandOptions | DragCommandOptions;
+type TargetedPinchCommandOptions = CommandContext & {
+  gesture: TargetedPinchGestureInput;
+};
+
+export type GestureCommandOptions =
+  | CoordinateGestureCommandOptions
+  | DragCommandOptions
+  | TargetedPinchCommandOptions;
 
 export type CoordinateGestureCommandResult = {
   kind: GestureIntent;
@@ -35,6 +45,8 @@ export type CoordinateGestureCommandResult = {
   pointerCount: GestureContactCount;
   from: Point;
   to: Point;
+  /** The selector a targeted pinch resolved, so a recorded `.ad` line replays without a ref. */
+  recordedTargetSelector?: string;
 } & BackendResultEnvelope;
 
 export type GestureCommandResult = CoordinateGestureCommandResult | DragCommandResult;
@@ -74,7 +86,44 @@ export const gestureCommand: RuntimeCommand<GestureCommandOptions, GestureComman
 ) => {
   const gesture: GestureCommandInput = options.gesture;
   if (gesture.intent === 'drag') return await dragCommand(runtime, { ...options, gesture });
+  if ('element' in gesture) return await targetedPinchCommand(runtime, { ...options, gesture });
   return await coordinateGestureCommand(runtime, { ...options, gesture });
+};
+
+/** Resolves the pinch element to its touch point, then pinches around that point. */
+const targetedPinchCommand: RuntimeCommand<
+  TargetedPinchCommandOptions,
+  CoordinateGestureCommandResult
+> = async (runtime, options) => {
+  if (!runtime.backend.performGesture) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'gesture is not supported by this backend');
+  }
+  const { element, scale } = options.gesture;
+  const resolved = await resolveInteractionTarget(
+    runtime,
+    {
+      ...options,
+      target: element.startsWith('@')
+        ? { kind: 'ref', ref: element }
+        : { kind: 'selector', selector: element },
+    },
+    {
+      action: 'pinch',
+      requireInteractive: false,
+      pipeline: SELECTOR_PIPELINE_POLICIES.resolvedTarget,
+    },
+  );
+  if (!resolved.point) {
+    throw new AppError('COMMAND_FAILED', 'Interaction target resolved without coordinates');
+  }
+  const result = await coordinateGestureCommand(runtime, {
+    ...options,
+    gesture: { intent: 'pinch', origin: resolved.point, scale },
+  });
+  const selectorChain = 'selectorChain' in resolved ? resolved.selectorChain : undefined;
+  return selectorChain?.length
+    ? { ...result, recordedTargetSelector: recordedSelectorExpression(selectorChain) }
+    : result;
 };
 
 function centroidAt(

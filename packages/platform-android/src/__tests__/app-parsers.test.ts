@@ -1,7 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  parseAndroidComponent,
   parseAndroidLaunchablePackages,
+  parseAndroidProcessRecords,
   parseAndroidResumedActivity,
   readAndroidBlockingDialogFocus,
 } from '../app-parsers.ts';
@@ -29,12 +31,45 @@ test('readAndroidBlockingDialogFocus preserves responding window text without re
     {
       focusObserved: true,
       focus: {
-        package: 'com.example.app',
+        process: 'com.example.app',
         focusedWindow: '123 u0 com.example.app/com.example.MainActivity Demo is not responding',
         raw: 'mCurrentFocus=Window{123 u0 com.example.app/com.example.MainActivity Demo is not responding}',
       },
+      focusedPackage: 'com.example.app',
     },
   );
+});
+
+// Every reader (resumed activity, focused window, foreground) passes its segment here.
+test.each([
+  [' ActivityRecord{99 u0 com.example.app/.MainActivity t7}', 'com.example.app', '.MainActivity'],
+  [
+    'Window{84ec7b8 u0 com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity',
+    'com.android.settings',
+    'com.android.settings.Settings$AppNotificationSettingsActivity',
+  ],
+  [
+    ' u0 com.example_app2.beta/com.example_app2.Main}',
+    'com.example_app2.beta',
+    'com.example_app2.Main',
+  ],
+  [
+    ' ActivityRecord{1 u0 com.first.app/.One t1} ActivityRecord{2 u0 com.second.app/.Two t2}',
+    'com.first.app',
+    '.One',
+  ],
+])('parseAndroidComponent reads the first package/Activity in %j', (segment, pkg, activity) => {
+  assert.deepEqual(parseAndroidComponent(segment), { package: pkg, activity });
+});
+
+test.each([
+  '',
+  'Window{5a1b2c3 u0 NotificationShade}',
+  'Window{5a1b2c3 u0 Application Not Responding: com.example.app}',
+  ' u0 android/com.android.internal.app.ResolverActivity}',
+  ' u0 com.example.app}',
+])('parseAndroidComponent names no component in %j', (segment) => {
+  assert.equal(parseAndroidComponent(segment), null);
 });
 
 test('parseAndroidResumedActivity reads every resumed-marker shape', () => {
@@ -67,4 +102,28 @@ test('parseAndroidResumedActivity ignores a stale last-resumed record', () => {
     ),
     null,
   );
+});
+
+test('parseAndroidProcessRecords reads process records, not PID mappings that name them', () => {
+  const dump = [
+    'ACTIVITY MANAGER RUNNING PROCESSES (dumpsys activity processes)',
+    '  All known processes:',
+    '  *APP* UID 10146 ProcessRecord{9b0c5a1 4563:com.example.app:remote/u0a146}',
+    '    user #0 uid=10146 gids={50146, 20146, 9997}',
+    '    packageList={com.example.app}',
+    '     mCrashing=false null mNotResponding=true [com.android.server.am.AppNotRespondingDialog@ec3b7c1] bad=false',
+    '  *PERS* UID 1000 ProcessRecord{1a2b3c4 812:system/1000}',
+    '    packageList={android, com.android.providers.settings}',
+    '     crashing=false notResponding=true',
+    '  PID mappings:',
+    '    PID #4563: ProcessRecord{9b0c5a1 4563:com.example.app:remote/u0a146}',
+  ].join('\n');
+
+  assert.deepEqual(parseAndroidProcessRecords(dump), [
+    { process: 'com.example.app:remote', packages: ['com.example.app'] },
+    {
+      process: 'system',
+      packages: ['android', 'com.android.providers.settings'],
+    },
+  ]);
 });

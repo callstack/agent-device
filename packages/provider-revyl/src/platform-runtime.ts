@@ -2,7 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { REVYL_PROVIDER, isSupportedRevylRuntimeDevice } from './device.ts';
 import {
   providerRuntimeOwner,
-  PROVIDER_RUNTIME_REASONS,
+  PLATFORM_RUNTIME_REASONS,
   sameRuntimeOwner,
   type DeviceBinding,
   type RuntimeFacts,
@@ -70,7 +70,7 @@ export function createRevylPlatformRuntimeOwner(
         throw new AppError(
           'UNSUPPORTED_OPERATION',
           'Revyl provider session is no longer live for the selected device',
-          { reason: PROVIDER_RUNTIME_REASONS.sessionUnavailable.reason },
+          { reason: PLATFORM_RUNTIME_REASONS.providerSessionUnavailable.reason },
         );
       }
       return bindRevylRuntime(options, owner, request.device, request.scope.signal, live);
@@ -153,7 +153,7 @@ function bindRevylDeployment(
     const live = options.getDeploymentSession(device);
     if (live) return live;
     throw new AppError('UNSUPPORTED_OPERATION', 'Revyl provider session is no longer live.', {
-      reason: PROVIDER_RUNTIME_REASONS.sessionUnavailable.reason,
+      reason: PLATFORM_RUNTIME_REASONS.providerSessionUnavailable.reason,
     });
   };
   return {
@@ -165,7 +165,7 @@ function bindRevylDeployment(
           'UNSUPPORTED_OPERATION',
           'Revyl cannot reinstall an app: it has no uninstall, and installing over an app keeps its data.',
           {
-            reason: 'unsupported-provider-mode',
+            reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
             hint: 'Run install to update the build in place, or start a new session for a clean app.',
           },
         );

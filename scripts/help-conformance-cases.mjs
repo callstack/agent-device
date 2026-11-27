@@ -26,6 +26,20 @@ const RAW_COORDINATE_TARGET =
 const BARE_REF_TARGET =
   /(?:^|\n)(?:agent-device\s+)?(?:press|tap|click|fill|longpress)\s+['"]?e\d+\b/i;
 
+// A press or click whose selector is exactly role=button and label=Save, in either order and
+// either quoting: one positional ('role=button label="Save"') or two (role=button label=Save).
+function isRoleButtonLabelSaveTap(agentCommand) {
+  if (agentCommand?.command !== 'press' && agentCommand?.command !== 'click') return false;
+  const terms = agentCommand.positionals
+    .join(' ')
+    .replaceAll(/["']/g, '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort();
+  return terms.length === 2 && terms[0] === 'label=save' && terms[1] === 'role=button';
+}
+
 function quiz(sample, question) {
   return `Read this previous agent-device output, then plan the next command:
 
@@ -446,6 +460,33 @@ export const CASES = [
     ],
     forbidden: [{ id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET }],
   },
+  {
+    // help selectors owns selector syntax. Only its rules make the plan
+    // combine role and label in one selector and stay off the bare role key
+    // (button="Save") the task invites.
+    id: 'selectors-role-and-label-in-one-expression',
+    docs: ['--help:first30', 'selectors'],
+    task: 'On the already-open app, two elements read "Save": a heading and a button. Without a snapshot ref, press the button whose accessibility label is "Save", then verify a "Saved" message appears. Plan commands only.',
+    expectations: ['validPlanCommands', 'fullPrefix'],
+    matchers: [
+      {
+        id: 'pressesRoleAndLabelSelector',
+        test: ({ commandValidation }) =>
+          commandValidation.some(({ agentCommand }) => isRoleButtonLabelSaveTap(agentCommand)),
+      },
+      {
+        id: 'verifiesSavedMessage',
+        test: ({ joined, commandValidation }) =>
+          /\bagent-device\s+(?:wait|is|get)\b[^\n]*saved/.test(joined) ||
+          hasFindExists(commandValidation, 'saved'),
+      },
+    ],
+    forbidden: [
+      // Matched against the lowercased canonical plan: button=save, or button="save" when quoted.
+      { id: 'noBareRoleKey', pattern: /\bbutton=\\?"?save\b/ },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
   // Next-command quiz cases: captured output (pinned to the real renderer by
   // scripts/__tests__/help-conformance-sample-outputs.test.ts) plus a task,
   // scored by regex instead of the named expectation scorers above.
@@ -525,11 +566,11 @@ Use the output already shown to determine whether the feed-search UI is present,
       {
         id: 'pressesPinnedTailRefOrExactLabel',
         pattern:
-          /(?:^|\n)agent-device\s+(?:press|click)\s+(?:@e40~s5\b|'?label="?Profile"?'?)[^\n]*--settle\b/i,
+          /(?:^|\n)agent-device\s+(?:press|click)\s+(?:@e40-s5\b|'?label="?Profile"?'?)[^\n]*--settle\b/i,
       },
     ],
     forbidden: [
-      { id: 'noUnpinnedRef', pattern: /@e40(?!~s5\b)/i },
+      { id: 'noUnpinnedRef', pattern: /@e40(?!-s5\b)/i },
       { id: 'noBareRefTarget', pattern: BARE_REF_TARGET },
       { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },

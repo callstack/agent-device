@@ -1,10 +1,13 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import {
   buildSwipePresetGesturePlan,
   gestureDirectionDelta,
   isScreenEdgeSwipePreset,
+  isSplitViewSwipePreset,
+  splitViewUnavailableError,
+  type SplitViewSwipePreset,
   type SwipePreset,
 } from '@agent-device/contracts/scroll-gesture';
 import {
@@ -32,6 +35,22 @@ import type {
 
 export const GESTURE_SAMPLE_INTERVAL_MS = 16;
 export const GESTURE_INITIAL_ANGLE_DEGREES = -90;
+
+/** Why a `gesture` input cannot be planned into an executable trajectory. */
+const GESTURE_PLAN_REFUSAL_REASONS = {
+  // Two tap contacts share coordinates, so one contact would press where another already rests.
+  tapDuplicatePoint: { reason: 'GESTURE_TAP_DUPLICATE_POINT' },
+  // The gesture path has fewer usable samples than any recognizable motion needs.
+  pathTooShort: { reason: 'GESTURE_PATH_TOO_SHORT' },
+  // The path's sample timeline is not ordered and finite, so no clock can play it back.
+  pathInvalidTimeline: { reason: 'GESTURE_PATH_INVALID_TIMELINE' },
+  // A trajectory sample carries a non-finite coordinate.
+  trajectoryNonFinite: { reason: 'GESTURE_TRAJECTORY_NON_FINITE' },
+  // A trajectory sample leaves the viewport, so the contact would press outside the screen, or a
+  // two-finger path cannot keep its contacts the minimum span apart inside it.
+  trajectoryOutOfBounds: { reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS' },
+} as const satisfies ReasonTable<'gesture'>;
+
 const GESTURE_FLING_DEFAULT_DISTANCE = 180;
 
 const GESTURE_INITIAL_SPAN_RATIO = 0.25;
@@ -41,6 +60,9 @@ const GESTURE_MINIMUM_RELIABLE_SPAN_PX = 48;
 const GESTURE_VIEWPORT_INSET_PX = 1;
 const DEFAULT_PAN_DURATION_MS = 500;
 export const GESTURE_FLING_DURATION_MS = 100;
+const SPLIT_VIEW_DURATION_MS = 2100;
+const SPLIT_VIEW_EXIT_DURATION_MS = 700;
+const SPLIT_VIEW_EDGE_INSET_PX = 1;
 const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
 const MAX_ROTATION_DEFAULT_DURATION_MS = 2_400;
@@ -79,7 +101,7 @@ export function buildGesturePlan(
   const profile = gesturePlatformProfile(platform);
   switch (input.intent) {
     case 'fling':
-      return buildFlingPlan(input, frame);
+      return buildFlingPlan(input, frame, platform);
     case 'pan':
       return buildPanPlan(input, frame, profile);
     case 'pinch':
@@ -211,8 +233,12 @@ function withContactHolds(
 function buildFlingPlan(
   input: Extract<GestureSemanticInput, { intent: 'fling' }>,
   viewport: Rect,
+  platform: PublicPlatform | undefined,
 ): SinglePointerGesturePlan {
   if ('preset' in input) {
+    if (isSplitViewSwipePreset(input.preset)) {
+      return buildSplitViewPlan(input.preset, viewport, platform);
+    }
     const { from, to } = presetGestureEndpoints(input.preset, viewport);
     const plan = buildSinglePointerPlan(
       'fling',
@@ -247,6 +273,51 @@ function buildFlingPlan(
     viewport,
     'endpoint-hold',
   );
+}
+
+function buildSplitViewPlan(
+  preset: SplitViewSwipePreset,
+  viewport: Rect,
+  platform: PublicPlatform | undefined,
+): SinglePointerGesturePlan {
+  if (platform !== 'ios') {
+    throw splitViewUnavailableError(`gesture swipe ${preset} works only on iOS`);
+  }
+  const centerX = viewport.x + viewport.width / 2;
+  const middleY = viewport.y + viewport.height / 2;
+  if (preset === 'split-view-exit') {
+    const plan = buildSinglePointerPlan(
+      'fling',
+      { x: centerX, y: middleY },
+      { x: viewport.x + SPLIT_VIEW_EDGE_INSET_PX, y: middleY },
+      SPLIT_VIEW_EXIT_DURATION_MS,
+      viewport,
+      'timed-pan',
+    );
+    return { ...plan, contactOrigin: 'split-view-divider' };
+  }
+  // The sideways travel stays shorter than the initial lift so the edge touch stays upward.
+  const endX = viewport.x + viewport.width * (preset === 'split-view-left' ? 0.2 : 0.8);
+  const samples: SinglePointerTrajectory['samples'] = [
+    {
+      offsetMs: 0,
+      point: { x: centerX, y: viewport.y + viewport.height - SPLIT_VIEW_EDGE_INSET_PX },
+    },
+    { offsetMs: 600, point: { x: centerX, y: middleY } },
+    { offsetMs: 1400, point: { x: centerX, y: middleY } },
+    { offsetMs: 1900, point: { x: endX, y: middleY } },
+    { offsetMs: SPLIT_VIEW_DURATION_MS, point: { x: endX, y: middleY } },
+  ];
+  assertSamplesInViewport(samples, viewport, { intent: 'fling', pointerId: 0 });
+  return {
+    topology: 'single',
+    intent: 'fling',
+    executionProfile: 'endpoint-hold',
+    contactOrigin: 'split-view-edge',
+    durationMs: SPLIT_VIEW_DURATION_MS,
+    viewport,
+    pointers: [{ pointerId: 0, samples }],
+  };
 }
 
 function buildPanPlan(
@@ -344,9 +415,8 @@ function buildTransformPlan(
   const initialSpan = motion.scale > 1 ? maximumSpan / motion.scale : maximumSpan;
   const finalSpan = initialSpan * motion.scale;
   if (Math.min(initialSpan, finalSpan) < GESTURE_MINIMUM_RELIABLE_SPAN_PX) {
-    throw trajectoryOutOfBounds({
+    throw trajectoryOutOfBounds(viewport, {
       intent: motion.intent,
-      viewport,
       initialSpan,
       finalSpan,
       minimumReliableSpan: GESTURE_MINIMUM_RELIABLE_SPAN_PX,
@@ -452,7 +522,7 @@ function tapContactPoints(points: readonly Point[]): Point[] {
     const earlier = finite.findIndex((other) => other.x === point.x && other.y === point.y);
     if (earlier !== index) {
       throw new AppError('INVALID_ARGS', 'gesture tap points must be distinct', {
-        reason: 'GESTURE_TAP_DUPLICATE_POINT',
+        reason: GESTURE_PLAN_REFUSAL_REASONS.tapDuplicatePoint.reason,
         point,
         hint: 'Give each contact its own coordinates.',
       });
@@ -495,7 +565,7 @@ export function densifyGesturePath(
   const durationMs = canonical.at(-1)?.offsetMs ?? 0;
   if (canonical.length < 2 || !Number.isFinite(durationMs) || durationMs <= 0) {
     throw new AppError('INVALID_ARGS', 'gesture path needs at least two timed samples', {
-      reason: 'GESTURE_PATH_TOO_SHORT',
+      reason: GESTURE_PLAN_REFUSAL_REASONS.pathTooShort.reason,
     });
   }
   if (
@@ -509,7 +579,7 @@ export function densifyGesturePath(
       'INVALID_ARGS',
       'gesture path needs a strictly increasing timeline from zero',
       {
-        reason: 'GESTURE_PATH_INVALID_TIMELINE',
+        reason: GESTURE_PLAN_REFUSAL_REASONS.pathInvalidTimeline.reason,
       },
     );
   }
@@ -562,7 +632,7 @@ function assertSamplesInViewport(
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       throw new AppError('INVALID_ARGS', 'Gesture motion produces non-finite pointer coordinates', {
         ...details,
-        reason: 'GESTURE_TRAJECTORY_NON_FINITE',
+        reason: GESTURE_PLAN_REFUSAL_REASONS.trajectoryNonFinite.reason,
         hint: 'Reduce the requested rotation, translation, or scale.',
       });
     }
@@ -572,17 +642,36 @@ function assertSamplesInViewport(
       y < viewport.y + GESTURE_VIEWPORT_INSET_PX ||
       y > maxY
     ) {
-      throw trajectoryOutOfBounds({ ...details, viewport, sample });
+      throw trajectoryOutOfBounds(viewport, { ...details, sample }, sample.point);
     }
   }
 }
 
-function trajectoryOutOfBounds(details: Record<string, unknown>): AppError {
-  return new AppError('INVALID_ARGS', 'Gesture trajectory does not fit inside the viewport', {
-    ...details,
-    reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS',
-    hint: 'Move the gesture away from the edge or reduce its translation, scale, or rotation.',
-  });
+/** The message names the viewport and the first point outside it, so a unit mix-up shows at once. */
+function trajectoryOutOfBounds(
+  viewport: Rect,
+  details: Record<string, unknown>,
+  point?: Point,
+): AppError {
+  const origin = viewport.x === 0 && viewport.y === 0 ? '' : ` at (${viewport.x}, ${viewport.y})`;
+  const frame = `the ${viewport.width}x${viewport.height} viewport${origin}`;
+  return new AppError(
+    'INVALID_ARGS',
+    point
+      ? `Gesture point (${roundForMessage(point.x)}, ${roundForMessage(point.y)}) is outside the usable area of ${frame}`
+      : `Gesture trajectory does not fit inside ${frame}`,
+    {
+      ...details,
+      viewport,
+      reason: GESTURE_PLAN_REFUSAL_REASONS.trajectoryOutOfBounds.reason,
+      hint: `${point ? 'Use the coordinate units snapshot reports: points on Apple platforms, not screenshot pixels. ' : ''}Move the gesture away from the edge or reduce its translation, scale, or rotation.`,
+    },
+  );
+}
+
+/** Interpolated samples carry long fractions; `details.sample` keeps the exact point. */
+function roundForMessage(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function normalizeViewport(viewport: Rect): Rect {
@@ -686,7 +775,10 @@ function interpolateGesturePoint(start: Point, end: Point, progress: number): Po
   };
 }
 
-function presetGestureEndpoints(preset: SwipePreset, viewport: Rect): { from: Point; to: Point } {
+function presetGestureEndpoints(
+  preset: Exclude<SwipePreset, SplitViewSwipePreset>,
+  viewport: Rect,
+): { from: Point; to: Point } {
   const relative = buildSwipePresetGesturePlan(preset, {
     referenceWidth: viewport.width,
     referenceHeight: viewport.height,

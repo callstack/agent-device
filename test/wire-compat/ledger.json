@@ -65,15 +65,20 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:51f17269ac0a02116ba8af33c9884b10b74f78bcb54c40f77dd887f1f08d8246",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:75226219f3d2475b59b297593346879c5211f56530a45494ff696b435e002bce",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
+    "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_SERVICES": "sha256:3e9d09c1e78adf1d537aa22053e2dee7d35a33d37942721701476a0c06dff52b",
+    "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_VERSION": "sha256:8dd8e36dc936523cf38bba3ed3737a6199431c35b7ce04e1441aaa2c8a186993",
+    "packages/daemon-client/src/daemon-client-transport.ts#HEALTH_VERSION_MAX_LENGTH": "sha256:0357d7c75ccb6fefe7ec901c7937bc795a2e66c4082c90fed27b4baf10c16416",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:96a79a8ff5a078916ee7bffed1d9624d0ba9c0dcbd8e2c55f9abf37fccfef744",
+    "packages/daemon-client/src/daemon-client-transport.ts#isHealthService": "sha256:ffd2c774e0efca5e5d2b01f9d37fe9b76aaf5e7569e07d9208fe667473771c10",
     "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
-    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:b709f88901784e767a542acc27d90ba080e7b016e85d6053a59df3495454ae3b",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:c4f638b4df43f572e105b6f8df578fe90ebf64cb56002e4d029a109bdbc167d1",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
-    "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthVersion": "sha256:856bd74aa8b2f205b6b30855755f16391015bffc1b6a323f618b51c26e749bfd",
+    "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bf9ca0ecb9dc00f18d0bf4acab30d544d680246b8cdacbc50f684db182b6f23b",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:fbb1ffa587ffb8b2975936fd35113c1970da16c58a713014df2c6ba885eecdd5",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:9f72097ae602ee8040c7a42104d682e4ea6b4c5999aa653a72b3cf47d4f5b81d",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
@@ -155,7 +160,8 @@
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
     "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:6d9aba219e6fafbdbcef76d30ed99fbb4f61dcc525242a0a76c3dc1bdacd24e2",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:f8edfda6b7f3172392f7649ee68edd87ac1f489da57c0c0e5cb57347803bb184",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:06dc215c06a9d2ea5a3821faf31b297a2e2f63928672c08c637b132beee726be",
+    "packages/remote/src/daemon-artifacts.ts#resolveOrdinaryArtifactFallbackPath": "sha256:e8b1cb5243194e1d4fc7e376979ca5aae3aaf55cfdd33102e1410b2033fb3a4f",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -188,14 +194,38 @@
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
-    "packages/daemon/src/server/http/http-instance-precondition.ts#refuseStaleDaemonInstance": "sha256:cf9b6f9dd95bb2593e4810c5b5939936b6d6358bf2614c7c234266cab1922d29",
-    "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:a5d802a666fd04a5c41a40bf3c96cbb4d05d6b449e950cf52098836df01df6ea",
-    "packages/proxy/src/daemon-proxy.ts#sendInstanceMismatch": "sha256:7d0a889f8c7a8151a5ac7a37f52620a269b707144303cae7304825fca49e2a0d",
+    "packages/daemon/src/server/http/http-instance-precondition.ts#refuseStaleDaemonInstance": "sha256:aab244a5946073ab494ca3c32613408107284ca9cf04c90983d9c7232be44289",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_CHECKED_RPC_ROUTE": "sha256:186cf62763a67a168d9b8148d9a06efe1de4c6755d83a05a6be85dae254435dd",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_CHECKED_RPC_CAPABILITY": "sha256:1a240ea04287b52e304bd845e8a0344649ed2e0f754c9ec80f8ea3fb10b971e7",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_RPC_PROTOCOL_HEADER": "sha256:7ce3188527c391c6f08f069d38438e70ad6ecdc257e44613b8f46055c5037766",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_REFUSAL_HEADER": "sha256:914b491b3f169de831e6758269a363f85778629286afc542646373c48d3145d3",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_REFUSALS": "sha256:99c46b14d91cc6f9eb6c55bfa96b8d89d33cc4087beac5313c5276ccdbecaf7d",
+    "packages/contracts/src/daemon-http.ts#checkedRpcProtocolRefusal": "sha256:a4efad68779436fa678c01e1c071ff45f52dcaa2e9902cd8be830937037174ef",
+    "packages/contracts/src/daemon-http.ts#checkedRpcRefusalId": "sha256:8c8cfcf83f06609109b85d8f66b4d8139447644263f2da0ac4bbfc3e53896d1a",
+    "packages/contracts/src/daemon-http.ts#CheckedRpcRefusalSide": "sha256:cc61050e901ed3706c75ffa27d48e8b05ef338a09804d43f4fdfa5978e82a1e9",
+    "packages/contracts/src/daemon-http.ts#readCheckedRpcRefusalSide": "sha256:61c1b531a34e2876e3f8a5b2cf9ee38d437fbf9c1086b66dd771072d31676e67",
+    "packages/contracts/src/daemon-http.ts#buildCheckedRpcProtocolRefusal": "sha256:cce201d221956e0584d1474093c808a5e741cf0f2b5786a4a7937950bcacb397",
+    "packages/daemon/src/server/http/http-checked-rpc.ts#refuseCheckedRpcCredential": "sha256:5594a47e90079eaf31eeb335c709451f8e60616511a4ec84d7248722a37b93ea",
+    "packages/daemon/src/server/http/http-checked-rpc.ts#withUnregisteredTrackingId": "sha256:fffc54ad047879605f532801118868fd0aed1db38b74d671b65325551cc8fe0a",
+    "packages/daemon/src/server/http/http-checked-rpc.ts#readFrameParams": "sha256:8ccdb4a3b91a585be7c1518d198f34f608905c62b8eba9aad12b62a4107f5f31",
+    "packages/proxy/src/checked-rpc-admission.ts#localCheckedRpcRefusal": "sha256:017a05ac5b415d33030a30c99529a9dd58bb19aeae5649d15a6e00740fe84d95",
+    "packages/proxy/src/checked-rpc-admission.ts#refusalResponse": "sha256:10872cc1096a6c3262de9a2dccfb1fa447b67107322894a7289116575de9b4b7",
+    "packages/proxy/src/checked-rpc-admission.ts#localRequestId": "sha256:1bd486b7d70c727c2cab6330fc78f65e1922126be2e38d615f39c1b36acf9eb4",
+    "packages/proxy/src/checked-rpc-admission.ts#readUpstreamRefusalDetails": "sha256:4789d8cffbee31ce2c3c33184751bd11498365aa72e7b37e3b46c432e941920c",
+    "packages/proxy/src/checked-rpc-admission.ts#UPSTREAM_REFUSAL_MAX_BYTES": "sha256:c9546492158610bc037a2d6a6cad59f8580d3c63f1e1797283472e50dc2317c7",
+    "packages/contracts/src/daemon-http.ts#CheckedRpcProtocolRefusal": "sha256:75b71253734f2a7e1bc34c42d4c9caca0c2eb25d809e5efb2ae0df58ae694202",
+    "packages/daemon/src/server/http/http-checked-rpc.ts#readCheckedRpcProtocolRefusal": "sha256:4c8924d8480a6af3acec96883d53636e33a199649bdd8ff63087dcf2ebaf4d29",
+    "packages/daemon/src/server/http/http-checked-rpc.ts#sendCheckedRpcProtocolRefusal": "sha256:0538d0374405a082b3c79b4225124ecbfab49dd0f53f44e401c155834c5518a5",
+    "packages/daemon/src/server/http/http-server.ts#DAEMON_HTTP_CAPABILITIES": "sha256:bac67f03945b928de4fece3a5e02386ebba9b7b957b1107f76c84bc8ca574f94",
+    "packages/proxy/src/daemon-proxy.ts#isRpcRoute": "sha256:1bf3b68f6bc855bd87ee7c0bbdef467c3c76232238885ae6c67bcf245ce9b846",
+    "packages/proxy/src/checked-rpc-admission.ts#refuseCheckedRpcProtocol": "sha256:dd63d879bf97d386889f1c4603b5722b9ad018a7f3415bcf72e44e3e8fefec48",
+    "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:5c39c2b5a1b4bc897a2b01ac47c6856af47e787e8cc5798657f0ae24fd1c78e0",
+    "packages/proxy/src/daemon-proxy.ts#sendInstanceMismatch": "sha256:a196304a18d0a37cb259d94dd67efeffe08afb6caf6a3461ab0870ef8c7bbda4",
     "packages/contracts/src/daemon-http.ts#buildDaemonInstanceMismatchRpcResponse": "sha256:24e50130bbd0c4a21dfc51005cabf118525b9121f918719a2c16f73fcfcfbcf9",
     "packages/proxy/src/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders": "sha256:9f5d76a1f761d65fabd7244fc67295fed5934a544e86a6455451ef8520cf1615",
     "packages/daemon-client/src/daemon-client-transport.ts#buildRemoteInstancePreconditionHeaders": "sha256:70241561c4070a8ebbdbbdb4ebcdbdfcb9543501cbb649a6d71cf041aee55a08",
     "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatchResponse": "sha256:7670f48fe0fc7344f8a000cd303e49788ec7ea9d1c729bcdc2af73ff02dae04d",
-    "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
+    "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:cde489fb7e510e236b3833195550939212cfb7871f8c7c3cf3ff4fcdeee599e2",
     "packages/contracts/src/lease-scope.ts#buildDaemonRpcRequest": "sha256:b3d03bb08f8f332b04dea6d2ea30abca2faf83a10f11cb874df2344b3f54c2b6",
     "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams": "sha256:365490a0fe1833d7ce8b0d3f5425462608a85119b12c1a2c4f16bb83b5d28e06",
     "packages/contracts/src/lease-scope.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
@@ -209,22 +239,32 @@
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadDirectUrl": "sha256:b121db3ffb5a520b4b31810a2e28ff01c1a15d959514c9fbe2a61cd960d2af93",
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadPreflightResponse": "sha256:332820b6f10e079632330c2c4996c4faa6f339e921f12f287bd83c9296df5ccd",
     "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:21d633d947cd72f5008bcc886a8f3ecd4f778b594d0654b8d0741db8594003db",
-    "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
+    "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:4ff6eba594b923a1d8f46a5856c42132b7ecd3a63d40f26c42972e06cb5a0a04",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
-    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:aa3ea996bdd1329d88570ba87c03026946dd33f34172c0eccd5a6ac3d38e9884",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:ba600575e06995bc903c107477b23f7853e920751452a50a9734fab6677326bf",
+    "packages/remote/src/daemon-artifacts.ts#downloadOneArtifact": "sha256:dd8726c99d2e5a4c63ad5f66392732d0116496af50251d7d03007d605b29012d",
+    "packages/remote/src/daemon-artifacts.ts#DroppedArtifact": "sha256:c340f0a9a4b99d0664f8c32ac78b3a054c95e7f171cf3531331f7cdc143e0cfb",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
     "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:b37b9391d20f535ca9c0858f92ed37943297c7acbf1fb10f8cad5cd5b53423eb",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
-    "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
-    "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
+    "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:7cdb0d65cdc72e12c88a05a837f20097fa76034fd00e82fa4a10da78be4fb7f4",
+    "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:2fbcaa03bc0675fef8d19fd0a163d5d01a2162031745a41ff5c1db8a982cc2b6",
     "packages/daemon/src/server/upload-http.ts#authorizeUpload": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740",
     "packages/remote/src/daemon-artifacts.ts#FetchRemoteArtifactParams": "sha256:f90ae571961d6147a09973791178d369dfb8550990a1e0ebf120e97336540824",
     "packages/remote/src/daemon-artifacts.ts#fetchRemoteArtifact": "sha256:871f675d744dfa2bbf50237ac14b7f8957f973b126b774f4011da65573c8548f",
     "packages/remote/src/artifact-download.ts#RemoteArtifactRequest": "sha256:6cce66499f34bb18139917df592e554395936964025089024d6c6f67e4fa4b98",
     "packages/remote/src/artifact-download.ts#RemoteArtifactFetch": "sha256:e83939ec48a66917df9ec84becf53b6ca3c8115cfdada10731046381ac9e32c1",
     "packages/remote/src/artifact-download.ts#fetchRemoteArtifactFromUrl": "sha256:de6e71abdc758f760beffba0dc260473f88a8c60b13540b9c14d39f1a3d5e3a1",
-    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:cafb5fd5838819719b2fac62c5e108276dd800a58b4614462d138cf1ed2f7d6e"
+    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:cafb5fd5838819719b2fac62c5e108276dd800a58b4614462d138cf1ed2f7d6e",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#isCheckedRpcOutcomeResponse": "sha256:75fb9f3444a3f8f4a762811ba7cbe02d92a39ed4e55483ea0cf7f029e5720a3e",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#CheckedRpcOutcome": "sha256:8aa7e58307417460bb54938f6bbbd340254e14ffbbaf2093272996909592f7be",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#ReadHealthLink": "sha256:86a9e6f1ebdaecca3ddaa16081c221321c01c684b70197961ecd71a3f54a464f",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#readCheckedRpcOutcome": "sha256:476b6638b99bc2d9abd8a45e881c2d7bdffdb07e9fcfb484d7bd249d3af0af94",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#checkedRpcRefusalError": "sha256:eb18282eae11aea1a06d826afbc50afe123969504addaeb9cb7bb7001e089a9c",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#protocolMismatchError": "sha256:ae7a834278884658edf41c146f8b89adfa46021af0ffc2763c44ac94ea38be6a",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#readRefusalDetails": "sha256:41309e8fe57616e93848c93b36e8fb665a737f87d013243c6f6f1949e9f87215",
+    "packages/daemon-client/src/daemon-client-checked-rpc.ts#isJsonRpcAnswer": "sha256:ecbf4226264fe3d3b551f89a075729df477e5c3b183dc2a761123c7229f4fe99"
   },
   "compatibleChanges": [
     {
@@ -274,8 +314,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
-      "digest": "sha256:fbb1ffa587ffb8b2975936fd35113c1970da16c58a713014df2c6ba885eecdd5",
-      "rationale": "Implementation-only daemon changes under ADR 0006: #3753 passes the runtime host environment into archiving; #4165 uses a bounded, abortable Node pipeline and validates the declared byte length, with idempotent reader release after completion or failed setup. The handler waits for file readiness before setting headers and starting the pipeline, so open errors use the existing JSON error response. Setup errors clear artifact-only headers first. Successful status codes, headers and artifact bytes retain their existing contracts. Failed or incomplete streaming reads close the HTTP transfer instead of hanging; released clients already treat an interrupted download as failure. Routes, authorization and error JSON shapes are unchanged, so no peer must parse a new payload or send a new field. Implementation-only follow-up to #4165 under ADR 0006: response close cancels artifact preparation and streaming through an internal AbortSignal. Shared builds continue for other downloads. The existing streamed failure helper now owns the same pre-header JSON error and post-header connection destruction. Successful status, headers, bytes, routes and authorization retain their existing contracts; disconnected clients receive no new payload. A response that has finished writing is not cancelled by its normal close event, so successful pipeline completion keeps its existing success semantics. Caller cancellation is normalized to the existing request_canceled error instead of forwarding caller-supplied reasons. Artifact expiry and download deadlines keep their existing reasons. The shared HTTP disconnect helper preserves typed cancellation on aborted requests and unfinished response closes. Directory preparation counts inventory and download callers together, so one disconnected download cannot abort an inventory caller's build; successful response fields and authorization stay unchanged."
+      "digest": "sha256:9f72097ae602ee8040c7a42104d682e4ea6b4c5999aa653a72b3cf47d4f5b81d",
+      "rationale": "Implementation-only daemon changes under ADR 0006: #3753 passes the runtime host environment into archiving; #4165 uses a bounded, abortable Node pipeline and validates the declared byte length, with idempotent reader release after completion or failed setup. The handler waits for file readiness before setting headers and starting the pipeline, so open errors use the existing JSON error response. Setup errors clear artifact-only headers first. Successful status codes, headers and artifact bytes retain their existing contracts. Failed or incomplete streaming reads close the HTTP transfer instead of hanging; released clients already treat an interrupted download as failure. Routes, authorization and error JSON shapes are unchanged, so no peer must parse a new payload or send a new field. Implementation-only follow-up to #4165 under ADR 0006: response close cancels artifact preparation and streaming through an internal AbortSignal. Shared builds continue for other downloads. The existing streamed failure helper now owns the same pre-header JSON error and post-header connection destruction. Successful status, headers, bytes, routes and authorization retain their existing contracts; disconnected clients receive no new payload. A response that has finished writing is not cancelled by its normal close event, so successful pipeline completion keeps its existing success semantics. Caller cancellation is normalized to the existing request_canceled error instead of forwarding caller-supplied reasons. Artifact expiry and download deadlines keep their existing reasons. The shared HTTP disconnect helper preserves typed cancellation on aborted requests and unfinished response closes. Directory preparation counts inventory and download callers together, so one disconnected download cannot abort an inventory caller's build; successful response fields and authorization stay unchanged. The size-mismatch failure reads artifact_size_mismatch from a ReasonTable row; the published reason value is unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
@@ -299,13 +339,13 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth",
-      "digest": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
-      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. #3178 threads the caller's optional AbortSignal through so a canceled call cuts a probe already in flight instead of waiting it out: the signal is client-local, never serialized, and the GET /health request and payload are unchanged."
+      "digest": "sha256:bf9ca0ecb9dc00f18d0bf4acab30d544d680246b8cdacbc50f684db182b6f23b",
+      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. #3178 threads the caller's optional AbortSignal through so a canceled call cuts a probe already in flight instead of waiting it out: the signal is client-local, never serialized, and the GET /health request and payload are unchanged. The mismatch refusal now names both versions and the side to upgrade in its message, with a new hint and a client-local upgradeSide detail; the comparison it makes, the /health request, and the refusal's code and existing detail fields are unchanged, and nothing new is serialized. It now flags the proxy link explicitly, carrying only the proxy's service, rather than inferring it from that name, so a proxy reporting an empty service is still named as a proxy; the comparison and the /health request are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:be2f3a9965bb6fe456ab8b1f0a696cf80ffcc8016262a4aee28dee25d18650d0",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -364,8 +404,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink",
-      "digest": "sha256:b709f88901784e767a542acc27d90ba080e7b016e85d6053a59df3495454ae3b",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object."
+      "digest": "sha256:c4f638b4df43f572e105b6f8df578fe90ebf64cb56002e4d029a109bdbc167d1",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #4511 reads an optional capabilities array and omits the field when a peer does not send one, so a released payload parses to the same object. The service and version now reach error messages, so readHealthLink keeps a service only when it is one the DaemonHealthPayload contract names and a version only when it is version-shaped and at most 64 characters; anything else reads as absent. Released daemons and proxies report exactly those, so their payloads parse unchanged, and the /health request is unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",
@@ -389,18 +429,18 @@
     },
     {
       "declaration": "packages/daemon/src/server/http/http-instance-precondition.ts#refuseStaleDaemonInstance",
-      "digest": "sha256:cf9b6f9dd95bb2593e4810c5b5939936b6d6358bf2614c7c234266cab1922d29",
-      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+      "digest": "sha256:aab244a5946073ab494ca3c32613408107284ca9cf04c90983d9c7232be44289",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before. The reason-table migration (#4937) then reads the byte-identical `remote_instance_mismatch` spelling from `DAEMON_INSTANCE_REASONS`; the payload is unchanged."
     },
     {
       "declaration": "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance",
-      "digest": "sha256:a5d802a666fd04a5c41a40bf3c96cbb4d05d6b449e950cf52098836df01df6ea",
-      "rationale": "Moved into @agent-device/proxy and rewritten over fetch Request/Response so the proxy can run on any transport. The 409 status, instance-mismatch header, JSON-RPC error body, and forwarded upstream precondition header are unchanged on the wire, so peers on both sides parse them as before."
+      "digest": "sha256:5c39c2b5a1b4bc897a2b01ac47c6856af47e787e8cc5798657f0ae24fd1c78e0",
+      "rationale": "Moved into @agent-device/proxy and rewritten over fetch Request/Response so the proxy can run on any transport. The 409 status, instance-mismatch header, JSON-RPC error body, and forwarded upstream precondition header are unchanged on the wire, so peers on both sides parse them as before. The checked RPC route (ADR 0006) shares the /rpc admission, so the same instance precondition now also applies to it; a released client never calls that route, and /rpc answers exactly as before."
     },
     {
       "declaration": "packages/proxy/src/daemon-proxy.ts#sendInstanceMismatch",
-      "digest": "sha256:7d0a889f8c7a8151a5ac7a37f52620a269b707144303cae7304825fca49e2a0d",
-      "rationale": "Moved into @agent-device/proxy and rewritten over fetch Request/Response so the proxy can run on any transport. The 409 status, instance-mismatch header, JSON-RPC error body, and forwarded upstream precondition header are unchanged on the wire, so peers on both sides parse them as before."
+      "digest": "sha256:a196304a18d0a37cb259d94dd67efeffe08afb6caf6a3461ab0870ef8c7bbda4",
+      "rationale": "Moved into @agent-device/proxy and rewritten over fetch Request/Response so the proxy can run on any transport. The 409 status, instance-mismatch header, JSON-RPC error body, and forwarded upstream precondition header are unchanged on the wire, so peers on both sides parse them as before. The reason-table migration (#4937) then reads the byte-identical `remote_instance_mismatch` spelling from `DAEMON_INSTANCE_REASONS`; the payload is unchanged."
     },
     {
       "declaration": "packages/proxy/src/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders",
@@ -419,8 +459,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch",
-      "digest": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
-      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+      "digest": "sha256:cde489fb7e510e236b3833195550939212cfb7871f8c7c3cf3ff4fcdeee599e2",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before. The reason-table migration (#4937) then reads the byte-identical `remote_instance_mismatch` spelling from `DAEMON_INSTANCE_REASONS`; the payload is unchanged."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth",
@@ -499,8 +539,8 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
-      "digest": "sha256:f8edfda6b7f3172392f7649ee68edd87ac1f489da57c0c0e5cb57347803bb184",
-      "rationale": "#4518 client-side only. Remote record stop uses a destination from the current request. Without one, it uses one plain file name or a generated name in cwd. Trace and perf retain the existing path rules. The request, headers, and response framing are unchanged."
+      "digest": "sha256:06dc215c06a9d2ea5a3821faf31b297a2e2f63928672c08c637b132beee726be",
+      "rationale": "#4518 and #4661 change client-side destination selection. Authorized destinations keep precedence. Fallbacks reject NUL names, and ordinary captures reject explicit non-string names and Windows drive-qualified basenames under Windows path rules. Daemons send the same artifact fields with the same framing."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
@@ -634,8 +674,8 @@
     },
     {
       "declaration": "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen",
-      "digest": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
-      "rationale": "Removes the unanswered open's record through the record owner instead of a direct unlink. The request still carries meta.scriptPublicationId and omits the caller path, and the response is read for the same scriptPublicationId field."
+      "digest": "sha256:7cdb0d65cdc72e12c88a05a837f20097fa76034fd00e82fa4a10da78be4fb7f4",
+      "rationale": "Removes the unanswered open's record through the record owner instead of a direct unlink. The request still carries meta.scriptPublicationId and omits the caller path, and the response is read for the same scriptPublicationId field. A checked open skips the client-side capability check, because every daemon that serves checked-rpc serves script-artifacts, and a checked open proven undispatched removes its record. The request and response fields are unchanged."
     },
     {
       "declaration": "packages/remote/src/script-version-publisher.ts#PublishOutcome",
@@ -644,13 +684,23 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
-      "digest": "sha256:aa3ea996bdd1329d88570ba87c03026946dd33f34172c0eccd5a6ac3d38e9884",
-      "rationale": "#4518 client-side only. Remote record stop downloads to a current request destination or reports a local cwd fallback after publishing. Released daemons supply the same artifact fields, and chunk downloads use the existing artifact order. The request, headers, and response framing are unchanged."
+      "digest": "sha256:ba600575e06995bc903c107477b23f7853e920751452a50a9734fab6677326bf",
+      "rationale": "#4518 and #4661 change client-side delivery. Record stop keeps its request destination and cwd fallback behavior. The client can skip an unusable destination and append a local reason and warning after parsing the daemon response. The daemon protocol still uses the same request fields, headers, and response framing."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonInstallSource",
       "digest": "sha256:adfde90c81de72009bf0e092b95fcb41cece2ecd44e936dcb1f6beb220287f02",
       "rationale": "Removes the github-actions-artifact variant. A new client never sends it. A released client that sends it to a new daemon gets a normal INVALID_ARGS error (source.kind must be \"url\"), not a misread payload. No local daemon ever materialized it: it always failed with UNSUPPORTED_OPERATION. The url and path variants are unchanged."
+    },
+    {
+      "declaration": "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES",
+      "digest": "sha256:4ff6eba594b923a1d8f46a5856c42132b7ecd3a63d40f26c42972e06cb5a0a04",
+      "rationale": "Adds the checked-rpc capability (ADR 0006). readDaemonCapabilities filters to known names, so a released client drops it, and a released daemon never lists it; a client treats an absent capability as cannot-do. The existing quiesce and script-artifacts entries are unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/session-script-destination.ts#RemoteEndpoint",
+      "digest": "sha256:2fbcaa03bc0675fef8d19fd0a163d5d01a2162031745a41ff5c1db8a982cc2b6",
+      "rationale": "Adds the client-local checkedRpc flag, set when the open goes on the checked RPC route. Nothing on the wire reads it; the open request and its response fields are unchanged."
     }
   ]
 }

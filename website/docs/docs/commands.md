@@ -56,6 +56,7 @@ agent-device close
 agent-device back
 agent-device orientation landscape-left
 agent-device hardware-button volume-up
+agent-device lock-screen lock
 agent-device fold half-open
 agent-device telephony sms 5551234 "Your code is 1234"
 agent-device device status --platform android --serial emulator-5554
@@ -197,7 +198,7 @@ Aliases: `launch`, `relaunch`.
 | `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
 | `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
 | `--relaunch` | open: terminate app process before launching it |
-| `--foreground` | open: keep normal app/device selection and return an initial snapshot of the first screen (a local iOS simulator waits up to 10s for it); without an app, resolve the sole running app on the sole booted iOS simulator |
+| `--foreground` | open: keep normal app/device selection and return an initial snapshot of the first screen (a local iOS simulator waits up to 10s for it); without an app, resolve the sole running app on the sole booted iOS simulator; on HarmonyOS with an app target, fail when the launched app does not hold the foreground within 5s |
 | `--no-record` | Do not record this action |
 | `--wait <ms>` | Open: wait up to n ms for a device another session is holding before failing with DEVICE_IN_USE |
 
@@ -235,9 +236,12 @@ Exact behavior: `agent-device help close`.
 - On a local iOS Simulator, the first capture after `open` waits for the app's first screen. If the wait ends first, the snapshot warns with `postGestureOutcome.kind: "loading"` or `"unsettled"`. Run `snapshot -i` or `wait text <expected>` before you act. An app whose first screen has no labeled controls, such as a game canvas, always waits the full time; pass `--no-post-gesture-stabilization` to skip the wait.
 - `open --wait <ms>` waits for a device that another session holds. A claim held by another workspace is not waited for: `open` returns the recovery command at once. `install` and `reinstall` never wait.
 - If an app on an iOS simulator shows an empty accessibility tree after an earlier XCTest session, run `open <app> --relaunch`, then `snapshot -i`.
+- On iOS simulators, `open` marks the keyboard's swipe-typing introduction and multilingual keyboard tip as shown before it launches the app, so neither sheet covers the keyboard on the first text entry. A failed write is logged and does not stop the launch.
 - Android React Native: `open --relaunch` needs an installed package name, not an APK path. For Metro-served JS changes, run `metro reload` instead.
+- `--metro-host`, `--metro-port`, `--bundle-url`, and `--launch-url` apply to the app that `open` opens. A later `open` without these flags applies them again only when it opens the same app. It opens another app, such as a system app, without them. An `open` that passes these flags for another app also removes the earlier hints from the app an earlier `open` applied them to.
 - ADB-backed Android: `open settings --relaunch` restarts the app that the intent opened. It fails when the intent matches more than one activity.
 - ADB-backed Android: `close` fails with `android-app-close-timeout` when the app does not leave the foreground or its processes do not exit in time. It fails with `android-process-probe-unavailable` when it cannot list the app's processes; if that happens before the stop, the app keeps running.
+- On HarmonyOS, `open` reads the foreground app after the launch dispatch, for up to 5 seconds. When the opened app never holds the foreground, the open succeeds and `warnings` name it `open-not-foreground` with the app that holds the foreground, or the fact that no mission is foreground. A lock screen is a typical cause: unlock the device, then run the open again. When no read of the mission list succeeds in that budget, the warning names `open-foreground-probe-unreadable` instead and claims nothing about the app: check the device connection. With `--foreground`, an unconfirmed open fails with `details.reason: open-not-foreground` or `open-foreground-probe-unreadable`, matching the same two cases.
 - If `close` cannot confirm its cleanup, it keeps the session and its device claim. Run `close` again with the same options to release the device, without `--save-script` if the first attempt saved the script. The same applies when `open --relaunch` cannot confirm its effects.
 
 iOS Simulator launch prompt:
@@ -357,6 +361,20 @@ Exact behavior: `agent-device help hardware-button`.
 
 <!-- /generated -->
 
+<!-- generated:command lock-screen -->
+
+Lock or unlock the device screen.
+
+```bash
+agent-device lock-screen <lock|unlock>
+```
+
+Supported targets: [Lock screen](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help lock-screen`.
+
+<!-- /generated -->
+
 - `back` uses the app's own back navigation: the back key on Android, the visible back control on macOS, and the Menu button on tvOS. On macOS, an app with no back control by identifier or "Back" label refuses with `in_app_back_control_unavailable` and nothing is pressed; press the app's control by its ref.
 - iOS has no system back. `back` presses the navigation bar's system back button when it finds exactly one, and otherwise swipes from the left edge. It never presses a custom "Back" button, and it does not dismiss a modal or sheet: press that screen's Close or Cancel control. On Android, system back also closes dialogs.
 - `back_swipe_no_change` means the swipe did not change the screen. `details.dismissControls` lists the Back, Close, and Cancel buttons at the top of the app window as selectors, for example `agent-device press 'role=button label="Close"'`. `back` never presses them itself, because they can discard a draft.
@@ -369,7 +387,10 @@ Exact behavior: `agent-device help hardware-button`.
 - `shake` works on iOS simulators and local Android emulators, not on Android TV or remote providers. On iOS, the app gets a motion-shake event but no accelerometer data, so an app that detects shakes through CoreMotion does not see it. Take a snapshot to see what the app did.
 - On Android, `shake-rest-acceleration-unreadable` means the emulator console returned no accelerometer reading, so nothing was sent. `shake-console-refused` after a swing means the accelerometer may not be back at rest. Check with `adb emu sensor get acceleration`.
 - `hardware-button` presses a key once and reports the press, not what the OS did with it. Android presses every key. A physical iPhone or iPad presses volume only, iOS simulators refuse every key, and TV targets point you to `tv-remote`.
-- On Android, `power` toggles the screen. After a press that turns the screen off, later commands can hit a locked screen; use `hardware-button wake`.
+- On Android, `power` toggles the screen. After a press that turns the screen off, later commands can hit a locked screen; use `hardware-button wake`, or `lock-screen unlock` to dismiss the lock screen too.
+- `lock-screen` returns once the device reports the lock state, in `state`. `lock` leaves a locked screen alone. Android verifies with the keyguard state that `dumpsys window` reports. On a device with a PIN, pattern, or password and "Power button instantly locks" off, the keyguard appears only after "Lock after screen timeout", so `lock` waits that long too: at least 5 s, which Android applies even to a shorter setting, and at most one minute. iOS simulators verify with SpringBoard's lock state and, for `lock`, a lock screen surface. On iOS, a dark screen is woken with the lock button first: `unlock` then swipes up and needs the screen on, and `lock` presses again if the screen woke unlocked. `unlock` lands on the app that was in front, not on the Home Screen. On Android it always sends the wake event, which leaves a screen that is on unchanged.
+- The session app is not activated, so check the result with `screenshot`. On iOS, an app-scoped command such as `snapshot` brings the session app back to the front, which can dismiss the lock screen.
+- `lock-screen unlock` never enters a credential. A PIN, pattern, password, or passcode lock fails with `lock-screen-secure`; on Android nothing is sent (`dispatched: no`). `lock-screen-unverified` means the device still reports the previous state. On Android, `lock` on a screen lock set to None fails with `lock-screen-disabled` and sends nothing (`dispatched: no`), because there is no lock screen to show. `lock-screen-state-unreadable` means `dumpsys` reported no keyguard state or no lock type for the foreground user, and nothing was sent.
 
 Fold a foldable device:
 
@@ -394,6 +415,8 @@ Exact behavior: `agent-device help fold`.
 - `fold closed|half-open|open` sets the pose of an iPhone Duo simulator or a foldable Android emulator, such as `pixel_9_pro_fold`. It reports the pose only after the device confirms it. Physical devices are refused.
 - Take a new snapshot after every fold, even a failed one. Refs and coordinates from before it are stale.
 - On iOS, `fold` needs an Xcode with foldable HID support. The first fold on a host or Xcode builds a helper and takes longer. The response's panel size is not the next snapshot's viewport, so do not use it to place a tap.
+- On a foldable iOS simulator, `home` and `app-switcher` press the Home button through the same helper, because the XCUITest Home press does not reach the home screen there. The first press on a host or Xcode builds the helper and takes longer.
+- On an unfolded iPhone Duo simulator with the inner panel lit, run `gesture swipe split-view-left` or `gesture swipe split-view-right` to move the full-screen app to that half. Use `open <bundle>` to launch the second app or switch between the two apps. With both apps in Split View, run `gesture swipe split-view-exit` to drag the divider left and make the right-hand app fill the screen. Other devices, a closed Duo, and WebDriver providers refuse these presets with `split_view_unavailable` before any touch.
 - `--keyframes` plays a timed hinge trajectory on iOS only, for example `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":5000,"angle":180}]'`.
 - For failure reasons, see [error reasons](/docs/error-reasons). For panels and poses, see `agent-device help foldable`.
 
@@ -433,8 +456,41 @@ Remote daemons and tenants:
 Pause agent interactions while a person controls a device.
 
 ```bash
-agent-device takeover [status | release <hold-id>] [--session <name>]
+agent-device takeover [status | hold | release <hold-id>] [--session <name>]
 ```
+
+**`takeover hold`**
+
+| Option | What it does |
+| --- | --- |
+| `--tenant <id>` | Tenant scope identifier for isolated daemon sessions |
+| `--run-id <id>` | Run identifier used for tenant lease admission checks |
+| `--lease-id <id>` | Lease identifier bound to tenant/run admission scope |
+| `--reason <text>` | Human-control hold reason a blocked agent sees (takeover hold) |
+| `--ttl-ms <ms>` | Human-control hold TTL in milliseconds, 1000 to 86400000 (takeover hold; default 60000) |
+| `--session <name>` | Named session (implicit default is scoped to this workspace + platform) |
+
+**`takeover status`**
+
+| Option | What it does |
+| --- | --- |
+| `--daemon-transport auto\|socket\|http` | Daemon client transport preference |
+| `--tenant <id>` | Tenant scope identifier for isolated daemon sessions |
+| `--session-isolation none\|tenant` | Session isolation strategy (tenant prefixes session namespace) |
+| `--run-id <id>` | Run identifier used for tenant lease admission checks |
+| `--lease-id <id>` | Lease identifier bound to tenant/run admission scope |
+| `--session <name>` | Named session (implicit default is scoped to this workspace + platform) |
+
+**`takeover release`**
+
+| Option | What it does |
+| --- | --- |
+| `--daemon-transport auto\|socket\|http` | Daemon client transport preference |
+| `--tenant <id>` | Tenant scope identifier for isolated daemon sessions |
+| `--session-isolation none\|tenant` | Session isolation strategy (tenant prefixes session namespace) |
+| `--run-id <id>` | Run identifier used for tenant lease admission checks |
+| `--lease-id <id>` | Lease identifier bound to tenant/run admission scope |
+| `--session <name>` | Named session (implicit default is scoped to this workspace + platform) |
 
 Exact behavior: `agent-device help takeover`.
 
@@ -590,7 +646,7 @@ agent-device doctor --remote --json
 ```
 
 - `doctor` is read-only: it never boots, installs, or changes the device. Without `--platform`, it checks every discoverable target.
-- `--app` adds install state and Metro and React Native wiring checks for that app.
+- `--app` checks whether the app is installed and enables app-specific diagnostics. To check Metro reachability, run `doctor` locally on the Metro host from your project directory.
 - `--remote` runs only the checks that don't need a booted device; use it in CI bootstrap.
 
 ## Prepare Apple runner
@@ -840,10 +896,11 @@ Exact behavior: `agent-device help audit`.
 `audit` checks the current screen for accessibility problems. Findings are review prompts, not failures, and `audit` changes nothing on the device.
 
 - It checks for small targets, controls with no accessible name, controls of one role that share a name, and controls covered by other UI. `agent-device help audit` describes each check and its exemptions.
+- On Android, `audit` also prints an estimated TalkBack swipe order for each app window, as refs. The estimate uses TalkBack's ordering rules on the captured tree, so it can differ from TalkBack where TalkBack scrolls, moves between windows, or reads web content. Confirm an order problem with TalkBack on a device.
 - On iOS 17+ with the XCTest runner, `audit` also runs Apple's native accessibility checks. Other targets run the heuristic checks only. Apple's Dynamic Type and clipped-text checks are not run; `agent-device help accessibility` describes the large text check to use instead.
 - A system alert over the app stops Apple's checks with `native_audit_blocked_by_alert`. Run `agent-device alert accept` or `agent-device alert dismiss`, then run `audit` again. A runner answer the CLI cannot read fails with `native-audit-invalid-result`.
 - When a native finding matches a captured element, it includes its ref. Otherwise, match its `rect` against a new snapshot before you act. A finding without a rect names no element, so report it without acting.
-- Like `find`, `audit` returns pinned refs such as `@eN~s<refsGeneration>`; press those. Take a new snapshot before you use other refs.
+- Like `find`, `audit` returns pinned refs such as `@eN-s<refsGeneration>`; press those. Take a new snapshot before you use other refs.
 
 ## Wait and alerts
 
@@ -900,14 +957,15 @@ agent-device alert dismiss
 Handle system alerts:
 
 - `alert` handles system alerts on iOS, macOS, and Android permission dialogs. On iOS it also covers app-owned modal popups and Safari's page prompts.
+- On Android, `alert` also handles the "isn't responding" (ANR) dialog in any device language: `dismiss` presses Close app, and `accept` presses Wait. While an ANR dialog has focus and its process does not belong to the session app alone, commands that act on the screen are refused and their hint names `alert`. An ANR of the session app is closed, and the app is relaunched, before the command runs.
 - Use `alert get` for a quick check, and `alert wait <short-ms>` only when a prompt may appear after async work. Do not use `settings permission` to answer a dialog already on screen; it is for setup before a flow.
 - `accept` and `dismiss` are sent once and never replayed, even if the response is lost. A closed alert does not prove that a permission was granted, so verify the app outcome.
-- `accept` picks the lasting grant, such as `Allow While Using App` over `Allow Once`, or "Allow all" on Android's partial-media sheet. On iOS, `dismiss` presses only a recognized decline button, such as `Cancel` or `Don't Allow`. iOS simulators also recognize these labels in the device's preferred languages; physical iOS devices, tvOS, and visionOS use English labels only.
+- `accept` picks the lasting grant, such as `Allow While Using App` over `Allow Once`, or "Allow all" on Android's partial-media sheet. On iOS, `dismiss` presses only a recognized decline button, such as `Cancel` or `Don't Allow`. iOS simulators also recognize these labels in the device's preferred languages; on physical iOS devices, tvOS, and visionOS the runner cannot read the OS strings, so it recognizes the system prompts' Simplified Chinese wording from a built-in table, at the rank of the English label each entry translates; wording the table does not cover stays unknown.
 - On iOS and Android, an unrecognized or ambiguous button fails with `ALERT_BUTTON_NOT_FOUND` or `alert_button_undecided`, and nothing is pressed. Read the labels with `alert get`, then press your choice with `snapshot -i` and `press @ref`. macOS falls back to the default or cancel button, then the first or last button.
 - `ALERT_UNRESOLVED` means the runner found an alert it cannot act on. Inspect it with `screenshot` and `snapshot -i`, then `press @ref` on the visible button.
 - `alert-window-expired`, `ALERT_CONFIRMATION_UNAVAILABLE`, `ALERT_DEADLINE_EXCEEDED`, and `dispatched: unknown` mean the press may have happened. Run `alert get` before you act again.
-- An `alert get` that fails with `runner_main_thread_timeout` does not mean there is no alert; that is `alert-not-found`.
-- On Android, `alert get --json` reports `status`: `visible`, `none`, or `undecided`. Branch on `status`, not on the message.
+- An `alert get` that fails with `runner_main_thread_timeout` does not mean there is no alert. Run `alert get` again.
+- A screen with no alert answers `alert get --json` with `status`: `none`, on every platform that serves `alert`. Branch on `status`, not on the message.
 - If a sheet or permission prompt is visible but `alert` reports none, run `snapshot -i -s "<visible label>"`, then `press @ref` on the visible button.
 
 ## Interactions
@@ -999,7 +1057,7 @@ agent-device gesture pan 200 420 0 -80 500
 agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
 agent-device gesture fling right 200 420 180
 agent-device gesture drag 'id="drag-source"' 'id="drop-target"'
-agent-device gesture drag @e4~s12 'label="Archive"' 700 600 200
+agent-device gesture drag @e4-s12 'label="Archive"' 700 600 200
 agent-device longpress 300 500 800
 agent-device hover @e12 --settle       # Web only: move the pointer without pressing
 agent-device scroll down 0.5
@@ -1008,6 +1066,7 @@ agent-device scroll down --until 'label="Sign in"'
 agent-device scroll refresh           # pull-to-refresh at the top of the list
 agent-device gesture pinch 2.0          # zoom in 2x
 agent-device gesture pinch 0.5 200 400 # zoom out at coordinates
+agent-device gesture pinch 2 @e17       # zoom in 2x centered on an element
 agent-device gesture rotate 35 200 420 # rotate app content
 agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and rotate
 agent-device gesture tap 80 300 200 450 310 600        # three fingers at once
@@ -1020,6 +1079,16 @@ A successful `click` or `press` means the action was sent to where the command f
 `--settle` reads the tree in the same view as the refs you last read: the full tree after `snapshot`, the interactive view after `snapshot -i`.
 
 After an action that animated the screen, a `click` or `press` on a ref or selector waits for the target to come to rest. If it does not, the command refuses with `target_still_moving` and nothing is pressed. Run `wait <selector>` on the target and retry, or add `--settle`. A refused `@ref` press needs a new `snapshot -i`, because the wait retires the ref. Presses at raw coordinates, and `click @ref` on the web, skip this check.
+
+A raw-coordinate press has no ref to wait on and skips that check. To confirm that a coordinate press changed the screen, capture before and after, then diff:
+
+```bash
+agent-device screenshot --out before.png
+agent-device press 201 500
+agent-device diff screenshot --baseline before.png --out diff.png --json
+```
+
+`diff screenshot` ranks the changed regions and writes the tinted diff PNG. Before you retry a coordinate press that produced no change, see [Screenshots](#media-and-logs).
 
 On iOS, a press on a control nested inside a larger touch control, such as a swipe action beside its row, refuses with `target_not_hittable` when the platform reports the control as not hittable. Reveal the control, for example by swiping its row, and take a new `snapshot -i`.
 
@@ -1139,7 +1208,7 @@ Exact behavior: `agent-device help hover`.
 Fling between coordinates.
 
 ```bash
-agent-device swipe <x1> <y1> <x2> <y2> [--count <n>] [--pause-ms <ms>] [--pattern one-way|ping-pong]
+agent-device swipe <x1> <y1> <x2> <y2> [--count <n>] [--pause-ms <ms>] [--pattern one-way|ping-pong] [--settle] [--settle-quiet <ms>] [--timeout <ms>]
 ```
 
 | Option | What it does |
@@ -1148,6 +1217,8 @@ agent-device swipe <x1> <y1> <x2> <y2> [--count <n>] [--pause-ms <ms>] [--patter
 | `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
 | `--pause-ms <ms>` | Delay between swipe or gesture tap iterations |
 | `--pattern one-way\|ping-pong` | Swipe repeat pattern |
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`.
 
 Supported targets: [Gesture plans and swipes](/docs/capabilities#interact-with-the-app).
 
@@ -1204,6 +1275,8 @@ Reads no options.
 
 Reads no options.
 
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`.
+
 Supported targets: [Gesture plans and swipes](/docs/capabilities#interact-with-the-app).
 
 Exact behavior: `agent-device help gesture`.
@@ -1211,10 +1284,12 @@ Exact behavior: `agent-device help gesture`.
 <!-- /generated -->
 
 - Touch platforms refuse `hover`; use `longpress` for a hold. For `hover` on the web, see [Web Automation](#web-automation).
+- Add `--settle` to a supported `swipe` or `gesture` to wait for the UI to go quiet after the final repetition. The diff compares with the last observed tree. Copy returned refs with their generation suffix. When the observation is inconclusive or the diff lacks your target, run `snapshot -i`.
 - `swipe` is a quick throw. `gesture pan` is a deliberate timed drag with one pointer, or two with `--pointer-count 2`. `gesture fling` is a fast directional throw. To update old scripts, see [Rewrite old gesture commands](/docs/migrating-gestures).
 - `gesture pan --hold-ms <ms>` holds one pointer before it moves, for drag handles that expose no element and so no ref, such as reorder grips.
-- `gesture drag source destination` holds one pointer from a selector or ref to another. It and `--hold-ms` work on Android touch devices and iOS/iPadOS only.
+- `gesture drag source destination` holds one pointer from a selector or ref to another. It refuses coordinates; for a coordinate drag, use `gesture pan <x> <y> <dx> <dy> [ms] --hold-ms <ms>`. It and `--hold-ms` work on Android touch devices and iOS/iPadOS only.
 - `gesture pinch`, `gesture rotate`, `gesture transform`, and two-finger `gesture pan` work in Android, iOS, and iPadOS app sessions. iOS sessions through a WebDriver provider refuse them. A path that does not fit the viewport fails instead of being clamped. Use `orientation` to rotate the device.
+- `swipe` and `gesture` coordinates use the units `snapshot` reports: points on Apple platforms, not screenshot pixels. A gesture that leaves the viewport fails with `GESTURE_TRAJECTORY_OUT_OF_BOUNDS`, and the message names the viewport size and the first point outside it. A `gesture pinch`, `rotate`, `transform`, or two-finger `pan` that cannot keep its fingers far enough apart in the viewport fails the same way, and its message names only the viewport.
 - `gesture tap` touches 2 to 5 points at once in Android and iOS/iPadOS app sessions. WebDriver providers refuse it unless they declare `tapGesture` support. Three or more fingers can trigger iOS system gestures such as undo, so verify app state afterwards. Use `press` for one finger.
 - On iOS, a long press, scroll, or swipe that fails with `synthesized_gesture_not_dispatched` sent nothing, so a retry is safe. `synthesized_gesture_outcome_unknown` means it may have run; check the screen first.
 - On iOS, a one-finger `gesture pan` can cross into the keyboard area. Use it for an intended drag where the app supports interactive keyboard dismissal.
@@ -1280,6 +1355,7 @@ An Apple runner that returns `COMMAND_ALREADY_FINISHED` cannot replay that comma
 - `malformed_request`: fix the client that built the request; resending it unchanged fails the same way.
 - `remote_daemon_unavailable`: the remote daemon did not answer its health check. Make it reachable, or clear `--daemon-base-url` or `AGENT_DEVICE_DAEMON_BASE_URL`. For a saved `connect` connection, run `disconnect` to return to the local daemon.
 - `webdriver_route_unsupported`: the device cloud's driver does not implement the route. The limit is the driver, not the device.
+- `find` with no match (`COMMAND_FAILED`, no reason): no `find` action ran. Run `snapshot -i` to see the current elements, or scroll first if the element may be off-screen.
 
 iOS runner refusals carry a typed `error.details.reason` too:
 
@@ -1682,7 +1758,7 @@ agent-device trigger-app-event screenshot_taken '{"source":"qa"}'
 Change OS settings and app permissions.
 
 ```bash
-agent-device settings <wifi|bluetooth|airplane|mobile-data|location|animations> <on|off> | settings location set <lat> <lon> | settings appearance <light|dark|toggle> | settings text-size [extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large] | settings <faceid|touchid> <match|nonmatch|enroll|unenroll> | settings fingerprint <match|nonmatch> | settings clear-app-state [app-id] | settings reset-keychain clear | settings permission <grant|deny|reset> <all|camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> [full|limited] | settings permission <grant|reset> <accessibility|screen-recording|input-monitoring> [--app <id-or-name>]
+agent-device settings <wifi|bluetooth|airplane|mobile-data|keep-awake|location|animations> <on|off> | settings location set <lat> <lon> | settings appearance <light|dark|toggle> | settings text-size [extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large] | settings timezone <iana-zone|reset> | settings locale <locale-id|reset> | settings <faceid|touchid> <match|nonmatch|enroll|unenroll> | settings fingerprint <match|nonmatch> | settings clear-app-state [app-id] | settings reset-keychain clear | settings permission <grant|deny|reset> <all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> | settings permission <grant|deny|reset> photos [full|limited] | settings permission <grant|reset> <accessibility|screen-recording|input-monitoring> [--app <id-or-name>]
 ```
 
 | Option | What it does |
@@ -1701,6 +1777,8 @@ agent-device settings mobile-data off
 agent-device settings location set 37.3349 -122.009
 agent-device settings animations off
 agent-device settings text-size accessibility-extra-large
+agent-device settings locale en_IN
+agent-device settings timezone Asia/Kolkata
 agent-device settings appearance dark
 agent-device settings faceid match
 agent-device settings fingerprint nonmatch
@@ -1724,8 +1802,23 @@ Device settings:
 
 - `settings animations off` (Android) stabilizes runs with heavy animation. Turn animations back on afterwards.
 - `settings bluetooth` and `settings mobile-data` are Android only and need adb. `settings bluetooth` needs Android 8.1 or newer, and `settings airplane` needs Android 11 or newer. Connectivity takes a moment to settle, so poll the app instead of asserting offline behavior at once.
+- On iOS simulators, `settings wifi` and `settings airplane` change only the status bar, and the output prints a warning that says so. The simulator keeps using the Mac's network, so these settings cannot test offline behavior.
 - Pair `settings mobile-data on` with `settings wifi off` to move a session, such as a video stream, from Wi-Fi to cellular. On a multi-SIM device, or one without an active SIM, the command can fail even when the switch took effect.
 - `settings text-size` without a category reads the current size. It works on iPhone and iPad simulators and on Android. A running app picks up a new size only after `open <app> --relaunch`.
+
+Language and region:
+
+- `settings locale <locale-id>` sets the language and region together on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous locale as `previousLocale`.
+- A locale id is a language with an optional script and region, written with `-` or `_`, such as `en_IN`, `fr-CA`, or `zh-Hans-CN`. Extensions and variants are refused with `INVALID_ARGS` before anything changes.
+- On iOS simulators, a running app keeps its old locale until `open <app> --relaunch`. `settings locale reset` removes the override, which leaves English with no region. The reported `previousLocale` is a value `settings locale` accepts, and `previousLanguages` lists every preferred language.
+- On Android devices and emulators, running apps take the new locale at once. Android before 8.0 refuses with `locale-api-level-unsupported`. `settings locale reset` applies `ro.product.locale`, the locale the system image boots with.
+
+Time zone:
+
+- `settings timezone <iana-zone>` sets the time zone on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous time zone as `previousTimeZone`.
+- Pass an IANA time zone name such as `Asia/Kolkata` or `America/New_York`; offsets and unknown names are refused with `INVALID_ARGS` before anything changes.
+- On iOS simulators, `settings timezone` sets `TZ` in simulator `launchd`: it applies only to apps launched afterwards (run `open <app> --relaunch` for a running app), is lost when the simulator reboots, and leaves the status bar on the Mac's time. A zone missing from the Mac's time zone database, which simulator apps read, fails with `time-zone-unknown-to-simulator` before anything changes. `settings timezone reset` gives newly launched apps the Mac's time zone again.
+- On Android devices and emulators, running apps and the status bar take the new time zone at once. `settings timezone` turns automatic time zone off and verifies `persist.sys.timezone` (failing with `time-zone-not-applied` if the device kept another zone; any failure puts the previous automatic time zone setting back). `settings timezone reset` turns automatic time zone back on and reports `timeZone: null`, because the device applies the network zone a moment later.
 
 Biometrics:
 
@@ -1741,8 +1834,9 @@ App state:
 Permissions:
 
 - On iOS and Android, `permission` applies to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. `--app` counts only on the command line; `AGENT_DEVICE_TARGET_APP` never retargets a settings change.
-- Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, or `bluetooth` takes no app).
-- On iOS simulators, the simulator decides which permissions it can change and refuses the rest. `grant all` skips a refused service with a warning.
+- Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, `bluetooth`, `locale`, or `timezone` takes no app).
+- On iOS simulators, targeting `notifications` with `grant`, `deny`, or `reset` returns `ios-notification-permission-unsupported`. Use `alert accept` or `alert dismiss` to answer the notification prompt.
+- On iOS simulators, the simulator decides which other permissions it can change and refuses the rest. `grant all` skips a refused service with a warning.
 - On Android, a permission group applies only the permissions the app declares. `full|limited` applies only to iOS `photos`.
 - Android kills a running app when you revoke one of its granted permissions. After `deny` or `reset`, run `open <app> --relaunch` when the warning says so.
 - On macOS, `grant` opens System Settings when access needs your approval; it never grants silently. `deny` is unsupported.
@@ -2128,7 +2222,7 @@ agent-device metro reload --bundle-url "http://localhost:8081/index.bundle?platf
 ```
 
 - `metro reload` asks connected React Native dev builds to reload JavaScript without restarting the native process, like pressing `r` in the Metro terminal.
-- Without flags, it reloads the dev server the session bound through `metro prepare` or `open`'s Metro hints, then `localhost:8081`. A reused session name never reloads a previous project's server.
+- Without flags, it reloads the dev server the session bound through `metro prepare` or `open`'s Metro hints. When no session bound one, and the daemon that answered `open` reported the session's device as one of its own local devices, it next uses the dev-server address the app itself stored (an iOS simulator only) when a dev server there serves this project, then a local dev server whose reported project root is this directory or a parent or child of it. Run it from the project's own directory, or pass `--metro-port`, because a local search matches the working directory. If neither local lookup resolves, it fails with `details.reason: 'metro_dev_server_unresolved'`; a provider device, a device inherited from an earlier request, or an app-less session retains the existing `localhost:8081` default. A reused session name never reloads a previous project's server.
 - Use `open <app> --relaunch` instead when the app is not connected to Metro, the reload fails, or the native process must restart. See `agent-device help metro` for the binding rules.
 
 ## Media and logs
@@ -2518,7 +2612,7 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 ```
 
 - `connect` saves the connection and waits to lease a device and prepare Metro until a command needs them. `connect --remote-config <path>` uses a local profile instead of the cloud one.
-- Cloud auth: `connect` uses your stored CLI session, and starts login in an interactive shell. In CI, use an `adc_live_...` service token. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`. Interactive login prints the code that the browser page must show; approve only when they match. When the cloud rotates the session credential during a refresh, the CLI stores the replacement and any session expiry. One command refreshes a stored session at a time; a command that waits too long fails with a session-file lock timeout, so retry it. A revoked session fails with `cli_session_revoked`, a refresh without a token fails with `cli_session_refresh_unanswered`, and a session directory that cannot be written fails with `cli_session_store_unwritable`.
+- Cloud auth: `connect` uses your stored CLI session, and starts login in an interactive shell. In CI, use an `adc_live_...` service token. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`. Interactive login prints the code that the browser page must show; approve only when they match. When the cloud rotates the session credential during a refresh, the CLI stores the replacement and any session expiry. One command refreshes a stored session at a time; a command that waits too long fails with a session-file lock timeout, so retry it. A revoked session fails with `cli_session_revoked`, a refresh without a token fails with `cli_session_refresh_unanswered`, and a session directory that cannot be written fails with `cli_session_store_unwritable`. A refresh goes only to the cloud origin stored with the session: an `AGENT_DEVICE_CLOUD_BASE_URL` with another origin fails with `cloud_login_origin_mismatch` until you log in again or unset it. A session saved by an older CLI fails with `cli_session_issuer_unverified`; run `agent-device auth login`. Cloud auth requests follow at most three redirects on the same origin. A 307 or 308 resends the POST; a 301, 302 or 303 continues as a GET without the body. A redirect to another origin, a fourth redirect, or a target with no readable Location or with a username or password fails with `cloud_auth_redirect_refused` before anything is sent to it.
 - `AGENT_DEVICE_CLOUD_BASE_URL` is the bridge API origin, which is not always the dashboard.
 - On a connection with a lease provider, such as the cloud or `connect proxy`, every command must name the session with `--session`, `AGENT_DEVICE_SESSION`, or config, or it fails with `REMOTE_SESSION_REQUIRED`. On other profiles, commands without a session use the most recent connection, which is safe only for one sequential workflow. To replace a connection, pass `--session <name> --force`.
 - After `connect`, normal commands reuse the connection. `connection status` shows `leaseId=pending` until the first command that needs a device.
@@ -2590,6 +2684,8 @@ agent-device disconnect [--shutdown]
 Exact behavior: `agent-device help disconnect`.
 
 <!-- /generated -->
+
+If agent-device cannot read or parse a session's own saved connection file or the active-session pointer, it cannot establish which session owns that file. It keeps the file and refuses with `connection_record_owner_unknown`. A session's own saved connection file that cannot be read refuses every command that uses that session's saved connection. An unreadable active-session pointer refuses `connect` and any command that rewrites the saved connection. The error names the file. Make it readable, or remove it if no session needs it. A file from an older build whose owner cannot be proven is left in place and is not used. A command that only reads the saved connection, such as `connection status`, changes no file. It uses an older build's file for the session where that file is, and it treats a file that fails validation as no connection. Only a command that saves or removes the saved connection moves an older file to its session's own file, or removes a file that fails validation. If an older file cannot move because its session's own file already exists, that command refuses with `connection_session_mismatch`. The refused file is kept, and so is the occupied session file. This is also true when both files name the same session, and when the occupied file cannot be read.
 
 <!-- generated:command auth -->
 

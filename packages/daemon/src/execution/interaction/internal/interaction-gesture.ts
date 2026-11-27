@@ -23,11 +23,17 @@ import {
 import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   REF_GRAMMAR_HINT,
+  retiredRefPinRefusal,
   splitRefGenerationSuffix,
   type Point,
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
+import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
+import {
+  postActionBaseline,
+  surfaceScopedNodes,
+} from '@agent-device/capture-kit/snapshot-baseline';
+import { issueSettleRefs, publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
 import {
   resolveBoundGestureRuntime,
   type BoundGestureExecutor,
@@ -39,7 +45,11 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../../android-system-dialog.ts';
-import { readRefMutationFrame } from '../../../core/ref-frame.ts';
+import {
+  isOutdatedObservation,
+  readRefMutationFrame,
+  refFrameTree,
+} from '../../../core/ref-frame.ts';
 import { thrownBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
@@ -55,6 +65,7 @@ import type { RecordedTargetCapture } from '@agent-device/selectors/target-evide
 import { gestureResponseData } from './interaction-gesture-response.ts';
 import { recordTouchVisualizationEvent } from '../../../core/recording-gestures.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
+import { readSettleRequest, settleFlagGuardResponse } from './interaction-flags.ts';
 
 type GestureHandlerParams = InteractionRouteInput & {
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -63,7 +74,10 @@ type GestureHandlerParams = InteractionRouteInput & {
 type GestureRuntime = Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>;
 type GestureRuntimeResult = Awaited<ReturnType<GestureRuntime['interactions']['gesture']>>;
 
+type GestureCapture = { state?: SnapshotState };
+
 type GestureInteractionOutcome = {
+  runtime: GestureRuntime;
   positionals: string[];
   flags: InteractionRouteInput['req']['flags'];
   responseData: Record<string, unknown>;
@@ -100,7 +114,7 @@ async function runGestureInteraction(
   params: GestureHandlerParams,
   session: SessionState,
   readiness: AndroidBlockingDialogReadinessResult,
-  consumedCapture: { state?: SnapshotState },
+  consumedCapture: GestureCapture,
 ): Promise<GestureInteractionResult> {
   const input = readGesturePayload(params.req.input);
   const gesture = prepareGestureCommandInput(input, session, readiness);
@@ -126,6 +140,7 @@ async function runGestureInteraction(
     () => gesture,
     (completed, _index, startedAt, finishedAt) => {
       const outcome = buildGestureOutcome(
+        runtime,
         input.kind === 'tap' ? { ...input, count: 1 } : input,
         gesture,
         completed,
@@ -142,7 +157,7 @@ async function runGestureInteraction(
       );
     },
   );
-  return buildGestureOutcome(input, gesture, result, params.req.flags);
+  return buildGestureOutcome(runtime, input, gesture, result, params.req.flags);
 }
 
 async function runPreparedGesture(
@@ -165,6 +180,7 @@ async function runPreparedGesture(
 }
 
 function buildGestureOutcome(
+  runtime: GestureRuntime,
   input: GesturePayload,
   gesture: GestureCommandInput,
   result: GestureRuntimeResult,
@@ -178,7 +194,8 @@ function buildGestureOutcome(
       ? { ...result, message: `Tapped ${input.points.length} points ${input.count} times` }
       : result;
   return {
-    positionals: dragRecordingPositionals(input, recording),
+    runtime,
+    positionals: recordedGesturePositionals(input, result),
     flags: gestureReplayFlags(input, flags),
     responseData: gestureResponseData(responseResult, {
       executionProfile: resolveExecutionProfile(gesture),
@@ -253,6 +270,7 @@ export async function dispatchSwipeViaRuntime(
         },
       );
       return {
+        runtime,
         positionals: swipeReplayPositionals(input),
         flags: params.req.flags,
         responseData: swipeResponseData(input, result),
@@ -284,7 +302,7 @@ function swipeResponseData(
 function createGestureRuntime(
   params: GestureHandlerParams,
   gestures: BoundGestureExecutor,
-  consumedCapture: { state?: SnapshotState },
+  consumedCapture: GestureCapture,
 ): Promise<GestureRuntime> {
   return createInteractionRuntimeForRoute({
     ...params,
@@ -303,13 +321,19 @@ async function dispatchGestureInteraction(
   run: (
     session: SessionState,
     readiness: AndroidBlockingDialogReadinessResult,
-    consumedCapture: { state?: SnapshotState },
+    consumedCapture: GestureCapture,
   ) => Promise<GestureInteractionResult>,
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return noActiveSessionError();
+  if (params.req.flags?.settleQuietMs !== undefined) {
+    const invalidSettleFlags = settleFlagGuardResponse(command, params.req.flags);
+    if (invalidSettleFlags) return invalidSettleFlags;
+  }
+  const settle = readSettleRequest(params.req.flags);
+  const baseline = settle ? await lastObservedGestureBaseline(session) : undefined;
   const actionStartedAt = Date.now();
-  const consumedCapture: { state?: SnapshotState } = {};
+  const consumedCapture: GestureCapture = {};
   try {
     const providerDevice = isActiveProviderDevice(session.device);
     const readiness = providerDevice
@@ -338,7 +362,7 @@ async function dispatchGestureInteraction(
       responseData.warning = `${existingWarning}${readiness.warning}`;
     }
     getRequestSignal(params.req.meta?.requestId)?.throwIfAborted();
-    return finalizeTouchInteraction({
+    const response = finalizeTouchInteraction({
       ref: params.sessionRef!,
       sessionStore: params.sessionStore,
       command,
@@ -352,6 +376,12 @@ async function dispatchGestureInteraction(
       actionStartedAt,
       actionFinishedAt: Date.now(),
     });
+    if (!response.ok || !settle || !baseline) return response;
+    // Observation can fail after the action ran and was recorded.
+    return observeGestureSettle(params, outcome.runtime, settle, baseline).then(
+      (observation) => ({ ok: true as const, data: { ...response.data, settle: observation } }),
+      () => response,
+    );
   } catch (error) {
     // The same ambiguity-issuance rule the touch routes run: a refusal that
     // prints candidate refs must issue them on the frame that lists them, or
@@ -364,6 +394,66 @@ async function dispatchGestureInteraction(
     );
     return { ok: false, error: normalizeError(appError) };
   }
+}
+
+async function lastObservedGestureBaseline(session: SessionState) {
+  const frameTree = refFrameTree(session);
+  const snapshotTree = session.snapshot;
+  const { presentedSurface: _unverifiedFrame, ...frame } = surfaceScopedNodes(frameTree);
+  const snapshot = surfaceScopedNodes(snapshotTree);
+  if (snapshotTree && isOutdatedObservation(snapshotTree)) delete snapshot.presentedSurface;
+  const baseline = await postActionBaseline({ frame, candidates: [snapshot] });
+  const tree = baseline === frame ? frameTree : snapshotTree;
+  return { baseline, androidOverlay: tree?.systemSurface?.kind === 'android-system-overlay' };
+}
+
+async function observeGestureSettle(
+  params: GestureHandlerParams,
+  runtime: GestureRuntime,
+  settle: SettleParams,
+  { baseline, androidOverlay }: Awaited<ReturnType<typeof lastObservedGestureBaseline>>,
+): Promise<SettleObservation> {
+  const requestId = params.req.meta?.requestId;
+  const observation = await runtime.interactions.settleObservation({
+    ...settle,
+    baseline,
+    session: params.sessionName,
+    requestId,
+  });
+  const { settled, waitedMs, captures, quietMs, timeoutMs } = observation;
+  const verdict = { settled, waitedMs, captures, quietMs, timeoutMs };
+  if (getRequestSignal(requestId)?.aborted) {
+    return {
+      ...verdict,
+      settled: false,
+      hint: 'Settle was canceled. Run snapshot -i to refresh the screen.',
+    };
+  }
+  const session = params.sessionStore.resolveCurrent(params.sessionRef!);
+  if (!session) {
+    return {
+      ...verdict,
+      settled: false,
+      hint: 'The session ended during settle. Open a session and take a fresh snapshot.',
+    };
+  }
+  if (!observation.diff) return observation;
+  if (androidOverlay || session.snapshot?.systemSurface?.kind === 'android-system-overlay') {
+    return {
+      ...verdict,
+      hint: 'The comparison included an Android system overlay. Run snapshot -i to read the current surface.',
+    };
+  }
+
+  const baselineHint = baseline.nodes.length
+    ? 'Compared with the last observed tree.'
+    : 'No prior tree was available for comparison.';
+  const refsGeneration = issueSettleRefs(params.sessionRef, params.sessionStore, observation);
+  return {
+    ...observation,
+    hint: observation.hint ? `${baselineHint} ${observation.hint}` : baselineHint,
+    ...(refsGeneration === undefined ? {} : { refsGeneration }),
+  };
 }
 
 function resolveExecutionProfile(
@@ -381,13 +471,18 @@ function prepareGestureCommandInput(
   readiness: AndroidBlockingDialogReadinessResult,
 ): GestureCommandInput {
   const normalized = normalizeGestureCommandInput(input);
-  if (normalized.intent !== 'drag') return normalized;
   try {
-    return {
-      ...normalized,
-      source: prepareDragTarget(normalized.source, session),
-      destination: prepareDragTarget(normalized.destination, session),
-    };
+    if (normalized.intent === 'drag') {
+      return {
+        ...normalized,
+        source: prepareGestureTarget(normalized.source, session),
+        destination: prepareGestureTarget(normalized.destination, session),
+      };
+    }
+    if ('element' in normalized) {
+      return { ...normalized, element: prepareGestureTarget(normalized.element, session) };
+    }
+    return normalized;
   } catch (error) {
     if (readiness.status === 'recovered') {
       const failure = asAppError(error);
@@ -400,8 +495,11 @@ function prepareGestureCommandInput(
   }
 }
 
-function prepareDragTarget(target: string, session: SessionState): string {
+function prepareGestureTarget(target: string, session: SessionState): string {
   if (!target.startsWith('@')) return target;
+  // A pin spelled with the retired separator is refused with the current one named.
+  const retired = retiredRefPinRefusal(target);
+  if (retired) throw new AppError('INVALID_ARGS', retired, { hint: REF_GRAMMAR_HINT });
   const split = splitRefGenerationSuffix(target);
   if (!split) {
     throw new AppError('INVALID_ARGS', `Invalid ref "${target}" — malformed generation suffix.`, {
@@ -420,16 +518,19 @@ function prepareDragTarget(target: string, session: SessionState): string {
   return split.base;
 }
 
-function dragRecordingPositionals(
-  input: GesturePayload,
-  recording: Extract<GestureRuntimeResult, { kind: 'drag' }>['recording'],
-): string[] {
-  if (input.kind !== 'drag' || !recording) return gesturePayloadToPositionals(input);
-  return gesturePayloadToPositionals({
-    ...input,
-    source: recording.sourceSelector ?? input.source,
-    destination: recording.destinationSelector ?? input.destination,
-  });
+/** The `.ad` line for a gesture: a resolved target records its selector, never a session ref. */
+function recordedGesturePositionals(input: GesturePayload, result: GestureRuntimeResult): string[] {
+  if (input.kind === 'drag' && result.kind === 'drag' && result.recording) {
+    return gesturePayloadToPositionals({
+      ...input,
+      source: result.recording.sourceSelector ?? input.source,
+      destination: result.recording.destinationSelector ?? input.destination,
+    });
+  }
+  if (input.kind === 'pinch' && result.kind !== 'drag' && result.recordedTargetSelector) {
+    return gesturePayloadToPositionals({ ...input, element: result.recordedTargetSelector });
+  }
+  return gesturePayloadToPositionals(input);
 }
 
 function readSwipeInput(input: unknown): SwipePayload {

@@ -86,6 +86,7 @@ async function runStateCommand(
     deviceRuntimeGateway: readinessDeviceRuntimeGateway,
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    trackClaimRecoveryDisposal: () => {},
     platformRequestScope: {
       signal: new AbortController().signal,
       diagnostics: { emit: () => {} },

@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { PLUGIN_REASONS } from '@agent-device/plugins/manifest';
 import type { PluginRegistryPolicy } from '@agent-device/plugins/registry';
 import type { CloudWebDriverRuntimeOptions } from '@agent-device/provider-webdriver/plugin';
 
@@ -32,7 +33,7 @@ function readWebDriverOptions(descriptor: object): WebDriverDescriptorOptions {
     throw new AppError(
       'INVALID_ARGS',
       'A WebDriver plugin must provide provider, endpoint, platform, deviceName and profileFields',
-      { reason: 'invalid_plugin' },
+      { reason: PLUGIN_REASONS.invalidPlugin.reason },
     );
   }
   return descriptor as WebDriverDescriptorOptions;

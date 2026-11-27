@@ -1,7 +1,16 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import type {
+  OpenApplicationInput,
+  OpenApplicationOutcome,
+  OpenForegroundVerification,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { runHarmonyShell } from './hdc.ts';
+import { parseHarmonyForegroundRead } from './app-state.ts';
+import { remainingReadBudgetMs } from './read-budget.ts';
 import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
 export function parseHarmonyBundleList(rawOutput: string): string[] {
@@ -177,10 +186,31 @@ function combineHarmonySignals(
 /** A module.json5 ability name: a letter, then letters, digits, `_`, or `.`. */
 const HARMONY_ABILITY_NAME = /^[A-Za-z][A-Za-z0-9_.]*$/;
 
+/**
+ * aa start's typed refusal when a secure keyguard blocks the launch. The unlock
+ * attempt fails on a locked unit, so no launch happened and the foreground poll
+ * never runs; the failure belongs to the open-not-foreground class.
+ */
+const HARMONY_LOCKED_SCREEN_LAUNCH_ERROR = /Error Code: ?10106102/;
+
+/** Why a HarmonyOS app-open argument is refused before any device is touched. */
+const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
+  // --activity is not an ability name the module.json5 format can carry.
+  invalidAbilityName: { reason: 'invalid-harmony-ability-name' },
+} as const satisfies ReasonTable<'open'>;
+
+/** Why a HarmonyOS open reports that the launched app did not take the foreground. */
+const HARMONY_OPEN_FOREGROUND_REASONS = {
+  // The launch was refused (a locked screen) or the poll answered without the app.
+  notForeground: { reason: 'open-not-foreground' },
+  // The poll's every read failed, so the foreground question stayed unanswered.
+  probeUnreadable: { reason: 'open-foreground-probe-unreadable' },
+} as const satisfies ReasonTable<'open'>;
+
 function requireHarmonyAbilityName(ability: string): void {
   if (HARMONY_ABILITY_NAME.test(ability)) return;
   throw new AppError('INVALID_ARGS', `Invalid HarmonyOS ability name: ${ability}`, {
-    reason: 'invalid-harmony-ability-name',
+    reason: HARMONY_LIFECYCLE_REFUSAL_REASONS.invalidAbilityName.reason,
     ability,
     hint: 'Pass --activity as the ability name from module.json5, such as EntryAbility.',
   });
@@ -234,11 +264,192 @@ export async function openHarmonyApp(
   words.push(...(options?.launchArgs ?? []));
   const result = await runHarmonyShell(device, words, { signal: options?.signal });
   if (!result.stdout.includes('start ability successfully')) {
+    if (HARMONY_LOCKED_SCREEN_LAUNCH_ERROR.test(result.stdout)) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `HarmonyOS refused to launch ${bundleId}: the device screen is locked`,
+        {
+          reason: HARMONY_OPEN_FOREGROUND_REASONS.notForeground.reason,
+          hint: 'Unlock the device screen, then run the open again.',
+        },
+      );
+    }
     throw new AppError('COMMAND_FAILED', `Failed to start ${bundleId}`, {
       details: { output: result.stdout.trim() },
     });
   }
   invalidateHarmonyGestureViewport(device);
+}
+
+/** How long an open may keep re-reading the foreground before it accepts what it last saw. */
+export const HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS = 5_000;
+/** One foreground read per interval until the budget runs out; the first read costs no wait. */
+const HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS = 500;
+
+/** One `aa dump -l` read; a read never outlives the poll's own budget remainder. */
+const HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS = 5_000;
+
+/**
+ * Reads which HarmonyOS mission holds the foreground until the launched bundle does, the poll
+ * budget runs out, or the request is aborted. Answers the contract's verification fact when the
+ * budget closed unconfirmed, and `undefined` when the launched bundle held the foreground.
+ */
+export async function pollHarmonyOpenForeground(
+  device: DeviceInfo,
+  bundleId: string,
+  options: Readonly<{
+    signal?: AbortSignal;
+    pollBudgetMs?: number;
+    pollIntervalMs?: number;
+  }> = {},
+): Promise<OpenForegroundVerification | undefined> {
+  const pollBudgetMs = options.pollBudgetMs ?? HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS;
+  const pollIntervalMs = options.pollIntervalMs ?? HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS;
+  const deadlineAtMs = Date.now() + pollBudgetMs;
+  let foregroundPackage: string | undefined;
+  let sawReadable = false;
+  while (true) {
+    options.signal?.throwIfAborted();
+    // Each read is bounded by the budget's remainder, so one slow read cannot
+    // push the poll past its deadline.
+    const remainingMs = deadlineAtMs - Date.now();
+    if (remainingMs <= 0) break;
+    const missionRead = await readHarmonyForegroundMission(
+      device,
+      options.signal,
+      Math.min(remainingMs, HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS),
+    );
+    if (missionRead.kind === 'foreground') {
+      sawReadable = true;
+      if (missionRead.package === bundleId) return undefined;
+      foregroundPackage = missionRead.package;
+    } else if (missionRead.kind === 'no-foreground-mission') {
+      // A read that answered with no FOREGROUND mission is the lock-screen
+      // shape: evidence the app stayed behind a system surface, not a probe
+      // that failed to run.
+      sawReadable = true;
+    }
+    const remainingAfterRead = deadlineAtMs - Date.now();
+    if (remainingAfterRead <= 0) break;
+    await sleep(Math.min(pollIntervalMs, remainingAfterRead), undefined, {
+      signal: options.signal,
+    });
+  }
+  if (!sawReadable) return { state: 'probe-failed' };
+  if (foregroundPackage !== undefined) {
+    return { state: 'other-foreground', foregroundPackage };
+  }
+  return { state: 'no-foreground' };
+}
+
+/**
+ * One foreground read. `no-foreground-mission` is the lock-screen shape; `failed` is a read that
+ * threw, timed out, or produced output with no parseable mission list.
+ */
+type HarmonyForegroundMissionRead =
+  | { kind: 'foreground'; package: string }
+  | { kind: 'no-foreground-mission' }
+  | { kind: 'failed' };
+
+async function readHarmonyForegroundMission(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<HarmonyForegroundMissionRead> {
+  try {
+    const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
+      signal,
+      timeoutMs,
+    });
+    const parse = parseHarmonyForegroundRead(result.stdout);
+    if (parse.kind === 'foreground') return { kind: 'foreground', package: parse.package };
+    return parse.kind === 'no-foreground-mission'
+      ? { kind: 'no-foreground-mission' }
+      : { kind: 'failed' };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { kind: 'failed' };
+  }
+}
+
+/**
+ * The HarmonyOS open post-check: a successful `aa start` dispatch says the launch was accepted,
+ * not that the app is visible. When the launched bundle never holds the foreground, `open
+ * --foreground` fails this open and a plain open carries the read beside its warning.
+ */
+export async function verifyHarmonyOpenForeground(
+  input: OpenApplicationInput,
+  outcome: OpenApplicationOutcome,
+  device: DeviceInfo,
+  signal: AbortSignal,
+): Promise<OpenApplicationOutcome> {
+  const bundleId = outcome.appBundleId ?? input.appBundleId;
+  if (bundleId === undefined || isDeepLinkTarget(bundleId)) return outcome;
+  // The poll never outlives the request's own deadline: whatever the budget
+  // has less room for wins, and a budget with no room for one read falls to
+  // probe-failed. The message names the window that actually bounded the
+  // poll: a budget the deadline squeezed below the 5s default says deadline,
+  // and the deadline hint fires only when no read had room to run.
+  const requestDeadlineAtMs = input.execution.requestDeadlineAtMs;
+  const pollBudgetMs = remainingReadBudgetMs(
+    HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
+    requestDeadlineAtMs,
+  );
+  const verification = await pollHarmonyOpenForeground(device, bundleId, { signal, pollBudgetMs });
+  if (verification === undefined) return outcome;
+  if (input.execution.foreground !== true) {
+    return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
+  }
+  throw openForegroundHardFailure(bundleId, verification, pollBudgetMs);
+}
+
+/**
+ * The `--foreground` hard failure: a probe whose every read failed is a probe
+ * that never ran to an answer, so it carries the unreadable reason and the
+ * connection hint — the deadline hint fires only when the deadline left no
+ * room for one read; an answered read that never named the launched app
+ * carries `open-not-foreground` and the unlock hint.
+ */
+function openForegroundHardFailure(
+  bundleId: string,
+  verification: OpenForegroundVerification,
+  pollBudgetMs: number,
+): AppError {
+  if (verification.state === 'probe-failed') {
+    if (pollBudgetMs <= 0) {
+      return new AppError(
+        'COMMAND_FAILED',
+        `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`,
+        {
+          reason: HARMONY_OPEN_FOREGROUND_REASONS.probeUnreadable.reason,
+          hint: 'The request deadline is too tight for a foreground read: run the open again with more budget.',
+        },
+      );
+    }
+    const window = Math.max(1, Math.round(pollBudgetMs / 100) / 10);
+    return new AppError(
+      'COMMAND_FAILED',
+      `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within ${window}s`,
+      {
+        reason: HARMONY_OPEN_FOREGROUND_REASONS.probeUnreadable.reason,
+        hint: 'Check the device connection, then run the open again.',
+      },
+    );
+  }
+  const clampedByDeadline = pollBudgetMs < HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS;
+  return new AppError(
+    'COMMAND_FAILED',
+    clampedByDeadline
+      ? `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground before the request deadline`
+      : `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground within 5s`,
+    {
+      reason: HARMONY_OPEN_FOREGROUND_REASONS.notForeground.reason,
+      hint: 'Unlock the device screen, then run the open again.',
+      ...(verification.state === 'other-foreground'
+        ? { foregroundPackage: verification.foregroundPackage }
+        : {}),
+    },
+  );
 }
 
 export async function closeHarmonyApp(device: DeviceInfo, bundleId: string): Promise<void> {

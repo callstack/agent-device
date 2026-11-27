@@ -35,12 +35,14 @@ import {
   pointArrayField,
   pointField,
   postGestureStabilizationFields,
+  readFieldInput,
   readTargetedInput,
   repeatedFields,
   requiredField,
   selectorSnapshotFields,
   stringField,
   type CommandFieldMap,
+  type InferCommandInput,
   type TargetedInput,
 } from '../command-input.ts';
 import { readCommonInput, type CommonCommandInput } from '../common-input-fields.ts';
@@ -62,7 +64,7 @@ const FIND_ACTION_VALUES = [
 
 const interactionCommandDescriptions = {
   click:
-    "Activate a UI target by snapshot ref, selector, or coordinates. This can change app state. Success reports dispatch only; settle returns the resulting UI diff and verify returns cheap post-action evidence. A ref or selector target is re-checked for motion before dispatch when the session's previous action just animated the screen, and is dispatched at its resting position; one that has not stopped refuses with target_still_moving rather than acting where it was. With settle, continue from the returned diff. Copy refs exactly, including any ~sN suffix.",
+    "Activate a UI target by snapshot ref, selector, or coordinates. This can change app state. Success reports dispatch only; settle returns the resulting UI diff and verify returns cheap post-action evidence. A ref or selector target is re-checked for motion before dispatch when the session's previous action just animated the screen, and is dispatched at its resting position; one that has not stopped refuses with target_still_moving rather than acting where it was. With settle, continue from the returned diff. Copy refs exactly, including any -sN suffix.",
   press:
     "Short-press a UI target by snapshot ref, selector, or coordinates. Success reports dispatch only; settle returns the resulting UI diff and verify returns cheap post-action evidence. A ref or selector target is re-checked for motion before dispatch when the session's previous action just animated the screen, and is dispatched at its resting position; one that has not stopped refuses with target_still_moving rather than acting where it was. A comma-separated ref list dispatches 2-16 keys in order as one command, admitted before the first press.",
   fill: 'Replace text in a UI input selected by snapshot ref, selector, or coordinates. An empty text clears the field. Unconfirmed evidence does not establish the resulting value or screen. The recordAs option keeps sensitive text out of a recorded replay while sending it to the live app. To append instead of replacing, use type.',
@@ -71,7 +73,7 @@ const interactionCommandDescriptions = {
   hover:
     'Move the pointer over a UI target by snapshot ref, selector, or coordinates without pressing, to reveal hover-gated UI such as row toolbars or menus. Web only; touch platforms have no hover state. The settle option returns the UI diff revealed by the hover.',
   swipe:
-    'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point.',
+    'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point. Settle observes the UI once after the last swipe and compares with the last observed tree.',
   focus:
     'Move input focus to explicit screen coordinates without entering text. This command changes focus only and does not enter or replace text.',
   type: 'Append text to the currently focused input. This requires an active input and preserves its existing text.',
@@ -81,7 +83,7 @@ const interactionCommandDescriptions = {
   is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, checked, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. This command checks the current condition without polling.',
   find: 'Find by text/label/value/role/id and run action; the action defaults to click. The role locator matches snapshot kind vocabulary (button, text, text-field, switch, ...); pre-reconciliation leaf spellings (statictext, edittext, textview) stay accepted on the nodes that carried them during a deprecation window. The focus and type actions aim at a text field: the match or the field holding it, even beside other fields, or else the one enabled on-screen field inside the match. Several enabled on-screen fields inside the match refuse with AMBIGUOUS_MATCH and the field candidates, and a disabled target refuses with reason target_disabled. Web text boxes are not recognized as text fields.',
   gesture:
-    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition. A drag takes a source and a destination ref or selector and holds the source down for 800 ms by default before carrying it over, which is how a list item changes position or a drop target is hit.',
+    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition. A drag takes a source and a destination ref or selector and holds the source down for 800 ms by default before carrying it over, which is how a list item changes position or a drop target is hit. Settle observes the UI once after the last repetition and compares with the last observed tree.',
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
@@ -144,6 +146,7 @@ const swipeFields = {
   count: integerField('Number of swipe repetitions.', { min: 1, max: SWIPE_REPETITION_MAX }),
   pauseMs: integerField('Pause between repeated swipes.', { min: 0, max: SWIPE_PAUSE_MAX_MS }),
   pattern: enumField(SWIPE_PATTERNS),
+  ...postActionObservationFields('swipe'),
   ...postGestureStabilizationFields(),
 };
 
@@ -223,8 +226,11 @@ const findFields = {
   ...recordControlFields(),
 };
 
+const gestureSettleFields = postActionObservationFields('gesture');
+
 const gestureFields = {
   kind: requiredField(enumField(GESTURE_KINDS, 'Gesture variant.')),
+  ...gestureSettleFields,
   direction: enumField(SCROLL_DIRECTIONS, 'Fling direction.'),
   preset: enumField(SWIPE_PRESETS, 'Swipe preset.'),
   ...postGestureStabilizationFields(),
@@ -232,6 +238,9 @@ const gestureFields = {
   delta: pointField('Movement delta for pan or transform gestures.'),
   distance: integerField('Fling distance.', { min: 0 }),
   scale: numberField('Pinch or transform scale.'),
+  element: stringField(
+    'Element to pinch, as an @ref or selector; the pinch centers on it, in place of origin.',
+  ),
   degrees: numberField('Rotation in degrees.'),
   durationMs: integerField('Pan/transform duration.', { min: 16, max: 10_000 }),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),
@@ -274,7 +283,8 @@ export type GetInput = TargetedInput<typeof getFields, ElementTarget>;
 export type GestureInput = CommonCommandInput & GesturePayload;
 
 /** What `gesture` reads from a caller: the daemon's input, plus the opt-out a swipe may carry. */
-export type GestureCommandInput = GestureInput & { postGestureStabilization?: boolean };
+export type GestureCommandInput = GestureInput &
+  InferCommandInput<typeof gestureSettleFields> & { postGestureStabilization?: boolean };
 
 export const interactionCommandMetadata = [
   defineTargetedCommandMetadata('click', clickFields),
@@ -309,7 +319,12 @@ export function readGestureInput(input: unknown): GestureInput {
 /** Only a swipe stabilizes by default, so any other kind has nothing to opt out of and drops it. */
 function readGestureCommandInput(input: unknown): GestureCommandInput {
   const record = readInputRecord(input);
-  const gesture = readGestureInput(record);
+  const gesture =
+    record.settle === undefined &&
+    record.settleQuietMs === undefined &&
+    record.timeoutMs === undefined
+      ? readGestureInput(record)
+      : { ...readFieldInput(record, gestureSettleFields), ...readGesturePayload(record) };
   return gesture.kind === 'swipe' && optionalBoolean(record, 'postGestureStabilization') === false
     ? { ...gesture, postGestureStabilization: false }
     : gesture;

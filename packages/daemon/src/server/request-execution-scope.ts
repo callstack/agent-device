@@ -83,7 +83,7 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { teardownSessionResources } from '../sessions/session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
-import { runtimeHintValues } from '../sessions/session-runtime.ts';
+import { runtimeHintsClearInput } from '../sessions/session-runtime.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -231,6 +231,7 @@ export async function createRequestExecutionScope(params: {
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformServices: DaemonPlatformServices;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   platformRequestScope: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
@@ -351,6 +352,7 @@ export async function createRequestExecutionScope(params: {
           ? (device) => pinPolicy.assertDeviceHonorsPin(devicePin, device, scopedReq.flags)
           : undefined,
       claimRecoveryGateway: params.claimRecoveryGateway,
+      trackClaimRecoveryDisposal: params.trackClaimRecoveryDisposal,
       sessionStore,
     });
 
@@ -576,6 +578,7 @@ function createRequestDeviceAccess(params: {
   daemonPolicy: DaemonPolicy | undefined;
   admitDevicePin: ((device: DeviceInfo) => void) | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   sessionStore: SessionStore;
 }): {
   claimAdmission: DeviceClaimAdmission;
@@ -600,6 +603,7 @@ function createRequestDeviceAccess(params: {
         return createBoundedClaimRecoveryBeforeGateway(params.req)(claim);
       },
       composeGateway: params.claimRecoveryGateway,
+      trackDisposal: params.trackClaimRecoveryDisposal,
     }),
   });
   return {
@@ -647,7 +651,10 @@ async function teardownExpiredSession(params: {
   const { ref, sessionStore, inspectFacts, bindDevice, platformCleanup } = params;
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
   const sessionName = ref.address;
-  const runtimeHints = runtimeHintValues(sessionStore.getRuntimeHints(ref.address));
+  const runtimeHints = runtimeHintsClearInput(
+    sessionStore.getRuntimeHints(ref.address),
+    session.appBundleId,
+  );
   let primaryError: unknown;
   try {
     await teardownSessionResources({

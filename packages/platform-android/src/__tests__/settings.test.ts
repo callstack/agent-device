@@ -651,3 +651,86 @@ test('setAndroidSetting mobile-data stops sampling when the request is cancelled
     },
   );
 });
+
+// --- settings keep-awake: svc power stayon with the mask read-back ---
+
+test('setAndroidSetting keep-awake writes svc stayon and reads the mask back to a state', async () => {
+  for (const { state, word, row, keepAwake } of [
+    { state: 'on', word: 'true', row: '15', keepAwake: 'enabled' },
+    { state: 'off', word: 'false', row: '0', keepAwake: 'disabled' },
+  ] as const) {
+    await withFakeAdb(
+      (args) => {
+        const joined = args.join(' ');
+        if (joined === `shell svc power stayon ${word}`) return '';
+        if (joined === 'shell settings get global stay_on_while_plugged_in') return row;
+        return undefined;
+      },
+      async ({ calls, device }) => {
+        const result = await setAndroidSetting(device, 'keep-awake', state);
+        assert.deepEqual(flatCalls(calls), [
+          `shell svc power stayon ${word}`,
+          'shell settings get global stay_on_while_plugged_in',
+        ]);
+        assert.deepEqual(result, { keepAwake });
+      },
+    );
+  }
+});
+
+test('setAndroidSetting keep-awake reports not-applied when the row stays off', async () => {
+  await withFakeAdb(
+    (args) => {
+      const joined = args.join(' ');
+      if (joined === 'shell svc power stayon true') return '';
+      if (joined === 'shell settings get global stay_on_while_plugged_in') return '0';
+      return undefined;
+    },
+    async ({ device }) => {
+      await assert.rejects(
+        () => setAndroidSetting(device, 'keep-awake', 'on'),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.equal(error.details?.reason, 'keep-awake-not-applied');
+          return true;
+        },
+      );
+    },
+  );
+});
+
+test('setAndroidSetting keep-awake reports unreadable for a row that is not a mask', async () => {
+  await withFakeAdb(
+    (args) => {
+      const joined = args.join(' ');
+      if (joined === 'shell svc power stayon true') return '';
+      if (joined === 'shell settings get global stay_on_while_plugged_in') return 'null';
+      return undefined;
+    },
+    async ({ device }) => {
+      await assert.rejects(
+        () => setAndroidSetting(device, 'keep-awake', 'on'),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.equal(error.details?.reason, 'keep-awake-unreadable');
+          return true;
+        },
+      );
+    },
+  );
+});
+
+test('setAndroidSetting keep-awake runs nothing for a state svc cannot spell', async () => {
+  await withFakeAdb(
+    (args) => ({ stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'keep-awake', 'forever'), {
+        code: 'INVALID_ARGS',
+        message: /Invalid setting state: forever/,
+      });
+      assert.deepEqual(calls, []);
+    },
+  );
+});

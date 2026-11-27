@@ -1,6 +1,6 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
-import { parseAndroidFocusSegment } from './app-parsers.ts';
+import { parseAndroidComponent, parseAndroidFocusSegment } from './app-parsers.ts';
 
 const FOCUS_COMMANDS = [
   ['dumpsys', 'window', 'windows'],
@@ -43,10 +43,5 @@ async function readAndroidFocusWithExecutor(
 }
 
 export function parseAndroidForegroundApp(text: string): AppStateRuntimeResult | null {
-  return parseAndroidFocusSegment(text, (segment) => parseAndroidComponentFromSegment(segment));
-}
-
-function parseAndroidComponentFromSegment(segment: string): AppStateRuntimeResult | null {
-  const match = segment.match(/\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/);
-  return match?.[1] && match[2] ? { package: match[1], activity: match[2] } : null;
+  return parseAndroidFocusSegment(text, parseAndroidComponent);
 }

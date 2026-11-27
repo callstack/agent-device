@@ -904,6 +904,7 @@ function createTestRequestScope(
     Parameters<typeof createRequestExecutionScope>[0],
     | 'platformServices'
     | 'claimRecoveryGateway'
+    | 'trackClaimRecoveryDisposal'
     | 'deviceRuntimeGateway'
     | 'platformRequestScope'
     | 'host'
@@ -915,6 +916,7 @@ function createTestRequestScope(
     ...params,
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    trackClaimRecoveryDisposal: () => {},
     deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
     platformRequestScope: platformRequestScopeFixture(),
   });

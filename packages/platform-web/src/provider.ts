@@ -1,6 +1,16 @@
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+
+/**
+ * Why the un-composed web provider refuses: a request reached a web device with no composed
+ * provider, which is a composition bug, so every capability answers closed instead of borrowing a
+ * host it was never given (#3794).
+ */
+const WEB_PROVIDER_COMPOSITION_REFUSAL_REASONS = {
+  // A web-device request arrived with no composed provider for it.
+  providerMissing: { reason: 'web-provider-missing' },
+} as const satisfies ReasonTable<'web provider'>;
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
@@ -80,7 +90,7 @@ export type WebProvider = {
 function uncomposedWebProviderFailure(): Promise<never> {
   return Promise.reject(
     new AppError('COMMAND_FAILED', 'The web provider is not composed for this request.', {
-      reason: 'web-provider-missing',
+      reason: WEB_PROVIDER_COMPOSITION_REFUSAL_REASONS.providerMissing.reason,
     }),
   );
 }

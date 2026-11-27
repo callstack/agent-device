@@ -1,6 +1,6 @@
 {
   "name": "agent-device",
-  "version": "0.21.42-dev",
+  "version": "0.21.45-dev",
   "description": "Open source device layer for AI coding agents: a CLI, MCP server, and typed Node.js API to control mobile, web, TV, and desktop apps on devices and simulators, locally or in the cloud.",
   "mcpName": "io.github.callstack/agent-device",
   "license": "MIT",
@@ -202,6 +202,7 @@
     "test-app:start": "pnpm --dir examples/test-app start",
     "test-app:ios": "pnpm --dir examples/test-app ios",
     "test-app:android": "pnpm --dir examples/test-app android",
+    "test-app:android:fixture": "node scripts/test-app-android-fixture.mjs",
     "test-app:typecheck": "pnpm --dir examples/test-app typecheck",
     "test-app:security": "pnpm --dir examples/test-app security:test",
     "test-app:replay:ios": "pnpm ad test examples/test-app/replays --platform ios --artifacts-dir .tmp/test-app-replay/ios",

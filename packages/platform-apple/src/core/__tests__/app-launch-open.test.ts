@@ -8,6 +8,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn(actual.runCmd) };
 });
+// Keyboard intro preparation has its own coverage in ios-simulator-keyboard.test.ts.
+vi.mock('../ios-simulator-keyboard.ts', () => ({ prepareIosSimulatorKeyboardIntros: vi.fn() }));
 vi.mock('../simulator.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../simulator.ts')>();
   return { ...actual, ensureBootedSimulator: vi.fn(actual.ensureBootedSimulator) };

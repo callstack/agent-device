@@ -3,6 +3,7 @@ import type { CloudProviderSessionResult } from '@agent-device/contracts/observa
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
+  claimRemoteConnectionState,
   readActiveConnectionState,
   requireLeasedConnectionSession,
   sessionLeaseScope,
@@ -82,6 +83,7 @@ export const connectCommand: ClientCommandHandler = async ({
     host,
   );
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
+  const checkedRpcTarget = await assertCheckedRpcServed(connectFlags, host);
   const context = resolveConnectContext({
     stateDir,
     flags: connectFlags,
@@ -103,6 +105,7 @@ export const connectCommand: ClientCommandHandler = async ({
     connectionMetadata,
     context,
     remoteConfigPath: resolved.remoteConfigPath,
+    checkedRpcTarget,
   });
   writeRemoteConnectionState({ stateDir, state });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
@@ -122,6 +125,19 @@ export const connectCommand: ClientCommandHandler = async ({
   );
   return true;
 };
+
+/**
+ * `daemonRpc: checked` skips the `/health` probe on later commands, so `connect` records it only
+ * when every link of the remote advertises `checked-rpc`, and only for the exact target it probed.
+ */
+async function assertCheckedRpcServed(
+  flags: CliFlags,
+  host: HostEnvironment,
+): Promise<string | undefined> {
+  if (flags.daemonRpc !== 'checked') return undefined;
+  const { assertRemoteServesCheckedRpc } = await import('@agent-device/daemon-client');
+  return await assertRemoteServesCheckedRpc(flags, host);
+}
 
 function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
   if (!provider || !flags.remoteConfig) return;
@@ -178,6 +194,8 @@ function buildConnectedState(options: {
   connectionMetadata?: RemoteConnectionRequestMetadata;
   context: ConnectContext;
   remoteConfigPath: string;
+  /** The fingerprint of the checked target `connect` probed and found served, when asked to. */
+  checkedRpcTarget?: string;
 }): RemoteConnectionState {
   const { flags, scope, connectionMetadata, context, remoteConfigPath } = options;
   const previous = shouldReusePreviousConnectionState(flags, context.previous)
@@ -197,7 +215,9 @@ function buildConnectedState(options: {
     session: context.session,
     remoteConfigPath,
     remoteConfigHash: context.remoteConfigHash,
-    daemon: context.daemon,
+    daemon: options.checkedRpcTarget
+      ? { ...context.daemon, checkedRpcTarget: options.checkedRpcTarget }
+      : context.daemon,
     tenant: scope.tenant,
     runId: scope.runId,
     ...leaseBinding,
@@ -319,28 +339,51 @@ function scopeConnectProfile(
     cwd: host.cwd,
     env: host.env,
   }).profile;
+  // The profile is the only source of `daemonRpc`; `connect` checks it before recording it.
+  const resolvedFlags = { ...resolved.flags, daemonRpc: profile.daemonRpc };
   if (!flags.remoteConfig || flags.session === undefined) {
-    return { flags: resolved.flags, connection: buildRemoteConnectionRequestMetadata(profile) };
+    return { flags: resolvedFlags, connection: buildRemoteConnectionRequestMetadata(profile) };
   }
   const scope = sessionLeaseScope(
-    { ...profile, leaseId: resolved.flags.leaseId, runId: profile.runId },
+    { ...profile, leaseId: resolvedFlags.leaseId, runId: profile.runId },
     flags.session,
   );
   return {
     flags:
-      resolved.flags.runId === profile.runId
-        ? { ...resolved.flags, runId: scope.runId }
-        : resolved.flags,
+      resolvedFlags.runId === profile.runId
+        ? { ...resolvedFlags, runId: scope.runId }
+        : resolvedFlags,
     connection: buildRemoteConnectionRequestMetadata({ ...profile, clientId: scope.clientId }),
   };
 }
 
-export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
-  const { session, stateDir, state } = readRequestedConnectionState(flags, host);
+/**
+ * The record moves to its session's own path before any teardown, so a record this command cannot
+ * remove is refused before its session closes or its lease ends. The CLI claims it before it builds
+ * the client, and that claim is the one torn down.
+ */
+function claimDisconnectTarget(
+  claimedConnection: RemoteConnectionState | null | undefined,
+  stateDir: string,
+  session: string | undefined,
+): RemoteConnectionState | null {
+  if (claimedConnection !== undefined) return claimedConnection;
+  return claimRemoteConnectionState({ stateDir, session });
+}
+
+export const disconnectCommand: ClientCommandHandler = async ({
+  flags,
+  client,
+  host,
+  claimedConnection,
+}) => {
+  const stateDir = resolveConnectionStateDir(flags, host);
+  const state = claimDisconnectTarget(claimedConnection, stateDir, flags.session);
   if (!state) {
-    await writeNoRemoteConnectionOutput(flags, session);
+    await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
     return true;
   }
+  requireLeasedConnectionSession(state, flags.session);
   const connectedSession = state.session;
 
   let providerData: CloudProviderSessionResult | undefined;
@@ -475,19 +518,21 @@ function readRequestedConnectionState(
   host: HostEnvironment,
 ): {
   session: string;
-  stateDir: string;
   state: RemoteConnectionState | null;
 } {
   const session = flags.session ?? 'default';
-  const stateDir = resolveDaemonPaths(flags.stateDir, {
-    cwd: host.cwd,
-    env: host.env,
-  }).baseDir;
+  const stateDir = resolveConnectionStateDir(flags, host);
+  // Only a caller that named no session follows the active-session pointer. `--session=` names the
+  // empty session.
   const state =
     readRemoteConnectionState({ stateDir, session }) ??
-    (flags.session ? null : readActiveConnectionState({ stateDir }));
+    (flags.session === undefined ? readActiveConnectionState({ stateDir }) : null);
   if (state) requireLeasedConnectionSession(state, flags.session);
-  return { session, stateDir, state };
+  return { session, state };
+}
+
+function resolveConnectionStateDir(flags: CliFlags, host: HostEnvironment): string {
+  return resolveDaemonPaths(flags.stateDir, { cwd: host.cwd, env: host.env }).baseDir;
 }
 
 async function writeNoRemoteConnectionOutput(flags: CliFlags, session: string): Promise<void> {

@@ -2,14 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  CONTACT_SHEET_CONTAINER_REASON,
-  CONTACT_SHEET_DURATION_REASON,
-  CONTACT_SHEET_EXTRACTION_REASON,
-  CONTACT_SHEET_OUTPUT_COLLISION_REASON,
-  CONTACT_SHEET_PIXEL_BUDGET_REASON,
-  CONTACT_SHEET_UNSUPPORTED_HOST_REASON,
-} from './contact-sheet-report.ts';
+import { CONTACT_SHEET_REASONS } from './contact-sheet-report.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { BLACK, RED, WHITE, paintPng, solidPng } from '../png-pixels.fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
@@ -192,7 +185,9 @@ describe('buildRecordingContactSheet', () => {
     const error = await build(webm).catch((error: unknown) => error);
 
     expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).details?.reason).toBe(CONTACT_SHEET_CONTAINER_REASON);
+    expect((error as AppError).details?.reason).toBe(
+      CONTACT_SHEET_REASONS.containerUnsupported.reason,
+    );
     expect((error as AppError).message).toMatch(/WebM/);
   });
 
@@ -200,12 +195,14 @@ describe('buildRecordingContactSheet', () => {
     const notAVideo = path.join(directory, 'broken.mp4');
     fs.writeFileSync(notAVideo, 'not a video at all');
 
-    expect(await reasonOf(() => build(notAVideo))).toBe(CONTACT_SHEET_CONTAINER_REASON);
+    expect(await reasonOf(() => build(notAVideo))).toBe(
+      CONTACT_SHEET_REASONS.containerUnsupported.reason,
+    );
   });
 
   test('refuses a clip whose timeline the container cannot name', async () => {
     expect(await reasonOf(() => build(recording('no-duration', -1)))).toBe(
-      CONTACT_SHEET_DURATION_REASON,
+      CONTACT_SHEET_REASONS.durationUnknown.reason,
     );
   });
 
@@ -219,7 +216,9 @@ describe('buildRecordingContactSheet', () => {
       }),
     );
 
-    expect(await reasonOf(() => build(video))).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    expect(await reasonOf(() => build(video))).toBe(
+      CONTACT_SHEET_REASONS.frameExtractionFailed.reason,
+    );
     expect(fs.existsSync(recordingContactSheetPath(video))).toBe(false);
   });
 
@@ -227,7 +226,7 @@ describe('buildRecordingContactSheet', () => {
     const video = recording('unsupported-host', 1_000);
 
     expect(await reasonOf(() => build(video, { hostPlatform: 'linux' }))).toBe(
-      CONTACT_SHEET_UNSUPPORTED_HOST_REASON,
+      CONTACT_SHEET_REASONS.unsupportedHost.reason,
     );
     expect(mockRunCmd).not.toHaveBeenCalled();
   });
@@ -255,7 +254,7 @@ describe('buildRecordingContactSheet', () => {
     const video = recording('collision', 1_000);
 
     expect(await reasonOf(() => build(video, { outputPath: video }))).toBe(
-      CONTACT_SHEET_OUTPUT_COLLISION_REASON,
+      CONTACT_SHEET_REASONS.outputCollidesWithInput.reason,
     );
     // Refused before the decoder ran, so a mistyped --out cannot cost a ruined recording.
     expect(mockRunCmd).not.toHaveBeenCalled();
@@ -271,7 +270,7 @@ describe('buildRecordingContactSheet', () => {
 
     for (const outputPath of [symlink, hardLink]) {
       expect(await reasonOf(() => build(video, { outputPath }))).toBe(
-        CONTACT_SHEET_OUTPUT_COLLISION_REASON,
+        CONTACT_SHEET_REASONS.outputCollidesWithInput.reason,
       );
     }
     // Neither alias was opened for writing, so the recording is still whole behind both names.
@@ -292,7 +291,7 @@ describe('buildRecordingContactSheet', () => {
     );
 
     expect(await reasonOf(() => build(video, { maxPixels: 100 }))).toBe(
-      CONTACT_SHEET_EXTRACTION_REASON,
+      CONTACT_SHEET_REASONS.frameExtractionFailed.reason,
     );
   });
 
@@ -308,7 +307,9 @@ describe('buildRecordingContactSheet', () => {
       }),
     );
 
-    expect(await reasonOf(() => build(video))).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    expect(await reasonOf(() => build(video))).toBe(
+      CONTACT_SHEET_REASONS.frameExtractionFailed.reason,
+    );
   });
 
   test('refuses a sheet the pixel budget cannot hold and leaves nothing at the output', async () => {
@@ -317,7 +318,7 @@ describe('buildRecordingContactSheet', () => {
     answerForGrid({ timesMs: [0, 250, 500, 750, 1000], changedMs: [250, 500, 750, 1000] });
 
     expect(await reasonOf(() => build(video, { outputPath: out, maxPixels: 200 }))).toBe(
-      CONTACT_SHEET_PIXEL_BUDGET_REASON,
+      CONTACT_SHEET_REASONS.pixelBudgetExceeded.reason,
     );
     expect(fs.existsSync(out)).toBe(false);
     expect(fs.readdirSync(directory).filter((name) => name.endsWith('.writing'))).toEqual([]);

@@ -11,7 +11,7 @@ import {
 import {
   AppError,
   asAppError,
-  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+  BOUNDED_COMPOSITE_REASONS,
   type DaemonError,
 } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
@@ -25,6 +25,7 @@ import {
   BATCH_DAEMON_STEP_KEYS,
   INHERITED_PARENT_FLAG_KEYS,
   assertBatchRuntimeCommandAllowed,
+  BATCH_STEP_REASONS,
   normalizeBatchCommandName,
 } from './batch-policy.ts';
 import { resolveCommandRecordingEffect } from './registry.ts';
@@ -172,7 +173,7 @@ function batchStepFailure(
         ...(error.details ?? {}),
         ...(progress.executedSteps.some(stepMayMutateApp) &&
         !(
-          error.details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON &&
+          error.details?.reason === BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason &&
           error.details.dispatched === 'no'
         )
           ? { dispatched: 'unknown' }
@@ -234,15 +235,15 @@ export function validateAndNormalizeBatchSteps(
     if (step.flags !== undefined && !isRecord(step.flags)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} flags must be an object.`);
     }
-    assertNoTextStdinStep(step.flags as Record<string, unknown> | undefined, index + 1);
+    assertNoTextStdinStep(step.flags, index + 1);
     if (step.input !== undefined && !isRecord(step.input)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} input must be an object.`);
     }
     normalized.push({
       command,
       positionals: positionals as string[],
-      input: step.input as Record<string, unknown> | undefined,
-      flags: (step.flags ?? {}) as Record<string, unknown>,
+      input: step.input,
+      flags: step.flags ?? {},
       runtime: parseBatchStepRuntime(step.runtime, index + 1),
     });
   }
@@ -262,7 +263,7 @@ function assertNoTextStdinStep(
   throw new AppError(
     'INVALID_ARGS',
     `Batch step ${stepNumber}: fill textStdin is not supported because batch steps have no stdin of their own.`,
-    { reason: 'fill_text_stdin_in_batch' },
+    { reason: BATCH_STEP_REASONS.fillTextStdin.reason },
   );
 }
 
@@ -372,7 +373,7 @@ async function runBatchStep(
 function readBatchFlags(
   flags: BatchFlags | Record<string, unknown> | undefined,
 ): BatchFlags | undefined {
-  return flags as BatchFlags | undefined;
+  return flags;
 }
 
 function batchErrorResponse(

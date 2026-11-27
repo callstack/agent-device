@@ -7,7 +7,7 @@ import type {
   ScriptDeliveryReceipt,
 } from '@agent-device/kernel/contracts';
 import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
-import type { DaemonError } from '@agent-device/kernel/errors';
+import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -21,14 +21,19 @@ import {
 } from './script-publication-record.ts';
 import { publishScriptVersion } from './script-version-publisher.ts';
 
-type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
+type RemoteEndpoint = DaemonArtifactEndpoint & {
+  capabilities?: readonly string[];
+  /** The open goes on the checked RPC route, where the daemon checks its own capability. */
+  checkedRpc?: true;
+};
 
 /**
  * Sends a remote `open --save-script`. Before the open leaves, the client mints a publication ID
  * and records the caller destination and the `--force` grant under it. The serialized request
  * carries the ID and omits the destination. A daemon answer that does not name the ID removes the
- * record. A failed open may still have armed the recording, so it keeps the record. A record that
- * outlives its open stays inert: only artifacts of its own ID match it.
+ * record, and so does a checked open's failure that proves nothing was dispatched. Any other
+ * failed open may still have armed the recording, so it keeps the record. A record that outlives its open stays inert:
+ * only artifacts of its own ID match it.
  */
 export async function sendRemoteScriptOpen(
   info: RemoteEndpoint,
@@ -36,18 +41,25 @@ export async function sendRemoteScriptOpen(
   stateDir: string,
   send: (req: DaemonWireRequest) => Promise<DaemonResponse>,
 ): Promise<DaemonResponse> {
-  assertScriptArtifactsCapability(info.capabilities);
+  if (!info.checkedRpc) assertScriptArtifactsCapability(info.capabilities);
   const { savedScript: destination, ...clientArtifactPaths } = req.meta?.clientArtifactPaths ?? {};
   if (!info.baseUrl || !destination) throw new Error('A remote script open needs a destination.');
   const publicationId = crypto.randomUUID();
   const file = recordPath(stateDir, info.baseUrl, req, publicationId);
   await createRecord(file, { destination, force: req.flags?.force === true, revision: 0 });
   const meta = { ...req.meta, clientArtifactPaths, scriptPublicationId: publicationId };
-  const response = await send({ ...req, meta });
-  if (!response.ok || response.data?.scriptPublicationId !== publicationId) {
-    // A record that cannot be removed stays inert, so the open's own outcome is reported.
-    await withRecordLock(file, async () => removeRecord(file)).catch(() => {});
+  // A record that cannot be removed stays inert, so the open's own outcome is reported.
+  const discard = () => withRecordLock(file, async () => removeRecord(file)).catch(() => {});
+  let response: DaemonResponse;
+  try {
+    response = await send({ ...req, meta });
+  } catch (error) {
+    if (info.checkedRpc && error instanceof AppError && error.details?.dispatched === 'no') {
+      await discard();
+    }
+    throw error;
   }
+  if (!response.ok || response.data?.scriptPublicationId !== publicationId) await discard();
   return response;
 }
 

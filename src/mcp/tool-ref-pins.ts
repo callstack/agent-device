@@ -1,6 +1,12 @@
+import { auditResultRefs } from '@agent-device/contracts/audit-result-refs';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
-import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  snapshotRefBodies,
+  formatPinnedRef,
+  REF_PIN_SEPARATOR,
+  type SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import {
   isCommandName,
   type CommandExecutionResult,
@@ -70,7 +76,7 @@ function mergeErrorCandidateRefPins(
  * recorded at that response's generation, and refs absent from it KEEP their
  * older pins. That per-ref memory is the point — after snapshot(s12) then
  * find(s13), a plain `@e37` from the pre-find snapshot must still forward as
- * `@e37~s12` so the daemon warns precisely; a single last-seen generation
+ * `@e37-s12` so the daemon warns precisely; a single last-seen generation
  * would silently re-bless it at s13 (the exact find-blessing hole #1076
  * describes). Refs never seen in an issuing response pass through unpinned
  * (the coarse #1093 warning is the floor). The model never sees or types
@@ -219,8 +225,9 @@ function mergeFindRefPins(
 }
 
 /**
- * `audit` publishes a partial frame for exactly its finding refs (ADR 0014), like a read-only
- * `find`. A result without findings carries no generation, issues nothing, and leaves pins alone.
+ * `audit` publishes a partial frame for exactly its finding and screen-reader order refs (ADR 0014),
+ * like a read-only `find`. A result without refs carries no generation, issues nothing, and leaves
+ * pins alone.
  */
 function mergeAuditRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
@@ -229,9 +236,7 @@ function mergeAuditRefPins(
 ): void {
   const refsGeneration = result.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
-  const issued = result.findings.flatMap((finding) =>
-    finding.ref ? [finding.ref.replace(/^@/, '')] : [],
-  );
+  const issued = auditResultRefs(result).map((ref) => ref.replace(/^@/, ''));
   mergeIntoScopedPins(refPinsByScope, scopeKey, issued, refsGeneration);
 }
 
@@ -336,12 +341,12 @@ function pinRefArgument(
 }
 
 function pinRef(ref: string, pins: Map<string, number>): string {
-  // Only pin the canonical plain form `@e12`: an existing `~` means the ref is
-  // already pinned (or malformed — the daemon owns rejecting that), and a
+  // Only pin the canonical plain form `@e12`: an existing pin separator means the
+  // ref is already pinned (or malformed — the daemon owns rejecting that), and a
   // missing `@` prefix is not a ref the daemon would accept anyway. Refs with
   // no recorded provenance pass through unpinned — never guess. The comma
   // split runs first so a plan with one already-pinned member still pins the
-  // others: `@e13~s4,@e14` forwards `@e13~s4` untouched and pins `@e14`.
+  // others: `@e13-s4,@e14` forwards `@e13-s4` untouched and pins `@e14`.
   if (!ref.startsWith('@')) return ref;
   if (ref.includes(',')) {
     return ref
@@ -349,7 +354,7 @@ function pinRef(ref: string, pins: Map<string, number>): string {
       .map((member) => pinRef(member.trim(), pins))
       .join(',');
   }
-  if (ref.includes('~')) return ref;
+  if (ref.includes(REF_PIN_SEPARATOR) || ref.includes('~')) return ref;
   const generation = pins.get(ref.slice(1));
-  return generation === undefined ? ref : `${ref}~s${generation}`;
+  return generation === undefined ? ref : formatPinnedRef(ref, generation);
 }

@@ -117,7 +117,11 @@ export type {
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
 } from '../client-session.ts';
-export type { PermissionTarget, SettingsUpdateOptions } from '../client-settings.ts';
+export type {
+  ModeFreePermissionUpdateOptions,
+  PermissionTarget,
+  SettingsUpdateOptions,
+} from '../client-settings.ts';
 export type {
   AlertCommandOptions,
   AppStateCommandOptions,
@@ -128,6 +132,7 @@ export type {
   FoldCommandOptions,
   DoctorCommandOptions,
   HardwareButtonCommandOptions,
+  LockScreenCommandOptions,
   HomeCommandOptions,
   KeyboardCommandOptions,
   OrientationCommandOptions,

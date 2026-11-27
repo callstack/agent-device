@@ -199,7 +199,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
       session: session.name,
       command: 'swipe',
       positionals: [],
-      flags: {},
+      flags: { settle: true },
       input: { from: { x: 100, y: 600 }, to: { x: 100, y: 200 }, count: 2 },
     },
     sessionName: session.name,
@@ -215,6 +215,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
     2,
   );
   assert.equal(response.error.details?.dispatchedSteps, 1);
+  assert.equal(gestures.captureSnapshot.mock.calls.length, 0);
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
@@ -272,15 +273,28 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
       status: 'dialog',
       focus: { package: 'com.example.app', focusedWindow: 'Application Not Responding', raw: '' },
     }),
-    readSnapshotNodes: async () => [
-      {
-        index: 0,
-        ref: 'e0',
-        type: 'Button',
-        label: 'Close app',
-        rect: { x: 10, y: 20, width: 100, height: 40 },
-      },
-    ],
+    // The dialog leaves once Close app is tapped.
+    readSnapshotNodes: async () =>
+      tap.mock.calls.length > 0
+        ? []
+        : [
+            {
+              index: 0,
+              ref: 'e0',
+              type: 'Button',
+              label: 'Close app',
+              identifier: 'android:id/aerr_close',
+              rect: { x: 10, y: 20, width: 100, height: 40 },
+            },
+            {
+              index: 1,
+              ref: 'e1',
+              type: 'Button',
+              label: 'Wait',
+              identifier: 'android:id/aerr_wait',
+              rect: { x: 10, y: 70, width: 100, height: 40 },
+            },
+          ],
     tap,
     openApp,
   };

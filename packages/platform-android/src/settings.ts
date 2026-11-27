@@ -53,10 +53,13 @@ export const ANDROID_SETTINGS = [
   'bluetooth',
   'airplane',
   'mobile-data',
+  'keep-awake',
   'location',
   'animations',
   'appearance',
   'text-size',
+  'timezone',
+  'locale',
   'fingerprint',
   'clear-app-state',
   'permission',
@@ -123,6 +126,14 @@ export async function setAndroidSetting(
       return await setAndroidGlobalToggle(
         device,
         MOBILE_DATA_TOGGLE,
+        parseSettingState(state),
+        signal,
+      );
+    }
+    case 'keep-awake': {
+      return await setAndroidGlobalToggle(
+        device,
+        KEEP_AWAKE_TOGGLE,
         parseSettingState(state),
         signal,
       );
@@ -219,6 +230,14 @@ export async function setAndroidSetting(
     }
     case 'text-size': {
       return await setAndroidTextSize(device, state);
+    }
+    case 'timezone': {
+      const { setAndroidTimeZone } = await import('./settings-timezone.ts');
+      return await setAndroidTimeZone(device, state);
+    }
+    case 'locale': {
+      const { setAndroidLocale } = await import('./settings-locale.ts');
+      return await setAndroidLocale(device, state, signal);
     }
     default:
       return normalized satisfies never;
@@ -319,6 +338,24 @@ function nearestTextSizeCategory(scale: number): (typeof TEXT_SIZE_CATEGORIES)[n
  * multi-SIM device keeps it per subscription; that read-back is uncovered until a dual-SIM run shows
  * which row to read.
  */
+/** Keep-awake rides `svc power stayon true|false`; the row is the stay-on mask itself. */
+const KEEP_AWAKE_TOGGLE: AndroidGlobalToggle<'keepAwake'> = {
+  service: 'power',
+  writeArgs: (enabled) => ['stayon', enabled ? 'true' : 'false'],
+  row: 'stay_on_while_plugged_in',
+  label: 'keep-awake',
+  stateKey: 'keepAwake',
+  parseRow: (storedValue) => {
+    if (storedValue === '0') return 'disabled';
+    if (/^[1-9][0-9]*$/.test(storedValue)) return 'enabled';
+    return undefined;
+  },
+  notAppliedReason: ANDROID_GLOBAL_TOGGLE_REASONS.keepAwakeNotApplied.reason,
+  unreadableReason: ANDROID_GLOBAL_TOGGLE_REASONS.keepAwakeUnreadable.reason,
+  sampleIntervalMs: 100,
+  hint: 'Check the stay-on mask with: adb shell settings get global stay_on_while_plugged_in',
+};
+
 const MOBILE_DATA_TOGGLE: AndroidGlobalToggle<'mobileData'> = {
   service: 'data',
   row: 'mobile_data',

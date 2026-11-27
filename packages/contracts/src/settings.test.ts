@@ -3,16 +3,17 @@ import {
   describeSettingRead,
   describeSettingWrite,
   parseAppearanceAction,
+  parseLocaleId,
   parsePermissionAction,
   parsePermissionTarget,
   parseSettingsMutation,
   parseSettingState,
   parseTextSizeCategory,
+  parseTimeZoneId,
   readTextSizeCategory,
   settingsAppNotConsumedRefusal,
   settingsAppScope,
   settingsHelpLines,
-  SETTINGS_APP_NOT_CONSUMED_REASON,
   SETTINGS_INVALID_ARGS_MESSAGE,
   SETTINGS_USAGE_OVERRIDE,
   textSizeSettingPayload,
@@ -41,22 +42,25 @@ function expectInvalidArgs(run: () => unknown, message: string): void {
 describe('settings usage', () => {
   test('folds settings that share a form into one line', () => {
     expect(SETTINGS_USAGE_OVERRIDE.split(' | ')).toEqual([
-      'settings <wifi|bluetooth|airplane|mobile-data|location|animations> <on|off>',
+      'settings <wifi|bluetooth|airplane|mobile-data|keep-awake|location|animations> <on|off>',
       'settings location set <lat> <lon>',
       'settings appearance <light|dark|toggle>',
       `settings text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`,
+      'settings timezone <iana-zone|reset>',
+      'settings locale <locale-id|reset>',
       'settings <faceid|touchid> <match|nonmatch|enroll|unenroll>',
       'settings fingerprint <match|nonmatch>',
       'settings clear-app-state [app-id]',
       'settings reset-keychain clear',
-      `settings permission <grant|deny|reset> <${MOBILE_PERMISSION_TARGETS.join('|')}> [full|limited]`,
+      'settings permission <grant|deny|reset> <all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri>',
+      'settings permission <grant|deny|reset> photos [full|limited]',
       'settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>',
     ]);
   });
 
   test('the invalid-args message lists the same forms, with the last one as an alternative', () => {
     expect(SETTINGS_INVALID_ARGS_MESSAGE).toMatch(
-      /^settings requires <wifi\|bluetooth\|airplane\|mobile-data\|location\|animations> <on\|off>, .*, or permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>$/,
+      /^settings requires <wifi\|bluetooth\|airplane\|mobile-data\|keep-awake\|location\|animations> <on\|off>, .*, or permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>$/,
     );
   });
 
@@ -120,7 +124,7 @@ describe('parseSettingsMutation', () => {
     });
     expectInvalidArgs(
       () => parseSettingsMutation(['permission', 'grant', 'bluetooth']),
-      'settings permission requires a target:',
+      'settings permission requires a target: all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri|photos|accessibility|screen-recording|input-monitoring',
     );
     expectInvalidArgs(
       () => parseSettingsMutation(['permission', 'grant', 'photos', 'some']),
@@ -136,6 +140,48 @@ describe('parseSettingsMutation', () => {
     expectInvalidArgs(
       () => parseSettingsMutation(['permission', 'grant', 'accessibility', 'full']),
       'settings permission accessibility takes no mode.',
+    );
+  });
+
+  test('only photos takes a mode among the mobile targets', () => {
+    expectInvalidArgs(
+      () => parseSettingsMutation(['permission', 'grant', 'camera', 'limited']),
+      'settings permission camera takes no mode.',
+    );
+  });
+
+  test('an app id in the mode slot is refused with a typed reason that names the app', () => {
+    const appPositional = (permission: string, app: string) =>
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: expect.objectContaining({
+          reason: 'setting_permission_app_positional',
+          dispatched: 'no',
+          permission,
+          app,
+          hint: `Pass the app with --app ${app}.`,
+        }),
+      });
+    for (const positionals of [
+      ['permission', 'deny', 'notifications', 'com.example.app'],
+      ['permission', 'grant', 'photos', 'com.example.app'],
+      ['permission', 'grant', 'photos', 'limited', 'com.example.app'],
+    ]) {
+      expect(() => parseSettingsMutation(positionals)).toThrow(
+        appPositional(positionals[2]!, 'com.example.app'),
+      );
+    }
+  });
+
+  test('a macOS target takes no --app, so a dotted value gets no --app spelling', () => {
+    expect(() =>
+      parseSettingsMutation(['permission', 'grant', 'accessibility', 'com.example.app']),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        message: 'settings permission accessibility takes no mode.',
+        details: undefined,
+      }),
     );
   });
 
@@ -184,6 +230,92 @@ describe('text-size', () => {
       'Cleared user data for com.example.app',
     );
     expect(describeSettingWrite('wifi', 'on', undefined)).toBe('Updated setting: wifi');
+  });
+});
+
+describe('timezone', () => {
+  test('a time zone Intl knows passes through as written so device read-back decides', () => {
+    expect(parseSettingsMutation(['Timezone', 'Asia/Kolkata'])).toEqual({
+      setting: 'timezone',
+      state: 'Asia/Kolkata',
+    });
+    expect(parseTimeZoneId('america/new_york')).toBe('america/new_york');
+    expect(parseTimeZoneId(' Etc/GMT+5 ')).toBe('Etc/GMT+5');
+    expect(parseTimeZoneId('Asia/Kolkata')).toBe('Asia/Kolkata');
+    expect(parseTimeZoneId('asia/kolkata')).toBe('asia/kolkata');
+    expect(parseTimeZoneId('US/Pacific')).toBe('US/Pacific');
+    expect(parseTimeZoneId('us/pacific')).toBe('us/pacific');
+  });
+
+  test('an offset or a name the time zone data does not know is refused', () => {
+    for (const value of ['+05:30', 'Mars/Olympus_Mons', 'Asia/', '']) {
+      expectInvalidArgs(() => parseTimeZoneId(value), `Invalid time zone: ${value}.`);
+    }
+  });
+
+  test('reset is a state of its own, and timezone takes exactly one value', () => {
+    expect(parseSettingsMutation(['timezone', 'RESET'])).toEqual({
+      setting: 'timezone',
+      state: 'reset',
+    });
+    expectInvalidArgs(
+      () => parseSettingsMutation(['timezone']),
+      'settings timezone requires a state: <iana-zone|reset>.',
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['timezone', 'Asia/Kolkata', 'extra']),
+      SETTINGS_INVALID_ARGS_MESSAGE,
+    );
+  });
+
+  test('timezone writes answer with the zone set or the reset', () => {
+    expect(describeSettingWrite('timezone', 'Asia/Kolkata', undefined)).toBe(
+      'Time zone set to Asia/Kolkata',
+    );
+    expect(describeSettingWrite('timezone', 'reset', undefined)).toBe(
+      'Time zone reset to the device default',
+    );
+  });
+});
+
+describe('locale', () => {
+  test('a locale id is carried as its BCP 47 tag whichever separator and casing it uses', () => {
+    expect(parseSettingsMutation(['Locale', 'en_in'])).toEqual({
+      setting: 'locale',
+      state: 'en-IN',
+    });
+    expect(parseLocaleId('fr-CA')).toBe('fr-CA');
+    expect(parseLocaleId(' zh_hans_cn ')).toBe('zh-Hans-CN');
+    expect(parseLocaleId('es_419')).toBe('es-419');
+    expect(parseLocaleId('EN')).toBe('en');
+  });
+
+  test('a locale with an extension or variant, or no language, is refused before dispatch', () => {
+    for (const value of ['en-US-u-ca-buddhist', 'en_US_POSIX', 'english', 'x', '']) {
+      expectInvalidArgs(() => parseLocaleId(value), `Invalid locale id: ${value}.`);
+    }
+  });
+
+  test('reset is a state of its own, and locale takes exactly one value', () => {
+    expect(parseSettingsMutation(['locale', 'RESET'])).toEqual({
+      setting: 'locale',
+      state: 'reset',
+    });
+    expectInvalidArgs(
+      () => parseSettingsMutation(['locale']),
+      'settings locale requires a state: <locale-id|reset>.',
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['locale', 'en_IN', 'extra']),
+      SETTINGS_INVALID_ARGS_MESSAGE,
+    );
+  });
+
+  test('locale writes answer with the locale set or the reset', () => {
+    expect(describeSettingWrite('locale', 'en-IN', undefined)).toBe('Locale set to en-IN');
+    expect(describeSettingWrite('locale', 'reset', undefined)).toBe(
+      'Locale reset to the device default',
+    );
   });
 });
 
@@ -239,8 +371,20 @@ describe('settingsAppScope', () => {
   });
 });
 
-describe('settingsAppScope device-wide radios', () => {
-  test.each(['mobile-data', 'bluetooth'])(
+describe('settingsAppScope device-wide settings', () => {
+  test('timezone changes the whole device on every mobile family', () => {
+    expect(settingsAppScope('apple', 'timezone', 'reset')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'timezone', 'Asia/Kolkata')).toBe('device-level');
+    expect(settingsAppScope('macos-host', 'timezone', 'reset')).toBe('unknown');
+  });
+
+  test('locale changes the whole device on every mobile family', () => {
+    expect(settingsAppScope('apple', 'locale', 'reset')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'locale', 'en-IN')).toBe('device-level');
+    expect(settingsAppScope('macos-host', 'locale', 'reset')).toBe('unknown');
+  });
+
+  test.each(['mobile-data', 'keep-awake', 'bluetooth'])(
     '%s switches the whole device wherever it is served',
     (setting) => {
       expect(settingsAppScope('mobile', setting, 'on')).toBe('device-level');
@@ -258,7 +402,7 @@ describe('settingsAppNotConsumedRefusal', () => {
     expect(refusal.code).toBe('INVALID_ARGS');
     expect(refusal.message).toContain('settings location on');
     expect(refusal.message).toContain('com.example.app');
-    expect(refusal.details.reason).toBe(SETTINGS_APP_NOT_CONSUMED_REASON);
+    expect(refusal.details.reason).toBe('setting_app_not_consumed');
     expect(refusal.details.dispatched).toBe('no');
     expect(refusal.details.app).toBe('com.example.app');
     expect(refusal.hint).toContain('settings permission grant location --app com.example.app');

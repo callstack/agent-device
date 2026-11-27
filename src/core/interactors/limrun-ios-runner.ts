@@ -46,6 +46,7 @@ export async function createLimrunIosRunner(
   const hostTools = withMethodScope({ ...appleApplications }, (task) =>
     hasScopedAppleToolProvider() ? task() : withTools(task),
   );
+  const platform = session.device.appleOs === 'watchos' ? 'watchos' : 'ios';
   const port = randomInt(20000, 50000);
   const apiUrl = session.apiUrl.replace(/\/$/, '');
   const commandUrl = new URL(`targetHttpPort${port}/command`, `${apiUrl}/../`).href;
@@ -79,7 +80,8 @@ export async function createLimrunIosRunner(
     const directory = await prepareLimrunRunnerProducts({
       directory: staging,
       version: readVersion(),
-      appPath: host.env.AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP,
+      platform,
+      appPath: host.env[`AGENT_DEVICE_LIMRUN_${platform.toUpperCase()}_RUNNER_APP`],
       bindAddress: bind.stdout.trim(),
       endpoint,
       signal: preparation,
@@ -149,7 +151,7 @@ export async function createLimrunIosRunner(
     try {
       startupSignal.throwIfAborted();
       const { directory, bindAddress } = await cachedProducts(signal);
-      await writeLimrunRunnerConfiguration(directory, bindAddress, ownedEndpoint);
+      await writeLimrunRunnerConfiguration(directory, bindAddress, ownedEndpoint, platform);
       await uploadLimrunRunnerProducts(directory, apiUrl, session.token, signal, [
         'Runner.xctestrun',
       ]);
@@ -222,7 +224,7 @@ export async function createLimrunIosRunner(
     } finally {
       startupSignal.removeEventListener('abort', cancel);
     }
-    const reader = response.body!.getReader();
+    const reader = response.body.getReader();
     let settle!: () => void;
     const exited = new Promise<void>((resolve) => {
       settle = resolve;

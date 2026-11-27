@@ -25,6 +25,15 @@ export type ProviderDeviceOrientation = (typeof PROVIDER_DEVICE_ORIENTATIONS)[nu
 export const PROVIDER_DEVICE_TYPES = ['real', 'virtual'] as const;
 export type ProviderDeviceType = (typeof PROVIDER_DEVICE_TYPES)[number];
 
+/**
+ * How a client sends a remote command. `health` reads `/health` before each command RPC. `checked`
+ * sends a standalone command on the checked RPC route, where the server refuses protocol skew
+ * itself, so the command takes one round trip. Only the remote-config profile sets it, and
+ * `connect` records it only when every link of the remote advertises `checked-rpc`.
+ */
+export const DAEMON_RPC_MODES = ['health', 'checked'] as const;
+export type DaemonRpcMode = (typeof DAEMON_RPC_MODES)[number];
+
 export type CloudProviderProfileFields = {
   providerApp?: string;
   providerOsVersion?: string;
@@ -130,6 +139,13 @@ export type RemoteConnectionProfileFields = {
   daemonAuthToken?: string;
   daemonTransport?: DaemonTransportPreference;
   daemonServerMode?: DaemonServerMode;
+  /**
+   * How a remote command is sent; see `DaemonRpcMode`. The CLI sets it only from the connection
+   * `connect` recorded. An SDK caller that sets `checked` opts in explicitly: its standalone
+   * commands are not fenced to one daemon instance, and a remote that does not serve the checked
+   * route answers 404, which fails typed (`remote_checked_rpc_unsupported`) and is never resent.
+   */
+  daemonRpc?: DaemonRpcMode;
   tenant?: string;
   sessionIsolation?: SessionIsolationMode;
   runId?: string;

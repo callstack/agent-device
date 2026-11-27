@@ -1,7 +1,7 @@
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
 import { LEASE_REASONS, leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import {
@@ -12,6 +12,11 @@ import {
 import { recordEndedLease } from '../core/request-ended-leases.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { releaseLease } from '../resources/lease-release.ts';
+
+const TARGET_SHUTDOWN_REASONS = {
+  // The selected target does not own the lease this request names, so it will not release it.
+  leaseMismatch: { reason: 'TARGET_SHUTDOWN_LEASE_MISMATCH' },
+} as const satisfies ReasonTable<'shutdown'>;
 
 /** A runtime can end only the lease admitted for this request and owned by that runtime's provider. */
 export async function releaseTargetLease(params: {
@@ -34,7 +39,7 @@ export async function releaseTargetLease(params: {
     !params.leaseLifecycleProvider?.release
   ) {
     throw new AppError('UNAUTHORIZED', 'The selected target does not own this request lease.', {
-      reason: 'TARGET_SHUTDOWN_LEASE_MISMATCH',
+      reason: TARGET_SHUTDOWN_REASONS.leaseMismatch.reason,
     });
   }
   const request = leaseScopeToReleaseRequest(scope);

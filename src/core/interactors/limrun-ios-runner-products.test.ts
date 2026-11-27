@@ -104,6 +104,7 @@ test('refuses release bytes with a mismatched checksum before extracting or depl
   const directory = await mkdtempForTest('runner-products-');
   await expect(
     prepareLimrunRunnerProducts({
+      appPath: '',
       directory,
       version: '0.1.0',
       bindAddress: '10.244.1.2',
@@ -118,6 +119,32 @@ test('refuses release bytes with a mismatched checksum before extracting or depl
   await expect(fs.stat(path.join(directory, 'extracted'))).rejects.toMatchObject({
     code: 'ENOENT',
   });
+});
+
+test('a Watch lease rejects an iPhone manifest before downloading its runner', async () => {
+  const fetch = vi.fn(async () =>
+    Response.json({
+      version: '0.1.0',
+      platform_target: 'iphonesimulator',
+      sha256: '0'.repeat(64),
+    }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  await expect(
+    prepareLimrunRunnerProducts({
+      directory: await mkdtempForTest('watch-products-'),
+      version: '0.1.0',
+      platform: 'watchos',
+      bindAddress: '10.0.0.1',
+      endpoint,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow('Invalid watchsimulator runner release manifest');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith(
+    expect.stringContaining('/agent-device-watchos-runner-0.1.0.manifest.json'),
+    expect.anything(),
+  );
 });
 
 test('nightly builds require a packaged runner instead of requesting unpublished release assets', async () => {

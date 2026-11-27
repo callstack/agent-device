@@ -26,6 +26,18 @@ const mockCaptureSnapshot = vi.mocked(captureSnapshot);
  */
 const mockDismissTap = mockTapPoint;
 
+/** RCTRedBoxController's footer: one button per label in a fill-equally stack across the window. */
+function redBoxFooter(labels: string[], y: number, windowWidth: number) {
+  const width = windowWidth / labels.length;
+  return labels.map((label, column) => ({
+    index: column + 1,
+    ref: `e${column + 2}`,
+    type: 'XCUIElementTypeButton',
+    label,
+    rect: { x: column * width, y, width, height: 44 },
+  }));
+}
+
 beforeEach(() => {
   mockCaptureSnapshot.mockReset();
   resetGetRuntimeFixture();
@@ -97,7 +109,7 @@ test('react-native dismiss-overlay taps collapsed warning close affordance inste
   });
 });
 
-test('react-native dismiss-overlay prefers non-trailing collapsed warning close controls', async () => {
+test('react-native dismiss-overlay closes a collapsed banner at its own affordance, not at a Close over it', async () => {
   const sessionName = 'rn-session';
   const sessionStore = makeSessionStore();
   sessionStore.publish(sessionName, makeSession(sessionName));
@@ -114,6 +126,7 @@ test('react-native dismiss-overlay prefers non-trailing collapsed warning close 
         {
           index: 1,
           ref: 'e91',
+          type: 'Button',
           label: 'Close',
           rect: { x: 10, y: 803, width: 34, height: 34 },
           hittable: true,
@@ -141,13 +154,13 @@ test('react-native dismiss-overlay prefers non-trailing collapsed warning close 
 
   expect(response?.ok).toBe(true);
   expect(mockDismissTap).toHaveBeenCalledWith(
-    expect.objectContaining({ point: { x: 27, y: 820 } }),
+    expect.objectContaining({ point: { x: 379, y: 820 } }),
   );
   expect(response?.ok && response.data).toMatchObject({
     action: 'dismiss-overlay',
-    overlayAction: 'close',
-    ref: 'e91',
-    x: 27,
+    overlayAction: 'close-collapsed-banner',
+    ref: 'e90',
+    x: 379,
     y: 820,
   });
 });
@@ -332,7 +345,7 @@ test('react-native dismiss-overlay rejects unsafe collapsed warning coordinate f
   });
 });
 
-test('react-native dismiss-overlay dismisses RedBox error overlays instead of minimizing them', async () => {
+test('react-native dismiss-overlay dismisses the LogBox inspector instead of minimizing it', async () => {
   const sessionName = 'rn-redbox-session';
   const sessionStore = makeSessionStore();
   sessionStore.publish(sessionName, makeSession(sessionName));
@@ -350,15 +363,22 @@ test('react-native dismiss-overlay dismisses RedBox error overlays instead of mi
             index: 1,
             ref: 'e2',
             label: 'Dismiss',
-            rect: { x: 20, y: 730, width: 150, height: 44 },
+            rect: { x: 0, y: 730, width: 130, height: 44 },
           },
           {
             index: 2,
             ref: 'e3',
             label: 'Minimize',
-            rect: { x: 190, y: 730, width: 150, height: 44 },
+            rect: { x: 130, y: 730, width: 130, height: 44 },
+          },
+          {
+            index: 3,
+            ref: 'e4',
+            label: 'Copy',
+            rect: { x: 260, y: 730, width: 130, height: 44 },
           },
         ],
+        viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 390, height: 844 }),
         createdAt: Date.now(),
       },
     })
@@ -387,7 +407,7 @@ test('react-native dismiss-overlay dismisses RedBox error overlays instead of mi
 
   expect(response?.ok).toBe(true);
   expect(mockDismissTap).toHaveBeenCalledWith(
-    expect.objectContaining({ point: { x: 95, y: 752 } }),
+    expect.objectContaining({ point: { x: 65, y: 752 } }),
   );
   expect(response?.ok && response.data).toMatchObject({
     action: 'dismiss-overlay',
@@ -397,13 +417,13 @@ test('react-native dismiss-overlay dismisses RedBox error overlays instead of mi
     verified: true,
     verificationRequired: false,
     message: 'React Native overlay dismiss action sent and verified gone',
-    x: 95,
+    x: 65,
     y: 752,
   });
   expect(response?.ok && response.data?.minimized).toBeUndefined();
 });
 
-test('react-native dismiss-overlay reports unverified dismiss when RedBox controls remain', async () => {
+test('react-native dismiss-overlay reports unverified dismiss when the inspector controls remain', async () => {
   const sessionName = 'rn-redbox-still-full-session';
   const sessionStore = makeSessionStore();
   sessionStore.publish(sessionName, makeSession(sessionName));
@@ -420,15 +440,22 @@ test('react-native dismiss-overlay reports unverified dismiss when RedBox contro
           index: 1,
           ref: 'e2',
           label: 'Dismiss',
-          rect: { x: 20, y: 730, width: 150, height: 44 },
+          rect: { x: 0, y: 730, width: 130, height: 44 },
         },
         {
           index: 2,
           ref: 'e3',
           label: 'Minimize',
-          rect: { x: 190, y: 730, width: 150, height: 44 },
+          rect: { x: 130, y: 730, width: 130, height: 44 },
+        },
+        {
+          index: 3,
+          ref: 'e4',
+          label: 'Copy',
+          rect: { x: 260, y: 730, width: 130, height: 44 },
         },
       ],
+      viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 390, height: 844 }),
       createdAt: Date.now(),
     },
   };
@@ -478,13 +505,9 @@ test('react-native dismiss-overlay uses Dismiss when RedBox Minimize is absent',
           label: 'Runtime Error',
           rect: { x: 0, y: 0, width: 390, height: 100 },
         },
-        {
-          index: 1,
-          ref: 'e2',
-          label: 'Dismiss',
-          rect: { x: 20, y: 730, width: 150, height: 44 },
-        },
+        ...redBoxFooter(['Dismiss', 'Reload JS', 'Copy', 'Extra Info'], 730, 390),
       ],
+      viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 390, height: 844 }),
       createdAt: Date.now(),
     },
   });
@@ -507,7 +530,7 @@ test('react-native dismiss-overlay uses Dismiss when RedBox Minimize is absent',
 
   expect(response?.ok).toBe(true);
   expect(mockDismissTap).toHaveBeenCalledWith(
-    expect.objectContaining({ point: { x: 95, y: 752 } }),
+    expect.objectContaining({ point: { x: 49, y: 752 } }),
   );
   expect(response?.ok && response.data).toMatchObject({
     action: 'dismiss-overlay',
@@ -530,13 +553,13 @@ test('react-native dismiss-overlay accepts RedBox control labels with keyboard s
           label: 'Runtime Error: NativeModule is null',
           rect: { x: 0, y: 0, width: 390, height: 620 },
         },
-        {
-          index: 1,
-          ref: 'e2',
-          label: 'Dismiss (ESC)',
-          rect: { x: 18, y: 700, width: 104, height: 44 },
-        },
+        ...redBoxFooter(
+          ['Dismiss (ESC)', 'Reload JS (⌘R)', 'Copy (⌥⌘C)', 'Extra Info (⌘E)'],
+          700,
+          390,
+        ),
       ],
+      viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 390, height: 844 }),
       createdAt: Date.now(),
     },
   });
@@ -559,7 +582,7 @@ test('react-native dismiss-overlay accepts RedBox control labels with keyboard s
 
   expect(response?.ok).toBe(true);
   expect(mockDismissTap).toHaveBeenCalledWith(
-    expect.objectContaining({ point: { x: 70, y: 722 } }),
+    expect.objectContaining({ point: { x: 49, y: 722 } }),
   );
   expect(response?.ok && response.data).toMatchObject({
     action: 'dismiss-overlay',
@@ -594,9 +617,31 @@ test('react-native dismiss-overlay prefers concrete RedBox buttons over labeled 
           ref: 'e43',
           type: 'XCUIElementTypeButton',
           label: 'Dismiss (ESC)',
-          rect: { x: 156, y: 805, width: 90, height: 44 },
+          rect: { x: 0, y: 805, width: 100.5, height: 44 },
+        },
+        {
+          index: 3,
+          ref: 'e44',
+          type: 'XCUIElementTypeButton',
+          label: 'Reload JS (⌘R)',
+          rect: { x: 100.5, y: 805, width: 100.5, height: 44 },
+        },
+        {
+          index: 4,
+          ref: 'e45',
+          type: 'XCUIElementTypeButton',
+          label: 'Copy (⌥⌘C)',
+          rect: { x: 201, y: 805, width: 100.5, height: 44 },
+        },
+        {
+          index: 5,
+          ref: 'e46',
+          type: 'XCUIElementTypeButton',
+          label: 'Extra Info (⌘E)',
+          rect: { x: 301.5, y: 805, width: 100.5, height: 44 },
         },
       ],
+      viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 402, height: 874 }),
       createdAt: Date.now(),
     },
   });
@@ -622,7 +667,7 @@ test('react-native dismiss-overlay prefers concrete RedBox buttons over labeled 
     action: 'dismiss-overlay',
     overlayAction: 'dismiss',
     ref: 'e43',
-    x: 201,
+    x: 50,
     y: 827,
   });
 });
@@ -638,14 +683,8 @@ test('react-native dismiss-overlay reports verified success after a clean post-d
           {
             index: 0,
             ref: 'e1',
-            label: 'LogBox',
-            rect: { x: 0, y: 640, width: 390, height: 120 },
-          },
-          {
-            index: 1,
-            ref: 'e2',
-            label: 'Close',
-            rect: { x: 84, y: 692, width: 42, height: 44 },
+            label: '!, Warning: Failed prop type',
+            rect: { x: 10, y: 640, width: 370, height: 48 },
           },
         ],
         createdAt: Date.now(),
@@ -687,7 +726,7 @@ test('react-native dismiss-overlay reports verified success after a clean post-d
   expect(mockCaptureSnapshot).toHaveBeenCalledTimes(2);
   expect(response.data).toMatchObject({
     action: 'dismiss-overlay',
-    overlayAction: 'close',
+    overlayAction: 'close-collapsed-banner',
     verified: true,
     verificationRequired: false,
   });
@@ -754,7 +793,9 @@ test('react-native dismiss-overlay reports sparse verdict instead of no overlay 
     message:
       'React Native overlay state could not be determined because the accessibility tree is unreadable',
     details: {
-      reason: 'sparse tree',
+      reason: 'overlay_snapshot_unreadable',
+      verdictReason: 'sparse tree',
+      verdictReasonCode: 'sparse-tree',
       hint: expect.stringContaining('snapshot quality verdict is sparse'),
     },
   });
@@ -771,14 +812,8 @@ test('react-native dismiss-overlay reports unverified dismiss when post-dismiss 
           {
             index: 0,
             ref: 'e1',
-            label: 'LogBox',
-            rect: { x: 0, y: 640, width: 390, height: 120 },
-          },
-          {
-            index: 1,
-            ref: 'e2',
-            label: 'Close',
-            rect: { x: 84, y: 692, width: 42, height: 44 },
+            label: '!, Warning: Failed prop type',
+            rect: { x: 10, y: 640, width: 370, height: 48 },
           },
         ],
         createdAt: Date.now(),
@@ -839,14 +874,8 @@ test('react-native dismiss-overlay reports still-visible overlays with recovery 
         {
           index: 0,
           ref: 'e1',
-          label: 'LogBox',
-          rect: { x: 0, y: 640, width: 390, height: 120 },
-        },
-        {
-          index: 1,
-          ref: 'e2',
-          label: 'Close',
-          rect: { x: 84, y: 692, width: 42, height: 44 },
+          label: '!, Warning: Failed prop type',
+          rect: { x: 10, y: 640, width: 370, height: 48 },
         },
       ],
       createdAt: Date.now(),

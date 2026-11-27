@@ -2,6 +2,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { createDaemonHttpServer } from './http-server.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
@@ -237,7 +239,17 @@ test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (
   }
 });
 
-test('daemon proxy cancels the upstream daemon request when its client disconnects', async (t) => {
+/**
+ * Runs the collection a long-lived proxy eventually runs, so a test sees what an unreferenced
+ * request loses. A weak reference keeps its target until the job that created it ends.
+ */
+async function collectGarbage(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
+  setFlagsFromString('--expose-gc');
+  (runInNewContext('gc') as () => void)();
+}
+
+test('daemon proxy cancels the upstream daemon request when its client disconnects after a garbage collection', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   let upstreamStarted!: (requestId: string | undefined) => void;
@@ -303,10 +315,11 @@ test('daemon proxy cancels the upstream daemon request when its client disconnec
     const requestId = await started;
     assert.match(String(requestId), /req-disconnect/);
 
+    await collectGarbage();
     client.destroy();
 
     const timeout = new Promise<string>((resolve) => {
-      setTimeout(() => resolve('upstream request was never canceled'), 5000).unref();
+      setTimeout(() => resolve('upstream request was never canceled'), 2000).unref();
     });
     assert.equal(await Promise.race([canceled, timeout]), 'aborted');
   } finally {

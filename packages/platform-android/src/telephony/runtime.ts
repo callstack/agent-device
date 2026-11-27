@@ -1,5 +1,8 @@
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import { whenAdmitted } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import type { TelephonyEventInput } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -9,7 +12,7 @@ const available = Object.freeze({ available: true } as const);
 
 const telephonyKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'telephony simulates calls and SMS through the Android emulator console; a physical device has no console, so place a real call or send a real message to it instead.',
 } as const);
 

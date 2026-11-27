@@ -253,7 +253,7 @@ test('runtime clear rejects a false runtime-hints fact before its one implementa
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledTimes(1);
   expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
   expect(mockClearRuntimeHints).not.toHaveBeenCalled();
-  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+  expect(sessionStore.getRuntimeHints(sessionName)?.hints).toEqual({
     platform: 'android',
     metroHost: '10.0.0.10',
     metroPort: 8081,
@@ -370,7 +370,7 @@ for (const phase of ['admission', 'effect'] as const) {
       code: 'COMMAND_FAILED',
       details: { reason: 'session_lifetime_ended' },
     });
-    expect(sessionStore.getRuntimeHints(address)).toBe(successorHints);
+    expect(sessionStore.getRuntimeHints(address)?.hints).toBe(successorHints);
     expect(refFrameState(sessionStore.get(address)!)).toBe('active');
     expect(mockClearRuntimeHints).toHaveBeenCalledTimes(phase === 'admission' ? 0 : 1);
   });

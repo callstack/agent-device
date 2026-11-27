@@ -5,7 +5,11 @@ import {
 } from './launch-console.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isIosFamily } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  INTERACTOR_BINDING_REFUSAL_REASONS,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { ApplicationLaunchReport, Interactor, RunnerContext } from './interactor-types.ts';
 import type {
   ApplicationLifecycleExecution,
@@ -16,6 +20,12 @@ import type {
   OpenTargetResolution,
   OpenTargetResolutionInput,
 } from './application-lifecycle-runtime.ts';
+
+/** Why `open` refuses before it resolves an interactor for the chosen owner. */
+const APPLICATION_LIFECYCLE_ADMISSION_REFUSAL_REASONS = {
+  // --launch-console was asked for on an app-launch owner that cannot stream a console.
+  launchConsoleUnadmitted: { reason: 'launch-console-owner-unadmitted' },
+} as const satisfies ReasonTable<'open'>;
 
 /**
  * The exact request-bound interactor authority for a lifecycle operation.  It is deliberately
@@ -92,7 +102,7 @@ function bindApplicationLifecycleInteractor(
           'UNSUPPORTED_OPERATION',
           '--launch-console is supported only for a local or Limrun iOS simulator app launch',
           {
-            reason: 'launch-console-owner-unadmitted',
+            reason: APPLICATION_LIFECYCLE_ADMISSION_REFUSAL_REASONS.launchConsoleUnadmitted.reason,
             deviceId: device.id,
             hint: 'Remove --launch-console, or use a local or Limrun iOS simulator for launch output.',
           },
@@ -103,7 +113,10 @@ function bindApplicationLifecycleInteractor(
       throw new AppError(
         'UNSUPPORTED_OPERATION',
         'Provider-owned application lifecycle operation has no bound provider interactor.',
-        { reason: 'provider-runtime-interactor-missing', deviceId: device.id },
+        {
+          reason: INTERACTOR_BINDING_REFUSAL_REASONS.providerInteractorMissing.reason,
+          deviceId: device.id,
+        },
       );
     },
   });
@@ -274,6 +287,18 @@ export type DirectApplicationLifecycleParams = Readonly<{
    * interactor's open receives `terminateRunningApp` and owns the restart.
    */
   closeBeforeRelaunch: boolean;
+  /**
+   * Reads which bundle holds the foreground before the dispatch, or `undefined` when no read
+   * answers. Owners whose native launch of an already-foreground app is a passthrough wire their
+   * platform's read here, so the open can say that it re-activated instead of restarted. The read
+   * is advisory: its failure never fails the open it informs. The read receives the request's
+   * deadline beside the signal, so the owner can bound its device read by the budget the open has
+   * left instead of its own fixed one (#4860 follow-up).
+   */
+  readForegroundBundle?: (
+    signal: AbortSignal,
+    requestDeadlineAtMs: number | undefined,
+  ) => Promise<string | undefined>;
   /** Port reverse is the one non-direct operation a provider owner may still implement. */
   configureProviderPortReverse?: ApplicationLifecycleRuntimeOperations['configureProviderPortReverse'];
 }>;
@@ -318,6 +343,7 @@ async function openDirectApplication(
 ): Promise<OpenApplicationOutcome> {
   const { binding } = params;
   const interactor = await binding.resolveInteractor(input.execution, input.appBundleId);
+  const alreadyForeground = await resolveAlreadyForeground(params, input);
   if (params.closeBeforeRelaunch && input.relaunch && input.target !== undefined) {
     await invokeApplicationClose({
       device: binding.device,
@@ -348,7 +374,46 @@ async function openDirectApplication(
       },
     });
   }
-  return { appBundleId: input.appBundleId, timing: {} };
+  return {
+    appBundleId: input.appBundleId,
+    timing: {},
+    ...(alreadyForeground ? { alreadyForeground: true as const } : {}),
+  };
+}
+
+/** The plain app target a foreground read can compare against, when the open has one. */
+function probeableOpenTarget(input: OpenApplicationInput): string | undefined {
+  // An open that stops or replaces the running app re-activates nothing: --clear-app-state
+  // force-stops and cleans first, and --activity can start a different ability than the one
+  // running, so the read has no same-app fact to compare (#4860 review).
+  if (input.execution.clearAppState || input.execution.activity) return undefined;
+  if (input.positionals.length !== 1) return undefined;
+  const target = input.positionals[0];
+  return target !== undefined && !isDeepLinkTarget(target) ? target : undefined;
+}
+
+/**
+ * Whether the open's app target already held the foreground, read before the dispatch through the
+ * owner's probe. Only a plain app target answers: a relaunch intends a restart, --clear-app-state
+ * and --activity can each replace the running app, and a URL pair or a deep link has no foreground
+ * fact to compare. A read that fails or names another app claims nothing, so it cannot fail the
+ * open.
+ */
+async function resolveAlreadyForeground(
+  params: DirectApplicationLifecycleParams,
+  input: OpenApplicationInput,
+): Promise<boolean> {
+  const { readForegroundBundle, binding } = params;
+  if (!readForegroundBundle || input.relaunch) return false;
+  const target = probeableOpenTarget(input);
+  if (!target) return false;
+  try {
+    return (
+      (await readForegroundBundle(binding.signal, input.execution.requestDeadlineAtMs)) === target
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function followUpRuntimeLaunchUrl(input: OpenApplicationInput): string | undefined {
@@ -405,6 +470,7 @@ export function bindLocalDirectApplicationLifecycle(
     host: Readonly<{ resolve: LocalApplicationLifecycleInteractorResolver }>;
     device: DeviceInfo;
     signal: AbortSignal;
+    readForegroundBundle?: DirectApplicationLifecycleParams['readForegroundBundle'];
   }>,
 ): ApplicationLifecycleRuntimeOperations {
   return bindDirectApplicationLifecycle({
@@ -412,6 +478,7 @@ export function bindLocalDirectApplicationLifecycle(
     openTargetIdentity: params.openTargetIdentity,
     // No local direct owner (Linux, web, HarmonyOS, Vega) replaces a running app on open.
     closeBeforeRelaunch: true,
+    readForegroundBundle: params.readForegroundBundle,
     binding: bindLocalApplicationLifecycleInteractor({
       device: params.device,
       signal: params.signal,

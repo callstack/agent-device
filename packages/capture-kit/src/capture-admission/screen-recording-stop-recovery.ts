@@ -14,7 +14,7 @@ import {
   type DeviceIdentity,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, RUNTIME_CONTRACT_REASONS } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DurableCaptureResourceRecord } from '../durable-capture/index.ts';
@@ -107,14 +107,14 @@ function assertManifestBelongsToRequest(
     throw new AppError(
       'COMMAND_FAILED',
       'Screen recording recovery record does not belong to the requested session',
-      { reason: 'runtime-contract-invalid' },
+      { reason: RUNTIME_CONTRACT_REASONS.invalid.reason },
     );
   }
   if (!sameDeviceIdentity(envelope.device, deviceIdentity(params.device))) {
     throw new AppError(
       'COMMAND_FAILED',
       'Screen recording recovery device does not match the selected device',
-      { reason: 'runtime-contract-invalid' },
+      { reason: RUNTIME_CONTRACT_REASONS.invalid.reason },
     );
   }
 }

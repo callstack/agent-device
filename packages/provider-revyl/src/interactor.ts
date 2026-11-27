@@ -1,3 +1,4 @@
+import { PLATFORM_RUNTIME_REASONS } from '@agent-device/contracts/platform-runtime';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -5,6 +6,8 @@ import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { ScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
 import {
   buildScrollGesturePlan,
+  isSplitViewContactOrigin,
+  splitViewUnavailableError,
   type ScrollDirection,
 } from '@agent-device/contracts/scroll-gesture';
 import type {
@@ -15,6 +18,7 @@ import type {
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
   parseAppearanceAction,
   parsePermissionAction,
@@ -29,6 +33,7 @@ import {
   AppError,
   discloseDispatch,
   discloseDispatchAfterSteps,
+  REQUEST_CANCELED_REASONS,
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -135,7 +140,7 @@ class RevylInteractor implements Interactor {
   private async launch(app: string, launchArgs?: string[]): Promise<void> {
     if (launchArgs?.length) {
       throw new AppError('UNSUPPORTED_OPERATION', 'Revyl launches an app without arguments.', {
-        reason: 'unsupported-provider-mode',
+        reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
         hint: 'Open a deep link instead: open <url>.',
       });
     }
@@ -178,7 +183,7 @@ class RevylInteractor implements Interactor {
       'UNSUPPORTED_OPERATION',
       `Revyl ends the app this session launched (${sessionApp}), not ${target}.`,
       {
-        reason: 'unsupported-provider-mode',
+        reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
         command: 'close',
         sessionApp,
         requestedApp: target,
@@ -326,6 +331,65 @@ class RevylInteractor implements Interactor {
     };
   }
 
+  /**
+   * A one-finger fling or pan as one `/drag` from the plan's first sample to its last, over the
+   * plan's duration. The fling's speed is its distance over that duration, so the drag must carry
+   * `duration_ms`: a worker whose `health` does not report `supports_explicit_drag_duration` picks
+   * its own speed, and the gesture is refused there rather than run as a slow swipe that reports a
+   * fling. The planner has already held every sample inside the viewport.
+   *
+   * A straight drag keeps only the two endpoints, so a plan whose path has a corner or a held
+   * stretch between them is refused rather than flattened. Split View presets are such paths and
+   * also need a system edge contact, so they refuse with the Split View reason.
+   */
+  async performGesture(plan: GesturePlan): Promise<Record<string, unknown>> {
+    if (plan.topology !== 'single') {
+      throw unsupported(
+        'gesture',
+        'Revyl performs a one-finger fling or pan as one timed drag; it has no multi-touch action.',
+      );
+    }
+    if (isSplitViewContactOrigin(plan.contactOrigin)) {
+      throw splitViewUnavailableError('Revyl does not support Split View');
+    }
+    const samples = plan.pointers[0].samples;
+    if (samples.length > 2) {
+      throw unsupported(
+        'gesture',
+        'Revyl performs a gesture as one straight timed drag; it cannot follow a path with intermediate points.',
+      );
+    }
+    if (!this.session.dragDuration) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'This Revyl worker cannot be told how fast a drag travels, so it cannot perform a timed gesture.',
+        {
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
+          command: 'gesture',
+          gesture: plan.intent,
+          runId: this.session.runId,
+          hint: 'Use scroll, which runs the drag at the speed Revyl gives it.',
+        },
+      );
+    }
+    const start = samples[0].point;
+    const end = samples.at(-1)!.point;
+    const drag = {
+      x1: Math.round(start.x),
+      y1: Math.round(start.y),
+      x2: Math.round(end.x),
+      y2: Math.round(end.y),
+    };
+    await this.workerAction('drag', {
+      start_x: drag.x1,
+      start_y: drag.y1,
+      end_x: drag.x2,
+      end_y: drag.y2,
+      duration_ms: plan.durationMs,
+    });
+    return { backend: 'revyl-device-proxy', ...drag, durationMs: plan.durationMs };
+  }
+
   /** Refuses a drag duration this worker cannot honor; Revyl's `duration_ms` starts at 1. */
   private requireDragDuration(durationMs: number): void {
     if (!this.session.dragDuration) {
@@ -333,7 +397,7 @@ class RevylInteractor implements Interactor {
         'UNSUPPORTED_OPERATION',
         'This Revyl worker scrolls with one drag and cannot be told how fast the finger travels.',
         {
-          reason: 'unsupported-provider-mode',
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
           command: 'scroll',
           flag: '--duration-ms',
           runId: this.session.runId,
@@ -417,7 +481,7 @@ class RevylInteractor implements Interactor {
         'UNSUPPORTED_OPERATION',
         `This Revyl worker cannot rotate to ${orientation}; it rotates to portrait and landscape-left only.`,
         {
-          reason: 'unsupported-provider-mode',
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
           command: 'orientation',
           runId: this.session.runId,
           hint: 'Rotate to portrait or landscape-left.',
@@ -547,7 +611,7 @@ class RevylInteractor implements Interactor {
     return new AppError(
       'COMMAND_FAILED',
       'The Revyl action was canceled before it finished.',
-      { reason: 'request_canceled', runId: this.session.runId },
+      { reason: REQUEST_CANCELED_REASONS.canceled.reason, runId: this.session.runId },
       cause ?? this.signal?.reason,
     );
   }
@@ -616,7 +680,7 @@ function relativeToViewport(
 
 function unsupported(command: string, message: string): AppError {
   return new AppError('UNSUPPORTED_OPERATION', message, {
-    reason: 'unsupported-provider-mode',
+    reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
     command,
   });
 }

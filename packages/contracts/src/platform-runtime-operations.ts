@@ -16,7 +16,7 @@ import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-
 import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { FocusRuntimeOperations } from './focus-runtime.ts';
-import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
+import type { GestureCommandInput } from './gesture-plan-types.ts';
 import type { GestureRuntimeTier } from './gesture-tier.ts';
 import type { GestureRuntimeOperations } from './gesture-runtime.ts';
 import type { ScrollRuntimeOperations } from './scroll-runtime.ts';
@@ -131,6 +131,13 @@ export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
 export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
 export const shakeRuntimeUse = defineUse({ required: ['shake'] });
+// `lock-screen`'s cells: the parsed action names exactly one of them, as a hardware-button name does.
+export const lockScreenRuntimeUse = defineUse({ required: ['lockScreen'] });
+export const unlockScreenRuntimeUse = defineUse({ required: ['unlockScreen'] });
+export const lockScreenRuntimePlanUses = Object.freeze([
+  lockScreenRuntimeUse,
+  unlockScreenRuntimeUse,
+] as const);
 // `hardware-button`'s cells (ADR 0019 §9): the daemon admits and binds exactly the one the parsed
 // positional names, never all of them (#3848).
 export const volumeUpRuntimeUse = defineUse({ required: ['volumeUp'] });
@@ -368,7 +375,7 @@ export type GestureRuntimePlan = {
 
 /** Selects the one owner-fact-backed gesture plan a normalized gesture input needs. */
 /** Pinch, rotate, transform, an explicit two-pointer pan, and a multi-finger tap hold several contacts. */
-function isMultiTouchGesture(input: GestureSemanticInput): boolean {
+function isMultiTouchGesture(input: Exclude<GestureCommandInput, { intent: 'drag' }>): boolean {
   if (input.intent === 'pan') return ('pointerCount' in input ? input.pointerCount : 1) === 2;
   return (
     input.intent === 'pinch' ||
@@ -511,17 +518,25 @@ export const selectorTextCaptureRuntimePlanUses = Object.freeze([
  * `find`'s action-selected mutating uses (ADR 0019 §9: one bind per handler). A mutating find
  * resolves its target from a capture AND executes at most one direct leg, so each action's use
  * carries the complete requirement set and the handler binds exactly once. Click/fill legs
- * re-invoke their own commands, so their use is the plain capture pair.
+ * re-invoke their own commands, so their use is the plain capture pair. `querySelector` is the same
+ * CONDITIONAL off-screen rescue read the captured acting uses declare (#1542), because the focus leg
+ * applies the same off-screen rule.
  */
-const findFocusCaptureUse = defineUse({ required: ['captureSnapshot', 'focusPoint'] });
+const findFocusCaptureUse = defineUse({
+  required: ['captureSnapshot', 'focusPoint'],
+  conditional: ['querySelector'],
+});
 const findFocusCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint'],
+  conditional: ['querySelector'],
 });
 const findTypeCaptureUse = defineUse({
   required: ['captureSnapshot', 'focusPoint', 'typeText'],
+  conditional: ['querySelector'],
 });
 const findTypeCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint', 'typeText'],
+  conditional: ['querySelector'],
 });
 
 /**

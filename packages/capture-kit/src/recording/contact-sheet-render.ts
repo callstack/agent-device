@@ -1,4 +1,4 @@
-import { CONTACT_SHEET_PIXEL_BUDGET_REASON } from './contact-sheet-report.ts';
+import { CONTACT_SHEET_REASONS } from './contact-sheet-report.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { encodePngPixels } from '../png-encode.ts';
 import { PNG } from '../png.ts';
@@ -125,7 +125,7 @@ function fitLayout(
     'COMMAND_FAILED',
     `Contact sheet would be ${smallest.width * smallest.height} pixels, above the configured maxImagePixels limit of ${input.maxPixels}`,
     {
-      reason: CONTACT_SHEET_PIXEL_BUDGET_REASON,
+      reason: CONTACT_SHEET_REASONS.pixelBudgetExceeded.reason,
       cellCount: input.cells.length,
       maxPixels: input.maxPixels,
       hint: 'Shorten the recording or raise the command policy maxImagePixels limit.',

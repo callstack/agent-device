@@ -3,9 +3,15 @@ import {
   providerRuntimeOwner,
   type RuntimeFacts,
   unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
-import { deviceShape, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  deviceShape,
+  isHandheldAppleSimulator,
+  isIosFamily,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -16,7 +22,7 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import type { LimrunPlatformRuntimeOwnerOptions } from './app-log-runtime.ts';
-import { isSupportedLimrunAppLogDevice } from './device.ts';
+import { isSupportedLimrunRuntimeDevice } from './runtime-device.ts';
 import {
   limrunAppDeploymentFacts,
   type LimrunAppDeploymentRuntimeOptions,
@@ -31,49 +37,49 @@ import {
 
 const available = Object.freeze({ available: true } as const);
 const customSnapshotUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Custom snapshot actions are available only for Limrun iOS simulator sessions.',
 );
 const viewportUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Limrun does not expose viewport resizing.',
 );
 const elementTextUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Read element text from the captured snapshot.',
 );
 const headlessUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Headless boot is unavailable for provider-owned devices.',
 );
 /** Also read outside this module's own facts assembly: the owner's `inspectFacts` reports this
  * for every operation when the request names a device with no matching live session at all. */
 export const liveSessionUnavailable = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'Limrun requires a matching live provider session for this device.',
 );
 const prepareUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Apple runner preparation is unavailable for Limrun-owned devices.',
 );
 const openTargetUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Limrun open requires a Limrun-owned iOS simulator or Android emulator.',
 );
 const closeTargetUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Limrun close requires a Limrun-owned iOS simulator or Android emulator.',
 );
 const runtimeHintsUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Runtime hints are not applied to provider-owned devices.',
 );
 const portReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Limrun port reverse requires an active Android Limrun session.',
 );
 const audioProbeUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Limrun does not expose the audio probe.',
 );
 
@@ -96,9 +102,13 @@ export function limrunLifecycleFacts(device: DeviceInfo, live: boolean) {
     prepareApplicationOpen: openTarget,
     openApplication: openTarget,
     applyRuntimeHints:
-      isIosFamily(device) && openTarget.available ? available : runtimeHintsUnavailable,
+      isHandheldAppleSimulator(device) && openTarget.available
+        ? available
+        : runtimeHintsUnavailable,
     clearRuntimeHints:
-      isIosFamily(device) && openTarget.available ? available : runtimeHintsUnavailable,
+      isHandheldAppleSimulator(device) && openTarget.available
+        ? available
+        : runtimeHintsUnavailable,
     closeApplication: closeTarget,
     finalizeApplicationClose: closeTarget,
     prepareAppleRunner:
@@ -108,7 +118,7 @@ export function limrunLifecycleFacts(device: DeviceInfo, live: boolean) {
 }
 
 function limrunOpenTargetFact(device: DeviceInfo, live: boolean) {
-  return isSupportedLimrunAppLogDevice(device)
+  return isSupportedLimrunRuntimeDevice(device)
     ? live
       ? available
       : liveSessionUnavailable
@@ -116,7 +126,7 @@ function limrunOpenTargetFact(device: DeviceInfo, live: boolean) {
 }
 
 function limrunCloseTargetFact(device: DeviceInfo, live: boolean) {
-  return isSupportedLimrunAppLogDevice(device)
+  return isSupportedLimrunRuntimeDevice(device)
     ? live
       ? available
       : liveSessionUnavailable
@@ -217,7 +227,7 @@ export function limrunReleaseFacts(
       resolveOpenTarget: available,
       closeApplication: available,
       finalizeApplicationClose: available,
-      clearRuntimeHints: isIosFamily(device) ? available : runtimeHintsUnavailable,
+      clearRuntimeHints: isHandheldAppleSimulator(device) ? available : runtimeHintsUnavailable,
       shutdownTarget: available,
     },
   };

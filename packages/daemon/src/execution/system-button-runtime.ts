@@ -2,6 +2,7 @@ import {
   actionButtonRuntimeUse,
   appSwitcherRuntimeUse,
   homeRuntimeUse,
+  lockScreenRuntimeUse,
   mediaFastForwardRuntimeUse,
   mediaNextRuntimeUse,
   mediaPlayPauseRuntimeUse,
@@ -11,6 +12,7 @@ import {
   powerRuntimeUse,
   shakeRuntimeUse,
   sleepRuntimeUse,
+  unlockScreenRuntimeUse,
   volumeDownRuntimeUse,
   volumeUpRuntimeUse,
   wakeRuntimeUse,
@@ -23,8 +25,12 @@ import type { BoundDeviceRuntime, RuntimeUse } from '@agent-device/contracts/pla
 import {
   HARDWARE_BUTTON_NAME_LABELS,
   parseHardwareButtonPositionals,
+  parseLockScreenPositionals,
   type HardwareButton,
+  type LockScreenAction,
+  type LockScreenState,
 } from '@agent-device/contracts/device';
+import type { LockScreenCommandResult } from '@agent-device/contracts/navigation';
 import type {
   SystemButton,
   SystemButtonInput,
@@ -70,18 +76,20 @@ export type SystemButtonCommand = keyof typeof SYSTEM_BUTTON_COMMANDS;
 
 /**
  * Every generic-route command the shared press route below serves: the argumentless rows above
- * plus the positional-selected `hardware-button`, whose first positional names the cell (#3848).
- * The dispatcher's one guard covers the whole family, so another row grows this module's
- * table only — never the dispatcher's switch.
+ * plus the positional-selected `hardware-button` and `lock-screen`, whose first positional names
+ * the cell (#3848). The dispatcher's one guard covers the whole family, so another row grows this
+ * module's table only — never the dispatcher's switch.
  */
-export type SystemButtonRouteCommand = SystemButtonCommand | 'hardware-button';
+export type SystemButtonRouteCommand = SystemButtonCommand | 'hardware-button' | 'lock-screen';
 
 export function isSystemButtonCommand(command: string): command is SystemButtonCommand {
   return Object.hasOwn(SYSTEM_BUTTON_COMMANDS, command);
 }
 
 export function isSystemButtonRouteCommand(command: string): command is SystemButtonRouteCommand {
-  return command === 'hardware-button' || isSystemButtonCommand(command);
+  return (
+    command === 'hardware-button' || command === 'lock-screen' || isSystemButtonCommand(command)
+  );
 }
 
 /**
@@ -116,6 +124,18 @@ const HARDWARE_BUTTON_COMMAND_ROWS = {
   },
 } as const satisfies Record<HardwareButton, Readonly<{ use: SystemButtonUse; label: string }>>;
 
+/**
+ * The `lock-screen` command's positional-selected rows. Each cell returns only once the owner read
+ * the requested lock state back, so `state` reports that reading rather than the dispatch.
+ */
+const LOCK_SCREEN_COMMAND_ROWS = {
+  lock: { use: lockScreenRuntimeUse, state: 'locked', message: 'Locked the screen' },
+  unlock: { use: unlockScreenRuntimeUse, state: 'unlocked', message: 'Unlocked the screen' },
+} as const satisfies Record<
+  LockScreenAction,
+  Readonly<{ use: SystemButtonUse; state: LockScreenState; message: string }>
+>;
+
 /** The neutral intent one press carries, projected from a resolved command context. */
 function systemButtonInput(context: DaemonCommandContext): SystemButtonInput {
   return {
@@ -134,35 +154,48 @@ export async function resolveBoundSystemButtonRuntime(
   command: SystemButtonRouteCommand,
   params: {
     device: DeviceInfo;
-    /** Only `hardware-button` reads positionals; the argumentless presses ignore them. */
+    /**
+     * Only `hardware-button` and `lock-screen` read positionals; the argumentless presses ignore
+     * them.
+     */
     positionals?: readonly string[];
   } & RuntimeAdmissionBindings,
 ): Promise<ResolvedGenericExecution> {
-  if (command === 'hardware-button') {
-    return await resolveBoundHardwareButtonRuntime({
-      device: params.device,
-      // The hardware resolver owns the positional default and the arity refusal; the delegate
-      // forwards the request's optional positionals untouched.
-      positionals: params.positionals,
-      inspectFacts: params.inspectFacts,
-      platformServices: params.platformServices,
-      bindDevice: params.bindDevice,
-    });
-  }
+  // The positional resolvers own the arity refusal, so the request's optional positionals are
+  // forwarded untouched.
+  if (command === 'hardware-button') return await resolveBoundHardwareButtonRuntime(params);
+  if (command === 'lock-screen') return await resolveBoundLockScreenRuntime(params);
   const row: SystemButtonCommandRow = SYSTEM_BUTTON_COMMANDS[command];
+  return await pressBoundSystemButton(command, row.use, params, () => ({
+    action: command,
+    ...successText(row.message),
+  }));
+}
+
+/**
+ * Admits and binds the one cell `use` names, then presses it and answers with `respond()`. The
+ * exact owner's fact is inspected before the dispatcher runs, so an owner without the control is
+ * refused rather than discovered mid-execution.
+ */
+async function pressBoundSystemButton(
+  command: SystemButtonRouteCommand,
+  use: SystemButtonUse,
+  params: { device: DeviceInfo } & RuntimeAdmissionBindings,
+  respond: () => Record<string, unknown>,
+): Promise<ResolvedGenericExecution> {
   return await resolveBoundGenericRuntime(
     {
       command,
       device: params.device,
-      use: row.use,
+      use,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     },
     async (runtime: BoundDeviceRuntime<SystemButtonUse>, context) => {
-      const [button] = row.use.required;
+      const [button] = use.required;
       await runtime.operations[button](systemButtonInput(context));
-      return { action: command, ...successText(row.message) };
+      return respond();
     },
   );
 }
@@ -184,26 +217,37 @@ export async function resolveBoundHardwareButtonRuntime(
   // refuses with INVALID_ARGS before any device dispatch.
   const button = parseHardwareButtonPositionals(params.positionals ?? []);
   const row = HARDWARE_BUTTON_COMMAND_ROWS[button];
-  // Widen to the family use so one call site serves every row.
-  const use: SystemButtonUse = row.use;
-  return await resolveBoundGenericRuntime(
-    {
-      command: 'hardware-button',
-      device: params.device,
-      use,
-      inspectFacts: params.inspectFacts,
-      platformServices: params.platformServices,
-      bindDevice: params.bindDevice,
-    },
-    async (runtime: BoundDeviceRuntime<SystemButtonUse>, context) => {
-      const [operation] = row.use.required;
-      await runtime.operations[operation](systemButtonInput(context));
-      const name = row.label;
-      return {
-        action: 'hardware-button',
-        button: name,
-        ...successText(`Pressed hardware button ${name}`),
-      };
-    },
+  return await pressBoundSystemButton('hardware-button', row.use, params, () => ({
+    action: 'hardware-button',
+    button: row.label,
+    ...successText(`Pressed hardware button ${row.label}`),
+  }));
+}
+
+/**
+ * The one place `lock-screen` reaches a device. The action picks the lockScreen or unlockScreen
+ * cell, and admission inspects the exact owner's fact for it before the dispatcher runs. The owner
+ * returns only once the device reports the requested lock state, and throws a typed reason
+ * otherwise, so the result names that state.
+ */
+export async function resolveBoundLockScreenRuntime(
+  params: {
+    device: DeviceInfo;
+    /** Absent means no positional; the arity refusal below is what answers for it. */
+    positionals?: readonly string[];
+  } & RuntimeAdmissionBindings,
+): Promise<ResolvedGenericExecution> {
+  // Shared with the CLI reader: an unknown or missing action refuses with INVALID_ARGS before
+  // any owner is inspected or bound.
+  const row = LOCK_SCREEN_COMMAND_ROWS[parseLockScreenPositionals(params.positionals ?? [])];
+  return await pressBoundSystemButton(
+    'lock-screen',
+    row.use,
+    params,
+    (): LockScreenCommandResult => ({
+      action: 'lock-screen',
+      state: row.state,
+      message: row.message,
+    }),
   );
 }

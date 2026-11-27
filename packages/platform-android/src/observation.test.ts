@@ -45,13 +45,23 @@ test('answers focus and blocking-dialog questions from one observation-bound dum
   expect(host.runAdb).toHaveBeenCalledTimes(1);
 });
 
+const ANR_WINDOW_DUMP = (processName: string) =>
+  `mCurrentFocus=Window{1 u0 Application Not Responding: ${processName}}`;
+
+/** The record shape of `dumpsys activity processes`, as an Android 17 (API 37) emulator prints it. */
+function processRecord(processName: string, packages: readonly string[]) {
+  return [
+    `  *APP* UID 10146 ProcessRecord{9b0c5a1 4563:${processName}/u0a146}`,
+    `    packageList={${packages.join(', ')}}`,
+    '     mCrashing=false null mNotResponding=true [com.android.server.am.AppNotRespondingDialog@ec3b7c1] bad=false',
+  ].join('\n');
+}
+
 test('classifies an app-owned ANR without exposing dump mechanics to the daemon', async () => {
   const host = hostFor(
     new Map([
-      [
-        'shell dumpsys window windows',
-        'mCurrentFocus=Window{1 u0 Application Not Responding: com.example.app}',
-      ],
+      ['shell dumpsys window windows', ANR_WINDOW_DUMP('com.example.app')],
+      ['shell dumpsys activity processes', processRecord('com.example.app', ['com.example.app'])],
     ]),
   );
 
@@ -59,9 +69,95 @@ test('classifies an app-owned ANR without exposing dump mechanics to the daemon'
     status: 'dialog',
     focus: {
       package: 'com.example.app',
+      process: 'com.example.app',
       focusedWindow: 'Application Not Responding: com.example.app',
-      raw: 'mCurrentFocus=Window{1 u0 Application Not Responding: com.example.app}',
+      raw: ANR_WINDOW_DUMP('com.example.app'),
     },
+  });
+});
+
+test('an ANR in a named app process is owned by the package that runs it', async () => {
+  // An application-level android:process puts the process name, not the package, in the title.
+  const host = hostFor(
+    new Map([
+      ['shell dumpsys window windows', ANR_WINDOW_DUMP('com.example.app.worker')],
+      [
+        'shell dumpsys activity processes',
+        processRecord('com.example.app.worker', ['com.example.app']),
+      ],
+    ]),
+  );
+
+  const observation = await createAndroidObservationAdapter(host).readBlockingDialog(device);
+
+  expect(observation).toMatchObject({
+    status: 'dialog',
+    focus: { package: 'com.example.app', process: 'com.example.app.worker' },
+  });
+});
+
+test('an ANR in a private app process keeps its suffix through the owner lookup', async () => {
+  const host = hostFor(
+    new Map([
+      ['shell dumpsys window windows', ANR_WINDOW_DUMP('com.example.app:worker')],
+      [
+        'shell dumpsys activity processes',
+        [
+          processRecord('com.example.app', ['com.example.other']),
+          processRecord('com.example.app:worker', ['com.example.app']),
+        ].join('\n'),
+      ],
+    ]),
+  );
+
+  const observation = await createAndroidObservationAdapter(host).readBlockingDialog(device);
+
+  expect(observation).toMatchObject({
+    status: 'dialog',
+    focus: { package: 'com.example.app', process: 'com.example.app:worker' },
+  });
+});
+
+test('an ANR process that runs more than one package, or no known package, has no owner', async () => {
+  const read = async (processes: string) =>
+    await createAndroidObservationAdapter(
+      hostFor(
+        new Map([
+          ['shell dumpsys window windows', ANR_WINDOW_DUMP('com.example.shared')],
+          ['shell dumpsys activity processes', processes],
+        ]),
+      ),
+    ).readBlockingDialog(device);
+
+  const shared = await read(
+    processRecord('com.example.shared', ['com.example.app', 'com.example.other']),
+  );
+  const missing = await read(processRecord('com.example.app', ['com.example.app']));
+
+  for (const observation of [shared, missing]) {
+    expect(observation).toMatchObject({
+      status: 'dialog',
+      focus: { process: 'com.example.shared' },
+    });
+    expect(
+      observation.status === 'dialog' ? observation.focus.package : 'no dialog',
+    ).toBeUndefined();
+  }
+});
+
+test('a clear blocking-dialog read names the package of the focused component only', async () => {
+  const read = async (focusLine: string) =>
+    await createAndroidObservationAdapter(
+      hostFor(new Map([['shell dumpsys window windows', focusLine]])),
+    ).readBlockingDialog(device);
+
+  await expect(
+    read(
+      'mCurrentFocus=Window{1 u0 com.google.android.apps.nexuslauncher/com.android.launcher3.uioverrides.QuickstepLauncher}',
+    ),
+  ).resolves.toEqual({ status: 'clear', focusedPackage: 'com.google.android.apps.nexuslauncher' });
+  await expect(read('mCurrentFocus=Window{3 u0 Splash Screen com.example.app}')).resolves.toEqual({
+    status: 'clear',
   });
 });
 

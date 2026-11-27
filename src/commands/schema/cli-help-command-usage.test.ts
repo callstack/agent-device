@@ -185,13 +185,14 @@ test('proxy command help describes tunnel usage', async () => {
   assert.doesNotMatch(help, /agent-device-proxy/);
 });
 
-test('takeover command help documents lease-bound foreground and host API flows', async () => {
+test('takeover command help documents lease-bound foreground and hold flows', async () => {
   const help = await usageForCommand('takeover');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Usage:\s+agent-device takeover/);
   assert.match(help, /foreground command pauses state-changing agent commands/);
   assert.match(help, /until Ctrl\+C/);
-  assert.match(help, /\/admin\/human-control\/holds/);
+  assert.match(help, /device identity only from the admitted lease/);
+  assert.match(help, /device mutations served by that lease refuse with DEVICE_IN_USE/);
   assert.match(help, /active remote lease device/);
   assert.match(help, /do not survive daemon restart/);
 });
@@ -439,8 +440,9 @@ test('settings usage documents canonical faceid states', async () => {
   assert.match(help, /match\|nonmatch\|enroll\|unenroll/);
   assert.match(
     help,
-    /camera\|microphone\|photos\|contacts\|contacts-limited\|notifications\|calendar\|location\|location-always\|media-library\|motion\|reminders\|siri/,
+    /camera\|microphone\|contacts\|contacts-limited\|notifications\|calendar\|location\|location-always\|media-library\|motion\|reminders\|siri>/,
   );
+  assert.match(help, /permission <grant\|deny\|reset> photos \[full\|limited\]/);
   assert.doesNotMatch(help, /validate\|unvalidate/);
 });
 

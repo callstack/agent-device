@@ -11,7 +11,10 @@ import type {
   PushNotificationInput,
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { ensureAndroidReady } from '../readiness/runtime.ts';
@@ -192,5 +195,8 @@ async function installAndroidApp(
 
 function androidDeployFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind === 'emulator' || device.kind === 'device') return available;
-  return Object.freeze({ available: false, reason: 'unsupported-device-kind' } as const);
+  return Object.freeze({
+    available: false,
+    reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+  } as const);
 }

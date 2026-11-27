@@ -691,7 +691,10 @@ test('a failed own transport probe retires and joins the private startup before 
         session: 'default',
         command: 'test',
         positionals: [],
-        flags: { daemonTransport: 'socket', daemonServerMode: 'http' },
+        // No `daemonServerMode`: a socket client asking for an http-only server mode is refused
+        // before any launch. The record this launch publishes names only an HTTP port, which is what
+        // makes the client's own socket probe fail and drives the join this test is about.
+        flags: { daemonTransport: 'socket' },
       }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);

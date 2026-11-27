@@ -1,0 +1,55 @@
+{
+  "success": false,
+  "error": {
+    "code": "REPLAY_DIVERGENCE",
+    "message": "Daemon request deadline exceeded",
+    "hint": "Check completed steps and the current device state before retrying the timed-out operation.",
+    "diagnosticId": "mwu60q2l-f83095c6",
+    "logPath": "<state-dir>/sessions/cwd_e93f14f237f7fd4f_harmonyos/requests/571738ebf4f3424a.ndjson",
+    "diagnosticsRecord": {
+      "session": "cwd:e93f14f237f7fd4f:harmonyos",
+      "requestId": "571738ebf4f3424a"
+    },
+    "details": {
+      "reason": "daemon_request_timeout",
+      "replayPath": "one-line.ad",
+      "step": 1,
+      "action": "open",
+      "positionals": ["<arg>"],
+      "artifactPaths": [],
+      "divergence": {
+        "version": 1,
+        "kind": "action-failure",
+        "step": {
+          "index": 1,
+          "source": {
+            "path": "one-line.ad",
+            "line": 1
+          }
+        },
+        "action": "open \"com.sankuai.dianping\"",
+        "cause": {
+          "code": "COMMAND_FAILED",
+          "message": "request canceled",
+          "hint": "The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended."
+        },
+        "screen": {
+          "state": "unavailable",
+          "reason": "request-canceled",
+          "hint": "Post-failure snapshot skipped after request cancellation; the original replay failure is unaffected."
+        },
+        "suggestions": [],
+        "suggestionCount": 0,
+        "resume": {
+          "allowed": true,
+          "from": 1,
+          "planDigest": "2777bba07a19f1bcec3952098a94d9748a792d6b4d6b986703a7295929933ccc",
+          "alternateFrom": 2
+        },
+        "repairHint": "manual"
+      },
+      "causeReason": "request_canceled",
+      "timeoutMs": 3000
+    }
+  }
+}

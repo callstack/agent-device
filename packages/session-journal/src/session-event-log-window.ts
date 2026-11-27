@@ -306,9 +306,7 @@ function readWindowSidecar(
     const { generations } = parsed;
     if (!Array.isArray(generations) || generations.length === 0) return 'unverifiable';
     const records = generations.map(readGeneration);
-    return records.every((record) => record !== undefined)
-      ? (records as EventLogGeneration[])
-      : 'unverifiable';
+    return records.every((record) => record !== undefined) ? records : 'unverifiable';
   } catch {
     return 'unverifiable';
   }

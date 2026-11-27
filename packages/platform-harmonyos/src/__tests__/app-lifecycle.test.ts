@@ -17,13 +17,17 @@ vi.mock('../snapshot.ts', async (importOriginal) => ({
 }));
 
 import {
+  HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
   closeHarmonyApp,
   listHarmonyApps,
   parseHarmonyIsSystemApp,
   openHarmonyApp,
   parseHarmonyBundleList,
   parseHarmonyLaunchTarget,
+  pollHarmonyOpenForeground,
+  verifyHarmonyOpenForeground,
 } from '../app-lifecycle.ts';
+import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { runCmd } from '@agent-device/host-kit/command';
 
 const mockRunCmd = vi.mocked(runCmd);
@@ -482,5 +486,422 @@ test('openHarmonyApp refuses the offending entry when valid and invalid launch a
       return true;
     },
   );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('openHarmonyApp classifies the locked-screen launch refusal as open-not-foreground', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: [
+      'error: failed to start ability.',
+      'Error Code:10106102  Error Message:The device screen is locked during the application launch, unlock screen failed.',
+    ].join('\n'),
+    stderr: '',
+  });
+
+  await assert.rejects(
+    () => openHarmonyApp(DEVICE, 'com.example.application', { activity: 'EntryAbility' }),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-not-foreground');
+      assert.match(error.details?.hint ?? '', /Unlock the device screen/);
+      return true;
+    },
+  );
+});
+
+function missionDump(packageName: string, state: string): string {
+  return [
+    'User ID #100',
+    'Mission ID #28',
+    `\tstate #${state}`,
+    `\tmission name #[#${packageName}:entry:EntryAbility]`,
+    '',
+  ].join('\n');
+}
+
+test('pollHarmonyOpenForeground confirms the launched bundle on the first foreground read', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application');
+
+  assert.equal(read, undefined);
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], ['-t', 'harmony-1', 'shell', 'aa', 'dump', '-l']);
+});
+
+test('pollHarmonyOpenForeground keeps polling until the launched bundle holds the foreground', async () => {
+  mockRunCmd
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+      stderr: '',
+    })
+    .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: missionDump('com.example.application', 'FOREGROUND'),
+      stderr: '',
+    });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollIntervalMs: 1,
+  });
+
+  assert.equal(read, undefined);
+  assert.equal(mockRunCmd.mock.calls.length, 3);
+});
+
+test('pollHarmonyOpenForeground names the app that kept the foreground when the launch never surfaces', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollBudgetMs: 60,
+    pollIntervalMs: 10,
+  });
+
+  assert.deepEqual(read, { state: 'other-foreground', foregroundPackage: 'com.ohos.launcher' });
+});
+
+test('pollHarmonyOpenForeground classifies a mission list with no foreground mission as no-foreground', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'BACKGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollBudgetMs: 40,
+    pollIntervalMs: 10,
+  });
+
+  // The read answered — a mission list with no FOREGROUND mission is the
+  // lock-screen shape, not a probe that failed to run.
+  assert.deepEqual(read, { state: 'no-foreground' });
+});
+
+test('a mission-less keyguard dump reads as no-foreground, not as a dead probe', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'User ID #100\n', stderr: '' });
+  const pending = pollHarmonyOpenForeground(DEVICE, 'com.example.application');
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+  assert.deepEqual(await pending, { state: 'no-foreground' });
+});
+
+test('pollHarmonyOpenForeground reports probe-failed when every read fails', async () => {
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollBudgetMs: 40,
+    pollIntervalMs: 10,
+  });
+
+  // A budget whose every read failed is a probe that never ran to an answer.
+  assert.deepEqual(read, { state: 'probe-failed' });
+});
+
+test('pollHarmonyOpenForeground treats a failed read as unconfirmed and keeps polling', async () => {
+  mockRunCmd.mockRejectedValueOnce(new Error('hdc died mid-read')).mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollIntervalMs: 1,
+  });
+
+  assert.equal(read, undefined);
+});
+
+test('pollHarmonyOpenForeground rejects when the request signal aborts mid-poll', async () => {
+  const controller = new AbortController();
+  const abortReason = new Error('request cancelled during the open foreground poll');
+  mockRunCmd.mockImplementation(async (_command, _args, options) => {
+    return await new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener('abort', () => reject(abortReason), { once: true });
+    });
+  });
+
+  const pending = pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    signal: controller.signal,
+  });
+  controller.abort(abortReason);
+
+  await assert.rejects(pending, (error: unknown) => error === abortReason);
+});
+
+function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicationInput {
+  return {
+    positionals: ['com.example.application'],
+    appBundleId: 'com.example.application',
+    surface: 'app',
+    hasExistingSession: false,
+    relaunch: false,
+    prewarmRunnerBeforeOpen: false,
+    enableTestIme: false,
+    stateDir: '/tmp/agent-device-open-foreground',
+    runtimeHints: { values: {}, apply: async () => {} },
+    execution: {},
+    ...overrides,
+  };
+}
+
+test('verifyHarmonyOpenForeground passes a confirmed foreground outcome through unchanged', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+  const outcome = { timing: {} };
+
+  const verified = await verifyHarmonyOpenForeground(
+    openInput(),
+    outcome,
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  assert.equal(verified, outcome);
+});
+
+test('verifyHarmonyOpenForeground attaches the foreground read when the launch never surfaces', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput(),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  const verified = await pending;
+  assert.deepEqual(verified.timing.foregroundVerification, {
+    state: 'other-foreground',
+    foregroundPackage: 'com.ohos.launcher',
+  });
+});
+
+test('verifyHarmonyOpenForeground attaches no-foreground when a read answered with no foreground mission', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'BACKGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput(),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  const verified = await pending;
+  assert.deepEqual(verified.timing.foregroundVerification, { state: 'no-foreground' });
+});
+
+test('verifyHarmonyOpenForeground fails --foreground with the unreadable reason when every read fails', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(error.details?.hint ?? '', /check the device connection/i);
+      return true;
+    },
+  );
+});
+
+test('verifyHarmonyOpenForeground reports probe-failed without reading when the request deadline has no room left', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  // A deadline already in the past leaves the budget no room for one read:
+  // the poll answers probe-failed at once instead of outliving the request.
+  const verification = await verifyHarmonyOpenForeground(
+    openInput({ execution: { requestDeadlineAtMs: Date.now() - 1_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  assert.deepEqual(verification.timing.foregroundVerification, { state: 'probe-failed' });
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('a far deadline keeps the 5s window and the connection hint when every read fails', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 60_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  // A deadline with 60s left never bounds the 5s poll: the failure names the
+  // real window and sends the agent to the device, not to a bigger timeout.
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(String(error.message), /within 5s/);
+      assert.doesNotMatch(error.details?.hint ?? '', /deadline/i);
+      return true;
+    },
+  );
+});
+
+test('a partly clamped deadline keeps the computed window when every read fails', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 2_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  // A deadline with 2s left bounds the poll below the 5s default: the probe
+  // failure names the 2s the poll actually had, so a literal "5s" revert
+  // fails here. The clamp is not a squeeze to zero, so the hint stays the
+  // connection one.
+  await vi.advanceTimersByTimeAsync(3_000);
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(String(error.message), /within 2s/);
+      assert.doesNotMatch(String(error.message), /within 5s/);
+      assert.match(error.details?.hint ?? '', /check the device connection/i);
+      assert.doesNotMatch(error.details?.hint ?? '', /deadline/i);
+      return true;
+    },
+  );
+});
+
+test('a partly clamped deadline names the deadline window on open-not-foreground', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'BACKGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 2_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(3_000);
+
+  // The deadline cut the budget below 5s and reads answered with no
+  // foreground: the failure names the deadline that bounded the poll.
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.details?.reason, 'open-not-foreground');
+      assert.match(String(error.message), /before the request deadline/);
+      assert.match(error.details?.hint ?? '', /unlock the device screen/i);
+      return true;
+    },
+  );
+});
+
+test('verifyHarmonyOpenForeground names the deadline, not the connection, when the clamp spent the budget', async () => {
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() - 1_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(error.details?.hint ?? '', /deadline is too tight/i);
+      return true;
+    },
+  );
+});
+
+test('verifyHarmonyOpenForeground fails the open when --foreground demands the foreground and the launch never surfaces', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-not-foreground');
+      assert.equal(error.details?.foregroundPackage, 'com.ohos.launcher');
+      assert.match(error.details?.hint ?? '', /unlock the device screen/i);
+      return true;
+    },
+  );
+});
+
+test('verifyHarmonyOpenForeground skips verification without a bundle identity to verify', async () => {
+  await verifyHarmonyOpenForeground(
+    openInput({ appBundleId: undefined }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await verifyHarmonyOpenForeground(
+    openInput({ appBundleId: 'https://example.com' }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });

@@ -2,10 +2,7 @@ import { test, expect, vi } from 'vitest';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
-import {
-  ensureAndroidBlockingSystemDialogReady,
-  recoverAndroidBlockingSystemDialog,
-} from '../android-system-dialog.ts';
+import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
 import { detectAndroidEscapeSurface } from '../android-foreground-surface.ts';
 import { resolveDirectTouchReferenceFrameSafely } from '../interaction/internal/interaction-touch-reference-frame.ts';
 import { SessionStore } from '../../core/session-store.ts';
@@ -48,9 +45,6 @@ test('provider-owned Android sessions bypass local observation and recovery', as
       observation,
     }),
   ).resolves.toEqual({ status: 'clear' });
-  await expect(recoverAndroidBlockingSystemDialog({ session, observation })).resolves.toEqual({
-    status: 'absent',
-  });
   await expect(detectAndroidEscapeSurface(session, observation)).resolves.toBeNull();
   session.snapshot = {
     createdAt: 0,

@@ -177,7 +177,7 @@ function formatStructuredSnapshotLines(nodes: SnapshotNode[], pin?: number): str
 
 /**
  * ADR 0014: a scoped snapshot's reusable refs render in the ready-to-copy
- * `@eN~s<refsGeneration>` form. The line's own ref is its first `@` occurrence,
+ * `@eN-s<refsGeneration>` form. The line's own ref is its first `@` occurrence,
  * so a label that mentions another ref cannot displace it. `pin` undefined
  * leaves the line untouched.
  */

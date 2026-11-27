@@ -141,12 +141,12 @@ async function invokeResolvedReplayAction(params: {
   // again once it is resolved. Parent flags may carry project defaults, so they are not checked.
   const gestureFlagError = describeReplayGestureFlagError(
     resolved.command,
-    resolved.positionals ?? [],
-    resolved.flags ?? {},
+    resolved.positionals,
+    resolved.flags,
     'after variable substitution',
   );
   if (gestureFlagError) throw new AppError('INVALID_ARGS', gestureFlagError);
-  const flags = mergeParentFlags(req.flags, { ...(resolved.flags ?? {}) });
+  const flags = mergeParentFlags(req.flags, { ...resolved.flags });
   const recordedInputVariable =
     sourceAction.command === 'fill'
       ? readRecordedInputVariableName(inferFillText(sourceAction))
@@ -180,7 +180,7 @@ function buildReplayInteractionRequest(
   baseReq: ReplayBaseRequest,
   action: SessionAction,
 ): ReplayDispatchRequest {
-  const positionals = action.positionals ?? [];
+  const positionals = action.positionals;
   if (action.command === 'gesture') {
     return {
       ...baseReq,

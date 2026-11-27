@@ -6,7 +6,12 @@ import {
   type ExecDetachedChannel,
   type ExecDetachedExit,
 } from '@agent-device/host-kit/command';
-import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  type NormalizedError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   stopDaemonProcess,
@@ -55,7 +60,29 @@ import {
 } from './daemon-shutdown-report.ts';
 import { DAEMON_PROGRESS_CHANNEL_ENV } from './daemon-startup-phases.ts';
 
-export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
+/**
+ * Why the daemon's owner refuses to start or observe a process it cannot prove it owns. Every row
+ * is a fail-closed answer: the state dir, the startup, or the admission gate does not resolve to a
+ * lifetime this host started.
+ */
+const DAEMON_OWNERSHIP_REFUSAL_REASONS = {
+  // Replay's admission gate is closed, so no new daemon startup is allowed.
+  startupAdmissionClosed: { reason: 'daemon_startup_admission_closed' },
+  // The private replay state dir does not resolve to the one this host sealed for that capability.
+  privateStateUnowned: { reason: 'daemon_private_state_unowned' },
+  // The observed process is not one of the startups this host launched and tracks.
+  privateStartupUnowned: { reason: 'daemon_private_startup_unowned' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
+
+/**
+ * The exit codes of a daemon startup that must not run. `listenDenied`: the host refused the
+ * loopback listen (EPERM or EACCES), as a sandbox around the launching command does.
+ */
+export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({
+  busy: 75,
+  listenDenied: 77,
+  unproven: 78,
+});
 export type DaemonRegistrationFields = Readonly<{
   socketPort?: number;
   httpPort?: number;
@@ -275,7 +302,7 @@ export function launchDaemonProcess(
   const owned = input.ownedStateDir && requirePrivateReplayState(input.ownedStateDir, input.paths);
   if (owned?.sealed)
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
-      reason: 'daemon_startup_admission_closed',
+      reason: DAEMON_OWNERSHIP_REFUSAL_REASONS.startupAdmissionClosed.reason,
     });
   admitDaemonStateRoot({ paths: input.paths, mode: 'establish' });
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
@@ -337,7 +364,7 @@ function requirePrivateReplayState(
     throw new AppError(
       'COMMAND_FAILED',
       'Private replay directory ownership could not be verified.',
-      { reason: 'daemon_private_state_unowned' },
+      { reason: DAEMON_OWNERSHIP_REFUSAL_REASONS.privateStateUnowned.reason },
     );
   }
   return owned;
@@ -466,7 +493,7 @@ function confirmOwnedStartupIdentity(
 
 function unownedStartupError(): AppError {
   return new AppError('COMMAND_FAILED', 'The observed daemon is not an owned startup lifetime.', {
-    reason: 'daemon_private_startup_unowned',
+    reason: DAEMON_OWNERSHIP_REFUSAL_REASONS.privateStartupUnowned.reason,
   });
 }
 

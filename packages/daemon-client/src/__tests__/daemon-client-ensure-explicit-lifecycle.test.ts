@@ -564,6 +564,41 @@ test('ensureDaemon retires a daemon that timed out on quiesce and answers no liv
   }
 });
 
+// The route that force-retires a daemon which timed out on quiesce and answered no probe. A connect
+// the HOST refused is not a missed probe, so this daemon is neither retired nor spawned over.
+test('ensureDaemon reports a host denial instead of retiring a daemon whose quiesce timed out', async (t) => {
+  if (!(await withLoopback(t))) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  const stale = await startScriptedDaemon(okResult({}));
+  const { child } = await registerDaemon(paths, {
+    httpPort: stale.port,
+    version: '0.0.0-stale',
+    capabilities: ['quiesce'],
+  });
+  vi.spyOn(transport, 'sendRequest').mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'Daemon request timed out', {
+      reason: 'daemon_transport_timeout',
+    }),
+  );
+  const liveness = await import('../daemon-client-liveness-probe.ts');
+  vi.spyOn(liveness, 'answersLivenessProbe').mockResolvedValue({
+    reachable: false,
+    denial: { errno: 'EPERM', transport: 'socket', port: stale.port },
+  });
+
+  try {
+    const error = await failureOf(ensureDaemon({ stateDir, daemonTransport: 'http' }));
+
+    assert.equal(error.details?.reason, 'daemon-connect-denied');
+    assert.equal(error.details?.errno, 'EPERM');
+    assert.match(String(error.details?.hint), /A sandbox around this command/);
+    assert.equal(isProcessAlive(child.pid), true, 'a refused probe authorizes no signal');
+    assert.equal(spawn.mock.calls.length, 0, 'a daemon this client cannot see is not replaced');
+  } finally {
+    await closeLoopbackServer(stale.server);
+  }
+});
+
 test('ensureDaemon keeps a daemon that timed out on quiesce but still answers a probe', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();

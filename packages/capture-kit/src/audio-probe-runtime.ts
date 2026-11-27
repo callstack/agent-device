@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import {
   AUDIO_PROBE_RESOURCE_KIND,
   type AudioProbeCompletion,
@@ -184,7 +184,7 @@ async function terminateForCleanup(process: HostAudioCaptureProcess): Promise<Cl
   } catch (error) {
     return {
       status: 'cleanup-pending',
-      reason: 'cleanup-unconfirmed',
+      reason: DURABLE_RESOURCE_REASONS.cleanupUnconfirmed.reason,
       message: error instanceof Error ? error.message : 'Audio probe termination failed',
     };
   }
@@ -197,7 +197,7 @@ function assertConfirmedAudioProbeCleanup(outcome: CleanupOutcome, cause?: unkno
     outcome.message ?? 'Audio probe cleanup could not be confirmed',
     {
       reason: outcome.reason,
-      retriable: outcome.reason !== 'ownership-fence-lost',
+      retriable: outcome.reason !== DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
       hint: 'Keep audio-probe.resource.json and retry stop through its exact runtime owner.',
     },
     cause,

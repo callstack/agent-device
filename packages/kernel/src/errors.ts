@@ -206,7 +206,7 @@ export function readElementMatchCandidateRefs(
   details: Record<string, unknown> | undefined,
 ): string[] {
   return readStringArray(details?.candidates).flatMap((candidate) => {
-    const match = /^@(e\d+)(?:~s\d+)?(?:\s|$)/.exec(candidate);
+    const match = /^@(e\d+)(?:-s\d+)?(?:\s|$)/.exec(candidate);
     return match?.[1] ? [match[1]] : [];
   });
 }
@@ -324,9 +324,17 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
   malformedRequest: { reason: 'malformed_request' },
 } as const satisfies ReasonTable<'request admission'>;
 
-/** The refused composite step did not dispatch; earlier steps may already have dispatched. */
-export const BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON =
-  'bounded_composite_resource_unsupported' as const;
+/** Why a bounded composite (`batch`, a replay, or a `test` script) refuses one of its steps. */
+export const BOUNDED_COMPOSITE_REASONS = {
+  // The composite refused this step before dispatch because it must run as its own command, such as
+  // a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or
+  // option, and `details.standaloneCommandName` the public command to run instead. Earlier steps
+  // may have run.
+  resourceUnsupported: {
+    reason: 'bounded_composite_resource_unsupported',
+    commands: ['replay', 'test'],
+  },
+} as const satisfies ReasonTable<'batch'>;
 
 export type PreDispatchRefusalReason =
   (typeof PRE_DISPATCH_REFUSAL_REASONS)[keyof typeof PRE_DISPATCH_REFUSAL_REASONS]['reason'];
@@ -394,25 +402,99 @@ export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
 }
 
 /**
- * `details.reason` of a request its requester abandoned — an explicit cancel or
- * a client disconnect. One definition, so every layer that must let a
- * cancellation through untouched (retry loops, provider adapters, runner
- * transports) dispatches on the same typed reason.
+ * `details.reason` of a request its requester abandoned. One row, so every layer that must let a
+ * cancellation through untouched (retry loops, provider adapters, runner transports) dispatches on
+ * the same typed reason through {@link isRequestCanceledDetails}.
  */
-const REQUEST_CANCELED_REASON = 'request_canceled';
+export const REQUEST_CANCELED_REASONS = {
+  // The caller canceled the request or disconnected before the work finished, so the command
+  // stopped waiting, including on a snapshot, native build, provider request, device start or
+  // install. A provider device start already submitted may keep running. No retry is needed unless
+  // the cancellation was unintended.
+  canceled: { reason: 'request_canceled' },
+} as const satisfies ReasonTable<'request cancellation'>;
 const REQUEST_CANCELED_MESSAGE = 'request canceled';
 /**
- * A runtime owner whose facts advertised an operation it cannot actually perform: a contract bug,
- * never a legitimate refusal. Built here, beside the other typed error factories, so every binder
- * that reaches it already has it in its closure; `contracts/runtime-contract-error` is its public
- * subpath for platform packages.
+ * A platform runtime that broke its own contract: a contract bug, never a legitimate refusal.
+ * Declared here, beside the typed error factories, so the gateway, the binders and the durable
+ * capture readers that raise it already have it in their closure.
+ */
+export const RUNTIME_CONTRACT_REASONS = {
+  // A platform runtime broke its own contract: an owner advertised an operation it cannot perform,
+  // runtime registrations conflict, are missing or do not match the selected device, or a capture
+  // runtime returned a durable record for another session or device. Report the device and command.
+  invalid: { reason: 'runtime-contract-invalid' },
+} as const satisfies ReasonTable<'platform runtime'>;
+
+/**
+ * A runtime owner whose facts advertised an operation it cannot actually perform. Built here so
+ * every binder that reaches it already has it in its closure; `contracts/runtime-contract-error` is
+ * its public subpath for platform packages.
  */
 export function createRuntimeContractInvalidError(message: string): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: 'runtime-contract-invalid',
+    reason: RUNTIME_CONTRACT_REASONS.invalid.reason,
     hint: 'This is an agent-device runtime contract bug; report the selected device and command.',
   });
 }
+
+/**
+ * The provider fail-closed refusal every interactor binder answers with when the selected provider
+ * no longer exposes its interactor. Facts advertised the operation, so this names an ownership
+ * bug, and each binder pairs it with its own message. Declared beside the error factories because
+ * the binders in contracts raise it from modules that must not grow their eager closure.
+ */
+export const INTERACTOR_BINDING_REFUSAL_REASONS = {
+  // The selected provider owns this operation but exposes no bound interactor for it.
+  providerInteractorMissing: { reason: 'provider-runtime-interactor-missing' },
+} as const satisfies ReasonTable<'interactor binding'>;
+
+/**
+ * Why `keyboard dismiss` leaves a visible keyboard up. The Apple runner's `RUNNER_ERROR_CODES` row
+ * writes the same spelling as a literal, which the runner refusal docs guard reads. Declared here
+ * because `contracts/keyboard` would grow the Android input-state reader's eager closure.
+ */
+export const KEYBOARD_DISMISS_REASONS = {
+  // The keyboard stayed up: the Apple runner leaves a visible keyboard alone and presses nothing, or
+  // the Android IME stayed visible after Escape key events, which may have reached the app.
+  // `details.dispatched` says which.
+  unavailable: { reason: 'keyboard_dismiss_unavailable' },
+} as const satisfies ReasonTable<'keyboard'>;
+
+/**
+ * Why a durable capture (a screen recording, app log, audio probe or perf capture) could not be
+ * cleaned up or reattached. Runtimes return these as the `reason` of a `cleanup-pending` or
+ * `unreattachable` outcome (`contracts/durable-resource`), and the capture mechanics publish that
+ * outcome's reason unchanged. Declared here because the runtime gateway and the capture admission
+ * ledgers also raise them, and kernel errors is the one module all of them already load.
+ */
+export const DURABLE_RESOURCE_REASONS = {
+  // The capture's durable record now belongs to another owner, or its descriptor or evidence no
+  // longer matches the owning session or device, so nothing was signaled or removed. It is not
+  // retried.
+  ownershipFenceLost: { reason: 'ownership-fence-lost' },
+  // The runtime owner the request needs is not available: the platform runtime gateway has no
+  // runtime for the selected owner, or the transport that owns a capture could not be reached to
+  // clean it up.
+  ownerUnavailable: { reason: 'owner-unavailable' },
+  // The device transport failed while a capture was being stopped, collected or cleaned up.
+  transportFailed: { reason: 'transport-failed' },
+  // A capture's cleanup failed or could not be confirmed, so its record is kept for a later retry,
+  // and a new capture on that device is refused until the earlier one is confirmed gone.
+  cleanupUnconfirmed: { reason: 'cleanup-unconfirmed' },
+  // The capture's descriptor or recorded state cannot be read well enough to clean it up
+  // automatically; its record is kept for manual recovery.
+  manualRecoveryRequired: { reason: 'manual-recovery-required' },
+  // The capture's stored descriptor is malformed, or names a device, backend or session paths
+  // other than its owner's, so the capture cannot be reattached.
+  descriptorInvalid: { reason: 'descriptor-invalid' },
+  // The capture's stored descriptor was written in a different descriptor version than this build
+  // reads, so it cannot be reattached; its record is kept.
+  descriptorVersionUnsupported: { reason: 'descriptor-version-unsupported' },
+  // The capture's process or transport cannot be reattached after the daemon restarted, so only
+  // its cleanup can run.
+  transportNotReattachable: { reason: 'transport-not-reattachable' },
+} as const satisfies ReasonTable<'durable captures'>;
 
 const REQUEST_CANCELED_HINT =
   'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
@@ -426,7 +508,7 @@ export function createRequestCanceledError(details?: AppErrorDetails, cause?: un
   return new AppError(
     'COMMAND_FAILED',
     REQUEST_CANCELED_MESSAGE,
-    { hint: REQUEST_CANCELED_HINT, ...details, reason: REQUEST_CANCELED_REASON },
+    { hint: REQUEST_CANCELED_HINT, ...details, reason: REQUEST_CANCELED_REASONS.canceled.reason },
     cause,
   );
 }
@@ -467,7 +549,7 @@ export function createRequestDeadlineError(details?: AppErrorDetails, cause?: un
  * must not restate the literal.
  */
 export function isRequestCanceledDetails(details: AppErrorDetails | undefined): boolean {
-  return details?.reason === REQUEST_CANCELED_REASON;
+  return details?.reason === REQUEST_CANCELED_REASONS.canceled.reason;
 }
 
 export function isRequestCanceledError(error: unknown): boolean {

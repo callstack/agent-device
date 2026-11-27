@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isCompletedDurableCaptureError } from '@agent-device/capture-kit/durable-capture';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
@@ -14,6 +14,12 @@ import { finishLivePerfCapture } from '@agent-device/capture-kit/perf-capture-se
 import { finishLiveScreenRecording } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { openWebSessionNames } from './web-session-names.ts';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
+
+const SESSION_TEARDOWN_REASONS = {
+  // Session cleanup was incomplete; `details.failedSteps` lists the steps that failed, and the hint
+  // says whether the session was kept (retry `close`) or retired, and what to do next.
+  cleanupIncomplete: { reason: 'session_cleanup_incomplete' },
+} as const satisfies ReasonTable<'sessions'>;
 
 export async function stopSessionAppLog(params: {
   ref: SessionRef;
@@ -103,7 +109,7 @@ export function reportSessionCleanupFailures(params: {
     'COMMAND_FAILED',
     `Session cleanup left ${params.failures.length} resource(s) unreleased: ${stepMessages.join('; ')}`,
     {
-      reason: 'session_cleanup_incomplete',
+      reason: SESSION_TEARDOWN_REASONS.cleanupIncomplete.reason,
       session: params.sessionName,
       failedSteps,
       hint:

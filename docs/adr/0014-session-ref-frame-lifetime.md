@@ -53,7 +53,7 @@ The ref-frame vocabulary is promoted into `CONTEXT.md`.
 Snapshot refs such as `@e12` are positional names inside one accessibility-tree namespace.
 They are cheap and effective within that namespace.
 But they do not identify an element across navigation, layout changes, or another capture whose positional order is different.
-A generation pin such as `@e12~s42` identifies the namespace that issued the ref.
+A generation pin such as `@e12-s42` identifies the namespace that issued the ref.
 The pin does not make the element stable.
 
 The current session model mixes two different concepts in `session.snapshot`:
@@ -95,7 +95,7 @@ A session owns at most one **ref frame**.
 The frame is the authorization namespace for mutation refs.
 It contains:
 
-- A seeded, monotonic **ref-frame epoch**. The existing `refsGeneration` field exposes the epoch. The existing `~s<n>` input suffix accepts it.
+- A seeded, monotonic **ref-frame epoch**. The existing `refsGeneration` field exposes the epoch. The existing `-s<n>` input suffix accepts it.
 - The immutable source tree that is necessary to resolve and guard the refs that the frame issued.
 - A state of `active` or `expired`.
 - An issuance scope of `all` or a bounded set of issued ref bodies.
@@ -116,7 +116,17 @@ Neither transition deep-copies the tree.
 
 The existing `snapshotGeneration` implementation evolves behind one ref-frame module.
 The `snapshotRefsStale` marker that it originally paired with is now removed.
-For wire compatibility, the public name `refsGeneration` and the `@e12~s42` grammar remain unchanged.
+For wire compatibility, the public name `refsGeneration` and the pinned-ref grammar remain one ref body plus one generation suffix.
+
+#### 2026-11-25 amendment: the pin separator is `-s`
+
+A printed pin is text an agent pastes into a shell command.
+Command allow-rule matchers parse that line before they apply an allow rule, and they reject an unquoted word containing `~`, because zsh or bash could expand it.
+The retired `~s` separator therefore pushed every pasted pinned ref into a sandboxed run that cannot reach the daemon or the device.
+The separator is now `-s`, so `@e12-s42` is a plain literal word for bash, zsh, and those matchers, and it needs no quoting.
+`packages/kernel/src/snapshot.ts` owns the form: `formatPinnedRef` writes it and the split readers read it.
+The retired spelling stays accepted as input only where saved replay scripts and recorded refs are read.
+Older clients that emit or type `~s<generation>` are no longer accepted on live command input.
 
 ### Frame transitions
 
@@ -158,7 +168,7 @@ These outputs are partial external publications:
 - Snapshot diffs.
 - Digests that omit the namespace.
 - `find`.
-- `audit` finding refs.
+- `audit` finding and screen-reader order refs.
 - Settled diffs/tails.
 - Replay divergence screens.
 
@@ -230,6 +240,18 @@ hint: Capture a fresh interactive snapshot or use a stable selector.
 
 The daemon cannot truthfully report `mintedGeneration` for a plain ref.
 When the actual failure is lifetime expiration, error messages must not claim that a found ref was missing or lacked bounds.
+
+#### 2026-11-24 amendment: a settled-diff frame names itself in the plain-ref refusal
+
+Issue #4571 measured the plain-ref refusal as the most common agent-blocking error after `--settle`: a bare ref from the earlier full snapshot is refused, the refusal offers nothing, and the agent pays a full `snapshot -i`.
+The frame now records which publication minted it: a bounded `origin` (`complete`, `settle-diff`, or `partial`) set at issuance through the same factories.
+The settle issuance path passes `settle-diff`; every other partial publication keeps `partial`.
+Origin is diagnostic only: it changes no admission decision and no ref lifetime — whether refs a diff left unchanged stay valid remains an open contract question for maintainers.
+
+When a settled diff replaced the frame and the refused plain ref is not one of its issued refs, the refusal names the settled diff as the replacement and carries `details.replacedBy: "settle-diff"` plus `details.replacementRefs`, each issued ref pinned to the frame epoch in the ready-to-copy `@eN-s<epoch>` form.
+The hint offers the same refs and keeps the fresh-snapshot escape.
+When the diff issued no refs, the refusal still names the diff and keeps the recapture guidance.
+The exact-emitted-ref suggestion (`details.suggestedRef`) keeps precedence when the refused body is itself in scope.
 
 ### Expiration occurs at the side-effect seam
 
@@ -425,7 +447,7 @@ This remains an explicit non-goal.
 
 The response-level `refsGeneration` field remains the token-economical authority.
 Snapshot nodes never gain per-node generation bytes.
-Every reusable ref in a partial CLI text result must render in the ready-to-copy `@eN~s<refsGeneration>` form.
+Every reusable ref in a partial CLI text result must render in the ready-to-copy `@eN-s<refsGeneration>` form.
 JSON and Node.js responses retain plain ref bodies plus one response-level generation.
 Before a mutation, callers must pair them.
 MCP may render a plain ref, because it stores and forwards the pin internally.
@@ -455,8 +477,10 @@ The daemon never captures automatically for the sole purpose of a ref renewal.
 
 Older clients remain wire-parse-compatible:
 
-- Command grammar, `refsGeneration`, and `~s<n>` remain unchanged.
+- The shape of a pinned ref (one ref body plus one generation suffix) and `refsGeneration` remain unchanged, so an older client still parses every response.
 - Structured error details are additive.
+
+The pin's separator is not wire-compatible in behavior: the 2026-11-25 amendment retired `~s` for `-s`, so an older client that types or pastes `~s<generation>` is refused on live command input and must resend with `-s`.
 
 Thus, ADR 0006 requires no protocol bump.
 But older clients are not fully compatible in behavior:

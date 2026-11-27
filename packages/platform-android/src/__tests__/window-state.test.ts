@@ -32,8 +32,8 @@ const dumpsysWindowWindows = ['shell', 'dumpsys', 'window', 'windows'].join(' ')
 const dumpsysWindow = ['shell', 'dumpsys', 'window'].join(' ');
 const dumpsysActivityActivities = ['shell', 'dumpsys', 'activity', 'activities'].join(' ');
 
-function dialogPackage(observation: AndroidBlockingDialogObservation): string | undefined {
-  return observation.status === 'dialog' ? observation.focus.package : undefined;
+function dialogProcess(observation: AndroidBlockingDialogObservation): string | undefined {
+  return observation.status === 'dialog' ? observation.focus.process : undefined;
 }
 
 beforeEach(() => {
@@ -68,7 +68,7 @@ test('a dump that names only the focused app token does not answer the blocking-
     }),
   );
 
-  assert.equal(dialogPackage(observation), 'com.agentdevice.tester');
+  assert.equal(dialogProcess(observation), 'com.agentdevice.tester');
   assert.deepEqual(
     calls.map((args) => args.join(' ')),
     [dumpsysWindowWindows, dumpsysWindow],
@@ -100,7 +100,7 @@ test('the second dumpsys variant still runs when the first dump shows no focused
     }),
   );
 
-  assert.equal(dialogPackage(observation), 'com.agentdevice.tester');
+  assert.equal(dialogProcess(observation), 'com.agentdevice.tester');
   assert.deepEqual(
     calls.map((args) => args.join(' ')),
     [dumpsysWindowWindows, dumpsysWindow],
@@ -258,7 +258,7 @@ test('a demoted variant is still asked when nothing ahead of it answers', async 
     },
   );
 
-  assert.equal(dialogPackage(observation), 'com.agentdevice.tester');
+  assert.equal(dialogProcess(observation), 'com.agentdevice.tester');
   assert.deepEqual(
     calls.map((args) => args.join(' ')),
     [dumpsysWindowWindows, dumpsysWindow, dumpsysWindow, dumpsysWindowWindows],

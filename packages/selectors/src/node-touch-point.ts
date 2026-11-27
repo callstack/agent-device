@@ -188,7 +188,7 @@ export function resolveNodeTouchPoint(
       'COMMAND_FAILED',
       `${failure.blockedTargetLabel} has no parent-owned touch point outside its interactive descendants`,
       {
-        reason: 'covered_by_interactive_descendants',
+        reason: INTERACTION_ERROR_REASONS.coveredByInteractiveDescendants.reason,
         ...failure.blockedTargetDetails,
         competitorRefs: resolution.competitorRefs.slice(0, 5).map((ref) => `@${ref}`),
         competitorCount: resolution.competitorCount,

@@ -48,6 +48,16 @@ test('stages a token-authenticated runner once and presents forwarded XCTest sna
   ).rejects.toThrow();
 });
 
+test('launches a Watch session with the watchOS runner and XCTest frameworks', async () => {
+  const f = await fixture({ appleOs: 'watchos' });
+  await f.runner.createInteractor().snapshot({ appBundleId: 'com.apple.NanoSettings' });
+  expect(f.testingEnvironment).toEqual({
+    DYLD_FRAMEWORK_PATH: '__PLATFORMS__/WatchSimulator.platform/Developer/Library/Frameworks',
+    DYLD_LIBRARY_PATH: '__PLATFORMS__/WatchSimulator.platform/Developer/usr/lib',
+  });
+  expect(f.requests.filter((url) => url.endsWith('/xctest/run'))).toHaveLength(1);
+});
+
 test('reports an occupied XCTest slot instead of falling back to AX', async () => {
   const f = await fixture({ launchStatus: 409 });
   await expect(

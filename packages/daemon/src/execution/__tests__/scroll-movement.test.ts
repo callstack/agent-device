@@ -697,6 +697,37 @@ test('a gesture nobody has read yet may still be moving the stored tree', () => 
   assert.equal(plan.reason, 'prior-gesture-unsettled');
 });
 
+// The read a scroll takes is the default tree, which `surfacePairDrift` never compares with a tree of
+// another presentation, so a stored tree of one is known unusable before any capture is spent.
+test.each([
+  ['interactive-only', { snapshotInteractiveOnly: true }],
+  ['scoped', { snapshotScope: 'lab-list' }],
+  ['depth-limited', { snapshotDepth: 3 }],
+] as const)(
+  'a stored tree read as %s is refused as a baseline without spending a capture',
+  (_case, flags) => {
+    const plan = planScrollMovement({
+      device: IOS_SIMULATOR,
+      flags: undefined,
+      session: makeSession('movement-plan-presentation', { snapshot: state(screen(0), flags) }),
+    });
+    assertPlanKind(plan, 'unobservable');
+
+    assert.equal(plan.reason, 'baseline-presentation-drift');
+  },
+);
+
+test('a stored tree the session no longer stands behind names that first, whatever its presentation', () => {
+  const session = makeSession('movement-plan-stale-interactive', {
+    snapshot: state(screen(0), { snapshotInteractiveOnly: true }),
+  });
+  expireRefFrame(session);
+  const plan = planScrollMovement({ device: IOS_SIMULATOR, flags: undefined, session });
+  assertPlanKind(plan, 'unobservable');
+
+  assert.equal(plan.reason, 'stored-surface-not-current');
+});
+
 test('a session standing behind its tree gets the read, at no extra capture cost', () => {
   const snapshot = state(screen(0));
   const plan = planScrollMovement({

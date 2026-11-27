@@ -1,5 +1,5 @@
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogProcessCommand,
   AppLogProcessTransport,
@@ -16,6 +16,7 @@ import {
   type RuntimeOwnerRef,
   localRuntimeOwner,
   sameRuntimeOwner,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   DurableDescriptorCodec,
@@ -149,7 +150,7 @@ function createBinding<Family extends Platform, Descriptor extends PidScopedDesc
       if (!appLogSessionArtifactsMatch(host, context.sessionId, descriptor)) {
         return {
           status: 'unreattachable',
-          reason: 'descriptor-invalid',
+          reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
           message: `${options.label} app-log descriptor paths do not match the owning session`,
         };
       }
@@ -159,7 +160,7 @@ function createBinding<Family extends Platform, Descriptor extends PidScopedDesc
       if (!appLogSessionArtifactsMatch(host, context.sessionId, descriptor)) {
         return {
           status: 'cleanup-pending',
-          reason: 'ownership-fence-lost',
+          reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
           message: `${options.label} app-log descriptor paths do not match the owning session`,
         } as const;
       }
@@ -196,7 +197,7 @@ function createFacts<Family extends Platform, Descriptor extends PidScopedDescri
     ? available
     : ({
         available: false,
-        reason: 'owner-capability-missing',
+        reason: PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
         hint: options.startUnavailableHint,
       } as const);
   return Object.freeze({

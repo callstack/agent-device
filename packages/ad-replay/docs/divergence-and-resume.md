@@ -108,7 +108,7 @@ No surface may reduce divergence to text and discard repair data.
 Divergence `screen.refs` issues a bounded partial ref frame (ADR 0014).
 `markSessionPartialRefsIssued` authorizes exactly those refs.
 MCP pins them automatically.
-CLI text renders `@eN~s<refsGeneration>`.
+CLI text renders `@eN-s<refsGeneration>`.
 JSON and Node.js callers pair each plain ref with the response-level generation before mutation.
 A mutation through this partial frame requires a pinned ref.
 A plain ref returns `plain_ref_requires_complete_frame`.

@@ -160,7 +160,7 @@ export function buildInteractionResponseData(params: {
    * Staleness warning for the consumed `@ref` argument (ADR 0014), resolved by
    * `resolveRefStalenessWarning` (packages/daemon/src/execution/session-snapshot.ts): the
    * STALE_SNAPSHOT_REFS_WARNING for a plain ref once the frame has expired, or
-   * the precise pinned-generation warning for a `@e12~s3` ref whose epoch no
+   * the precise pinned-generation warning for a `@e12-s3` ref whose epoch no
    * longer matches the frame. Stale mutations are rejected before reaching this
    * builder; remaining paths append it to the response warning.
    */

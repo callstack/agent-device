@@ -1,6 +1,9 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
+  FIND_NO_MATCH_HINT,
+  FIND_NO_MATCH_MESSAGE,
   findBestMatchesByLocator,
+  type FindAction,
   type FindLocator,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
@@ -13,6 +16,9 @@ import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { buildAmbiguousMatchError } from '../../selector-match-errors.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+
+// A bare `find <text>` is this action, so an agent that meant a lookup learns the read form here.
+const FIND_CLICK_NO_MATCH_HINT = `${FIND_NO_MATCH_HINT} This find clicks its match; to look an element up without acting on it, use find text "..." exists.`;
 
 export type FindMatchResult =
   | { ok: true; node: SnapshotState['nodes'][number] }
@@ -28,11 +34,12 @@ export function resolveFindMatch(params: {
   nodes: SnapshotState['nodes'];
   locator: FindLocator;
   query: string;
+  action: FindAction['kind'];
   selectorExpression: string | null;
   flags: DaemonRequest['flags'];
   platform: SessionState['device']['platform'];
 }): FindMatchResult {
-  const { nodes, locator, query, selectorExpression, flags, platform } = params;
+  const { nodes, locator, query, action, selectorExpression, flags, platform } = params;
   const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
   const rooted = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
   // #1625: selector-shaped and text-shaped queries share ONE ambiguity
@@ -75,7 +82,12 @@ export function resolveFindMatch(params: {
   if (!node) {
     return {
       ok: false,
-      response: errorResponse('COMMAND_FAILED', 'find did not match any element'),
+      // Nothing was dispatched: a bare `find` defaults to click, which would otherwise read as a
+      // mutation that may have reached the device.
+      response: errorResponse('COMMAND_FAILED', FIND_NO_MATCH_MESSAGE, {
+        dispatched: 'no',
+        hint: action === 'click' ? FIND_CLICK_NO_MATCH_HINT : FIND_NO_MATCH_HINT,
+      }),
     };
   }
   return { ok: true, node };

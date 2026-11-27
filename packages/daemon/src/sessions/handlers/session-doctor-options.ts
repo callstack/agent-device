@@ -146,6 +146,7 @@ export function sessionChecks(
 }
 
 function shouldProbeMetro(req: DaemonRequest, kind: DoctorKind): boolean {
+  if (req.internal?.publicNetworkOnly) return false;
   return (
     kind !== 'auto' ||
     typeof req.runtime?.metroPort === 'number' ||

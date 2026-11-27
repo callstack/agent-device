@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import { deviceIdentity, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type {
   CleanupOutcome,
@@ -149,7 +150,10 @@ export async function cleanupAppleRecording(
 ): Promise<CleanupOutcome> {
   const decoded = descriptorCodec.decode(body);
   if (decoded.status !== 'decoded' || !descriptorMatchesAppleDevice(device, decoded.descriptor)) {
-    return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+    return {
+      status: 'cleanup-pending',
+      reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
+    };
   }
   if (decoded.descriptor.backend === 'simctl') {
     return await cleanupSimulator(host, decoded.descriptor.processes, sessionId);
@@ -166,7 +170,10 @@ async function cleanupSimulator(
     processes.map(async (marker) => await host.screenRecording.apple.inspectProcess(marker)),
   );
   if (ownership.includes('ownership-lost')) {
-    return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+    return {
+      status: 'cleanup-pending',
+      reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+    };
   }
   if (ownership.every((value) => value === 'missing')) {
     if (sessionId !== undefined) {
@@ -182,7 +189,10 @@ async function cleanupSimulator(
     ),
   );
   if (outcomes.includes('ownership-lost')) {
-    return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+    return {
+      status: 'cleanup-pending',
+      reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+    };
   }
   if (sessionId !== undefined) {
     host.screenRecording.ownedProcesses.clear(sessionScope(sessionId));
@@ -209,7 +219,10 @@ async function cleanupRunner(
     );
     if (ownership === 'missing') return { status: 'already-missing' };
     if (ownership === 'ownership-lost') {
-      return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+      return {
+        status: 'cleanup-pending',
+        reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+      };
     }
     await host.screenRecording.apple.runRunner(device, {
       kind: 'stop',
@@ -221,7 +234,7 @@ async function cleanupRunner(
   } catch (error) {
     return {
       status: 'cleanup-pending',
-      reason: 'transport-failed',
+      reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
       message: error instanceof Error ? error.message : 'Apple recording cleanup failed',
     };
   }
@@ -254,11 +267,14 @@ export async function reattachAppleRecording(
   const { host, device, envelope } = params;
   const decoded = descriptorCodec.decode(envelope.descriptor.body);
   if (decoded.status !== 'decoded') {
-    return unreattachableAppleRecording('descriptor-invalid', decoded.message);
+    return unreattachableAppleRecording(
+      DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
+      decoded.message,
+    );
   }
   if (!descriptorMatchesAppleDevice(device, decoded.descriptor)) {
     return unreattachableAppleRecording(
-      'descriptor-invalid',
+      DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
       'Apple screen-recording descriptor does not match the bound device.',
     );
   }
@@ -294,7 +310,7 @@ async function reattachSimulatorRecording(
   );
   if (!ownership.every((value) => value === 'missing')) {
     return unreattachableAppleRecording(
-      'transport-not-reattachable',
+      DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
       ownership.includes('ownership-lost')
         ? 'Apple recording ownership no longer matches the durable descriptor.'
         : 'Apple screen recordings require exact cleanup after daemon restart.',
@@ -346,7 +362,7 @@ async function reattachRunnerRecording(
   );
   if (ownership === 'missing') return { status: 'missing' };
   return unreattachableAppleRecording(
-    'transport-not-reattachable',
+    DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
     ownership === 'ownership-lost'
       ? 'Apple recording ownership no longer matches the durable descriptor.'
       : 'Apple screen recordings require exact cleanup after daemon restart.',

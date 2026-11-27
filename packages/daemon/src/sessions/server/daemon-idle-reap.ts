@@ -1,6 +1,5 @@
 import {
   DAEMON_LIFECYCLE_REASONS,
-  DAEMON_SHUTTING_DOWN_REASON,
   DAEMON_QUIESCE_COMMAND,
   readDaemonLifecycleFence,
   type DaemonLifecycleCensus,
@@ -203,7 +202,7 @@ export function daemonShuttingDownResponse(): DaemonResponse {
     error: {
       code: 'COMMAND_FAILED',
       message: 'Daemon is shutting down.',
-      details: { reason: DAEMON_SHUTTING_DOWN_REASON },
+      details: { reason: DAEMON_LIFECYCLE_REASONS.shuttingDown.reason },
     },
   };
 }

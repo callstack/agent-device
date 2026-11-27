@@ -215,7 +215,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
     assert.equal(typeof firstGeneration, 'number');
     const currentPress = await activeWebDaemon.callCommand(
       'press',
-      [`@e2~s${firstGeneration}`],
+      [`@e2-s${firstGeneration}`],
       { platform: 'web' },
       { session: 'checkout' },
     );
@@ -232,7 +232,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
     const staleRefRaw = responseError(
       await activeWebDaemon.callCommand(
         'press',
-        [`@e2~s${firstGeneration}`],
+        [`@e2-s${firstGeneration}`],
         { platform: 'web' },
         { session: 'checkout' },
       ),

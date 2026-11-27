@@ -45,7 +45,7 @@
       "depthLadder": "yes",
       "availability": {
         "simulator": true,
-        "physicalDevice": false
+        "physicalDevice": true
       },
       "knownGaps": []
     }

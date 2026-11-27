@@ -47,5 +47,5 @@ test('a default-mode divergence is error text carrying the repair data, and its 
   assert.match(text, /\[id\] "Save" id="save"/);
 
   await executor.execute('press', { ref: '@e5' });
-  assert.deepEqual(runCalls[1]?.input, { ref: '@e5~s12' });
+  assert.deepEqual(runCalls[1]?.input, { ref: '@e5-s12' });
 });

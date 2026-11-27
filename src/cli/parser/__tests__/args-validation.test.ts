@@ -28,8 +28,58 @@ test('parseArgs rejects invalid record --fps range', () => {
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      error.message === 'Invalid fps: 0',
+      error.message ===
+        'Invalid fps: 0. Expected number from 1 to 120 (rounded down to an integer).',
   );
+});
+
+test('parseArgs names the accepted values of a refused flag value', () => {
+  const cases: Array<[string[], Record<string, unknown>, string]> = [
+    [
+      ['open', 'com.example.app', '--wait', '240000'],
+      { flag: '--wait', min: 100, max: 120000 },
+      'Expected number from 100 to 120000 (rounded down to an integer).',
+    ],
+    [
+      ['open', 'com.example.app', '--wait=soon'],
+      { flag: '--wait', min: 100, max: 120000 },
+      'Expected number from 100 to 120000 (rounded down to an integer).',
+    ],
+    [
+      ['open', 'com.example.app', '--timeout', '0.5'],
+      { flag: '--timeout', min: 1, max: undefined },
+      'Expected number >= 1 (rounded down to an integer).',
+    ],
+    [
+      ['screenshot', './shot.png', '--scale', '2'],
+      { flag: '--scale', min: 0.01, max: 1 },
+      'Expected number from 0.01 to 1.',
+    ],
+    [
+      ['snapshot', '--target', 'watch'],
+      { flag: '--target', allowed: ['mobile', 'tv', 'desktop'] },
+      'Expected one of: mobile, tv, desktop.',
+    ],
+  ];
+
+  for (const [argv, bounds, expected] of cases) {
+    assert.throws(
+      () => parseArgs(argv, { strictFlags: true }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.deepEqual(error.details, { reason: 'flag_value_invalid', ...bounds });
+        assert.ok(error.message.endsWith(expected), error.message);
+        return true;
+      },
+      `expected ${argv.join(' ')} to be refused with its accepted values`,
+    );
+  }
+});
+
+test('parseArgs floors an in-range fractional value of an integer flag', () => {
+  const parsed = parseArgs(['open', 'com.example.app', '--timeout', '1.5'], { strictFlags: true });
+  assert.equal(parsed.flags.timeoutMs, 1);
 });
 
 test('parseArgs refuses a record option the chosen action never reads', () => {
@@ -239,10 +289,10 @@ test('negative numeric positionals are accepted without -- separator', () => {
 });
 
 test('get accepts a snapshot ref with a multiword label', () => {
-  const parsed = parseArgs(['get', 'text', '@e5~s3', 'World', 'Clock'], { strictFlags: true });
+  const parsed = parseArgs(['get', 'text', '@e5-s3', 'World', 'Clock'], { strictFlags: true });
 
   assert.equal(parsed.command, 'get');
-  assert.deepEqual(parsed.positionals, ['text', '@e5~s3', 'World', 'Clock']);
+  assert.deepEqual(parsed.positionals, ['text', '@e5-s3', 'World', 'Clock']);
 });
 
 test('bounded commands reject excess positionals from their CLI schema', () => {
@@ -305,7 +355,7 @@ test('invalid range errors are deterministic', () => {
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      error.message === 'Invalid depth: -1',
+      error.message === 'Invalid depth: -1. Expected number >= 0 (rounded down to an integer).',
   );
 });
 

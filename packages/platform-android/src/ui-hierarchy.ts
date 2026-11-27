@@ -7,8 +7,10 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { decodeXmlCharacterReferences } from '@agent-device/xml';
 import {
+  attachAndroidScreenReaderFacts,
   attachAndroidSiblingOrder,
   type AndroidNode,
+  type AndroidScreenReaderFacts,
   type AndroidUiHierarchy,
 } from './ui-hierarchy-node.ts';
 
@@ -64,6 +66,8 @@ export type AndroidUiNodeMetadata = {
   windowFocused?: boolean;
   windowRect?: Rect;
   windowRegionRect?: boolean;
+  /** Helper-only inputs of the TalkBack order estimate. */
+  screenReader?: AndroidScreenReaderFacts;
 } & AndroidSystemChromeProvenance;
 
 /**
@@ -193,6 +197,21 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     ...optionalBoolAttr('windowFocused', 'window-focused'),
     ...optionalRectAttr('windowRect', 'window-bounds'),
     ...optionalBoolAttr('windowRegionRect', 'window-region-rect'),
+    ...(numberAttr('ax-id') === undefined
+      ? {}
+      : {
+          screenReader: {
+            axId: numberAttr('ax-id')!,
+            traversalBefore: numberAttr('traversal-before'),
+            traversalAfter: numberAttr('traversal-after'),
+            screenReaderFocusable: boolAttr('screen-reader-focusable') === true,
+            important: boolAttr('important'),
+            focusAction: boolAttr('focus-action') === true,
+            stateDescription: Boolean(getAttr('state-description')),
+            collection: boolAttr('collection') === true,
+            range: boolAttr('range') === true,
+          },
+        }),
   };
 }
 
@@ -326,7 +345,7 @@ function normalizeAndroidUiHierarchyNode(
   parent: AndroidNode,
 ): AndroidUiHierarchy {
   const label = attrs.text || attrs.desc;
-  return attachAndroidSiblingOrder(
+  const node = attachAndroidSiblingOrder(
     {
       type: attrs.className,
       label,
@@ -373,6 +392,7 @@ function normalizeAndroidUiHierarchyNode(
     },
     attrs.drawingOrder === undefined ? undefined : { parent, order: attrs.drawingOrder },
   );
+  return attachAndroidScreenReaderFacts(node, attrs.screenReader);
 }
 
 function androidFieldValue(attrs: AndroidUiNodeMetadata): string | null {

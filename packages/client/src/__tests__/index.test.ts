@@ -529,7 +529,7 @@ test('interactions.drag projects generic endpoints and timing phases through str
 
   await client.interactions.drag({
     source: 'id="drag-source"',
-    destination: '@e2~s42',
+    destination: '@e2-s42',
     sourceHoldMs: 700,
     moveMs: 600,
     destinationHoldMs: 200,
@@ -544,7 +544,7 @@ test('interactions.drag projects generic endpoints and timing phases through str
         input: {
           kind: 'drag',
           source: 'id="drag-source"',
-          destination: '@e2~s42',
+          destination: '@e2-s42',
           sourceHoldMs: 700,
           moveMs: 600,
           destinationHoldMs: 200,
@@ -804,7 +804,7 @@ test('client capture.snapshot preserves refsGeneration from daemon responses (AD
   const result = await client.capture.snapshot();
 
   // Node.js callers must retain the response-level generation to pin a plain ref
-  // (`@e1~s752890`) before a mutation.
+  // (`@e1-s752890`) before a mutation.
   assert.equal(result.refsGeneration, 752890);
 });
 

@@ -11,6 +11,7 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
 });
 
 import { sleep } from '@agent-device/host-kit/retry';
+import { AppError } from '@agent-device/kernel/errors';
 
 import { runAndroidAdb, runAndroidShell } from '../adb.ts';
 import { ANDROID_EMULATOR } from '../runtime.fixtures.ts';
@@ -65,6 +66,8 @@ function stubEmulator(options: {
   stateReads: string[];
   keyguardReads?: boolean[];
   posture?: string;
+  /** Thrown by the posture command instead of answering it. */
+  postureError?: unknown;
   hinge?: string;
 }) {
   const stateReads = [...options.stateReads];
@@ -83,7 +86,10 @@ function stubEmulator(options: {
   });
   mockAdb.mockImplementation(async (_device, args) => {
     const command = args.join(' ');
-    if (command.startsWith('emu posture ')) return answer(options.posture ?? 'OK\n');
+    if (command.startsWith('emu posture ')) {
+      if (options.postureError !== undefined) throw options.postureError;
+      return answer(options.posture ?? 'OK\n');
+    }
     if (command === 'emu sensor get hinge-angle0') {
       return answer(options.hinge ?? 'hinge-angle0 = 0\nOK\n');
     }
@@ -230,6 +236,55 @@ test('reads a KO reply as a dispatch failure even though the console exits 0', a
     code: 'COMMAND_FAILED',
     details: { reason: 'fold-posture-dispatch-failed' },
   });
+});
+
+const consoleTimeout = () =>
+  new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+
+test('reports a posture whose console answer timed out as possibly applied', async () => {
+  stubEmulator({ stateReads: ['0'], postureError: consoleTimeout() });
+
+  const failure = await setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'open' }).catch(
+    (error: unknown) => error,
+  );
+  expect(failure).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'fold-posture-dispatch-timed-out',
+      dispatched: 'unknown',
+      deviceId: ANDROID_EMULATOR.id,
+      timeoutMs: 10_000,
+    },
+  });
+  // The refusal ends the fold: no device-state read claims a pose the dispatch cannot vouch for.
+  expect(shellCommands()).not.toContain('cmd device_state print-state');
+});
+
+test('keeps a failed posture exit and a cancelled posture as they are, not possibly applied', async () => {
+  stubEmulator({
+    stateReads: ['0'],
+    postureError: new AppError('COMMAND_FAILED', 'adb emu posture 3 exited with code 1', {
+      exitCode: 1,
+    }),
+  });
+  const exited = await setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'open' }).catch(
+    (error: unknown) => error,
+  );
+  expect((exited as AppError).details).not.toHaveProperty('reason');
+
+  // A timeout raised while the caller cancels is the cancellation's, not a late posture answer.
+  const controller = new AbortController();
+  stubEmulator({ stateReads: ['0'] });
+  mockAdb.mockImplementationOnce(async () => {
+    controller.abort(new DOMException('request cancelled', 'AbortError'));
+    throw consoleTimeout();
+  });
+  const cancelled = await setAndroidFoldPose(
+    ANDROID_EMULATOR,
+    { pose: 'open' },
+    { signal: controller.signal },
+  ).catch((error: unknown) => error);
+  expect((cancelled as AppError).details).not.toHaveProperty('reason');
 });
 
 test('fails as fold-pose-unverified when the guest never commits the device state', async () => {

@@ -97,7 +97,7 @@ test('gesture recording codec round-trips selector-authored drag timings', () =>
   const payload = {
     kind: 'drag' as const,
     source: 'id="drag-source"',
-    destination: '@e2~s42',
+    destination: '@e2-s42',
     sourceHoldMs: 800,
     moveMs: 700,
     destinationHoldMs: 250,
@@ -248,6 +248,13 @@ test('the .ad preflight defers to dispatch for values it cannot know yet', () =>
   );
 });
 
+test('pinch refuses an element followed by more arguments', () => {
+  assert.throws(() => gesturePayloadFromPositionals(['pinch', '2', '@e17', '100']), {
+    code: 'INVALID_ARGS',
+    message: 'gesture pinch takes x y or one element after the scale, not both',
+  });
+});
+
 test('pinch and rotate syntax rejects a partial origin', () => {
   assert.throws(() => gesturePayloadFromPositionals(['pinch', '1.5', '100']), {
     code: 'INVALID_ARGS',
@@ -255,6 +262,19 @@ test('pinch and rotate syntax rejects a partial origin', () => {
   assert.throws(() => gesturePayloadFromPositionals(['rotate', '35', '100']), {
     code: 'INVALID_ARGS',
   });
+});
+
+test('pinch takes an element in place of an origin and keeps it through replay', () => {
+  for (const element of ['@e17', 'label=Photo']) {
+    const payload = gesturePayloadFromPositionals(['pinch', '2', element]);
+    assert.deepEqual(payload, { kind: 'pinch', scale: 2, element });
+    assert.deepEqual(gesturePayloadToPositionals(payload), ['pinch', '2', element]);
+    assert.deepEqual(normalizeGestureCommandInput(payload), {
+      intent: 'pinch',
+      element,
+      scale: 2,
+    });
+  }
 });
 
 test('swipe is fling sugar', () => {

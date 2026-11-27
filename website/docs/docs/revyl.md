@@ -93,6 +93,12 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   the drag takes, from 1 to 10000 ms, when Revyl's worker supports it. An older worker picks the
   speed itself, so there the flag refuses rather than running the drag at a speed nobody chose.
   `fill --delay-ms` is paced by typing one character per pause.
+- `swipe`, `gesture swipe left|right|left-edge|right-edge`, `gesture fling`, and one-finger
+  `gesture pan` without `--hold-ms`. Each gesture sends one drag from its start to its end that
+  takes the gesture's duration, so a fling moves as fast as it does on a local device. A swipe
+  with `--count` sends one such drag per repetition, in the direction `--pattern` gives it. This
+  needs a worker that supports setting the drag duration; on an older worker these gestures refuse
+  rather than run at a speed Revyl picks.
 - `install` of a local build, `install-from-source` from a URL or CI artifact, `open` with the app's
   bundle identifier or package name, `open` with a deep link or URL, and `close` for the app the
   session opened.
@@ -114,10 +120,13 @@ report a refused command as a success:
 
 - `type` refuses and points at `fill`, because Revyl enters text at a point rather than into the
   field the platform happens to focus.
-- `swipe` and `gesture` refuse. Use `scroll`, which plans the path itself and sends one drag.
+- `gesture pinch`, `rotate`, `transform`, `tap`, and `drag`, two-finger `gesture pan`, and
+  `gesture pan --hold-ms` refuse, because Revyl has no multi-touch or held-drag action.
+  `gesture swipe split-view-left|split-view-right|split-view-exit` refuses with
+  `split_view_unavailable`, because a straight drag cannot enter or leave Split View.
 - `keyboard`, `clipboard`, `alert`, `fold`, `telephony`, and `tv-remote` are not supported.
 - The other `settings` refuse: `wifi`, `airplane`, `mobile-data`, `bluetooth`, `animations`,
-  `text-size`, `faceid`, `touchid`, and `fingerprint`. Revyl's devices refuse airplane mode, and the
+  `text-size`, `locale`, `timezone`, `faceid`, `touchid`, and `fingerprint`. Revyl's devices refuse airplane mode, and the
   worker has no action for the rest.
 - `reinstall` refuses, as described above.
 - `uninstall`, `apps`, `push`, `logs`, `network dump`, `artifacts`, and `recordings` are not

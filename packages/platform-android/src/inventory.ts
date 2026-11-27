@@ -16,18 +16,21 @@ import {
   isAndroidEmulatorSerial,
   normalizeAndroidDeviceName,
   parseAndroidAvdList,
-  parseAndroidDeviceDescription,
   parseAndroidDeviceEntries,
+  parseAndroidDeviceProps,
   parseAndroidEmulatorAvdNameOutput,
   androidFeatureListDeclares,
   parseAndroidTargetFromCharacteristics,
+  ANDROID_INVENTORY_PROPS,
   type AndroidDeviceEntry,
+  type AndroidDeviceProps,
 } from './inventory-parsers.ts';
 
 const PROBE_TIMEOUT_MS = 10_000;
-const DEVICE_DESCRIPTION_TIMEOUT_MS = 2_000;
-const DEVICE_DESCRIPTION_PROBE = shellFragment(
-  'getprop ro.product.model; getprop ro.build.version.release',
+// Every property discovery reads, one `getprop` per line in ANDROID_INVENTORY_PROPS order, in one
+// adb shell: getprop reads the property area without a binder call, so a busy device answers it.
+const DEVICE_PROPS_PROBE = shellFragment(
+  ANDROID_INVENTORY_PROPS.map((prop) => `getprop ${prop}`).join('; '),
 );
 // Fire OS devices declare amazon.hardware.fire_tv and may not declare the AOSP leanback
 // features, so TV detection must read it as a TV signal too (Amazon: "Identify Fire TV
@@ -132,94 +135,78 @@ async function listDeviceEntries(context: AndroidInventoryContext): Promise<Andr
   return parseAndroidDeviceEntries(result.stdout);
 }
 
+/**
+ * Two adb shells per running device, run together: the getprop batch and `pm list features`. The
+ * feature list stays its own call because a busy device can stall it (#4765), and a stalled
+ * feature list must not take the boot state, name, or description with it.
+ */
 async function probeRunningDevice(
   context: AndroidInventoryContext,
   entry: AndroidDeviceEntry,
 ): Promise<DeviceInfo> {
-  const [name, booted, target, description] = await Promise.all([
-    resolveDeviceName(context, entry),
-    isBooted(context, entry.serial),
-    resolveTargetOrUnknown(context, entry.serial),
-    readDeviceDescription(context, entry.serial),
+  const [propsProbe, featuresProbe] = await Promise.allSettled([
+    runAdbShell(context, entry.serial, [DEVICE_PROPS_PROBE]),
+    runAdbShell(context, entry.serial, ['pm', 'list', 'features']),
   ]);
+  const props = readDeviceProps(propsProbe);
+  // The target goes first: it fails discovery on a props probe failure other than a timeout.
+  const target = resolveTargetOrUnknown(context, entry.serial, () =>
+    resolveTarget(propsProbe, props, featuresProbe),
+  );
+  const name = await resolveDeviceName(context, entry, props);
   return {
     platform: 'android',
     id: entry.serial,
     name,
     kind: isAndroidEmulatorSerial(entry.serial) ? 'emulator' : 'device',
     target,
-    ...description,
-    booted,
+    ...(props?.['ro.product.model'] ? { model: props['ro.product.model'] } : {}),
+    ...(props?.['ro.build.version.release']
+      ? { osVersion: props['ro.build.version.release'] }
+      : {}),
+    booted: props?.['sys.boot_completed'] === '1',
   };
 }
 
-/** Best-effort model and OS version read in one shell call; a failed probe leaves both unset. */
-async function readDeviceDescription(
-  context: AndroidInventoryContext,
-  serial: string,
-): Promise<Pick<DeviceInfo, 'model' | 'osVersion'>> {
-  try {
-    const result = await runAdbShell(
-      context,
-      serial,
-      [DEVICE_DESCRIPTION_PROBE],
-      DEVICE_DESCRIPTION_TIMEOUT_MS,
-    );
-    return result.exitCode === 0 ? parseAndroidDeviceDescription(result.stdout) : {};
-  } catch (error) {
-    if (context.scope.signal.aborted) throw error;
-    return {};
-  }
+/** The properties a device answered, `{}` when adb exited non-zero, `undefined` when it failed. */
+function readDeviceProps(
+  probe: PromiseSettledResult<HostCommandResult>,
+): AndroidDeviceProps | undefined {
+  if (probe.status === 'rejected') return undefined;
+  return probe.value.exitCode === 0 ? parseAndroidDeviceProps(probe.value.stdout) : {};
 }
 
 async function resolveDeviceName(
   context: AndroidInventoryContext,
   entry: AndroidDeviceEntry,
+  props: AndroidDeviceProps | undefined,
 ): Promise<string> {
   const model = entry.rawModel.replaceAll('_', ' ').trim();
   if (!isAndroidEmulatorSerial(entry.serial)) return model || entry.serial;
-  const avdName = await resolveEmulatorAvdName(context, entry.serial);
+  const avdName =
+    props?.['ro.boot.qemu.avd_name'] ||
+    props?.['persist.sys.avd_name'] ||
+    (await readEmulatorConsoleAvdName(context, entry.serial));
   return avdName?.replaceAll('_', ' ') || model || entry.serial;
 }
 
-async function resolveEmulatorAvdName(
+/** Asks the emulator console, for an emulator whose properties name no AVD. */
+async function readEmulatorConsoleAvdName(
   context: AndroidInventoryContext,
   serial: string,
 ): Promise<string | undefined> {
-  for (const prop of ['ro.boot.qemu.avd_name', 'persist.sys.avd_name']) {
-    const result = await runBestEffortNameProbe(context, adbShellArgv(serial, ['getprop', prop]));
-    const value = result?.stdout.trim();
-    if (result?.exitCode === 0 && value) return value;
-  }
-  const result = await runBestEffortNameProbe(context, ['-s', serial, 'emu', 'avd', 'name']);
-  const value = result && parseAndroidEmulatorAvdNameOutput(result.stdout);
-  return result?.exitCode === 0 ? value : undefined;
-}
-
-async function runBestEffortNameProbe(
-  context: AndroidInventoryContext,
-  args: readonly string[],
-): Promise<HostCommandResult | undefined> {
+  let result: HostCommandResult;
   try {
-    return await run(context, context.adb, args);
+    result = await run(context, context.adb, ['-s', serial, 'emu', 'avd', 'name']);
   } catch (error) {
-    const appError = asAppError(error);
-    if (appError.code === 'COMMAND_FAILED' && typeof appError.details?.timeoutMs === 'number') {
-      return undefined;
-    }
+    if (isAdbTimeout(error)) return undefined;
     throw error;
   }
+  return result.exitCode === 0 ? parseAndroidEmulatorAvdNameOutput(result.stdout) : undefined;
 }
 
-async function isBooted(context: AndroidInventoryContext, serial: string): Promise<boolean> {
-  try {
-    return (
-      (await runAdbShell(context, serial, ['getprop', 'sys.boot_completed'])).stdout.trim() === '1'
-    );
-  } catch (error) {
-    if (context.scope.signal.aborted) throw error;
-    return false;
-  }
+function isAdbTimeout(error: unknown): boolean {
+  return asAppError(error).details?.adbFailure === 'timeout';
 }
 
 /**
@@ -227,19 +214,15 @@ async function isBooted(context: AndroidInventoryContext, serial: string): Promi
  * fail a request that selects another device. The selected serial and every other failure still
  * fail discovery, so a selected device never runs with a demoted target.
  */
-async function resolveTargetOrUnknown(
+function resolveTargetOrUnknown(
   context: AndroidInventoryContext,
   serial: string,
-): Promise<'mobile' | 'tv' | undefined> {
+  resolve: () => 'mobile' | 'tv',
+): 'mobile' | 'tv' | undefined {
   try {
-    return await resolveTarget(context, serial);
+    return resolve();
   } catch (error) {
-    const appError = asAppError(error);
-    if (
-      context.scope.signal.aborted ||
-      serial === context.selectedSerial ||
-      appError.details?.adbFailure !== 'timeout'
-    ) {
+    if (context.scope.signal.aborted || serial === context.selectedSerial || !isAdbTimeout(error)) {
       throw error;
     }
     context.scope.diagnostics.emit({
@@ -251,26 +234,20 @@ async function resolveTargetOrUnknown(
   }
 }
 
-async function resolveTarget(
-  context: AndroidInventoryContext,
-  serial: string,
-): Promise<'mobile' | 'tv'> {
-  const characteristics = await runAdbShell(context, serial, [
-    'getprop',
-    'ro.build.characteristics',
-  ]);
-  if (parseAndroidTargetFromCharacteristics(commandOutput(characteristics)) === 'tv') return 'tv';
-  const featureResults = await mapWithConcurrency(
-    TV_FEATURES,
-    2,
-    async (feature) =>
-      await runAdbShell(context, serial, ['cmd', 'package', 'has-feature', feature]),
-  );
-  if (featureResults.some((result) => commandOutput(result).toLowerCase().includes('true'))) {
-    return 'tv';
-  }
-  const featureList = await runAdbShell(context, serial, ['pm', 'list', 'features']);
-  const features = commandOutput(featureList);
+/**
+ * `ro.build.characteristics`, then the feature list. `cmd package has-feature` is not asked: it
+ * reads the same PackageManager feature table that `pm list features` prints.
+ */
+function resolveTarget(
+  propsProbe: PromiseSettledResult<HostCommandResult>,
+  props: AndroidDeviceProps | undefined,
+  featuresProbe: PromiseSettledResult<HostCommandResult>,
+): 'mobile' | 'tv' {
+  if (propsProbe.status === 'rejected') throw propsProbe.reason;
+  const characteristics = props?.['ro.build.characteristics'] ?? '';
+  if (parseAndroidTargetFromCharacteristics(characteristics) === 'tv') return 'tv';
+  if (featuresProbe.status === 'rejected') throw featuresProbe.reason;
+  const features = commandOutput(featuresProbe.value);
   return TV_FEATURES.some((feature) => androidFeatureListDeclares(features, feature))
     ? 'tv'
     : 'mobile';

@@ -84,6 +84,8 @@ export async function ensureAndroidSnapshotHelper(options: {
   artifact: AndroidSnapshotHelperArtifact;
   deviceKey?: string;
   installPolicy?: AndroidSnapshotHelperInstallPolicy;
+  /** Inspect the device even when the install memo says current; the memo stays for other callers. */
+  inspectInstalled?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<AndroidSnapshotHelperInstallResult> {
@@ -104,7 +106,12 @@ export async function ensureAndroidSnapshotHelper(options: {
   const cachedVersionCode = installCacheKey
     ? installedSnapshotHelpers.get(installCacheKey)
     : undefined;
-  if (installCacheKey && installPolicy !== 'always' && cachedVersionCode !== undefined) {
+  if (
+    installCacheKey &&
+    installPolicy !== 'always' &&
+    !options.inspectInstalled &&
+    cachedVersionCode !== undefined
+  ) {
     return {
       packageName,
       versionCode,

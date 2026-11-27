@@ -4,7 +4,10 @@ import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import {
+  bindProviderGestureInteractor,
+  gestureRuntimeOperationFacts,
+} from '@agent-device/contracts/gesture-runtime';
 import {
   bindProviderScrollInteractor,
   scrollRuntimeOperationFacts,
@@ -37,6 +40,7 @@ import type { Interactor, RunnerContext } from '@agent-device/contracts/interact
 import {
   type RuntimeOperationUnavailability,
   unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -48,13 +52,16 @@ export const available = Object.freeze({ available: true } as const);
  * ride and is refused rather than sent to a point the caller never named.
  */
 const typeTextUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl enters text at a point; run fill <field> "text" instead of type.',
 );
-/** The worker executes actions, not gesture plans; a plan has no action to send it to. */
+/**
+ * The worker's one gesture action is a single-finger `/drag`, so a plan with a second contact or a
+ * held contact has no action to send it to.
+ */
 const gestureUnavailable = unavailableFact(
-  'unsupported-provider-mode',
-  'Revyl does not expose portable gesture execution.',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
+  'Revyl performs a one-finger fling or pan as one timed drag; it has no multi-touch or held-drag action.',
 );
 /**
  * Revyl's `/key` action accepts ENTER and BACKSPACE: one key rather than a keyboard surface. It
@@ -62,27 +69,27 @@ const gestureUnavailable = unavailableFact(
  * the wrong platform, so the family is refused. Text entry rides `fill`.
  */
 const keyboardUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not expose keyboard status, dismissal, or a return-key press.',
 );
 /** Neither platform carries a pasteboard action. */
 const clipboardUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not expose the pasteboard.',
 );
 /** Revyl's `/set_orientation` locks a rotation; no action hands rotation back to the sensor. */
 const orientationUnlockUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl sets an orientation but cannot hand rotation back to the sensor.',
 );
 /** Revyl's worker answers `/back` only on Android: iOS has no system back button to press. */
 const iosBackUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   "Revyl has a back button only on Android; on iOS, click the app's own back control.",
 );
 /** `/go_home` is the only system button the worker answers. */
 const systemButtonUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl exposes the home button only.',
 );
 /**
@@ -90,21 +97,21 @@ const systemButtonUnavailable = unavailableFact(
  * and refuses airplane mode on the devices it rents.
  */
 const settingUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl sets appearance, location, permissions, and app state; it does not expose this setting.',
 );
 /** `/clear_keychain` resets a simulator keychain, and an Android emulator has none. */
 const keychainUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'reset-keychain resets an iOS simulator keychain; an Android emulator has none.',
 );
 /** Revyl's worker has no push action, so a push and an app event refuse with one reason. */
 export const REVYL_PUSH_UNAVAILABLE = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not deliver a push notification to a session.',
 );
 const alertUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl has no alert surface of its own; a system alert appears in the snapshot tree.',
 );
 /**
@@ -112,7 +119,7 @@ const alertUnavailable = unavailableFact(
  * devices carry no receiver, so the cell refuses the target kind rather than the provider mode.
  */
 const tvRemoteUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'tv-remote is supported only on Android TV targets; Revyl rents phones and tablets.',
 );
 /**
@@ -120,15 +127,15 @@ const tvRemoteUnavailable = unavailableFact(
  * reports it for a device this runtime owns but has no live session for.
  */
 export const liveSessionUnavailable = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'Revyl requires a matching live provider session for this device.',
 );
 export const REVYL_FOLD_UNAVAILABLE = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'fold runs a HID helper inside a foldable iPhone simulator on the daemon host; a Revyl session has no such simulator.',
 );
 export const REVYL_TELEPHONY_UNAVAILABLE = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not route it through a Revyl session.",
 );
 
@@ -148,15 +155,19 @@ export function revylInteractionOperationFacts(liveSession?: RuntimeOperationUna
       unsupported:
         liveSession ??
         unavailableFact(
-          'unsupported-provider-mode',
+          PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
           'Revyl taps and fills at a point; it has no action for a hover or for a selector target.',
         ),
       tap: cell,
       longPress: cell,
       fill: cell,
     }),
+    // A one-finger fling or pan is one timed drag of the plan's path. Whether this worker can time a
+    // drag is a property of its session, so the interactor refuses a worker that cannot.
     ...gestureRuntimeOperationFacts({
       unsupported: liveSession ?? gestureUnavailable,
+      plan: cell,
+      directionalFling: cell,
     }),
     // A scroll is one drag of the planned finger path, so it needs no gesture execution.
     ...scrollRuntimeOperationFacts({ scroll: cell }),
@@ -242,7 +253,7 @@ export function revylSettingsOperationFacts(device: Pick<DeviceInfo, 'platform'>
 
 /**
  * Binds the operations that reach the device through the session's interactor: the two captures,
- * focus, touch and scroll. Refused cells stay absent from the binding, so a refusal is the facts'
+ * focus, touch, one-finger gestures and scroll. Refused cells stay absent from the binding, so a refusal is the facts'
  * answer and never a call that reaches a throwing interactor.
  */
 export function bindRevylInteractionOperations(
@@ -276,6 +287,12 @@ export function bindRevylInteractionOperations(
       resolveInteractor,
       facts: revylInteractionOperationFacts(),
       pause: async (milliseconds: number) => await sleep(milliseconds, undefined, { signal }),
+    }),
+    ...bindProviderGestureInteractor({
+      device,
+      signal,
+      resolveInteractor,
+      facts: revylInteractionOperationFacts(),
     }),
     ...bindProviderScrollInteractor({ device, signal, resolveInteractor }),
   });

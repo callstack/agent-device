@@ -8,9 +8,10 @@ import { captureScreenshotViaRunner, screenshotIos } from './core/screenshot.ts'
 import { iosRunnerOverrides } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
-import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
+import { actOnAppleAlert, awaitAppleAlert, readAppleAlertStatus } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { isAppleFoldableSimulator, setAppleFoldableOrientation } from './foldable/orientation.ts';
+import { createFoldHelper } from './foldable/fold-helper.ts';
 import { shakeIosSimulator } from './navigation/shake.ts';
 import {
   withAppleRunnerProvider,
@@ -52,7 +53,6 @@ import {
   readAppleSnapshotResult,
   type AppleRunnerSnapshotResult,
 } from './snapshot-presentation.ts';
-import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 
 const SNAPSHOT_RESPONSE_REASONS = {
@@ -165,6 +165,10 @@ export function createAppleInteractor(
         );
         return;
       }
+      // XCUIDevice's home press never reaches SpringBoard on a foldable simulator.
+      if (await isAppleFoldableSimulator(device, runnerOpts.signal)) {
+        return await createFoldHelper(device).pressHome(1, runnerOpts.signal);
+      }
       await runAppleRunnerCommand(
         device,
         { command: 'home', appBundleId: runnerContext.appBundleId },
@@ -180,6 +184,9 @@ export function createAppleInteractor(
       return await setRunnerOrientation(device, orientation, runnerContext, runnerOpts);
     },
     appSwitcher: async () => {
+      if (await isAppleFoldableSimulator(device, runnerOpts.signal)) {
+        return await createFoldHelper(device).pressHome(2, runnerOpts.signal);
+      }
       await runAppleRunnerCommand(
         device,
         { command: 'appSwitcher', appBundleId: runnerContext.appBundleId },
@@ -194,6 +201,20 @@ export function createAppleInteractor(
       );
     },
     shake: () => shakeIosSimulator(device, runnerOpts.signal),
+    lockScreen: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'lockScreen', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
+    unlockScreen: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'unlockScreen', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
     // Volume presses reach the runner only on physical iPhone/iPad; the facts refuse every other
     // kind, and Apple exposes no power press at all, so no `power` member exists here.
     volumeUp: async () => {
@@ -266,7 +287,7 @@ export function createAppleInteractor(
       setIosSetting(device, setting, state, appId, options, env, runnerOpts.signal),
     readSetting: (setting) => readIosSetting(device, setting),
     readAlert: (options) =>
-      readAppleAlert(
+      readAppleAlertStatus(
         device,
         runnerOpts,
         { ...options, appBundleId: options?.appBundleId ?? runnerContext.appBundleId },
@@ -409,9 +430,8 @@ function assertReportedRunnerSnapshotNodes(
 
 /**
  * Agent-facing warnings for a runner capture: a legacy runner's message text when it carried no
- * quality verdict, the shared disclosure when the capture describes an in-place system surface
- * (e.g. the web sign-in or Apple Pay sheet) rather than the app itself (#2438), and the disclosure
- * when this capture's own command had to bring the session app back to the foreground (#2682).
+ * quality verdict, and the disclosure when this capture's own command had to bring the session app
+ * back to the foreground (#2682).
  */
 function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
   const warnings: string[] = [];
@@ -421,8 +441,6 @@ function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
     );
   }
   if (!result.quality && result.message) warnings.push(result.message);
-  if (result.systemSurface)
-    warnings.push(iosSystemSurfaceDisclosure(result.systemSurface.bundleId));
   if (result.targetActivation)
     warnings.push(iosTargetActivationDisclosure(result.targetActivation));
   return warnings;
@@ -552,19 +570,19 @@ function withInjectedAppleRunnerTransport(
     ...interactor,
     open: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('open');
-      return await interactor.open!(...args);
+      return await interactor.open(...args);
     },
     openDevice: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('openDevice');
-      return await interactor.openDevice!(...args);
+      return await interactor.openDevice(...args);
     },
     close: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('close');
-      return await interactor.close!(...args);
+      return await interactor.close(...args);
     },
     screenshot: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('screenshot');
-      return await interactor.screenshot!(...args);
+      return await interactor.screenshot(...args);
     },
     readClipboard: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('readClipboard');
@@ -572,7 +590,7 @@ function withInjectedAppleRunnerTransport(
     },
     setSetting: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('setSetting');
-      return await interactor.setSetting!(...args);
+      return await interactor.setSetting(...args);
     },
     readSetting: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('readSetting');

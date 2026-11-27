@@ -3,9 +3,19 @@
 `agent-device` is a CLI and daemon that automates devices and web targets.
 The daemon owns sessions. Registry declarations route commands to platform runtimes.
 
+## Worker handoff
+
+For a delegated task, CI owns validation.
+Do not run local gates, check scripts, coverage, or project-wide tests.
+If you write a test, run only that test file.
+If the task asks you to publish a change, push it.
+Report the head SHA with checks pending.
+Do not wait for CI.
+
 ## Task routing
 
-Read each applicable row. Follow other links only as needed.
+If the task names the owning file, start there.
+For each question that remains, use the matching row.
 
 | When the task involves | Read |
 | --- | --- |
@@ -13,7 +23,7 @@ Read each applicable row. Follow other links only as needed.
 | Architecture decisions | `docs/adr/README.md` |
 | Write or amend an ADR | `docs/adr/FORMAT.md` |
 | Source, package boundaries, routing, diagnostics, CI | `docs/agents/code-ownership.md` |
-| Checks or a failed gate | `docs/agents/testing.md` |
+| A CI failure to fix or local validation for maintainers | `docs/agents/testing.md` |
 | New or changed tests | `docs/agents/test-authoring.md` |
 | Test audits or deletions | `docs/agents/test-audit.md` |
 | Mutation experiments or base comparisons | `docs/agents/test-experiments.md` |
@@ -23,12 +33,11 @@ Read each applicable row. Follow other links only as needed.
 | A PR to open or update | `docs/agents/pull-requests.md` |
 | A change to review | `docs/agents/review.md` |
 | Trust boundaries, untrusted paths, security review | `docs/agents/security.md` |
-| Device-facing changes or manual device verification | `docs/agents/device-verification.md` |
+| Apple runner or device-facing changes | `docs/agents/device-verification.md` |
 | Issues, PRDs, or triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
-A device-facing change affects live device behavior: dispatch, capture, interaction, app lifecycle, or native execution.
-A daemon edit that changes none of these needs no device run.
+A device-facing change affects dispatch, capture, interaction, app lifecycle, or native execution.
 
 The versioned CLI help owns command semantics. To drive an app, start with the skill's routing card.
 
@@ -45,16 +54,13 @@ The versioned CLI help owns command semantics. To drive an app, start with the s
 
 ## Worktree setup
 
-- Use `pnpm`. Use OXC to lint and format. Run `pnpm format` on the full repository.
-- In a new worktree, run `pnpm install --frozen-lockfile && pnpm build` before testing.
+- Use `pnpm`. Use OXC to format the files you change.
+- If a requested reproduction or a permitted test needs setup, prepare only what it needs.
 - Do not change other worktrees, devices, sessions, dirty files, or experiments. Do not use `git stash`; all worktrees share it.
 - Do not copy `.env` into a worktree. For host credentials, source the main checkout's file by absolute path.
-- Give each parallel worker different files and devices. `pnpm check:affected --run`, `pnpm check`, and heavy `pnpm gate` ids share one lock.
+- Give each parallel worker different files and devices.
 - The layering scan reads only tracked files. Stage new modules before you trust its result.
 - When you rename a file, move its Fallow baseline entry. Do not regenerate unrelated baselines.
-
-The validation lock reclaims provably dead owners. An unknown owner blocks.
-If the wait times out, report the printed owner and lock state. Do not remove the lock manually.
 
 ## Agent docs
 

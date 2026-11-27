@@ -6,9 +6,10 @@
 // absolute deadline exist for) spend wall-clock, and each stays inside the unit budget.
 
 import net from 'node:net';
+import EventEmitter from 'node:events';
 import http from 'node:http';
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
@@ -73,7 +74,7 @@ test('a daemon answering /health is responsive', async (t) => {
     res.end('{}');
   });
   await withLoopback(server, async (port) => {
-    assert.equal(await probeDaemonResponsive(daemonInfo({ httpPort: port })), true);
+    assert.equal((await probeDaemonResponsive(daemonInfo({ httpPort: port }))).reachable, true);
     assert.deepEqual(requestedUrls, ['/health']);
   });
 });
@@ -89,7 +90,7 @@ test('a 5xx answer is still an answer: the finding is liveness, not reachability
     res.end('overloaded');
   });
   await withLoopback(server, async (port) => {
-    assert.equal(await probeDaemonResponsive(daemonInfo({ httpPort: port })), true);
+    assert.equal((await probeDaemonResponsive(daemonInfo({ httpPort: port }))).reachable, true);
   });
 });
 
@@ -110,7 +111,7 @@ test('headers alone answer: a daemon that stalls mid-body is still served', asyn
   await withLoopback(stallingBodyServer, async (port) => {
     const startedAt = Date.now();
     assert.equal(
-      await probeDaemonResponsive(daemonInfo({ httpPort: port })),
+      (await probeDaemonResponsive(daemonInfo({ httpPort: port }))).reachable,
       true,
       'a stalled body must not be read as an unresponsive daemon',
     );
@@ -158,7 +159,7 @@ test('the health leg rides a fresh connection, never the keep-alive pool', async
       request.end();
     });
     assert.equal(clientSockets.size, 1, 'the prime must have connected');
-    assert.equal(await probeDaemonResponsive(daemonInfo({ httpPort: port })), true);
+    assert.equal((await probeDaemonResponsive(daemonInfo({ httpPort: port }))).reachable, true);
     assert.equal(probeRequests, 1, 'the health leg must actually have been asked');
     assert.equal(
       clientSockets.size,
@@ -179,13 +180,43 @@ test('a refused endpoint is negative, not a hang: the verdict arrives well insid
   });
   await withLoopback(server, async (port) => {
     const startedAt = Date.now();
-    assert.equal(await probeDaemonResponsive(daemonInfo({ port })), false);
+    assert.equal((await probeDaemonResponsive(daemonInfo({ port }))).reachable, false);
     assert.ok(
       Date.now() - startedAt < LIVENESS_PROBE_BUDGET_MS / 2,
       'refusal must settle the probe immediately, not by spending the window',
     );
   });
 });
+
+// The verdict that authorizes a reset. A connect the HOST refused (EPERM or EACCES under a sandbox
+// around this client) is not a missed probe: read as silence it would SIGKILL a daemon only this
+// client's sandbox cannot reach, which is the same mistake #3177 removed for a live peer.
+test.for(['EPERM', 'EACCES'] as const)(
+  'a %s refusal is reported as a denial, not as an unresponsive daemon',
+  async (code) => {
+    const socket = Object.assign(new EventEmitter(), {
+      destroy: () => {},
+      setEncoding: () => {},
+      setTimeout: () => socket,
+      write: () => {},
+    });
+    const createConnection = vi.spyOn(net, 'createConnection').mockImplementation(((
+      _options: unknown,
+      _listener?: () => void,
+    ) => {
+      setImmediate(() => socket.emit('error', Object.assign(new Error(code), { code })));
+      return socket;
+    }) as unknown as typeof net.createConnection);
+    try {
+      assert.deepEqual(await probeDaemonResponsive(daemonInfo({ port: 65_530 })), {
+        reachable: false,
+        denial: { errno: code, transport: 'socket', port: 65_530 },
+      });
+    } finally {
+      createConnection.mockRestore();
+    }
+  },
+);
 
 test('a silent HTTP leg cannot veto a live socket leg', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
@@ -222,7 +253,7 @@ test('a silent HTTP leg cannot veto a live socket leg', async (t) => {
     await withLoopback(liveSocketServer, async (port) => {
       const startedAt = Date.now();
       assert.equal(
-        await probeDaemonResponsive(daemonInfo({ port, httpPort })),
+        (await probeDaemonResponsive(daemonInfo({ port, httpPort }))).reachable,
         true,
         'the socket answer alone is the finding; the silent HTTP leg must not outweigh it',
       );
@@ -252,7 +283,11 @@ async function expectMalformedLegAnswersNotThisOne(
     () => null,
     (error: unknown) => error,
   );
-  assert.equal(await probe, expectResponsive, `${name}: the malformed leg answers 'not this one'`);
+  assert.equal(
+    (await probe).reachable,
+    expectResponsive,
+    `${name}: the malformed leg answers 'not this one'`,
+  );
   assert.equal(await rejection, null, `${name}: the probe never rejects on a malformed record`);
 }
 
@@ -317,7 +352,7 @@ test('a slow-trickle endpoint is cut off by the absolute deadline, not extended 
   });
   await withLoopback(server, async (port) => {
     const startedAt = Date.now();
-    assert.equal(await probeDaemonResponsive(daemonInfo({ port })), false);
+    assert.equal((await probeDaemonResponsive(daemonInfo({ port }))).reachable, false);
     const elapsedMs = Date.now() - startedAt;
     assert.ok(
       elapsedMs >= LIVENESS_PROBE_BUDGET_MS / 2 && elapsedMs <= LIVENESS_PROBE_BUDGET_MS * 1.5,
@@ -340,7 +375,10 @@ test('the socket probe asks with the session-lock-exempt inventory command', asy
     });
   });
   await withLoopback(server, async (port) => {
-    assert.equal(await probeDaemonResponsive(daemonInfo({ port }), { session: 'worker-3' }), true);
+    assert.equal(
+      (await probeDaemonResponsive(daemonInfo({ port }), { session: 'worker-3' })).reachable,
+      true,
+    );
     const asked = JSON.parse(requestLine) as { command: string; session?: string };
     assert.equal(asked.command, 'session_list');
     assert.equal(asked.session, 'worker-3');

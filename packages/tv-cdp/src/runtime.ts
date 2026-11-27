@@ -29,6 +29,7 @@ import {
   unavailableFact,
   type DeviceBinding,
   type RuntimeFacts,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -98,7 +99,7 @@ function tvDevice(platform: TvPlatform, tv: LeasedTv): DeviceInfo {
 
 function tvFacts(platform: TvPlatform, device: DeviceInfo, owner: Owner) {
   const refused = unavailableFact(
-    'unsupported-provider-mode',
+    PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
     `Not supported on ${platform.label}.`,
   );
   const refusedByDefault = createUnavailablePlatformRuntimeFacts(device, owner, {

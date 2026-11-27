@@ -9,6 +9,7 @@ import {
   type DaemonReachability,
   resolveLocalDaemonCodeIdentity,
 } from '../daemon-launch-spec.ts';
+import type { DaemonProbeVerdict } from '../daemon-client-loopback-probe.ts';
 import { isSourceCheckoutProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 
@@ -128,13 +129,35 @@ test('a version mismatch is decided without asking the client transport', async 
   const decision = await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), {
     onClientTransport: async () => {
       asked = true;
-      return false;
+      return silent;
     },
-    onAnyAdvertisedTransport: async () => false,
+    onAnyAdvertisedTransport: async () => silent,
+    refusedByHost: async () => undefined,
   });
 
   assert.equal(decision.kind, 'replace');
   assert.equal(asked, false);
+});
+
+// The guard a replacement asks for is a PERMISSION question, not a liveness one: it must be a bare
+// connect, so it costs no health request, no retry and no wait step. Reaching for the reachability
+// probe here would put a `/health` request and the probe's retries on every mismatched-daemon takeover.
+test('the guard before a replacement asks only whether the host refuses the connect', async () => {
+  let probedLiveness = 0;
+  const decision = await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), {
+    onClientTransport: async () => {
+      probedLiveness += 1;
+      return silent;
+    },
+    onAnyAdvertisedTransport: async () => {
+      probedLiveness += 1;
+      return silent;
+    },
+    refusedByHost: async () => undefined,
+  });
+
+  assert.equal(decision.kind, 'replace');
+  assert.equal(probedLiveness, 0, 'a version mismatch is replaced without a reachability probe');
 });
 
 test('a newer daemon alive only on a transport the client does not prefer is still refused', async () => {
@@ -156,6 +179,58 @@ test('a same-version daemon the client transport cannot reach is replaced', asyn
   );
 });
 
+test('a same-version daemon the host refused to connect to is not judged unreachable', async () => {
+  useClientTree(false);
+
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'installed' }), denied()),
+    { kind: 'connectDenied', denial: DENIAL },
+  );
+});
+
+// The unreachable branch retires too, so it asks the same permission question even when the client's
+// own transport leg answered only silence: a managed client pinned to a leg the daemon does not serve
+// would otherwise replace a daemon it was never allowed to reach.
+test('a daemon unreachable on the client transport but refused by the host is not replaced', async () => {
+  useClientTree(false);
+
+  assert.deepEqual(
+    await resolveDaemonTakeover(
+      runningDaemon({ codeOrigin: 'installed' }),
+      silentButRefusedOnTheGuard(),
+    ),
+    { kind: 'connectDenied', denial: DENIAL },
+  );
+});
+
+// A replacement retires a live process, so no branch of the ladder may answer it on the record alone.
+// Before this, only a NEWER daemon was probed: an older or code-mismatched one was replaced without
+// ever being seen, which let a client whose sandbox refuses the connect kill a healthy daemon.
+test('a version mismatch the host refused to probe is a denial, not a replacement', async () => {
+  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), denied()), {
+    kind: 'connectDenied',
+    denial: DENIAL,
+  });
+});
+
+test('a code mismatch the host refused to probe is a denial, not a replacement', async () => {
+  useClientTree(false);
+
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'checkout' }), denied()),
+    { kind: 'connectDenied', denial: DENIAL },
+  );
+});
+
+// The refusal outranks the newer-daemon refusal: both stop the daemon being touched, and only
+// `connectDenied` says the reason is this client's sandbox rather than the daemon's version.
+test('a connect the host refused never reads as a newer daemon to refuse', async () => {
+  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), denied()), {
+    kind: 'connectDenied',
+    denial: DENIAL,
+  });
+});
+
 test('a reachable daemon older than the client is replaced', async () => {
   assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), reachable()), {
     kind: 'replace',
@@ -175,16 +250,54 @@ function useClientTree(sourceCheckout: boolean): void {
 }
 
 function reachable(): DaemonReachability {
-  return { onClientTransport: async () => true, onAnyAdvertisedTransport: async () => true };
+  return {
+    onClientTransport: async () => answered,
+    onAnyAdvertisedTransport: async () => answered,
+    refusedByHost: async () => undefined,
+  };
 }
 
 function unreachable(): DaemonReachability {
-  return { onClientTransport: async () => false, onAnyAdvertisedTransport: async () => false };
+  return {
+    onClientTransport: async () => silent,
+    onAnyAdvertisedTransport: async () => silent,
+    refusedByHost: async () => undefined,
+  };
 }
 
 function onlyOnAnotherTransport(): DaemonReachability {
-  return { onClientTransport: async () => false, onAnyAdvertisedTransport: async () => true };
+  return {
+    onClientTransport: async () => silent,
+    onAnyAdvertisedTransport: async () => answered,
+    refusedByHost: async () => undefined,
+  };
 }
+
+/**
+ * The client's own transport answers nothing and the guard's connects are refused, while the ports
+ * themselves answer nothing: what a sandbox that silences one leg and refuses the other produces.
+ */
+function silentButRefusedOnTheGuard(): DaemonReachability {
+  return {
+    onClientTransport: async () => silent,
+    onAnyAdvertisedTransport: async () => silent,
+    refusedByHost: async () => DENIAL,
+  };
+}
+
+/** The host refused every endpoint this client tried, as its sandbox does. */
+function denied(): DaemonReachability {
+  return {
+    onClientTransport: async () => ({ reachable: false, denial: DENIAL }),
+    onAnyAdvertisedTransport: async () => ({ reachable: false, denial: DENIAL }),
+    refusedByHost: async () => DENIAL,
+  };
+}
+
+const DENIAL = { errno: 'EPERM', transport: 'socket', port: 41_234 } as const;
+
+const answered: DaemonProbeVerdict = { reachable: true };
+const silent: DaemonProbeVerdict = { reachable: false };
 
 function runningDaemon(info: {
   version?: string;

@@ -10,7 +10,7 @@ export async function setHarmonySetting(
 ): Promise<Record<string, unknown>> {
   if (setting !== 'clear-app-state') {
     throw new AppError('UNSUPPORTED_OPERATION', `HarmonyOS setting "${setting}" is not supported`, {
-      hint: 'HarmonyOS currently supports settings clear-app-state for an app bundle only.',
+      hint: 'HarmonyOS currently supports settings clear-app-state only.',
     });
   }
   if (state !== 'clear') {

@@ -101,7 +101,7 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
   'ios-simulator.interactions-gesture-viewport.read': [IOS_SIMULATOR, (i) => i.gestureViewport!()],
   'ios-simulator.interactions-gesture-viewport.include-keyboard': [
     IOS_SIMULATOR,
-    (i) => i.gestureViewport!(true),
+    (i) => i.gestureViewport!('including-keyboard'),
   ],
   'ios-simulator.interactions-press-series.tap': [
     IOS_SIMULATOR,
@@ -190,6 +190,8 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
   'ios-simulator.interactor-app-switcher.open': [IOS_SIMULATOR, (i) => i.appSwitcher!()],
   'ios-simulator.interactor-action-button.press': [IOS_SIMULATOR, (i) => i.actionButton!()],
   'ios-simulator.interactor-volume-up.press': [IOS_SIMULATOR, (i) => i.volumeUp!()],
+  'ios-simulator.interactor-lock-screen.lock': [IOS_SIMULATOR, (i) => i.lockScreen!()],
+  'ios-simulator.interactor-unlock-screen.unlock': [IOS_SIMULATOR, (i) => i.unlockScreen!()],
   'ios-simulator.interactor-volume-down.press': [IOS_SIMULATOR, (i) => i.volumeDown!()],
   'tvos.interactor-tv-remote.hold': [TVOS_SIMULATOR, (i) => i.tvRemote!('select', 500)],
   'ios-simulator.interactor-keyboard-dismiss.dismiss': [IOS_SIMULATOR, (i) => i.keyboardDismiss!()],

@@ -24,6 +24,7 @@ test('createRequestExecutionScope exposes the host of the daemon serving the req
     leaseRegistry: new LeaseRegistry(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    trackClaimRecoveryDisposal: () => {},
     deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
     platformRequestScope: platformRequestScopeFixture(),
   });

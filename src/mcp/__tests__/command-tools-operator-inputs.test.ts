@@ -157,7 +157,7 @@ test('MCP refuses an explicit daemonAuthToken argument with env guidance', async
   assert.deepEqual(calls, [], 'a refused credential input must never reach the command route');
 });
 
-test('MCP refuses an explicit metro bearerToken argument with env guidance', async () => {
+test('Metro host commands stay outside MCP discovery and execution', async () => {
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({
     createClient: () => ({}) as AgentDeviceClient,
@@ -167,15 +167,10 @@ test('MCP refuses an explicit metro bearerToken argument with env guidance', asy
     },
   });
 
-  const result = await executor.execute('metro', {
-    action: 'prepare',
-    bearerToken: 'stolen-token',
-  });
-
-  assert.equal(result.isError, true);
-  assert.match(result.content[0]?.text ?? '', /bearerToken is not accepted as a tool argument/);
-  assert.match(result.content[0]?.text ?? '', /AGENT_DEVICE_METRO_BEARER_TOKEN/);
-  assert.deepEqual(calls, [], 'a refused credential input must never reach the command route');
+  assert.ok(!listCommandTools({ outputSchemas: false }).some((tool) => tool.name === 'metro'));
+  await assert.rejects(executor.execute('metro', { action: 'reload' }), { code: 'INVALID_ARGS' });
+  await assert.rejects(executor.execute('metro', { action: 'prepare' }), { code: 'INVALID_ARGS' });
+  assert.deepEqual(calls, []);
 });
 
 // Regression: the router forwards raw tools/call arguments verbatim, and the

@@ -1,9 +1,15 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { validateAndNormalizeBatchSteps } from '@agent-device/command-registry/batch';
 import { DEFAULT_BATCH_MAX_STEPS } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { remoteScriptOpen } from '../core/session-script-publication-capability.ts';
+
+const REMOTE_HOST_INPUT_REASONS = {
+  // A remote request supplied a host path or other host input (`details.field`), which a remote
+  // daemon refuses.
+  denied: { reason: 'REMOTE_HOST_INPUT_DENIED' },
+} as const satisfies ReasonTable<'remote daemon'>;
 
 const HOST_PATH_FIELDS = [
   'sessionSaveScript',
@@ -203,7 +209,7 @@ const REMOTE_SCRIPT_PUBLICATION_HINT =
 
 function remoteHostInputDenied(field: string, hint = REMOTE_HOST_INPUT_HINT): AppError {
   return new AppError('INVALID_ARGS', `Remote requests cannot supply the host input ${field}.`, {
-    reason: 'REMOTE_HOST_INPUT_DENIED',
+    reason: REMOTE_HOST_INPUT_REASONS.denied.reason,
     field,
     retriable: false,
     hint,

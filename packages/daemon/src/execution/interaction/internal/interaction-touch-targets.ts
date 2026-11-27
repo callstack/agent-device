@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   FillCommandResult,
   InteractionRequestTarget,
@@ -10,9 +10,11 @@ import {
   stripAtPrefix,
   type DecodedFillTarget,
 } from '@agent-device/selectors/interaction-positionals';
+import { isRefToken, retiredRefPinRefusal } from '@agent-device/kernel/snapshot';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 /** What a decoded touch target carries: the target plus optional ref-plan provenance. */
 type ParsedTouchTargetOk = {
@@ -52,26 +54,8 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
       }
       return parseTouchRefSequence(positionals);
     }
-    const spaceSeparatedRef = positionals[1];
-    if (
-      SEQUENCE_TOUCH_COMMANDS.has(commandLabel) &&
-      spaceSeparatedRef !== undefined &&
-      /^@e\d+(~s?\d*)?$/.test(spaceSeparatedRef.trim())
-    ) {
-      // `press @e13 @e14` is a comma-separated plan typed with spaces. On the
-      // single-ref path the extra positional would become a fallback label and
-      // every key after the first would be lost to a silent success — the
-      // exact failure class the sequence form exists to remove.
-      return {
-        ok: false,
-        response: errorResponse(
-          'INVALID_ARGS',
-          `"${spaceSeparatedRef.trim()}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
-          undefined,
-          { hint: REF_SEQUENCE_HINT },
-        ),
-      };
-    }
+    const secondKey = parseSpaceSeparatedSecondKey(positionals[1], commandLabel);
+    if (secondKey) return { ok: false, response: secondKey };
     const versioned = parseVersionedRefPositional(first);
     if (!versioned.ok) return { ok: false, response: versioned.response };
     return {
@@ -95,6 +79,32 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
     };
   }
   return { ok: true, target: { kind: 'selector', selector } };
+}
+
+/**
+ * The refusal for `press @e13 @e14` — a comma-separated plan typed with spaces. On the
+ * single-ref path the extra positional would become a fallback label and every key after
+ * the first would be lost to a silent success, the exact failure class the sequence form
+ * exists to remove. A key pinned with the retired separator is the same mistake and its
+ * refusal names the current spelling, because the caller is holding a pin. Undefined
+ * means the second positional is not a ref: outside the tap family, absent, or text that
+ * reads as a fallback label there.
+ */
+function parseSpaceSeparatedSecondKey(
+  second: string | undefined,
+  commandLabel: string,
+): DaemonFailureResponse | undefined {
+  if (!SEQUENCE_TOUCH_COMMANDS.has(commandLabel) || second === undefined) return undefined;
+  if (!isRefToken(second)) return undefined;
+  const key = second.trim();
+  const retired = retiredRefPinRefusal(key);
+  if (retired) return errorResponse('INVALID_ARGS', retired, { hint: REF_SEQUENCE_HINT });
+  return errorResponse(
+    'INVALID_ARGS',
+    `"${key}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
+    undefined,
+    { hint: REF_SEQUENCE_HINT },
+  );
 }
 
 const TOUCH_SEQUENCE_MAX_REFS = 16;
@@ -227,15 +237,12 @@ function missingFillTextResponse(place: 'ref' | 'coordinates' | 'selector'): Par
  * admission, the selector whitespace rule, and the daemon error responses.
  */
 export function parseFillTarget(positionals: string[]): ParsedFillTarget {
-  const decoded = decodeFillTarget(positionals);
-  if (!decoded) {
-    return {
-      ok: false,
-      response: errorResponse(
-        'INVALID_ARGS',
-        'fill requires x y text, @ref text, or selector text',
-      ),
-    };
+  let decoded: DecodedFillTarget;
+  try {
+    decoded = readFillTargetFromPositionals(positionals);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    return { ok: false, response: { ok: false, error: normalizeError(error) } };
   }
   switch (decoded.kind) {
     case 'ref': {
@@ -276,16 +283,6 @@ export function parseFillTarget(positionals: string[]): ParsedFillTarget {
   }
 }
 
-// A decode failure only means "no recognizable target shape" — fold it into this handler's
-// uniform INVALID_ARGS response.
-function decodeFillTarget(positionals: string[]): DecodedFillTarget | null {
-  try {
-    return readFillTargetFromPositionals(positionals);
-  } catch {
-    return null;
-  }
-}
-
 export function interactionResultExtra(
   result: PressCommandResult | FillCommandResult | LongPressCommandResult,
 ): Record<string, unknown> {
@@ -300,7 +297,7 @@ export function interactionResultExtra(
   const shared = sequence ? { sequence } : {};
   if (result.kind === 'ref') {
     return {
-      ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
+      ref: stripAtPrefix(result.target.ref),
       refLabel: result.refLabel,
       selectorChain: result.selectorChain,
       targetHittable: result.targetHittable,
@@ -313,7 +310,7 @@ export function interactionResultExtra(
   }
   if (result.kind === 'selector') {
     return {
-      selector: result.target?.kind === 'selector' ? result.target.selector : undefined,
+      selector: result.target.selector,
       selectorChain: result.selectorChain,
       refLabel: result.refLabel,
       targetHittable: result.targetHittable,
@@ -332,9 +329,8 @@ export function formatTouchTargetLabel(
   result: PressCommandResult | LongPressCommandResult,
 ): string {
   if (target.kind === 'point') return 'coordinate tap';
-  if (result.kind === 'ref' && result.target?.kind === 'ref') return result.target.ref;
-  if (result.kind === 'selector' && result.target?.kind === 'selector')
-    return result.target.selector;
+  if (result.kind === 'ref') return result.target.ref;
+  if (result.kind === 'selector') return result.target.selector;
   return 'target';
 }
 

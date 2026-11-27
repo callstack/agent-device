@@ -6,11 +6,9 @@ vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 
 import {
   ALERT_MIN_READ_BUDGET_MS,
-  ALERT_NOT_FOUND_REASON,
   ALERT_RUNNER_MAX_BUDGET_MS,
   DEFAULT_ALERT_TIMEOUT_MS,
   ALERT_NOT_FOUND_RUNNER_CODE,
-  ALERT_WAIT_TIMEOUT_REASON,
   ALERT_POLL_INTERVAL_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
 } from '@agent-device/contracts/alert-contract';
@@ -18,7 +16,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { runMacOsAlertAction } from '../os/macos/helper.ts';
-import { actOnAppleAlert, alertIfPresent, awaitAppleAlert, readAppleAlert } from '../alert.ts';
+import {
+  actOnAppleAlert,
+  alertIfPresent,
+  awaitAppleAlert,
+  readAppleAlert,
+  readAppleAlertStatus,
+} from '../alert.ts';
 
 const mockRunner = vi.mocked(runAppleRunnerCommand);
 const mockHelper = vi.mocked(runMacOsAlertAction);
@@ -44,7 +48,7 @@ function runnerUnresolved(): AppError {
 }
 
 function helperAbsence(): AppError {
-  return new AppError('COMMAND_FAILED', 'alert not found', { reason: ALERT_NOT_FOUND_REASON });
+  return new AppError('COMMAND_FAILED', 'alert not found', { reason: 'alert-not-found' });
 }
 
 afterEach(() => {
@@ -128,7 +132,7 @@ test('a wait that never sees an alert reports the timeout rather than the last a
   );
   await vi.advanceTimersByTimeAsync(2_000);
 
-  assert.equal(((await outcome) as AppError).details?.reason, ALERT_WAIT_TIMEOUT_REASON);
+  assert.equal(((await outcome) as AppError).details?.reason, 'alert-wait-timeout');
 });
 
 test('an accept retries only while the backend says the alert is not there yet', async () => {
@@ -415,6 +419,103 @@ test('a macOS app session forwards the bundle its surface is scoped to', async (
   ]);
 });
 
+// The get leg is the "is anything up?" probe, so a quiet screen is one of its answers: the same
+// `alertStatus` record a tree-based backend answers with, not the runner's typed absence (#5002).
+test('a get settles a typed absence into the status none record', async () => {
+  mockRunner.mockRejectedValue(runnerAbsence());
+
+  assert.deepEqual(
+    await readAppleAlertStatus(IOS_SIMULATOR, runnerOptions, undefined, process.env),
+    {
+      kind: 'alertStatus',
+      platform: 'ios',
+      action: 'get',
+      alert: null,
+      status: 'none',
+      message: 'No alert visible',
+    },
+  );
+});
+
+test('a macOS get settles a helper absence into the status none record', async () => {
+  mockHelper.mockRejectedValue(helperAbsence());
+
+  assert.deepEqual(
+    await readAppleAlertStatus(MACOS_DEVICE, runnerOptions, undefined, process.env),
+    {
+      kind: 'alertStatus',
+      platform: 'macos',
+      action: 'get',
+      alert: null,
+      status: 'none',
+      message: 'No alert visible',
+    },
+  );
+});
+
+test('a get that saw an alert answers with it, not a status', async () => {
+  mockRunner.mockResolvedValue({ title: 'Camera Access' });
+
+  assert.deepEqual(
+    await readAppleAlertStatus(IOS_SIMULATOR, runnerOptions, undefined, process.env),
+    { title: 'Camera Access' },
+  );
+});
+
+test('a get still reports a failure that is not an absence', async () => {
+  mockRunner.mockRejectedValue(runnerUnresolved());
+
+  await assert.rejects(
+    readAppleAlertStatus(IOS_SIMULATOR, runnerOptions, undefined, process.env),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.runnerErrorCode === ALERT_UNRESOLVED_RUNNER_CODE,
+  );
+});
+
+// The absence an acting leg meets stays a refusal: nothing was pressed, so the window ends on
+// the typed refusal with the scoped-snapshot fallback, never on a success shape.
+test('a dismiss with no alert still fails', async () => {
+  vi.useFakeTimers();
+  mockRunner.mockRejectedValue(runnerAbsence());
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'dismiss',
+    undefined,
+    process.env,
+  ).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(3_500);
+  const error = (await outcome) as AppError;
+
+  assert.equal(error.message, 'alert not found');
+  assert.match(String(error.details?.hint), /scoped snapshot/i);
+});
+
+// The launch-confirmation port rides the same get leg and reads through `alertIfPresent`, so the
+// none record is absence there too — never a prompt to recognize.
+test('alertIfPresent reads the status none record as absence', async () => {
+  assert.equal(
+    await alertIfPresent(
+      Promise.resolve({
+        kind: 'alertStatus',
+        platform: 'ios',
+        action: 'get',
+        alert: null,
+        status: 'none',
+        message: 'No alert visible',
+      }),
+    ),
+    undefined,
+  );
+  assert.deepEqual(await alertIfPresent(Promise.resolve({ title: 'Camera Access' })), {
+    title: 'Camera Access',
+  });
+});
+
 // An unreadable prompt is a prompt on screen. Retrying it is fine, since its host may become
 // readable, but no window may end by reporting it as absence.
 test('a read that meets an unreadable prompt is not an absent alert', async () => {
@@ -545,7 +646,7 @@ test.each([
       assert.equal(error, observed);
       assert.equal(error.details?.dispatched, 'no');
     } else {
-      assert.equal(error.details?.reason, ALERT_WAIT_TIMEOUT_REASON);
+      assert.equal(error.details?.reason, 'alert-wait-timeout');
       assert.equal(error.details?.runnerErrorCode, ALERT_NOT_FOUND_RUNNER_CODE);
     }
   },

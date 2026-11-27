@@ -267,6 +267,39 @@ extension RunnerTests {
       )
     }
   }
+  /// The frame a private AX or snapshot root must equal to prove that the app fills the screen. On a
+  /// physical device AXRuntime answers no app from the runner, so Unknown evidence falls to the sole
+  /// XCTest screen; evidence that the app is windowed or not primary never does.
+  func testFullScreenProofFrameFallsToTheSoleScreenOnlyForUnknownEvidence() {
+    let probed = CGRect(x: 0, y: 0, width: 834, height: 1210)
+    let portrait = CGSize(width: 440, height: 956)
+    let soleScreen = CGRect(origin: .zero, size: portrait)
+    let cases: [(name: String, evidence: RunnerFullScreenEvidence, soleScreen: CGSize, expected: CGRect)] = [
+      ("fills screen keeps the probed screen", .fillsScreen, portrait, probed),
+      ("windowed refuses", .windowed, portrait, .null),
+      ("foreign primary app refuses", .notPrimaryApp, portrait, .null),
+      ("unknown takes the sole screen", .unknown, portrait, soleScreen),
+      // A failed sole-screen read (CGSizeZero) proves nothing.
+      ("unknown with no sole screen refuses", .unknown, .zero, .null),
+      // Width and height swapped: no read here says which way to rotate the root.
+      ("unknown with a landscape sole screen refuses", .unknown, CGSize(width: 956, height: 440), .null),
+      ("unknown with a non-finite sole screen refuses", .unknown, CGSize(width: CGFloat.nan, height: 956), .null),
+    ]
+    for (name, evidence, soleScreenSize, expected) in cases {
+      let frame = RunnerFullScreenProofFrame(evidence, probed, soleScreenSize)
+      if expected.isNull {
+        XCTAssertTrue(frame.isNull, name)
+      } else {
+        XCTAssertEqual(frame, expected, name)
+      }
+    }
+    // The sole screen admits only a root that is the whole screen at the origin, never a placed
+    // window's local root (#4399).
+    XCTAssertTrue(Self.isFullScreenAtOrigin(soleScreen, fullScreenFrame: soleScreen))
+    XCTAssertFalse(
+      Self.isFullScreenAtOrigin(CGRect(x: 0, y: 0, width: 440, height: 600), fullScreenFrame: soleScreen)
+    )
+  }
   // MARK: - The lit panel's window (ADR 0025)
 
   /// The inner panel as the host names it: 669x951 native points, presented turned as 951x669.

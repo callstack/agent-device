@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import fc from 'fast-check';
 import { encode as encodeJpeg } from 'jpeg-js';
-import { PNG } from './png.ts';
+import { IMAGE_DECODE_REASONS, PNG } from './png.ts';
 import { decodeScreenshotImage, detectScreenshotImageFormat } from './screenshot-image.ts';
 
 function solidRgba(width: number, height: number, rgba: readonly [number, number, number, number]) {
@@ -37,7 +37,11 @@ test('a valid SOI marker followed by garbage is refused with the typed decode er
   expect(thrownBy(() => decodeScreenshotImage(garbage, 'Limrun iOS screenshot'))).toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'Failed to decode Limrun iOS screenshot as JPEG',
-    details: { label: 'Limrun iOS screenshot', reason: expect.any(String) },
+    details: {
+      label: 'Limrun iOS screenshot',
+      reason: IMAGE_DECODE_REASONS.jpegDecodeFailed.reason,
+      decoderError: expect.any(String),
+    },
   });
 });
 
@@ -87,7 +91,11 @@ test('decoding refuses bytes in neither container and a JPEG body that cannot be
   expect(thrownBy(() => decodeScreenshotImage(corrupt, 'fixture'))).toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'Failed to decode fixture as JPEG',
-    details: { label: 'fixture', reason: expect.any(String) },
+    details: {
+      label: 'fixture',
+      reason: IMAGE_DECODE_REASONS.jpegDecodeFailed.reason,
+      decoderError: expect.any(String),
+    },
   });
 });
 
@@ -152,6 +160,9 @@ test('the JPEG decoder enforces the budget through malformed APP marker recovery
   expect(decodeScreenshotImage(malformed, 'current', 4).width).toBe(2);
   expect(thrownBy(() => decodeScreenshotImage(malformed, 'current', 3))).toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason: expect.stringContaining('maxResolutionInMP') },
+    details: {
+      reason: IMAGE_DECODE_REASONS.jpegDecodeFailed.reason,
+      decoderError: expect.stringContaining('maxResolutionInMP'),
+    },
   });
 });

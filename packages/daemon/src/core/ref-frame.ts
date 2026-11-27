@@ -1,9 +1,11 @@
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import {
   expiredRefFrame,
   issuedRefFrame,
   PRISTINE_REF_FRAME,
   type RefFrame,
+  type RefFrameOrigin,
   type RefFrameScope,
   type RefFrameState,
 } from './ref-frame-slot.ts';
@@ -21,7 +23,7 @@ const outdatedObservations = new WeakSet<SnapshotState>();
  * may use to target a mutation. This module is the single owner of the frame's
  * transitions and of the admission decision; the frame value itself is declared in
  * `ref-frame-slot.ts`, below this module and the session record. The frame epoch reuses
- * the existing `snapshotGeneration`/`refsGeneration` counter and the `@e12~s42` pin grammar
+ * the existing `snapshotGeneration`/`refsGeneration` counter and the `@e12-s42` pin grammar
  * for wire compatibility.
  *
  * The frame is expired at the device side-effect seam, carries a non-`all`
@@ -37,11 +39,21 @@ const outdatedObservations = new WeakSet<SnapshotState>();
  * Typed admission-failure reasons, evaluated in this order so the caller can
  * distinguish "capture a complete snapshot" from "use the emitted pinned ref".
  */
+export const REF_FRAME_REASONS = {
+  // A device action since the snapshot expired the ref frame, so a mutation using its refs is
+  // refused; a read that still has retained evidence answers with a staleness warning instead.
+  frameExpired: { reason: 'ref_frame_expired' },
+  // The pinned ref was minted from a snapshot generation that a newer one superseded.
+  generationMismatch: { reason: 'ref_generation_mismatch' },
+  // A plain ref needs a complete frame. Retry with the pinned ref in `details.suggestedRef` when
+  // present; otherwise capture a fresh interactive snapshot or use a stable selector.
+  plainRefRequiresCompleteFrame: { reason: 'plain_ref_requires_complete_frame' },
+  // The current ref frame did not issue this ref, so it no longer names a node.
+  notIssued: { reason: 'ref_not_issued' },
+} as const satisfies ReasonTable<'ref frames'>;
+
 export type RefFrameRejectReason =
-  | 'ref_frame_expired'
-  | 'ref_generation_mismatch'
-  | 'plain_ref_requires_complete_frame'
-  | 'ref_not_issued';
+  (typeof REF_FRAME_REASONS)[keyof typeof REF_FRAME_REASONS]['reason'];
 
 export type RefFrameAdmission =
   | { admitted: true }
@@ -142,7 +154,7 @@ export function readSessionRuntimeRevision(session: SessionState): number {
  * {@link activateRefFrame}.
  */
 export function activateCompleteRefFrame(session: SessionState): void {
-  activateRefFrame(session, 'all');
+  activateRefFrame(session, 'all', 'complete');
 }
 
 /**
@@ -154,8 +166,12 @@ export function activateCompleteRefFrame(session: SessionState): void {
  * empty result must not (see `markSessionPartialRefsIssued`) — but the transition itself
  * belongs here, with the complete form, because the two differ only in scope.
  */
-export function activatePartialRefFrame(session: SessionState, scope: ReadonlySet<string>): void {
-  activateRefFrame(session, scope);
+export function activatePartialRefFrame(
+  session: SessionState,
+  scope: ReadonlySet<string>,
+  origin: RefFrameOrigin = 'partial',
+): void {
+  activateRefFrame(session, scope, origin);
 }
 
 /**
@@ -168,16 +184,29 @@ export function activatePartialRefFrame(session: SessionState, scope: ReadonlySe
  * `session.snapshot` without disturbing this tree, so a ref keeps resolving against the
  * namespace that authorized it.
  */
-function activateRefFrame(session: SessionState, scope: RefFrameScope): void {
+function activateRefFrame(
+  session: SessionState,
+  scope: RefFrameScope,
+  origin: RefFrameOrigin,
+): void {
   session.refFrame = issuedRefFrame({
     scope,
     tree: session.snapshot,
     generation: session.snapshotGeneration,
+    origin,
   });
 }
 
 export function refFrameState(session: SessionState): RefFrameState {
   return refFrame(session).state;
+}
+
+/**
+ * Which publication minted the frame (`ref-frame-slot.ts`). Diagnostic only: refusal text
+ * and details read it (#4571); admission never does. Undefined before any issuance.
+ */
+export function refFrameOrigin(session: SessionState): RefFrameOrigin | undefined {
+  return refFrame(session).origin;
 }
 
 export function refFrameScope(session: SessionState): RefFrameScope {
@@ -188,6 +217,7 @@ export type RefMutationFrame = {
   admission: RefFrameAdmission;
   scope: RefFrameScope;
   currentGeneration: number | undefined;
+  origin: RefFrameOrigin | undefined;
 };
 
 export function readRefMutationFrame(params: {
@@ -204,6 +234,7 @@ export function readRefMutationFrame(params: {
     }),
     scope: refFrameScope(params.session),
     currentGeneration: refFrameEpoch(params.session),
+    origin: refFrameOrigin(params.session),
   };
 }
 
@@ -213,8 +244,8 @@ export function readRefMutationFrame(params: {
  * observation, so an internal read capture cannot admit or reject a mutation by
  * positional coincidence.
  *
- * `refBody` is the plain ref body (no `@`, no `~s<n>` suffix). `mintedGeneration`
- * is the generation carried by a pinned input (`@e12~s42`), or `undefined` for a
+ * `refBody` is the plain ref body (no `@`, no `-s<n>` suffix). `mintedGeneration`
+ * is the generation carried by a pinned input (`@e12-s42`), or `undefined` for a
  * plain ref.
  */
 export function admitRefMutation(params: {
@@ -225,20 +256,20 @@ export function admitRefMutation(params: {
   const { session, refBody, mintedGeneration } = params;
 
   if (refFrameState(session) === 'expired') {
-    return { admitted: false, reason: 'ref_frame_expired' };
+    return { admitted: false, reason: REF_FRAME_REASONS.frameExpired.reason };
   }
 
   if (mintedGeneration !== undefined && mintedGeneration !== refFrameEpoch(session)) {
-    return { admitted: false, reason: 'ref_generation_mismatch' };
+    return { admitted: false, reason: REF_FRAME_REASONS.generationMismatch.reason };
   }
 
   const scope = refFrameScope(session);
   if (scope !== 'all') {
     if (mintedGeneration === undefined) {
-      return { admitted: false, reason: 'plain_ref_requires_complete_frame' };
+      return { admitted: false, reason: REF_FRAME_REASONS.plainRefRequiresCompleteFrame.reason };
     }
     if (!scope.has(refBody)) {
-      return { admitted: false, reason: 'ref_not_issued' };
+      return { admitted: false, reason: REF_FRAME_REASONS.notIssued.reason };
     }
   }
 
@@ -253,6 +284,8 @@ export function admitRefMutation(params: {
  */
 export function admitRefRead(session: SessionState, refBody: string): RefFrameAdmission {
   const scope = refFrameScope(session);
-  if (scope !== 'all' && !scope.has(refBody)) return { admitted: false, reason: 'ref_not_issued' };
+  if (scope !== 'all' && !scope.has(refBody)) {
+    return { admitted: false, reason: REF_FRAME_REASONS.notIssued.reason };
+  }
   return { admitted: true };
 }

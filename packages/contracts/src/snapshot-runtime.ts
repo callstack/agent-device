@@ -1,5 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  INTERACTOR_BINDING_REFUSAL_REASONS,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type {
   Interactor,
   RunnerContext,
@@ -11,6 +15,12 @@ import type {
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 
 export type { SnapshotRuntimeAcquiredResult, SnapshotResult } from './interactor-types.ts';
+
+/** Why this snapshot seam refuses before or after the interactor runs. */
+const SNAPSHOT_RUNTIME_REFUSAL_REASONS = {
+  // An acquired iOS snapshot reached a host with no presentation owner to publish it through.
+  presenterMissing: { reason: 'ios-snapshot-presenter-missing' },
+} as const satisfies ReasonTable<'snapshot'>;
 
 /** Runner metadata needed by the selected snapshot implementation, without request-owned state. */
 export type SnapshotRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundleId' | 'signal'>>;
@@ -131,7 +141,10 @@ function bindSnapshotInteractor(
       throw new AppError(
         'UNSUPPORTED_OPERATION',
         'Provider-owned snapshot operation has no bound provider interactor.',
-        { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
+        {
+          reason: INTERACTOR_BINDING_REFUSAL_REASONS.providerInteractorMissing.reason,
+          deviceId: params.device.id,
+        },
       );
     }
     const result: SnapshotRuntimeResult = await interactor.snapshot({ ...input.options, signal });
@@ -140,7 +153,10 @@ function bindSnapshotInteractor(
       throw new AppError(
         'COMMAND_FAILED',
         'Acquired iOS snapshot has no host presentation owner.',
-        { reason: 'ios-snapshot-presenter-missing', deviceId: params.device.id },
+        {
+          reason: SNAPSHOT_RUNTIME_REFUSAL_REASONS.presenterMissing.reason,
+          deviceId: params.device.id,
+        },
       );
     }
     return await params.presentIosAcquisition(result, input.options);

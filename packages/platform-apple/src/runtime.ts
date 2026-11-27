@@ -13,6 +13,7 @@ import {
   localRuntimeOwner,
   unavailableFact,
   whenAdmitted,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
 import type { AppStateRuntimeOperations } from '@agent-device/contracts/app-state-runtime';
@@ -71,33 +72,33 @@ import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
-const unavailable = unavailableFact('unsupported-platform-leaf');
+const unavailable = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason);
 const viewportUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
 );
 const audioQueryUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'the stateless audio page probe is a web-session operation; Apple targets use the host capture.',
 );
 const perfUnavailable = unavailableFact(
-  'unsupported-device-backend',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
   'perf requires an Apple simulator, macOS device, or CoreDevice-backed physical Apple device.',
 );
 
 /** Neither simctl nor CoreDevice injects a call or text message into an Apple target. */
 const telephonyUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'telephony simulates calls and SMS through the Android emulator console; Apple simulators and devices expose no host control that injects a call or text message.',
 );
 
 const headlessUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Headless boot is supported only for local Android emulators.',
 );
 
 const runtimeHintsUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
 );
 
@@ -109,11 +110,11 @@ const appleCloseTargetKindUnavailable = unsupportedAppleDeviceKind(
   'close is supported only for Apple simulators and devices.',
 );
 const portReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Port reverse is supported only by an owning provider runtime.',
 );
 const shutdownKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'shutdown is supported only for Apple simulators and Android emulators.',
 );
 
@@ -122,7 +123,7 @@ const screenshotKindUnavailable = unsupportedAppleDeviceKind(
 );
 
 function unsupportedAppleDeviceKind(hint: string) {
-  return unavailableFact('unsupported-device-kind', hint);
+  return unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason, hint);
 }
 
 function shutdownFact(device: DeviceInfo) {
@@ -167,7 +168,7 @@ function appleRuntimeHintsFact(device: DeviceInfo) {
 function appInventoryFacts(device: DeviceInfo) {
   if (device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest') {
     return unavailableFact(
-      'unsupported-device-backend',
+      PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
       'App inventory is available only on CoreDevice-backed physical iOS devices.',
     );
   }
@@ -193,7 +194,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       : undefined;
     const recordingFacts =
       leafRecordingFacts.available && hostAvailability?.available === false
-        ? unavailableFact('unsupported-provider-mode', hostAvailability.hint)
+        ? unavailableFact(
+            PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
+            hostAvailability.hint,
+          )
         : leafRecordingFacts;
     const boot = isMacOs(device) ? unavailable : available;
     const apps = appInventoryFacts(device);
@@ -205,7 +209,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         accessibilityAudit: isRunnerServedIos(device)
           ? available
           : unavailableFact(
-              'unsupported-device-backend',
+              PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
               'Native accessibility audit requires an iOS target served by the XCTest runner.',
             ),
         networkDump: available,

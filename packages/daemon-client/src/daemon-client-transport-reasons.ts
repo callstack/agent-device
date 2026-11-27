@@ -8,6 +8,8 @@ export const DAEMON_TRANSPORT_REASONS = {
   // The connection to the daemon broke; `details.daemonRequestSent` says whether the request was written.
   failure: { reason: 'daemon_transport_failure' },
   // The daemon did not answer within the request's budget; `details.timeoutMs` is that budget.
+  // For a sent remote request, `details.remoteResponseStarted` says whether a progress stream had
+  // already begun, and `details.remoteHealthAnswered` says whether `/health` answered when it had not.
   timeout: { reason: 'daemon_transport_timeout' },
   // A message the daemon sent is not a daemon response envelope; `details.line`, when present,
   // carries what arrived.

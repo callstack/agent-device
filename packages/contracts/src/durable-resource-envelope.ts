@@ -1,3 +1,4 @@
+import type { DescriptorDecodeFailureReason } from './durable-resource.ts';
 import type { DeviceIdentity } from '@agent-device/kernel/device';
 import type { JsonObject } from './json.ts';
 import type { ResourceOwnershipFence, RuntimeOwnerRef } from './platform-runtime.ts';
@@ -26,7 +27,7 @@ export type DurableEnvelopeDecodeOutcome =
   | Readonly<{ status: 'decoded'; envelope: DurableResourceEnvelope }>
   | Readonly<{
       status: 'unreattachable';
-      reason: 'descriptor-invalid' | 'descriptor-version-unsupported';
+      reason: DescriptorDecodeFailureReason;
       message: string;
       version?: number;
     }>;

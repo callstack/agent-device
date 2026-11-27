@@ -14,6 +14,7 @@ import {
   actionButtonRuntimeUse,
   appSwitcherRuntimeUse,
   homeRuntimeUse,
+  lockScreenRuntimeUse,
   mediaFastForwardRuntimeUse,
   mediaNextRuntimeUse,
   mediaPlayPauseRuntimeUse,
@@ -23,6 +24,7 @@ import {
   shakeRuntimeUse,
   powerRuntimeUse,
   sleepRuntimeUse,
+  unlockScreenRuntimeUse,
   volumeDownRuntimeUse,
   volumeUpRuntimeUse,
   wakeRuntimeUse,
@@ -47,6 +49,7 @@ import type { GenericPlatformExecutionParams } from '../../core/generic-leaf-exe
 import {
   isSystemButtonRouteCommand,
   resolveBoundHardwareButtonRuntime,
+  resolveBoundLockScreenRuntime,
   resolveBoundSystemButtonRuntime,
   type SystemButtonCommand,
 } from '../system-button-runtime.ts';
@@ -121,14 +124,16 @@ const EXPECTED: Record<
 
 test('the registry names exactly the commands the press route serves', () => {
   // The denominator is the route's own predicate over the registry: the argumentless
-  // rows plus the positional-selected `hardware-button`, so a press command joining (or
-  // leaving) the route without a row here or in the route set fails.
+  // rows plus the positional-selected `hardware-button` and `lock-screen`, so a press command
+  // joining (or leaving) the route without a row here or in the route set fails.
   const routeCommands = commandDescriptors
     .map((descriptor) => descriptor.name)
     .filter(isSystemButtonRouteCommand);
-  expect([...routeCommands].sort()).toEqual([...Object.keys(EXPECTED), 'hardware-button'].sort());
-  // The conformance family stays the argumentless presses; hardware-button carries its own
-  // plan rows in the conformance table.
+  expect([...routeCommands].sort()).toEqual(
+    [...Object.keys(EXPECTED), 'hardware-button', 'lock-screen'].sort(),
+  );
+  // The conformance family stays the argumentless presses; the positional-selected commands
+  // carry their own plan rows in the conformance table.
   expect([...systemButtonCommands].sort()).toEqual(Object.keys(EXPECTED).sort());
 });
 
@@ -330,5 +335,84 @@ test('hardware-button refuses an unknown or missing button before inspecting any
     ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
   }
   expect(harness.inspectFacts).not.toHaveBeenCalled();
+  expect(harness.press).not.toHaveBeenCalled();
+});
+
+// lock-screen selects the lockScreen or unlockScreen cell from its action and reports the state
+// the owner verified. The use is stated per action here, not read back from the row table.
+test.each([
+  ['lock', lockScreenRuntimeUse, 'lockScreen', 'locked', 'Locked the screen'],
+  ['unlock', unlockScreenRuntimeUse, 'unlockScreen', 'unlocked', 'Unlocked the screen'],
+] as const)(
+  'lock-screen %s binds its cell and reports the verified state',
+  async (action, use, cell, state, message) => {
+    const harness = runtimeHarness(cell, available, androidPhone);
+
+    const resolved = await resolveBoundSystemButtonRuntime('lock-screen', {
+      platformServices: daemonPlatformServicesFixture(),
+      device: androidPhone,
+      positionals: [action],
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    });
+
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(harness.bindDevice).toHaveBeenCalledWith(androidPhone, use);
+    const session = makeSession('system-button-runtime', { device: androidPhone });
+    expect(
+      await resolved.execute({
+        session,
+        sessionName: session.name,
+        logPath: '/tmp/daemon.log',
+        command: 'lock-screen',
+        request: {
+          command: 'lock-screen',
+          positionals: [action],
+          token: 't',
+          session: session.name,
+        },
+        positionals: [action],
+        out: undefined,
+        dispatchContext: {},
+      }),
+    ).toEqual({ action: 'lock-screen', state, message });
+    expect(harness.press).toHaveBeenCalledTimes(1);
+  },
+);
+
+test('lock-screen refuses an unknown or missing action before inspecting any device', async () => {
+  const harness = runtimeHarness('lockScreen');
+  for (const positionals of [[], ['sleep'], ['lock', 'unlock']] as const) {
+    await expect(
+      resolveBoundLockScreenRuntime({
+        platformServices: daemonPlatformServicesFixture(),
+        device: iosSimulator,
+        positionals,
+        inspectFacts: harness.inspectFacts,
+        bindDevice: harness.bindDevice,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  }
+  expect(harness.inspectFacts).not.toHaveBeenCalled();
+  expect(harness.press).not.toHaveBeenCalled();
+});
+
+test('lock-screen rejects an unavailable exact-owner fact before binding', async () => {
+  const harness = runtimeHarness('unlockScreen', unavailable, macOsDevice);
+  const resolved = await resolveBoundSystemButtonRuntime('lock-screen', {
+    platformServices: daemonPlatformServicesFixture(),
+    device: macOsDevice,
+    positionals: ['unlock'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+  expect(resolved.ok).toBe(false);
+  if (resolved.ok) return;
+  expect(resolved.response).toMatchObject({
+    ok: false,
+    error: { code: 'UNSUPPORTED_OPERATION', details: { reason: 'unsupported-platform-leaf' } },
+  });
+  expect(harness.bindDevice).not.toHaveBeenCalled();
   expect(harness.press).not.toHaveBeenCalled();
 });

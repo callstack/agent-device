@@ -9,7 +9,7 @@ import type { FillUnconfirmedVerification } from './fill-evidence.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
-import type { GesturePlan } from './gesture-plan-types.ts';
+import type { GesturePlan, GestureViewportScope } from './gesture-plan-types.ts';
 import type { ReadSettingResult, SettingOptions } from './settings.ts';
 import type { ReadableSetting } from './settings-catalog.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -416,7 +416,7 @@ export type Interactor = {
   ): Promise<{
     found: boolean;
   }>;
-  gestureViewport?(includesKeyboard?: true): Promise<Rect>;
+  gestureViewport?(scope?: GestureViewportScope): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
   /**
    * Optional (parity with `actionButton`): opens the springboard, a control not every owner
@@ -457,6 +457,18 @@ export type Interactor = {
    * resolving an absent member as a successful no-op.
    */
   shake?(): Promise<void>;
+  /**
+   * Optional (parity with `shake`): shows the lock screen and returns once the device reports it
+   * locked; a device already locked returns without a dispatch. An owner without a lock control
+   * leaves it undefined, and its fact refuses `lock-screen lock` before binding.
+   */
+  lockScreen?(): Promise<void>;
+  /**
+   * Optional (parity with `lockScreen`): dismisses the lock screen back to whatever was in front
+   * and returns once the device reports it unlocked. It never enters a credential: a lock that
+   * asks for a PIN, pattern, password, or passcode is refused with `lock-screen-secure`.
+   */
+  unlockScreen?(): Promise<void>;
   /**
    * Optional (parity with `home`): presses the physical volume-up key once, a control phone
    * owners with a volume button carry. An owner without it leaves it undefined; its fact refuses

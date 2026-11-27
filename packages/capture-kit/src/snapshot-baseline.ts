@@ -2,6 +2,8 @@ import type { SnapshotState, SnapshotSystemSurface } from '@agent-device/contrac
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { SnapshotPresentation } from '@agent-device/kernel/snapshot';
 
+// Intentionally duplicates `@agent-device/contracts/snapshot-model`'s `systemSurfaceBundleId`
+// so this module keeps a type-only import and stays within ADR 0027's eager-closure budget.
 function systemSurfaceBundleId(surface: SnapshotSystemSurface | undefined): string | undefined {
   if (surface === undefined) return undefined;
   switch (surface.kind) {

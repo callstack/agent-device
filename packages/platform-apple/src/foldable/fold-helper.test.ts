@@ -64,12 +64,15 @@ test.each(['success', 'dispatch'] as const)(
     expect(calls.map((call) => call.args)).toEqual([
       ['simctl', 'spawn', 'selected-duo', '/cache/fold-helper', 'set', 'half-open'],
     ]);
-    if (outcome === 'success') expect(value).toBeUndefined();
-    else
-      expect(value).toMatchObject({
-        code: 'COMMAND_FAILED',
-        details: { reason: 'fold-hid-dispatch-failed', deviceId: 'selected-duo' },
-      });
+    if (outcome === 'success') {
+      expect(value).toBeUndefined();
+      return;
+    }
+    expect(value).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'fold-hid-dispatch-failed', deviceId: 'selected-duo' },
+    });
+    expect((value as AppError).details).not.toHaveProperty('dispatched');
   },
 );
 
@@ -127,6 +130,31 @@ test('rotate dispatches every picker value, upside-down included', async () => {
     ['rotate', 'landscape-right'],
     ['rotate', 'portrait-upside-down'],
   ]);
+});
+
+test('pressHome spawns home mode with the press count', async () => {
+  const { calls } = await withHelper(scopedDuo, { stdout: '', exitCode: 0 }, async (helper) => {
+    await helper.pressHome(1);
+    await helper.pressHome(2);
+  });
+  expect(calls.map((call) => call.args.slice(-2))).toEqual([
+    ['home', '1'],
+    ['home', '2'],
+  ]);
+});
+
+test('pressHome maps a failed helper exit to its dispatch-failed reason', async () => {
+  const { value } = await withHelper(scopedDuo, { stdout: '', exitCode: 1 }, (helper) =>
+    caught(helper.pressHome(1)),
+  );
+  expect(value).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'home-hid-dispatch-failed',
+      deviceId: 'scoped-duo',
+      dispatched: 'unknown',
+    },
+  });
 });
 
 test('reads one guest hinge sample without sending HID', async () => {
@@ -205,14 +233,48 @@ test.each([
 });
 
 test.each([
-  ['setPose', (helper: FoldHelper) => helper.setPose('open'), 'fold-hid-dispatch-failed'],
-  ['readHingeAngle', (helper: FoldHelper) => helper.readHingeAngle(), 'fold-hinge-angle-no-sample'],
+  [
+    'readHingeAngle',
+    (helper: FoldHelper) => helper.readHingeAngle(),
+    'fold-hinge-angle-no-sample',
+    {},
+  ],
   [
     'readPanelPayload',
     (helper: FoldHelper) => helper.readPanelPayload({ timeoutMs: 5000 }),
     'fold-helper-panels-unreadable',
+    {},
   ],
-] as const)('%s maps a helper timeout to its typed reason', async (_mode, use, reason) => {
+  // A pose or a rotation can land after the deadline, so the refusal discloses an unknown dispatch.
+  [
+    'setPose (named pose)',
+    (helper: FoldHelper) => helper.setPose('open'),
+    'fold-hid-dispatch-timed-out',
+    { dispatched: 'unknown', hint: expect.not.stringContaining('keyframe') },
+  ],
+  [
+    'setPose (keyframes)',
+    (helper: FoldHelper) =>
+      helper.setPose([
+        { atMs: 0, angle: 0 },
+        { atMs: 1000, angle: 180 },
+      ]),
+    'fold-hid-dispatch-timed-out',
+    { dispatched: 'unknown', hint: expect.stringContaining('first keyframe') },
+  ],
+  [
+    'rotate',
+    (helper: FoldHelper) => helper.rotate('landscape-left'),
+    'orientation-hid-dispatch-timed-out',
+    { dispatched: 'unknown' },
+  ],
+  [
+    'pressHome',
+    (helper: FoldHelper) => helper.pressHome(2),
+    'home-hid-dispatch-timed-out',
+    { dispatched: 'unknown' },
+  ],
+] as const)('%s maps a helper timeout to its typed reason', async (_mode, use, reason, extra) => {
   const value = await withAppleToolProvider(
     createLocalAppleToolProvider({
       runCommand: async () => {
@@ -223,8 +285,16 @@ test.each([
   );
   expect(value).toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { reason, deviceId: 'scoped-duo', timeoutMs: 4000 },
+    details: { reason, deviceId: 'scoped-duo', timeoutMs: 4000, ...extra },
   });
+});
+
+test('rotate maps a failed helper exit to its dispatch-failed reason', async () => {
+  const { value } = await withHelper(scopedDuo, { stdout: '', exitCode: 1 }, (helper) =>
+    caught(helper.rotate('landscape-left')),
+  );
+  expect(value).toMatchObject({ details: { reason: 'orientation-hid-dispatch-failed' } });
+  expect((value as AppError).details).not.toHaveProperty('dispatched');
 });
 
 test('never spawns the helper for an already cancelled read or dispatch', async () => {

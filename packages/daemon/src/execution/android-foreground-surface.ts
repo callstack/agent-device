@@ -61,7 +61,7 @@ function buildAndroidEscapeHint(permissionDialog: boolean): string {
   return 'Use screenshot as visual truth, then take a fresh snapshot -i before retrying.';
 }
 
-function looksLikeAndroidEscapeSurface(packageName: string): boolean {
+export function looksLikeAndroidEscapeSurface(packageName: string): boolean {
   return (
     packageName === 'com.android.settings' ||
     packageName === 'com.android.systemui' ||

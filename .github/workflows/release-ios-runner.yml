@@ -4,6 +4,9 @@ on:
   # release.yml calls this after publishing a stable release; dispatch reruns it for one tag.
   workflow_call:
     inputs:
+      include_watchos:
+        type: boolean
+        default: true
       release_tag:
         description: GitHub Release tag to upload assets to, for example v0.12.6.
         required: true
@@ -14,6 +17,10 @@ on:
         description: GitHub Release tag to upload assets to, for example v0.12.6.
         required: true
         type: string
+      include_watchos:
+        description: Also publish Watch assets. Leave unchecked for historical iOS-only release tags.
+        type: boolean
+        default: false
       checkout_ref:
         description: Optional branch, tag, or commit SHA to build. Defaults to the selected workflow ref.
         required: false
@@ -24,14 +31,18 @@ permissions:
 
 jobs:
   publish-ios-simulator-runner:
-    name: Publish iOS Simulator Runner
+    name: Publish ${{ matrix.destination }} Simulator Runner
+    strategy:
+      fail-fast: false
+      matrix:
+        destination: ${{ fromJSON(inputs.include_watchos && '["iOS","watchOS"]' || '["iOS"]') }}
     # Xcode 27 is this image's default. Limrun hosts load XCTest from their own Xcode 27, and the
     # packaging step refuses a runner from an older Xcode, which would embed XCTest.
     runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 90
     env:
-      AGENT_DEVICE_XCUITEST_PLATFORM: ios
-      AGENT_DEVICE_XCUITEST_DESTINATION: generic/platform=iOS Simulator
+      AGENT_DEVICE_XCUITEST_PLATFORM: ${{ matrix.destination == 'iOS' && 'ios' || 'watchos' }}
+      AGENT_DEVICE_XCUITEST_DESTINATION: generic/platform=${{ matrix.destination }} Simulator
       AGENT_DEVICE_IOS_CLEAN_DERIVED: '1'
     steps:
       - name: Checkout
@@ -66,13 +77,13 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      - name: Build iOS simulator runner
+      - name: Build simulator runner
         env:
           AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
         run: sh ./scripts/build-xcuitest-apple.sh
         shell: bash
 
-      - name: Package iOS simulator runner
+      - name: Package simulator runner
         id: package
         env:
           AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived

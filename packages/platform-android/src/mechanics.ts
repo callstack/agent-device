@@ -276,6 +276,7 @@ export {
 export {
   androidSnapshotPublicationInput,
   createAndroidSnapshotCapture,
+  requireCompleteAndroidSnapshotCapture,
   type AndroidSnapshotCapture,
   type AndroidSnapshotPublicationInput,
 } from './snapshot-capture.ts';
@@ -401,4 +402,22 @@ export async function shakeAndroidEmulator(
 ): Promise<void> {
   const { shakeAndroidEmulator: shake } = await import('./shake/console-shake.ts');
   await shake(device, signal);
+}
+
+/** Deferred to keep this entry's eager closure within scripts/__tests__/eager-closure-budgets.test.ts. */
+export async function lockAndroidScreen(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const { lockAndroidScreen: lock } = await import('./lock-screen.ts');
+  await lock(device, signal);
+}
+
+/** Deferred like {@link lockAndroidScreen}. */
+export async function unlockAndroidScreen(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const { unlockAndroidScreen: unlock } = await import('./lock-screen.ts');
+  await unlock(device, signal);
 }

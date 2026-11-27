@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { SETTING_NAMES, TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings-catalog';
+import type { AgentDeviceClient } from '../client-port.ts';
 import { settingsCliReader, settingsCommandFacet, settingsDaemonWriter } from './settings.ts';
 
 function flags(): CliFlags {
@@ -13,16 +14,16 @@ function expectInvalidArgs(run: () => unknown, message: string): void {
 
 describe('settings CLI', () => {
   test('reads and writes settings input', () => {
-    const input = settingsCliReader(['permission', 'grant', 'camera', 'limited'], flags());
+    const input = settingsCliReader(['permission', 'grant', 'photos', 'limited'], flags());
     expect(input).toMatchObject({
       setting: 'permission',
       state: 'grant',
-      permission: 'camera',
+      permission: 'photos',
       mode: 'limited',
     });
     expect(settingsDaemonWriter(input)).toMatchObject({
       command: 'settings',
-      positionals: ['permission', 'grant', 'camera', 'limited'],
+      positionals: ['permission', 'grant', 'photos', 'limited'],
     });
   });
 
@@ -35,6 +36,16 @@ describe('settings CLI', () => {
       | undefined;
     expect(setting?.enum).toEqual(SETTING_NAMES);
   });
+});
+
+test('the public settings method accepts a target union only without a mode', () => {
+  type Update = AgentDeviceClient['settings']['update'];
+  type Grant = { setting: 'permission'; permission: 'camera' | 'photos'; state: 'grant' };
+  expectTypeOf((update: Update, grant: Grant) => {
+    void update(grant);
+    // @ts-expect-error A union can name a target that does not accept a mode.
+    void update({ ...grant, mode: 'limited' });
+  }).toBeFunction();
 });
 
 describe('settings CLI permission', () => {
@@ -83,6 +94,38 @@ describe('settings CLI permission', () => {
         positionals: ['mobile-data', state],
       });
     }
+  });
+
+  test('reads timezone as a written value the daemon parses again', () => {
+    const timeZone = settingsCliReader(['timezone', 'Asia/Kolkata'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(timeZone).toEqual({
+      setting: 'timezone',
+      state: 'Asia/Kolkata',
+      app: 'com.example.app',
+    });
+    expect(settingsDaemonWriter(timeZone)).toMatchObject({
+      positionals: ['timezone', 'Asia/Kolkata'],
+      input: { app: 'com.example.app' },
+    });
+    expect(() => settingsCliReader(['timezone', '+05:30'], flags())).toThrow(
+      expect.objectContaining({ code: 'INVALID_ARGS' }),
+    );
+  });
+
+  test('reads locale as a written value the daemon parses again', () => {
+    const locale = settingsCliReader(['locale', 'en_IN'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(locale).toEqual({ setting: 'locale', state: 'en-IN', app: 'com.example.app' });
+    expect(settingsDaemonWriter(locale)).toMatchObject({
+      positionals: ['locale', 'en-IN'],
+      input: { app: 'com.example.app' },
+    });
+    expect(() => settingsCliReader(['locale', 'english'], flags())).toThrow(
+      expect.objectContaining({ code: 'INVALID_ARGS' }),
+    );
   });
 
   test.each(['mobile-data', 'bluetooth'])(

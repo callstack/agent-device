@@ -276,7 +276,7 @@ test(
         // and no stale-refs warning. The plain `@e2` would require a complete
         // frame.
         const callsBeforeFollowUp = runnerTranscript.calls.length;
-        const followUp = await daemon.callCommand('press', [`@e2~s${settle.refsGeneration}`], {});
+        const followUp = await daemon.callCommand('press', [`@e2-s${settle.refsGeneration}`], {});
         const followUpData = assertRpcOk(followUp);
         assert.equal(followUpData.warning, undefined);
         assert.equal(followUpData.x, 200);
@@ -456,7 +456,7 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
       // added-line ref would — consumed in pinned form from the partial frame
       // (ADR 0014).
       const callsBeforeFollowUp = runnerTranscript.calls.length;
-      const followUp = await daemon.callCommand('press', [`@e3~s${settle.refsGeneration}`], {});
+      const followUp = await daemon.callCommand('press', [`@e3-s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 200);
@@ -796,7 +796,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
       assert.equal(typeof settle.refsGeneration, 'number');
 
       const callsBeforeFollowUp = runnerTranscript.calls.length;
-      const followUp = await daemon.callCommand('press', [`@e17~s${settle.refsGeneration}`], {});
+      const followUp = await daemon.callCommand('press', [`@e17-s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 201);

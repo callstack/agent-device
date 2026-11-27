@@ -9,7 +9,19 @@ function bindingPath(scope: MetroSessionFixture): string {
 }
 
 export function writeMetroSessionFixture(
-  options: MetroSessionFixture & { hints: { controlBaseUrl: string; deviceBaseUrls?: string[] } },
+  options: MetroSessionFixture & {
+    hints: {
+      controlBaseUrl?: string;
+      deviceBaseUrls?: string[];
+      app?: {
+        platform: 'ios' | 'android';
+        deviceKind?: 'simulator' | 'emulator' | 'device';
+        deviceId: string;
+        appId?: string;
+        hostedLocally?: boolean;
+      };
+    };
+  },
 ): void {
   const file = bindingPath(options);
   fs.mkdirSync(path.dirname(file), { recursive: true });

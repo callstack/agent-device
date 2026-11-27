@@ -1,4 +1,5 @@
 import type {
+  AndroidBlockingDialogFocus,
   AndroidBlockingDialogObservation,
   AndroidObservationAdapter,
   AndroidObservationHost,
@@ -12,7 +13,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   ANDROID_FOCUS_MARKERS,
   ANDROID_FOCUSED_WINDOW_MARKER,
+  clearAndroidBlockingDialogObservation,
+  parseAndroidComponent,
+  parseAndroidProcessRecords,
   readAndroidBlockingDialogFocus,
+  resolveAndroidProcessOwner,
 } from './app-parsers.ts';
 
 const WINDOW_DUMPS: readonly (readonly string[])[] = [
@@ -23,6 +28,7 @@ const ACTIVITY_DUMPS: readonly (readonly string[])[] = [
   ['dumpsys', 'activity', 'activities'],
   ['dumpsys', 'activity'],
 ];
+const PROCESS_DUMP: readonly string[] = ['dumpsys', 'activity', 'processes'];
 const FOCUS_LINE = new RegExp(
   `(?:${ANDROID_FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`,
   'gm',
@@ -45,7 +51,7 @@ export function createAndroidObservationAdapter(
 ): AndroidObservationAdapter {
   return Object.freeze({
     readAppState: async (device) => await readAppState(host, device),
-    readBlockingDialog: async (device) => await readBlockingDialog(host, device),
+    readBlockingDialog: async (device) => await observeBlockingDialog(host, device),
     async readAppFocus(device, appBundleId, options = {}) {
       const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
       const focus = await runAndroidAutomationHelper(device, { action: 'focus' });
@@ -57,7 +63,7 @@ export function createAndroidObservationAdapter(
       }
       return (await readAppState(host, device, read)).package === appBundleId;
     },
-    readSnapshotNodes: async (device) => await host.readSnapshotNodes(device),
+    readSnapshotNodes: async (device, options) => await host.readSnapshotNodes(device, options),
     async tap(device, x, y) {
       return await host.runAdb(
         device,
@@ -139,14 +145,42 @@ async function readBlockingDialog(
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   const focus = await runAndroidAutomationHelper(device, { action: 'focus' });
   if (focus?.windowType === '1' && focus.focusedPackage && focus.focusedPackage !== 'android') {
-    return { status: 'clear' };
+    return clearAndroidBlockingDialogObservation(focus.focusedPackage);
   }
   for (const args of orderedDumps(device, 'blockingDialog')) {
     const parsed = readAndroidBlockingDialogFocus(await read(args));
     if (parsed.focus) return { status: 'dialog', focus: parsed.focus };
-    if (parsed.focusObserved) return { status: 'clear' };
+    if (parsed.focusObserved) return clearAndroidBlockingDialogObservation(parsed.focusedPackage);
   }
   return { status: 'unknown' };
+}
+
+/**
+ * The blocking-dialog observation the daemon guard acts on. A dialog names the not-responding
+ * process, so its owning package is resolved here.
+ */
+async function observeBlockingDialog(
+  host: AndroidObservationHost,
+  device: DeviceInfo,
+): Promise<AndroidBlockingDialogObservation> {
+  const read = createDumpReader(host, device);
+  const observation = await readBlockingDialog(host, device, read);
+  if (observation.status === 'dialog') {
+    return { status: 'dialog', focus: await withProcessOwner(observation.focus, read) };
+  }
+  return observation;
+}
+
+async function withProcessOwner(
+  focus: AndroidBlockingDialogFocus,
+  read: DumpReader,
+): Promise<AndroidBlockingDialogFocus> {
+  if (!focus.process) return focus;
+  const owner = resolveAndroidProcessOwner(
+    parseAndroidProcessRecords(await read(PROCESS_DUMP)),
+    focus.process,
+  );
+  return owner ? { ...focus, package: owner } : focus;
 }
 
 function orderedDumps(device: DeviceInfo, question: Question): readonly (readonly string[])[] {
@@ -181,10 +215,8 @@ function preservePositiveMemo(memo: Map<string, boolean>, key: string, answered:
 
 function parseForeground(text: string): AppStateRuntimeResult | null {
   for (const match of text.matchAll(FOCUS_LINE)) {
-    const component = match[1]?.match(
-      /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/,
-    );
-    if (component?.[1] && component[2]) return { package: component[1], activity: component[2] };
+    const component = parseAndroidComponent(match[1] ?? '');
+    if (component) return component;
   }
   return null;
 }

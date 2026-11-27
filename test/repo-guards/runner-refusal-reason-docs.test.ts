@@ -14,12 +14,12 @@ import {
  * undocumented member as an unknown value. Every exported typed published-reason table must have
  * each reason documented at the surfaces that enumerate it, in the same change that adds it.
  * Reason tables are read by the collector the reasons page uses; the runner code rows, which are not a
- * reason table, and the claim-conflict union are read as typed syntax (oxc), so an unreadable member
- * fails here instead of being dropped.
+ * reason table, are read as typed syntax (oxc), so an unreadable member fails here instead of being
+ * dropped.
  */
 
 type Surface = Readonly<{ name: string; relativePath: string }>;
-type Kind = 'table' | 'runnerCodes' | 'union';
+type Kind = 'table' | 'runnerCodes';
 const commandsDoc: Surface = { name: 'commands.md', relativePath: 'website/docs/docs/commands.md' };
 const cliHelpWorkflows: Surface = {
   name: 'cli-help-workflows.ts',
@@ -46,7 +46,11 @@ const REASON_TABLES = [
     commandsDoc,
     cliHelpWorkflows,
   ]),
-  reasonTable('DeviceClaimConflictReason', 'packages/contracts/src/device-inventory.ts', 'union'),
+  reasonTable(
+    'DEVICE_CLAIM_CONFLICT_REASONS',
+    'packages/contracts/src/device-inventory.ts',
+    'table',
+  ),
 ];
 
 test('every reason of every exported published-reason table is documented at its surfaces', () => {
@@ -122,18 +126,6 @@ test('the extractors read every member and reject unsupported ones instead of dr
     'table',
     ['wait_capture_stalled'],
   );
-  expectRead(
-    `export type DeviceClaimConflictReason = 'DEVICE_CLAIM_LIVE_OWNER' | 'DEVICE_CLAIM_OWNER_UNCERTAIN';`,
-    'DeviceClaimConflictReason',
-    'union',
-    ['DEVICE_CLAIM_LIVE_OWNER', 'DEVICE_CLAIM_OWNER_UNCERTAIN'],
-  );
-  expectReject(
-    `export type DeviceClaimConflictReason = string;`,
-    'DeviceClaimConflictReason',
-    'union',
-    /unsupported member in DeviceClaimConflictReason/,
-  );
 });
 
 /** Whether `docs` names `reason` as a whole token, so a longer reason that extends it does not count. */
@@ -144,7 +136,6 @@ function documentsReason(docs: string, reason: string): boolean {
 
 /** Reads a published-reason table's members, failing on anything unreadable. */
 function readReasons(source: string, filename: string, name: string, kind: Kind): string[] {
-  if (kind === 'union') return readUnionReasons(parseTs(filename, source), filename, name);
   const tables = collectReasonTables(new Map([[filename, source]]));
   if (kind === 'table') {
     const table = tables.find((candidate) => candidate.name === name);
@@ -197,33 +188,4 @@ function readRunnerCodeRow(name: string, property: any): any {
     `${name} row ${label} must be an object literal of named members, so its reason can be read.`,
   );
   return row;
-}
-
-/** The string members of an exported `type Name = 'a' | 'b'` union. */
-function readUnionReasons(
-  parsed: ReturnType<typeof parseTs>,
-  filename: string,
-  name: string,
-): string[] {
-  const aliases = parsed.program.body.flatMap((statement) =>
-    statement.type === 'ExportNamedDeclaration' &&
-    statement.declaration?.type === 'TSTypeAliasDeclaration'
-      ? [statement.declaration]
-      : [],
-  );
-  const alias = aliases.find(
-    (candidate) => candidate.id.type === 'Identifier' && candidate.id.name === name,
-  );
-  assert.ok(alias !== undefined, `${filename} must export the ${name} union.`);
-  const annotation = alias.typeAnnotation;
-  const members = annotation.type === 'TSUnionType' ? annotation.types : [annotation];
-  return members.map((member) => {
-    assert.ok(
-      member.type === 'TSLiteralType' &&
-        member.literal.type === 'Literal' &&
-        typeof member.literal.value === 'string',
-      `unsupported member in ${name}: ${member.type}`,
-    );
-    return member.literal.value;
-  });
 }

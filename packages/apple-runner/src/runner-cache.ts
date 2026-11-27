@@ -122,7 +122,7 @@ export async function markRunnerXctestrunArtifactBadForRun(
         reason,
       });
       assertSafeDerivedCleanup(artifact.derived);
-      cleanRunnerDerivedArtifacts(artifact.derived);
+      await cleanRunnerDerivedArtifacts(artifact.derived);
     },
   });
 }
@@ -148,7 +148,10 @@ function resolveRunnerXctestrunCacheLockPath(derived: string): string {
   return path.join(path.dirname(derived), `${path.basename(derived)}.lock`);
 }
 
-export function cleanRunnerDerivedBeforeEvaluation(derived: string, forceRebuild: boolean): void {
+export async function cleanRunnerDerivedBeforeEvaluation(
+  derived: string,
+  forceRebuild: boolean,
+): Promise<void> {
   if (!shouldCleanDerived() && !forceRebuild && !badRunnerArtifactsForRun().has(derived)) {
     return;
   }
@@ -156,7 +159,7 @@ export function cleanRunnerDerivedBeforeEvaluation(derived: string, forceRebuild
     derived,
   });
   assertSafeDerivedCleanup(derived);
-  cleanRunnerDerivedArtifacts(derived);
+  await cleanRunnerDerivedArtifacts(derived);
   badRunnerArtifactsForRun().delete(derived);
 }
 
@@ -218,17 +221,35 @@ export function requireCertifiedRunnerCacheArtifacts(
   );
 }
 
-export function cleanRunnerDerivedArtifacts(derived: string): void {
+/**
+ * Unlinks a managed cache key that is a symlink, leaving its target alone, so the key is rebuilt as
+ * a real directory and no launch path runs through the link. Returns whether it unlinked one. A
+ * `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` override is the caller's own path and is never unlinked.
+ */
+export function unlinkSymlinkedManagedRunnerKey(derived: string): boolean {
+  if (resolveRunnerDerivedOverride(hostEnvironment().env)) return false;
+  if (!fs.lstatSync(derived, { throwIfNoEntry: false })?.isSymbolicLink()) return false;
+  fs.rmSync(derived, { force: true });
+  return true;
+}
+
+/**
+ * Removes the cache metadata, the build scratch, and every runner tree no session can be reading.
+ * A tree another session may launch from survives (see `listLiveRunnerTrees`); with the metadata
+ * gone, nothing resolves it again. A directory named `derived` loses only its Xcode entries.
+ */
+export async function cleanRunnerDerivedArtifacts(derived: string): Promise<void> {
   try {
-    if (!fs.existsSync(derived)) return;
-    if (path.basename(derived) !== 'derived') {
-      fs.rmSync(derived, { recursive: true, force: true });
-      return;
+    if (unlinkSymlinkedManagedRunnerKey(derived) || !fs.existsSync(derived)) return;
+    const { listLiveRunnerTrees, removeRunnerCacheEntriesExcept } =
+      await import('./runner-cache-trim.ts');
+    const kept = new Set(listLiveRunnerTrees(derived));
+    if (path.basename(derived) === 'derived') {
+      for (const name of fs.readdirSync(derived)) {
+        if (!shouldDeleteRunnerDerivedRootEntry(name)) kept.add(name);
+      }
     }
-    for (const entry of fs.readdirSync(derived, { withFileTypes: true })) {
-      if (!shouldDeleteRunnerDerivedRootEntry(entry.name)) continue;
-      fs.rmSync(path.join(derived, entry.name), { recursive: true, force: true });
-    }
+    await removeRunnerCacheEntriesExcept(derived, kept);
   } catch {}
 }
 

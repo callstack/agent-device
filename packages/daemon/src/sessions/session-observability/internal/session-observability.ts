@@ -33,7 +33,10 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
+import {
+  RUNTIME_GATEWAY_REASONS,
+  unsupportedOperationResponse,
+} from '../../../core/runtime-admission.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { handleAudioCommand } from './session-audio.ts';
@@ -404,12 +407,12 @@ async function startSessionAppLog(
 function requireAudioSeams(params: ObservabilityInput): Parameters<typeof handleAudioCommand>[0] {
   if (!params.bindDevice || !params.inspectFacts) {
     throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
-      reason: 'runtime-gateway-missing',
+      reason: RUNTIME_GATEWAY_REASONS.missing.reason,
     });
   }
   if (!params.audioProbeAdmissionLedger) {
     throw new AppError('COMMAND_FAILED', 'Audio probe admission ledger is not configured', {
-      reason: 'runtime-gateway-missing',
+      reason: RUNTIME_GATEWAY_REASONS.missing.reason,
     });
   }
   return {
@@ -429,12 +432,12 @@ function requireLogsHandlerParams(
 ): LogsHandlerParams {
   if (!params.bindDevice) {
     throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
-      reason: 'runtime-gateway-missing',
+      reason: RUNTIME_GATEWAY_REASONS.missing.reason,
     });
   }
   if (!params.appLogAdmissionLedger) {
     throw new AppError('COMMAND_FAILED', 'App-log admission ledger is not configured', {
-      reason: 'runtime-gateway-missing',
+      reason: RUNTIME_GATEWAY_REASONS.missing.reason,
     });
   }
   return {

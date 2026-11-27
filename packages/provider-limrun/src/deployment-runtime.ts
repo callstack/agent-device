@@ -2,8 +2,11 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableFact } from '@agent-device/contracts/platform-runtime';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import {
+  unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
+import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   awaitLimrunDeploymentOperation,
@@ -13,11 +16,11 @@ import { isSupportedLimrunRuntimeDevice } from './runtime-device.ts';
 
 const available = Object.freeze({ available: true } as const);
 const deploymentUnavailable = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'The Limrun provider session is no longer active for this device.',
 );
 const pushUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Push notifications are unavailable for Limrun provider-owned devices.',
 );
 export type LimrunAppDeploymentRuntimeOptions = Readonly<{
@@ -45,12 +48,11 @@ export function limrunAppDeploymentFacts(
     materializeAppSource: deployment,
     deployMaterializedApp: deployment,
     uninstallApp: deployment,
-    sendPushNotification:
-      device.platform === 'apple'
-        ? deployment
-        : sessionActive
-          ? pushUnavailable
-          : deploymentUnavailable,
+    sendPushNotification: isHandheldAppleSimulator(device)
+      ? deployment
+      : sessionActive
+        ? pushUnavailable
+        : deploymentUnavailable,
   });
 }
 
@@ -60,7 +62,8 @@ export function createLimrunAppDeploymentOperations(
   signal: AbortSignal,
   operationDrain?: LimrunRequestOperationDrain,
 ): Partial<PlatformRuntimeOperations> {
-  if (!limrunAppDeploymentFacts(options, device).deployApp.available) return {};
+  const facts = limrunAppDeploymentFacts(options, device);
+  if (!facts.deployApp.available) return {};
   const bind = options.bindDeployment!;
   const load = async () => {
     signal.throwIfAborted();
@@ -86,7 +89,7 @@ export function createLimrunAppDeploymentOperations(
     };
   };
   return {
-    ...(device.platform === 'apple'
+    ...(facts.sendPushNotification.available
       ? {
           sendPushNotification: async (
             input: import('@agent-device/contracts/app-deployment-runtime').PushNotificationInput,

@@ -154,7 +154,7 @@ export type InteractionPathContract = {
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
 const TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/3335';
-// The four guarantees this route's own seam leaves open are owned by #3734.
+// The guarantee this route's own seam leaves open is owned by #3734.
 const FIND_FOCUS_DISPATCH_GAPS_ISSUE = 'https://github.com/callstack/agent-device/issues/3734';
 
 /**
@@ -375,9 +375,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason: 'Target-authored drag has replay identity evidence but does not expose --verify.',
       },
       settleObservation: {
-        kind: 'inapplicable',
-        reason:
-          'Target-authored drag does not expose --settle; callers can wait on the destination state.',
+        kind: 'runtime',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/settle.ts#settleObservationCommand',
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -390,7 +389,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       outcomeObservation: {
         kind: 'waived',
         reason:
-          'gap: target-authored drag has no --settle/--verify observation of the destination; the tap-shaped runtime paths are the only ones with an opt-in evidence route today.',
+          'gap: target-authored drag reports dispatch by default. Opt-in --settle observes the resulting tree; the caller still checks the intended destination state.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       targetStability: {
@@ -572,11 +571,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'packages/selectors/src/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
       },
+      // `findAct` declares `offscreen: "ignore"` so find can rank across the whole tree and prefer an
+      // on-screen match (#1625). The seam then applies the acting paths' rule, with the same `@ref`
+      // refusal shape and the same conditional #1542 live-read rescue, to the node it would focus.
       offscreen: {
-        kind: 'waived',
-        reason:
-          'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured touch point the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
-        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
+        kind: 'runtime',
+        via: 'packages/selectors/src/interaction-offscreen.ts#throwIfOffscreenTarget',
       },
       // The rule treats a nested text field as a competitor to avoid, but this seam means to focus
       // one, so `resolveFocusTarget` chooses the node the rule then aims inside (#3734).
@@ -584,18 +584,18 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
       },
-      // The guarantee is promotion AND annotation. This seam runs only the first half, so the
-      // cell cannot claim `runtime` for the whole guarantee (the same shape `native-ref` classifies
-      // the other way round, annotation without promotion).
+      // Promotion AND annotation: the `findAct` row declares `hittable-ancestor-below-root`, so the
+      // pipeline promotes the match (`runNodePipelineStages`), and a focused node that still reports
+      // `hittable: false` answers `find focus` and `find type` with `targetHittable: false` plus the
+      // hint press/click/fill give, from the same owner.
       nonHittable: {
-        kind: 'waived',
-        reason:
-          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's touch point unless `resolveFocusTarget` chooses a text field instead (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
-        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
+        kind: 'runtime',
+        via: 'packages/selectors/src/interaction-targeting.ts#describeNonHittableTarget',
       },
       // One construction site per dispatch kind, both shared with the plain commands: the focus
       // payload is `executeFocusPoint`'s (the same owner `focus <x> <y>` reaches), and `type`'s
-      // second dispatch is `executeBoundTypeText`'s. The seam hand-rolls neither.
+      // second dispatch is `executeBoundTypeText`'s. The seam hand-rolls neither; it only adds the
+      // `nonHittable` annotation above.
       responseConstruction: {
         kind: 'runtime',
         via: 'packages/daemon/src/execution/focus-runtime.ts#executeFocusPoint',
@@ -637,7 +637,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       targetStability: {
         kind: 'waived',
         reason:
-          "gap: the seam dispatches a touch point captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's pre-dispatch admission (`admitResolvedTarget`), and this route does not pass through it.",
+          "gap: the seam dispatches a touch point captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's pre-dispatch admission (`admitResolvedTarget`), and this route does not pass through it. Closing it is an ADR 0039 decision, not wiring: that ADR keeps the one admission loop in command runtime and keeps find's carried targets out of it (`admitResolvedTarget` returns early for a `preresolvedTarget`, so `find click` skips the check too), and find's re-observation would have to re-run find's own ranking rather than `resolveInteractionTarget`.",
         trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
     },

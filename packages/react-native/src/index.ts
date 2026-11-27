@@ -1,4 +1,5 @@
 import type { MetroSessionOptions, MetroSessionOpenInput } from './metro/metro-session-hints.ts';
+import type { MetroAppTarget } from './metro/metro-dev-server-discovery.ts';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveRuntimeTransportHints } from '@agent-device/host-kit/runtime-transport-hints';
@@ -10,6 +11,7 @@ import type { ReactDevtoolsOutput } from './react-devtools/react-devtools-output
 
 export type { PrepareMetroRuntimeOptions, ReloadMetroOptions } from './metro/client-metro.ts';
 export type { PrepareMetroRuntimeResult, ReloadMetroResult } from '@agent-device/contracts/remote';
+export type { MetroAppTarget } from './metro/metro-dev-server-discovery.ts';
 export type { MetroBridgeDescriptor } from './metro/metro-types.ts';
 export type { ReactDevtoolsCommandOptions } from './react-devtools/react-devtools-connection.ts';
 export type { ReactDevtoolsOutput } from './react-devtools/react-devtools-output.ts';
@@ -94,6 +96,13 @@ export async function readMetroSessionRuntime(
 ): Promise<SessionRuntimeHints | undefined> {
   const session = await import('./metro/metro-session-hints.ts');
   return session.readMetroSessionRuntime(options);
+}
+
+export async function readMetroSessionAppTarget(
+  options: MetroSessionOptions,
+): Promise<MetroAppTarget | undefined> {
+  const session = await import('./metro/metro-session-hints.ts');
+  return session.readMetroSessionAppTarget(options);
 }
 
 export async function clearMetroSessionHintsQuietly(options: MetroSessionOptions): Promise<void> {

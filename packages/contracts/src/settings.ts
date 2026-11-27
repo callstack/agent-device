@@ -1,4 +1,9 @@
-import { AppError, appNotInstalledDetails, discloseDispatch } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  appNotInstalledDetails,
+  discloseDispatch,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import {
   APPEARANCE_ACTIONS,
   MOBILE_PERMISSION_TARGETS,
@@ -6,6 +11,7 @@ import {
   SETTINGS,
   settingDefinition,
   SETTING_NAMES,
+  SETTING_RESET_STATE,
   TEXT_SIZE_CATEGORIES,
   type AppearanceAction,
   type MobilePermissionTarget,
@@ -64,6 +70,16 @@ export function describeSettingWrite(
 ): string {
   if (setting === 'clear-app-state') return `Cleared user data for ${appBundleId}`;
   if (setting === 'text-size') return `Text size set to ${state}`;
+  if (setting === 'timezone') {
+    return state === SETTING_RESET_STATE
+      ? 'Time zone reset to the device default'
+      : `Time zone set to ${state}`;
+  }
+  if (setting === 'locale') {
+    return state === SETTING_RESET_STATE
+      ? 'Locale reset to the device default'
+      : `Locale set to ${state}`;
+  }
   return `Updated setting: ${setting}`;
 }
 
@@ -120,12 +136,20 @@ export function settingsAppScope(
 }
 
 /**
- * The reason a request is told its app names nothing: what a caller does about it — drop the app or
- * move to a target whose mutation is app-scoped — is the reason's meaning, so a driver can branch
- * on `error.details.reason` instead of the prose. Paired with `dispatched: no`, because the
- * refusal runs before a device is touched.
+ * The `settings` refusal family: a request is told what its input cannot do, paired with
+ * `dispatched: no`, because the refusal runs before a device is touched.
  */
-export const SETTINGS_APP_NOT_CONSUMED_REASON = 'setting_app_not_consumed';
+const SETTINGS_REFUSAL_REASONS = {
+  /**
+   * The reason a request is told its app names nothing: what a caller does about it — drop the app
+   * or move to a target whose mutation is app-scoped — is the reason's meaning, so a driver can
+   * branch on `error.details.reason` instead of the prose.
+   */
+  // The asked-for setting applies to the target itself, so the named app consumes nothing.
+  appNotConsumed: { reason: 'setting_app_not_consumed' },
+  // A permission's trailing positional reads as a bundle id or package, which belongs in --app.
+  permissionAppPositional: { reason: 'setting_permission_app_positional' },
+} as const satisfies ReasonTable<'settings'>;
 
 /**
  * The refusal a mutation answers with when its target consumes no app: the code, sentence, typed
@@ -148,7 +172,7 @@ export function settingsAppNotConsumedRefusal(
     code: 'INVALID_ARGS',
     message: `settings ${described} applies to the target itself, not to an app: ${app} names nothing it can grant or revoke.`,
     details: {
-      reason: SETTINGS_APP_NOT_CONSUMED_REASON,
+      reason: SETTINGS_REFUSAL_REASONS.appNotConsumed.reason,
       dispatched: 'no',
       setting: described,
       app,
@@ -200,10 +224,13 @@ function formUsage(form: SettingForm, readable: boolean): string {
       return 'set <lat> <lon>';
     case 'permission': {
       const modes = form.modes ? ` [${form.modes.join('|')}]` : '';
-      return `<${form.actions.join('|')}> <${form.targets.join('|')}>${modes}`;
+      const targets = form.targets.length === 1 ? form.targets[0] : `<${form.targets.join('|')}>`;
+      return `<${form.actions.join('|')}> ${targets}${modes}`;
     }
     case 'app-id':
       return '[app-id]';
+    case 'value':
+      return `<${form.placeholder}|${SETTING_RESET_STATE}>`;
   }
 }
 
@@ -286,6 +313,9 @@ function parseFormPositionals(
     case 'on-off':
       if (positionals.length !== 2) throw invalidSettingsArgs();
       return { setting, state: readSettingState(state) ? 'on' : 'off' };
+    case 'value':
+      if (positionals.length !== 2) throw invalidSettingsArgs();
+      return { setting, state: parseSettingValue(setting, positionals[1] ?? '') };
     default:
       if (positionals.length !== 2) throw invalidSettingsArgs();
       return { setting, state };
@@ -301,13 +331,15 @@ function parsePermissionPositionals(
   const forms = definition.forms.filter(
     (form): form is Extract<SettingForm, { kind: 'permission' }> => form.kind === 'permission',
   );
-  const targets = forms.flatMap((form) => form.targets);
-  const permission = findVocabularyName(targets, positionals[2]);
+  const permission = findVocabularyName(
+    forms.flatMap((form) => form.targets),
+    positionals[2],
+  );
   const form = forms.find((candidate) => candidate.targets.includes(permission ?? ''));
   if (permission === undefined || form === undefined) {
     throw new AppError(
       'INVALID_ARGS',
-      `settings permission requires a target: ${targets.join('|')}`,
+      `settings permission requires a target: ${forms.flatMap((candidate) => candidate.targets).join('|')}`,
     );
   }
   if (findVocabularyName(form.actions, action) === undefined) {
@@ -318,15 +350,30 @@ function parsePermissionPositionals(
   }
   if (positionals.length === 3) return { permission };
   const mode = findVocabularyName(form.modes ?? [], positionals[3]);
-  if (mode === undefined || positionals.length > 4) {
-    throw new AppError(
-      'INVALID_ARGS',
-      form.modes === undefined
-        ? `settings permission ${permission} takes no mode.`
-        : `settings permission mode must be ${form.modes.join('|')}.`,
-    );
-  }
-  return { permission, mode };
+  if (mode !== undefined && positionals.length === 4) return { permission, mode };
+  const refusal = permissionModeRefusal(permission, form.modes, mode);
+  // A dotted value reads as a bundle id or package, which only an app-scoped target takes.
+  const app = (MOBILE_PERMISSION_TARGETS as readonly string[]).includes(permission)
+    ? positionals.slice(3).find((value) => value.includes('.'))
+    : undefined;
+  if (app === undefined) throw new AppError('INVALID_ARGS', refusal);
+  throw new AppError('INVALID_ARGS', refusal, {
+    reason: SETTINGS_REFUSAL_REASONS.permissionAppPositional.reason,
+    dispatched: 'no',
+    permission,
+    app,
+    hint: `Pass the app with --app ${app}.`,
+  });
+}
+
+function permissionModeRefusal(
+  permission: string,
+  modes: readonly string[] | undefined,
+  mode: string | undefined,
+): string {
+  if (modes === undefined) return `settings permission ${permission} takes no mode.`;
+  if (mode === undefined) return `settings permission mode must be ${modes.join('|')}.`;
+  return `settings permission ${permission} takes one mode.`;
 }
 
 function invalidSettingsArgs(): AppError {
@@ -361,7 +408,78 @@ function formAcceptsState(form: SettingForm, state: string | undefined): boolean
     case 'permission':
       return findVocabularyName(form.actions, state) !== undefined;
     case 'app-id':
+    case 'value':
       return true;
+  }
+}
+
+/** The settings whose form is a `value`: each one validates its own value before dispatch. */
+type ValueSetting = {
+  [Name in SettingName]: Extract<
+    (typeof SETTINGS)[Name]['forms'][number],
+    { kind: 'value' }
+  > extends never
+    ? never
+    : Name;
+}[SettingName];
+
+const VALUE_PARSERS = {
+  locale: parseLocaleId,
+  timezone: parseTimeZoneId,
+} as const satisfies Record<ValueSetting, (value: string) => string>;
+
+/** The value as the owners write it, or `reset`, so no device is handed a value it cannot read. */
+function parseSettingValue(setting: SettingName, value: string): string {
+  if (normalizeName(value) === SETTING_RESET_STATE) return SETTING_RESET_STATE;
+  const parser: (raw: string) => string = VALUE_PARSERS[setting as ValueSetting];
+  return parser(value);
+}
+
+const TIME_ZONE_NAME_PATTERN = /^[A-Za-z][\w+-]*(\/[\w+-]+)*$/;
+
+/**
+ * An IANA time zone name the host's time zone data knows, kept as written; the target device
+ * checks it on read-back. Offsets such as `+05:30` are refused because neither owner takes one.
+ */
+export function parseTimeZoneId(value: string): string {
+  const name = value.trim();
+  if (TIME_ZONE_NAME_PATTERN.test(name) && isKnownTimeZone(name)) return name;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid time zone: ${value}. Use an IANA time zone name, such as Asia/Kolkata or America/New_York.`,
+  );
+}
+
+function isKnownTimeZone(name: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: name });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A language, an optional script, and an optional region: the parts every owner can write. */
+const LOCALE_ID_PATTERN = /^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\d{3}))?$/;
+
+/**
+ * The BCP 47 tag of a locale id written with `-` or `_` in any casing, such as `en-IN` for `en_in`.
+ * Extensions and variants are refused: neither owner can apply them.
+ */
+export function parseLocaleId(value: string): string {
+  const canonical = canonicalLocale(value.trim().replaceAll('_', '-'));
+  if (canonical !== undefined && LOCALE_ID_PATTERN.test(canonical)) return canonical;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid locale id: ${value}. Use a language with an optional script and region, such as en_IN, fr-CA, or zh-Hans-CN.`,
+  );
+}
+
+function canonicalLocale(tag: string): string | undefined {
+  try {
+    return Intl.getCanonicalLocales(tag)[0];
+  } catch {
+    return undefined;
   }
 }
 

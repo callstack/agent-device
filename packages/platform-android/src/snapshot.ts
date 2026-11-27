@@ -189,6 +189,11 @@ export async function snapshotAndroid(
     return createAndroidSnapshotCapture(result, {
       clickability: buildAndroidSnapshotClickabilityEvidence(built),
       occlusionContext,
+      screenReaderOrder: async () => {
+        const { buildAndroidScreenReaderOrderEvidence } =
+          await import('./snapshot-screen-reader-order.ts');
+        return buildAndroidScreenReaderOrderEvidence(tree, built);
+      },
     });
   } catch (error) {
     if (!isAndroidSnapshotPresentationFailure(error)) throw error;

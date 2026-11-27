@@ -56,24 +56,26 @@ test('parseFillTarget preserves selector text whitespace', () => {
   });
 });
 
-test('parseFillTarget rejects invalid coordinates instead of treating them as a point', () => {
-  const parsed = parseFillTarget(['10', 'not-y', 'text']);
+test('parseFillTarget rejects invalid coordinates without quoting them', () => {
+  const parsed = parseFillTarget(['10', 'not-y', 'pw-secret']);
 
   expect(parsed.ok).toBe(false);
   if (!parsed.ok) {
     expect(parsed.response.ok).toBe(false);
     if (!parsed.response.ok) {
-      expect(parsed.response.error.message).toBe(
-        'fill requires x y text, @ref text, or selector text',
+      expect(parsed.response.error.code).toBe('INVALID_ARGS');
+      expect(parsed.response.error.message).toContain(
+        'Target is not a @ref, selector, or "x y" point',
       );
+      expect(JSON.stringify(parsed.response.error)).not.toMatch(/not-y|pw-secret/);
     }
   }
 });
 
-// --- Versioned refs (#1076): the daemon boundary splits `@e12~s3` pins ---
+// --- Versioned refs (#1076): the daemon boundary splits `@e12-s3` pins ---
 
 test('parseTouchTarget splits a pinned ref into plain ref + generation', () => {
-  const parsed = parseTouchTarget(['@e4~s12', 'Email field'], 'press');
+  const parsed = parseTouchTarget(['@e4-s12', 'Email field'], 'press');
 
   expect(parsed).toEqual({
     ok: true,
@@ -87,7 +89,7 @@ test('parseTouchTarget splits a pinned ref into plain ref + generation', () => {
 });
 
 test('parseTouchTarget rejects a malformed generation suffix with the grammar hint', () => {
-  const parsed = parseTouchTarget(['@e4~s'], 'press');
+  const parsed = parseTouchTarget(['@e4-s'], 'press');
 
   expect(parsed.ok).toBe(false);
   if (!parsed.ok) {
@@ -96,14 +98,14 @@ test('parseTouchTarget rejects a malformed generation suffix with the grammar hi
       error: {
         code: 'INVALID_ARGS',
         message: expect.stringContaining('malformed generation suffix'),
-        details: { hint: expect.stringContaining('@e12~s3') },
+        details: { hint: expect.stringContaining('@e12-s3') },
       },
     });
   }
 });
 
 test('parseLongPressTarget carries the pinned generation past the trailing duration', () => {
-  const parsed = parseLongPressTarget(['@e4~s7', '800']);
+  const parsed = parseLongPressTarget(['@e4-s7', '800']);
 
   expect(parsed).toEqual({
     ok: true,
@@ -118,7 +120,7 @@ test('parseLongPressTarget carries the pinned generation past the trailing durat
 });
 
 test('parseFillTarget splits a pinned ref and keeps the text intact', () => {
-  const parsed = parseFillTarget(['@e4~s3', 'qa@example.com']);
+  const parsed = parseFillTarget(['@e4-s3', 'qa@example.com']);
 
   expect(parsed).toEqual({
     ok: true,
@@ -132,7 +134,7 @@ test('parseFillTarget splits a pinned ref and keeps the text intact', () => {
 });
 
 test('parseFillTarget does not reinterpret the first word of ref text as a fallback label', () => {
-  const parsed = parseFillTarget(['@e4~s3', 'good', 'morning']);
+  const parsed = parseFillTarget(['@e4-s3', 'good', 'morning']);
 
   expect(parsed).toEqual({
     ok: true,
@@ -207,7 +209,7 @@ test('parseTouchTarget decodes a comma-separated ref sequence for press', () => 
 });
 
 test('parseTouchTarget decodes pinned members and keeps their generations', () => {
-  const parsed = parseTouchTarget(['@e1~s4,@e2'], 'press');
+  const parsed = parseTouchTarget(['@e1-s4,@e2'], 'press');
 
   expect(parsed.ok).toBe(true);
   if (!parsed.ok) return;
@@ -313,7 +315,7 @@ test('parseTouchTarget refuses a space-separated second ref on press and click',
     expect(parsed.response.error.hint).toBeTruthy();
   }
   // A pinned second ref is the same mistake.
-  expect(parseTouchTarget(['@e13', '@e14~s4'], 'press').ok).toBe(false);
+  expect(parseTouchTarget(['@e13', '@e14-s4'], 'press').ok).toBe(false);
   // Commands outside the tap family keep today's trailing-text behavior: the
   // second positional stays a fallback label there.
   expect(parseTouchTarget(['@e1', '@e2'], 'longpress').ok).toBe(true);
@@ -330,10 +332,36 @@ test('parseTouchRefSequence refuses a trailing positional after the plan', () =>
 });
 
 test('parseTouchTarget refuses a malformed generation suffix as a second key', () => {
-  // `@e14~s` is generation-shaped enough that treating it as a fallback label
+  // `@e14-s` is generation-shaped enough that treating it as a fallback label
   // would dispatch only the first key.
-  const parsed = parseTouchTarget(['@e13', '@e14~s'], 'press');
+  const parsed = parseTouchTarget(['@e13', '@e14-s'], 'press');
   expect(parsed.ok).toBe(false);
   if (parsed.ok || parsed.response.ok) return;
   expect(parsed.response.error.message).toContain('Separate the keys');
+});
+
+test('parseTouchTarget refuses a second key pinned with the retired separator', () => {
+  // A paste from a pre-separator client or a saved script must not become a
+  // fallback label: `press @e13 @e14~s3` would press one key and call it done.
+  const parsed = parseTouchTarget(['@e13', '@e14~s3'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.code).toBe('INVALID_ARGS');
+  // The refusal names the current spelling of the pin the caller is holding.
+  expect(parsed.response.error.message).toContain('"~s" is retired');
+  expect(parsed.response.error.message).toContain('Use @e14-s3.');
+});
+
+test('parseTouchTarget refuses a retired pin on the acted ref', () => {
+  const parsed = parseTouchTarget(['@e13~s3'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.message).toContain('"~s" is retired');
+});
+
+test('parseTouchTarget refuses a retired pin inside a ref sequence', () => {
+  const parsed = parseTouchTarget(['@e13,@e14~s3'], 'press');
+  expect(parsed.ok).toBe(false);
+  if (parsed.ok || parsed.response.ok) return;
+  expect(parsed.response.error.message).toContain('"~s" is retired');
 });

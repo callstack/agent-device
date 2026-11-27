@@ -103,6 +103,8 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
     cleanupSteps.push(
       [MICROPHONE_PERMISSION_RESET_STEP, ['settings', 'permission', 'reset', 'microphone']],
       ['restore light appearance', ['settings', 'appearance', 'light']],
+      ['reset time zone', ['settings', 'timezone', 'reset']],
+      ['reset locale', ['settings', 'locale', 'reset']],
       ['restore portrait orientation', ['orientation', 'portrait']],
     );
   }

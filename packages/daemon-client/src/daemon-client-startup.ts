@@ -21,9 +21,10 @@ import {
   parseDaemonStartupProgressMessage,
   type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
-import type {
-  DaemonPaths,
-  DaemonTransportPreference,
+import {
+  serverModeAnswersTransport,
+  type DaemonPaths,
+  type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveDaemonLaunchSpec, resolveDaemonTakeover } from './daemon-launch-spec.ts';
 import {
@@ -37,13 +38,20 @@ import {
   readDaemonInfo,
   type DaemonInfo,
 } from './daemon-client-metadata.ts';
-import { canConnect, isDaemonTransportUnavailableError } from './daemon-client-transport.ts';
 import {
+  isDaemonTransportUnavailableError,
+  probeDaemonReachability,
+} from './daemon-client-transport.ts';
+import type { DaemonProbeVerdict, LoopbackConnectDenial } from './daemon-client-loopback-probe.ts';
+import {
+  DAEMON_LOOPBACK_DENIED_HINT,
   DAEMON_UNAVAILABLE_REASONS,
   daemonContendedError,
   daemonIncompatibleError,
+  daemonServerModeServesNoClientTransportError,
   daemonTakeoverRetirementError,
   daemonStopCommand,
+  daemonConnectDeniedError,
   daemonRegistrationUnprovenError,
   getDaemonMetadataState,
   resolveDaemonStartupHint,
@@ -79,6 +87,7 @@ const DAEMON_STARTUP_TIMEOUT_ENV = 'AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS';
 
 type DaemonStartupFailureReason =
   | typeof DAEMON_UNAVAILABLE_REASONS.startupExited.reason
+  | typeof DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason
   | typeof DAEMON_UNAVAILABLE_REASONS.startupStalled.reason
   | typeof DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason;
 
@@ -113,11 +122,28 @@ export async function observeLocalDaemon(
     return null;
 
   const decision = await resolveDaemonTakeover(existing, {
-    onClientTransport: () =>
-      canReachReusableDaemon(existing, settings.transportPreference, deadline),
-    onAnyAdvertisedTransport: () => canReachReusableDaemon(existing, 'auto', deadline),
+    onClientTransport: () => probeReusableDaemon(existing, settings.transportPreference, deadline),
+    onAnyAdvertisedTransport: () => probeReusableDaemon(existing, 'auto', deadline),
+    refusedByHost: () => readRefusedAdvertisedConnect(existing),
   });
   return { info: existing, decision: await refineReplacement(existing, decision, options) };
+}
+
+/**
+ * Whether the host refuses this client's connects to the registered daemon's advertised ports — the
+ * guard a retirement takes out before it acts. One bare connect per advertised port, so it adds no
+ * health request and no wait step to a takeover. Loaded here, never at module scope: the CLI's eager
+ * closure must not pay for a verdict only a probe reads.
+ */
+async function readRefusedAdvertisedConnect(
+  info: DaemonInfo,
+): Promise<LoopbackConnectDenial | undefined> {
+  const { readAdvertisedConnectDenial } = await import('./daemon-client-loopback-probe.ts');
+  return await readAdvertisedConnectDenial({
+    port: info.port,
+    httpPort: info.httpPort,
+    remote: Boolean(info.baseUrl),
+  });
 }
 
 async function refineReplacement(
@@ -127,13 +153,28 @@ async function refineReplacement(
 ): Promise<DaemonTakeoverDecision> {
   if (!options.refineUnreachable || decision.kind !== 'replace') return decision;
   if (!isProcessAlive(info.pid)) return { ...decision, cause: 'unreachable' };
-  if (
-    decision.cause === 'unreachable' &&
-    (await canReachReusableDaemon(info, 'auto', options.deadline))
-  ) {
-    return { ...decision, cause: 'transport' };
+  if (decision.cause === 'unreachable') {
+    // The ladder probed the advertised endpoints before it answered `replace`. It is asked again
+    // here, so a refusal observed at this point still withholds the death verdict, and a live pid
+    // that answers now is judged a transport mismatch rather than a dead daemon.
+    const probe = await probeReusableDaemon(info, 'auto', options.deadline);
+    if (probe.denial) return { kind: 'connectDenied', denial: probe.denial };
+    if (probe.reachable) return { ...decision, cause: 'transport' };
   }
   return decision;
+}
+
+/**
+ * Refuses a server-mode and transport pair no daemon can satisfy, and so before this client starts,
+ * retires or quiesces one. The pair is judged on its own: it says nothing about a daemon already
+ * registered, which is why a client that can reach one reuses it, and why this is asked only where a
+ * daemon would be changed.
+ */
+export function assertServerModeAnswersClientTransport(
+  settings: Pick<DaemonClientSettings, 'serverMode' | 'transportPreference'>,
+): void {
+  if (!serverModeAnswersTransport(settings.serverMode, settings.transportPreference))
+    throw daemonServerModeServesNoClientTransportError(settings);
 }
 
 export async function readReusableLocalDaemon(
@@ -145,6 +186,14 @@ export async function readReusableLocalDaemon(
   if (!observed) return null;
   const { info: existing, decision } = observed;
   if (decision.kind === 'reuse') return existing;
+  // Ordered before the contended and newer-daemon refusals: a connect the host refused is about this
+  // client's sandbox, and neither re-judging the race nor replacing what it cannot see is the answer.
+  if (decision.kind === 'connectDenied')
+    throw daemonConnectDeniedError({
+      info: existing,
+      denial: decision.denial,
+      stateDir: settings.paths.baseDir,
+    });
   // Ordered before the newer-daemon refusal on purpose: a client that may not retire a contender
   // reports the race and lets `ensureDaemon` judge the winner again, where that refusal belongs.
   if (!settings.retireIncompatibleContender) throw daemonContendedError();
@@ -152,6 +201,10 @@ export async function readReusableLocalDaemon(
     throw await newerDaemonRefusedError(existing, decision, settings.paths.baseDir);
   }
   if (remainingStartupBudget(deadline) < MINIMUM_DAEMON_TAKEOVER_BUDGET_MS) return null;
+  // Asked here, and nowhere earlier: a daemon this client can reach was returned above, and a daemon
+  // it may not retire was refused above. This is the first point a takeover would end the registered
+  // daemon, and a configuration that cannot produce a usable one is not a reason to end it.
+  assertServerModeAnswersClientTransport(settings);
   const notice = {
     stateDir: settings.paths.baseDir,
     previous: { pid: existing.pid, ...(existing.version ? { version: existing.version } : {}) },
@@ -172,9 +225,11 @@ async function isAwaitingDaemonStartup(
   info: DaemonInfo,
   deadline: number | undefined,
 ): Promise<boolean> {
-  return (
-    isProcessAlive(info.pid) && !(await canConnect(info, 'auto', remainingStartupBudget(deadline)))
-  );
+  if (!isProcessAlive(info.pid)) return false;
+  const probe = await probeReusableDaemonOnce(info, 'auto', deadline);
+  // A denied probe says nothing about the daemon, so it is not "still starting": the caller has to
+  // reach the takeover's connectDenied answer instead.
+  return !probe.reachable && !probe.denial;
 }
 
 export async function stopDaemonForTakeover(
@@ -202,27 +257,34 @@ export async function retireDaemonForTakeover(
     throw daemonTakeoverRetirementError(retirement, existing, paths);
 }
 
-/** A live pid is probed again before being judged unreachable; liveness is signal 0, not `ps`. */
-async function canReachReusableDaemon(
+/**
+ * A live pid is probed again before being judged unreachable; liveness is signal 0, not `ps`. A probe
+ * the host refused is returned at once: the refusal comes from this client's own sandbox, so waiting
+ * cannot turn it into an answer.
+ */
+async function probeReusableDaemon(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
   deadline?: number,
-): Promise<boolean> {
-  if (await canConnectReusableDaemon(info, preference, deadline)) return true;
+): Promise<DaemonProbeVerdict> {
+  const first = await probeReusableDaemonOnce(info, preference, deadline);
+  if (first.reachable || first.denial) return first;
   for (let retry = 1; retry <= LIVE_DAEMON_PROBE_RETRIES; retry += 1) {
     if (!isProcessAlive(info.pid) || (deadline !== undefined && Date.now() >= deadline))
-      return false;
+      return first;
     await sleep(Math.min(LIVE_DAEMON_PROBE_RETRY_DELAY_MS, remainingStartupBudget(deadline)));
-    if (await canConnectReusableDaemon(info, preference, deadline)) {
+    const again = await probeReusableDaemonOnce(info, preference, deadline);
+    if (again.reachable) {
       emitDiagnostic({
         level: 'warn',
         phase: 'daemon_probe_recovered',
         data: { pid: info.pid, retry },
       });
-      return true;
+      return again;
     }
+    if (again.denial) return again;
   }
-  return false;
+  return first;
 }
 
 /**
@@ -251,15 +313,15 @@ export async function assertDaemonPolicyMatches(
   );
 }
 
-async function canConnectReusableDaemon(
+async function probeReusableDaemonOnce(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
   deadline?: number,
-): Promise<boolean> {
+): Promise<DaemonProbeVerdict> {
   try {
-    return await canConnect(info, preference, remainingStartupBudget(deadline));
+    return await probeDaemonReachability(info, preference, remainingStartupBudget(deadline));
   } catch (error) {
-    if (isDaemonTransportUnavailableError(error)) return false;
+    if (isDaemonTransportUnavailableError(error)) return { reachable: false };
     throw error;
   }
 }
@@ -304,6 +366,11 @@ type FailedDaemonStartup = {
 };
 
 export async function startLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+  // Asked before the first launch: a daemon whose server mode opens no listener this client will call
+  // can never be observed as ready over the endpoint it needs, so this client would retire it and
+  // report an unavailable endpoint on every later call. Naming a mode that cannot answer the client's
+  // own transport is a configuration to fix, not a daemon to start and take away again.
+  assertServerModeAnswersClientTransport(settings);
   const startupTimeoutMs = resolveDaemonStartupTimeoutMs(settings.host.env);
   const deadline = Date.now() + startupTimeoutMs;
   const cleanupResults: DaemonRetirementResult[] = [];
@@ -340,12 +407,26 @@ export async function startLocalDaemon(settings: DaemonClientSettings): Promise<
     ...(phases ? { phases: describeStartupPhaseTimings(phases) } : {}),
     ...(daemonLogTail ? { daemonLogTail } : {}),
     metadataState: state,
-    hint:
-      reason === DAEMON_UNAVAILABLE_REASONS.startupStalled.reason ||
-      reason === DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason
-        ? resolveStartupProgressHint(reason, startupTimeoutMs)
-        : resolveDaemonStartupHint(state, settings.paths),
+    hint: resolveStartupFailureHint(effectiveReason, startupTimeoutMs, () =>
+      resolveDaemonStartupHint(state, settings.paths),
+    ),
   });
+}
+
+function resolveStartupFailureHint(
+  reason: DaemonStartupFailureReason,
+  ceilingMs: number,
+  exitedHint: () => string,
+): string {
+  switch (reason) {
+    case DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason:
+      return DAEMON_LOOPBACK_DENIED_HINT;
+    case DAEMON_UNAVAILABLE_REASONS.startupStalled.reason:
+    case DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason:
+      return resolveStartupProgressHint(reason, ceilingMs);
+    case DAEMON_UNAVAILABLE_REASONS.startupExited.reason:
+      return exitedHint();
+  }
 }
 
 async function attemptLocalDaemonStartup(
@@ -385,16 +466,21 @@ async function attemptLocalDaemonStartup(
     };
   }
   const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
+  const listenDenied =
+    startup.kind === 'early_exit' &&
+    startup.exit.exitCode === DAEMON_STARTUP_EXIT_CODES.listenDenied;
   const reason: DaemonStartupFailureReason =
     startup.kind === 'stalled'
       ? DAEMON_UNAVAILABLE_REASONS.startupStalled.reason
       : startup.kind === 'ceiling'
         ? DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason
-        : DAEMON_UNAVAILABLE_REASONS.startupExited.reason;
+        : listenDenied
+          ? DAEMON_UNAVAILABLE_REASONS.startupListenDenied.reason
+          : DAEMON_UNAVAILABLE_REASONS.startupExited.reason;
   const available = isRegistrationAvailable(inspectProcessLock(settings.paths.lockPath));
   return {
     cleanup,
-    retry: joined && startup.kind === 'early_exit' && available,
+    retry: joined && startup.kind === 'early_exit' && !listenDenied && available,
     reason,
     startError: startup.kind === 'early_exit' ? describeDaemonEarlyExit(startup.exit) : undefined,
     daemonProcess: startup.kind === 'early_exit' ? startup.exit : { pid: launch.pid },
@@ -615,14 +701,13 @@ async function readReadyLaunchedDaemon(
 ): Promise<DaemonInfo | null> {
   const info = readDaemonInfo(settings.paths.infoPath);
   if (!info || !isLaunchedDaemon(info, launch)) return null;
+  let probe: DaemonProbeVerdict;
   try {
-    return (await canConnect(
+    probe = await probeDaemonReachability(
       info,
       settings.transportPreference,
       remainingStartupBudget(deadline),
-    )) && Date.now() < deadline
-      ? info
-      : null;
+    );
   } catch (error) {
     const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
     emitDiagnostic({
@@ -640,6 +725,18 @@ async function readReadyLaunchedDaemon(
     }
     throw error;
   }
+  if (probe.denial) {
+    // The host refused this client's connect to the daemon it launched, so readiness cannot be
+    // observed and the outcome is terminal. It is not a failed startup: the stalled and ceiling paths
+    // call `retireStartupAttempt`, which would signal a daemon this client cannot see, and a daemon
+    // that registered is healthy — this sandbox is not.
+    throw daemonConnectDeniedError({
+      info,
+      denial: probe.denial,
+      stateDir: settings.paths.baseDir,
+    });
+  }
+  return probe.reachable && Date.now() < deadline ? info : null;
 }
 
 function isLaunchedDaemon(info: DaemonInfo, launch: DaemonStartupLaunch): boolean {

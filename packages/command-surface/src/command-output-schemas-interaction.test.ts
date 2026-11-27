@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import { INTERACTION_COMMAND_OUTPUT_SCHEMAS } from './interaction/index.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
@@ -8,14 +9,9 @@ const INTERACTION_COMMANDS = Object.keys(INTERACTION_COMMAND_OUTPUT_SCHEMAS) as 
   keyof typeof INTERACTION_COMMAND_OUTPUT_SCHEMAS
 >;
 
-// press, click, fill, longpress, and hover carry the post-action observation trait (#1652): the
-// composed map grafts a `settle` property onto a COPY, so they are not reference-equal to the
-// module's own object. find carries no such trait.
-const SETTLE_DERIVED_COMMANDS = new Set(['press', 'click', 'fill', 'longpress', 'hover']);
-
 test('MCP interaction family output schemas are the family module entries, not copies', () => {
   for (const command of INTERACTION_COMMANDS) {
-    if (SETTLE_DERIVED_COMMANDS.has(command)) continue;
+    if (commandSupportsSettleObservation(command)) continue;
     assert.equal(
       COMMAND_OUTPUT_SCHEMAS[command],
       INTERACTION_COMMAND_OUTPUT_SCHEMAS[command],

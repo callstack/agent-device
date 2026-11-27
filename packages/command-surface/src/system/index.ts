@@ -7,6 +7,7 @@ import { foldCommandFacet } from './fold.ts';
 import { hardwareButtonCommandFacet } from './hardware-button.ts';
 import { homeCommandFacet } from './home.ts';
 import { keyboardCommandFacet } from './keyboard.ts';
+import { lockScreenCommandFacet } from './lock-screen.ts';
 import { orientationCommandFacet } from './orientation.ts';
 import { shakeCommandFacet } from './shake.ts';
 import { telephonyCommandFacet } from './telephony.ts';
@@ -33,6 +34,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     clipboardCommandFacet,
     tvRemoteCommandFacet,
     hardwareButtonCommandFacet,
+    lockScreenCommandFacet,
     telephonyCommandFacet,
   ],
 });

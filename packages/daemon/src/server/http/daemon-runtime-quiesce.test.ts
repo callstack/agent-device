@@ -231,7 +231,7 @@ test('an idle daemon accepts a quiesce, drains and releases its state directory'
   const published = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as {
     capabilities?: unknown;
   };
-  expect(published.capabilities).toEqual(['quiesce', 'script-artifacts']);
+  expect(published.capabilities).toEqual(['quiesce', 'script-artifacts', 'checked-rpc']);
 
   expect(await daemon.quiesce()).toEqual({ ok: true, data: { outcome: 'draining' } });
 

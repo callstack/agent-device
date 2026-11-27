@@ -79,6 +79,32 @@ test('runtime drag resolves generic selector endpoints before one continuous poi
   assert.equal(result.targets?.destination.selectorChain?.[0], 'id="drop-target"');
 });
 
+test('runtime pinch on an element centers the plan on it and records its selector', async () => {
+  let capturedPlan:
+    | Parameters<
+        NonNullable<import('@agent-device/contracts/backend').AgentDeviceBackend['performGesture']>
+      >[1]
+    | undefined;
+  const device = createInteractionDevice(dragTargetSnapshot(), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async (_context, plan) => {
+      capturedPlan = plan;
+    },
+  });
+
+  const result = await device.interactions.gesture({
+    gesture: { intent: 'pinch', element: '@e2', scale: 2 },
+  });
+
+  assert.equal(result.kind, 'pinch');
+  assert.equal(capturedPlan?.topology, 'multi');
+  assert.deepEqual(result.from, { x: 80, y: 130 });
+  assert.equal(
+    'recordedTargetSelector' in result ? result.recordedTargetSelector : undefined,
+    'id="drag-source"',
+  );
+});
+
 test('runtime drag resolves both endpoints before dispatching any device gesture', async () => {
   let dispatchCount = 0;
   const device = createInteractionDevice(dragTargetSnapshot(), {

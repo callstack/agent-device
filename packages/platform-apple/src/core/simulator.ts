@@ -4,7 +4,11 @@ import { execFailureDetails, requireExecSuccess } from '@agent-device/host-kit/c
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
-import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
+import {
+  BOOT_FAILURE_REASONS,
+  bootFailureHint,
+  classifyBootFailure,
+} from '@agent-device/provision-kit/boot-diagnostics';
 
 import {
   IOS_BOOT_TIMEOUT_MS,
@@ -151,7 +155,10 @@ export async function ensureBootedSimulator(
         jitter: 0.2,
         shouldRetry: (error) => {
           const reason = classifyAttempt(error);
-          return reason !== 'IOS_BOOT_TIMEOUT' && reason !== 'CI_RESOURCE_STARVATION_SUSPECTED';
+          return (
+            reason !== BOOT_FAILURE_REASONS.iosBootTimeout.reason &&
+            reason !== BOOT_FAILURE_REASONS.ciResourceStarvationSuspected.reason
+          );
         },
       },
       {

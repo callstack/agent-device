@@ -17,11 +17,14 @@ struct CapturedAppScreen {
 /// Why the runner could not name the display hosting the target app. Carried as a reason code
 /// rather than as message text so a required capture can fail closed with a code the host keys on,
 /// and an optional observation can report "unknown" without parsing a sentence (#2728).
-enum RunnerAppScreenCaptureFailure: String, Error {
-  case unresolvedWindow = "APP_SCREEN_WINDOW_UNRESOLVED"
-  case unresolvedScreen = "APP_SCREEN_UNRESOLVED"
-  case unrenderableImage = "APP_SCREEN_CAPTURE_UNRENDERABLE"
-  case offLitPanel = "APP_SCREEN_OFF_LIT_PANEL"
+enum RunnerAppScreenCaptureFailure: Error {
+  case unresolvedWindow
+  case unresolvedScreen
+  /// The lit-panel booking found no window and XCTest recorded an issue during that walk, so the
+  /// answer is an unread window list, not an app without windows (#5023).
+  case unreadableWindows
+  case unrenderableImage
+  case offLitPanel
 
   init(_ failure: RunnerApplicationScreenFailure) {
     switch failure {
@@ -39,14 +42,13 @@ enum RunnerAppScreenCaptureFailure: String, Error {
     Response(ok: false, error: ErrorPayload(code: wireCode, message: message, hint: hint))
   }
 
-  /// The wire code for this refusal: always the `RunnerWireErrorCode` table row that shares the
-  /// raw value. The raw value stays for test assertions and logging; only this property is
-  /// allowed to put the code on the wire, so the literal guard sees one constant per code.
+  /// The wire code for this refusal, from the `RunnerWireErrorCode` table. Unreadable windows
+  /// share `APP_SCREEN_UNRESOLVED` and differ only in their message and hint.
   var wireCode: String {
     switch self {
     case .unresolvedWindow:
       return RunnerTests.RunnerWireErrorCode.appScreenWindowUnresolved
-    case .unresolvedScreen:
+    case .unresolvedScreen, .unreadableWindows:
       return RunnerTests.RunnerWireErrorCode.appScreenUnresolved
     case .unrenderableImage:
       return RunnerTests.RunnerWireErrorCode.appScreenCaptureUnrenderable
@@ -58,9 +60,11 @@ enum RunnerAppScreenCaptureFailure: String, Error {
   var message: String {
     switch self {
     case .unresolvedWindow:
-      return "Neither the target app nor the system surface resolved a window, so no display could be named."
+      return "No app window resolved, so no display could be named."
     case .unresolvedScreen:
       return "The resolved app window did not report the display it is shown on."
+    case .unreadableWindows:
+      return "XCTest recorded an issue while reading the target app's windows on the lit panel, so they could not be read."
     case .unrenderableImage:
       return "The resolved display handed back an image that could not be drawn upright."
     case .offLitPanel:
@@ -71,9 +75,11 @@ enum RunnerAppScreenCaptureFailure: String, Error {
   var hint: String {
     switch self {
     case .unresolvedWindow:
-      return "The capture follows the display that owns a window, so this is a runtime that is answering no window for any process; runner.log names the window frame and the query answer it refused."
+      return "The runner follows the display that owns the target app's window, and a capture also asks the system surface; runner.log names the window frame and the query answer it refused."
     case .unresolvedScreen:
       return "Retry the capture. If it persists, the XCTest runtime is not reporting the window's display; runner.log names the window frame it resolved."
+    case .unreadableWindows:
+      return "The runner dispatched nothing. Retry the command: a window that closed during the read is gone on the next one. If it repeats on this screen, XCTest is likely rejecting a deep accessibility tree; runner.log names the issue before AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW_UNREAD."
     case .unrenderableImage:
       return "Retry the capture. The display was resolved, so this is the capture itself failing, not a panel question."
     case .offLitPanel:

@@ -169,12 +169,12 @@ test('Provider-backed integration audit publishes pinned finding refs and keeps 
         'plain_ref_requires_complete_frame',
       );
       assert.equal(
-        refusalReason(await daemon.callCommand('press', [`@e4~s${generation}`])),
+        refusalReason(await daemon.callCommand('press', [`@e4-s${generation}`])),
         'ref_not_issued',
       );
 
       // The pinned finding ref presses the Menu button, the node the finding names.
-      assertRpcOk(await daemon.callCommand('press', [`@e2~s${generation}`]));
+      assertRpcOk(await daemon.callCommand('press', [`@e2-s${generation}`]));
       const taps = tapRequests();
       assert.equal(taps.length, 2);
       assert.deepEqual([taps[1]?.x, taps[1]?.y], [25, 75]);
@@ -320,7 +320,7 @@ test('Provider-backed integration publishes a native-only matched ref without an
         },
       ]);
       assert.equal(typeof result.refsGeneration, 'number');
-      assertRpcOk(await daemon.callCommand('press', [`@e4~s${result.refsGeneration}`]));
+      assertRpcOk(await daemon.callCommand('press', [`@e4-s${result.refsGeneration}`]));
       assert.deepEqual(
         tapRequests().map(({ x, y }) => ({ x, y })),
         [{ x: 30, y: 310 }],

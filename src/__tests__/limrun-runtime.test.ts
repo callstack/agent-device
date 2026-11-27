@@ -43,6 +43,7 @@ const limrunMockState = vi.hoisted(() => {
       address: { address: '127.0.0.1', port: 62_001 },
       close: androidTunnelClose,
     })),
+    iosModel: 'iPhone',
     iosCreate: vi.fn(async () => ({
       metadata: { id: 'ios-instance-1' },
       status: { token: 'instance-token', apiUrl: 'https://ios.example' },
@@ -115,7 +116,7 @@ vi.mock('@limrun/api/ios-client', async (importOriginal) => {
         udid: 'ios-device',
         screenWidth: 402,
         screenHeight: 874,
-        model: 'iPhone',
+        model: limrunMockState.iosModel,
       },
     })),
   };
@@ -151,16 +152,7 @@ test('Limrun runtime identifies direct CLI usage when creating an instance', asy
     apiKey: 'lim_test_key',
   });
 
-  const lease: DeviceLease = {
-    leaseId: 'lease-a',
-    tenantId: 'team-a',
-    runId: 'run-a',
-    backend: 'ios-instance',
-    leaseProvider: 'limrun',
-    createdAt: 1,
-    heartbeatAt: 1,
-    expiresAt: 60_001,
-  };
+  const lease = iosLease('lease-a');
 
   try {
     const allocateLease = runtime.leaseLifecycle.allocate;
@@ -254,21 +246,15 @@ test('Limrun iOS uses shared deep-link classification', async () => {
     ]);
     assert.deepEqual(limrunMockState.iosLaunchApp.mock.calls, []);
     assert.deepEqual(limrunMockState.iosOpenUrl.mock.calls, []);
+    const write = (domain: string, key: string) => [
+      ['spawn', 'booted', 'defaults', 'write', domain, key, '-bool', 'YES'],
+      undefined,
+    ];
     assert.deepEqual(limrunMockState.iosSimctl.mock.calls, [
       [['list', 'devices', '-j'], undefined],
-      [
-        [
-          'spawn',
-          'booted',
-          'defaults',
-          'write',
-          'com.apple.Accessibility',
-          'ApplicationAccessibilityEnabled',
-          '-bool',
-          'YES',
-        ],
-        undefined,
-      ],
+      write('com.apple.keyboard.preferences', 'DidShowContinuousPathIntroduction'),
+      write('com.apple.keyboard.preferences', 'MultilingualKeyboardTip'),
+      write('com.apple.Accessibility', 'ApplicationAccessibilityEnabled'),
       [['openurl', 'booted', 'example://screen'], undefined],
     ]);
   } finally {
@@ -920,6 +906,38 @@ test('Limrun refuses to replace an owner port reverse on an attached Android ins
     ['reverse', '--no-rebind', 'tcp:8081', 'tcp:8081'],
   ]);
 });
+
+for (const attached of [false, true]) {
+  test.each([
+    { model: 'watch', name: 'Apple Watch Series 11 (46mm)', appleOs: 'watchos' },
+    { model: 'ipad', name: 'iPad Pro 11-inch (M4)', appleOs: 'ipados' },
+  ] as const)(
+    `Limrun identifies a ${attached ? 'pre-existing' : 'newly allocated'} $model from its instance client`,
+    async ({ model, name, appleOs }) => {
+      limrunMockState.iosModel = name;
+      const runtime = new LimrunRuntime(
+        attached
+          ? { instances: { ios: ATTACHED_IOS } }
+          : { apiKey: 'lim_test_key', iosModel: model },
+      );
+      try {
+        const device = await allocateLimrunDevice(runtime, iosLease(`lease-${model}`));
+        assert.equal(device.appleOs, appleOs);
+        assert.equal(device.name, limrunMockState.iosModel);
+        assert.ok(runtime.getInteractor(device));
+        if (attached) assert.equal(limrunMockState.iosCreate.mock.calls.length, 0);
+        else
+          expect(limrunMockState.iosCreate).toHaveBeenCalledWith(
+            expect.objectContaining({ spec: expect.objectContaining({ model }) }),
+            expect.anything(),
+          );
+      } finally {
+        limrunMockState.iosModel = 'iPhone';
+        await runtime.shutdown();
+      }
+    },
+  );
+}
 
 test('Limrun instance access wins over the API key for its platform only', async () => {
   const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', instances: { ios: ATTACHED_IOS } });

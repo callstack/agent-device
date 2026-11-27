@@ -46,7 +46,7 @@ async function describeInstallation(
   const version = typeof packageJson.version === 'string' ? packageJson.version : undefined;
   if (version === undefined) {
     throw new AppError('INVALID_ARGS', `Plugin package has no version: ${name}`, {
-      reason: 'invalid_plugin',
+      reason: PLUGIN_REASONS.invalidPlugin.reason,
     });
   }
   return { name, version, directory, selection, entry: discoverPluginEntry(directory) };
@@ -69,7 +69,7 @@ async function loadInstallation({ name, directory, selection, entry }: StoreInst
   const module = await import(pathToFileURL(entry.file).href);
   if (typeof module.default !== 'function')
     throw new AppError('INVALID_ARGS', `Plugin must export a default factory: ${name}`, {
-      reason: 'invalid_plugin',
+      reason: PLUGIN_REASONS.invalidPlugin.reason,
     });
   return await module.default(selection.options);
 }

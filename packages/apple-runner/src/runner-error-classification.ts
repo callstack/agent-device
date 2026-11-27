@@ -606,7 +606,7 @@ function matchesRunnerErrorRule(error: AppError, match: RunnerErrorMatch): boole
 
 function matchesRunnerErrorDetails(error: AppError, details: RunnerErrorMatch['details']): boolean {
   if (details === undefined) return true;
-  return details((error.details ?? {}) as AppErrorDetails);
+  return details(error.details ?? {});
 }
 
 function matchesRunnerErrorMessage(error: AppError, parts: readonly string[] | undefined): boolean {
@@ -745,7 +745,7 @@ export function isStructuredRunnerFailure(error: unknown): error is AppError {
  */
 export function isUsbmuxDeviceUnattachedError(error: unknown): boolean {
   if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') return false;
-  return hasUsbmuxDeviceUnattached((error.details ?? {}) as AppErrorDetails);
+  return hasUsbmuxDeviceUnattached(error.details ?? {});
 }
 
 /**

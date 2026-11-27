@@ -598,6 +598,8 @@ extension RunnerTests {
         )
       }
       return Response(ok: true, data: DataPayload(message: command.command.rawValue))
+    case .lockScreen, .unlockScreen:
+      return executeLockScreenCommand(command.command)
     case .keyboardDismiss, .keyboardStatus:
       var status: RunnerKeyboardStatus?
       withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
@@ -707,7 +709,11 @@ extension RunnerTests {
       }
       return Self.reportingSchedule(execution.schedule, in: response)
     case .gestureViewport:
-      let frame = try gestureViewportFrame(app: activeApp, includesKeyboard: command.includesKeyboard == true)
+      let frame = try gestureViewportFrame(
+        app: activeApp,
+        includesKeyboard: command.includesKeyboard == true,
+        displayViewport: command.displayViewport == true
+      )
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {
         return Response(ok: false, error: ErrorPayload(code: "COMMAND_FAILED", message: "Active app interaction viewport is unavailable"))
       }

@@ -13,6 +13,7 @@ import {
   computeDaemonCodeSignature,
   resolveDaemonCodeOrigin,
 } from '@agent-device/host-kit/code-signature';
+import type { DaemonProbeVerdict, LoopbackConnectDenial } from './daemon-client-loopback-probe.ts';
 import type { DaemonInfo, DaemonTakeoverDecision } from './daemon-client-metadata.ts';
 
 type DaemonLaunchSpec = {
@@ -111,23 +112,35 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
  * Reuse needs the daemon on the transport this client will route through; refusal needs only
  * proof that the daemon is alive, on any transport its metadata advertises. A client whose
  * transport preference the daemon does not serve must still see a live newer daemon.
+ *
+ * Each probe answers with a verdict, not a boolean: a connect the host refused is evidence about
+ * the sandbox around this client, not about the daemon, and no caller may read it as "dead".
  */
 export type DaemonReachability = {
   /** Asked last, only once version and code identity leave the decision to it. */
-  onClientTransport: () => Promise<boolean>;
-  onAnyAdvertisedTransport: () => Promise<boolean>;
+  onClientTransport: () => Promise<DaemonProbeVerdict>;
+  onAnyAdvertisedTransport: () => Promise<DaemonProbeVerdict>;
+  /**
+   * Asked before any answer that RETIRES the daemon: whether the host refuses this client's connects
+   * to its advertised ports. Cheaper than a reachability probe by design — one bare connect per
+   * advertised port, no health request, no retries and no waits — because the question is about this
+   * client's permission to reach the endpoint, not about whether the daemon answers there.
+   */
+  refusedByHost: () => Promise<LoopbackConnectDenial | undefined>;
 };
 
 /**
- * One ladder decides reuse, replace, or refuse, so a daemon can never be reused and announced as
- * replaced, or replaced without a reason to print. The version answers first because it is cheap
- * and decides alone for the common pair of installed trees; the code identity
- * (`resolveCodeIdentityMismatch`) answers next and unreachability last.
+ * One ladder decides reuse, replace, refuse, or "the host refused this client", so a daemon can
+ * never be reused and announced as replaced, or replaced without a reason to print. The version
+ * answers first because it is cheap and decides alone for the common pair of installed trees; the
+ * code identity (`resolveCodeIdentityMismatch`) answers next and unreachability last.
  *
  * A live daemon NEWER than this client is neither reused nor replaced: it was started by a
  * newer install that may still own live sessions, and an older binary that a package manager
  * hoisted onto PATH must not kill it under that install. An unreachable newer daemon is dead and
- * replaced like any version mismatch.
+ * replaced like any version mismatch. A probe the HOST refused answers `connectDenied` on either
+ * branch instead: this client never saw the daemon, so it holds no evidence that the daemon is
+ * dead, and retiring it would end a daemon only this client's sandbox cannot reach.
  */
 export async function resolveDaemonTakeover(
   info: DaemonInfo,
@@ -135,10 +148,17 @@ export async function resolveDaemonTakeover(
 ): Promise<DaemonTakeoverDecision> {
   const clientVersion = readVersion();
   if (info.version !== clientVersion) {
+    // A replacement retires a live process, so no branch of the ladder answers it on the record
+    // alone: whether the host even lets this client reach the daemon's ports is asked first, and a
+    // refusal answers `connectDenied` instead of a death verdict. This is where the question used to
+    // be asked only for a NEWER daemon; an older or mismatched one was replaced unprobed, which let a
+    // client whose sandbox refuses the connect kill a daemon it never saw.
+    const refusal = await reachability.refusedByHost();
+    if (refusal) return { kind: 'connectDenied', denial: refusal };
     if (
       info.version &&
       isNewerVersion(info.version, clientVersion) &&
-      (await reachability.onAnyAdvertisedTransport())
+      (await reachability.onAnyAdvertisedTransport()).reachable
     ) {
       return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
     }
@@ -150,8 +170,21 @@ export async function resolveDaemonTakeover(
   }
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
-  if (codeMismatch) return { kind: 'replace', reason: codeMismatch, cause: 'code' };
-  if (!(await reachability.onClientTransport())) {
+  if (codeMismatch) {
+    const refusal = await reachability.refusedByHost();
+    if (refusal) return { kind: 'connectDenied', denial: refusal };
+    return { kind: 'replace', reason: codeMismatch, cause: 'code' };
+  }
+  const probe = await reachability.onClientTransport();
+  if (probe.denial) return { kind: 'connectDenied', denial: probe.denial };
+  if (!probe.reachable) {
+    // A managed client retires a daemon it cannot reach on its own transport, so the permission
+    // question is asked here too, whatever the client's transport preference happened to try: a
+    // preference for an endpoint the daemon does not serve, or a sandbox that answers this leg with
+    // silence and would refuse the other outright, both end in a retirement of a daemon this client
+    // was never allowed to see.
+    const refusal = await reachability.refusedByHost();
+    if (refusal) return { kind: 'connectDenied', denial: refusal };
     return { kind: 'replace', reason: 'unreachable', cause: 'unreachable' };
   }
   return { kind: 'reuse' };

@@ -9,6 +9,7 @@ import type {
   HardwareButtonName,
   OrientationRequest,
   SetFoldPoseInput,
+  LockScreenAction,
 } from './device-rotation.ts';
 import type { TelephonyEventInput } from './telephony-input.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
@@ -111,6 +112,10 @@ export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
 
 export type HardwareButtonCommandOptions = DeviceCommandBaseOptions & {
   button: HardwareButtonName;
+};
+
+export type LockScreenCommandOptions = DeviceCommandBaseOptions & {
+  action: LockScreenAction;
 };
 
 export type TelephonyCommandOptions = DeviceCommandBaseOptions & TelephonyEventInput;

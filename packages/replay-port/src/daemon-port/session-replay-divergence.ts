@@ -5,10 +5,7 @@ import { isUnreadableCaptureContentError } from '@agent-device/contracts/android
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
-import {
-  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
-  type DaemonError,
-} from '@agent-device/kernel/errors';
+import { BOUNDED_COMPOSITE_REASONS, type DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { collectReplaySelectorCandidates } from '@agent-device/replay-port/session-replay-heal';
 import { buildSelectorCandidates, resolveReplaySuggestionCandidate } from '@agent-device/selectors';
@@ -104,7 +101,7 @@ export async function buildReplayFailureDivergence(params: {
   };
 
   const refusedBeforeDispatch =
-    error.details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON &&
+    error.details?.reason === BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason &&
     error.details.dispatched === 'no';
   const observation = refusedBeforeDispatch
     ? ({
@@ -567,7 +564,7 @@ export function resolveSuggestionMatchingConfig(
     allowDisambiguation:
       isTouch ||
       action.command === 'fill' ||
-      (action.command === 'get' && action.positionals?.[0] === 'text'),
+      (action.command === 'get' && action.positionals[0] === 'text'),
   };
 }
 

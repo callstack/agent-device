@@ -76,12 +76,18 @@ export function messageCliOutput(result: Record<string, unknown>): CliOutput {
  * one renders on a single line.
  */
 function collectResponseWarnings(result: Record<string, unknown>): string[] {
-  return [
+  const raw = [
     ...(typeof result.warning === 'string' && result.warning.trim() !== '' ? [result.warning] : []),
     ...readResponseWarnings(result),
+    ...(result.targetHittable === false &&
+    typeof result.hint === 'string' &&
+    result.hint.trim() !== ''
+      ? [result.hint]
+      : []),
   ]
     .map((warning) => collapseWarningText(warning))
     .filter((warning) => warning.length > 0);
+  return Array.from(new Set(raw));
 }
 
 /**
@@ -143,14 +149,25 @@ export function foldWarningText(warning: string): string {
 }
 
 /**
+ * The pin separator, spelled here rather than imported from the kernel owner
+ * (`REF_PIN_SEPARATOR`, `@agent-device/kernel/snapshot`): this module sits in the
+ * CLI façade's eager module closure, which the gate in
+ * `scripts/__tests__/eager-closure-budgets.test.ts` holds to no growth. The two
+ * spellings are bound by `output-common.test.ts`.
+ */
+const REF_PIN_SEPARATOR = '-s';
+
+/**
  * ADR 0014: a reusable ref in a PARTIAL result renders in ready-to-copy
- * `@eN~s<refsGeneration>` form so a human CLI caller can paste it into the next
+ * `@eN-s<refsGeneration>` form so a CLI or agent caller can paste it into the next
  * mutation without a separate pin step. A mutating result carries no
- * `refsGeneration`, so its acted ref is never pinned.
+ * `refsGeneration`, so its acted ref is never pinned. The `-s` separator is
+ * shell-literal on purpose: agents paste this text into commands their host gates
+ * with allow-rules that reject unquoted words holding a glob metacharacter.
  */
 export function pinnedRefText(ref: unknown, refsGeneration: unknown): string | undefined {
   if (typeof ref !== 'string' || ref.length === 0) return undefined;
   if (typeof refsGeneration !== 'number') return undefined;
   const body = ref.startsWith('@') ? ref.slice(1) : ref;
-  return `@${body}~s${refsGeneration}`;
+  return `@${body}${REF_PIN_SEPARATOR}${refsGeneration}`;
 }

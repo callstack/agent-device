@@ -10,7 +10,10 @@ For each platform, the suite records a reason for each catalog command that it d
 ## Run locally
 
 1. Run `pnpm build`. The suite drives the built CLI and the built SDK.
-2. Use your own booted simulator or emulator. Install a current Release fixture on it. For the cached CI build and the JavaScript repack, see `examples/test-app/README.md`.
+2. Use your own booted simulator or emulator. For Android, install the cached Release fixture with
+   `pnpm test-app:android:fixture --serial <serial>`. It needs `pnpm test-app:install` run once, `gh` auth, and
+   `ANDROID_HOME`, and it checks the installed package afterwards. For iOS, install a current Release fixture; see
+   `examples/test-app/README.md`.
 3. For iOS, set `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` to a path in your worktree.
 4. For Android, run `pnpm build:android` once. The snapshot helper APK must be in `android/snapshot-helper/dist/`.
 5. Run the suite:
@@ -21,20 +24,10 @@ pnpm perf --platform android --serial <serial> --rounds 3 --warmup 1 --out-dir .
 ```
 
 `--rounds` is at least 3. `--scenarios lifecycle,heavy-feed` runs a subset. `--app-id` changes the fixture bundle id or package name.
-To install the cached Android Release fixture, use an empty download directory:
-
-```sh
-pnpm test-app:install
-NAME="$(sh .github/actions/setup-fixture-app/resolve-artifact-name.sh android)"
-RUN="$(gh api "repos/callstack/agent-device/actions/artifacts?name=$NAME" --jq '.artifacts[0].workflow_run.id')"
-gh run download "$RUN" --repo callstack/agent-device --name "$NAME" --dir <download-dir>
-tar -xzf <download-dir>/binary.tar.gz -C <download-dir>
-ANDROID_HOME=<sdk> bash .github/actions/setup-fixture-app/repack-android-apk.sh <download-dir>/app-release.apk <apk-dir>/fixture-app.apk
-adb -s <serial> install -r <apk-dir>/fixture-app.apk
-```
-
-The repack puts the current JavaScript into the cached native build.
-If no artifact has the current fingerprint, build the APK as `.github/workflows/test-app-build-cache.yml` does.
+The Android suite and `pnpm bench:android:automation` check the installed package before the first timed sample.
+A debuggable build, or one that carries expo-dev-launcher, ignores the suite's deep links, so the check stops the run and names `pnpm test-app:android:fixture --serial <serial>`.
+The fixture command repacks the cached native build with the current JavaScript.
+If no artifact has the current fingerprint, it fails and points at `.github/workflows/test-app-build-cache.yml`; build the APK the way that workflow does.
 
 The suite uses its own temporary state directory and daemon. It stops them at the end.
 At the end, or on SIGINT or SIGTERM, the suite saves the logs to `raw/state/`, stops the session and daemon within a deadline, and saves the logs again.
@@ -60,6 +53,7 @@ Some shared steps use other screen coordinates or waits on Android. The `on.andr
 | `push` | Not timed: the fixture has no notification authorization. | lifecycle (adb broadcast) |
 | `telephony` | Not timed: the simulator refuses calls and SMS. | lifecycle (`telephony sms`) |
 | `shake` | Not timed: the fixture handles no shake. | Same reason. |
+| `lock-screen` | Not timed: a locked screen covers the fixture for every step after it. | Same reason. |
 | `snapshot` | home-reads: `snapshot-forced-tree` | heavy-feed: `snapshot-raw-one-shot` |
 | `audio` | Not timed: hosted runners grant no macOS audio permission. | Not timed: the Linux runner has no ScreenCaptureKit. |
 | `fold` | Not timed: iPhone Duo only. | Not timed: foldable emulators only. |

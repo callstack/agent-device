@@ -1,11 +1,7 @@
 import fs from 'node:fs';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
-import {
-  CONTACT_SHEET_EXTRACTION_REASON,
-  CONTACT_SHEET_NO_FRAMES_REASON,
-  CONTACT_SHEET_UNSUPPORTED_HOST_REASON,
-} from './contact-sheet-report.ts';
+import { CONTACT_SHEET_REASONS } from './contact-sheet-report.ts';
 import {
   AppError,
   createRequestCanceledError,
@@ -30,7 +26,7 @@ export function assertContactSheetHostSupport(
     'UNSUPPORTED_OPERATION',
     'Contact sheets can only be built on macOS hosts, which is where the frame decoder runs',
     {
-      reason: CONTACT_SHEET_UNSUPPORTED_HOST_REASON,
+      reason: CONTACT_SHEET_REASONS.unsupportedHost.reason,
       hostPlatform,
       hint: 'Run this command on the macOS host that recorded the clip, or read the video artifact itself.',
     },
@@ -76,7 +72,7 @@ export async function extractRecordingFrames(
   assertContactSheetHostSupport(input.hostPlatform ?? process.platform);
   if (input.timesMs.length === 0) {
     throw new AppError('COMMAND_FAILED', 'Contact sheet sampling requested no frames', {
-      reason: CONTACT_SHEET_NO_FRAMES_REASON,
+      reason: CONTACT_SHEET_REASONS.noFrames.reason,
       videoPath: input.videoPath,
     });
   }
@@ -114,7 +110,7 @@ export async function extractRecordingFrames(
       'COMMAND_FAILED',
       `Failed to extract frames from the recording: ${lastNonEmptyLine(result.stderr) || `exit ${result.exitCode}`}`,
       {
-        reason: CONTACT_SHEET_EXTRACTION_REASON,
+        reason: CONTACT_SHEET_REASONS.frameExtractionFailed.reason,
         videoPath: input.videoPath,
         exitCode: result.exitCode,
       },
@@ -132,7 +128,7 @@ export async function extractRecordingFrames(
       'COMMAND_FAILED',
       'The recording returned no decodable frames for a contact sheet',
       {
-        reason: CONTACT_SHEET_NO_FRAMES_REASON,
+        reason: CONTACT_SHEET_REASONS.noFrames.reason,
         videoPath: input.videoPath,
         skippedSampleCount: extracted.skippedSampleCount,
       },
@@ -211,7 +207,7 @@ function extractionError(message: string, videoPath: string, cause?: unknown): A
   return new AppError(
     'COMMAND_FAILED',
     message,
-    { reason: CONTACT_SHEET_EXTRACTION_REASON, videoPath },
+    { reason: CONTACT_SHEET_REASONS.frameExtractionFailed.reason, videoPath },
     cause,
   );
 }

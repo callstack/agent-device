@@ -283,12 +283,6 @@ export const LEASE_DEVICE_SPEC_KEYS = [
 
 type LeaseDeviceSpecKey = (typeof LEASE_DEVICE_SPEC_KEYS)[number];
 
-/** The typed reason a request naming a device spec is refused with. */
-const DEVICE_SPEC_UNSUPPORTED_REASON = 'device-spec-unsupported';
-
-/** The typed reason a request giving a device-spec key a value of the wrong type is refused with. */
-const DEVICE_SPEC_INVALID_REASON = 'device-spec-invalid';
-
 // A Cloud provider profile field added without joining the projection would be dropped from the
 // envelope and fail `prepareSession` on the remote daemon — this makes that omission fail to build.
 type LeaseAllocateProfileKeysAreExhaustive =
@@ -410,7 +404,7 @@ export function deviceSpecUnsupportedError(
 ): AppError {
   return new AppError('UNSUPPORTED_OPERATION', message, {
     ...details,
-    reason: DEVICE_SPEC_UNSUPPORTED_REASON,
+    reason: LEASE_REASONS.deviceSpecUnsupported.reason,
     keys: [...keys],
     hint: 'Drop --os, --image-tag, --device-mode, --device-baseline and --physical, or connect through a proxy whose backend picks devices by spec.',
   });
@@ -421,7 +415,7 @@ export function deviceSpecInvalidError(keys: readonly string[]): AppError {
   return new AppError(
     'INVALID_ARGS',
     'osVersion, imageTag, deviceMode and deviceBaseline take a string, and physical takes a boolean.',
-    { reason: DEVICE_SPEC_INVALID_REASON, keys: [...keys] },
+    { reason: LEASE_REASONS.deviceSpecInvalid.reason, keys: [...keys] },
   );
 }
 
@@ -516,6 +510,10 @@ export const LEASE_REASONS = {
   scopeMismatch: { reason: 'LEASE_SCOPE_MISMATCH' },
   // The lease was allocated with an owner scope that the request does not repeat.
   scopeRequired: { reason: 'LEASE_SCOPE_REQUIRED' },
+  // The request picks a device by OS version, image tag, device mode, baseline, or class, and nothing on its path honours a spec.
+  deviceSpecUnsupported: { reason: 'device-spec-unsupported' },
+  // A device-spec key was given a value of the wrong type.
+  deviceSpecInvalid: { reason: 'device-spec-invalid' },
   // The device instance behind the lease ended outside the daemon, which ends the lease with it.
   instanceEnded: { reason: 'provider-instance-ended' },
 } as const satisfies ReasonTable<'leases'>;

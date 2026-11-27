@@ -64,15 +64,24 @@ Tips:
   - Several enabled on-screen fields inside the match refuse with `AMBIGUOUS_MATCH` and the field candidates.
   - A disabled target refuses with `COMMAND_FAILED` and reason `target_disabled`. This includes a match whose only on-screen fields are disabled.
   - A match or field covered by another visible element refuses with `COMMAND_FAILED` and reason `target_covered`.
+  - A target outside the screen refuses with `COMMAND_FAILED` and reason `offscreen_ref`, as `click @ref` does. `find` prefers an on-screen match, so this happens only when the chosen target is off screen.
+  - A target that still reports `hittable: false` is focused, and the response adds `targetHittable: false` and a `hint`, as `press`, `click`, and `fill` do.
   - Web text boxes are not recognized as text fields, so a web match keeps its own aim.
 - Use `fill` to find a field and replace its text in one step. To append to the text in the focused field, use `click` or `press`, then `type`.
 
 ## Selector syntax
 
-A selector expression is one or more `key=value` terms separated by spaces. An element must match
-every term. Commands that take a target, such as `press`, `fill`, `longpress`, `get`, `is`, `wait`,
-and `scroll --until`, accept a selector wherever they accept an `@ref`. `find` accepts one as its
-query.
+A selector expression is one or more terms separated by spaces, and an element must match every
+term. A term is `key=value`, or a boolean key alone, which means `key=true`: `role=switch checked`
+is `role=switch checked=true`. `agent-device help selectors` prints this syntax.
+
+These commands take a selector:
+
+- `press`, `click`, `fill`, `longpress`, `hover`, `get`, `is`, and `wait`, as the target
+- `gesture drag`, as its source and destination
+- `gesture pinch`, as the element to pinch
+- `find`, as its query
+- `scroll --until` and `screenshot --crop-on`, as the flag value
 
 ```bash
 agent-device press 'role=button label="Continue"'
@@ -91,8 +100,11 @@ Text keys:
 | `value`       | The accessibility value                                                            |
 | `text`        | The first non-empty of label, value, and identifier                                |
 | `role`        | The role shown in brackets in snapshot output (`button`, `text-field`, `switch`, …) |
-| `appname`     | The owning app's name, on desktop targets that report it                           |
-| `windowtitle` | The owning window's title, on desktop targets that report it                       |
+| `appname`     | The owning app's name                                                              |
+| `windowtitle` | The owning window's title                                                          |
+
+Not every snapshot reports `appname` and `windowtitle`; `agent-device help selectors` lists the
+ones that do.
 
 Text values match the whole field, ignoring case and extra whitespace: `label="sign in"` matches
 `Sign In` but not `Sign In Now`. For partial matches, use `find`.

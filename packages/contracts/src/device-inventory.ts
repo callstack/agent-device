@@ -11,7 +11,15 @@ import {
   type DeviceTarget,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+
+/** The refusals this inventory's own input validation and provider-instance lookup answer with. */
+const DEVICE_INVENTORY_REFUSAL_REASONS = {
+  // A device-pin selector names a platform, device, udid, or serial the request cannot carry.
+  invalidDevicePin: { reason: 'invalid_device_pin' },
+  // The provider connection has no allocated instance to route to.
+  providerInstanceUnallocated: { reason: 'provider_instance_unallocated' },
+} as const satisfies ReasonTable<'device inventory'>;
 
 export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = [
   'android',
@@ -107,25 +115,30 @@ function deviceInventoryGroupForDevice(device: DeviceInfo): DeviceInventoryGroup
  * The refusal reasons a host-local device claim can answer with when another owner holds the
  * device. Replay reads them to tell an infrastructure conflict from a script failure.
  */
-export type DeviceClaimConflictReason =
-  | 'DEVICE_CLAIM_LIVE_OWNER'
-  | 'DEVICE_CLAIM_RECOVERY_PENDING'
-  | 'DEVICE_CLAIM_OWNER_UNCERTAIN';
+export const DEVICE_CLAIM_CONFLICT_REASONS = {
+  // A live session in another workspace or daemon owns the device.
+  liveOwner: { reason: 'DEVICE_CLAIM_LIVE_OWNER' },
+  // The recorded owner is gone and its resources still need settling before the claim is released.
+  recoveryPending: { reason: 'DEVICE_CLAIM_RECOVERY_PENDING' },
+  // A claim exists, but its owner cannot be verified as live or gone.
+  ownerUncertain: { reason: 'DEVICE_CLAIM_OWNER_UNCERTAIN' },
+} as const satisfies ReasonTable<'device claims'>;
 
-const DEVICE_CLAIM_CONFLICT_REASONS = new Set<DeviceClaimConflictReason>([
-  'DEVICE_CLAIM_LIVE_OWNER',
-  'DEVICE_CLAIM_RECOVERY_PENDING',
-  'DEVICE_CLAIM_OWNER_UNCERTAIN',
-]);
+export type DeviceClaimConflictReason =
+  (typeof DEVICE_CLAIM_CONFLICT_REASONS)[keyof typeof DEVICE_CLAIM_CONFLICT_REASONS]['reason'];
+
+const DEVICE_CLAIM_CONFLICT_REASON_VALUES = new Set<string>(
+  Object.values(DEVICE_CLAIM_CONFLICT_REASONS).map((row) => row.reason),
+);
 
 export function isDeviceClaimConflictReason(value: unknown): value is DeviceClaimConflictReason {
-  return DEVICE_CLAIM_CONFLICT_REASONS.has(value as DeviceClaimConflictReason);
+  return typeof value === 'string' && DEVICE_CLAIM_CONFLICT_REASON_VALUES.has(value);
 }
 
 /** A provider connection that has no live instance: none was allocated, or the last one ended. */
 export function providerInstanceUnallocatedError(leaseProvider: string): AppError {
   return new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
-    reason: 'provider_instance_unallocated',
+    reason: DEVICE_INVENTORY_REFUSAL_REASONS.providerInstanceUnallocated.reason,
     hint: 'Run boot or open to allocate an instance. SDK callers allocate one with leases.allocate and pass its leaseId.',
     leaseProvider,
   });
@@ -184,7 +197,10 @@ export function readDevicePin(value: unknown): DevicePin | undefined {
 }
 
 function invalidDevicePin(message: string, pinSource: string): never {
-  throw new AppError('INVALID_ARGS', message, { reason: 'invalid_device_pin', pinSource });
+  throw new AppError('INVALID_ARGS', message, {
+    reason: DEVICE_INVENTORY_REFUSAL_REASONS.invalidDevicePin.reason,
+    pinSource,
+  });
 }
 
 function isPinRecord(value: unknown): value is Record<string, unknown> {

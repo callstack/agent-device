@@ -19,6 +19,7 @@ import {
   expireRefFrame,
   refFrame,
   refFrameEpoch,
+  refFrameOrigin,
   refFrameScope,
   refFrameState,
 } from '../../core/ref-frame.ts';
@@ -161,7 +162,7 @@ test('markSessionPartialRefsIssued: an empty result leaves all frame state untou
 
   // A non-empty result supersedes with exactly its bodies.
   session.snapshotGeneration = 9;
-  markSessionPartialRefsIssued(session, ['@e5~s7', 'e6']);
+  markSessionPartialRefsIssued(session, ['@e5-s7', 'e6']);
   expect(refFrameScope(session)).toEqual(new Set(['e5', 'e6']));
   expect(refFrame(session).generation).toBe(9);
 });
@@ -199,7 +200,7 @@ test('a ref pinned before a diff keeps resolving: the diff advances the counter,
   expect(
     resolveRefStalenessWarning({
       session: afterDiff,
-      ref: `@e1~s${issuedAt}`,
+      ref: `@e1-s${issuedAt}`,
       mintedGeneration: issuedAt,
     }),
   ).toBeUndefined();
@@ -208,7 +209,7 @@ test('a ref pinned before a diff keeps resolving: the diff advances the counter,
   expect(
     resolveRefStalenessWarning({
       session: afterDiff,
-      ref: '@e1~s1',
+      ref: '@e1-s1',
       mintedGeneration: 1,
     }),
   ).toBeDefined();
@@ -257,6 +258,9 @@ for (const retire of [false, true]) {
     } else {
       expect(generation).toBe(session.snapshotGeneration);
       expect(refFrameScope(session)).toEqual(new Set(['e1']));
+      // #4571: the settle-diff origin is what lets a later plain-ref refusal name
+      // this diff as the replacement instead of a generic recapture.
+      expect(refFrameOrigin(session)).toBe('settle-diff');
     }
   });
 }

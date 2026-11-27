@@ -137,7 +137,7 @@ export class NotFoundError extends Error {}
 
 const limrunInstanceClientStub = `
 const handlers = {
-  deviceInfo: { screenWidth: 393, screenHeight: 852 },
+  deviceInfo: { model: "iPhone", screenWidth: 393, screenHeight: 852 },
   disconnect: async () => {},
 };
 export const createInstanceClient = async () => handlers;

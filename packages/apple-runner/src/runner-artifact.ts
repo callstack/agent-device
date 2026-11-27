@@ -19,6 +19,7 @@ import {
   runnerRuntimeSlot,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
+import { holdRunnerTreeForLaunch } from './runner-lease.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
@@ -32,6 +33,7 @@ import {
   assertSafeDerivedCleanup,
   cleanRunnerDerivedArtifacts,
   cleanRunnerDerivedBeforeEvaluation,
+  unlinkSymlinkedManagedRunnerKey,
   emitRunnerXctestrunDecision,
   emitRunnerXctestrunRebuildDecision,
   evaluateExistingXctestrun,
@@ -594,7 +596,8 @@ async function ensureXctestrunUnderCacheLock(params: {
   forceRebuild: boolean;
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
-  cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
+  unlinkSymlinkedManagedRunnerKey(derived);
+  await cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
   const existing = await evaluateExistingXctestrun({
     derived,
     expectedCacheMetadata,
@@ -607,7 +610,7 @@ async function ensureXctestrunUnderCacheLock(params: {
     existing,
     cache,
   });
-  if (reusable) return reusable;
+  if (reusable) return holdForLaunch(device, reusable);
   if (existing.reason !== 'reuse_ready') {
     emitRunnerXctestrunRebuildDecision(existing, derived);
   }
@@ -616,17 +619,29 @@ async function ensureXctestrunUnderCacheLock(params: {
   // delete: that directory is either a first build or one the caller laid out itself.
   if (existing.reason !== 'cache_metadata_missing') {
     assertSafeDerivedCleanup(derived);
-    cleanRunnerDerivedArtifacts(derived);
+    await cleanRunnerDerivedArtifacts(derived);
   }
-  return await buildXctestrunArtifact({
+  return holdForLaunch(
     device,
-    options,
-    projectRoot,
-    expectedCacheMetadata,
-    derived,
-    cache,
-    reason: existing.reason,
-  });
+    await buildXctestrunArtifact({
+      device,
+      options,
+      projectRoot,
+      expectedCacheMetadata,
+      derived,
+      cache,
+      reason: existing.reason,
+    }),
+  );
+}
+
+/** Takes the launch's hold on the resolved tree while the key lock still keeps every cleanup out. */
+function holdForLaunch(
+  device: DeviceInfo,
+  artifact: RunnerXctestrunArtifact,
+): RunnerXctestrunArtifact {
+  holdRunnerTreeForLaunch(device.id, artifact.xctestrunPath);
+  return artifact;
 }
 
 async function resolveReusableXctestrunArtifact(params: {
@@ -679,10 +694,16 @@ async function buildXctestrunArtifact(params: {
     status: 'progress',
     message: 'Building Apple runner (one-time per agent-device version)...',
   });
-  await buildRunnerXctestrun(device, projectPath, derived, options, buildTimeoutMs);
+  // A fresh products directory per build: no build writes over a tree another session resolved.
+  const productsDir = path.join(
+    derived,
+    'Build',
+    `Products-${crypto.randomBytes(4).toString('hex')}`,
+  );
+  await buildRunnerXctestrun(device, projectPath, derived, productsDir, options, buildTimeoutMs);
   const buildMs = Math.max(0, Date.now() - buildStartedAt);
 
-  const built = findXctestrun(derived, device);
+  const built = findXctestrun(productsDir, device);
   if (!built) {
     throw new AppError('COMMAND_FAILED', 'Failed to locate .xctestrun after build');
   }
@@ -881,6 +902,7 @@ async function buildRunnerXctestrun(
   device: DeviceInfo,
   projectPath: string,
   derived: string,
+  productsDir: string,
   options: RunnerXctestrunBuildOptions,
   /** What {@link requireRunnerPhaseRemainingMs} left of the build phase, for the exec layer. */
   buildTimeoutMs: number | undefined,
@@ -916,7 +938,7 @@ async function buildRunnerXctestrun(
         ...xcodebuildDestinationArgs(device, resolveRunnerBuildDestination(device)),
         '-derivedDataPath',
         derived,
-        ...resolveRunnerBuildLocationSettings(derived),
+        ...resolveRunnerBuildLocationSettings(derived, productsDir),
         ...performanceBuildSettings,
         ...archBuildSettings,
         ...sandboxBuildArgs,

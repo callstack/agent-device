@@ -5,7 +5,7 @@ import {
   type RuntimeHintsApplicationInput,
   hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   type DaemonFailureResponse,
   errorResponse,
@@ -13,9 +13,15 @@ import {
 } from '@agent-device/kernel/contracts';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionRuntimeHints, SessionState } from '../core/session-state.ts';
-import { SessionStore } from '../core/session-store.ts';
+import { SessionStore, type StoredRuntimeHints } from '../core/session-store.ts';
 import { trimRuntimeValue } from '@agent-device/host-kit/runtime-transport-hints';
 import { isAndroidEmulator, isIosSimulator } from './device/device-targets.ts';
+
+export const RUNTIME_HINTS_REASONS = {
+  // Runtime hints were requested, but the device runtime admitted no operation to apply or clear
+  // them.
+  operationMissing: { reason: 'runtime-hints-operation-missing' },
+} as const satisfies ReasonTable<'open'>;
 
 type SessionRuntimeHintsStore = Readonly<{
   getRuntimeHints: SessionStore['getRuntimeHints'];
@@ -71,7 +77,7 @@ export function openApplicationRuntimeHints(
     throw new AppError(
       'COMMAND_FAILED',
       'Transport runtime hints were requested without the fact-admitted apply operation; pair the hints with the operation or drop them.',
-      { reason: 'runtime-hints-operation-missing', dispatched: 'no' },
+      { reason: RUNTIME_HINTS_REASONS.operationMissing.reason, dispatched: 'no' },
     );
   }
   return { values: runtimeHintValues(runtime), apply };
@@ -219,23 +225,42 @@ export function setSessionRuntimeHintsForOpen(
   sessionStore: SessionStore,
   sessionName: string,
   runtime: SessionRuntimeHints | undefined,
+  appId: string | undefined,
 ): SessionRuntimeHints | undefined {
   if (!runtime) return undefined;
   if (countConfiguredRuntimeHints(runtime) === 0) {
     sessionStore.setRuntimeHints(sessionName, undefined);
     return undefined;
   }
-  sessionStore.setRuntimeHints(sessionName, runtime);
+  sessionStore.setRuntimeHints(sessionName, runtime, appId);
   return runtime;
 }
 
+/** Binds stored hints that an open applied to the app it opened. */
+export function bindStoredRuntimeHintsToApp(
+  sessionStore: SessionStore,
+  sessionName: string,
+  appId: string | undefined,
+): void {
+  const stored = sessionStore.getRuntimeHints(sessionName);
+  if (stored && appId) sessionStore.setRuntimeHints(sessionName, stored.hints, appId);
+}
+
+/** Stored hints apply to the app they are bound to, or to any app while they are unbound. */
+export function storedRuntimeHintsForApp(
+  runtime: SessionRuntimeHints | undefined,
+  boundAppId: string | undefined,
+  appId: string | undefined,
+): SessionRuntimeHints | undefined {
+  return boundAppId === undefined || boundAppId === appId ? runtime : undefined;
+}
+
 function resolveSessionRuntimeHints(
-  sessionStore: SessionRuntimeHintsStore,
+  runtime: SessionRuntimeHints | undefined,
   sessionName: string,
   device?: DeviceInfo,
   platform?: RuntimePlatform,
 ): SessionRuntimeHints | undefined {
-  const runtime = sessionStore.getRuntimeHints(sessionName);
   if (!runtime) return undefined;
   const boundPlatform = device ? publicPlatformString(device) : undefined;
   const deviceRuntimePlatform = toRuntimePlatform(boundPlatform) ?? platform;
@@ -265,14 +290,14 @@ function resolveOpenRuntimeHints(params: {
   platform?: RuntimePlatform;
 }): {
   runtime: SessionRuntimeHints | undefined;
-  previousRuntime: SessionRuntimeHints | undefined;
+  previous: StoredRuntimeHints | undefined;
   replacedStoredRuntime: boolean;
 } {
   const { req, sessionStore, sessionName, device } = params;
   const runtimePlatform = device
     ? toRuntimePlatform(publicPlatformString(device))
     : params.platform;
-  const previousRuntime = sessionStore.getRuntimeHints(sessionName);
+  const previous = sessionStore.getRuntimeHints(sessionName);
   const explicitRuntime = normalizeExplicitRuntimeHints({
     runtime: req.runtime,
     sessionName,
@@ -280,14 +305,14 @@ function resolveOpenRuntimeHints(params: {
   });
   if (req.runtime === undefined) {
     const storedRuntime = resolveSessionRuntimeHints(
-      sessionStore,
+      previous?.hints,
       sessionName,
       device,
       runtimePlatform,
     );
     return {
       runtime: device ? applyDeviceDefaultMetroHost(storedRuntime, device) : storedRuntime,
-      previousRuntime,
+      previous,
       replacedStoredRuntime: false,
     };
   }
@@ -297,7 +322,7 @@ function resolveOpenRuntimeHints(params: {
       : undefined;
   return {
     runtime: device ? applyDeviceDefaultMetroHost(selectedRuntime, device) : selectedRuntime,
-    previousRuntime,
+    previous,
     replacedStoredRuntime: true,
   };
 }
@@ -322,36 +347,76 @@ export function tryResolveOpenRuntimeHints(
   }
 }
 
-export async function maybeClearRemovedRuntimeTransportHints(params: {
+type RemovedRuntimeHintsPolicyInput = Readonly<{
   replacedStoredRuntime: boolean;
-  previousRuntime: SessionRuntimeHints | undefined;
+  previous: StoredRuntimeHints | undefined;
   runtime: SessionRuntimeHints | undefined;
   session: SessionState | undefined;
-  clearRuntimeHints(input: { appId?: string; values: RuntimeHintValues }): Promise<void>;
-}): Promise<void> {
-  const { previousRuntime, clearRuntimeHints } = params;
-  if (!shouldClearRemovedRuntimeTransportHints(params)) return;
-  const session = params.session;
-  if (!session?.appBundleId) return;
-  await clearRuntimeHints({
-    appId: session.appBundleId,
-    values: runtimeHintValues(previousRuntime),
-  });
-}
+}>;
 
-/** Daemon session policy decides whether an open must remove its previous native transport. */
-export function shouldClearRemovedRuntimeTransportHints(
-  params: Readonly<{
-    replacedStoredRuntime: boolean;
-    previousRuntime: SessionRuntimeHints | undefined;
-    runtime: SessionRuntimeHints | undefined;
-    session: SessionState | undefined;
-  }>,
-): boolean {
+/** Stored hints that an open applied to an app; that app keeps their native transport. */
+export type AppliedRuntimeHints = StoredRuntimeHints & Readonly<{ appId: string }>;
+
+/**
+ * An open without transport hints removes the transport of the stored hints it replaces before it
+ * launches.
+ */
+function clearsRemovedRuntimeTransportBeforeOpen(params: RemovedRuntimeHintsPolicyInput): boolean {
   return (
     params.replacedStoredRuntime &&
-    Boolean(params.session?.appBundleId) &&
-    hasRuntimeTransportHints(params.previousRuntime) &&
-    !hasRuntimeTransportHints(params.runtime)
+    !hasRuntimeTransportHints(params.runtime) &&
+    requiresRuntimeHintsClear(removedRuntimeHintsClearInput(params))
   );
+}
+
+/** The applied hints that this open replaces with new transport hints. */
+export function replacedAppliedRuntimeTransport(
+  params: RemovedRuntimeHintsPolicyInput,
+): AppliedRuntimeHints | undefined {
+  const { previous } = params;
+  if (!params.replacedStoredRuntime || previous?.appId === undefined) return undefined;
+  if (!hasRuntimeTransportHints(previous.hints) || !hasRuntimeTransportHints(params.runtime)) {
+    return undefined;
+  }
+  return { hints: previous.hints, appId: previous.appId };
+}
+
+/**
+ * Whether an open may have to remove the native transport of the stored hints it replaces.
+ * Admission runs before the open resolves its app, so it admits the clear for replaced applied
+ * hints whichever app the open reaches.
+ */
+export function mayClearRemovedRuntimeTransportHints(
+  params: RemovedRuntimeHintsPolicyInput,
+): boolean {
+  return (
+    clearsRemovedRuntimeTransportBeforeOpen(params) ||
+    replacedAppliedRuntimeTransport(params) !== undefined
+  );
+}
+
+export async function maybeClearRemovedRuntimeTransportHints(
+  params: RemovedRuntimeHintsPolicyInput &
+    Readonly<{ clearRuntimeHints(input: RuntimeHintsApplicationInput): Promise<void> }>,
+): Promise<void> {
+  if (!clearsRemovedRuntimeTransportBeforeOpen(params)) return;
+  await params.clearRuntimeHints(removedRuntimeHintsClearInput(params));
+}
+
+function removedRuntimeHintsClearInput(
+  params: Pick<RemovedRuntimeHintsPolicyInput, 'previous' | 'session'>,
+): RuntimeHintsApplicationInput {
+  return runtimeHintsClearInput(params.previous, params.session?.appBundleId);
+}
+
+/** Clearing stored hints targets the app they are bound to, else the session's current app. */
+export function runtimeHintsClearInput(
+  stored: StoredRuntimeHints | undefined,
+  sessionAppId: string | undefined,
+): RuntimeHintsApplicationInput {
+  return { appId: stored?.appId ?? sessionAppId, values: runtimeHintValues(stored?.hints) };
+}
+
+export function requiresRuntimeHintsClear(input: RuntimeHintsApplicationInput): boolean {
+  return Boolean(input.appId) && hasRuntimeTransportHintValues(input.values);
 }

@@ -287,7 +287,7 @@ start the daemon with a policy that requires one (`leases.require`, below). The 
 by every client of the proxy, so a host serving several clients through one proxy authenticates each
 client itself and sets each request's tenant, session isolation, and lease before forwarding it.
 Embedding `@agent-device/proxy` with its `authenticate` option does the tenant and session
-isolation part: the proxy sends each client's requests as the tenant `authenticate` returns. A tenant id is 1-128 letters, numbers, dots, underscores or hyphens; any other id fails the request with a 500. On `/rpc` the proxy accepts only `agent_device.command` and the `agent_device.lease.*` methods, and refuses others with a 401. Upload tickets carry the client's own `authorization` and `x-agent-device-token` headers, or the `uploadHeaders` that `authenticate` returns, and never the daemon's token.
+isolation part: the proxy sends each client's requests as the tenant `authenticate` returns. A tenant id is 1-128 letters, numbers, dots, underscores or hyphens; any other id fails the request with a 500. On `/rpc` and `/rpc/checked` the proxy accepts only `agent_device.command` and the `agent_device.lease.*` methods, and refuses others with a 401. Upload tickets carry the client's own `authorization` and `x-agent-device-token` headers, or the `uploadHeaders` that `authenticate` returns, and never the daemon's token.
 
 ## Restrict what clients can do
 
@@ -328,7 +328,7 @@ stop that daemon first. A denied request fails with `UNAUTHORIZED` and
 
 ## What the proxy exposes
 
-The proxy serves only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token. `GET /artifacts` lists the caller tenant's downloadable artifacts. An entry has `sessionName` when the daemon registered it outside a request reply, for example a recording kept when its leased session ended.
+The proxy serves only the daemon HTTP contract: `/health`, `/rpc`, `/rpc/checked` (which requires the `x-agent-device-rpc-protocol` header), `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token. `GET /artifacts` lists the caller tenant's downloadable artifacts. An entry has `sessionName` when the daemon registered it outside a request reply, for example a recording kept when its leased session ended.
 
 The proxy passes the daemon's HTTP status through. Most failed upload and artifact requests answer
 a JSON body `{ "ok": false, "error": "...", "code": "..." }`. When the daemon writes this body, it
@@ -361,7 +361,25 @@ for the API.
 
 ## Compatibility
 
-Remote clients read `/health` before sending commands and compare the daemon RPC protocol version. Keep client and proxy versions close: patch-level differences usually work, and incompatible RPC protocol versions fail before any command runs.
+By default, remote clients read `/health` before sending a command and compare the daemon RPC protocol version. A connection can skip that probe for standalone commands; see [Send standalone commands in one round trip](#send-standalone-commands-in-one-round-trip). Keep client and proxy versions close: patch-level differences usually work, and incompatible RPC protocol versions fail before any command runs.
+
+### Send standalone commands in one round trip
+
+Without the field, a command's dispatch makes two requests: `GET /health`, then `POST /rpc`. Uploads, artifact downloads, and lease calls are separate. Add `"daemonRpc": "checked"` to the remote-config profile to send that dispatch as one `POST /rpc/checked` instead. The proxy and the daemon behind it then check the RPC protocol themselves, after authentication, and refuse a mismatch with the same upgrade message before anything runs.
+
+```json
+{
+  "daemonBaseUrl": "https://example.trycloudflare.com/agent-device",
+  "daemonRpc": "checked"
+}
+```
+
+Only `connect` turns the field on, and only when the proxy, and the daemon behind it, list `checked-rpc` in `capabilities` on `/health`. The proxy's `upstream` must be the daemon itself, not another proxy. The connection then records a fingerprint of that exact target, and a command sent to any other base URL reads `/health` first. Otherwise `connect` fails with `reason: "remote_checked_rpc_unsupported"` and `dispatched: "no"`: when a link lacks the capability, or when the profile resolves no daemon base URL. An unreachable `/health` fails with `remote_daemon_unavailable`. No flag or environment variable turns it on.
+
+- Lease allocate and heartbeat calls, and `install` or `reinstall`, still read `/health` first, so what follows must reach the daemon that holds the lease or the upload. A later command in the same process reuses that answer and its instance fences on `/rpc`, with no extra round trip.
+- If the remote stops serving the route later, for example after a rollback, commands fail with `reason: "remote_checked_rpc_unsupported"` and `dispatched: "unknown"`. The client never resends them. Update the proxy and daemon, or remove `daemonRpc` and run `connect --force`.
+- A 502, 503 or 504 answer to a checked request is not waited out or resent, because the command may have run. Only a connection attempt that timed out before it opened is retried, after `/health` answers again; a refused connection fails at once.
+- Set it only when everything between you and the proxy forwards `/rpc/checked` and its `x-agent-device-rpc-protocol` header unchanged.
 
 `/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field. `leaseBackends` lists the lease backends the daemon admits (`macos-app` only on a macOS host); a host
 checks `upstream.leaseBackends` for `macos-app` before handing out a macOS app lease, and older

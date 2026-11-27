@@ -2,7 +2,12 @@ import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from '../daemon-client-rpc.ts';
+import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
+import {
+  buildHttpRpcPayload,
+  handleDaemonHttpResponseBody,
+  refuseOversizedDaemonRequest,
+} from '../daemon-client-rpc.ts';
 
 test('lease allocation transports an optional initial provider app', () => {
   const payload = buildHttpRpcPayload(
@@ -218,4 +223,14 @@ test('lease allocation carries the device spec a proxy backend picks by', () => 
     imageTag: 'google_apis_playstore',
     physical: true,
   });
+});
+
+test('the pre-send size refusal proves the request never left', () => {
+  assert.throws(
+    () => refuseOversizedDaemonRequest('x'.repeat(DAEMON_REQUEST_MAX_BYTES + 1), 'req-big'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'daemon_request_too_large' &&
+      error.details?.dispatched === 'no',
+  );
 });

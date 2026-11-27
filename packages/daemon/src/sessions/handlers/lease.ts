@@ -46,12 +46,32 @@ import {
 } from '@agent-device/contracts/lease-scope';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { platformForLeaseBackend } from '@agent-device/kernel/contracts';
-import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  errorMessage,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../../resources/artifact-tracking.ts';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
+
+const LEASE_HANDLER_REASONS = {
+  // The lease names a provider this daemon has not registered; `details.failedPlugins` lists
+  // plugins that failed to load.
+  providerNotRegistered: { reason: 'provider-not-registered' },
+  // The running daemon holds different provider credentials than this shell; stop the daemon and
+  // rerun.
+  providerCredentialsChanged: { reason: 'provider-credentials-changed' },
+  // The provider session belongs to another tenant.
+  providerSessionNotOwned: { reason: 'PROVIDER_SESSION_NOT_OWNED' },
+  // Only the host administrator releases a `macos-app` lease.
+  macOsAppHostOwned: { reason: 'MACOS_APP_LEASE_HOST_OWNED' },
+  // Only the host administrator allocates a `macos-app` lease.
+  macOsAppHostAllocated: { reason: 'MACOS_APP_LEASE_HOST_ALLOCATED' },
+} as const satisfies ReasonTable<'leases'>;
 
 type LeaseHandlerArgs = {
   host: HostEnvironment;
@@ -453,7 +473,7 @@ function assertProviderRuntimeRegistered(
     'UNSUPPORTED_OPERATION',
     `Provider "${provider}" is not available in this daemon runtime.`,
     {
-      reason: 'provider-not-registered',
+      reason: LEASE_HANDLER_REASONS.providerNotRegistered.reason,
       provider,
       registeredProviders: [...registeredProviders],
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
@@ -482,7 +502,7 @@ function assertProviderCredentialsUnchanged(
       ? `The running daemon holds different ${provider} credentials than this shell.`
       : `The running daemon was started without the ${provider} credentials this shell holds.`,
     {
-      reason: 'provider-credentials-changed',
+      reason: LEASE_HANDLER_REASONS.providerCredentialsChanged.reason,
       provider,
       hint: `Stop it with agent-device daemon stop --state-dir ${shellQuoteIfNeeded(daemon.stateDir)}, then rerun the command so a new daemon starts with this shell's environment.`,
     },
@@ -575,7 +595,7 @@ function resolveProviderSession(
   });
   if (providerSession) return providerSession;
   throw new AppError('UNAUTHORIZED', 'Provider session is not owned by the request tenant', {
-    reason: 'PROVIDER_SESSION_NOT_OWNED',
+    reason: LEASE_HANDLER_REASONS.providerSessionNotOwned.reason,
   });
 }
 
@@ -591,7 +611,7 @@ function readFlagString(
 function assertTenantMayRelease(lease: DeviceLease | undefined): void {
   if (lease?.backend !== 'macos-app') return;
   throw new AppError('UNAUTHORIZED', 'A macos-app lease is released by the host administrator.', {
-    reason: 'MACOS_APP_LEASE_HOST_OWNED',
+    reason: LEASE_HANDLER_REASONS.macOsAppHostOwned.reason,
     retriable: false,
     hint: 'Disconnect only drops the client connection; the host ends the lease.',
   });
@@ -601,7 +621,7 @@ function assertTenantMayRelease(lease: DeviceLease | undefined): void {
 function assertTenantMayAllocate(leaseBackend: string | undefined): void {
   if (normalizeLeaseBackend(leaseBackend) !== 'macos-app') return;
   throw new AppError('UNAUTHORIZED', 'A macos-app lease is allocated by the host administrator.', {
-    reason: 'MACOS_APP_LEASE_HOST_ALLOCATED',
+    reason: LEASE_HANDLER_REASONS.macOsAppHostAllocated.reason,
     retriable: false,
     hint: 'Ask the host administrator for a macos-app lease and connect with its leaseId.',
   });

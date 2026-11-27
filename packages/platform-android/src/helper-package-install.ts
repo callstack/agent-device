@@ -260,7 +260,15 @@ async function readInstalledAndroidPackageSha256(
   if (pathResult.exitCode !== 0 || !remotePath) {
     throw new AppError('COMMAND_FAILED', 'Could not resolve installed Android helper APK');
   }
+  return await readAndroidDeviceFileSha256(adbProvider, remotePath, signal);
+}
 
+/** The SHA-256 of one file on the device, pulled to a private temp directory and hashed there. */
+export async function readAndroidDeviceFileSha256(
+  adbProvider: AndroidAdbProvider,
+  remotePath: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const files = requireAndroidAdbHost().files;
   const tempDirectory = await files.makeTempDirectory('agent-device-helper-');
   const localPath = path.join(tempDirectory, 'base.apk');
@@ -273,7 +281,6 @@ async function readInstalledAndroidPackageSha256(
     });
     if (pull.exitCode !== 0) {
       throw androidAdbResultError('Could not read installed Android helper APK', pull, {
-        packageName,
         remotePath,
       });
     }
@@ -283,7 +290,8 @@ async function readInstalledAndroidPackageSha256(
   }
 }
 
-function readBaseApkPath(output: string): string | undefined {
+/** The base APK path among the `package:` lines `pm path` prints. */
+export function readBaseApkPath(output: string): string | undefined {
   return output
     .split(/\r?\n/)
     .map((line) => (line.startsWith('package:') ? line.slice('package:'.length).trim() : ''))

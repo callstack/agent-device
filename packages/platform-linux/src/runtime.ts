@@ -1,8 +1,12 @@
-import type {
-  DeviceBinding,
-  RuntimeFacts,
-  RuntimeOperationFact,
-  RuntimeOperationUnavailability,
+import {
+  type DeviceBinding,
+  type RuntimeFacts,
+  type RuntimeOperationFact,
+  type RuntimeOperationUnavailability,
+  PLATFORM_RUNTIME_REASONS,
+  localRuntimeOwner,
+  sameRuntimeOwner,
+  unavailableFact,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -22,11 +26,6 @@ import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runt
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
-import {
-  localRuntimeOwner,
-  sameRuntimeOwner,
-  unavailableFact,
-} from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import {
   screenshotRuntimeOperationFacts,
@@ -45,22 +44,26 @@ import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/app
 
 const supported = Object.freeze({ available: true } as const);
 const linuxOwner = localRuntimeOwner('linux');
-const unsupportedPlatformLeaf = unavailableFact('unsupported-platform-leaf');
-const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
+const unsupportedPlatformLeaf = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
+const elementTextKindUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+);
 const focusKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'focus is supported only for the Linux desktop device.',
 );
 const typeKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'type is supported only for the Linux desktop device.',
 );
 const gestureKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Gestures are supported only for the Linux desktop device.',
 );
 const scrollKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'scroll is supported only for the Linux desktop device.',
 );
 /**
@@ -68,63 +71,69 @@ const scrollKindUnavailable = unavailableFact(
  * fling's speed semantics, which is the one gesture the retired admission refused BY PLATFORM
  * rather than by leaf or kind.
  */
-const directionalFlingUnavailable = unavailableFact('unsupported-platform-leaf');
-const multiTouchUnavailable = unavailableFact('unsupported-platform-leaf');
+const directionalFlingUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
+const multiTouchUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const targetAuthoredDragUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 );
 /** No frame read of its own: a Linux gesture derives its viewport from a capture, as it does today. */
-const gestureViewportUnavailable = unavailableFact('unsupported-platform-leaf');
+const gestureViewportUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const runtimeHintsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
 );
 const appleRunnerUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Apple runner preparation is supported only for Apple targets.',
 );
 const providerPortReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Port reverse is supported only by an owning provider runtime.',
 );
 const openTargetKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'open is supported only for the Linux desktop device.',
 );
 const closeTargetKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'close is supported only for the Linux desktop device.',
 );
 const snapshotKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'snapshot is supported only for the Linux desktop device.',
 );
 const screenshotKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'screenshot is supported only for the Linux desktop device.',
 );
 const snapshotCustomActionsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Re-run without --actions, or target an iOS simulator.',
 );
 const backKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'back is supported only for the Linux desktop device.',
 );
 const homeKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'home is supported only for the Linux desktop device.',
 );
 const clipboardKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'clipboard is supported only for the Linux desktop device.',
 );
 // `orientation`, `tv-remote`, and every keyboard action never carried a Linux capability bucket
 // at all (the retired descriptors declared `linux: {}`), so they are unavailable unconditionally.
 const linuxPlatformLeafUnavailable = unsupportedPlatformLeaf;
 const linuxAudioProbeUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
 export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {

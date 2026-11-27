@@ -273,3 +273,46 @@ test('a shut-down tie marks every candidate shut down and an unknown state omits
     },
   );
 });
+
+const unbootedIphones: DeviceInfo[] = ['iPhone 16', 'iPhone 17', 'iPhone 17 Pro'].map(
+  (name, i) => ({
+    ...shutDownIphone,
+    id: `sim-iphone-${i}`,
+    name,
+  }),
+);
+
+const bootedIpad: DeviceInfo = {
+  ...shutDownIphone,
+  id: 'sim-ipad-booted',
+  name: 'iPad Pro 13-inch (M5)',
+  appleOs: 'ipados',
+  booted: true,
+};
+
+test('the only booted simulator wins over shut-down iPhones, even when it is an iPad', async () => {
+  const selected = await resolveDevice([...unbootedIphones, bootedIpad], { platform: 'ios' });
+  assert.equal(selected.id, bootedIpad.id);
+});
+
+test('two booted iPads with shut-down iPhones still refuse to choose', async () => {
+  const secondBootedIpad: DeviceInfo = { ...bootedIpad, id: 'sim-ipad-booted-2', name: 'iPad Air' };
+  await assert.rejects(
+    resolveDevice([...unbootedIphones, bootedIpad, secondBootedIpad], { platform: 'ios' }),
+    (error: unknown) => error instanceof AppError && error.code === 'AMBIGUOUS_MATCH',
+  );
+});
+
+test('with nothing booted, shut-down iPhones still tie ahead of a shut-down iPad', async () => {
+  const shutDownIpad: DeviceInfo = { ...bootedIpad, booted: false };
+  await assert.rejects(
+    resolveDevice([...unbootedIphones, shutDownIpad], { platform: 'ios' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'AMBIGUOUS_MATCH' &&
+      JSON.stringify(error.details?.devices) ===
+        JSON.stringify(
+          unbootedIphones.map((device) => ({ id: device.id, name: device.name, booted: false })),
+        ),
+  );
+});

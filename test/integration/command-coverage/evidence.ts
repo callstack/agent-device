@@ -67,6 +67,12 @@ export const ANDROID_SHAKE_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
     [C.shake],
     'Android admits the shake fact on emulators and refuses every other kind',
   );
+export const ANDROID_LOCK_SCREEN_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'test/integration/provider-scenarios/android-lock-screen.test.ts',
+    [C.lockScreen],
+    'Provider-backed integration Android lock-screen locks and unlocks a swipe keyguard and records both commands',
+  );
 export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/platform-android/src/runtime.test.ts',
@@ -126,6 +132,10 @@ export const APPLE_ACTION_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
 export const APPLE_SHAKE_FACT_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/navigation/shake.test.ts',
   test: 'classifies the shake fact for the %s leaf',
+};
+export const APPLE_LOCK_SCREEN_FACT_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-apple/src/runtime.test.ts',
+  test: 'classifies the lock-screen facts for the %s leaf',
 };
 export const APPLE_HARDWARE_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',

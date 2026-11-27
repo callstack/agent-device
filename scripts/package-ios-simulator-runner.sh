@@ -14,12 +14,18 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 node "$SCRIPT_DIR/release-version.mjs" asset-tag "v$VERSION"
 node "$SCRIPT_DIR/release-version.mjs" asset-tag "$RELEASE_TAG"
 
-DERIVED_PATH="${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-$HOME/.agent-device/apple-runner/derived}"
+PLATFORM="${AGENT_DEVICE_XCUITEST_PLATFORM:-ios}"
+case "$PLATFORM" in
+  ios) SDK=iphonesimulator; DERIVED_SUFFIX='' ;;
+  watchos) SDK=watchsimulator; DERIVED_SUFFIX=/watchos ;;
+  *) echo "Unsupported runner platform: $PLATFORM" >&2; exit 1 ;;
+esac
+DERIVED_PATH="${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-$HOME/.agent-device/apple-runner/derived$DERIVED_SUFFIX}"
 PRODUCTS_DIR="$DERIVED_PATH/Build/Products"
 EXPECTED_RUNNER_BUNDLE_ID="${AGENT_DEVICE_IOS_RUNNER_RELEASE_BUNDLE_ID:-}"
-ARCHIVE_BASENAME="agent-device-ios-runner-$VERSION.app.tar.gz"
+ARCHIVE_BASENAME="agent-device-$PLATFORM-runner-$VERSION.app.tar.gz"
 CHECKSUM_BASENAME="$ARCHIVE_BASENAME.sha256"
-MANIFEST_BASENAME="agent-device-ios-runner-$VERSION.manifest.json"
+MANIFEST_BASENAME="agent-device-$PLATFORM-runner-$VERSION.manifest.json"
 GITHUB_SERVER="${GITHUB_SERVER_URL:-https://github.com}"
 REPOSITORY="${GITHUB_REPOSITORY:-}"
 
@@ -41,7 +47,7 @@ write_github_output() {
 }
 
 resolve_runner_xctestrun_path() {
-  find "$PRODUCTS_DIR" -maxdepth 1 -name '*iphonesimulator*.xctestrun' | sort | head -n 1
+  find "$PRODUCTS_DIR" -maxdepth 1 -name "*${SDK}*.xctestrun" | sort | head -n 1
 }
 
 resolve_xctestrun_runner_app_path() {
@@ -63,13 +69,18 @@ resolve_xctestrun_runner_app_path() {
 
 RUNNER_XCTESTRUN_PATH="$(resolve_runner_xctestrun_path)"
 if [ -z "$RUNNER_XCTESTRUN_PATH" ]; then
-  echo "Unable to locate iphonesimulator xctestrun under $PRODUCTS_DIR" >&2
+  echo "Unable to locate $SDK xctestrun under $PRODUCTS_DIR" >&2
   exit 1
 fi
 
 RUNNER_APP_PATH="$(resolve_xctestrun_runner_app_path "$RUNNER_XCTESTRUN_PATH")"
 if [ ! -d "$RUNNER_APP_PATH" ]; then
   echo "Unable to locate simulator runner app referenced by $RUNNER_XCTESTRUN_PATH" >&2
+  exit 1
+fi
+
+if [ "$(read_plist_value "$RUNNER_APP_PATH/Info.plist" DTPlatformName)" != "$SDK" ]; then
+  echo "Runner app does not target $SDK" >&2
   exit 1
 fi
 
@@ -81,7 +92,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-STAGED_APP_PATH="$STAGE_DIR/agent-device-ios-runner-$VERSION.app"
+STAGED_APP_PATH="$STAGE_DIR/agent-device-$PLATFORM-runner-$VERSION.app"
 ARCHIVE_PATH="$OUTPUT_DIR/$ARCHIVE_BASENAME"
 CHECKSUM_PATH="$OUTPUT_DIR/$CHECKSUM_BASENAME"
 MANIFEST_PATH="$OUTPUT_DIR/$MANIFEST_BASENAME"
@@ -117,9 +128,9 @@ else
   ARCHIVE_URL=""
 fi
 
-node - "$VERSION" "$RELEASE_TAG" "$ARCHIVE_BASENAME" "$ARCHIVE_URL" "$SHA256" "$CHECKSUM_BASENAME" "$RUNNER_BUNDLE_ID" "$APP_NAME" > "$MANIFEST_PATH" <<'NODE'
-const [version, release_tag, asset_name, assetUrl, sha256, checksum_name, bundle_id, bundle_name] = process.argv.slice(2);
-console.log(JSON.stringify({ version, release_tag, asset_name, asset_url: assetUrl || null, sha256, checksum_name, bundle_id, bundle_name, platform_target: 'iphonesimulator', archive_format: 'tar.gz' }, null, 2));
+node - "$VERSION" "$RELEASE_TAG" "$ARCHIVE_BASENAME" "$ARCHIVE_URL" "$SHA256" "$CHECKSUM_BASENAME" "$RUNNER_BUNDLE_ID" "$APP_NAME" "$SDK" > "$MANIFEST_PATH" <<'NODE'
+const [version, release_tag, asset_name, assetUrl, sha256, checksum_name, bundle_id, bundle_name, platform_target] = process.argv.slice(2);
+console.log(JSON.stringify({ version, release_tag, asset_name, asset_url: assetUrl || null, sha256, checksum_name, bundle_id, bundle_name, platform_target, archive_format: 'tar.gz' }, null, 2));
 NODE
 
 write_github_output "runner_app_path=$RUNNER_APP_PATH"

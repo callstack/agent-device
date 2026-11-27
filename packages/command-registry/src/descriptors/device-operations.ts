@@ -39,6 +39,7 @@ import {
   hardwareButtonRuntimePlanUses,
   homeRuntimeUse,
   hoverRuntimeUses,
+  lockScreenRuntimePlanUses,
   longPressRuntimeUses,
   orientationRuntimePlanUses,
   pressRuntimeUses,
@@ -407,7 +408,8 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       // R52 retires this command's capability bucket: admission is the owner's gesture-tier facts,
       // which the retired `requireGestureSupported` used to decide inside the daemon. The declared
       // uses are the four tiers one gesture input can select between (ADR 0019 §9).
-      timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+      timeoutPolicy: postActionObservationTimeoutPolicy('gesture', DEFAULT_TIMEOUT_POLICY),
+      postActionObservation: postActionObservation('gesture'),
       batchable: true,
       compositeResource: 'none',
       platformExecution: { kind: 'device-runtime', uses: gestureRuntimePlanUses },
@@ -509,7 +511,8 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       },
       // R54 retires this command's capability bucket. A swipe always normalizes to a coordinate
       // fling, so it declares only the one-contact plan it can select.
-      timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+      timeoutPolicy: postActionObservationTimeoutPolicy('swipe', DEFAULT_TIMEOUT_POLICY),
+      postActionObservation: postActionObservation('swipe'),
       batchable: true,
       compositeResource: 'none',
       platformExecution: { kind: 'device-runtime', uses: swipeRuntimePlanUses },
@@ -628,6 +631,20 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       // the session app, and settling would re-capture the app the press leaves alone (#3848).
       ...GENERIC_MUTATING_COMMAND_TRAITS,
       platformExecution: { kind: 'device-runtime', uses: hardwareButtonRuntimePlanUses },
+    },
+    {
+      name: 'lock-screen',
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/lock-screen.ts'] as const }
+        : {}),
+      catalog: { group: 'public', key: 'lockScreen' },
+      frameworkTier: 'extended',
+      // The first positional selects the lockScreen or unlockScreen cell, the way hardware-button
+      // selects a key; admission binds exactly that one fact. No post-action observation is
+      // declared: settling would re-capture, and so re-foreground, the session app over the lock
+      // screen this command shows.
+      ...GENERIC_MUTATING_COMMAND_TRAITS,
+      platformExecution: { kind: 'device-runtime', uses: lockScreenRuntimePlanUses },
     },
     {
       name: 'install-from-source',

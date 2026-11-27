@@ -120,8 +120,22 @@ export class SnapshotBridgeManager {
     const previousSession = liveSession(this.entries.get(udid));
     const session = await this.ensureSession(udid, input, deadline, turn);
     try {
-      const targetStartTime = await this.readTargetStartTime(input.target, deadline);
-      const envelope = await this.exchange(session, input, deadline, turn);
+      // A resolved target carries the start time its resolver just read, so only the read after the
+      // exchange is needed: an unchanged start time then proves the tree came from that process.
+      const verifiedStartTime = input.target.processStartTime;
+      const targetStartTime =
+        verifiedStartTime ?? (await this.readTargetStartTime(input.target, deadline));
+      let envelope: SnapshotBridgeEnvelope;
+      try {
+        envelope = await this.exchange(session, input, deadline, turn);
+      } catch (error) {
+        // A read that met a replaced or exited process fails as that, not as the bridge's refusal. A
+        // close keeps its own failure; a cancelled or expired request has no deadline left to read in.
+        if (verifiedStartTime !== undefined && !refusedByClose(this.closed, turn)) {
+          await this.throwIfTargetReplaced(input.target, verifiedStartTime, deadline);
+        }
+        throw error;
+      }
       await this.assertTargetStillCurrent(input.target, targetStartTime, deadline);
       return envelope;
     } catch (error) {
@@ -540,6 +554,37 @@ export class SnapshotBridgeManager {
       });
     }
     return startTime;
+  }
+
+  /** The stale-target failure a replaced or exited target explains; an unreadable identity explains nothing. */
+  private async throwIfTargetReplaced(
+    target: SnapshotSourceTarget,
+    expectedStartTime: string,
+    deadline: SnapshotSourceDeadline,
+  ): Promise<void> {
+    let observedStartTime: string | null;
+    try {
+      observedStartTime = await this.host.readTargetProcessStartTime(target.pid, {
+        signal: deadline.signal,
+        timeoutMs: remainingSnapshotSourceMs(deadline, 'target-identity-deadline'),
+      });
+    } catch {
+      return;
+    }
+    if (!observedStartTime) {
+      throw snapshotSourceError('stale-target', 'target-process-unavailable', {
+        pid: target.pid,
+        generation: target.generation,
+      });
+    }
+    if (observedStartTime !== expectedStartTime) {
+      throw snapshotSourceError('stale-target', 'target-process-changed', {
+        pid: target.pid,
+        generation: target.generation,
+        expectedStartTime,
+        observedStartTime,
+      });
+    }
   }
 
   private async assertTargetStillCurrent(

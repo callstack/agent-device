@@ -1,9 +1,13 @@
 import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
-import type {
-  DeviceBinding,
-  RuntimeFacts,
-  RuntimeOperationFact,
+import {
+  type DeviceBinding,
+  type RuntimeFacts,
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+  localRuntimeOwner,
+  unavailableFact,
+  whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -22,11 +26,6 @@ import {
 } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
-import {
-  localRuntimeOwner,
-  unavailableFact,
-  whenAdmitted,
-} from '@agent-device/contracts/platform-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import {
@@ -76,9 +75,11 @@ import {
 
 const owner = localRuntimeOwner('android');
 const available = Object.freeze({ available: true } as const);
-const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
+const elementTextKindUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+);
 const androidSettingUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Run `agent-device settings --help` for the settings each target serves.',
 );
 /**
@@ -86,15 +87,15 @@ const androidSettingUnavailable = unavailableFact(
  * Android kind drives touch through adb except the synthetic `simulator` row, which has no device.
  */
 const focusKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'focus is supported on Android emulators and physical devices.',
 );
 /** adb drives keyboard actions on the same two kinds it drives everything else. */
 const keyboardKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'keyboard actions are supported on Android emulators and physical devices.',
 );
-const hoverUnavailable = unavailableFact('unsupported-platform-leaf');
+const hoverUnavailable = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason);
 /**
  * `home`, `app-switcher`, and the three `hardware-button` keys are the system buttons
  * `input keyevent` can press. Any other (the iPhone Action Button today) is hardware with no
@@ -102,73 +103,86 @@ const hoverUnavailable = unavailableFact('unsupported-platform-leaf');
  * Android cell admits.
  */
 const systemButtonUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Android has no key event for this system button.',
 );
 /** The emulator console's accelerometer override is the only shake control adb reaches. */
 const shakeKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'shake overrides the accelerometer through the Android emulator console; a physical device has no console, so shake it by hand.',
 );
 /** Shake is a handheld gesture, and the accelerometer override is unverified on a TV image. */
 const shakeTvUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'shake is supported on Android phone and tablet emulators only.',
 );
 function androidShakeFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'emulator') return shakeKindUnavailable;
   return device.target === 'tv' ? shakeTvUnavailable : available;
 }
+const lockScreenKindUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+  'lock-screen is supported on Android emulators and physical devices.',
+);
+/** An Android TV image shows no keyguard, so there is no lock state to verify. */
+const lockScreenTvUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+  'lock-screen is supported on Android phones and tablets only.',
+);
+function androidLockScreenFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind === 'simulator') return lockScreenKindUnavailable;
+  return device.target === 'tv' ? lockScreenTvUnavailable : available;
+}
 const headlessUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Headless boot is supported only for Android emulators.',
 );
 const appStateUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Android appstate is supported only for Android emulators and devices.',
 );
 const prepareUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Apple runner preparation is supported only for Apple targets.',
 );
 const openTargetUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'open is supported only for Android emulators and devices.',
 );
 const closeTargetUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'close is supported only for Android emulators and devices.',
 );
 const runtimeHintsUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Runtime hints are supported only for Android emulators and devices.',
 );
 const portReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Port reverse is supported only by an owning provider runtime.',
 );
 const shutdownKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'shutdown is supported only for Apple simulators and Android emulators.',
 );
 const screenshotKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'screenshot is supported only for Android emulators and devices.',
 );
 const snapshotKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'snapshot is supported only for Android emulators and devices.',
 );
 const snapshotCustomActionsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Re-run without --actions, or target an iOS simulator.',
 );
 const viewportUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'viewport resizes web targets only (--platform web).',
 );
 const audioQueryUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'the stateless audio page probe is a web-session operation; Android targets use the host capture.',
 );
 
@@ -206,15 +220,15 @@ function androidRuntimeHintsFact(device: DeviceInfo) {
 }
 
 const gestureKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Gestures are supported on Android emulators and physical devices.',
 );
 const androidTvMultiTouchUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
 );
 const androidTvDragUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 );
 
@@ -238,7 +252,7 @@ function androidTouchFact(device: DeviceInfo) {
 }
 
 const clipboardShellUnavailable = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
 );
 
@@ -250,7 +264,7 @@ const clipboardShellUnavailable = unavailableFact(
  * inspection asks again.
  */
 const clipboardShellUnknown = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'Could not determine whether this Android build supports a shell clipboard: the adb probe did not complete. Retry once the device is reachable.',
 );
 
@@ -269,7 +283,7 @@ async function probeClipboardShellSupport(
 }
 
 const tvRemoteUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'tv-remote is supported only on Android TV targets.',
 );
 /**
@@ -318,7 +332,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         screenRecordingStart: available,
         screenRecordingReattach: available,
         screenRecordingCleanup: available,
-        accessibilityAudit: unavailableFact('unsupported-platform-leaf'),
+        accessibilityAudit: unavailableFact(
+          PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+        ),
         ...snapshotRuntimeOperationFacts({
           capture: device.kind === 'simulator' ? snapshotKindUnavailable : available,
           customActions: snapshotCustomActionsUnavailable,
@@ -372,6 +388,8 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
           shake: androidShakeFact(device),
+          lockScreen: androidLockScreenFact(device),
+          unlockScreen: androidLockScreenFact(device),
           ...androidHardwareButtonFacts(device),
         }),
         ...androidFoldableFacts(device),
@@ -387,10 +405,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             bluetooth: available,
             airplane: available,
             'mobile-data': available,
+            'keep-awake': available,
             location: available,
             animations: available,
             appearance: available,
             'text-size': available,
+            timezone: available,
+            locale: available,
             fingerprint: available,
             'clear-app-state': available,
             permission: available,

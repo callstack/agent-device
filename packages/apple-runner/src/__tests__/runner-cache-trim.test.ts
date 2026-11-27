@@ -85,6 +85,17 @@ test('trimming keeps the products and the metadata file and removes the rest', a
   );
 });
 
+test('a fresh .xctestrun at the key root is no tree and does not stop the trim', async () => {
+  const derived = path.join(base, KEY);
+  const protectedPaths = seedBuiltKey(derived);
+  fs.writeFileSync(path.join(derived, 'legacy.xctestrun'), '<plist/>');
+
+  const removed = await trimRunnerBuildScratch(derived, protectedPaths, derived);
+
+  assert.ok(removed.includes('legacy.xctestrun'));
+  assert.ok(removed.includes('Logs'));
+});
+
 test('a product outside the cache root leaves the tree untouched', async () => {
   const derived = path.join(base, KEY);
   seedBuiltKey(derived);
@@ -215,7 +226,9 @@ test('a runner build trims its key, and the next start reuses the products witho
     '.agent-device-runner-cache.json',
     'Build',
   ]);
-  assert.deepEqual(fs.readdirSync(path.join(built.derived, 'Build')), ['Products']);
+  assert.deepEqual(fs.readdirSync(path.join(built.derived, 'Build')), [
+    path.basename(path.dirname(built.xctestrunPath)),
+  ]);
 
   const reused = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
 

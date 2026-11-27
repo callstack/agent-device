@@ -88,6 +88,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'click',
     'fill',
     'find',
+    'gesture',
     'get',
     'hover',
     'is',
@@ -99,6 +100,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'record',
     'scroll',
     'snapshot',
+    'swipe',
     'type',
     'wait',
   ]);

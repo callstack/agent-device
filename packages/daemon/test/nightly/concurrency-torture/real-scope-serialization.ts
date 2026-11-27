@@ -77,6 +77,7 @@ export async function measureRealScopeMaxOverlap(concurrency: number): Promise<n
               host: createTestHostEnvironment(),
               platformServices: daemonPlatformServicesFixture(),
               claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+              trackClaimRecoveryDisposal: () => {},
               deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
               platformRequestScope: platformRequestScopeFixture(),
               req: openRequest(`real-${i}`, device.id),

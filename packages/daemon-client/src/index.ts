@@ -20,7 +20,11 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
-import { createRequestGuard, sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
+import {
+  createRequestGuard,
+  readRemoteDaemonHealth,
+  sendRequest as sendDaemonRequest,
+} from './daemon-client-transport.ts';
 import { isRemoteDaemon, readRegisteredDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 import type {
@@ -393,7 +397,8 @@ async function protectArtifactUploadWithLeaseBeats(
   onProgress: DaemonTransportOptions['onProgress'],
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
-  if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
+  // A checked request uploads nothing (`remoteCheckedRpc`), so it has no phase for a beat to cover.
+  if (!isRemoteDaemon(info) || !leaseScope.leaseId || settings.remoteCheckedRpc) {
     return await prepareRemoteRequestArtifacts(
       request,
       info,
@@ -457,6 +462,45 @@ export async function stopRecordedDaemon(
 export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeIdentity> {
   const { resolveLocalDaemonCodeIdentity: resolve } = await import('./daemon-launch-spec.ts');
   return await resolve();
+}
+
+/**
+ * Refuses `daemonRpc: checked` unless the remote endpoint advertises the `checked-rpc` capability in
+ * `/health`, and, when it is a proxy, so does the daemon behind it. The probe goes through the same
+ * base URL and trust validation as every remote request. It resolves to the fingerprint of the exact
+ * target a checked call will reach, which is all `connect` records. No error it raises names the
+ * endpoint.
+ */
+export async function assertRemoteServesCheckedRpc(
+  flags: Pick<DaemonRequest['flags'] & object, 'daemonBaseUrl'> & { daemonAuthToken?: string },
+  host: HostEnvironment,
+): Promise<string> {
+  const [lifecycle, checked] = await Promise.all([
+    import('./daemon-client-lifecycle.ts'),
+    import('./daemon-client-checked-rpc.ts'),
+  ]);
+  try {
+    const settings = lifecycle.resolveClientSettings(
+      {
+        session: 'default',
+        command: 'connect',
+        positionals: [],
+        flags: { daemonBaseUrl: flags.daemonBaseUrl },
+      },
+      flags.daemonAuthToken,
+      host,
+    );
+    if (!settings.remoteBaseUrl) throw checked.checkedRpcWithoutEndpointError();
+    const info: DaemonInfo = {
+      token: settings.remoteAuthToken ?? '',
+      pid: 0,
+      baseUrl: settings.remoteBaseUrl,
+    };
+    checked.assertHealthServesCheckedRpc(await readRemoteDaemonHealth(info));
+    return lifecycle.checkedRpcTargetFingerprint(settings.remoteBaseUrl);
+  } catch (error) {
+    throw checked.withoutEndpoint(error);
+  }
 }
 
 /** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */

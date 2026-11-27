@@ -5,6 +5,7 @@ import type {
   BackCommandOptions,
   FoldCommandOptions,
   HomeCommandOptions,
+  LockScreenCommandOptions,
   OrientationCommandOptions,
   ShakeCommandOptions,
   TelephonyCommandOptions,
@@ -20,6 +21,7 @@ import { clipboardCliReader, clipboardDaemonWriter } from './clipboard.ts';
 import { foldCliReader, foldDaemonWriter } from './fold.ts';
 import { hardwareButtonCliReader, hardwareButtonDaemonWriter } from './hardware-button.ts';
 import { keyboardCliReader, keyboardDaemonWriter } from './keyboard.ts';
+import { lockScreenCliReader, lockScreenDaemonWriter } from './lock-screen.ts';
 import { orientationCliReader, orientationDaemonWriter } from './orientation.ts';
 import { telephonyCliReader, telephonyDaemonWriter } from './telephony.ts';
 import { tvRemoteCliReader, tvRemoteDaemonWriter } from './tv-remote.ts';
@@ -63,6 +65,9 @@ describe('system command interface', () => {
     >();
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['lockScreen']>().toEqualTypeOf<
+      (options: LockScreenCommandOptions) => Promise<CommandResult<'lock-screen'>>
     >();
   });
 
@@ -300,6 +305,23 @@ describe('system command interface', () => {
     expect(
       hardwareButtonDaemonWriter({ button: 'sleep' } as Record<string, unknown>).positionals,
     ).toEqual(['sleep']);
+  });
+
+  test('lock-screen reader and writer take exactly one lock or unlock action', () => {
+    expect(lockScreenCliReader(['lock'], flags({ platform: 'android' }))).toEqual({
+      platform: 'android',
+      action: 'lock',
+    });
+    expect(lockScreenCliReader(['Unlock'], flags())).toEqual({ action: 'unlock' });
+    expect(
+      lockScreenDaemonWriter({ action: 'unlock' } as Record<string, unknown>).positionals,
+    ).toEqual(['unlock']);
+    for (const positionals of [[], ['lock', 'unlock'], ['locked'], ['sleep']]) {
+      expectInvalidArgs(
+        () => lockScreenCliReader(positionals, flags()),
+        'lock-screen requires exactly one action',
+      );
+    }
   });
 });
 

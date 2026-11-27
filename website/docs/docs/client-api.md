@@ -39,6 +39,7 @@ Entry points for driving devices from Node.js:
     example while the app is still loading. Polling callers may keep polling. False for every other
     platform, backend, and mechanism failure.
   - `centerOfRect(rect)`
+  - `formatPinnedRef(ref, generation)`: pair a plain capture ref with its `refsGeneration` before an interaction.
   - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
   - types: `DaemonBinding`, `DaemonLifecycle`, `EnsureDaemonOptions`, `DaemonConnection`, `DaemonIdentity`
   - types: every option and result type of the client's methods, among them `AppOpenOptions`,
@@ -63,6 +64,27 @@ This example opens an app, takes a snapshot, interacts, handles typed errors, an
 ```
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
+
+`formatPinnedRef` requires a build containing the public formatter export; releases through **0.21.43 do not export it**. Check your installed package before adding the named import:
+
+```sh
+node --input-type=module -e "import * as sdk from 'agent-device'; console.log(typeof sdk.formatPinnedRef)"
+```
+
+The command must print `function`. Use `formatPinnedRef` from the same installed `agent-device` package as your client. It formats a capture's plain ref and generation for that version, so your integration does not construct the pin separator itself:
+
+```ts
+import { createAgentDeviceClient, formatPinnedRef } from 'agent-device';
+
+const client = createAgentDeviceClient();
+const snapshot = await client.capture.snapshot({ interactiveOnly: true });
+const node = snapshot.nodes?.find((node) => node.label === 'Continue');
+if (node?.ref && snapshot.refsGeneration !== undefined) {
+  await client.interactions.press({ ref: formatPinnedRef(node.ref, snapshot.refsGeneration) });
+}
+```
+
+A pin does not refresh a stale ref. A device action expires its frame, and a newer ref-issuing response replaces its generation. Use the latest response's refs and `refsGeneration`, or take a new snapshot. Without new refs, a second press from the original snapshot is refused with `ref_frame_expired`.
 
 When the daemon can name the attached host device, `client.apps.open()` answers with it under `device`. Its `kind` (`simulator`, `emulator`, or `device`), `model` and `osVersion` are each optional and present only when the host or provider reported them, the same fields `client.sessions.list()` reports per session. A target that reports no OS leaves `osVersion` unset; nothing infers one.
 
@@ -288,6 +310,8 @@ await client.command.shake();
 await client.command.hardwareButton({ button: 'volume-up' });
 await client.command.hardwareButton({ button: 'volume-down' });
 await client.command.hardwareButton({ button: 'power', platform: 'android' });
+await client.command.lockScreen({ action: 'lock' });
+await client.command.lockScreen({ action: 'unlock' });
 await client.command.fold({ pose: 'open' });
 await client.command.telephony({ action: 'call', number: '5551234' });
 await client.command.telephony({ action: 'sms', number: '5551234', text: 'Your code is 1234' });
@@ -304,6 +328,8 @@ await client.command.fold({
 `fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion. Android emulators accept `pose` only.
 
 `hardwareButton` presses one phone hardware key once: `button` is `'volume-up'`, `'volume-down'`, `'power'`, `'mute'`, `'sleep'`, `'wake'`, `'media-play-pause'`, `'media-next'`, `'media-previous'`, `'media-rewind'`, or `'media-fast-forward'`. It takes no hold duration and activates no app; the result reports the dispatched press, not the OS reaction. Android presses all eleven on phones and tablets; a physical iPhone or iPad presses volume only; iOS Simulators, Android TV, and tvOS refuse (use `tvRemote` on TV targets). `sleep` and `wake` are the explicit Android events that turn the screen off or on; `power` toggles it.
+
+`lockScreen` shows the lock screen (`action: 'lock'`) or dismisses it back to the app that was in front (`action: 'unlock'`), and resolves with `{ action: 'lock-screen', state: 'locked' | 'unlocked', message }` once the device reports that state. `lock` leaves a locked screen alone, and no app is activated. Android phones and tablets and iPhone and iPad simulators support it. `unlock` never enters a credential: a PIN, pattern, password, or passcode lock fails with `UNSUPPORTED_OPERATION` and `details.reason: 'lock-screen-secure'`.
 
 `press`, `click`, and `longpress` do not wait for a missing target to appear. When a screen is still loading, wait for its landmark before interacting:
 
@@ -337,6 +363,7 @@ Supported command methods:
 - `actionButton`
 - `shake`
 - `hardwareButton`
+- `lockScreen`
 - `fold`
 - `telephony`
 - `keyboard`

@@ -72,6 +72,7 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   clipboard: resultOutput(clipboardCliOutput),
   'tv-remote': messageOutput,
   'hardware-button': messageOutput,
+  'lock-screen': messageOutput,
   telephony: messageOutput,
 } satisfies Partial<Record<CommandName, CliOutputFormatter>>);
 

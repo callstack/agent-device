@@ -5,7 +5,6 @@ import type {
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
@@ -16,15 +15,27 @@ import {
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
+  isLoopbackHostname,
   resolveDaemonPaths,
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
+  DAEMON_RETIREMENT_REASONS,
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { DAEMON_CLIENT_CONFIG_REASONS } from './daemon-lifecycle-errors.ts';
+import { createHash } from 'node:crypto';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import {
+  buildDaemonHttpUrl,
+  DAEMON_HTTP_CHECKED_RPC_ROUTE,
+} from '@agent-device/contracts/daemon-http';
+import { requestUploadsArtifacts } from '@agent-device/remote/daemon-artifacts';
+import type { DaemonRpcMode } from '@agent-device/contracts/remote';
+import {
+  DAEMON_CLIENT_CONFIG_REASONS,
+  REMOTE_DAEMON_UNREACHABLE_HINT,
+} from './daemon-lifecycle-errors.ts';
 
 import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-contracts/session-repair-tombstone';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
@@ -55,6 +66,11 @@ export type DaemonClientSettings = {
   ownedStateDir?: OwnedReplayStateDir;
   remoteBaseUrl?: string;
   remoteAuthToken?: string;
+  /**
+   * The request goes on the checked RPC route without a `/health` probe: its connection sets
+   * `daemonRpc: checked`, and the request has no remote side effect before its command RPC.
+   */
+  remoteCheckedRpc?: true;
   /** See {@link DaemonBinding}. Present on a client that is pinned to one daemon instance. */
   daemonBinding?: DaemonBinding;
 };
@@ -70,11 +86,6 @@ export type EnsuredDaemon = {
   info: DaemonInfo;
   startedByClient: boolean;
 };
-
-const LOOPBACK_BLOCK_LIST = new net.BlockList();
-LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
-LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
-LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
 /**
  * Whether a timed-out request may retire the daemon it was waiting on. An attach client never may: the
@@ -132,8 +143,44 @@ export function resolveClientSettings(
     ownedStateDir,
     remoteBaseUrl: remote.remoteBaseUrl,
     remoteAuthToken: remote.authToken,
+    ...(remote.remoteBaseUrl &&
+    remote.daemonRpc === 'checked' &&
+    approvesCheckedRpcTarget(req.flags?.daemonRpcTarget, remote.remoteBaseUrl) &&
+    isStandaloneRemoteRequest(req)
+      ? { remoteCheckedRpc: true as const }
+      : {}),
     ...(daemonBinding ? { daemonBinding } : {}),
   };
+}
+
+/**
+ * Whether a remote request reaches the daemon with nothing before its command RPC that must land on
+ * the same daemon. An upload, and a lease allocate or heartbeat, keep the `/health` probe, so their
+ * instance ID pins what follows; every caller, the SDK included, gets this rule.
+ */
+function isStandaloneRemoteRequest(req: Omit<DaemonWireRequest, 'token'>): boolean {
+  return (
+    !requestUploadsArtifacts(req) &&
+    req.command !== INTERNAL_COMMANDS.leaseAllocate &&
+    req.command !== INTERNAL_COMMANDS.leaseHeartbeat
+  );
+}
+
+/**
+ * A fingerprint of the exact HTTP target a checked call is sent to, resolved by the same
+ * `buildDaemonHttpUrl` the transport sends with. `connect` records only this fingerprint.
+ */
+export function checkedRpcTargetFingerprint(remoteBaseUrl: string): string {
+  const target = buildDaemonHttpUrl(remoteBaseUrl, DAEMON_HTTP_CHECKED_RPC_ROUTE);
+  return createHash('sha256').update(target).digest('hex');
+}
+
+/**
+ * A connection's recorded approval holds only for the target it fingerprinted. An explicit SDK opt-in
+ * names no fingerprint and is taken as given.
+ */
+function approvesCheckedRpcTarget(recorded: string | undefined, remoteBaseUrl: string): boolean {
+  return recorded === undefined || recorded === checkedRpcTargetFingerprint(remoteBaseUrl);
 }
 
 /**
@@ -196,12 +243,20 @@ function resolveRemoteClientSettings(
   rawBaseUrl: string | undefined;
   remoteBaseUrl?: string;
   authToken?: string;
+  daemonRpc: DaemonRpcMode;
 } {
   const rawBaseUrl = req.flags?.daemonBaseUrl ?? env.AGENT_DEVICE_DAEMON_BASE_URL;
   const remoteBaseUrl = resolveRemoteDaemonBaseUrl(rawBaseUrl);
   const authToken = suppliedAuthToken ?? env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   validateRemoteDaemonTrust(remoteBaseUrl, authToken);
-  return { rawBaseUrl, remoteBaseUrl, authToken };
+  const daemonRpc = resolveDaemonRpcMode(req.flags?.daemonRpc);
+  return { rawBaseUrl, remoteBaseUrl, authToken, daemonRpc };
+}
+
+function resolveDaemonRpcMode(raw: string | undefined): DaemonRpcMode {
+  if (raw === undefined || raw === '') return 'health';
+  if (raw === 'health' || raw === 'checked') return raw;
+  throw new AppError('INVALID_ARGS', 'daemonRpc must be health or checked', { daemonRpc: raw });
 }
 
 function resolveTransportClientSettings(
@@ -221,11 +276,23 @@ function resolveTransportClientSettings(
   const rawServerMode =
     flags?.daemonServerMode ??
     env.AGENT_DEVICE_DAEMON_SERVER_MODE ??
-    (rawTransport === 'dual' ? 'dual' : undefined);
-  return {
-    preference,
-    serverMode: resolveDaemonServerMode(rawServerMode),
-  };
+    defaultServerModeForRequestedTransport(rawTransport);
+  return { preference, serverMode: resolveDaemonServerMode(rawServerMode) };
+}
+
+/**
+ * The server mode that answers the transport a client named, used when that client named no server
+ * mode: the daemon a managed client starts has to serve the endpoint that client will call. `auto`
+ * and `socket` ask for nothing — the socket-only default answers both. A client that starts no
+ * daemon never reads this setting, so it decides nothing for one.
+ */
+function defaultServerModeForRequestedTransport(
+  rawTransport: string | undefined,
+): DaemonServerMode | undefined {
+  const normalized = (rawTransport ?? '').trim().toLowerCase();
+  if (normalized === 'dual') return 'dual';
+  if (normalized === 'http') return 'http';
+  return undefined;
 }
 
 function shouldUseOwnedReplayStateDir(
@@ -277,6 +344,15 @@ async function ensureRemoteDaemon(
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
+  // The checked route makes the server refuse what `/health` would have: no probe goes first. A
+  // process that already read `/health` here, a lease call's for one, stays health-first: a pinned
+  // answer is reused, fenced and free, and one that could not be pinned is read again.
+  if (settings.remoteCheckedRpc) {
+    const { hasReadRemoteHealth } = await import('./daemon-client-remote-health-cache.ts');
+    if (!hasReadRemoteHealth(remoteInfo)) {
+      return { info: { ...remoteInfo, checkedRpc: true }, startedByClient: false };
+    }
+  }
   // The command's budget starts with the first probe, which already runs under it and its signal.
   const deadline = performance.now() + (healthRecovery?.budgetMs ?? 0);
   let health = await cachedRemoteDaemonHealth(
@@ -292,7 +368,8 @@ async function ensureRemoteDaemon(
       failedProbe: health,
       recovery: healthRecovery,
       deadline,
-      hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
+      hint: REMOTE_DAEMON_UNREACHABLE_HINT,
+      probe: async (probeMs, signal) => await cachedRemoteDaemonHealth(remoteInfo, probeMs, signal),
     });
   }
   remoteInfo.capabilities = (health.upstream ?? health).capabilities;
@@ -380,7 +457,7 @@ export async function cleanupDaemonAfterRequest(
           'COMMAND_FAILED',
           'Replay completed, but daemon cleanup could not be confirmed.',
           {
-            reason: 'daemon_retirement_unconfirmed',
+            reason: DAEMON_RETIREMENT_REASONS.retirementUnconfirmed.reason,
             retirement: result,
             stateDir: settings.paths.baseDir,
             hint:
@@ -543,17 +620,6 @@ function validateRemoteDaemonTrust(
       hint: 'Provide --daemon-auth-token or AGENT_DEVICE_DAEMON_AUTH_TOKEN when using a non-loopback remote daemon URL.',
     },
   );
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname
-    .trim()
-    .toLowerCase()
-    .replace(/^\[(.*)\]$/, '$1');
-  if (normalized === 'localhost') return true;
-  if (net.isIPv4(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv4');
-  if (net.isIPv6(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv6');
-  return false;
 }
 
 export function attachSessionAddressHints(

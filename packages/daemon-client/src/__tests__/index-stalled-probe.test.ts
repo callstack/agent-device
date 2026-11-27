@@ -61,12 +61,14 @@ vi.mock('../daemon-client-transport.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../daemon-client-transport.ts')>();
   return {
     ...actual,
-    canConnect: async (...args: Parameters<typeof actual.canConnect>) => {
-      const reachable = mockMissNextProbe.value ? false : await actual.canConnect(...args);
+    probeDaemonReachability: async (...args: Parameters<typeof actual.probeDaemonReachability>) => {
+      const probe = mockMissNextProbe.value
+        ? { reachable: false }
+        : await actual.probeDaemonReachability(...args);
       mockMissNextProbe.value = false;
-      probeAnswers.push(reachable);
+      probeAnswers.push(probe.reachable);
       probedPorts.push(args[0].port);
-      return reachable;
+      return probe;
     },
   };
 });

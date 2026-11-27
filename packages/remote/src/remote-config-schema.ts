@@ -1,4 +1,5 @@
 import {
+  DAEMON_RPC_MODES,
   PROVIDER_DEVICE_ORIENTATIONS,
   PROVIDER_DEVICE_TYPES,
   type RemoteConfigProfile,
@@ -113,9 +114,21 @@ const REMOTE_CONFIG_LEASE_FIELD_SPECS = [
   { key: 'clientId', type: 'string', env: false },
 ] as const satisfies readonly RemoteConfigFieldSpec[];
 
+/**
+ * Profile-only: no flag or environment variable sets it. `connect` checks the remote serves checked
+ * RPC before it records the mode in the connection, and commands read it from there.
+ */
+const REMOTE_CONFIG_DAEMON_RPC_FIELD_SPEC = {
+  key: 'daemonRpc',
+  type: 'enum',
+  enumValues: DAEMON_RPC_MODES,
+  env: false,
+} as const satisfies RemoteConfigFieldSpec;
+
 export const REMOTE_CONFIG_PROFILE_FIELD_SPECS = [
   ...REMOTE_CONFIG_FIELD_SPECS,
   ...REMOTE_CONFIG_LEASE_FIELD_SPECS,
+  REMOTE_CONFIG_DAEMON_RPC_FIELD_SPEC,
 ] as const satisfies readonly RemoteConfigFieldSpec[];
 
 const remoteConfigFieldSpecByKey = new Map(

@@ -24,6 +24,8 @@ import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/maco
 import { closeIosApp } from './app-launch.ts';
 import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
+import { setIosTimeZone } from './settings-timezone.ts';
+import { setIosLocale } from './settings-locale.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runSimctlForDevice } from './simctl-execution.ts';
@@ -49,11 +51,22 @@ const APPLE_SIMULATOR_SETTINGS = [
   'reset-keychain',
   'permission',
   'text-size',
+  'timezone',
+  'locale',
   'faceid',
   'touchid',
 ] as const satisfies readonly SettingName[];
 
 export type AppleSimulatorSetting = (typeof APPLE_SIMULATOR_SETTINGS)[number];
+
+/** `simctl` has no network switch, so these settings only redraw the status bar. */
+function statusBarOnlyWarnings(setting: 'wifi' | 'airplane'): { warnings: string[] } {
+  return {
+    warnings: [
+      `settings ${setting} changes only the simulator status bar; the simulator keeps using the host Mac's network.`,
+    ],
+  };
+}
 
 // fallow-ignore-next-line complexity
 export async function setIosSetting(
@@ -118,7 +131,7 @@ export async function setIosSetting(
         },
         signal,
       );
-      return;
+      return statusBarOnlyWarnings('wifi');
     }
     case 'airplane': {
       const enabled = parseSettingState(state);
@@ -161,11 +174,11 @@ export async function setIosSetting(
         },
         signal,
       );
-      return;
+      return statusBarOnlyWarnings('airplane');
     }
     case 'faceid':
     case 'touchid': {
-      const biometricSetting = normalized as IosBiometricSetting;
+      const biometricSetting = normalized;
       const biometric = IOS_BIOMETRIC_SETTINGS[biometricSetting];
       const action = parseBiometricAction(state, biometricSetting);
       await runIosBiometricSimctlCommand(device, action, {
@@ -177,6 +190,10 @@ export async function setIosSetting(
     case 'text-size': {
       return await setIosTextSize(device, state);
     }
+    case 'timezone':
+      return await setIosTimeZone(device, state);
+    case 'locale':
+      return await setIosLocale(device, state);
     case 'appearance':
     case 'permission':
     case 'location':

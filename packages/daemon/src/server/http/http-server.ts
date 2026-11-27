@@ -32,7 +32,10 @@ import {
   buildDaemonHealthPayload,
   normalizeDaemonPublicOrigin,
   nodeHttpRequestUrl,
+  DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
+  DAEMON_HTTP_CHECKED_RPC_ROUTE,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  type CheckedRpcProtocolRefusal,
   DAEMON_REQUEST_MAX_BYTES,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -81,8 +84,16 @@ import {
   type TenantTrustDecision,
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
+import {
+  readCheckedRpcProtocolRefusal,
+  refuseCheckedRpcCredential,
+  sendCheckedRpcProtocolRefusal,
+  withUnregisteredTrackingId,
+} from './http-checked-rpc.ts';
 
 const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
+/** What this daemon serves over HTTP beyond the base RPC contract, as `/health` advertises it. */
+const DAEMON_HTTP_CAPABILITIES = ['script-artifacts', DAEMON_HTTP_CHECKED_RPC_CAPABILITY];
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
@@ -143,7 +154,7 @@ export async function createDaemonHttpServer(options: {
         JSON.stringify(
           buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
             instanceId,
-            capabilities: ['script-artifacts'],
+            capabilities: DAEMON_HTTP_CAPABILITIES,
             hostArch,
             leaseBackends,
           }),
@@ -224,7 +235,8 @@ export async function createDaemonHttpServer(options: {
       return;
     }
 
-    if (req.method !== 'POST' || req.url !== '/rpc') {
+    const checked = req.url === DAEMON_HTTP_CHECKED_RPC_ROUTE;
+    if (req.method !== 'POST' || (req.url !== '/rpc' && !checked)) {
       res.statusCode = 404;
       res.end('Not found');
       return;
@@ -243,6 +255,7 @@ export async function createDaemonHttpServer(options: {
         expectedToken: token,
         instanceId,
         handleRequest,
+        checked,
       }).catch((error: unknown) => {
         sendUnownedRpcRequestFailure(res, onUnownedRequestFailure, error);
       });
@@ -314,8 +327,14 @@ async function handleRpcRequest(params: {
   expectedToken: string | undefined;
   instanceId: string;
   handleRequest: DaemonInvokeFn;
+  /** The call came on the checked route, so its protocol is checked before dispatch. */
+  checked: boolean;
 }): Promise<void> {
-  const { req, res, body, authHook, expectedToken, instanceId, handleRequest } = params;
+  const { req, res, body, authHook, expectedToken, instanceId, handleRequest, checked } = params;
+  // A checked call proves its credential before anything reads its protocol or method. One on
+  // another protocol then takes the `/rpc` flow and is refused only once every auth gate passed.
+  if (checked && refuseCheckedRpcCredential(req, res, body, expectedToken)) return;
+  const protocolRefusal = readCheckedRpcProtocolRefusal(req, checked);
   const validated = validateRpcRequestEnvelope(body);
   if (!validated.ok) {
     sendRpcRefusal(res, validated.refusal);
@@ -338,6 +357,7 @@ async function handleRpcRequest(params: {
       method: validated.method,
       params: validated.params,
       lifetime,
+      protocolRefusal,
     });
     if (admission.outcome !== 'admitted') {
       if (admission.outcome === 'rejected') {
@@ -557,8 +577,8 @@ function beginRpcRequestLifetime(params: {
 // token is compared, and a stale daemon instance after it.
 
 /**
- * The gate's answer for one validated call. `answered` is the stale-daemon-instance refusal,
- * which writes its own 409 and mismatch header: nothing else may be written for the call.
+ * The gate's answer for one validated call. `answered` is a refusal that wrote its own 409 and
+ * header, the stale daemon instance or a checked call's protocol: nothing else may be written.
  */
 type RpcRequestAdmission =
   | { outcome: 'admitted'; daemonRequest: DaemonRequest }
@@ -582,8 +602,11 @@ async function admitRpcRequest(params: {
   method: string;
   params: Record<string, unknown>;
   lifetime: RpcRequestLifetime;
+  /** A checked call's protocol refusal, answered once the caller passes the auth gates. */
+  protocolRefusal: CheckedRpcProtocolRefusal | undefined;
 }): Promise<RpcRequestAdmission> {
   const { req, res, authHook, expectedToken, instanceId, rpcRequest, method, lifetime } = params;
+  const { protocolRefusal } = params;
   const wireRequest = methodToDaemonRequest(method, params.params, req.headers);
   // A command call naming no command is params the router cannot route.
   if (namesNoCommand(method, wireRequest)) {
@@ -597,7 +620,10 @@ async function admitRpcRequest(params: {
       ),
     };
   }
-  const daemonRequest = lifetime.admit(wireRequest);
+  // A call that will be refused never reserves its tracking id: only a call that can run registers.
+  const daemonRequest = protocolRefusal
+    ? withUnregisteredTrackingId(wireRequest, rpcRequest.id)
+    : lifetime.admit(wireRequest);
 
   // Captured before the hook runs: what the caller claimed is an input to the trust
   // decision, never an identity.
@@ -625,6 +651,10 @@ async function admitRpcRequest(params: {
   const tokenError = enforceDaemonToken(daemonRequest.token, expectedToken);
   if (tokenError) {
     return refused(rpcRequest, -32000, tokenError, 401);
+  }
+  if (protocolRefusal) {
+    sendCheckedRpcProtocolRefusal(res, rpcRequest.id, protocolRefusal);
+    return { outcome: 'answered' };
   }
   if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) {
     return { outcome: 'answered' };

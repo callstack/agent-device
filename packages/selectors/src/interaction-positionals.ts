@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 export function stripAtPrefix(ref: string | undefined): string | undefined {
   return ref?.startsWith('@') ? ref.slice(1) : ref;
@@ -55,6 +55,10 @@ export function readInteractionTargetFromPositionals(
   return readPointTarget(positionals);
 }
 
+/**
+ * Decodes `fill` positionals. Any positional may be sensitive text (for example `--record-as` or
+ * `--text-stdin` when a ref variable expands to nothing), so no refusal quotes a positional.
+ */
 export function readFillTargetFromPositionals(positionals: string[]): DecodedFillTarget {
   const firstPositional = positionals[0];
   if (firstPositional?.startsWith('@')) {
@@ -67,10 +71,7 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
     };
   }
   if (BARE_SNAPSHOT_REF_PATTERN.test(firstPositional ?? '')) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Did you mean "@${firstPositional}"? Snapshot refs need the @ prefix.`,
-    );
+    throw new AppError('INVALID_ARGS', 'Snapshot refs need the @ prefix.');
   }
   const selectorArgs = splitSelectorFromArgs(positionals, { preferTrailingValue: true });
   if (selectorArgs) {
@@ -80,33 +81,60 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
       text: selectorArgs.rest.length === 0 ? undefined : selectorArgs.rest.join(' '),
     };
   }
+  if (isFillTargetMissing(positionals)) {
+    throw new AppError('INVALID_ARGS', formatFillMissingTargetFailure(positionals), {
+      reason: FILL_TARGET_REFUSAL_REASONS.targetMissing.reason,
+    });
+  }
   const pointText = positionals.slice(2);
   return {
     kind: 'point',
-    target: readPointTarget(positionals.slice(0, 2)),
+    target: readPointTarget(positionals.slice(0, 2), { quotePositionals: false }),
     text: pointText.length === 0 ? undefined : pointText.join(' '),
   };
 }
 
-function readPointTarget(positionals: string[]): { x: number; y: number } {
+/** Why `fill` refused its positionals before it decoded a target. */
+const FILL_TARGET_REFUSAL_REASONS = {
+  // Only the text arrived: one value that is no target, or a blank target before the text.
+  targetMissing: { reason: 'fill_target_missing' },
+} as const satisfies ReasonTable<'fill'>;
+
+/**
+ * `fill $REF "136849"` with an unset `REF` reaches here as one value, and `fill "$REF" "136849"`
+ * as a blank target; either way the caller supplied text but no target. One value that holds a
+ * selector key (`label=Sign in`) or an unknown key is a malformed target, so its own diagnostic
+ * stays.
+ */
+function isFillTargetMissing(positionals: string[]): boolean {
+  const [target = '', ...rest] = positionals;
+  if (rest.length > 0) return target.trim() === '';
+  if (target.trim() === '' || detectUnknownSelectorKeyToken(target)) return false;
+  return !target.split(/\s+/).some(isSelectorToken);
+}
+
+function formatFillMissingTargetFailure(positionals: string[]): string {
+  const got = positionals.length === 1 ? 'got one value' : 'got an empty target';
+  return `fill needs <target> <text> but ${got}. If a ref variable expanded to nothing, the target is missing: pass an @ref from snapshot, a selector, or x y coordinates before the text.`;
+}
+
+function readPointTarget(
+  positionals: string[],
+  options: { quotePositionals?: boolean } = {},
+): { x: number; y: number } {
+  const quotePositionals = options.quotePositionals ?? true;
   const firstPositional = positionals[0] ?? '';
   const unknownKey = detectUnknownSelectorKeyToken(firstPositional);
   if (unknownKey) {
-    // An unquoted multi-word value arrives split across positionals (button=Push Article), so
-    // fold the trailing tokens back into the suggested value like mergeRestIntoSelectorValue.
-    // A fully quoted value (button="Push Article") is complete; trailing tokens are not part of it.
-    const value = hasCompleteQuotedValue(firstPositional)
-      ? unknownKey.value
-      : [unknownKey.value, ...positionals.slice(1)].join(' ').trim();
     throw new AppError(
       'INVALID_ARGS',
-      formatUnknownSelectorKeyFailure({ key: unknownKey.key, value }),
+      formatUnknownSelectorKeyFailure(unknownKey, positionals, quotePositionals),
     );
   }
   const x = Number(positionals[0]);
   const y = Number(positionals[1]);
   if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
-  throw new AppError('INVALID_ARGS', formatTargetParseFailure(positionals));
+  throw new AppError('INVALID_ARGS', formatTargetParseFailure(positionals, quotePositionals));
 }
 
 function hasCompleteQuotedValue(token: string): boolean {
@@ -116,25 +144,45 @@ function hasCompleteQuotedValue(token: string): boolean {
   return (first === '"' || first === "'") && valueRaw.endsWith(first);
 }
 
-function formatUnknownSelectorKeyFailure(unknownKey: { key: string; value: string }): string {
-  const { key, value } = unknownKey;
+function formatUnknownSelectorKeyFailure(
+  unknownKey: { key: string; value: string },
+  positionals: string[],
+  quotePositionals: boolean,
+): string {
+  const { key } = unknownKey;
   const supported = SELECTOR_KEY_NAMES.join(', ');
+  if (!quotePositionals) {
+    const hint = isRoleHintWord(key)
+      ? 'Did you mean role=<role> label="..."?'
+      : 'Did you mean label="..."?';
+    return `Unknown selector key. Supported: ${supported}. ${hint}`;
+  }
+  // An unquoted multi-word value arrives split across positionals (button=Push Article), so
+  // fold the trailing tokens back into the suggested value like mergeRestIntoSelectorValue.
+  // A fully quoted value (button="Push Article") is complete; trailing tokens are not part of it.
+  const firstPositional = positionals[0] ?? '';
+  const value = hasCompleteQuotedValue(firstPositional)
+    ? unknownKey.value
+    : [unknownKey.value, ...positionals.slice(1)].join(' ').trim();
   const hint = isRoleHintWord(key)
     ? `Did you mean role=${key} label=${quoteSelectorValue(value)}?`
     : `Did you mean label=${quoteSelectorValue(value)}?`;
   return `Unknown selector key "${key}". Supported: ${supported}. ${hint}`;
 }
 
-function formatTargetParseFailure(positionals: string[]): string {
+function formatTargetParseFailure(positionals: string[], quotePositionals: boolean): string {
   const raw = positionals.filter((part) => part !== undefined).join(' ');
   if (!raw.trim()) {
     return 'Missing target. Pass an @ref from snapshot, a selector like text="Sign in", or "x y" coordinates.';
   }
-  const base = `Target "${raw}" is not a @ref, selector, or "x y" point.`;
+  const base = quotePositionals
+    ? `Target "${raw}" is not a @ref, selector, or "x y" point.`
+    : 'Target is not a @ref, selector, or "x y" point.';
   if (positionals.some((part) => isSelectorToken(part ?? ''))) {
     return `${base} Selector values with spaces need quotes, e.g. text="Sign in".`;
   }
-  return `${base} To match by visible text, use text=${quoteSelectorValue(raw)} (or label=/id=/role=), or pass an @ref from snapshot.`;
+  const textExample = quotePositionals ? quoteSelectorValue(raw) : '"..."';
+  return `${base} To match by visible text, use text=${textExample} (or label=/id=/role=), or pass an @ref from snapshot.`;
 }
 
 function formatSelectorTrailingArgsFailure(

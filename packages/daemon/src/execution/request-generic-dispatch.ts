@@ -7,10 +7,7 @@ import type { DaemonCommandContext } from '../core/context.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
-import {
-  ensureAndroidBlockingSystemDialogReady,
-  recoverAndroidBlockingSystemDialog,
-} from './android-system-dialog.ts';
+import { ensureAndroidBlockingSystemDialogReady } from './android-system-dialog.ts';
 import { markDeferredInteractionOutcome } from '../core/deferred-interaction-outcome.ts';
 import {
   augmentScrollVisualizationResult,
@@ -59,12 +56,6 @@ export async function dispatchGenericCommand(params: {
   const session = sessionStore.requireCurrent(sessionRef);
   const platformCommand = req.command;
 
-  const commandReadiness = await ensureGenericCommandReady(
-    session,
-    platformCommand,
-    params.androidObservation,
-  );
-  if (commandReadiness.response) return commandReadiness.response;
   // #1638: freeze the settled diff's baseline before anything can mutate the
   // screen or the stored snapshot — including the Android dialog preflight.
   const settlePlan = await planGenericSettleObservation({
@@ -129,10 +120,8 @@ export async function dispatchGenericCommand(params: {
     recorded,
     data,
     actionStartedAt,
-    readinessWarnings: [
-      commandReadiness.warning,
+    readinessWarning:
       preflightReadiness.status === 'recovered' ? preflightReadiness.warning : undefined,
-    ],
     observeSettle: settlePlan.observe,
     androidObservation: params.androidObservation,
   });
@@ -152,7 +141,7 @@ async function finalizeGenericCommand(params: {
   recorded: RecordedGenericRequest;
   data: Record<string, unknown> | void;
   actionStartedAt: number;
-  readinessWarnings: readonly (string | undefined)[];
+  readinessWarning: string | undefined;
   observeSettle?: () => Promise<SettleObservation | undefined>;
   androidObservation?: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
@@ -165,7 +154,7 @@ async function finalizeGenericCommand(params: {
   );
   if ('response' in postflightReadiness) return postflightReadiness.response;
 
-  let data = withReadinessWarnings(params.data, params.readinessWarnings);
+  let data = withReadinessWarning(params.data, params.readinessWarning);
   recordVisualizationAndAction({
     ref,
     sessionStore,
@@ -198,19 +187,16 @@ async function finalizeGenericCommand(params: {
   return { ok: true, data: data ?? {} };
 }
 
-/** Readiness warnings are disclosed on the result they made possible without clobbering its data. */
-function withReadinessWarnings(
+/** A readiness warning is disclosed on the result it made possible without clobbering its data. */
+function withReadinessWarning(
   data: Record<string, unknown> | void,
-  warnings: readonly (string | undefined)[],
+  warning: string | undefined,
 ): Record<string, unknown> | void {
-  const appendedWarnings = warnings.filter(
-    (warning): warning is string => typeof warning === 'string' && warning.length > 0,
-  );
-  if (appendedWarnings.length === 0) return data;
+  if (!warning) return data;
   if (data && typeof data !== 'object') return data;
   const existingWarnings =
     data && typeof data.warning === 'string' && data.warning.length > 0 ? [data.warning] : [];
-  return { ...(data ?? {}), warning: [...existingWarnings, ...appendedWarnings].join(' ') };
+  return { ...(data ?? {}), warning: [...existingWarnings, warning].join(' ') };
 }
 
 /**
@@ -259,11 +245,6 @@ type AndroidDialogReadiness =
   | { status: 'recovered'; warning: string }
   | { response: DaemonResponse };
 
-type GenericCommandReadiness = {
-  response?: DaemonResponse;
-  warning?: string;
-};
-
 async function ensureNoAndroidBlockingDialogReady(
   session: SessionState,
   platformCommand: string,
@@ -286,39 +267,6 @@ async function ensureNoAndroidBlockingDialogReady(
   } catch (error) {
     return { response: { ok: false, error: normalizeError(error) } };
   }
-}
-
-async function ensureGenericCommandReady(
-  session: SessionState,
-  platformCommand: string,
-  observation: AndroidObservationAdapter | undefined,
-): Promise<GenericCommandReadiness> {
-  // No support gate survives here. R56 migrated `app-switcher`, the last generic-route descriptor
-  // with a capability bucket, so every command that reaches this dispatcher was already admitted
-  // (or refused) against its exact owner's facts by `resolveGenericRuntimeExecution` — which fails
-  // closed for anything it has no arm for. A second `requireCommandSupported` call would be a
-  // support authority beside the facts, which ADR 0019 §8 forbids.
-  if (
-    session.device.platform !== 'android' ||
-    isActiveProviderDevice(session.device) ||
-    !session.screenRecording ||
-    platformCommand === 'record'
-  ) {
-    return {};
-  }
-  const recovery = await recoverAndroidBlockingSystemDialog({ session, observation });
-  if (recovery.status !== 'failed') {
-    return recovery.status === 'unknown' ? { warning: recovery.warning } : {};
-  }
-  return {
-    response: {
-      ok: false,
-      error: {
-        code: 'COMMAND_FAILED',
-        message: 'Android system dialog blocked the recording session',
-      },
-    },
-  };
 }
 
 function recordVisualizationAndAction(params: {
@@ -350,13 +298,13 @@ function recordVisualizationAndAction(params: {
     session,
     command,
     resolvedPositionals,
-    data as Record<string, unknown> | void,
+    data,
   );
   recordTouchVisualizationEvent(
     session,
     command,
     resolvedPositionals,
-    visualizationData as Record<string, unknown> | void,
+    visualizationData,
     flags,
     actionStartedAt,
     actionFinishedAt,

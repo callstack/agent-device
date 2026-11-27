@@ -940,6 +940,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit

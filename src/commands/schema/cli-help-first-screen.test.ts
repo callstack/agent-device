@@ -39,7 +39,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   ],
   workflow: [
     'Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name)',
-    'Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name). Pin with ~s<n> (press @e12~s4); every platform rejects a stale pinned ref',
+    'Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name). Pin with -s<n> (press @e12-s4); every platform rejects a stale pinned ref',
     'Unknown app id: devices, then apps, then open <discovered-app-id>. Never open artifact paths or invent package ids',
     'Truncated preview: snapshot -s @e12 (the current concrete ref), not get text. Missing target: scroll <dir> --until <selector>. TV/D-pad focus: help tv',
     'Mutating selector ambiguity: press/click/fill/longpress collapse duplicate accessibility wrappers only when every match is one ancestor-descendant chain resolving to the same actionable node. Matches in distinct subtrees fail with AMBIGUOUS_MATCH',
@@ -55,6 +55,11 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback',
     'iOS transform/pinch/rotate use private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output',
     'Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.',
+  ],
+  selectors: [
+    'One or more terms separated by spaces. An element must match every term',
+    'A role word is not a key: write role=button label="Save", not button="Save"',
+    'Text values match the whole field, ignoring case and extra whitespace',
   ],
   tv: [
     'Use this when the target is Android TV (including Fire TV devices on Fire OS over ADB), Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control',
@@ -138,7 +143,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   ],
   accessibility: [
     'Audit findings are advisory heuristics',
-    'This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance',
+    'This tool does not measure color contrast or iOS focus order, and does not give a compliance verdict. Do not claim compliance',
     '2. Run agent-device audit, then agent-device snapshot -i',
     'Visit every tab, pushed screen, sheet, dialog, and empty, error, and loading state',
     'Large text: first run agent-device settings text-size to record the current size.',

@@ -1,3 +1,4 @@
+import { PLATFORM_RUNTIME_REASONS } from '@agent-device/contracts/platform-runtime';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { LimrunDeviceSession } from './device-session.ts';
@@ -23,7 +24,7 @@ export async function readLimrunAppState(
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'Limrun appstate requires an active provider session',
-      { reason: 'owner-capability-missing' },
+      { reason: PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason },
     );
   }
   if (session.platform === 'ios') {

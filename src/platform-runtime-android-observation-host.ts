@@ -8,10 +8,15 @@ export function createAndroidObservationHost(): AndroidObservationHost {
       const result = await runAndroidAdb(device, args, options);
       return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
     },
-    async readSnapshotNodes(device) {
-      const { snapshotAndroid, androidSnapshotPublicationInput } = await loadAndroidMechanics();
+    async readSnapshotNodes(device, options) {
+      const {
+        snapshotAndroid,
+        androidSnapshotPublicationInput,
+        requireCompleteAndroidSnapshotCapture,
+      } = await loadAndroidMechanics();
       const { buildSnapshotState } = await import('@agent-device/capture-kit/snapshot-state');
       const rawSnapshot = await snapshotAndroid(device, { interactiveOnly: false });
+      if (options?.requireComplete) requireCompleteAndroidSnapshotCapture(rawSnapshot);
       return buildSnapshotState(androidSnapshotPublicationInput(rawSnapshot), undefined).nodes;
     },
     async openApp(device, appBundleId) {

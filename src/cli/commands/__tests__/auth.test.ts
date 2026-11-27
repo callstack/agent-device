@@ -24,7 +24,7 @@ function writeStoredCliSession(
   writeCliSession({
     stateDir,
     session: {
-      version: 1,
+      version: 2,
       id: 'cli-1',
       cloudBaseUrl: 'https://cloud.example.test',
       refreshCredential: 'refresh-credential',
@@ -345,4 +345,31 @@ test('auth rejects a subcommand outside status, login, and logout', async () => 
   assert.equal(result.code, 1);
   assert.match(result.stderr, /INVALID_ARGS/);
   assert.match(result.stderr, /auth accepts only: status, login, logout/);
+});
+
+test('auth refuses --remote-config as unsupported without reading the profile', async () => {
+  const workspace = mkdtempForTestSync('agent-device-auth-remote-config-');
+  const stateDir = path.join(workspace, 'state');
+  const okProfile = path.join(workspace, 'ok.json');
+  const badProfile = path.join(workspace, 'bad.json');
+  const missingProfile = path.join(workspace, 'missing.json');
+  fs.writeFileSync(okProfile, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  fs.writeFileSync(badProfile, '{not-json');
+
+  for (const argv of [
+    ['auth', 'status', '--state-dir', stateDir, '--remote-config', okProfile, '--json'],
+    ['auth', 'status', '--state-dir', stateDir, '--remote-config', badProfile, '--json'],
+    ['auth', 'status', '--state-dir', stateDir, '--remote-config', missingProfile, '--json'],
+    ['auth', 'login', '--state-dir', stateDir, '--remote-config', okProfile, '--json'],
+  ]) {
+    const result = await runCliCapture(argv);
+    assert.equal(result.code, 1, result.stdout);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error.code, 'INVALID_ARGS');
+    assert.match(error.message, /Flag --remote-config is not supported for command auth\./);
+  }
+
+  const help = await runCliCapture(['help', 'auth']);
+  assert.equal(help.code, 0);
+  assert.doesNotMatch(help.stdout, /--remote-config/);
 });

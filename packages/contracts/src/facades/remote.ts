@@ -16,6 +16,7 @@ export type {
   ProviderConnectionVerification,
 } from '../provider-connection.ts';
 export {
+  DAEMON_RPC_MODES,
   PROVIDER_DEVICE_ORIENTATIONS,
   PROVIDER_DEVICE_TYPES,
   PROVIDER_PROFILE_FIELD_FLAG_ALIASES,
@@ -23,6 +24,7 @@ export {
 } from '../remote-config-fields.ts';
 export type {
   CloudProviderProfileFields,
+  DaemonRpcMode,
   ProviderDeviceOrientation,
   ProviderDeviceType,
   RemoteConfigMetroOptions,

@@ -1,14 +1,13 @@
 import type { FoldPose, SetFoldPoseInput } from '@agent-device/contracts/device';
 import { FOLD_REASONS, type SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
-import { runAndroidShell } from '../adb.ts';
 import { runEmulatorConsole } from '../emulator-console.ts';
-import { androidAdbResultError } from '../adb-failure.ts';
-import type { AndroidAdbExecutorResult } from '../adb-transport.ts';
+import { readAndroidKeyguardShowing, runCheckedAndroidShell } from '../keyguard.ts';
 
 /**
  * The emulator console's posture ids (`adb emu posture <id>`) and the device state Android
@@ -33,6 +32,9 @@ const ANDROID_FOLD_REASONS = {
   keyframesUnsupported: { reason: 'fold-keyframes-unsupported' },
   // The Android emulator console refused the posture command.
   postureDispatchFailed: { reason: 'fold-posture-dispatch-failed' },
+  // The Android emulator console did not answer the posture command in time, so the posture may
+  // have applied.
+  postureDispatchTimedOut: { reason: 'fold-posture-dispatch-timed-out' },
   // The lock screen that folding raised on Android did not stay dismissed.
   lockScreenPersists: { reason: 'fold-lock-screen-persists' },
   // The Android emulator console returned no hinge angle.
@@ -55,6 +57,8 @@ const KEYFRAMES_HINT =
   'The emulator console poses the hinge at fixed angles only; request closed, half-open, or open.';
 const POSTURE_DISPATCH_HINT =
   'The emulator console refused the posture. Check that the AVD is a foldable profile (hw.sensor.hinge=yes), then retry.';
+const POSTURE_TIMEOUT_HINT =
+  'Check the pose with a screenshot or `adb shell cmd device_state print-state`. A retry sends the posture again and waits for its device state.';
 const POSE_UNVERIFIED_HINT =
   'The emulator console accepted the posture, but the guest did not commit the matching device state. Read it directly with `adb shell cmd device_state print-state` to see which state the emulator holds.';
 const HINGE_ANGLE_HINT =
@@ -77,7 +81,8 @@ export async function setAndroidFoldPose(
 
   // Only a fold to the cover display raises the keyguard, and a keyguard already showing is not
   // the fold's to clear: only one that `closed` raises is dismissed.
-  const lockedBefore = pose === 'closed' && (await isKeyguardShowing(device, signal));
+  const lockedBefore =
+    pose === 'closed' && (await readAndroidKeyguardShowing(device, signal)) === true;
   await sendEmulatorPosture(device, pose, posture.id, signal);
   emitDiagnostic({
     level: 'info',
@@ -149,7 +154,11 @@ async function readDeviceStates(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<Map<string, string>> {
-  const { stdout } = await shell(device, ['cmd', 'device_state', 'print-states'], signal);
+  const { stdout } = await runCheckedAndroidShell(
+    device,
+    ['cmd', 'device_state', 'print-states'],
+    signal,
+  );
   const states = new Map<string, string>();
   for (const match of stdout.matchAll(/identifier=(\d+), name='([A-Z_]+)'/g)) {
     states.set(match[2]!, match[1]!);
@@ -163,7 +172,11 @@ async function sendEmulatorPosture(
   postureId: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  const sent = await runEmulatorConsole(device, ['posture', postureId], signal);
+  const sent = await runEmulatorConsole(device, ['posture', postureId], signal).catch(
+    (error: unknown) => {
+      throw postureTimeoutError(device, pose, error, signal);
+    },
+  );
   if (sent.refusal !== undefined) {
     throw new AppError('COMMAND_FAILED', `Unable to set the emulator posture for ${pose}`, {
       deviceId: device.id,
@@ -172,6 +185,28 @@ async function sendEmulatorPosture(
       hint: POSTURE_DISPATCH_HINT,
     });
   }
+}
+
+/** A console that answers late may still apply the posture, so its timeout is not an unsent posture. */
+function postureTimeoutError(
+  device: DeviceInfo,
+  pose: FoldPose,
+  error: unknown,
+  signal: AbortSignal | undefined,
+): unknown {
+  if (signal?.aborted || !isCommandTimeoutError(error)) return error;
+  return new AppError(
+    'COMMAND_FAILED',
+    `Timed out setting the emulator posture for ${pose}; the posture may have applied`,
+    {
+      ...error.details,
+      deviceId: device.id,
+      reason: ANDROID_FOLD_REASONS.postureDispatchTimedOut.reason,
+      dispatched: 'unknown',
+      hint: POSTURE_TIMEOUT_HINT,
+    },
+    error,
+  );
 }
 
 /**
@@ -213,7 +248,11 @@ async function readDeviceState(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<string | undefined> {
-  const { stdout } = await shell(device, ['cmd', 'device_state', 'print-state'], signal);
+  const { stdout } = await runCheckedAndroidShell(
+    device,
+    ['cmd', 'device_state', 'print-state'],
+    signal,
+  );
   return /\d+/.exec(stdout)?.[0];
 }
 
@@ -234,10 +273,10 @@ async function dismissFoldLockScreen(
   let dismissed = false;
   for (let attempt = 1; attempt <= ANDROID_FOLD_SETTLE_ATTEMPTS; attempt += 1) {
     await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
-    if (await isKeyguardShowing(device, signal)) {
+    if ((await readAndroidKeyguardShowing(device, signal)) === true) {
       clearReads = 0;
       dismissed = true;
-      await shell(device, ['wm', 'dismiss-keyguard'], signal);
+      await runCheckedAndroidShell(device, ['wm', 'dismiss-keyguard'], signal);
     } else {
       clearReads += 1;
       if (clearReads >= LOCK_SCREEN_CLEAR_READS) break;
@@ -259,14 +298,6 @@ async function dismissFoldLockScreen(
   }
 }
 
-async function isKeyguardShowing(
-  device: DeviceInfo,
-  signal: AbortSignal | undefined,
-): Promise<boolean> {
-  const { stdout } = await shell(device, ['dumpsys', 'window'], signal);
-  return stdout.includes('isKeyguardShowing=true');
-}
-
 /** The hinge sensor the guest reads, as the console reports it: `hinge-angle0 = <degrees>`. */
 async function readHingeAngle(
   device: DeviceInfo,
@@ -283,25 +314,4 @@ async function readHingeAngle(
     });
   }
   return Number(match[1]);
-}
-
-/**
- * An executor may hand back a failed result instead of throwing (the managed scoped transport
- * does), so every read checks the exit code itself before trusting stdout: a failed
- * `print-states` must be an adb failure, never an empty state list read as a phone.
- */
-async function shell(
-  device: DeviceInfo,
-  words: readonly string[],
-  signal: AbortSignal | undefined,
-): Promise<AndroidAdbExecutorResult> {
-  const result = await runAndroidShell(device, words, { signal, allowFailure: true });
-  if (result.exitCode !== 0) {
-    throw androidAdbResultError(
-      `adb shell ${words.join(' ')} exited with code ${result.exitCode}`,
-      result,
-      { deviceId: device.id },
-    );
-  }
-  return result;
 }

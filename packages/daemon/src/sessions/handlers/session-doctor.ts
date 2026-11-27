@@ -6,6 +6,7 @@ import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-devic
 import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../../core/provider-device-admission.ts';
+import { RUNTIME_GATEWAY_REASONS } from '../../core/runtime-admission.ts';
 import {
   listLocalDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
@@ -114,7 +115,7 @@ export async function handleDoctorCommand(params: {
 function requireHostDiagnostics(value: HostDiagnostics | undefined): HostDiagnostics {
   if (!value) {
     throw new AppError('COMMAND_FAILED', 'Host diagnostics gateway is not configured', {
-      reason: 'runtime-gateway-missing',
+      reason: RUNTIME_GATEWAY_REASONS.missing.reason,
     });
   }
   return value;

@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import { decodeDeviceIdentity, isPlatform, type DeviceIdentity } from '@agent-device/kernel/device';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type {
@@ -27,7 +28,7 @@ export function decodeDurableResourceEnvelope(value: unknown): DurableEnvelopeDe
   if (envelopeVersion !== DURABLE_RESOURCE_ENVELOPE_VERSION) {
     return {
       status: 'unreattachable',
-      reason: 'descriptor-version-unsupported',
+      reason: DURABLE_RESOURCE_REASONS.descriptorVersionUnsupported.reason,
       message: `Unsupported durable resource envelope version: ${envelopeVersion}`,
       version: envelopeVersion,
     };
@@ -104,7 +105,11 @@ export function createDurableResourceEnvelope<ResourceKind extends string>(input
 }
 
 function invalidEnvelope(message: string): DurableEnvelopeDecodeOutcome {
-  return { status: 'unreattachable', reason: 'descriptor-invalid', message };
+  return {
+    status: 'unreattachable',
+    reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
+    message,
+  };
 }
 
 function decodeRuntimeOwnerRef(value: unknown): RuntimeOwnerRef | null {

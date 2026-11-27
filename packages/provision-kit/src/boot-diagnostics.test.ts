@@ -89,6 +89,27 @@ test('a provisioning failure is not treated as retryable infrastructure', () => 
   assert.equal(isInfrastructureBootFailureReason('IOS_RUNNER_DEVICE_NOT_PROVISIONED'), false);
 });
 
+test('the infrastructure subset is exactly the boot reasons a host or transport change clears', () => {
+  // Typed as BootFailureReason, so a spelling no boot table row declares does not compile.
+  const infrastructure: readonly BootFailureReason[] = [
+    'IOS_BOOT_TIMEOUT',
+    'IOS_RUNNER_CONNECT_TIMEOUT',
+    'IOS_RUNNER_OWNED_BY_OTHER_DAEMON',
+    'IOS_TOOL_MISSING',
+    'ANDROID_BOOT_TIMEOUT',
+    'ADB_TRANSPORT_UNAVAILABLE',
+    'CI_RESOURCE_STARVATION_SUSPECTED',
+  ];
+  const other: readonly BootFailureReason[] = [
+    'IOS_RUNNER_DEVICE_NOT_PROVISIONED',
+    'BOOT_COMMAND_FAILED',
+    'UNKNOWN',
+  ];
+  for (const reason of infrastructure)
+    assert.equal(isInfrastructureBootFailureReason(reason), true);
+  for (const reason of other) assert.equal(isInfrastructureBootFailureReason(reason), false);
+});
+
 test('a live foreign runner owner is typed infrastructure', () => {
   assert.equal(isInfrastructureBootFailureReason('IOS_RUNNER_OWNED_BY_OTHER_DAEMON'), true);
   assert.match(bootFailureHint('IOS_RUNNER_OWNED_BY_OTHER_DAEMON'), /owning agent-device session/);

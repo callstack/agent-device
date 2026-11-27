@@ -46,7 +46,15 @@ function anrDialogNodes(): RawSnapshotNode[] {
       index: 1,
       type: 'android.widget.Button',
       label: 'Close app',
+      identifier: 'android:id/aerr_close',
       rect: CLOSE_APP_RECT,
+    },
+    {
+      index: 2,
+      type: 'android.widget.Button',
+      label: 'Wait',
+      identifier: 'android:id/aerr_wait',
+      rect: { x: 100, y: 700, width: 220, height: 80 },
     },
   ];
 }
@@ -59,7 +67,7 @@ function coveredCloseAppNodes(): RawSnapshotNode[] {
   return [
     ...anrDialogNodes(),
     {
-      index: 2,
+      index: 3,
       type: 'com.google.android.material.bottomsheet.BottomSheetDialog',
       identifier: 'com.example:id/bottom_sheet',
       hittable: true,
@@ -169,6 +177,31 @@ test('an ANR that surfaces between two commands is recovered by the next pre-dis
   expect(tapCalls(calls)).toEqual([CLOSE_APP_TAP]);
 });
 
+test("the session app's ANR is recovered on a device in another language", async () => {
+  // Recovery finds Close app by its framework id, so a translated label does not hide it.
+  const session = makeAndroidSession('readiness-anr-localized', { appBundleId: APP });
+  const [title, closeApp, wait] = anrDialogNodes();
+  screenNodes = [
+    { ...title!, label: `${APP} reagiert nicht` },
+    { ...closeApp!, label: 'App schließen' },
+    { ...wait!, label: 'Warten' },
+  ];
+  const { observation, calls } = makeObservation(anrFocus);
+
+  const readiness = await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command: 'tap',
+    phase: 'before-command',
+    observation,
+  });
+
+  expect(readiness).toEqual({
+    status: 'recovered',
+    warning: `Recovered Android app ANR before tap: closed and relaunched ${APP}.`,
+  });
+  expect(tapCalls(calls)).toEqual([CLOSE_APP_TAP]);
+});
+
 test('an ANR whose Close app is covered is not tapped, and recovery reports failure', async () => {
   // #1832: recovery reads the presentation's occlusion result, so a "Close app" that a foreground
   // surface covers is unreachable. Tapping it anyway would land the tap on whatever is on top.
@@ -209,7 +242,12 @@ test('a system dialog that surfaces between two commands blocks the next command
       phase: 'before-command',
       observation,
     }),
-  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      hint: 'Run alert dismiss to close the app that is not responding, or alert accept to wait for it, then retry.',
+    },
+  });
 });
 
 test('an ANR the command itself provoked still fails that command', async () => {

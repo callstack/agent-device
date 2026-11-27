@@ -9,6 +9,7 @@ import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type {
   AppInstallFromSourceOptions,
   AppOpenOptions,
+  ModeFreePermissionUpdateOptions,
   SettingsUpdateOptions,
 } from '@agent-device/contracts/client';
 import type { MetroPrepareOptions, MetroReloadOptions } from '@agent-device/contracts/remote';
@@ -892,7 +893,7 @@ test('install prints command-owned success output in human mode', async () => {
 });
 
 test('settings location set forwards coordinates to client settings update', async () => {
-  let observed: SettingsUpdateOptions | undefined;
+  let observed: SettingsUpdateOptions | ModeFreePermissionUpdateOptions | undefined;
   const client = createStubClient({
     installFromSource: async () => ({
       launchTarget: 'com.example.demo',

@@ -7,7 +7,7 @@ export const gestureHelpTopic = {
   summary: 'Full multi-touch gesture shapes and platform quirks',
   body: `agent-device help gestures
 
-Full command shapes and platform quirks for touch/pointer gestures beyond scroll/swipe. Read this when a task needs multi-touch, a repeated gesture series, or exact per-platform verification.
+Full command shapes and platform quirks for touch/pointer gestures beyond scroll/swipe. Pull to refresh is agent-device scroll refresh. Read this when a task needs multi-touch, a repeated gesture series, or exact per-platform verification.
 
 Shapes:
   agent-device longpress 300 500 800
@@ -17,7 +17,7 @@ Shapes:
   agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
   agent-device scroll down --until 'id=submit'
   agent-device gesture fling right 200 420 180
-  agent-device gesture pinch 0.5 200 400
+  agent-device gesture pinch 2 @e17
   agent-device gesture rotate 35 200 420
   agent-device gesture transform 200 420 80 -40 2 35 700
   agent-device gesture tap 80 300 200 450 310 600 --count 20 --pause-ms 100
@@ -27,7 +27,7 @@ Shapes:
 
 Platform quirks:
   If rotation stops repeated iOS presses, inspect the screen before continuing with the remaining presses.
-  Cancelled gesture and swipe requests return COMMAND_FAILED with details.reason=request_canceled and record no action. Repetition pauses are interruptible.
+  Cancellation during gesture dispatch returns COMMAND_FAILED with details.reason=request_canceled. Repetition pauses are interruptible.
   iOS transform/pinch/rotate use private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output. A gesture tap of three or more fingers can trigger iOS system gestures (undo/redo, the edit menu) and fast repeats can trigger double-tap recognizers, so verify app state; iOS touches the contacts down and lifts them together; Android touches them down up to 8ms apart and lifts them 8ms apart in reverse order.
   Android transform injects a geometric two-finger path; app recognizers may report non-exact pan/scale/rotation -- verify semantic app state or coarse per-component effects instead of exact numeric deltas unless the app exposes stable metrics. If Android needs exact values, prefer isolated gesture pan --pointer-count 2, gesture pinch, or gesture rotate over one combined transform:
     agent-device gesture transform 200 420 80 -40 2 35 700 --platform android
@@ -35,8 +35,9 @@ Platform quirks:
   tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
   Gesture planning prefers the active-app frame; a backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
   Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
-  Drag to reorder or drop: gesture drag @e12 @e40 holds the source (800 ms by default; positional sourceHoldMs overrides it), moves, and releases on the destination. swipe and fling never hold, so they do not start a reorder.
+  Drag to reorder or drop: gesture drag @e12 @e40 holds the source (800 ms by default; positional sourceHoldMs overrides it), moves, and releases on the destination. Its source and destination are refs or selectors, not coordinates; for a coordinate hold-then-drag, use gesture pan <x> <y> <dx> <dy> [durationMs] --hold-ms <ms>. swipe and fling never hold, so they do not start a reorder.
   On mobile, after scroll, swipe, or gesture swipe, the next read waits for two captures to agree; web and desktop targets do not wait. A caller whose own polling verifies the screen adds --no-post-gesture-stabilization to skip that wait; a directional scroll then also skips its movement check.
+  Add --settle to swipe or any supported gesture kind to wait for the UI to go quiet after the final repetition. A settle diff compares with the last observed tree. If settle is inconclusive, the action result stays available. Run snapshot -i if the response lacks the ref you need.
 
 macOS:
   Context menus are secondary clicks, not long presses: agent-device click @e66 --button secondary --platform macos, then snapshot -i.

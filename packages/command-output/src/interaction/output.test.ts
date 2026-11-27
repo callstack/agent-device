@@ -69,9 +69,9 @@ describe('find CLI output', () => {
     expect(output.text).toBe(
       [
         '3 matches:',
-        '= @e5~s500014 [button] "Add"',
-        '= @e9~s500014 [cell] "Add another account"',
-        '= @e12~s500014 [other]',
+        '= @e5-s500014 [button] "Add"',
+        '= @e9-s500014 [cell] "Add another account"',
+        '= @e12-s500014 [other]',
       ].join('\n'),
     );
   });
@@ -89,7 +89,7 @@ describe('find CLI output', () => {
     });
 
     expect(output.text).toBe(
-      ['2 matches:', '= @e5~s500014 [button] "Add"', '= (no ref) [text] "Item saved"'].join('\n'),
+      ['2 matches:', '= @e5-s500014 [button] "Add"', '= (no ref) [text] "Item saved"'].join('\n'),
     );
   });
 
@@ -170,7 +170,7 @@ describe('press CLI output', () => {
         // A removed line names an element that just left: rendered verbatim,
         // never as a paste-ready target.
         '- @e4 [button] "Search"',
-        '+ @e9~s41 [text] "Notifications"',
+        '+ @e9-s41 [text] "Notifications"',
       ].join('\n'),
     );
   });
@@ -301,7 +301,7 @@ describe('fill CLI output', () => {
         'Filled 9 chars',
         'settled after 300ms: +1 -1 (~8 unchanged)',
         '- ${CODE}',
-        '+ @e4~s3 ${CODE}',
+        '+ @e4-s3 ${CODE}',
       ].join('\n'),
     );
   });

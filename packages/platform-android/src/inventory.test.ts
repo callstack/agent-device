@@ -14,14 +14,21 @@ const scope: PlatformRequestScope = {
   progress: { report: () => undefined },
 };
 
+const PROPS_PROBE =
+  'getprop sys.boot_completed; getprop ro.boot.qemu.avd_name; getprop persist.sys.avd_name; ' +
+  'getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.characteristics';
+
+/** One line per property, in the props probe's order. */
+function props(lines: readonly string[]): string {
+  return `${lines.join('\n')}\n`;
+}
+
 const RUNNING_EMULATOR_PROBES: ReadonlyArray<readonly [string, string]> = [
-  ['ro.boot.qemu.avd_name', 'Pixel_9_Pro_XL\n'],
-  ['sys.boot_completed', '1\n'],
-  ['getprop ro.product.model; getprop ro.build.version.release', 'sdk_gphone16k_arm64\n17\n'],
-  ['ro.build.characteristics', 'phone\n'],
-  ['has-feature', 'false\n'],
-  ['pm\0list\0features', ''],
+  [PROPS_PROBE, props(['1', 'Pixel_9_Pro_XL', '', 'sdk_gphone16k_arm64', '17', 'phone'])],
+  ['pm\0list\0features', 'feature:android.hardware.wifi\n'],
 ];
+
+const isShellProbe = (call: HostCommandRequest) => call.args.includes('shell');
 
 test.each([
   ['include-stopped', true],
@@ -64,15 +71,15 @@ test.each([
           : []),
       ],
     );
-    const isDescriptionProbe = (call: HostCommandRequest) =>
-      call.args.some((arg) => arg.includes('ro.product.model'));
+    // One getprop batch and one feature list per running device, and nothing else on its shell.
     assert.deepEqual(
-      calls.filter(isDescriptionProbe).map((call) => call.timeoutMs),
-      [2_000],
+      calls.filter(isShellProbe).map((call) => call.args),
+      [
+        ['-s', 'emulator-5554', 'shell', PROPS_PROBE],
+        ['-s', 'emulator-5554', 'shell', 'pm', 'list', 'features'],
+      ],
     );
-    assert.ok(
-      calls.filter((call) => !isDescriptionProbe(call)).every((call) => call.timeoutMs === 10_000),
-    );
+    assert.ok(calls.every((call) => call.timeoutMs === 10_000));
     assert.ok(calls.every((call) => call.allowFailure === true));
   },
 );
@@ -108,23 +115,95 @@ test.each([
   },
 );
 
+test('Android inventory leaves model, OS version, and boot state unset when the props probe exits non-zero', async () => {
+  const host = createHost(async (request) => {
+    const key = request.args.join('\0');
+    if (key === 'devices\0-l')
+      return result('List of devices attached\nR5CT1 device model:SM_S921B\n');
+    if (key.includes(PROPS_PROBE)) return result('', 'error: closed', 1);
+    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+    if (probe) return result(probe[1]);
+    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+  });
+
+  const [device] = await createAndroidInventory(host).discover(
+    { androidAvdSelection: 'running-only' },
+    scope,
+  );
+
+  assert.deepEqual(
+    [device?.name, device?.booted, device?.model, device?.osVersion, device?.target],
+    ['SM S921B', false, undefined, undefined, 'mobile'],
+  );
+});
+
+test('Android inventory keeps a device whose props probe times out listed with an unknown target', async () => {
+  const diagnostics: unknown[] = [];
+  const host = createHost(async (request) => {
+    const key = request.args.join('\0');
+    if (key === 'devices\0-l')
+      return result('List of devices attached\nR5CT1 device model:SM_S921B\n');
+    if (key.includes(PROPS_PROBE)) {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+    }
+    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+    if (probe) return result(probe[1]);
+    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+  });
+
+  const [device] = await createAndroidInventory(host).discover(
+    { androidAvdSelection: 'running-only' },
+    { ...scope, diagnostics: { emit: (event) => diagnostics.push(event) } },
+  );
+
+  assert.deepEqual(
+    [device?.name, device?.booted, device?.model, device?.target],
+    ['SM S921B', false, undefined, undefined],
+  );
+  assert.equal(diagnostics.length, 1);
+});
+
+test('Android inventory fails when the props probe fails for a reason other than a timeout', async () => {
+  const host = createHost(async (request) => {
+    const key = request.args.join('\0');
+    if (key === 'devices\0-l')
+      return result('List of devices attached\nR5CT1 device model:SM_S921B\n');
+    if (key.includes(PROPS_PROBE)) throw new AppError('COMMAND_FAILED', 'spawn adb EACCES');
+    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+    if (probe) return result(probe[1]);
+    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+  });
+
+  await assert.rejects(
+    createAndroidInventory(host).discover({ androidAvdSelection: 'running-only' }, scope),
+    (error: unknown) => error instanceof AppError && error.message === 'spawn adb EACCES',
+  );
+});
+
 test.each([
-  ['exits non-zero', async () => result('', 'error: closed', 1)],
+  ['the props name it', props(['1', 'Pixel_9', '', 'sdk_gphone64_arm64', '16', 'emulator']), []],
   [
-    'times out',
-    async () => {
-      throw new AppError('COMMAND_FAILED', 'adb timed out after 2000ms', { timeoutMs: 2_000 });
-    },
+    'only persist.sys.avd_name names it',
+    props(['1', '', 'Pixel_9', 'sdk_gphone64_arm64', '16', 'emulator']),
+    [],
+  ],
+  [
+    'no prop names it',
+    props(['1', '', '', 'sdk_gphone64_arm64', '16', 'emulator']),
+    [['-s', 'emulator-5560', 'emu', 'avd', 'name']],
   ],
 ] as const)(
-  'Android inventory leaves model and OS version unset when the description probe %s',
-  async (_case, describeProbe) => {
+  'Android inventory names an emulator from its AVD when %s',
+  async (_case, propsOutput, consoleCalls) => {
+    const calls: string[][] = [];
     const host = createHost(async (request) => {
       const key = request.args.join('\0');
-      if (key === 'devices\0-l') {
-        return result('List of devices attached\nR5CT1 device model:SM_S921B\n');
+      if (key === 'devices\0-l') return result('List of devices attached\nemulator-5560 device\n');
+      if (key.includes(PROPS_PROBE)) return result(propsOutput);
+      if (key.includes('emu\0avd\0name')) {
+        calls.push([...request.args]);
+        return result('Pixel_9\r\nOK\r\n');
       }
-      if (key.includes('ro.product.model')) return await describeProbe();
       const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
       if (probe) return result(probe[1]);
       throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
@@ -135,10 +214,8 @@ test.each([
       scope,
     );
 
-    assert.equal(device?.name, 'SM S921B');
-    assert.equal(device?.booted, true);
-    assert.equal(device?.model, undefined);
-    assert.equal(device?.osVersion, undefined);
+    assert.equal(device?.name, 'Pixel 9');
+    assert.deepEqual(calls, consoleCalls);
   },
 );
 
@@ -169,35 +246,34 @@ test.each([
   },
 );
 
-test('Android inventory classifies a device by has-feature amazon.hardware.fire_tv before the feature list', async () => {
-  // The characteristics probe says nothing, no AOSP leanback/television feature answers, and
-  // only the Amazon Fire TV feature answers true: the device must be a tv target from the
-  // has-feature probe, without the pm list features fallback deciding it.
-  const featureListProbeCalls: string[] = [];
-  const host = createHost(async (request) => {
-    const key = request.args.join('\0');
-    if (key === 'devices\0-l')
-      return result('List of devices attached\nAFTKMST12 device model:AFTKMST12\n');
-    if (key.includes('pm\0list\0features')) {
-      featureListProbeCalls.push(key);
-      return result('feature:android.hardware.wifi\n');
-    }
-    if (key.includes('has-feature')) {
-      return result(key.includes('amazon.hardware.fire_tv') ? 'true\n' : 'false\n');
-    }
-    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
-    if (probe) return result(probe[1]);
-    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
-  });
+test.each([
+  ['a device the request does not select', undefined],
+  ['the requested serial', 'AFTKMST12'],
+] as const)(
+  'Android inventory reads tv from ro.build.characteristics even when the feature list times out on %s',
+  async (_case, serial) => {
+    const host = createHost(async (request) => {
+      const key = request.args.join('\0');
+      if (key === 'devices\0-l') {
+        return result('List of devices attached\nAFTKMST12 device model:AFTKMST12\n');
+      }
+      if (key.includes(PROPS_PROBE)) {
+        return result(props(['1', '', '', 'AFTKMST12', '9', 'tv']));
+      }
+      if (key.includes('pm\0list\0features')) {
+        throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+      }
+      throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+    });
 
-  const [device] = await createAndroidInventory(host).discover(
-    { androidAvdSelection: 'running-only' },
-    scope,
-  );
+    const [device] = await createAndroidInventory(host).discover(
+      { serial, androidAvdSelection: 'running-only' },
+      scope,
+    );
 
-  assert.equal(device?.target, 'tv');
-  assert.deepEqual(featureListProbeCalls, []);
-});
+    assert.equal(device?.target, 'tv');
+  },
+);
 
 test('Android inventory keeps a device whose feature probe times out from failing discovery of another', async () => {
   const diagnostics: unknown[] = [];
@@ -221,11 +297,12 @@ test('Android inventory keeps a device whose feature probe times out from failin
     { ...scope, diagnostics: { emit: (event) => diagnostics.push(event) } },
   );
 
+  // The stalled feature list takes only the busy device's target with it.
   assert.deepEqual(
-    devices.map((device) => [device.id, device.target]),
+    devices.map((device) => [device.id, device.target, device.booted, device.model]),
     [
-      ['emulator-5554', undefined],
-      ['emulator-5556', 'mobile'],
+      ['emulator-5554', undefined, true, 'sdk_gphone16k_arm64'],
+      ['emulator-5556', 'mobile', true, 'sdk_gphone16k_arm64'],
     ],
   );
   assert.deepEqual(diagnostics, [

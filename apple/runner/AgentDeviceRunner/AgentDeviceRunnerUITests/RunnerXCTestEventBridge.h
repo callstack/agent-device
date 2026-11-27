@@ -133,11 +133,26 @@ FOUNDATION_EXPORT RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForegroun
   CGRect screenFrame
 );
 
-// The screen's frame when AXRuntime reports `application` as the primary app filling it, else
-// `CGRectNull`. The same probe the sole-screen route admits a non-phone app with; it reads two frames
-// and walks no tree, so it answers while XCTest's accessibility channel is penalized.
+// The frame an app's own root must equal, at the origin, to prove that the app fills the screen.
+// Fills-screen evidence answers the screen AXRuntime read. Not-primary-app and windowed evidence
+// answer `CGRectNull`. Unknown evidence answers the sole XCTest screen in native portrait points,
+// because no window smaller than the screen equals it: AXRuntime answers no app from a runner on a
+// physical device. A missing, empty, or landscape sole screen answers `CGRectNull`.
+FOUNDATION_EXPORT CGRect RunnerFullScreenProofFrame(
+  RunnerFullScreenEvidence evidence,
+  CGRect probedScreenFrame,
+  CGSize soleScreenSize
+);
+
+// The frame `RunnerFullScreenProofFrame` decides for `application`, from the AXRuntime probe and,
+// only when that probe proves nothing, `soleScreenSize`. Neither read walks the app's tree, so it
+// answers while XCTest's accessibility channel is penalized. `XCUIScreen` is main-actor isolated, so
+// a caller off the main thread supplies a size that was read on main.
 #if TARGET_OS_IOS
-FOUNDATION_EXPORT CGRect RunnerFullScreenApplicationFrame(id application);
+FOUNDATION_EXPORT CGRect RunnerFullScreenApplicationFrame(
+  id application,
+  CGSize (^NS_NOESCAPE soleScreenSize)(void)
+);
 #endif
 
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(

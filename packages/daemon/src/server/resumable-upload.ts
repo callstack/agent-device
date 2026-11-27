@@ -3,11 +3,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
 import {
   requireTenantOwnedEntry,
+  TENANT_RESOURCE_REASONS,
   type TenantOwnedResourceKind,
 } from '../core/tenant-owned-entry.ts';
 import {
@@ -17,6 +18,12 @@ import {
 } from './artifact-download.ts';
 import { computeUploadHash, receiveResumableTransfer } from './resumable-upload-transfer.ts';
 import { resolveIngressFailure, throwIfIngressAborted } from './upload-ingress.ts';
+
+const UPLOAD_FINALIZE_REASONS = {
+  // Finalizing the upload failed, and removing its staged files failed too; `details.originalError`
+  // holds the first failure.
+  cleanupFailed: { reason: 'UPLOAD_FINALIZE_CLEANUP_FAILED' },
+} as const satisfies ReasonTable<'uploads'>;
 
 const RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
 const RESUMABLE_UPLOAD_RESOURCE: TenantOwnedResourceKind = {
@@ -307,7 +314,7 @@ function expireEntry(entry: ResumableUploadEntry, generation: number): void {
   closeEntry(entry);
   entry.activeReceive?.abort(
     new AppError('COMMAND_FAILED', 'Upload expired while receiving data', {
-      reason: 'RESOURCE_EXPIRED',
+      reason: TENANT_RESOURCE_REASONS.expired.reason,
     }),
   );
   const cleanup = entry.tail.then(async () => {
@@ -391,7 +398,10 @@ async function cleanupTerminalFinalizeFailure(
     return new AppError(
       'COMMAND_FAILED',
       'Upload finalize cleanup failed',
-      { reason: 'UPLOAD_FINALIZE_CLEANUP_FAILED', originalError: String(originalError) },
+      {
+        reason: UPLOAD_FINALIZE_REASONS.cleanupFailed.reason,
+        originalError: String(originalError),
+      },
       cleanupError,
     );
   }

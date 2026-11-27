@@ -86,6 +86,47 @@ describe('viewport-aware multi-touch geometry', () => {
     }
   });
 
+  test('an out-of-bounds refusal names the viewport and the first point outside it', () => {
+    const inset = { x: 0, y: 47, width: 390, height: 750 };
+    for (const [viewport, point, frame, named] of [
+      [PORTRAIT, { x: 0, y: 100 }, /the 390x844 viewport$/, '(0, 100)'],
+      [inset, { x: 100, y: 10 }, /the 390x750 viewport at \(0, 47\)$/, '(100, 10)'],
+      [PORTRAIT, { x: 391.23456, y: 100 }, /the 390x844 viewport$/, '(391.23, 100)'],
+    ] as const) {
+      const error = captureError(() =>
+        buildGesturePlan(
+          {
+            intent: 'tap',
+            points: [{ x: 100, y: 200 }, point],
+          },
+          viewport,
+        ),
+      );
+      assert.ok(isErrorWithReason(error, 'INVALID_ARGS', 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS'));
+      assert.ok(error.message.includes(`point ${named} `), error.message);
+      assert.match(error.message, frame);
+      assert.deepEqual(error.details?.viewport, viewport);
+      // The message rounds; the details keep the exact sample.
+      assert.deepEqual(error.details?.sample, { offsetMs: 0, point });
+      assert.match(String(error.details?.hint), /snapshot/);
+    }
+  });
+
+  test('a pinch too small for the viewport names the viewport but no point', () => {
+    const error = captureError(() =>
+      buildGesturePlan(
+        { intent: 'pinch', origin: { x: 20, y: 20 }, scale: 2 },
+        { x: 0, y: 0, width: 40, height: 40 },
+      ),
+    );
+    assert.ok(isErrorWithReason(error, 'INVALID_ARGS', 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS'));
+    assert.match(error.message, /the 40x40 viewport$/);
+    assert.doesNotMatch(error.message, /point/);
+    assert.equal(error.details?.minimumReliableSpan, 48);
+    assert.equal(error.details?.sample, undefined);
+    assert.doesNotMatch(String(error.details?.hint), /snapshot/);
+  });
+
   test('positive and negative translation choose geometry that keeps the full path in bounds', () => {
     for (const delta of [
       { x: 80, y: 40 },
@@ -151,7 +192,8 @@ describe('viewport-aware multi-touch geometry', () => {
 
 // Property, not another example: the planner's whole job is that a synthesized
 // point never leaves the active viewport. It either plans in bounds or refuses
-// with a structured INVALID_ARGS — never a silently out-of-bounds path. The
+// with a structured INVALID_ARGS (UNSUPPORTED_OPERATION for a platform without
+// the gesture) — never a silently out-of-bounds path. The
 // generator enumerates every gesture kind from GESTURE_KINDS, so a new kind
 // inherits the guarantee instead of needing its own pinned viewport case.
 describe('gesture planning never synthesizes an out-of-bounds point', () => {
@@ -166,6 +208,11 @@ describe('gesture planning never synthesizes an out-of-bounds point', () => {
             plan = buildGesturePlan(normalizePublicGesture(gesture).gesture, viewport, platform);
           } catch (error) {
             assert.ok(error instanceof AppError, `unexpected error type: ${String(error)}`);
+            // A Split View preset off iOS is refused for the platform, before any geometry.
+            if (error.details?.reason === 'split_view_unavailable') {
+              assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+              return;
+            }
             assert.equal(error.code, 'INVALID_ARGS');
             return;
           }
@@ -185,6 +232,16 @@ describe('gesture planning never synthesizes an out-of-bounds point', () => {
     assertAllSamplesInViewport(buildGesturePlan(gesture, viewport, 'ios'));
   });
 });
+
+function captureError(build: () => unknown): AppError {
+  try {
+    build();
+  } catch (error) {
+    assert.ok(error instanceof AppError, `unexpected error type: ${String(error)}`);
+    return error;
+  }
+  assert.fail('expected the gesture plan to be refused');
+}
 
 function buildTransformPlan(durationMs: number) {
   return requireTwoPointerPlan(

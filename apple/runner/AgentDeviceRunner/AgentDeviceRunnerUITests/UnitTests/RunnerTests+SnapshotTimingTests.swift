@@ -173,7 +173,7 @@ extension RunnerTests {
 
   /// The shape #3896 removed and this refactor makes unreachable: an attempt produced by a
   /// bounded-recovery step — the leading probe or the trailing bounded tier, on either the
-  /// Simulator deferred plan or the physical-device bounded plan — has no arming branch at all,
+  /// deferred plan or the bounded plan without an independent backend — has no arming branch at all,
   /// whatever its timing or failure. The attempt carries its step, so there is no channel-state
   /// argument left to forget. Ordinary tree attempts must still penalize on the same facts.
   func testBoundedRecoveryAttemptsCannotRenewPenaltyOnEitherPlatformPlan() {

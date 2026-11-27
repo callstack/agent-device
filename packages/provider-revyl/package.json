@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/revyl",
-  "version": "0.21.42-dev",
+  "version": "0.21.45-dev",
   "type": "module",
   "description": "Revyl cloud iOS simulator and Android emulator plugin for agent-device.",
   "files": [
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/gestures": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",

@@ -18,7 +18,10 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import {
   SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
   systemButtonRuntimeOperationFacts,
@@ -39,13 +42,13 @@ const available = Object.freeze({ available: true } as const);
 
 const backKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'back is supported on Apple simulators and physical devices.',
 } as const);
 /** visionOS has no back gesture or button; the runner refuses the same way if reached directly. */
 const backVisionOsUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'visionOS has no back command. Press the visible back control by its ref.',
 } as const);
 /** tvOS presses the remote's Menu button, macOS taps the window back control, iOS presses the
@@ -59,18 +62,18 @@ function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
 
 const homeKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'home is supported on Apple simulators and physical devices.',
 } as const);
 /** Parity with the retired `supportsAppAndDeviceLifecycle` closure: unavailable on macOS, which
  * drives an already-running app with no springboard home. */
 const homeLifecycleUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
 } as const);
 const appSwitcherKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'app-switcher is supported on Apple simulators and physical devices.',
 } as const);
 /**
@@ -102,12 +105,12 @@ function appleMobileInputEligible(device: DeviceInfo): boolean {
 
 const orientationKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'orientation is supported on Apple simulators and physical devices.',
 } as const);
 const orientationOsUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
 } as const);
 function appleOrientationFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return orientationKindUnavailable;
@@ -116,7 +119,7 @@ function appleOrientationFact(device: DeviceInfo): RuntimeOperationFact {
 
 const tvRemoteUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'tv-remote is supported only on tvOS devices.',
 } as const);
 function appleTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
@@ -132,7 +135,7 @@ function appleTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
  */
 const keyboardCellUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
 } as const);
 /**
  * `dismiss` and `enter` press the software keyboard, which every handheld Apple leaf has, so both
@@ -157,17 +160,17 @@ function appleKeyboardStatusFact(device: DeviceInfo): RuntimeOperationFact {
 /** Every system button this owner knows is named below; the family denial covers none today. */
 const systemButtonUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'No Apple leaf carries this system button.',
 } as const);
 const actionButtonKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'action-button is supported on iPhone and iPad simulators and physical devices, and on Apple Watch simulators.',
 } as const);
 const actionButtonOsUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'The Action Button is iPhone, iPad, and Apple Watch Ultra hardware; tvOS, macOS and visionOS have no such control.',
 } as const);
 /**
@@ -187,12 +190,12 @@ function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
 
 const shakeKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'shake is supported on iPhone and iPad simulators and Android emulators; a physical device has no host control that shakes it.',
 } as const);
 const shakeOsUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'shake is supported on iPhone and iPad simulators and Android emulators only.',
 } as const);
 /**
@@ -205,14 +208,33 @@ function appleShakeFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'simulator' ? available : shakeKindUnavailable;
 }
 
+const lockScreenKindUnavailable = Object.freeze({
+  available: false,
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+  hint: 'lock-screen is supported on iPhone and iPad simulators only.',
+} as const);
+const lockScreenOsUnavailable = Object.freeze({
+  available: false,
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+  hint: 'lock-screen is supported on iPhone and iPad simulators and Android phones and tablets only.',
+} as const);
+/**
+ * The runner locks through XCUIDevice's private lock button and verifies SpringBoard's lock
+ * state. Only the iPhone and iPad simulator leaf is admitted: no physical device run backs it.
+ */
+function appleLockScreenFact(device: DeviceInfo): RuntimeOperationFact {
+  if (!isHandheldAppleDevice(device)) return lockScreenOsUnavailable;
+  return device.kind === 'simulator' ? available : lockScreenKindUnavailable;
+}
+
 const volumeButtonOsUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'hardware-button volume presses the iPhone/iPad volume key; this Apple leaf has none.',
 } as const);
 const volumeButtonSimulatorUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'hardware-button volume is supported on physical iPhone and iPad; iOS Simulators refuse because XCUIDevice exposes no volume press there.',
 } as const);
 /**
@@ -228,8 +250,8 @@ function appleVolumeButtonFact(device: DeviceInfo): RuntimeOperationFact {
 }
 
 /**
- * The navigation cells: back, home, app-switcher, action-button, shake, orientation, tv-remote, and
- * keyboard status/dismiss/enter.
+ * The navigation cells: back, home, app-switcher, action-button, shake, lock-screen, orientation,
+ * tv-remote, and keyboard status/dismiss/enter.
  */
 export function appleNavigationFacts(device: DeviceInfo) {
   return Object.freeze({
@@ -240,6 +262,8 @@ export function appleNavigationFacts(device: DeviceInfo) {
       appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
       actionButton: appleActionButtonFact(device),
       shake: appleShakeFact(device),
+      lockScreen: appleLockScreenFact(device),
+      unlockScreen: appleLockScreenFact(device),
       // Power is the family denial: Apple exposes no public power/lock button press to XCUITest,
       // on any kind or OS, so no cell overrides it.
       volumeUp: appleVolumeButtonFact(device),
@@ -252,7 +276,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
         supported: tvRemoteButtonsForPlatform('apple'),
         unsupported: {
           available: false,
-          reason: 'unsupported-platform-leaf',
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
           hint: 'This TV remote button is not supported on tvOS.',
         },
       },

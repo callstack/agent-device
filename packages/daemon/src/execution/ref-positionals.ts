@@ -1,18 +1,31 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
+import {
+  REF_GRAMMAR_HINT,
+  retiredRefPinRefusal,
+  splitRefGenerationSuffix,
+} from '@agent-device/kernel/snapshot';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**
- * Daemon boundary for the versioned-ref suffix (#1076): a pinned `@e12~s3`
+ * Daemon boundary for the versioned-ref suffix (#1076): a pinned `@e12-s3`
  * target is split here so everything downstream (runtime resolution, backend
  * fast paths, recording) sees exactly today's plain `@e12` ref, while the
  * minted generation is surfaced separately for the staleness warning.
+ * A token pinned with the retired `~s` spelling is refused with the current
+ * spelling named, never read as a plain ref.
  */
 export type ParsedVersionedRef =
   | { ok: true; ref: string; generation?: number }
   | { ok: false; response: DaemonResponse };
 
 export function parseVersionedRefPositional(refInput: string): ParsedVersionedRef {
+  const retired = retiredRefPinRefusal(refInput);
+  if (retired) {
+    return {
+      ok: false,
+      response: errorResponse('INVALID_ARGS', retired, { hint: REF_GRAMMAR_HINT }),
+    };
+  }
   const split = splitRefGenerationSuffix(refInput);
   if (!split) {
     return {
