@@ -159,8 +159,6 @@ export async function resolveReleasedXctestrunArtifact(params: {
   const { directory, xctestrunPath, productPaths } = staged;
   let certified = false;
   try {
-    assertAdmitted();
-    budget?.signal?.throwIfAborted();
     const { buildRunnerCacheArtifactManifest } = await import('./runner-artifact-manifest.ts');
     const built = buildRunnerCacheArtifactManifest(derived, xctestrunPath, productPaths);
     if (!built.ok) {
@@ -171,6 +169,8 @@ export async function resolveReleasedXctestrunArtifact(params: {
       });
       return null;
     }
+    assertAdmitted();
+    budget?.signal?.throwIfAborted();
     writeRunnerCacheMetadata(derived, { ...expectedCacheMetadata, artifacts: built.artifacts });
     certified = true;
   } finally {
