@@ -8,6 +8,7 @@ static id primaryApplication;
 static id systemApplicationElement;
 static id replacementApplication;
 static NSUInteger captureCount;
+static NSUInteger primaryAppReads;
 static NSString *captureScenario;
 
 @interface AXElement : NSObject
@@ -18,7 +19,7 @@ static NSString *captureScenario;
 @end
 
 @implementation AXElement
-+ (id)primaryApp { return primaryApplication; }
++ (id)primaryApp { primaryAppReads++; return primaryApplication; }
 + (id)systemApplication { return systemApplicationElement; }
 @end
 
@@ -267,6 +268,10 @@ int main(int argc, const char *argv[])
       } else require([result[@"tree"][@"XC_kAXXCAttributeLabel"] isEqual:@"fixture app"], @"stable capture must publish the materialized app tree");
     }
     require(captureCount == expectedCaptures, @"covered apps must be refused before native acquisition");
+    // One read answers ownership and window placement before acquisition, the first request needs no
+    // read of its own, each later request reads once, and so does the check after acquisition.
+    if ([scenario isEqual:@"stable"]) require(primaryAppReads == 2, @"a one-request capture reads the primary app twice");
+    if ([scenario isEqual:@"wide-continuation"]) require(primaryAppReads == 3, @"a continuation reads the primary app once more");
   }
   return 0;
 }

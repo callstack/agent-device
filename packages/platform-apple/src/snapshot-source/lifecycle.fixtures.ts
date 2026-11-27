@@ -61,6 +61,8 @@ export type LifecycleFixture = {
   directorySetups: string[];
   /** The socket each bridge connect attempt was for, in order, including one that has not returned. */
   connects: string[];
+  /** The pid of each target identity read, in order. */
+  identityReads: number[];
 };
 
 /**
@@ -177,6 +179,7 @@ export function createLifecycleFixture(
   const startedTargets: LifecycleFixture['startedTargets'] = [];
   const directorySetups: string[] = [];
   const connects: string[] = [];
+  const identityReads: number[] = [];
   const realHost = createSnapshotSourceHost(createLiveTestHostEnvironment());
   const host: SnapshotSourceHost = {
     ...realHost,
@@ -188,7 +191,8 @@ export function createLifecycleFixture(
       if (options.pauseAtDirectorySetup) await options.pauseAtDirectorySetup();
     },
     remove: async () => {},
-    readTargetProcessStartTime: async () => {
+    readTargetProcessStartTime: async (pid) => {
+      identityReads.push(pid);
       const startTime = options.targetStartTimes?.shift();
       return startTime === undefined ? 'target-start' : startTime;
     },
@@ -236,6 +240,7 @@ export function createLifecycleFixture(
   };
   return {
     host,
+    identityReads,
     processes,
     sockets,
     diagnostics,
