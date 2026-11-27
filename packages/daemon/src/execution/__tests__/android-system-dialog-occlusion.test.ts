@@ -1,8 +1,7 @@
 import { test, expect, vi } from 'vitest';
 
-// #1832: blocking-dialog recovery reads the daemon presentation, so it must also consume that
-// presentation's OCCLUSION result. A stale "App isn't responding" surface left under the foreground
-// one must not trigger recovery, and a covered "Close app" must not be tapped ahead of the visible
+// #1832: app-ANR recovery reads the daemon presentation, so it must also consume that
+// presentation's OCCLUSION result. A covered "Close app" must not be tapped ahead of the visible
 // one — the exact disagreement routing through buildSnapshotState exists to remove.
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
@@ -10,15 +9,33 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 });
 
 import { runAndroidAdb, snapshotAndroid } from '@agent-device/platform-android/mechanics';
-import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
 import { androidObservationPolicyFixture as androidObservation } from '../../__tests__/support/android-observation-fixture.ts';
 import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
-import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { makeAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';
 
-const recoverAndroidBlockingSystemDialog = (
-  params: Omit<Parameters<typeof recoverOwnedAndroidBlockingSystemDialog>[0], 'observation'>,
-) => recoverOwnedAndroidBlockingSystemDialog({ ...params, observation: androidObservation });
+const APP = 'com.example.demo';
+
+/** The session app's ANR is in focus; the Close app taps and the relaunch go through mechanics. */
+const appAnrObservation: AndroidObservationAdapter = {
+  ...androidObservation,
+  readBlockingDialog: async () => ({
+    status: 'dialog',
+    focus: { package: APP, focusedWindow: `Application Not Responding: ${APP}`, raw: 'ANR' },
+  }),
+  readAppFocus: async () => true,
+  openApp: async () => undefined,
+};
+
+async function recoverAppAnr(sessionName: string) {
+  return await ensureAndroidBlockingSystemDialogReady({
+    session: makeAndroidSession(sessionName, { appBundleId: APP }),
+    command: 'press',
+    phase: 'before-command',
+    observation: appAnrObservation,
+  });
+}
 
 const SCREEN = { x: 0, y: 0, width: 1080, height: 2400 };
 
@@ -30,16 +47,6 @@ const foregroundSheet = (index: number) => ({
   hittable: true,
   rect: SCREEN,
 });
-
-function recordingSession(name: string) {
-  const session = makeAndroidSession(name);
-  session.screenRecording = makeTestScreenRecordingResource(session, {
-    backend: 'adb screenrecord',
-    outPath: '/tmp/anr.mp4',
-    startedAt: 0,
-  });
-  return session;
-}
 
 function tappedPoints(): Array<{ x: number; y: number }> {
   return vi
@@ -101,55 +108,10 @@ test('recovery taps the reachable Close app, not a covered one that comes first'
     .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
-  const result = await recoverAndroidBlockingSystemDialog({
-    session: recordingSession('anr-covered-button'),
-  });
+  const result = await recoverAppAnr('anr-covered-button');
 
   expect(result.status).toBe('recovered');
   expect(tappedPoints()).toEqual([{ x: 140, y: 1840 }]);
-});
-
-test('a fully covered dialog does not trigger recovery', async () => {
-  vi.mocked(runAndroidAdb).mockReset();
-  const staleDialog = {
-    index: 0,
-    type: 'TextView',
-    label: "App isn't responding",
-    hittable: true,
-    rect: { x: 0, y: 100, width: 1080, height: 60 },
-  };
-  const staleCloseApp = {
-    index: 1,
-    type: 'Button',
-    label: 'Close app',
-    identifier: 'android:id/aerr_close',
-    hittable: true,
-    rect: { x: 40, y: 300, width: 200, height: 80 },
-  };
-  const staleWait = {
-    index: 2,
-    type: 'Button',
-    label: 'Wait',
-    identifier: 'android:id/aerr_wait',
-    hittable: true,
-    rect: { x: 40, y: 400, width: 200, height: 80 },
-  };
-  vi.mocked(snapshotAndroid).mockResolvedValue(
-    makeAndroidSnapshotCapture([
-      staleDialog,
-      staleCloseApp,
-      staleWait,
-      foregroundSheet(3),
-    ]) as never,
-  );
-  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
-
-  const result = await recoverAndroidBlockingSystemDialog({
-    session: recordingSession('anr-covered-dialog'),
-  });
-
-  expect(result.status).toBe('absent');
-  expect(tappedPoints()).toEqual([]);
 });
 
 test('collectively covered Close app is neither selected nor tapped', async () => {
@@ -214,70 +176,8 @@ test('collectively covered Close app is neither selected nor tapped', async () =
     .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
   vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 
-  const result = await recoverAndroidBlockingSystemDialog({
-    session: recordingSession('anr-collectively-covered-button'),
+  await expect(recoverAppAnr('anr-collectively-covered-button')).rejects.toMatchObject({
+    message: expect.stringContaining('Automatic recovery failed'),
   });
-
-  expect(result.status).toBe('absent');
-  expect(tappedPoints()).toEqual([]);
-});
-
-test('an ANR dialog in another language is found and closed by its button ids', async () => {
-  vi.mocked(runAndroidAdb).mockReset();
-  vi.mocked(snapshotAndroid)
-    .mockResolvedValueOnce(
-      makeAndroidSnapshotCapture([
-        { index: 0, type: 'TextView', label: 'Demo reagiert nicht', rect: SCREEN },
-        {
-          index: 1,
-          type: 'Button',
-          label: 'App schließen',
-          identifier: 'android:id/aerr_close',
-          hittable: true,
-          rect: { x: 40, y: 1800, width: 200, height: 80 },
-        },
-        {
-          index: 2,
-          type: 'Button',
-          label: 'Warten',
-          identifier: 'android:id/aerr_wait',
-          hittable: true,
-          rect: { x: 40, y: 1900, width: 200, height: 80 },
-        },
-      ]) as never,
-    )
-    .mockResolvedValue(makeAndroidSnapshotCapture([]) as never);
-  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
-
-  const result = await recoverAndroidBlockingSystemDialog({
-    session: recordingSession('anr-localized'),
-  });
-
-  expect(result.status).toBe('recovered');
-  expect(tappedPoints()).toEqual([{ x: 140, y: 1840 }]);
-});
-
-test('a crash dialog, which has Close app but no Wait, is not treated as an ANR', async () => {
-  vi.mocked(runAndroidAdb).mockReset();
-  vi.mocked(snapshotAndroid).mockResolvedValue(
-    makeAndroidSnapshotCapture([
-      { index: 0, type: 'TextView', label: 'Demo keeps stopping', rect: SCREEN },
-      {
-        index: 1,
-        type: 'Button',
-        label: 'Close app',
-        identifier: 'android:id/aerr_close',
-        hittable: true,
-        rect: { x: 40, y: 1800, width: 200, height: 80 },
-      },
-    ]) as never,
-  );
-  vi.mocked(runAndroidAdb).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
-
-  const result = await recoverAndroidBlockingSystemDialog({
-    session: recordingSession('crash-dialog'),
-  });
-
-  expect(result.status).toBe('absent');
   expect(tappedPoints()).toEqual([]);
 });

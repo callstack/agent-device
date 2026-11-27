@@ -583,8 +583,13 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       recordingEffect: 'mutates-app',
       // ADR 0014, "Command effects are daemon-owned and completely classified":
       // The `daemon` facet classifies this command's device mutation for the completeness gate.
-      // The route remains `generic`.
-      daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
+      // The route remains `generic`. Like `home`, it acts on the screen, so the Android
+      // blocking-dialog guard applies.
+      daemon: {
+        route: 'generic',
+        refFrameEffect: 'may-invalidate',
+        androidBlockingDialogGuard: true,
+      },
       timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
       batchable: true,
       compositeResource: 'none',
