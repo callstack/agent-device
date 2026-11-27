@@ -308,6 +308,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               platformResourceCleanup,
               providerAppCatalog,
               daemonPolicy,
+              endSessionsForLease,
             });
             return await executeRequestScope(scope);
           }),
@@ -487,6 +488,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           platformResourceCleanup,
           providerAppCatalog,
           daemonPolicy,
+          endSessionsForLease,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref

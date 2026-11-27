@@ -59,7 +59,6 @@ import {
 import {
   createRequestExecutionLocks,
   withRequestExecutionLockKeys,
-  runWhileRequestExecutionLockKeysFree,
 } from './request-execution-locks.ts';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
@@ -235,6 +234,7 @@ export async function createRequestExecutionScope(params: {
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
   daemonPolicy?: DaemonPolicy;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
@@ -469,12 +469,7 @@ export async function createRequestExecutionScope(params: {
             sessionStore,
             leaseRegistry,
             req: scopedReq,
-            whileSessionIdle: async (ref, end) =>
-              await runWhileRequestExecutionLockKeysFree(
-                executionLocks,
-                existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
-                end,
-              ),
+            endSessionsForLease: params.endSessionsForLease,
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,

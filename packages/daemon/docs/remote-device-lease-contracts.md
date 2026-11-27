@@ -71,8 +71,9 @@ Every lease-admission refusal comes after authentication and tenant scoping, and
 If a request that would do device work names the expired lease of its session, the daemon refuses before it tears that session down.
 The lease expiry sweep ends that session later.
 For a `close` or an admission-exempt command, such as `lease_release`, the daemon tears that session down at once.
-Such a command also tears down a session whose lease the registry no longer holds.
-If another request holds that session, the daemon leaves the teardown to the queued lease end.
+For a session whose lease the registry no longer holds, such a command starts the lease end of that lease.
+The lease end runs once no other request holds the session.
+A `close` waits for that lease end. A lease command does not wait.
 A refusal of `close` states no `details.dispatched`, because the teardown may have run.
 A sensitive `fill` value never redacts a typed `details.dispatched` or a shared lease `details.reason`. Any other value in those fields stays redacted.
 A daemon that makes this refusal advertises the `lease-admission` capability on `/health`.

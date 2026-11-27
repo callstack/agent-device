@@ -19,6 +19,7 @@ import {
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
+  createLeaseSessionEnd,
   createRequestExecutionScope,
   getLeaseRegistryExecutionLocks,
 } from '../request-execution-scope.ts';
@@ -203,8 +204,15 @@ async function sessionWhoseLeaseEnded(fate: 'expired' | 'released') {
   if (fate === 'expired') now = 1_011;
   else leaseRegistry.releaseLease({ ...owner, leaseId: lease.leaseId });
 
-  const run = async (command: string, task: () => Promise<unknown>) => {
-    const scope = await createRequestExecutionScope({
+  const leaseEnd = createLeaseSessionEnd({
+    env: process.env,
+    sessionStore,
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    teardownSession: async () => {},
+    cleanupSessionlessExecutionHost: async () => {},
+  });
+  const scopeFor = async (command: string) =>
+    await createRequestExecutionScope({
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
@@ -214,6 +222,7 @@ async function sessionWhoseLeaseEnded(fate: 'expired' | 'released') {
       req: makeRequest({ command, session: session.name, meta }),
       sessionStore,
       leaseRegistry,
+      endSessionsForLease: async (leaseId) => await leaseEnd.end(leaseId, 'LEASE_RELEASED'),
       platformResourceCleanup: {
         stopSnapshotHelper: async () => {},
         closeManagedBrowser: async () => {},
@@ -221,22 +230,40 @@ async function sessionWhoseLeaseEnded(fate: 'expired' | 'released') {
         retainExecutionHostAfterClose: () => false,
       },
     });
-    return await scope.runLocked(task);
+  const run = async (command: string, task: () => Promise<unknown>) =>
+    await (await scopeFor(command)).runLocked(task);
+  /** Another request that holds the session until `finish`. */
+  const holdSession = () => {
+    let finish!: () => void;
+    const running = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const held = withRequestExecutionLockKeys(
+      getLeaseRegistryExecutionLocks(leaseRegistry),
+      existingSessionExecutionLockKeys(session.name, session.device.id),
+      async () => await running,
+    );
+    return async () => {
+      finish();
+      await held;
+    };
   };
-  return { sessionStore, leaseRegistry, session, claimFile, run };
+  const expectSessionEnded = () => {
+    expect(sessionStore.get(session.name)).toBeUndefined();
+    expect(fs.existsSync(claimFile)).toBe(false);
+  };
+  return { sessionStore, leaseRegistry, session, scopeFor, run, holdSession, expectSessionEnded };
 }
 
 test.each(['expired', 'released'] as const)(
   'a close naming its session lease that is %s tears down the session and claim and rents nothing',
   async (fate) => {
-    const { sessionStore, leaseRegistry, session, claimFile, run } =
-      await sessionWhoseLeaseEnded(fate);
+    const { leaseRegistry, run, expectSessionEnded } = await sessionWhoseLeaseEnded(fate);
     const task = vi.fn(async () => 'ran');
 
     const refusal = await run('close', task).catch((error: unknown) => error);
 
-    expect(sessionStore.get(session.name)).toBeUndefined();
-    expect(fs.existsSync(claimFile)).toBe(false);
+    expectSessionEnded();
     expect(leaseRegistry.listActiveLeases()).toEqual([]);
     expect(task).not.toHaveBeenCalled();
     // The lease is still refused, without claiming that nothing ran.
@@ -246,35 +273,48 @@ test.each(['expired', 'released'] as const)(
 );
 
 test.each(['lease_release', 'lease_heartbeat'])(
-  '%s for a released lease tears down the session still holding it',
+  '%s for a released lease ends the session still holding it',
   async (command) => {
-    const { sessionStore, session, claimFile, run } = await sessionWhoseLeaseEnded('released');
+    const { run, expectSessionEnded } = await sessionWhoseLeaseEnded('released');
 
     await run(command, async () => 'ran');
 
-    expect(sessionStore.get(session.name)).toBeUndefined();
-    expect(fs.existsSync(claimFile)).toBe(false);
+    await vi.waitFor(expectSessionEnded);
   },
 );
 
-// Lease commands take no session lock, and the queued lease end waits for the command that holds it.
-test('lease_heartbeat leaves a session that another request holds to the queued lease end', async () => {
-  const { sessionStore, leaseRegistry, session, claimFile, run } =
+// `runAdmitted` takes no lock, as for a close whose lock plan missed the session's keys.
+test('a close that finds its session busy ends it once that request finishes', async () => {
+  const { sessionStore, session, scopeFor, holdSession, expectSessionEnded } =
     await sessionWhoseLeaseEnded('released');
-  let finish!: () => void;
-  const running = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  const held = withRequestExecutionLockKeys(
-    getLeaseRegistryExecutionLocks(leaseRegistry),
-    existingSessionExecutionLockKeys(session.name, session.device.id),
-    async () => await running,
-  );
+  const release = holdSession();
+  let settled = false;
+  const closing = (await scopeFor('close'))
+    .runAdmitted(async () => 'ran')
+    .catch((error: unknown) => error)
+    .finally(() => {
+      settled = true;
+    });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(settled).toBe(false);
+  expect(sessionStore.get(session.name)).toBeDefined();
+  await release();
+
+  await expect(closing).resolves.toMatchObject({ details: { reason: 'LEASE_NOT_FOUND' } });
+  expectSessionEnded();
+});
+
+// Lease commands take no session lock: they must neither wait for the command that holds the session
+// nor end it underneath that command.
+test('lease_heartbeat on a busy session ends it once that request finishes', async () => {
+  const { sessionStore, session, run, holdSession, expectSessionEnded } =
+    await sessionWhoseLeaseEnded('released');
+  const release = holdSession();
 
   await run('lease_heartbeat', async () => 'ran');
-
   expect(sessionStore.get(session.name)).toBeDefined();
-  expect(fs.existsSync(claimFile)).toBe(true);
-  finish();
-  await held;
+  await release();
+
+  await vi.waitFor(expectSessionEnded);
 });

@@ -70,20 +70,6 @@ export function createRequestExecutionLocks(params: {
   };
 }
 
-/**
- * Runs `task` under `keys`, unless another request holds or waits for one of them. Keys this request
- * already holds are re-entered.
- */
-export async function runWhileRequestExecutionLockKeysFree(
-  locks: Map<string, Promise<unknown>>,
-  keys: readonly RequestExecutionLockKey[],
-  task: () => Promise<void>,
-): Promise<void> {
-  const held = heldRequestLockKeys(locks);
-  if (keys.some((key) => !held.includes(key) && locks.has(key))) return;
-  await withRequestExecutionLockKeys(locks, keys, task);
-}
-
 function heldRequestLockKeys(locks: Map<string, Promise<unknown>>): RequestExecutionLockKey[] {
   return heldKeyedLockKeys(locks) as RequestExecutionLockKey[];
 }

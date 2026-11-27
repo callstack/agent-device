@@ -122,7 +122,6 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
     sessionStore,
     leaseRegistry,
     teardownSession,
-    whileSessionIdle: async (_ref, end) => await end(),
   });
 
   expect(cleaned).toBe(true);
@@ -162,7 +161,6 @@ function sessionWithExpiredLease() {
       sessionStore,
       leaseRegistry,
       teardownSession,
-      whileSessionIdle: async (_ref, end) => await end(),
     });
   return { sessionStore, session, teardownSession, cleanup };
 }
