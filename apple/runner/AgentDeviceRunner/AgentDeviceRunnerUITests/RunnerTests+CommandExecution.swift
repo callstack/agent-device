@@ -115,25 +115,30 @@ extension RunnerTests {
             x: touchPoint.x,
             y: touchPoint.y
           )
+          func selectorTapResponse(
+            timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
+            fallback: GestureFallback? = nil
+          ) throws -> Response {
+            if isTextEntry {
+              try waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
+            }
+            rememberTextEntryTap(isTextEntry ? element : nil)
+            return gestureResponse(
+              message: match.usedNonHittableFallback ? "tapped via non-hittable coordinate fallback" : "tapped",
+              timing: timing,
+              frame: .touch(touchFrame),
+              fallback: fallback,
+              maestroNonHittableCoordinateFallbackUsed:
+                command.allowNonHittableCoordinateFallback == true
+                ? match.usedNonHittableFallback
+                : nil
+            )
+          }
           var fallback: GestureFallback?
           if command.synthesized == true {
             switch try performSynthesizedTapGesture(app: activeApp, x: touchPoint.x, y: touchPoint.y) {
             case .performed(let timing):
-              if isTextEntry {
-                try waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
-              }
-              rememberTextEntryTap(isTextEntry ? element : nil)
-              return gestureResponse(
-                message: match.usedNonHittableFallback
-                  ? "tapped via non-hittable coordinate fallback"
-                  : "tapped",
-                timing: timing,
-                frame: .touch(touchFrame),
-                maestroNonHittableCoordinateFallbackUsed:
-                  command.allowNonHittableCoordinateFallback == true
-                  ? match.usedNonHittableFallback
-                  : nil
-              )
+              return try selectorTapResponse(timing: timing)
             case .xctestFallback(let message, let hint):
               fallback = .coordinateTap(message, hint: hint)
             case .refused(_, let refusal):
@@ -154,20 +159,7 @@ extension RunnerTests {
             clearRememberedTextEntryTap()
             return response
           }
-          if isTextEntry {
-            try waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
-          }
-          rememberTextEntryTap(isTextEntry ? element : nil)
-          return gestureResponse(
-            message: match.usedNonHittableFallback ? "tapped via non-hittable coordinate fallback" : "tapped",
-            timing: timing,
-            frame: .touch(touchFrame),
-            fallback: fallback,
-            maestroNonHittableCoordinateFallbackUsed:
-              command.allowNonHittableCoordinateFallback == true
-              ? match.usedNonHittableFallback
-              : nil
-          )
+          return try selectorTapResponse(timing: timing, fallback: fallback)
         }
         clearRememberedTextEntryTap()
         return Response(ok: false, error: ErrorPayload(code: RunnerWireErrorCode.elementNotFound, message: "element not found"))
