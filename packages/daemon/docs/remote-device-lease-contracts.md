@@ -68,13 +68,15 @@ The client then allocates a new lease under a fresh id.
 Request admission refuses a request that names an inactive or unknown lease.
 The refusal is `UNAUTHORIZED` with `details.reason: LEASE_NOT_FOUND` and `details.dispatched: no`.
 Every lease-admission refusal comes after authentication and tenant scoping, and before any handler runs.
-If a request that would do device work names the expired lease of its session, the daemon refuses before it tears that session down.
+If a request names a lease other than its session's lease, and the registry does not hold the named lease, the refusal is `LEASE_NOT_FOUND`.
+If the registry holds that lease, the refusal is `LEASE_SESSION_MISMATCH`.
+If the session lease expired and a request that would do device work names a lease that is not live, the daemon refuses before it tears that session down.
 The lease expiry sweep ends that session later.
 For a `close` or an admission-exempt command, such as `lease_release`, the daemon tears that session down at once.
-For a session whose lease the registry no longer holds, such a command starts the lease end of that lease.
-The lease end runs once no other request holds the session.
-A `close` waits for that lease end. A lease command does not wait.
-A refusal of `close` states no `details.dispatched`, because the teardown may have run.
+For a session whose lease the registry no longer holds, such a command starts the lease end of that lease and does not wait for it.
+The lease end runs outside the execution locks of that request.
+A `close` that holds the locks of that session also ends that session at once.
+A refusal that follows a teardown, or a started lease end, states no `details.dispatched`.
 A sensitive `fill` value never redacts a typed `details.dispatched` or a shared lease `details.reason`. Any other value in those fields stays redacted.
 A daemon that makes this refusal advertises the `lease-admission` capability on `/health`.
 A proxy forwards the capability of the daemon behind it in `upstream`.
@@ -82,11 +84,13 @@ A proxy forwards the capability of the daemon behind it in `upstream`.
 The CLI can reuse a stored lease without a heartbeat.
 It then marks the command as admission-checked and names the window that the heartbeat would have named.
 The daemon-client reads `lease-admission` from the `/health` check that the command already makes.
+It accepts the capability only if that answer names the instance of the daemon, and of the proxy in front of it.
 If the capability is absent, the daemon-client refuses the command before the send with `lease_admission_unsupported`.
 It makes the same check again after an instance-mismatch refresh.
 An admission-checked command never takes the checked RPC route. On a checked connection (`daemonRpc: checked`) it is `GET /health`, then `POST /rpc`.
 If the only request of the command gets either refusal, the CLI materializes the connection again and sends the command once more.
 After `LEASE_NOT_FOUND`, the CLI allocates a new lease. After `lease_admission_unsupported`, it sends the heartbeat.
+Only the refusal that the daemon-client itself builds counts. A daemon answer with that reason is an ordinary failure.
 The CLI does not resend on any other failure.
 
 These commands keep the heartbeat:
@@ -97,6 +101,10 @@ These commands keep the heartbeat:
 - `install`, `reinstall`, and `install-from-source`, which can upload a local artifact before admission.
 - A command with `--save-script`.
 - `batch`, `replay`, and `test`, which read local scripts while they build the request. A script path can be a pipe.
+- `fill --text-stdin`, so that a refusal comes before the CLI reads the pipe.
+- A command that prepares a Metro runtime, which registers remote work under the lease before the command.
+- A command whose daemon URL, tenant, run, lease backend, or device key differs from the saved connection, or that has no saved connection.
+- A command whose stored lease id is not canonical lower-case hex.
 - A by-spec `open` that allocates fresh: the connection names no device, or the request names a device spec or a device selector.
 
 A by-spec `open` that names no spec or selector reuses the stored device without a heartbeat.

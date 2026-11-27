@@ -211,7 +211,7 @@ async function sessionWhoseLeaseEnded(fate: 'expired' | 'released') {
     teardownSession: async () => {},
     cleanupSessionlessExecutionHost: async () => {},
   });
-  const scopeFor = async (command: string) =>
+  const scopeFor = async (command: string, requestMeta: DaemonRequest['meta'] = meta) =>
     await createRequestExecutionScope({
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
@@ -219,7 +219,7 @@ async function sessionWhoseLeaseEnded(fate: 'expired' | 'released') {
       trackClaimRecoveryDisposal: () => {},
       deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
       platformRequestScope: platformRequestScopeFixture(),
-      req: makeRequest({ command, session: session.name, meta }),
+      req: makeRequest({ command, session: session.name, meta: requestMeta }),
       sessionStore,
       leaseRegistry,
       endSessionsForLease: async (leaseId) => await leaseEnd.end(leaseId, 'LEASE_RELEASED'),
@@ -288,21 +288,132 @@ test('a close that finds its session busy ends it once that request finishes', a
   const { sessionStore, session, scopeFor, holdSession, expectSessionEnded } =
     await sessionWhoseLeaseEnded('released');
   const release = holdSession();
-  let settled = false;
-  const closing = (await scopeFor('close'))
-    .runAdmitted(async () => 'ran')
-    .catch((error: unknown) => error)
-    .finally(() => {
-      settled = true;
-    });
 
-  await new Promise((resolve) => setImmediate(resolve));
-  expect(settled).toBe(false);
+  const refusal = await (
+    await scopeFor('close')
+  )
+    .runAdmitted(async () => 'ran')
+    .catch((error: unknown) => error);
+
+  expect(refusal).toMatchObject({ details: { reason: 'LEASE_NOT_FOUND' } });
+  // The teardown is queued, so the refusal cannot claim that nothing runs.
+  expect(refusal).not.toHaveProperty('details.dispatched');
   expect(sessionStore.get(session.name)).toBeDefined();
   await release();
+  await vi.waitFor(expectSessionEnded);
+});
 
-  await expect(closing).resolves.toMatchObject({ details: { reason: 'LEASE_NOT_FOUND' } });
+// A lease end started under the close's own session lock would hold that lock until it got the rest.
+test('a close holding only its session lock finishes while another request holds the device', async () => {
+  const { leaseRegistry, session, scopeFor, expectSessionEnded } =
+    await sessionWhoseLeaseEnded('released');
+  const executionLocks = getLeaseRegistryExecutionLocks(leaseRegistry);
+  let finish!: () => void;
+  const running = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const device = withRequestExecutionLockKeys(
+    executionLocks,
+    [`device:${session.device.id}`],
+    async () => await running,
+  );
+  const scope = await scopeFor('close');
+
+  const refusal = await withRequestExecutionLockKeys(
+    executionLocks,
+    [`session:${session.name}`],
+    async () => await scope.runAdmitted(async () => 'ran').catch((error: unknown) => error),
+  );
+
+  expect(refusal).toMatchObject({ details: { reason: 'LEASE_NOT_FOUND' } });
+  finish();
+  await device;
+  await vi.waitFor(expectSessionEnded);
+});
+
+test('a refusal after an expired session was torn down claims no dispatch verdict', async () => {
+  const { scopeFor, expectSessionEnded } = await sessionWhoseLeaseEnded('expired');
+  // It names no lease, so it is refused only once the session and its lease are gone.
+  const scope = await scopeFor('press', {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    sessionIsolation: 'tenant',
+  });
+
+  const refusal = await scope.runLocked(async () => 'ran').catch((error: unknown) => error);
+
   expectSessionEnded();
+  expect(refusal).toBeInstanceOf(Error);
+  expect(refusal).not.toHaveProperty('details.dispatched');
+});
+
+// Each close holds its own session and the lease end needs both: neither may wait for it there.
+test('two closes of sessions sharing a removed lease both finish', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const owner = { tenantId: 'tenant-a', runId: 'run-1' };
+  const lease = leaseRegistry.allocateLease(owner);
+  const names = ['tenant-a:first', 'tenant-a:second'];
+  for (const name of names) {
+    sessionStore.publish(
+      name,
+      makeSession(name, {
+        device: { ...LINUX_DEVICE, id: name },
+        lease: { ...owner, leaseId: lease.leaseId },
+      }),
+    );
+  }
+  leaseRegistry.releaseLease({ ...owner, leaseId: lease.leaseId });
+  const executionLocks = getLeaseRegistryExecutionLocks(leaseRegistry);
+  const leaseEnd = createLeaseSessionEnd({
+    env: process.env,
+    sessionStore,
+    executionLocks,
+    teardownSession: async () => {},
+    cleanupSessionlessExecutionHost: async () => {},
+  });
+  const scopes = await Promise.all(
+    names.map(
+      async (session) =>
+        await createRequestExecutionScope({
+          host: createTestHostEnvironment(),
+          platformServices: daemonPlatformServicesFixture(),
+          claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+          trackClaimRecoveryDisposal: () => {},
+          deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+          platformRequestScope: platformRequestScopeFixture(),
+          req: makeRequest({
+            command: 'close',
+            session,
+            meta: { ...owner, leaseId: lease.leaseId, sessionIsolation: 'tenant' },
+          }),
+          sessionStore,
+          leaseRegistry,
+          endSessionsForLease: async (leaseId) => await leaseEnd.end(leaseId, 'LEASE_RELEASED'),
+        }),
+    ),
+  );
+  // Both closes queue behind one holder, so both hold their locks before either reaches the end.
+  let finish!: () => void;
+  const running = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const held = withRequestExecutionLockKeys(
+    executionLocks,
+    names.flatMap((name) => existingSessionExecutionLockKeys(name, name)),
+    async () => await running,
+  );
+  const closes = scopes.map(
+    async (scope) => await scope.runLocked(async () => 'ran').catch((error: unknown) => error),
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  finish();
+  await held;
+
+  for (const refusal of await Promise.all(closes)) {
+    expect(refusal).toMatchObject({ details: { reason: 'LEASE_NOT_FOUND' } });
+  }
+  await vi.waitFor(() => expect(sessionStore.listRefs()).toEqual([]));
 });
 
 // Lease commands take no session lock: they must neither wait for the command that holds the session

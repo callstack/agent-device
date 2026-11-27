@@ -122,7 +122,13 @@ function admitLease(
   session: SessionState | undefined,
   env: HostEnvironment['env'],
 ): DeviceLease {
-  assertRequestSessionLeaseMatches(resolveLeaseScope(req), session?.lease);
+  const named = resolveLeaseScope(req);
+  // A request that names another lease than its session's is a mismatch only while that lease is
+  // live. An ended one is the typed inactive refusal, so a client with a replaced lease reallocates.
+  if (named.leaseId && session?.lease && named.leaseId !== session.lease.leaseId) {
+    leaseRegistry.assertLeaseActive(named.leaseId);
+  }
+  assertRequestSessionLeaseMatches(named, session?.lease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
   // Admission renews for the window the lease already carries, or the window this request named.

@@ -1,3 +1,4 @@
+import { AsyncResource } from 'node:async_hooks';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -47,6 +48,7 @@ import {
 import {
   applyRequestCommandDefaults,
   existingSessionExecutionLockKeys,
+  holdsSessionExecutionLocks,
   prepareLockedRequestBinding,
   resolveRequestExecutionLockPlan,
   type RequestExecutionLockPlan,
@@ -237,6 +239,9 @@ export async function createRequestExecutionScope(params: {
   endSessionsForLease?: (leaseId: string) => Promise<void>;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
+  // Bound before this request takes a lock, so the lease end it starts never runs under one.
+  const queueLeaseEnd =
+    params.endSessionsForLease && AsyncResource.bind(params.endSessionsForLease);
   const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
   // A nested batch or replay step arrives with the identity of the request that spawned it, and its
   // own name is already the store key.
@@ -463,13 +468,14 @@ export async function createRequestExecutionScope(params: {
             });
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
-          await cleanupExpiredLeasedSession({
+          const sessionEnded = await cleanupExpiredLeasedSession({
             env: params.host.env,
             sessionName,
             sessionStore,
             leaseRegistry,
             req: scopedReq,
-            endSessionsForLease: params.endSessionsForLease,
+            queueLeaseEnd,
+            holdsSessionLocks: (ref) => holdsSessionExecutionLocks(executionLocks, ref),
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,
@@ -487,6 +493,7 @@ export async function createRequestExecutionScope(params: {
             leaseRegistry,
             providerAppCatalog: params.providerAppCatalog,
             daemonPolicy: params.daemonPolicy,
+            sessionEnded,
           });
           scope.req = scopedReq;
           admissionCompleted = true;

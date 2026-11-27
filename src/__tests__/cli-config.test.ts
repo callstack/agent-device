@@ -281,16 +281,18 @@ test('active remote connection defaults override generic config and env for remo
   });
 
   assert.equal(result.code, null);
-  // Admission checks the stored lease, so the command is the only request.
-  assert.equal(result.calls.length, 1);
-  assert.equal(result.calls[0]?.session, 'env-session');
-  assert.equal(result.calls[0]?.flags?.platform, 'android');
+  assert.equal(result.calls.length, 2);
+  assert.equal(result.calls[0]?.command, 'lease_heartbeat');
+  assert.equal(result.calls[1]?.session, 'env-session');
+  assert.equal(result.calls[1]?.flags?.platform, 'android');
   assert.equal(
-    result.calls[0]?.flags?.daemonBaseUrl,
+    result.calls[1]?.flags?.daemonBaseUrl,
     'http://remote-mac.example.test:9124/agent-device',
   );
   assert.equal(result.calls[0]?.meta?.tenantId, 'acme');
   assert.equal(result.calls[0]?.meta?.leaseId, 'lease-123');
+  assert.equal(result.calls[1]?.meta?.tenantId, 'acme');
+  assert.equal(result.calls[1]?.meta?.leaseId, 'lease-123');
 
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -628,11 +630,11 @@ test('remote-config commands reuse active generated session when profile has no 
   );
 
   assert.equal(result.code, null);
-  // Admission checks the stored lease, so the command is the only request.
-  assert.equal(result.calls.length, 1);
-  assert.equal(result.calls[0]?.command, 'snapshot');
-  assert.equal(result.calls[0]?.session, 'adc-generated');
-  assert.equal(result.calls[0]?.meta?.leaseId, 'lease-generated-001');
+  assert.equal(result.calls.length, 2);
+  assert.equal(result.calls[0]?.command, 'lease_heartbeat');
+  assert.equal(result.calls[1]?.command, 'snapshot');
+  assert.equal(result.calls[1]?.session, 'adc-generated');
+  assert.equal(result.calls[1]?.meta?.leaseId, 'lease-generated-001');
 
   fs.rmSync(root, { recursive: true, force: true });
 });

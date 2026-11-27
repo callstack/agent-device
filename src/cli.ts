@@ -23,7 +23,6 @@ import {
 } from '@agent-device/daemon-client';
 import fs from 'node:fs';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
-import type { CliRunInputs } from './commands/cli-runner.ts';
 import type { CommandProgressState } from '@agent-device/command-output';
 import { createCommandProgressState } from './commands/command-progress.ts';
 import { createAgentDeviceClient } from '@agent-device/client';
@@ -374,7 +373,6 @@ type CliRunContext = {
   leaseDevice?: LeaseDevice;
   /** The flags before materialization, and the reused lease that the command's admission checks. */
   leaseAdmission?: { flagsBefore: CliFlags; checked?: LeaseAdmission.AdmissionCheckedLease };
-  inputs: CliRunInputs;
   parsedBatchSteps: BatchStep[] | undefined;
   devicePin: DevicePin | undefined;
 };
@@ -445,7 +443,6 @@ async function resolveRunContextOrExit(
       resolvedRuntime: connectionDefaults?.runtime,
       connectionMetadata: connectionDefaults?.connection,
       parsedBatchSteps: undefined,
-      inputs: {},
       devicePin: parsed.devicePin,
     };
   } catch (error) {
@@ -674,7 +671,6 @@ async function dispatchCliCommand(
       debug: ctx.debugOutputEnabled,
       replayTestReporterRuntime,
       commandProgress,
-      inputs: ctx.inputs,
       leaseDevice: ctx.leaseDevice,
       claimedConnection: ctx.connectionDefaults?.claimed,
     })

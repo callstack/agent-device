@@ -122,6 +122,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
     sessionStore,
     leaseRegistry,
     teardownSession,
+    holdsSessionLocks: () => true,
   });
 
   expect(cleaned).toBe(true);
@@ -161,6 +162,7 @@ function sessionWithExpiredLease() {
       sessionStore,
       leaseRegistry,
       teardownSession,
+      holdsSessionLocks: () => true,
     });
   return { sessionStore, session, teardownSession, cleanup };
 }
@@ -175,6 +177,8 @@ test.each<
   // The registry reads lease ids without case or surrounding space.
   ['a press spelling the id differently', { command: 'press' }, (id) => ` ${id.toUpperCase()} `],
   ['an app-only close', { command: 'close', internal: { closeAppOnly: true } }, (id) => id],
+  // Admission would refuse that lease only after the teardown, with `dispatched: no`.
+  ['a press naming another lease that is not live', { command: 'press' }, () => 'f'.repeat(32)],
 ])(
   'cleanupExpiredLeasedSession refuses %s naming the expired lease before any teardown',
   async (_name, request, spell) => {

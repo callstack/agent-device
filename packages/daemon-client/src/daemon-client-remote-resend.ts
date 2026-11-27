@@ -7,6 +7,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   assertLeaseAdmissionCapability,
   assertScriptArtifactsCapability,
+  remoteDaemonCapabilities,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   CheckedRpcConnectFailure,
@@ -80,7 +81,7 @@ export async function retryAfterRemoteInstanceMismatch(
   }
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
-  info.capabilities = (health.upstream ?? health).capabilities;
+  info.capabilities = remoteDaemonCapabilities(health);
   cacheRemoteDaemonHealth(info, health);
   // A replacement daemon must still deliver the script that a remote recording asks for.
   if (scriptPublicationId) assertScriptArtifactsCapability(info.capabilities);

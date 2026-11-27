@@ -5,7 +5,6 @@ import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
 import { isLeaseAdmissionExempt } from '../core/daemon-command-registry.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
-import { normalizeLeaseId } from '../resources/lease-registry-scope.ts';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
@@ -65,11 +64,12 @@ export async function releaseExpiredProviderLease(
 /**
  * Ends the session of the request whose session lease expired, or refuses the request before that
  * teardown. A composite is refused so it does not lose its session mid-run. A request that would do
- * device work under that lease is refused so its client can reallocate and resend: the refusal says
- * `dispatched: no`, so nothing of the request may run first, and the lease expiry sweep ends the
- * session instead. A `close` or an admission-exempt command ends it now. For a session whose lease
- * the registry no longer holds, such a command starts the daemon's lease end, which runs once no
- * other request holds the session. A `close` waits for that end; a lease command does not.
+ * device work and names a lease that is not live is refused so its client can reallocate and resend:
+ * the refusal says `dispatched: no`, so nothing of the request may run first, and the lease expiry
+ * sweep ends the session instead. A `close` or an admission-exempt command ends it now. For a
+ * session whose lease the registry no longer holds, such a command queues the daemon's lease end,
+ * and a `close` that holds the session also ends it at once.
+ * Returns whether the request ended the session or queued its end.
  */
 export async function cleanupExpiredLeasedSession(params: {
   req: DaemonRequest;
@@ -78,20 +78,21 @@ export async function cleanupExpiredLeasedSession(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
-  /** The daemon's lease end: it ends the lease's sessions under their execution locks. */
-  endSessionsForLease?: (leaseId: string) => Promise<void>;
+  /** Starts the daemon's lease end outside this request's execution locks. */
+  queueLeaseEnd?: (leaseId: string) => Promise<void>;
+  holdsSessionLocks: (ref: SessionRef) => boolean;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
   const expired = params.leaseRegistry.consumeExpiredLease(lease.leaseId, () => {
-    if (!refusesExpiredLeaseTeardown(params.req, lease.leaseId)) return;
+    if (!refusesExpiredLeaseTeardown(params.req, params.leaseRegistry)) return;
     throw new AppError('UNAUTHORIZED', 'Lease is not active', {
       reason: LEASE_REASONS.notFound.reason,
       dispatched: 'no',
     });
   });
-  if (expired) {
+  const end = async () =>
     await endLeasedSession(
       ref,
       params.sessionStore,
@@ -99,33 +100,37 @@ export async function cleanupExpiredLeasedSession(params: {
       'LEASE_EXPIRED',
       params.env,
     );
+  if (expired) {
+    await end();
     return true;
   }
   if (
-    !params.endSessionsForLease ||
+    !params.queueLeaseEnd ||
     doesDeviceWork(params.req) ||
     isBoundedCompositeRequest(params.req) ||
     params.leaseRegistry.inspectLeaseBackend(lease.leaseId) !== undefined
   ) {
     return false;
   }
-  const ending = params.endSessionsForLease(lease.leaseId);
-  if (endsSession(params.req)) await ending;
+  // The lease end locks every session of the lease, so no request waits for it under its own locks.
+  void params.queueLeaseEnd(lease.leaseId);
+  if (endsSession(params.req) && params.holdsSessionLocks(ref)) await end();
   return true;
 }
 
-function refusesExpiredLeaseTeardown(req: DaemonRequest, expiredLeaseId: string): boolean {
+function refusesExpiredLeaseTeardown(req: DaemonRequest, leaseRegistry: LeaseRegistry): boolean {
   return (
     req.command === 'batch' ||
     req.command === 'replay' ||
     isBoundedCompositeRequest(req) ||
-    (doesDeviceWork(req) && namesLease(req, expiredLeaseId))
+    (doesDeviceWork(req) && namesInactiveLease(req, leaseRegistry))
   );
 }
 
-/** Compared as the registry reads lease ids, so another spelling of the id names the same lease. */
-function namesLease(req: DaemonRequest, leaseId: string): boolean {
-  return normalizeLeaseId(resolveLeaseScope(req).leaseId) === normalizeLeaseId(leaseId);
+/** Whether admission would refuse the lease the request names, which must then come first. */
+function namesInactiveLease(req: DaemonRequest, leaseRegistry: LeaseRegistry): boolean {
+  const { leaseId } = resolveLeaseScope(req);
+  return leaseId !== undefined && leaseRegistry.inspectLeaseBackend(leaseId) === undefined;
 }
 
 function doesDeviceWork(req: DaemonRequest): boolean {
@@ -188,13 +193,15 @@ export function admitRequestLeaseForLockedScope(params: {
   leaseRegistry: LeaseRegistry;
   providerAppCatalog?: ProviderAppCatalog;
   daemonPolicy?: DaemonPolicy;
+  /** The request ended its session, or queued that end, just before admission. */
+  sessionEnded?: boolean;
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
   const ref = sessionStore.lookup(sessionName);
   const existingSession = ref?.session;
   // Admission runs before any handler, so its refusal says `dispatched: no`: a client that let
   // admission check its lease (`lease-admission`) reallocates and resends on that refusal alone.
-  // A `close` may have torn its session down just before this, so its refusal claims nothing.
+  // After a teardown the refusal cannot claim that nothing ran.
   let activeLease: DeviceLease | undefined;
   try {
     activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
@@ -203,7 +210,7 @@ export function admitRequestLeaseForLockedScope(params: {
       daemonPolicy: params.daemonPolicy,
     });
   } catch (error) {
-    throw endsSession(params.req) ? error : thrownBeforeDispatch(error);
+    throw params.sessionEnded ? error : thrownBeforeDispatch(error);
   }
   if (!activeLease) return params.req;
 

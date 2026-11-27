@@ -471,6 +471,15 @@ export function parseLeaseDeviceKey(
   return { platform: platform!, target: target!, id: id! };
 }
 
+/** A lease id as the registry stores it: trimmed lower-case hex. `undefined` for any other value. */
+export function normalizeLeaseId(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const value = raw.trim();
+  if (!value) return undefined;
+  if (!/^[a-f0-9]{16,128}$/i.test(value)) return undefined;
+  return value.toLowerCase();
+}
+
 export function isProxyLeaseScope(scope: LeaseScope): boolean {
   return scope.leaseProvider === PROXY_LEASE_PROVIDER;
 }

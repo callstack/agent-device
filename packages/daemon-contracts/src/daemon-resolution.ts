@@ -478,17 +478,44 @@ export function assertScriptArtifactsCapability(capabilities: readonly string[] 
 }
 
 /**
+ * The client's own refusal, before the send, of a daemon that does not report `lease-admission`. Only
+ * the client builds this class, so a daemon answer that names the same reason is never one.
+ */
+export class LeaseAdmissionUnsupportedError extends AppError {
+  constructor() {
+    super('UNSUPPORTED_OPERATION', 'The daemon does not check leases at admission.', {
+      reason: DAEMON_CAPABILITY_REFUSAL_REASONS.leaseAdmissionUnsupported.reason,
+      daemonRequestSent: false,
+      dispatched: 'no',
+    });
+  }
+}
+
+/**
  * Refuses, before the send, a request whose reused lease no heartbeat checked, when the daemon does
  * not report `lease-admission`. Such a daemon need not refuse an inactive lease before dispatch,
  * so the caller checks the lease with a heartbeat and sends again.
  */
 export function assertLeaseAdmissionCapability(capabilities: readonly string[] | undefined): void {
-  if (capabilities?.includes('lease-admission')) return;
-  throw new AppError('UNSUPPORTED_OPERATION', 'The daemon does not check leases at admission.', {
-    reason: DAEMON_CAPABILITY_REFUSAL_REASONS.leaseAdmissionUnsupported.reason,
-    daemonRequestSent: false,
-    dispatched: 'no',
-  });
+  if (!capabilities?.includes('lease-admission')) throw new LeaseAdmissionUnsupportedError();
+}
+
+type DaemonHealthIdentity = Readonly<{
+  instanceId?: string;
+  capabilities?: readonly DaemonCapability[];
+}>;
+
+/**
+ * The capabilities of the daemon a remote `/health` answer describes. `lease-admission` counts only
+ * when the answer names the instance of every link, the daemon and any proxy in front of it: the
+ * instance fences then hold the next request to the daemon that reported it.
+ */
+export function remoteDaemonCapabilities(
+  health: DaemonHealthIdentity & Readonly<{ upstream?: DaemonHealthIdentity }>,
+): readonly DaemonCapability[] | undefined {
+  const daemon = health.upstream ?? health;
+  if (health.instanceId && daemon.instanceId) return daemon.capabilities;
+  return daemon.capabilities?.filter((capability) => capability !== 'lease-admission');
 }
 
 export function readDaemonCapabilities(value: unknown): readonly DaemonCapability[] {

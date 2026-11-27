@@ -14,7 +14,14 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
+import { prepareMetroRuntime } from '@agent-device/react-native';
 import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
+import { metroPrepareResult } from './remote-connection.fixtures.ts';
+
+vi.mock('@agent-device/react-native', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/react-native')>()),
+  prepareMetroRuntime: vi.fn(),
+}));
 
 // A daemon that advertises `lease-admission` checks a reused lease when it admits the command, so the
 // CLI sends the command marked as admission-checked and without a heartbeat. The daemon-client
@@ -22,14 +29,18 @@ import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
 // inactive lease before dispatch. The fake transport below stands where the daemon-client does.
 
 const PROXY_URL = 'http://proxy.example.test/agent-device';
+const STORED_LEASE = 'a1'.repeat(16);
 
 type Workspace = { root: string; home: string; project: string; stateDir: string };
 
-function workspace(connection: Partial<RemoteConnectionState> = {}): Workspace {
+function workspace(
+  connection: Partial<RemoteConnectionState> = {},
+  remoteConfig: Record<string, unknown> = {},
+): Workspace {
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
   const remoteConfigPath = path.join(project, 'agent.remote.json');
-  fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
+  fs.writeFileSync(remoteConfigPath, JSON.stringify(remoteConfig));
   const now = new Date().toISOString();
   writeRemoteConnectionState({
     stateDir,
@@ -41,7 +52,7 @@ function workspace(connection: Partial<RemoteConnectionState> = {}): Workspace {
       daemon: { baseUrl: PROXY_URL },
       tenant: 'proxy',
       runId: 'run-agent',
-      leaseId: 'lease-old',
+      leaseId: STORED_LEASE,
       leaseBackend: 'android-instance',
       leaseProvider: 'proxy',
       clientId: 'client-1',
@@ -95,7 +106,7 @@ function transportTo(daemon: Daemon) {
     if (req.command === 'lease_allocate' || req.command === 'lease_heartbeat') {
       return leaseAnswer(req);
     }
-    if (daemon.refusal && scopeOf(req, 'leaseId') === 'lease-old') throw daemon.refusal();
+    if (daemon.refusal && scopeOf(req, 'leaseId') === STORED_LEASE) throw daemon.refusal();
     if (req.command === 'open') return { ok: true, data: { session: req.session } };
     return { ok: true, data: { nodes: [], truncated: false } };
   };
@@ -139,7 +150,7 @@ test.each([
   assert.equal(result.code, null, result.stdout);
   assert.deepEqual(commandsOf(result), [command]);
   assert.deepEqual(markedOf(result), [true]);
-  assert.equal(scopeOf(result.calls[0], 'leaseId'), 'lease-old');
+  assert.equal(scopeOf(result.calls[0], 'leaseId'), STORED_LEASE);
   // Admission renews for the window the heartbeat would have named.
   assert.equal(result.calls[0]?.meta?.leaseTtlMs, REMOTE_LEASE_IDLE_TTL_MS);
 
@@ -168,7 +179,7 @@ test('a lease refused at admission is reallocated and the command is sent once m
   assert.equal(result.code, null, result.stdout);
   assert.deepEqual(commandsOf(result), ['snapshot', 'lease_allocate', 'snapshot']);
   const allocated = scopeOf(result.calls[1], 'leaseId');
-  assert.notEqual(allocated, 'lease-old');
+  assert.notEqual(allocated, STORED_LEASE);
   assert.equal(scopeOf(result.calls[2], 'leaseId'), allocated);
   assert.equal(
     readRemoteConnectionState({ stateDir: ws.stateDir, session: 'agent' })?.leaseId,
@@ -199,6 +210,16 @@ test.each([
       }),
     { dispatched: 'no' },
   ],
+  // Only the client's own guard proves nothing was sent: a gateway answer can follow a forward.
+  [
+    'a daemon answer with the unsupported-capability reason',
+    () =>
+      new AppError('UNSUPPORTED_OPERATION', 'The daemon does not check leases at admission.', {
+        reason: 'lease_admission_unsupported',
+        dispatched: 'no',
+      }),
+    { dispatched: 'no' },
+  ],
 ])('%s is never resent', async (_name, refusal, expected) => {
   const ws = workspace();
   const result = await run(ws, ['snapshot'], { leaseAdmission: true, refusal });
@@ -220,7 +241,7 @@ test('a close refused for an inactive lease allocates nothing and is not resent'
   assert.equal(result.code, 1, result.stdout);
   assert.deepEqual(commandsOf(result), ['close']);
   assert.deepEqual(markedOf(result), [false]);
-  assert.equal(scopeOf(result.calls[0], 'leaseId'), 'lease-old');
+  assert.equal(scopeOf(result.calls[0], 'leaseId'), STORED_LEASE);
 
   fs.rmSync(ws.root, { recursive: true, force: true });
 });
@@ -248,26 +269,6 @@ test('a resent command refused again is not sent a third time', async () => {
   fs.rmSync(ws.root, { recursive: true, force: true });
 });
 
-// A pipe can be read only once, so the rerun sends what the refused attempt already read.
-test('a rerun fill --text-stdin sends the piped text again', async () => {
-  const stdin = vi
-    .spyOn(process, 'stdin', 'get')
-    .mockReturnValue(Readable.from(['piped-secret\n']) as typeof process.stdin);
-  const ws = workspace();
-  const result = await run(ws, ['fill', '@e3', '--text-stdin'], {
-    leaseAdmission: true,
-    refusal: () => admissionRefusal('no'),
-  });
-  stdin.mockRestore();
-
-  assert.equal(result.code, null, result.stdout);
-  assert.deepEqual(commandsOf(result), ['fill', 'lease_allocate', 'fill']);
-  assert.deepEqual(result.calls[0]?.positionals, ['@e3', 'piped-secret']);
-  assert.deepEqual(result.calls[2]?.positionals, ['@e3', 'piped-secret']);
-
-  fs.rmSync(ws.root, { recursive: true, force: true });
-});
-
 test.each<[string, string[], Partial<RemoteConnectionState>]>([
   [
     'a host-allocated macos-app lease',
@@ -285,6 +286,19 @@ test.each<[string, string[], Partial<RemoteConnectionState>]>([
     { leaseProvider: 'limrun' },
   ],
   ['an install that uploads a local artifact first', ['install', 'com.example', 'app.apk'], {}],
+  ['an install from a source', ['install-from-source', 'https://example.com/app.apk'], {}],
+  [
+    'a stored lease id that is not canonical',
+    ['snapshot'],
+    { leaseId: STORED_LEASE.toUpperCase() },
+  ],
+  ['a command naming another run', ['snapshot', '--run-id', 'run-other'], {}],
+  ['a command naming another tenant', ['snapshot', '--tenant', 'tenant-other'], {}],
+  [
+    'a command naming another daemon',
+    ['snapshot', '--daemon-base-url', 'http://other.example.test/agent-device'],
+    {},
+  ],
   ['a remote --save-script open', ['open', 'com.example', '--save-script', 'flow.ad'], {}],
   ['a proxy open naming another device mode', ['open', 'com.example', '--device-mode', 'full'], {}],
   ['a proxy open with no stored device', ['open', 'com.example'], { deviceKey: undefined }],
@@ -297,6 +311,73 @@ test.each<[string, string[], Partial<RemoteConnectionState>]>([
 
   assert.equal(commandsOf(result)[0], 'lease_heartbeat', result.stdout);
   assert.equal(markedOf(result).includes(true), false);
+
+  fs.rmSync(ws.root, { recursive: true, force: true });
+});
+
+// Metro preparation registers the companion tunnel under the connection's lease before the command,
+// so the lease is checked first and the tunnel and the app share the live one.
+test('an open that prepares Metro replaces an ended lease before the bridge setup', async () => {
+  const ws = workspace({}, { metroProxyBaseUrl: 'https://bridge.example.test' });
+  const events: string[] = [];
+  vi.mocked(prepareMetroRuntime).mockImplementation(async (input) => {
+    events.push(`prepare ${input.bridgeScope?.leaseId}`);
+    return metroPrepareResult();
+  });
+  const result = await runCliCapture(
+    ['open', 'com.example', '--session', 'agent', '--state-dir', ws.stateDir, '--json'],
+    {
+      cwd: ws.project,
+      env: { HOME: ws.home },
+      sendToDaemon: async (req) => {
+        events.push(`${req.command} ${scopeOf(req, 'leaseId')}`);
+        if (req.command === 'lease_heartbeat') throw admissionRefusal();
+        // The by-spec allocation names no device; the lease answer does.
+        if (req.command === 'lease_allocate') {
+          return leaseAnswer({
+            ...req,
+            meta: { ...req.meta, deviceKey: 'android:mobile:emulator-5554' },
+          });
+        }
+        return { ok: true, data: { session: req.session } };
+      },
+    },
+  );
+
+  assert.equal(result.code, null, result.stdout);
+  const live = readRemoteConnectionState({ stateDir: ws.stateDir, session: 'agent' })?.leaseId;
+  assert.ok(live && live !== STORED_LEASE);
+  assert.deepEqual(events, [
+    `lease_heartbeat ${STORED_LEASE}`,
+    `lease_allocate ${live}`,
+    `prepare ${live}`,
+    `open ${live}`,
+  ]);
+
+  fs.rmSync(ws.root, { recursive: true, force: true });
+});
+
+test('a lease scope refusal arrives before fill --text-stdin reads the pipe', async () => {
+  const pipe = Readable.from(['piped-secret']);
+  const stdin = vi.spyOn(process, 'stdin', 'get').mockReturnValue(pipe as typeof process.stdin);
+  const ws = workspace();
+  const result = await runCliCapture(
+    ['fill', '@e3', '--text-stdin', '--session', 'agent', '--state-dir', ws.stateDir, '--json'],
+    {
+      cwd: ws.project,
+      env: { HOME: ws.home },
+      sendToDaemon: async () => {
+        throw new AppError('UNAUTHORIZED', 'Lease scope mismatch', {
+          reason: 'LEASE_SCOPE_MISMATCH',
+        });
+      },
+    },
+  );
+  stdin.mockRestore();
+
+  assert.equal(result.code, 1, result.stdout);
+  assert.deepEqual(commandsOf(result), ['lease_heartbeat']);
+  assert.equal(pipe.readableDidRead, false);
 
   fs.rmSync(ws.root, { recursive: true, force: true });
 });

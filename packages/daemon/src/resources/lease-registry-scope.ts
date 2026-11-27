@@ -5,6 +5,7 @@ import {
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
   leaseProviderRequiringRuntime,
+  normalizeLeaseId,
 } from '@agent-device/contracts/lease-scope';
 import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
@@ -135,14 +136,6 @@ function normalizeRunId(raw: string | undefined): string | undefined {
   if (!value) return undefined;
   if (!/^[a-zA-Z0-9._-]{1,128}$/.test(value)) return undefined;
   return value;
-}
-
-export function normalizeLeaseId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const value = raw.trim();
-  if (!value) return undefined;
-  if (!/^[a-f0-9]{16,128}$/i.test(value)) return undefined;
-  return value.toLowerCase();
 }
 
 export function normalizeRequiredLeaseId(raw: string | undefined): string {

@@ -20,6 +20,7 @@ import {
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
   DAEMON_RETIREMENT_REASONS,
+  remoteDaemonCapabilities,
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
@@ -376,7 +377,7 @@ async function ensureRemoteDaemon(
       probe: async (probeMs, signal) => await cachedRemoteDaemonHealth(remoteInfo, probeMs, signal),
     });
   }
-  remoteInfo.capabilities = (health.upstream ?? health).capabilities;
+  remoteInfo.capabilities = remoteDaemonCapabilities(health);
   remoteInfo.remoteInstanceId = health.instanceId;
   remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
   return { info: remoteInfo, startedByClient: false };

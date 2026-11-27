@@ -550,3 +550,29 @@ test('a daemon policy that requires a macos-app lease refuses unleased and other
     lease.leaseId,
   );
 });
+
+// A client whose stored lease was replaced must hear that it is inactive, so it reallocates.
+test.each([
+  ['an ended lease', false, 'LEASE_NOT_FOUND'],
+  ['a live lease', true, 'LEASE_SESSION_MISMATCH'],
+])('a request naming %s other than its session lease is refused as such', (_name, live, reason) => {
+  const registry = new LeaseRegistry();
+  const owner = { tenantId: 'tenant-a', runId: 'run-1' };
+  const held = registry.allocateLease(owner);
+  const other = live ? registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-2' }) : undefined;
+  const session = makeIosSession('default', { lease: { ...owner, leaseId: held.leaseId } });
+
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'snapshot',
+          meta: { ...owner, leaseId: other?.leaseId ?? 'f'.repeat(32), sessionIsolation: 'tenant' },
+        }),
+        registry,
+        session,
+        { env: process.env },
+      ),
+    (error: unknown) => error instanceof AppError && error.details?.reason === reason,
+  );
+});

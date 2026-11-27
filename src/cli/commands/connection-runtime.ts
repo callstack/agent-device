@@ -32,6 +32,7 @@ import {
   prepareRuntimeForCommand,
   selectCompatibleRuntime,
   stopMetroCleanup,
+  willPrepareRuntime,
 } from './connection-metro-runtime.ts';
 import { grantedLeaseDevice } from './proxy-lease-device.ts';
 
@@ -115,6 +116,10 @@ export async function materializeRemoteConnectionForCommand(options: {
       positionals: options.positionals,
       leaseLedger,
       reusedLeaseCheck: options.reusedLeaseCheck,
+      savedState: existingState ?? undefined,
+      // Decided before the lease is reused, from what preparation below will read.
+      preparesRuntime: (leaseFlags) =>
+        willPrepareRuntime({ ...options, flags: leaseFlags, runtime: nextRuntime }),
     });
     nextState = acquired.state;
     changed = changed || acquired.changed;

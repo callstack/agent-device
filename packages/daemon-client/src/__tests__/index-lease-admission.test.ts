@@ -71,6 +71,16 @@ test.each([
     name: 'upgraded proxy in front of a legacy daemon',
     health: { instanceId: 'proxy', capabilities: LEASE_ADMISSION, upstream: { instanceId: 'd' } },
   },
+  // Without every instance ID, nothing holds the next request to the daemon that answered.
+  { name: 'daemon that names no instance', health: { capabilities: LEASE_ADMISSION } },
+  {
+    name: 'proxy whose daemon names no instance',
+    health: { instanceId: 'proxy', upstream: { capabilities: LEASE_ADMISSION } },
+  },
+  {
+    name: 'proxy that names no instance',
+    health: { upstream: { instanceId: 'daemon', capabilities: LEASE_ADMISSION } },
+  },
 ])('a $name is refused before the send', async ({ health }) => {
   const { result, routes } = await sendAdmissionChecked(() => health);
 
@@ -81,13 +91,16 @@ test.each([
   expect(routes).toEqual(['/health']);
 });
 
-test('a replacement daemon without lease admission is refused before the resend', async () => {
+test.each([
+  {
+    name: 'without lease admission',
+    replacement: { instanceId: 'legacy', capabilities: ['script-artifacts'] },
+  },
+  { name: 'that names no instance', replacement: { capabilities: LEASE_ADMISSION } },
+])('a replacement daemon $name is refused before the resend', async ({ replacement }) => {
   let replaced = false;
   const { result, routes } = await sendAdmissionChecked(
-    () =>
-      replaced
-        ? { instanceId: 'legacy', capabilities: ['script-artifacts'] }
-        : { instanceId: 'capable', capabilities: LEASE_ADMISSION },
+    () => (replaced ? replacement : { instanceId: 'capable', capabilities: LEASE_ADMISSION }),
     (res) => {
       replaced = true;
       res.statusCode = 409;

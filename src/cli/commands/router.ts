@@ -34,7 +34,6 @@ export async function tryRunClientBackedCommand(params: {
   debug?: boolean;
   replayTestReporterRuntime?: ClientCommandParams['replayTestReporterRuntime'];
   commandProgress?: ClientCommandParams['commandProgress'];
-  inputs?: ClientCommandParams['inputs'];
   leaseDevice?: ClientCommandParams['leaseDevice'];
   claimedConnection?: ClientCommandParams['claimedConnection'];
 }): Promise<boolean> {

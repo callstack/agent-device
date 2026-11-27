@@ -128,6 +128,9 @@ export async function acquireConnectionLease(options: {
   positionals?: string[];
   leaseLedger: LeaseLedger;
   reusedLeaseCheck?: ReusedLeaseCheck;
+  savedState?: RemoteConnectionState;
+  /** Whether the command prepares a runtime under the lease; unknown counts as yes. */
+  preparesRuntime?: (flags: CliFlags) => boolean;
 }): Promise<{
   state: RemoteConnectionState;
   changed: boolean;
@@ -156,6 +159,8 @@ export async function acquireConnectionLease(options: {
       policy: leasePolicy,
       leaseLedger,
       reusedLeaseCheck: options.reusedLeaseCheck,
+      savedState: options.savedState,
+      preparesRuntime: options.preparesRuntime,
     });
     nextState = materialized.state;
     changed = materialized.changed;
@@ -207,6 +212,8 @@ async function materializeLeaseForCommand(options: {
   policy: ConnectionLeasePolicy;
   leaseLedger: LeaseLedger;
   reusedLeaseCheck?: ReusedLeaseCheck;
+  savedState?: RemoteConnectionState;
+  preparesRuntime?: (flags: CliFlags) => boolean;
 }): Promise<{
   state: RemoteConnectionState;
   changed: boolean;
@@ -243,6 +250,8 @@ async function materializeLeaseForCommand(options: {
     leaseBackend,
     policy,
     allocateBySpec: resolvedLeaseState.allocateBySpec,
+    savedState: options.savedState,
+    preparesRuntime: options.preparesRuntime?.(nextFlags) ?? true,
     check: options.reusedLeaseCheck,
   });
   let materializedLease = admissionCheckedLease
