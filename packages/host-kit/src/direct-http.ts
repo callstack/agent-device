@@ -64,90 +64,99 @@ export async function fetchOverDirectHttp(
     loadDirectHttpAgent('http:'),
     import('node:stream'),
   ]);
-  request.signal.throwIfAborted();
-  return await new Promise<Response>((resolve, reject) => {
-    let response: IncomingMessage | undefined;
-    const fail = (cause: unknown) => reject(new TypeError('fetch failed', { cause }));
-    const end = (reason: Error) => {
-      reject(reason);
-      response?.destroy(reason);
-      req.destroy();
-    };
-    const req = http.request(
-      {
-        host: url.hostname.replace(/^\[(.*)\]$/, '$1'),
-        port: url.port,
-        path: `${url.pathname}${url.search}`,
-        method: request.method,
-        headers: Object.fromEntries(request.headers),
-        agent,
-        timeout: IDLE_TIMEOUT_MS,
-      },
-      (res) => {
-        response = res;
-        // The body stream reports an error to its reader; an unread body has no other listener.
-        res.on('error', () => undefined);
-        const status = res.statusCode ?? 502;
-        if (request.redirect === 'error' && REDIRECT_STATUSES.has(status)) {
-          res.destroy();
-          fail(new Error('unexpected redirect'));
-          return;
-        }
-        const nullBody = request.method === 'HEAD' || NULL_BODY_STATUSES.has(status);
-        if (nullBody) res.resume();
-        resolve(
-          new Response(nullBody ? null : (Readable.toWeb(res) as ReadableStream<Uint8Array>), {
-            status,
-            statusText: res.statusMessage,
-            headers: responseHeadersOf(res),
+  // Taken over before anything can end the exchange, so that every way it fails releases it. A
+  // stream is destroyed or cancelled even while a read is pending, which the return of an async
+  // iterator over it would wait for.
+  const source =
+    streamedBody === undefined || streamedBody instanceof Readable
+      ? streamedBody
+      : streamedBody instanceof ReadableStream
+        ? Readable.fromWeb(streamedBody as WebReadableStream<Uint8Array>)
+        : Readable.from(streamedBody, { objectMode: false });
+  source?.on('error', () => undefined);
+  const exchange = () =>
+    new Promise<Response>((resolve, reject) => {
+      let response: IncomingMessage | undefined;
+      const fail = (cause: unknown) => reject(new TypeError('fetch failed', { cause }));
+      const end = (reason: Error) => {
+        reject(reason);
+        response?.destroy(reason);
+        req.destroy();
+      };
+      const req = http.request(
+        {
+          host: url.hostname.replace(/^\[(.*)\]$/, '$1'),
+          port: url.port,
+          path: `${url.pathname}${url.search}`,
+          method: request.method,
+          headers: Object.fromEntries(request.headers),
+          agent,
+          timeout: IDLE_TIMEOUT_MS,
+        },
+        (res) => {
+          response = res;
+          // The body stream reports an error to its reader; an unread body has no other listener.
+          res.on('error', () => undefined);
+          const status = res.statusCode ?? 502;
+          if (request.redirect === 'error' && REDIRECT_STATUSES.has(status)) {
+            res.destroy();
+            fail(new Error('unexpected redirect'));
+            return;
+          }
+          const nullBody = request.method === 'HEAD' || NULL_BODY_STATUSES.has(status);
+          if (nullBody) res.resume();
+          resolve(
+            new Response(nullBody ? null : (Readable.toWeb(res) as ReadableStream<Uint8Array>), {
+              status,
+              statusText: res.statusMessage,
+              headers: responseHeadersOf(res),
+            }),
+          );
+        },
+      );
+      req.on('timeout', () => {
+        end(
+          new AppError('COMMAND_FAILED', 'Plain-http request timed out waiting for the peer', {
+            reason: DIRECT_HTTP_REASONS.idleTimeout.reason,
+            timeoutMs: IDLE_TIMEOUT_MS,
           }),
         );
-      },
-    );
-    req.on('timeout', () => {
-      end(
-        new AppError('COMMAND_FAILED', 'Plain-http request timed out waiting for the peer', {
-          reason: DIRECT_HTTP_REASONS.idleTimeout.reason,
-          timeoutMs: IDLE_TIMEOUT_MS,
-        }),
+      });
+      const abort = () => end(request.signal.reason as Error);
+      request.signal.addEventListener('abort', abort, { once: true });
+      // This listener also keeps `request` reachable while the exchange lives: its signal follows
+      // the caller's only that long.
+      req.once('close', () => request.signal.removeEventListener('abort', abort));
+      req.on('error', fail);
+      if (source) {
+        source.on('error', (error) => {
+          fail(error);
+          req.destroy();
+        });
+        // Releases the source, and the file behind it, when the exchange ends first.
+        req.once('close', () => source.destroy());
+        source.pipe(req);
+        return;
+      }
+      if (!request.body) {
+        req.end();
+        return;
+      }
+      request.arrayBuffer().then(
+        (body) => req.end(Buffer.from(body)),
+        (error: unknown) => {
+          fail(error);
+          req.destroy();
+        },
       );
     });
-    const abort = () => end(request.signal.reason as Error);
-    request.signal.addEventListener('abort', abort, { once: true });
-    // This listener also keeps `request` reachable while the exchange lives: its signal follows
-    // the caller's only that long.
-    req.once('close', () => request.signal.removeEventListener('abort', abort));
-    req.on('error', fail);
-    if (streamedBody) {
-      // A stream is destroyed or cancelled even while a read is pending, which the return of an
-      // async iterator over it would wait for.
-      const source =
-        streamedBody instanceof Readable
-          ? streamedBody
-          : streamedBody instanceof ReadableStream
-            ? Readable.fromWeb(streamedBody as WebReadableStream<Uint8Array>)
-            : Readable.from(streamedBody, { objectMode: false });
-      source.on('error', (error) => {
-        fail(error);
-        req.destroy();
-      });
-      // Releases the source, and the file behind it, when the exchange ends first.
-      req.once('close', () => source.destroy());
-      source.pipe(req);
-      return;
-    }
-    if (!request.body) {
-      req.end();
-      return;
-    }
-    request.arrayBuffer().then(
-      (body) => req.end(Buffer.from(body)),
-      (error: unknown) => {
-        fail(error);
-        req.destroy();
-      },
-    );
-  });
+  try {
+    request.signal.throwIfAborted();
+    return await exchange();
+  } catch (error) {
+    source?.destroy();
+    throw error;
+  }
 }
 
 /**

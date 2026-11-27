@@ -12,8 +12,12 @@ const UPSTREAM_ADMISSION_REASONS = {
 
 /** Refuses every upstream base URL the proxy must not send to. The refusal never quotes it. */
 export function assertAdmittedUpstream(upstreamBaseUrl: string): void {
-  const upstream = assertSecureCredentialTransport(upstreamBaseUrl, 'Proxy upstreamBaseUrl');
-  if (!upstream.username && !upstream.password) return;
+  // Checked first, so that a username or password gets this refusal whatever the scheme.
+  const upstream = URL.parse(upstreamBaseUrl);
+  if (!upstream?.username && !upstream?.password) {
+    assertSecureCredentialTransport(upstreamBaseUrl, 'Proxy upstreamBaseUrl');
+    return;
+  }
   throw new AppError(
     'INVALID_ARGS',
     'Proxy upstreamBaseUrl must not carry a username or password.',

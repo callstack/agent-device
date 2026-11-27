@@ -269,6 +269,25 @@ test.each([
   assert.equal(fetchMock.mock.calls.length, 0);
 });
 
+test.each(['fe80::1', '2001:db8::1', 'fc00::1', '10.0.0.7', 'iphone.coredevice.local'])(
+  'a reported tunnel address of %s is no tunnel route, so it never receives the runner token',
+  async (reported) => {
+    mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
+    stubSuccessfulFetch();
+    mockRunCmd.mockImplementation(makeTunnelIpLookup(reported));
+
+    await assert.rejects(
+      () => sendRunnerCommandOnce(iosDevice, RUNNER_ENDPOINT_FIXTURE, { command: 'uptime' }),
+      (error: unknown) => {
+        assert.equal((error as AppError).details?.reason, 'insecure_credential_transport');
+        assert.equal((error as AppError).details?.dispatched, 'no');
+        return true;
+      },
+    );
+    assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+  },
+);
+
 test('sendRunnerCommandOnce writes nothing for a device with no route, and says so', async () => {
   mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
   const fetchMock = vi.fn();

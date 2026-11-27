@@ -1,3 +1,4 @@
+import { BlockList, isIPv6 } from 'node:net';
 import type { RunnerEndpoint } from './runner-contract.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from './host.ts';
@@ -21,10 +22,11 @@ export type RunnerCommandRoute =
       cachedTunnelIp: boolean;
       /**
        * How the URL was resolved: this Mac's loopback, the tunnel address CoreDevice reports for
-       * this device, or a URL a provider forwards. Only the tunnel route may carry the runner token
-       * over plain http to a host that is not loopback, because its tunnel encrypts the traffic.
+       * this device, a reported address that is not a tunnel address, or a URL a provider forwards.
+       * Only the tunnel route may carry the runner token over plain http to a host that is not
+       * loopback, because its tunnel encrypts the traffic.
        */
-      via: 'loopback' | 'coredevice-tunnel' | 'forwarded';
+      via: 'loopback' | 'coredevice-tunnel' | 'device-address' | 'forwarded';
     }
   | {
       kind: 'usbmux';
@@ -126,8 +128,15 @@ function buildTunnelRoute(
     kind: 'network',
     url: tunnelIp ? `http://[${tunnelIp}]:${port}/command` : null,
     cachedTunnelIp,
-    via: 'coredevice-tunnel',
+    via: tunnelIp && isCoreDeviceTunnelAddress(tunnelIp) ? 'coredevice-tunnel' : 'device-address',
   };
+}
+
+/** CoreDevice gives its tunnel a unique local IPv6 address, in `fd00::/8`. */
+function isCoreDeviceTunnelAddress(address: string): boolean {
+  const range = new BlockList();
+  range.addSubnet('fd00::', 8, 'ipv6');
+  return isIPv6(address) && range.check(address, 'ipv6');
 }
 
 function readDeviceTunnelIpCache(deviceId: string): string | null {

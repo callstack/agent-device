@@ -106,13 +106,17 @@ export async function postRunnerCommandOverRoute(
     );
   }
   // The request carries the runner token, and a forwarded one the provider's own headers. The
-  // resolver builds the loopback URL and the CoreDevice tunnel URL itself; the tunnel is the one
-  // plain-http route off this machine. Every other route meets the credential transport rule.
+  // resolver marks the loopback URL it builds and the CoreDevice tunnel address it recognizes; the
+  // tunnel is the one plain-http route off this machine. Every other route meets the credential
+  // transport rule.
   if (route.via !== 'loopback' && route.via !== 'coredevice-tunnel') {
     const { assertSecureCredentialTransport } =
       await import('@agent-device/contracts/credential-transport');
     try {
-      assertSecureCredentialTransport(route.url, 'Runner forwarding URL');
+      assertSecureCredentialTransport(
+        route.url,
+        route.via === 'forwarded' ? 'Runner forwarding URL' : 'Runner device address',
+      );
     } catch (error) {
       throw discloseDispatch(error as AppError, 'no');
     }

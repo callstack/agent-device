@@ -185,6 +185,28 @@ test.each([
   },
 );
 
+test.each([
+  'http://operator@daemon.example.test',
+  'http://operator:hunter2@127.0.0.1:4310',
+  'https://operator:hunter2@daemon.example.test',
+])('%s is refused for its username whatever its scheme', async (upstreamBaseUrl) => {
+  const upstreamFetch = vi.fn(async () => Response.json({}));
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'client-secret',
+    upstreamFetch,
+  });
+
+  const response = await proxy.handle(rpc());
+
+  expect(response.status).toBe(400);
+  const refusal = await response.text();
+  expect(refusal).toContain('proxy_upstream_userinfo');
+  expect(refusal).not.toMatch(/operator|hunter2/);
+  expect(upstreamFetch).not.toHaveBeenCalled();
+});
+
 test('a relayed Location is dropped when its path holds the upstream token as written', async () => {
   // A token that reads differently once decoded: `a%2Fb` decodes to `a/b`.
   const proxy = createDaemonProxy({

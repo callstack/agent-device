@@ -335,6 +335,27 @@ test.each(stalledStreams)('an abort during an upload releases %s', async (_label
   await server.closed;
 });
 
+test.each(stalledStreams)(
+  'an upload aborted before it starts releases %s and sends nothing',
+  async (_label, source) => {
+    const server = await serveUpload();
+    const released = deferred();
+    const reason = new Error('caller gave up');
+
+    await expect(
+      fetchWithCredential(server.origin, {
+        method: 'PUT',
+        body: source(released.resolve) as BodyInit,
+        signal: AbortSignal.abort(reason),
+        duplex: 'half',
+      } as RequestInit),
+    ).rejects.toBe(reason);
+
+    await released.promise;
+    expect(server.uploads).toEqual([]);
+  },
+);
+
 test('a streamed body that fails rejects the request as fetch does', async () => {
   const server = await serveUpload();
   const failure = new Error('disk gone');
