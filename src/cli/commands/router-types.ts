@@ -6,6 +6,7 @@ import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { CliCommandName } from '@agent-device/command-registry/catalog';
 import type { CommandProgressState } from '@agent-device/command-output';
 import type { ReplayTestReporterRuntime } from '../replay-test/reporting.ts';
+import type { CliRunInputs } from '../../commands/cli-runner.ts';
 
 export type ClientCommandParams = {
   /** The host this run reads its environment and working directory from. */
@@ -17,6 +18,7 @@ export type ClientCommandParams = {
   replayTestReporterRuntime?: ReplayTestReporterRuntime;
   /** Progress this run's transport already rendered to stderr, read by the output formatters. */
   commandProgress?: CommandProgressState;
+  inputs?: CliRunInputs;
   /** The device a proxy backend granted for the lease's device spec; `open` reports it. */
   leaseDevice?: LeaseDevice;
   /** The record `disconnect` claimed before its client was built, or `null` when it claimed none. */

@@ -15,12 +15,19 @@ import {
 } from '@agent-device/command-surface';
 import type { CliFlags } from '@agent-device/contracts/command';
 
+/** Input a CLI run can read only once. A rerun of the command reuses what is here. */
+export type CliRunInputs = {
+  /** The `fill --text-stdin` value. */
+  fillText?: Promise<string>;
+};
+
 type CliRunOptions = {
   client: AgentDeviceClient;
   command: CommandName;
   positionals: string[];
   flags: CliFlags;
   commandProgress?: CommandProgressState;
+  inputs?: CliRunInputs;
   /** The CLI run's own host environment; output formatters read styling from it (#3794). */
   env: EnvMap;
 };
@@ -35,7 +42,8 @@ export async function runCliCommandWithOutput(options: CliRunOptions): Promise<{
 }> {
   const input = readInputFromCli(options.command, options.positionals, options.flags);
   if (options.flags.textStdin) {
-    const text = await readFillTextFromStdin(process.stdin);
+    const inputs = options.inputs ?? {};
+    const text = await (inputs.fillText ??= readFillTextFromStdin(process.stdin));
     registerDiagnosticSensitiveValue(text);
     input.text = text;
   }

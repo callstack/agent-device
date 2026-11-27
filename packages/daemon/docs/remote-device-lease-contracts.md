@@ -71,7 +71,8 @@ Every lease-admission refusal comes after authentication and tenant scoping, and
 If a request that would do device work names the expired lease of its session, the daemon refuses before it tears that session down.
 The lease expiry sweep ends that session later.
 For a `close` or an admission-exempt command, such as `lease_release`, the daemon tears that session down at once.
-A `close` also tears down a session whose lease the registry no longer holds.
+Such a command also tears down a session whose lease the registry no longer holds.
+If another request holds that session, the daemon leaves the teardown to the queued lease end.
 A refusal of `close` states no `details.dispatched`, because the teardown may have run.
 A sensitive `fill` value never redacts a typed `details.dispatched` or a shared lease `details.reason`. Any other value in those fields stays redacted.
 A daemon that makes this refusal advertises the `lease-admission` capability on `/health`.
@@ -94,6 +95,7 @@ These commands keep the heartbeat:
 - A command exempt from lease admission.
 - `install`, `reinstall`, and `install-from-source`, which can upload a local artifact before admission.
 - A command with `--save-script`.
+- `batch`, `replay`, and `test`, which read local scripts while they build the request. A script path can be a pipe.
 - A by-spec `open` that allocates fresh: the connection names no device, or the request names a device spec or a device selector.
 
 A by-spec `open` that names no spec or selector reuses the stored device without a heartbeat.

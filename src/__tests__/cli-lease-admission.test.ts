@@ -1,4 +1,5 @@
-import { test } from 'vitest';
+import { Readable } from 'node:stream';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -247,6 +248,26 @@ test('a resent command refused again is not sent a third time', async () => {
   fs.rmSync(ws.root, { recursive: true, force: true });
 });
 
+// A pipe can be read only once, so the rerun sends what the refused attempt already read.
+test('a rerun fill --text-stdin sends the piped text again', async () => {
+  const stdin = vi
+    .spyOn(process, 'stdin', 'get')
+    .mockReturnValue(Readable.from(['piped-secret\n']) as typeof process.stdin);
+  const ws = workspace();
+  const result = await run(ws, ['fill', '@e3', '--text-stdin'], {
+    leaseAdmission: true,
+    refusal: () => admissionRefusal('no'),
+  });
+  stdin.mockRestore();
+
+  assert.equal(result.code, null, result.stdout);
+  assert.deepEqual(commandsOf(result), ['fill', 'lease_allocate', 'fill']);
+  assert.deepEqual(result.calls[0]?.positionals, ['@e3', 'piped-secret']);
+  assert.deepEqual(result.calls[2]?.positionals, ['@e3', 'piped-secret']);
+
+  fs.rmSync(ws.root, { recursive: true, force: true });
+});
+
 test.each<[string, string[], Partial<RemoteConnectionState>]>([
   [
     'a host-allocated macos-app lease',
@@ -267,6 +288,9 @@ test.each<[string, string[], Partial<RemoteConnectionState>]>([
   ['a remote --save-script open', ['open', 'com.example', '--save-script', 'flow.ad'], {}],
   ['a proxy open naming another device mode', ['open', 'com.example', '--device-mode', 'full'], {}],
   ['a proxy open with no stored device', ['open', 'com.example'], { deviceKey: undefined }],
+  ['a batch', ['batch', '--steps', '[{"command":"snapshot","input":{}}]'], {}],
+  ['a replay, which reads its script from a path', ['replay', '/dev/null'], {}],
+  ['a test run, which reads its scripts from paths', ['test', 'flow.ad'], {}],
 ])('%s keeps the heartbeat on a lease-admission daemon', async (_name, argv, connection) => {
   const ws = workspace(connection);
   const result = await run(ws, argv, { leaseAdmission: true });

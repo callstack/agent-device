@@ -18,7 +18,12 @@ import {
 } from '../../__tests__/support/device-claim-store.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { createRequestExecutionScope } from '../request-execution-scope.ts';
+import {
+  createRequestExecutionScope,
+  getLeaseRegistryExecutionLocks,
+} from '../request-execution-scope.ts';
+import { existingSessionExecutionLockKeys } from '../request-binding.ts';
+import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
   platformRequestScopeFixture,
@@ -166,40 +171,39 @@ test.each(['rebuild', 'retire'] as const)(
   },
 );
 
-test.each(['expired', 'released'] as const)(
-  'a close naming its session lease that is %s tears down the session and claim and rents nothing',
-  async (fate) => {
-    let now = 1_000;
-    const sessionStore = makeSessionStore('agent-device-request-scope-');
-    const leaseRegistry = new LeaseRegistry({
-      defaultLeaseTtlMs: 10,
-      minLeaseTtlMs: 1,
-      now: () => now,
-    });
-    const owner = { tenantId: 'tenant-a', runId: 'run-1' };
-    const lease = leaseRegistry.allocateLease(owner);
-    const meta = { ...owner, leaseId: lease.leaseId, sessionIsolation: 'tenant' as const };
-    const session = makeSession('tenant-a:default', {
-      device: LINUX_DEVICE,
-      lease: { ...owner, leaseId: lease.leaseId, leaseBackend: lease.backend },
-    });
-    const { stateDir } = claimStores();
-    const claim = await acquireDeviceClaim({
-      env: process.env,
-      device: session.device,
-      session: session.name,
-      workspace: stateDir,
-      stateDir,
-      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
-    });
-    if (claim.status !== 'acquired') throw new Error('expected an acquired claim');
-    sessionStore.publish(session.name, { ...session, deviceClaim: claim.ownership });
-    const claimFile = deviceClaimFilePath(claim.ownership.deviceKey);
-    expect(fs.existsSync(claimFile)).toBe(true);
-    if (fate === 'expired') now = 1_011;
-    else leaseRegistry.releaseLease({ ...owner, leaseId: lease.leaseId });
-    const task = vi.fn(async () => 'ran');
+/** A tenant session that holds a lease and a device claim, with the lease then expired or released. */
+async function sessionWhoseLeaseEnded(fate: 'expired' | 'released') {
+  let now = 1_000;
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry({
+    defaultLeaseTtlMs: 10,
+    minLeaseTtlMs: 1,
+    now: () => now,
+  });
+  const owner = { tenantId: 'tenant-a', runId: 'run-1' };
+  const lease = leaseRegistry.allocateLease(owner);
+  const meta = { ...owner, leaseId: lease.leaseId, sessionIsolation: 'tenant' as const };
+  const session = makeSession('tenant-a:default', {
+    device: LINUX_DEVICE,
+    lease: { ...owner, leaseId: lease.leaseId, leaseBackend: lease.backend },
+  });
+  const { stateDir } = claimStores();
+  const claim = await acquireDeviceClaim({
+    env: process.env,
+    device: session.device,
+    session: session.name,
+    workspace: stateDir,
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  if (claim.status !== 'acquired') throw new Error('expected an acquired claim');
+  sessionStore.publish(session.name, { ...session, deviceClaim: claim.ownership });
+  const claimFile = deviceClaimFilePath(claim.ownership.deviceKey);
+  expect(fs.existsSync(claimFile)).toBe(true);
+  if (fate === 'expired') now = 1_011;
+  else leaseRegistry.releaseLease({ ...owner, leaseId: lease.leaseId });
 
+  const run = async (command: string, task: () => Promise<unknown>) => {
     const scope = await createRequestExecutionScope({
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
@@ -207,7 +211,7 @@ test.each(['expired', 'released'] as const)(
       trackClaimRecoveryDisposal: () => {},
       deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
       platformRequestScope: platformRequestScopeFixture(),
-      req: makeRequest({ command: 'close', session: session.name, meta }),
+      req: makeRequest({ command, session: session.name, meta }),
       sessionStore,
       leaseRegistry,
       platformResourceCleanup: {
@@ -217,7 +221,19 @@ test.each(['expired', 'released'] as const)(
         retainExecutionHostAfterClose: () => false,
       },
     });
-    const refusal = await scope.runLocked(task).catch((error: unknown) => error);
+    return await scope.runLocked(task);
+  };
+  return { sessionStore, leaseRegistry, session, claimFile, run };
+}
+
+test.each(['expired', 'released'] as const)(
+  'a close naming its session lease that is %s tears down the session and claim and rents nothing',
+  async (fate) => {
+    const { sessionStore, leaseRegistry, session, claimFile, run } =
+      await sessionWhoseLeaseEnded(fate);
+    const task = vi.fn(async () => 'ran');
+
+    const refusal = await run('close', task).catch((error: unknown) => error);
 
     expect(sessionStore.get(session.name)).toBeUndefined();
     expect(fs.existsSync(claimFile)).toBe(false);
@@ -228,3 +244,37 @@ test.each(['expired', 'released'] as const)(
     expect(refusal).not.toHaveProperty('details.dispatched');
   },
 );
+
+test.each(['lease_release', 'lease_heartbeat'])(
+  '%s for a released lease tears down the session still holding it',
+  async (command) => {
+    const { sessionStore, session, claimFile, run } = await sessionWhoseLeaseEnded('released');
+
+    await run(command, async () => 'ran');
+
+    expect(sessionStore.get(session.name)).toBeUndefined();
+    expect(fs.existsSync(claimFile)).toBe(false);
+  },
+);
+
+// Lease commands take no session lock, and the queued lease end waits for the command that holds it.
+test('lease_heartbeat leaves a session that another request holds to the queued lease end', async () => {
+  const { sessionStore, leaseRegistry, session, claimFile, run } =
+    await sessionWhoseLeaseEnded('released');
+  let finish!: () => void;
+  const running = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const held = withRequestExecutionLockKeys(
+    getLeaseRegistryExecutionLocks(leaseRegistry),
+    existingSessionExecutionLockKeys(session.name, session.device.id),
+    async () => await running,
+  );
+
+  await run('lease_heartbeat', async () => 'ran');
+
+  expect(sessionStore.get(session.name)).toBeDefined();
+  expect(fs.existsSync(claimFile)).toBe(true);
+  finish();
+  await held;
+});

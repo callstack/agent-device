@@ -122,6 +122,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
     sessionStore,
     leaseRegistry,
     teardownSession,
+    whileSessionIdle: async (_ref, end) => await end(),
   });
 
   expect(cleaned).toBe(true);
@@ -147,10 +148,13 @@ function sessionWithExpiredLease() {
   sessionStore.publish('default', session);
   now = 1_011;
   const teardownSession = vi.fn(async () => {});
-  const cleanup = (request: Partial<DaemonRequest> & Pick<DaemonRequest, 'command'>) =>
+  const cleanup = (
+    request: Partial<DaemonRequest> & Pick<DaemonRequest, 'command'>,
+    spell: (leaseId: string) => string = (leaseId) => leaseId,
+  ) =>
     cleanupExpiredLeasedSession({
       req: makeRequest({
-        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: lease.leaseId },
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: spell(lease.leaseId) },
         ...request,
       }),
       env: process.env,
@@ -158,6 +162,7 @@ function sessionWithExpiredLease() {
       sessionStore,
       leaseRegistry,
       teardownSession,
+      whileSessionIdle: async (_ref, end) => await end(),
     });
   return { sessionStore, session, teardownSession, cleanup };
 }
@@ -165,15 +170,19 @@ function sessionWithExpiredLease() {
 // The refusal says `dispatched: no`, so a request that would do device work under the expired lease
 // must not tear its session down (recording, claim, runner) before the client reallocates; the
 // expiry sweep does that.
-test.each<[string, Partial<DaemonRequest> & Pick<DaemonRequest, 'command'>]>([
-  ['press', { command: 'press' }],
-  ['an app-only close', { command: 'close', internal: { closeAppOnly: true } }],
+test.each<
+  [string, Partial<DaemonRequest> & Pick<DaemonRequest, 'command'>, (leaseId: string) => string]
+>([
+  ['press', { command: 'press' }, (id) => id],
+  // The registry reads lease ids without case or surrounding space.
+  ['a press spelling the id differently', { command: 'press' }, (id) => ` ${id.toUpperCase()} `],
+  ['an app-only close', { command: 'close', internal: { closeAppOnly: true } }, (id) => id],
 ])(
   'cleanupExpiredLeasedSession refuses %s naming the expired lease before any teardown',
-  async (_name, request) => {
+  async (_name, request, spell) => {
     const { sessionStore, session, teardownSession, cleanup } = sessionWithExpiredLease();
 
-    await expect(cleanup(request)).rejects.toMatchObject({
+    await expect(cleanup(request, spell)).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
       details: { reason: 'LEASE_NOT_FOUND', dispatched: 'no' },
     });

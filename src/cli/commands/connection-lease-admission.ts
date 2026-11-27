@@ -1,5 +1,8 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { commandMeetsLeaseAdmission } from '@agent-device/command-registry/registry';
+import {
+  commandMeetsLeaseAdmission,
+  isDelegatingCompositeCommand,
+} from '@agent-device/command-registry/registry';
 import {
   isUndispatchedInactiveLeaseRefusal,
   leaseProviderRequiringRuntime,
@@ -50,6 +53,8 @@ const ARTIFACT_UPLOAD_COMMANDS: ReadonlySet<string> = new Set([
  * - a provider with a runtime runs lifecycle hooks on a heartbeat, such as an instance liveness check;
  * - a command exempt from lease admission is never checked there;
  * - an upload of a local artifact runs before admission, under the lease;
+ * - a composite (`batch`, `replay`, `test`) reads local scripts while it builds its request, and a
+ *   rerun could not read a pipe again;
  * - `--save-script` records its publication before the send;
  * - a by-spec allocation binds the device from the heartbeat answer, unless the connection already
  *   names the device and the request names no other device or spec.
@@ -74,6 +79,7 @@ export function leaseCheckedByAdmission(
     leaseProviderRequiringRuntime({ leaseProvider: state.leaseProvider }) !== undefined ||
     !commandMeetsLeaseAdmission(options.command) ||
     ARTIFACT_UPLOAD_COMMANDS.has(options.command) ||
+    isDelegatingCompositeCommand({ command: options.command, positionals: [] }) ||
     flags.saveScript !== undefined ||
     (options.allocateBySpec && !bindsStoredDevice(state, flags))
   ) {

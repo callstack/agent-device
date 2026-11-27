@@ -5,6 +5,7 @@ import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
 import { isLeaseAdmissionExempt } from '../core/daemon-command-registry.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import { normalizeLeaseId } from '../resources/lease-registry-scope.ts';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
@@ -66,8 +67,9 @@ export async function releaseExpiredProviderLease(
  * teardown. A composite is refused so it does not lose its session mid-run. A request that would do
  * device work under that lease is refused so its client can reallocate and resend: the refusal says
  * `dispatched: no`, so nothing of the request may run first, and the lease expiry sweep ends the
- * session instead. A `close` or an admission-exempt command ends it now, and a `close` also ends a
- * session whose lease the registry no longer holds.
+ * session instead. A `close` or an admission-exempt command ends it now. It also ends a session whose
+ * lease the registry no longer holds, unless another request holds the session: the queued lease end
+ * then runs after that request.
  */
 export async function cleanupExpiredLeasedSession(params: {
   req: DaemonRequest;
@@ -76,6 +78,8 @@ export async function cleanupExpiredLeasedSession(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
+  /** Runs `end` under the session's execution locks, or skips it while another request holds one. */
+  whileSessionIdle: (ref: SessionRef, end: () => Promise<void>) => Promise<void>;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
@@ -87,19 +91,33 @@ export async function cleanupExpiredLeasedSession(params: {
       dispatched: 'no',
     });
   });
-  const closesLapsedSession =
-    endsSession(params.req) &&
-    !isBoundedCompositeRequest(params.req) &&
-    params.leaseRegistry.inspectLeaseBackend(lease.leaseId) === undefined;
-  if (!expired && !closesLapsedSession) return false;
-  await endLeasedSession(
-    ref,
-    params.sessionStore,
-    params.teardownSession,
-    'LEASE_EXPIRED',
-    params.env,
-  );
-  return true;
+  const end = async (current: SessionRef) =>
+    await endLeasedSession(
+      current,
+      params.sessionStore,
+      params.teardownSession,
+      'LEASE_EXPIRED',
+      params.env,
+    );
+  if (expired) {
+    await end(ref);
+    return true;
+  }
+  if (
+    doesDeviceWork(params.req) ||
+    isBoundedCompositeRequest(params.req) ||
+    params.leaseRegistry.inspectLeaseBackend(lease.leaseId) !== undefined
+  ) {
+    return false;
+  }
+  let ended = false;
+  await params.whileSessionIdle(ref, async () => {
+    // A request that held the session first can have ended it.
+    if (params.sessionStore.resolveCurrent(ref)?.lease?.leaseId !== lease.leaseId) return;
+    await end(params.sessionStore.refresh(ref));
+    ended = true;
+  });
+  return ended;
 }
 
 function refusesExpiredLeaseTeardown(req: DaemonRequest, expiredLeaseId: string): boolean {
@@ -107,8 +125,13 @@ function refusesExpiredLeaseTeardown(req: DaemonRequest, expiredLeaseId: string)
     req.command === 'batch' ||
     req.command === 'replay' ||
     isBoundedCompositeRequest(req) ||
-    (doesDeviceWork(req) && resolveLeaseScope(req).leaseId === expiredLeaseId)
+    (doesDeviceWork(req) && namesLease(req, expiredLeaseId))
   );
+}
+
+/** Compared as the registry reads lease ids, so another spelling of the id names the same lease. */
+function namesLease(req: DaemonRequest, leaseId: string): boolean {
+  return normalizeLeaseId(resolveLeaseScope(req).leaseId) === normalizeLeaseId(leaseId);
 }
 
 function doesDeviceWork(req: DaemonRequest): boolean {

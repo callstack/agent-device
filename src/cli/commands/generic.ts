@@ -25,6 +25,7 @@ export async function runGenericClientBackedCommand({
   debug,
   replayTestReporterRuntime,
   commandProgress,
+  inputs,
   leaseDevice,
 }: ClientCommandParams & { command: ClientBackedCliCommandName }): Promise<boolean> {
   const { result, cliOutput: formatted } = await runCliCommandWithOutput({
@@ -33,6 +34,7 @@ export async function runGenericClientBackedCommand({
     positionals,
     flags,
     commandProgress,
+    inputs,
     env: host.env,
   });
   const cliOutput =

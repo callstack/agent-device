@@ -1,4 +1,6 @@
 import { resolveCommandAndroidAvdSelection } from '../core/daemon-command-registry.ts';
+import { applyCommandDefaults } from '@agent-device/command-registry/registry';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   hasDeviceSelectionInput,
@@ -69,6 +71,16 @@ export async function resolveRequestExecutionLockPlan(params: {
   const ids = !device ? [] : req.command === 'open' ? hostAndDeviceIds(device) : [device.id];
   for (const id of ids) keys.add(deviceExecutionLockKey(id));
   return { keys: orderRequestExecutionLockKeys(keys), deviceId: device?.id };
+}
+
+export function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
+  const flags = { ...(req.flags ?? {}) };
+  const changed = applyCommandDefaults(req.command, flags);
+  if (!changed) return req;
+  return {
+    ...req,
+    flags: flags as CommandFlags,
+  };
 }
 
 export function prepareLockedRequestBinding(params: {

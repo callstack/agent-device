@@ -45,6 +45,7 @@ import {
   type SessionTeardown,
 } from '../sessions/lease-lifecycle.ts';
 import {
+  applyRequestCommandDefaults,
   existingSessionExecutionLockKeys,
   prepareLockedRequestBinding,
   resolveRequestExecutionLockPlan,
@@ -58,6 +59,7 @@ import {
 import {
   createRequestExecutionLocks,
   withRequestExecutionLockKeys,
+  runWhileRequestExecutionLockKeysFree,
 } from './request-execution-locks.ts';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
@@ -98,10 +100,7 @@ import {
   createDeviceClaimAdmission,
   type DeviceClaimAdmission,
 } from '../resources/device/device-claim-admission.ts';
-import {
-  applyCommandDefaults,
-  resolveCommandDeviceClaimPolicy,
-} from '@agent-device/command-registry/registry';
+import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import {
@@ -470,6 +469,12 @@ export async function createRequestExecutionScope(params: {
             sessionStore,
             leaseRegistry,
             req: scopedReq,
+            whileSessionIdle: async (ref, end) =>
+              await runWhileRequestExecutionLockKeysFree(
+                executionLocks,
+                existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
+                end,
+              ),
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,
@@ -702,16 +707,6 @@ function requirePlatformCleanup(
     );
   }
   return cleanup;
-}
-
-function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
-  const flags = { ...(req.flags ?? {}) };
-  const changed = applyCommandDefaults(req.command, flags);
-  if (!changed) return req;
-  return {
-    ...req,
-    flags: flags as CommandFlags,
-  };
 }
 
 export async function prepareLockedRequestScope(params: {
