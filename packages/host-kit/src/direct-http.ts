@@ -1,5 +1,4 @@
-import type { Agent } from 'node:http';
-import { loadNodeHttpRequester } from './internal/transport.ts';
+import type { Agent, IncomingMessage } from 'node:http';
 
 // Loaded at send time by the code that sends a credential over plain http, never at module scope.
 
@@ -20,6 +19,16 @@ export async function loadDirectHttpAgent(protocol: string): Promise<Agent | und
 
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
+/** A `node:http` response's headers as Fetch `Headers`, repeated values kept in order. */
+export function responseHeadersOf(res: IncomingMessage): Headers {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(res.headers)) {
+    if (value === undefined) continue;
+    for (const item of Array.isArray(value) ? value : [value]) headers.append(name, item);
+  }
+  return headers;
+}
+
 /**
  * Sends one Fetch request over `node:http` with `loadDirectHttpAgent`, for a plain-http
  * destination that receives a credential. It never follows a redirect: a 3xx is returned as is.
@@ -27,8 +36,9 @@ const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 export async function fetchOverDirectHttp(request: Request): Promise<Response> {
   const url = new URL(request.url);
   if (url.protocol !== 'http:') throw new TypeError('fetchOverDirectHttp sends plain http only');
-  const [http, agent, { Readable }] = await Promise.all([
-    loadNodeHttpRequester('http:'),
+  // The module object itself, so a stubbed `request` is the one called.
+  const [{ default: http }, agent, { Readable }] = await Promise.all([
+    import('node:http'),
     loadDirectHttpAgent('http:'),
     import('node:stream'),
   ]);
@@ -47,11 +57,7 @@ export async function fetchOverDirectHttp(request: Request): Promise<Response> {
       },
       (res) => {
         const status = res.statusCode ?? 502;
-        const headers = new Headers();
-        for (const [name, value] of Object.entries(res.headers)) {
-          if (value === undefined) continue;
-          for (const item of Array.isArray(value) ? value : [value]) headers.append(name, item);
-        }
+        const headers = responseHeadersOf(res);
         const nullBody = request.method === 'HEAD' || NULL_BODY_STATUSES.has(status);
         if (nullBody) res.resume();
         resolve(

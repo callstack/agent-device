@@ -11,6 +11,7 @@ import {
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
   type TransferPhaseWatchdog,
 } from '@agent-device/host-kit/transport';
+import { responseHeadersOf } from '@agent-device/host-kit/direct-http';
 
 const PROXY_TRANSFER_AGGREGATE_MS = 600_000;
 
@@ -205,11 +206,7 @@ async function exchangeOverNodeHttp(
       answered = true;
       outgoingStopped.abort();
       exchange.watchdog.suspend();
-      const headers = new Headers();
-      for (const [name, value] of Object.entries(res.headers)) {
-        if (value === undefined) continue;
-        for (const item of Array.isArray(value) ? value : [value]) headers.append(name, item);
-      }
+      const headers = responseHeadersOf(res);
       if (request.method === 'HEAD' || NULL_BODY_STATUSES.has(status)) {
         res.resume();
         void responseClosed.then(finish);
