@@ -33,17 +33,12 @@ export async function sendCheckedRpcAfterConnectFailure(
   }
   // A cached `/health` answer predates this failure, so recovery decides on fresh probes only.
   await port.invalidateHealth();
-  if (!error.timedOut) {
-    throw remoteDaemonUnavailableError({
-      daemonBaseUrl: undefined,
-      attempts: 1,
-      hint: REMOTE_DAEMON_UNREACHABLE_HINT,
-    });
-  }
   try {
+    // The observed connect verdict is the first failed probe: a refused connection is not transient
+    // and fails at once, and only a connect that timed out enters the probe loop.
     await recoverRemoteDaemonHealth({
       info: port.info,
-      failedProbe: { reachable: false, timedOut: true },
+      failedProbe: error.timedOut ? { reachable: false, timedOut: true } : { reachable: false },
       recovery:
         port.timeoutMs === undefined
           ? undefined

@@ -76,6 +76,45 @@ function firstCheckedConnectHangs(healthStatus = 200, healthProtocol = 3): Call[
   return calls;
 }
 
+/** Every checked POST is refused before it connects, while `/health` answers 503. */
+function checkedConnectRefused(): Call[] {
+  const calls: Call[] = [];
+  vi.spyOn(http, 'request').mockImplementation(((
+    options: { method?: string; path?: string },
+    callback: (res: EventEmitter) => void,
+  ) => {
+    const call = {
+      method: options.method ?? 'GET',
+      path: options.path ?? '',
+      at: performance.now(),
+    };
+    calls.push(call);
+    const req = Object.assign(new EventEmitter(), {
+      write: () => {},
+      destroy: () => {},
+      end: () => {
+        if (call.method === 'POST') {
+          process.nextTick(() =>
+            req.emit(
+              'error',
+              Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+            ),
+          );
+          return;
+        }
+        const res = Object.assign(fakeResponse(), { statusCode: 503 });
+        process.nextTick(() => {
+          callback(res);
+          res.emit('data', '');
+          res.emit('end');
+        });
+      },
+    });
+    return req;
+  }) as unknown as typeof http.request);
+  return calls;
+}
+
 /** Advances fake time to the next timer once real work has gone quiet. Returns the stop. */
 function driveFakeTime(): () => Promise<void> {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
@@ -217,6 +256,30 @@ test('recovery that finds protocol skew proves nothing left and names no endpoin
     assert.equal(details?.dispatched, 'no');
     assert.equal(details?.daemonBaseUrl, undefined);
     assert.equal(details?.remoteRpcProtocolVersion, 99);
+  } finally {
+    await stopDriving();
+  }
+});
+
+test('a refused checked POST fails at once even while /health answers 503', async () => {
+  const calls = checkedConnectRefused();
+  const stopDriving = driveFakeTime();
+  try {
+    const started = performance.now();
+    const outcome = await sendToDaemon(sessionList('checked'), { authToken: freshToken() }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const details = (outcome as { details?: Record<string, unknown> }).details;
+    assert.equal(details?.reason, 'remote_daemon_unavailable');
+    assert.equal(details?.dispatched, 'no');
+    assert.equal(details?.attempts, 1);
+    // No probe loop: one refused POST, no /health retries, no time spent waiting.
+    assert.deepEqual(
+      calls.map(({ method }) => method),
+      ['POST'],
+    );
+    assert.ok(performance.now() - started < 1_000);
   } finally {
     await stopDriving();
   }
