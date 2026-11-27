@@ -2,6 +2,7 @@
 // loopback, whatever transport carries it, and not to wherever an upstream redirect points.
 
 import { afterEach, expect, test, vi } from 'vitest';
+import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import type { AddressInfo } from 'node:net';
@@ -93,12 +94,24 @@ test.each([
       new Request('https://gateway.example.test/agent-device/artifacts/build', {
         headers: { authorization: 'Bearer client-secret' },
       }),
+      new Request(
+        'https://gateway.example.test/agent-device/sessions/default/requests/ref-1/diagnostics',
+        { headers: { authorization: 'Bearer client-secret' } },
+      ),
+      rpc('upload/preflight'),
     ]) {
       const response = await proxy.handle(request);
       expect(response.status, request.url).toBe(400);
       const refusal = await response.text();
       expect(refusal, request.url).toContain('Proxy upstreamBaseUrl');
-      expect(refusal, request.url).not.toMatch(/operator|hunter2/);
+      expect(refusal, request.url).not.toMatch(/operator|hunter2|daemon\.(invalid|example)/);
+      const body = JSON.parse(refusal) as {
+        reason?: string;
+        error?: { data?: { details?: { reason?: string } } };
+      };
+      expect(body.error?.data?.details?.reason ?? body.reason, request.url).toBe(
+        upstreamBaseUrl.includes('@') ? 'proxy_upstream_userinfo' : 'insecure_credential_transport',
+      );
     }
     expect(sent).toEqual([]);
   },
@@ -273,4 +286,39 @@ test.each([
 
   expect(response.status).toBe(500);
   expect(await response.json()).toMatchObject({ ok: false, code: 'COMMAND_FAILED' });
+});
+
+test('a default upstream on a localhost that resolves off loopback receives nothing', async () => {
+  const reached: string[] = [];
+  const daemon = await serve((req, res) => {
+    reached.push(`${req.method} ${req.url}`);
+    res.end('{}');
+  });
+  // `0.0.0.0` reaches this machine's listener and is not a loopback address.
+  vi.spyOn(dns, 'lookup').mockImplementation(((
+    _hostname: string,
+    options: dns.LookupOptions,
+    callback: (...answer: unknown[]) => void,
+  ) => {
+    if (options.all) callback(null, [{ address: '0.0.0.0', family: 4 }]);
+    else callback(null, '0.0.0.0', 4);
+  }) as typeof dns.lookup);
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: daemon.replace('127.0.0.1', 'localhost'),
+    upstreamToken: 'daemon-secret',
+    clientToken: 'client-secret',
+  });
+
+  for (const request of [
+    new Request('https://gateway.example.test/agent-device/health'),
+    new Request('https://gateway.example.test/agent-device/artifacts/build', {
+      headers: { authorization: 'Bearer client-secret' },
+    }),
+  ]) {
+    const response = await proxy.handle(request);
+    expect(await response.json(), request.url).toMatchObject({
+      reason: 'insecure_credential_transport',
+    });
+  }
+  expect(reached).toEqual([]);
 });

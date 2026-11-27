@@ -152,7 +152,7 @@ function probeHttpHealth(httpPort: number, deadlineAtMs: number): ProbeLeg {
   // This leg builds detached. Catch transport-construction errors here so they settle the probe.
   void (async () => {
     try {
-      const transport = await loadNodeHttpRequester('http:');
+      const transport = await loadNodeHttpRequester(new URL(`http://127.0.0.1:${httpPort}/health`));
       const request = transport.request(
         // `agent: false` is load-bearing, not hygiene: since Node 19 the global agent keeps sockets
         // alive, so a pooled request would ride an idle socket from an earlier command's health read

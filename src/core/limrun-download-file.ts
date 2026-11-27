@@ -13,7 +13,6 @@ import { assertSecureCredentialTransport } from '@agent-device/contracts/credent
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
 const MAX_DOWNLOAD_REDIRECTS = 5;
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 // Why a Limrun file download did not land. A started download removes its destination on every
 // failure, so each row means "retry from the same URL", and `limrun_download_failed` adds that the
@@ -71,18 +70,18 @@ async function fetchDownload(
   initialHeaders: LimrunFileDownload['headers'],
   signal: AbortSignal,
 ): Promise<Response> {
-  const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+  const { fetchWithCredential, isRedirectStatus } =
+    await import('@agent-device/host-kit/direct-http');
   let url = from;
   let headers = initialHeaders;
   for (let redirects = 0; ; redirects += 1) {
-    const response = await fetchWithCredential(url.href, {
-      method: 'GET',
-      headers,
-      redirect: 'manual',
-      signal,
-    });
+    const response = await fetchWithCredential(
+      url.href,
+      { method: 'GET', headers, redirect: 'manual', signal },
+      { subject: 'Limrun download URL' },
+    );
     const location = response.headers.get('location');
-    if (!REDIRECT_STATUSES.has(response.status) || location === null) return response;
+    if (!isRedirectStatus(response.status) || location === null) return response;
     await response.body?.cancel().catch(() => undefined);
     const target = URL.parse(location, url);
     if (!target || !isFollowedRedirect(url, target) || redirects >= MAX_DOWNLOAD_REDIRECTS) {
@@ -92,7 +91,7 @@ async function fetchDownload(
       });
     }
     if (target.origin !== url.origin) headers = {};
-    url = assertSecureCredentialTransport(target, 'Limrun download URL');
+    url = target;
   }
 }
 

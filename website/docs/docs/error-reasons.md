@@ -901,7 +901,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `insecure_credential_transport` | A credential would travel over plain http or ws to a host that is not loopback, to a socket URL that is not ws or wss, or to a URL that does not parse. The refusal names the setting, never the destination. |
+| `insecure_credential_transport` | A credential would travel over plain http or ws to a host that is not loopback, to a `localhost` that resolves to no loopback address, to a socket URL that is not ws or wss, or to a URL that does not parse. The refusal names the setting, never the destination. |
 | `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
 | `remote_rpc_protocol_missing` | The checked RPC call named no RPC protocol. An intermediary that strips request headers causes this. |
 | `remote_rpc_protocol_mismatch` | The daemon or proxy speaks a different RPC protocol from the caller. After authentication, `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused. |

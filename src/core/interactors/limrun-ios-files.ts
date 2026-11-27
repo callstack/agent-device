@@ -9,7 +9,6 @@ import {
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { downloadLimrunFile } from '../limrun-download-file.ts';
-import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 
 type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 type Files = AppleToolProvider['simulatorFiles'];
@@ -66,7 +65,7 @@ export function createLimrunSimulatorFiles(
     signal.throwIfAborted();
     const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
     const response = await fetchWithCredential(
-      assertSecureCredentialTransport(url, 'Limrun API URL'),
+      url,
       {
         method,
         headers: {
@@ -77,6 +76,7 @@ export function createLimrunSimulatorFiles(
         signal,
         redirect: 'error',
       },
+      { subject: 'Limrun API URL' },
     );
     if (!response.ok) {
       await response.body?.cancel();

@@ -167,8 +167,9 @@ resent. `/health` refuses such an answer too: the proxy then answers `/health` w
 `upstreamFetch`, and must not carry a username or password. With your own transport, give it a
 logical URL that meets this rule, such as `https://device-host-17.internal`, and route it inside
 the transport. For any other URL, the proxy sends nothing upstream and answers every request with
-`INVALID_ARGS`. On `/rpc`, `details.reason` is `proxy_upstream_userinfo` for a username or
-password, and `insecure_credential_transport` otherwise.
+`INVALID_ARGS`. The reason is `proxy_upstream_userinfo` for a username or password, and
+`insecure_credential_transport` otherwise: `details.reason` on `/rpc`, and `reason` on every other
+route.
 
 On transfer routes, the proxy bounds its wait for your transport and response body. It settles on
 your abort, your `upstreamTimeoutMs`, its 600-second aggregate and its demand-aware response-body

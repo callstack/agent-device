@@ -11,7 +11,7 @@ import {
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
   type TransferPhaseWatchdog,
 } from '@agent-device/host-kit/transport';
-import { responseHeadersOf } from '@agent-device/host-kit/direct-http';
+import { NULL_BODY_STATUSES, responseHeadersOf } from '@agent-device/host-kit/direct-http';
 
 const PROXY_TRANSFER_AGGREGATE_MS = 600_000;
 
@@ -24,7 +24,6 @@ const TRANSFER_FORWARDING_REASONS = {
   // The upstream daemon closed the connection before it answered, or during a write.
   upstreamClosed: { reason: 'transfer_upstream_closed' },
 } as const satisfies ReasonTable<'proxy'>;
-const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
 /** Forwards one exchange over `node:http(s)`, without redirects or retries; plain http goes direct. */
 export function createNodeTransferFetch(): (request: Request) => Promise<Response> {
@@ -142,7 +141,10 @@ async function exchangeOverNodeHttp(
 ): Promise<Response> {
   const url = new URL(request.url);
   const [transport, { urlToHttpOptions }] = await untilAborted(exchange.signal, () =>
-    Promise.all([loadNodeHttpRequester(url.protocol, 'direct'), import('node:url')]),
+    Promise.all([
+      loadNodeHttpRequester(url, { subject: 'Proxy upstreamBaseUrl' }),
+      import('node:url'),
+    ]),
   );
   exchange.signal.throwIfAborted();
   const { auth: _auth, ...target } = urlToHttpOptions(url);

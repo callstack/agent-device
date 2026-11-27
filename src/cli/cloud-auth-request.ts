@@ -1,12 +1,7 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { readCloudJsonResponse } from './cloud-response.ts';
 
 const HTTP_TIMEOUT_MS = 15_000;
-const MAX_CLOUD_AUTH_REDIRECTS = 3;
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-// Fetch turns a POST into a GET without a body on these. A 307 or 308 keeps the method and body.
-const GET_REDIRECT_STATUSES = new Set([301, 302, 303]);
 
 const CLOUD_AUTH_REQUEST_REASONS = {
   // A cloud auth request got a redirect it does not follow: to another origin, past the third hop,
@@ -50,62 +45,46 @@ export async function postCloudAuthJson<T>(options: {
  * Sends one credential-bearing cloud request and returns the final answer. The URL must be https,
  * or plain http to loopback. A redirect is followed only to the same origin, at most three times,
  * and never to a target with a username or password. A 301, 302 or 303 turns a POST into a GET
- * without its body or headers; a GET keeps its headers on the same origin.
+ * without its body; a GET keeps its headers on the same origin.
  */
 export async function fetchCloudOnOneOrigin(
   requestUrl: URL,
   request: RequestInit,
-  // di-seam-approved: the same fetch-global seam as postCloudAuthJson's fetchImpl. Without it,
-  // plain http (loopback only) goes direct, never through an environment proxy.
+  // di-seam-approved: the same fetch-global seam as postCloudAuthJson's fetchImpl.
   fetchImpl?: typeof fetch,
 ): Promise<Response> {
-  assertSecureCredentialTransport(requestUrl, 'Cloud base URL');
-  const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
-  // One timeout covers the whole redirect chain.
-  const signal = AbortSignal.timeout(HTTP_TIMEOUT_MS);
-  let url = requestUrl;
-  let init = request;
-  for (let redirects = 0; ; redirects += 1) {
-    const response = await fetchWithCredential(
-      url,
-      { ...init, redirect: 'manual', signal },
-      fetchImpl,
-    );
-    if (!REDIRECT_STATUSES.has(response.status)) return response;
-    await response.body?.cancel().catch(() => undefined);
-    url = readRedirectTarget(response, url, requestUrl, redirects);
-    if (GET_REDIRECT_STATUSES.has(response.status) && init.method !== 'GET') {
-      init = { method: 'GET' };
-    }
-  }
+  const { fetchWithCredential, isRedirectStatus } =
+    await import('@agent-device/host-kit/direct-http');
+  const response = await fetchWithCredential(
+    requestUrl,
+    // One timeout covers the whole redirect chain.
+    { ...request, signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) },
+    { subject: 'Cloud base URL', send: fetchImpl },
+  );
+  if (!isRedirectStatus(response.status)) return response;
+  await response.body?.cancel().catch(() => undefined);
+  throw redirectRefused(response, requestUrl);
 }
 
-function readRedirectTarget(
-  response: Response,
-  current: URL,
-  requestUrl: URL,
-  redirects: number,
-): URL {
+/** Why a redirect the send did not follow ends the request. */
+function redirectRefused(response: Response, requestUrl: URL): AppError {
   const location = response.headers.get('location');
-  const target = location === null ? null : URL.parse(location, current);
-  const refusal = describeRefusedRedirect(target, requestUrl, redirects);
-  if (target && !refusal) return target;
-  throw new AppError('COMMAND_FAILED', `Cloud auth endpoint answered with ${refusal}.`, {
-    reason: CLOUD_AUTH_REQUEST_REASONS.redirectRefused.reason,
-    status: response.status,
-    hint: `Cloud auth requests stay on ${requestUrl.origin}. Check that it is the cloud API origin.`,
-  });
+  const target = location === null ? null : URL.parse(location, requestUrl);
+  return new AppError(
+    'COMMAND_FAILED',
+    `Cloud auth endpoint answered with ${describeRefusedRedirect(target, requestUrl)}.`,
+    {
+      reason: CLOUD_AUTH_REQUEST_REASONS.redirectRefused.reason,
+      status: response.status,
+      hint: `Cloud auth requests stay on ${requestUrl.origin}. Check that it is the cloud API origin.`,
+    },
+  );
 }
 
-function describeRefusedRedirect(
-  target: URL | null,
-  requestUrl: URL,
-  redirects: number,
-): string | undefined {
+function describeRefusedRedirect(target: URL | null, requestUrl: URL): string {
   if (!target) return 'a redirect that has no readable Location';
   // Fetch rejects such a URL with an error that quotes it, and the target can echo a credential.
   if (target.username || target.password) return 'a redirect to a URL with a username or password';
   if (target.origin !== requestUrl.origin) return 'a redirect to another origin';
-  if (redirects >= MAX_CLOUD_AUTH_REDIRECTS) return 'more than three redirects';
-  return undefined;
+  return 'more than three redirects';
 }

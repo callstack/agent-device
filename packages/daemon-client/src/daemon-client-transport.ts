@@ -298,14 +298,14 @@ async function readDaemonHttpHealth(
   const timeoutSignal = AbortSignal.timeout(Math.ceil(timeoutMs));
   const signal = callerSignal ? AbortSignal.any([timeoutSignal, callerSignal]) : timeoutSignal;
   const transport = await Promise.race([
-    loadNodeHttpRequester(url.protocol, 'direct'),
+    loadNodeHttpRequester(url, { subject: 'Remote daemon base URL' }),
     new Promise<null>((resolve) => {
       signal.addEventListener('abort', () => resolve(null), { once: true });
     }),
   ]);
   const unreachable = (): RemoteDaemonHealth => unreachableDaemonHealth(timeoutSignal, deadline);
   if (!transport || healthProbeExpired(signal, deadline)) return unreachable();
-  return await new Promise((resolve) => {
+  return await new Promise((resolve, reject) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
     const req = transport.request(
       {
@@ -340,8 +340,9 @@ async function readDaemonHttpHealth(
       req.destroy();
       resolve({ reachable: false, timedOut: true });
     });
-    req.on('error', () => {
-      resolve(unreachable());
+    req.on('error', (error) => {
+      if (error instanceof AppError) reject(error);
+      else resolve(unreachable());
     });
     req.end();
   });
@@ -811,7 +812,7 @@ async function sendHttpRequest(
   }
   if (checked) headers[DAEMON_HTTP_RPC_PROTOCOL_HEADER] = String(DAEMON_RPC_PROTOCOL_VERSION);
   const checkedRpc = checked ? await import('./daemon-client-checked-rpc.ts') : undefined;
-  const transport = await loadNodeHttpRequester(rpcUrl.protocol, 'direct');
+  const transport = await loadNodeHttpRequester(rpcUrl, { subject: 'Remote daemon base URL' });
   const callerSignal = options.signal;
   refuseAbortedRequest(callerSignal, req.meta?.requestId);
 
@@ -951,6 +952,7 @@ async function sendHttpRequest(
       // from emitting a `daemon_request_socket_error` diagnostic; a genuine transport error still
       // arrives before the settle and rejects.
       if (settled) return;
+      if (err instanceof AppError) return rejectOnce(err);
       if (connectWatch?.unconnected()) return rejectOnce(connectWatch.failure(false));
       rejectOnce(handleTransportError(err, req.meta?.requestId, remote, requestSent));
     });

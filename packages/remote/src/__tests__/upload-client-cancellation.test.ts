@@ -18,19 +18,18 @@ import { uploadArtifact } from '../upload-client.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { observeOutcome } from './support/upload-transfer-fixtures.ts';
 
-// Control requests to a plain-http (loopback) daemon go direct over `node:http`, never through an
-// environment proxy, so that send is the control-plane seam these cases replace.
+// Control requests send the daemon token through the credential primitive, so that send is the
+// control-plane seam these cases replace.
 const directHttp = vi.hoisted(() => ({
   send: undefined as ((request: Request) => Promise<Response>) | undefined,
 }));
 vi.mock('@agent-device/host-kit/direct-http', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/direct-http')>();
-  return {
-    ...actual,
-    fetchOverDirectHttp: vi.fn(async (request: Request) =>
-      directHttp.send ? await directHttp.send(request) : await actual.fetchOverDirectHttp(request),
-    ),
-  };
+  const fetchWithCredential: typeof actual.fetchWithCredential = async (input, init, options) =>
+    directHttp.send
+      ? await directHttp.send(new Request(input, init))
+      : await actual.fetchWithCredential(input, init, options);
+  return { ...actual, fetchWithCredential: vi.fn(fetchWithCredential) };
 });
 
 const TEST_TOKEN = 'agent-device-upload-cancel-token';

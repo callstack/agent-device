@@ -1,4 +1,7 @@
-import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
+import {
+  assertSecureCredentialTransport,
+  isCredentialTransportRefusal,
+} from '@agent-device/contracts/credential-transport';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 // Whether the upstream token may go to the configured daemon. Loaded with the first upstream
@@ -26,4 +29,16 @@ export function assertAdmittedUpstream(upstreamBaseUrl: string): void {
       hint: 'Pass the daemon credential as upstreamToken, and remove it from the URL.',
     },
   );
+}
+
+/**
+ * The reason an answer outside `/rpc` names when the upstream may not receive the token: that
+ * reason alone, never the destination or other error details.
+ */
+export function admissionWireDetails(error: unknown): { reason?: string } {
+  if (!(error instanceof AppError)) return {};
+  const reason = error.details?.reason as string | undefined;
+  const refused =
+    isCredentialTransportRefusal(error) || reason === UPSTREAM_ADMISSION_REASONS.userinfo.reason;
+  return refused ? { reason } : {};
 }

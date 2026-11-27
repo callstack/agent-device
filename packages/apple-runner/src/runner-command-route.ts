@@ -1,4 +1,3 @@
-import { BlockList, isIPv6 } from 'node:net';
 import type { RunnerEndpoint } from './runner-contract.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from './host.ts';
@@ -21,12 +20,11 @@ export type RunnerCommandRoute =
       url: string | null;
       cachedTunnelIp: boolean;
       /**
-       * How the URL was resolved: this Mac's loopback, the tunnel address CoreDevice reports for
-       * this device, a reported address that is not a tunnel address, or a URL a provider forwards.
-       * Only the tunnel route may carry the runner token over plain http to a host that is not
-       * loopback, because its tunnel encrypts the traffic.
+       * Set only on the route built from the tunnel address CoreDevice reports for this device.
+       * Its tunnel encrypts the traffic, so it may carry the runner token over plain http to a
+       * tunnel address that is not loopback.
        */
-      via: 'loopback' | 'coredevice-tunnel' | 'device-address' | 'forwarded';
+      coreDeviceTunnel?: true;
     }
   | {
       kind: 'usbmux';
@@ -66,7 +64,7 @@ export function createRunnerCommandRouteResolver(
       timeoutBudgetMs?: number,
       forceRefresh = false,
     ): Promise<RunnerCommandRoute> => {
-      if (http) return { kind: 'network', url: http.url, cachedTunnelIp: false, via: 'forwarded' };
+      if (http) return { kind: 'network', url: http.url, cachedTunnelIp: false };
       if (runsOnThisHost(device)) return buildLoopbackRoute(port);
       const control = resolveIosPhysicalDeviceControl(device);
       if (control.backend === 'xctest') return buildUsbmuxRoute(device, port);
@@ -111,12 +109,7 @@ function runsOnThisHost(device: DeviceInfo): boolean {
 }
 
 function buildLoopbackRoute(port: number): RunnerCommandRoute {
-  return {
-    kind: 'network',
-    url: `http://127.0.0.1:${port}/command`,
-    cachedTunnelIp: false,
-    via: 'loopback',
-  };
+  return { kind: 'network', url: `http://127.0.0.1:${port}/command`, cachedTunnelIp: false };
 }
 
 function buildTunnelRoute(
@@ -128,15 +121,8 @@ function buildTunnelRoute(
     kind: 'network',
     url: tunnelIp ? `http://[${tunnelIp}]:${port}/command` : null,
     cachedTunnelIp,
-    via: tunnelIp && isCoreDeviceTunnelAddress(tunnelIp) ? 'coredevice-tunnel' : 'device-address',
+    coreDeviceTunnel: true,
   };
-}
-
-/** CoreDevice gives its tunnel a unique local IPv6 address, in `fd00::/8`. */
-function isCoreDeviceTunnelAddress(address: string): boolean {
-  const range = new BlockList();
-  range.addSubnet('fd00::', 8, 'ipv6');
-  return isIPv6(address) && range.check(address, 'ipv6');
 }
 
 function readDeviceTunnelIpCache(deviceId: string): string | null {

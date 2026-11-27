@@ -449,7 +449,6 @@ function keepAliveWith(owner: object, request: Request): Request {
   return request;
 }
 
-/** Builds a request for `owner` to send on, kept reachable for as long as `owner` is. */
 /**
  * Builds an upstream request for `owner`. It never follows a redirect: a followed one would resend
  * the upstream token, on the checked route possibly to the unchecked `/rpc`.
@@ -587,10 +586,10 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
   const customUpstreamFetch = options.upstreamFetch;
   const upstreamFetch: DaemonProxyUpstreamFetch =
     customUpstreamFetch ??
-    (async (request) =>
-      new URL(request.url).protocol === 'http:'
-        ? await (await import('@agent-device/host-kit/direct-http')).fetchOverDirectHttp(request)
-        : await fetch(request));
+    (async (request) => {
+      const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+      return await fetchWithCredential(request, {}, { subject: 'Proxy upstreamBaseUrl' });
+    });
   return {
     upstreamBaseUrl,
     publicOrigin:
@@ -966,12 +965,14 @@ async function proxyErrorResponse(error: unknown, request: Request): Promise<Res
     ? (await import('./transfer-transport.ts')).transferWireDetails(error)
     : {};
   const normalized = normalizeError(error);
+  const { admissionWireDetails } = await import('./upstream-admission.ts');
   return Response.json(
     {
       ok: false,
       error: normalized.message,
       code: normalized.code,
       ...details,
+      ...admissionWireDetails(error),
     },
     { status: normalized.code === 'INVALID_ARGS' ? 400 : 500 },
   );

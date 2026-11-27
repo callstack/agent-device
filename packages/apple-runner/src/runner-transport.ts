@@ -105,22 +105,6 @@ export async function postRunnerCommandOverRoute(
       'no',
     );
   }
-  // The request carries the runner token, and a forwarded one the provider's own headers. The
-  // resolver marks the loopback URL it builds and the CoreDevice tunnel address it recognizes; the
-  // tunnel is the one plain-http route off this machine. Every other route meets the credential
-  // transport rule.
-  if (route.via !== 'loopback' && route.via !== 'coredevice-tunnel') {
-    const { assertSecureCredentialTransport } =
-      await import('@agent-device/contracts/credential-transport');
-    try {
-      assertSecureCredentialTransport(
-        route.url,
-        route.via === 'forwarded' ? 'Runner forwarding URL' : 'Runner device address',
-      );
-    } catch (error) {
-      throw discloseDispatch(error as AppError, 'no');
-    }
-  }
   const response = await fetchWithTimeout(
     route.url,
     {
@@ -130,6 +114,11 @@ export async function postRunnerCommandOverRoute(
     },
     timeoutMs,
     signal,
+    // The request carries the runner token, and a forwarded one the provider's own headers.
+    {
+      subject: endpoint.http ? 'Runner forwarding URL' : 'Runner device address',
+      coreDeviceTunnel: route.coreDeviceTunnel,
+    },
   );
   if (endpoint.http && [502, 503, 504].includes(response.status)) {
     await response.body?.cancel();
@@ -161,13 +150,15 @@ export async function fetchWithTimeout(
   init: RequestInit,
   timeoutMs: number,
   requestSignal?: AbortSignal,
+  destination: Readonly<{ subject: string; coreDeviceTunnel?: boolean }> = {
+    subject: 'Runner URL',
+  },
 ): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
-    // The token travels in a header, so a redirect must never carry it elsewhere, and a
-    // plain-http send never goes through an environment proxy.
-    return await fetchWithCredential(url, { ...init, redirect: 'error', signal });
+    // The token travels in a header, so a redirect must never carry it elsewhere.
+    return await fetchWithCredential(url, { ...init, redirect: 'error', signal }, destination);
   } catch (error) {
     // `AbortSignal.timeout` rejects with a bare DOMException that no recovery rule can
     // read. Only a rejection carrying that signal's own reason is our deadline: a

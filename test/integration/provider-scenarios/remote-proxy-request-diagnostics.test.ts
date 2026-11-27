@@ -109,7 +109,7 @@ test('Provider-backed integration local proxy serves the daemon diagnostics reco
       // The token travels over plain http to loopback, so the request takes the direct agent that
       // never routes through an environment proxy.
       assert.deepEqual(directOptions, {
-        agent: await loadDirectHttpAgent('http:'),
+        agent: await loadDirectHttpAgent(),
         protocol: 'http:',
         host: '127.0.0.1',
         port: String(daemon.httpPort),

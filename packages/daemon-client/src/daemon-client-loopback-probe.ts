@@ -147,7 +147,10 @@ export async function probeHttpEndpoint(probe: HttpEndpointProbe): Promise<Daemo
   const port = Number(url.port) || (url.protocol === 'https:' ? 443 : 80);
   if (probe.timeoutMs <= 0) return { reachable: false };
   const deadlineAtMs = performance.now() + probe.timeoutMs;
-  const loaded = await settleWithin(() => loadNodeHttpRequester(url.protocol), probe.timeoutMs);
+  const loaded = await settleWithin(
+    () => loadNodeHttpRequester(url, { subject: 'Daemon health probe URL' }),
+    probe.timeoutMs,
+  );
   if (loaded.kind === 'deadline') return { reachable: false };
   // What the loader spent is gone from the request's window: the budget belongs to the probe, not to
   // each step inside it.

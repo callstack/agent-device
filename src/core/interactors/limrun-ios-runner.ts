@@ -168,16 +168,20 @@ export async function createLimrunIosRunner(
         async () => {
           runRequested = true;
           const result = await awaitWithSignal(
-            fetchWithCredential(`${apiUrl}/xctest/run`, {
-              method: 'POST',
-              headers: { ...headers, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                root: path.basename(directory),
-                xctestrun: 'Runner.xctestrun',
-              }),
-              signal,
-              redirect: 'error',
-            }),
+            fetchWithCredential(
+              `${apiUrl}/xctest/run`,
+              {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  root: path.basename(directory),
+                  xctestrun: 'Runner.xctestrun',
+                }),
+                signal,
+                redirect: 'error',
+              },
+              { subject: 'Limrun API URL' },
+            ),
             launchSignal,
           );
           if (!result.ok) {

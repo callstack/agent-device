@@ -38,23 +38,32 @@ export type NodeHttpRequester = Pick<typeof import('node:http'), 'request'>;
  * object a static `import http from 'node:http'` yields -- its `request`
  * property is mutable, which the transport tests rely on to stub requests.
  *
- * `credential: 'direct'` is for a request that carries a credential: over plain http (loopback
- * only) it connects directly and never through an environment proxy. Call that requester as
- * `request(options, callback)`, its only form. Its direct agent always replaces an `agent` among
- * the options, because any other agent could route the credential through a proxy. It still calls
- * the module's `request` at send time.
+ * Pass `credential` for a request that carries one. `url` then meets the credential transport rule,
+ * and plain http connects directly, never through an environment proxy, and to `localhost` only at a
+ * loopback address. That requester is called as `request(options, callback)`, its only form, with
+ * the options of `url`. Its direct agent always replaces an `agent` among them, since another agent
+ * could send the credential through a proxy; `agent: false` asks for a connection of its own. It
+ * still calls the module's `request` at send time.
  */
 export async function loadNodeHttpRequester(
-  protocol: string,
-  credential?: 'direct',
+  url: URL,
+  credential?: { subject: string },
 ): Promise<NodeHttpRequester> {
-  if (protocol === 'https:') return (await import('node:https')).default;
+  if (credential) {
+    const rule = await import('@agent-device/contracts/credential-transport');
+    rule.assertSecureCredentialTransport(url, credential.subject);
+  }
+  if (url.protocol === 'https:') return (await import('node:https')).default;
   const http = (await import('node:http')).default;
-  if (credential !== 'direct') return http;
-  const agent = await (await import('../direct-http.ts')).loadDirectHttpAgent(protocol);
+  if (!credential) return http;
+  const { loadDirectHttpAgent } = await import('../direct-http.ts');
+  const [pooled, fresh] = [await loadDirectHttpAgent(), await loadDirectHttpAgent(true)];
   return {
     request: ((options: RequestOptions, callback?: (res: IncomingMessage) => void) =>
-      http.request({ ...options, agent }, callback)) as NodeHttpRequester['request'],
+      http.request(
+        { ...options, agent: options.agent === false ? fresh : pooled },
+        callback,
+      )) as NodeHttpRequester['request'],
   };
 }
 

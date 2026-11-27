@@ -250,7 +250,6 @@ test.each([
     kind: 'network',
     url: 'http://[fd00::123]:8100/command',
     cachedTunnelIp: false,
-    via: 'forwarded',
   } as const;
 
   await assert.rejects(

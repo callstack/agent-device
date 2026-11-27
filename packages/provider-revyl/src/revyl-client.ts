@@ -179,11 +179,9 @@ export type RevylClient = Readonly<{
 
 export function createRevylClient(options: RevylClientOptions): RevylClient {
   const backendUrl = resolveRevylBackendUrl(options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL);
-  // Without an injected `fetch`, plain http (loopback only) goes direct, never through an
-  // environment proxy.
   const transmit: RevylTransmit = async (url, init) => {
     const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
-    return await fetchWithCredential(url, init, options.fetch);
+    return await fetchWithCredential(url, init, { subject: 'Revyl URL', send: options.fetch });
   };
   const baseHeaders = {
     Authorization: `Bearer ${options.apiKey}`,
@@ -309,7 +307,8 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       });
     },
     async uploadSessionArtifact(uploadUrl, file, contentType, signal) {
-      // Revyl chooses this URL, and its signature is the credential.
+      // Revyl chooses this URL, and its signature is the credential: refused before the file is
+      // opened.
       assertSecureCredentialTransport(uploadUrl, 'Revyl upload URL');
       // Node streams a request body only in half-duplex mode, which the DOM `RequestInit` type omits.
       const init: RequestInit & { duplex: 'half' } = {

@@ -72,3 +72,26 @@ test.each([
     }),
   );
 });
+
+test.each(['http://[fd00::1]:8100/command', 'http://[fdda:2b::42]:8100'])(
+  'the CoreDevice tunnel exception admits %s, and only when asked for',
+  (url) => {
+    expect(() => assertSecureCredentialTransport(url, 'Runner URL')).toThrow();
+    expect(
+      assertSecureCredentialTransport(url, 'Runner URL', { coreDeviceTunnel: true }).href,
+    ).toBe(new URL(url).href);
+  },
+);
+
+test.each([
+  'http://[fe80::1]:8100',
+  'http://[fc00::1]:8100',
+  'http://[2001:db8::1]:8100',
+  'http://10.0.0.7:8100',
+  'http://iphone.coredevice.local:8100',
+  'ws://[fd00::1]:8100',
+])('the CoreDevice tunnel exception never admits %s', (url) => {
+  expect(() =>
+    assertSecureCredentialTransport(url, 'Runner URL', { coreDeviceTunnel: true }),
+  ).toThrow();
+});

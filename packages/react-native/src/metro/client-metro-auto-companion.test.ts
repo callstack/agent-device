@@ -562,9 +562,19 @@ test('a loopback bridge gets the bearer token directly, never through global fet
   );
   const received: string[] = [];
   const bridge = http.createServer((req, res) => {
-    received.push(`${req.method} ${req.url} ${req.headers.authorization}`);
-    req.resume();
-    res.writeHead(401).end('{"ok":false}');
+    let body = '';
+    req.on('data', (chunk) => (body += String(chunk)));
+    req.on('end', () => {
+      received.push(
+        `${req.method} ${req.url} ${req.headers.authorization} ${JSON.parse(body).tenantId}`,
+      );
+      // The bridge moved its route: the POST follows on the same origin, with body and bearer.
+      if (req.url === '/api/metro/bridge') {
+        res.writeHead(307, { location: '/api/metro/bridge/v2' }).end();
+        return;
+      }
+      res.writeHead(401).end('{"ok":false}');
+    });
   });
   await new Promise<void>((resolve) => bridge.listen(0, '127.0.0.1', resolve));
   // The dev server probe carries no credential and stays on global fetch.
@@ -589,7 +599,10 @@ test('a loopback bridge gets the bearer token directly, never through global fet
       ),
     );
 
-    assert.deepEqual(received, ['POST /api/metro/bridge Bearer shared-token']);
+    assert.deepEqual(received, [
+      'POST /api/metro/bridge Bearer shared-token tenant-1',
+      'POST /api/metro/bridge/v2 Bearer shared-token tenant-1',
+    ]);
     assert.equal(JSON.stringify(fetchMock.mock.calls).includes('shared-token'), false);
   } finally {
     vi.unstubAllGlobals();

@@ -21,7 +21,10 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
+import {
+  assertSecureCredentialTransport,
+  isCredentialTransportRefusal,
+} from '@agent-device/contracts/credential-transport';
 import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import type {
   MetroBridgeDescriptor,
@@ -454,24 +457,27 @@ function isRetryableBridgeError(error: unknown): boolean {
 }
 
 async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<MetroBridgeResult> {
-  // Checked on the final URL, right before the bearer token is sent, and outside the retry.
   const bridgeUrl = `${input.baseUrl}/api/metro/bridge`;
-  assertSecureCredentialTransport(bridgeUrl, 'Metro bridge URL');
   const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
   let response: Response;
 
   try {
-    response = await fetchWithCredential(bridgeUrl, {
-      method: 'POST',
-      headers: createProxyHeaders(input.baseUrl, input.bearerToken),
-      body: JSON.stringify({
-        ...input.scope,
-        ...(input.runtime ? { ios_runtime: input.runtime } : {}),
-        timeout_ms: input.timeoutMs,
-      }),
-      signal: AbortSignal.timeout(input.timeoutMs),
-    });
+    response = await fetchWithCredential(
+      bridgeUrl,
+      {
+        method: 'POST',
+        headers: createProxyHeaders(input.baseUrl, input.bearerToken),
+        body: JSON.stringify({
+          ...input.scope,
+          ...(input.runtime ? { ios_runtime: input.runtime } : {}),
+          timeout_ms: input.timeoutMs,
+        }),
+        signal: AbortSignal.timeout(input.timeoutMs),
+      },
+      { subject: 'Metro bridge URL' },
+    );
   } catch (error) {
+    if (isCredentialTransportRefusal(error)) throw error;
     if (error instanceof Error && error.name === 'TimeoutError') {
       throw createMetroBridgeRequestError(
         `/api/metro/bridge timed out after ${input.timeoutMs}ms calling ${input.baseUrl}/api/metro/bridge`,

@@ -47,7 +47,7 @@ test('a fresh connect the host refused is not answered around by a pooled socket
   // the agent. It goes through the SAME module object the probe loads, or no candidate lands in the
   // pool and the case proves nothing. The request is bounded so a pool this case does not control
   // cannot hold it open to the test budget.
-  const requester = await hostTransport.loadNodeHttpRequester('http:');
+  const requester = await hostTransport.loadNodeHttpRequester(new URL('http://127.0.0.1'));
   await new Promise<void>((resolve, reject) => {
     const request = requester.request(
       { host: '127.0.0.1', port, path: '/health', method: 'GET', timeout: 2_000 },

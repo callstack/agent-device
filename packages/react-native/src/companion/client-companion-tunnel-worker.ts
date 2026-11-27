@@ -26,9 +26,17 @@ import { normalizeBaseUrl } from '../metro/base-url.ts';
 import {
   assertSecureCredentialSocket,
   assertSecureCredentialTransport,
+  isCredentialTransportRefusal,
 } from '@agent-device/contracts/credential-transport';
+import {
+  createCompanionSocketDialer,
+  fetchRelayedRequest,
+  relayTarget,
+  type CompanionSocketDialer,
+} from './client-companion-local-relay.ts';
 
 const COMPANION_REGISTER_TIMEOUT_MS = 5_000;
+const BRIDGE_URL_SUBJECT = 'Metro companion bridge URL';
 const COMPANION_REGISTER_MAX_RETRY_DELAY_MS = 60_000;
 
 export type CompanionTunnelWorkerRuntime = {
@@ -89,12 +97,16 @@ async function registerCompanion(
   const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
   let response: Response;
   try {
-    response = await fetchWithCredential(registerUrl, {
-      method: 'POST',
-      headers: createHeaders(options.serverBaseUrl, options.bearerToken),
-      body: JSON.stringify(buildCompanionPayload(options)),
-      signal: AbortSignal.timeout(COMPANION_REGISTER_TIMEOUT_MS),
-    });
+    response = await fetchWithCredential(
+      registerUrl,
+      {
+        method: 'POST',
+        headers: createHeaders(options.serverBaseUrl, options.bearerToken),
+        body: JSON.stringify(buildCompanionPayload(options)),
+        signal: AbortSignal.timeout(COMPANION_REGISTER_TIMEOUT_MS),
+      },
+      { subject: BRIDGE_URL_SUBJECT },
+    );
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
       throw new Error(
@@ -166,43 +178,23 @@ function clampRetryDelay(delayMs: number): number {
 }
 
 /**
- * The final URL a bearer request goes to, or a refusal no retry can fix. The base must be a URL
- * with a host on its own: appending a path can give one to a base without it (`https://` becomes
- * `https://api/...`).
+ * The URL a bearer request goes to. The base must be a destination on its own: appending a path can
+ * give a host to a base without one (`https://` becomes `https://api/...`).
  */
 function bearerDestination(serverBaseUrl: string, path: string): string {
-  return refuseWithoutRetry(() => {
-    assertSecureCredentialTransport(serverBaseUrl, 'Metro companion bridge URL');
-    const url = `${normalizeBaseUrl(serverBaseUrl)}${path}`;
-    assertSecureCredentialTransport(url, 'Metro companion bridge URL');
-    return url;
-  });
+  assertSecureCredentialTransport(serverBaseUrl, BRIDGE_URL_SUBJECT);
+  return `${normalizeBaseUrl(serverBaseUrl)}${path}`;
 }
 
 /**
- * Prepares the bridge socket. The registered URL is what admits this companion to the bridge, so it
- * follows the credential transport rule: `wss`, or `ws` to loopback. A `ws` socket connects
- * directly, because the global `WebSocket` hands its URL to an environment proxy.
+ * Reports a failed attempt and says whether to retry, and after how long if the bridge said. A
+ * refused destination stays refused, so it is thrown for the worker to fail with.
  */
-async function prepareBridgeSocket(wsUrl: string): Promise<() => WebSocket> {
-  const destination = refuseWithoutRetry(() =>
-    assertSecureCredentialSocket(wsUrl, 'Metro companion bridge socket URL'),
-  );
-  if (destination.protocol === 'wss:') return () => new WebSocket(wsUrl);
-  const { Agent, WebSocket: DirectWebSocket } = await import('undici');
-  return () => new DirectWebSocket(wsUrl, { dispatcher: new Agent() }) as unknown as WebSocket;
-}
-
-/** Runs a transport check as part of registration: its refusal is one no retry can fix. */
-function refuseWithoutRetry<T>(check: () => T): T {
-  try {
-    return check();
-  } catch (error) {
-    throw new CompanionRegistrationError(
-      error instanceof Error ? error.message : String(error),
-      false,
-    );
-  }
+function reportFailedAttempt(error: unknown): { retry: boolean; retryAfterMs?: number } {
+  console.error(error instanceof Error ? error.message : String(error));
+  if (isCredentialTransportRefusal(error)) throw error;
+  if (!(error instanceof CompanionRegistrationError)) return { retry: true };
+  return { retry: error.retryable, retryAfterMs: error.retryAfterMs };
 }
 
 function nextRetryDelay(currentDelayMs: number): number {
@@ -215,12 +207,16 @@ async function unregisterCompanion(options: CompanionTunnelWorkerOptions): Promi
   try {
     const unregisterUrl = bearerDestination(options.serverBaseUrl, unregisterPath);
     const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
-    await fetchWithCredential(unregisterUrl, {
-      method: 'POST',
-      headers: createHeaders(options.serverBaseUrl, options.bearerToken),
-      body: JSON.stringify(buildCompanionPayload(options)),
-      signal: AbortSignal.timeout(2_000),
-    });
+    await fetchWithCredential(
+      unregisterUrl,
+      {
+        method: 'POST',
+        headers: createHeaders(options.serverBaseUrl, options.bearerToken),
+        body: JSON.stringify(buildCompanionPayload(options)),
+        signal: AbortSignal.timeout(2_000),
+      },
+      { subject: BRIDGE_URL_SUBJECT },
+    );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
   }
@@ -244,7 +240,7 @@ async function parseBridgeMessage(event: MessageEvent): Promise<MetroCompanionRe
 }
 
 function toUpstreamWebSocketUrl(localBaseUrl: string, requestPath: string): string {
-  const upstream = new URL(requestPath, `${normalizeBaseUrl(localBaseUrl)}/`);
+  const upstream = relayTarget(localBaseUrl, requestPath);
   upstream.protocol = upstream.protocol === 'https:' ? 'wss:' : 'ws:';
   return upstream.toString();
 }
@@ -331,14 +327,11 @@ async function handleBridgeHttpRequest(
   options: CompanionTunnelWorkerOptions,
 ): Promise<void> {
   try {
-    const response = await fetch(
-      new URL(message.path, `${normalizeBaseUrl(options.localBaseUrl)}/`),
-      {
-        method: message.method,
-        headers: message.headers,
-        ...(message.bodyBase64 ? { body: Buffer.from(message.bodyBase64, 'base64') } : {}),
-      },
-    );
+    const response = await fetchRelayedRequest(relayTarget(options.localBaseUrl, message.path), {
+      method: message.method,
+      headers: message.headers,
+      ...(message.bodyBase64 ? { body: Buffer.from(message.bodyBase64, 'base64') } : {}),
+    });
     const body = Buffer.from(await response.arrayBuffer());
     sendJson(bridgeSocket, {
       type: 'http-response',
@@ -361,8 +354,22 @@ async function handleBridgeWebSocketOpen(
   message: Extract<MetroCompanionRequest, { type: 'ws-open' }>,
   options: CompanionTunnelWorkerOptions,
   upstreamSockets: Map<string, WebSocket>,
+  dialer: CompanionSocketDialer,
 ): Promise<void> {
-  const upstreamSocket = new WebSocket(toUpstreamWebSocketUrl(options.localBaseUrl, message.path));
+  const refuse = (error: unknown) =>
+    sendJson(bridgeSocket, {
+      type: 'ws-open-result',
+      streamId: message.streamId,
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  let upstreamSocket: WebSocket;
+  try {
+    upstreamSocket = dialer.open(toUpstreamWebSocketUrl(options.localBaseUrl, message.path));
+  } catch (error) {
+    refuse(error);
+    return;
+  }
   upstreamSocket.binaryType = 'arraybuffer';
   let opened = false;
   upstreamSocket.addEventListener('message', (event) => {
@@ -411,12 +418,7 @@ async function handleBridgeWebSocketOpen(
   } catch (error) {
     upstreamSockets.delete(message.streamId);
     closeSocketQuietly(upstreamSocket, 1011, 'open failed');
-    sendJson(bridgeSocket, {
-      type: 'ws-open-result',
-      streamId: message.streamId,
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    refuse(error);
   }
 }
 
@@ -445,6 +447,7 @@ async function handleBridgeMessage(
   message: MetroCompanionRequest,
   options: CompanionTunnelWorkerOptions,
   upstreamSockets: Map<string, WebSocket>,
+  dialer: CompanionSocketDialer,
 ): Promise<void> {
   switch (message.type) {
     case 'ping': {
@@ -456,7 +459,7 @@ async function handleBridgeMessage(
       return;
     }
     case 'ws-open': {
-      await handleBridgeWebSocketOpen(bridgeSocket, message, options, upstreamSockets);
+      await handleBridgeWebSocketOpen(bridgeSocket, message, options, upstreamSockets, dialer);
       return;
     }
     case 'ws-frame': {
@@ -524,6 +527,7 @@ export async function runCompanionTunnelWorker(
   }, runtime.leaseCheckIntervalMs ?? COMPANION_TUNNEL_LEASE_CHECK_INTERVAL_MS);
   lifetimeHandle.unref();
   let registerRetryDelayMs = runtime.reconnectDelayMs ?? COMPANION_TUNNEL_RECONNECT_DELAY_MS;
+  const dialer = await createCompanionSocketDialer();
   try {
     while (!shutdownRequested && shouldKeepWorkerRunning(options)) {
       let registered = false;
@@ -534,13 +538,15 @@ export async function runCompanionTunnelWorker(
         registerRetryDelayMs = runtime.reconnectDelayMs ?? COMPANION_TUNNEL_RECONNECT_DELAY_MS;
         registered = true;
         activeRegistrationComplete = true;
-        const connectBridge = await prepareBridgeSocket(registration.wsUrl);
+        // The registered URL is what admits this companion to the bridge.
+        assertSecureCredentialSocket(registration.wsUrl, 'Metro companion bridge socket URL');
+        await dialer.verify(registration.wsUrl);
         if (shutdownRequested || !shouldKeepWorkerRunning(options)) {
           await unregisterActiveRegistration();
           registered = false;
           break;
         }
-        const bridgeSocket = connectBridge();
+        const bridgeSocket = dialer.open(registration.wsUrl);
         activeBridgeSocket = bridgeSocket;
         bridgeSocket.binaryType = 'arraybuffer';
         try {
@@ -548,7 +554,7 @@ export async function runCompanionTunnelWorker(
           bridgeSocket.addEventListener('message', (event) => {
             void (async () => {
               const message = await parseBridgeMessage(event);
-              await handleBridgeMessage(bridgeSocket, message, options, upstreamSockets);
+              await handleBridgeMessage(bridgeSocket, message, options, upstreamSockets, dialer);
             })().catch((error) => {
               console.error(error instanceof Error ? error.message : String(error));
             });
@@ -574,12 +580,11 @@ export async function runCompanionTunnelWorker(
         if (shutdownRequested || !shouldKeepWorkerRunning(options)) {
           break;
         }
-        console.error(error instanceof Error ? error.message : String(error));
-        if (error instanceof CompanionRegistrationError && !error.retryable) {
+        const next = reportFailedAttempt(error);
+        if (!next.retry) {
           break;
         }
-        retryDelayOverrideMs =
-          error instanceof CompanionRegistrationError ? error.retryAfterMs : undefined;
+        retryDelayOverrideMs = next.retryAfterMs;
       }
       if (shutdownRequested || !shouldKeepWorkerRunning(options)) {
         break;
@@ -596,6 +601,7 @@ export async function runCompanionTunnelWorker(
       process.off('SIGTERM', requestShutdown);
       process.off('SIGINT', requestShutdown);
     }
+    await dialer.close();
   }
 }
 

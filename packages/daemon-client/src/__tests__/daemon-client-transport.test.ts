@@ -119,9 +119,9 @@ test('the health deadline includes requester loading and forbids a late request'
   const actualLoad = hostTransport.loadNodeHttpRequester;
   const load = vi
     .spyOn(hostTransport, 'loadNodeHttpRequester')
-    .mockImplementation(async (protocol) => {
+    .mockImplementation(async (url, credential) => {
       await blocked;
-      return actualLoad(protocol);
+      return actualLoad(url, credential);
     });
   let probing: Promise<boolean> | undefined;
   try {

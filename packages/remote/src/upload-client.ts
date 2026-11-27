@@ -338,17 +338,13 @@ async function requestUploadControl(
   watchdog.signal.throwIfAborted();
   watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
   try {
-    // Redirects could forward the daemon token, so these control requests never follow them. Plain
-    // http (loopback only) goes direct, never through an environment proxy.
-    const request = new Request(url, {
-      ...init,
-      method: 'POST',
-      redirect: 'error',
-      signal: watchdog.signal,
-    });
-    const response = await (url.protocol === 'http:'
-      ? (await import('@agent-device/host-kit/direct-http')).fetchOverDirectHttp(request)
-      : fetch(request));
+    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+    // Redirects could forward the daemon token, so these control requests never follow them.
+    const response = await fetchWithCredential(
+      url,
+      { ...init, method: 'POST', redirect: 'error', signal: watchdog.signal },
+      { subject: 'Upload URL' },
+    );
     const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
     watchdog.signal.throwIfAborted();
     return { response, body };

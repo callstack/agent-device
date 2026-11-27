@@ -24,9 +24,20 @@ test('consumeTextLines trims complete lines and retains a partial line', () => {
   assert.equal(second.buffer, '');
 });
 
+test.each(['http://10.0.0.7:4310', 'http://[fd00::1]:4310'])(
+  'loadNodeHttpRequester refuses a credential to %s',
+  async (url) => {
+    await assert.rejects(
+      () => loadNodeHttpRequester(new URL(url), { subject: 'Test URL' }),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'insecure_credential_transport',
+    );
+  },
+);
+
 test('loadNodeHttpRequester selects the protocol module and keeps request mutable', async () => {
-  const httpRequester = await loadNodeHttpRequester('http:');
-  const httpsRequester = await loadNodeHttpRequester('https:');
+  const httpRequester = await loadNodeHttpRequester(new URL('http://127.0.0.1'));
+  const httpsRequester = await loadNodeHttpRequester(new URL('https://remote.example'));
   assert.equal(httpRequester, http);
   assert.equal(httpsRequester, https);
 
