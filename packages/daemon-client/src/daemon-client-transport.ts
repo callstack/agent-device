@@ -37,7 +37,7 @@ import {
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { RemoteResendPort } from './daemon-client-remote-resend.ts';
+import type { RemoteResendPort } from './daemon-client-remote-resend-port.ts';
 import type {
   DaemonProbeVerdict,
   LoopbackConnectDenial,

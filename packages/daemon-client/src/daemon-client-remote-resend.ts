@@ -2,42 +2,17 @@
 // never dispatched: a typed pre-dispatch instance refusal on `/rpc` (ADR 0006), or, on the checked
 // route, this client's own proof that the connection never opened. Nothing a response says on the
 // checked route triggers a resend. Loaded only on those failures; the transport hands in what it
-// owns, so this module never imports it back.
+// owns as a `RemoteResendPort`, declared below both in `daemon-client-remote-resend-port.ts`.
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { CheckedRpcConnectFailure } from './daemon-client-checked-rpc.ts';
 import { cacheRemoteDaemonHealth } from './daemon-client-remote-health-cache.ts';
 import { recoverRemoteDaemonHealth } from './daemon-client-remote-health-recovery.ts';
-import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
+import type { RemoteResendPort } from './daemon-client-remote-resend-port.ts';
 import {
   REMOTE_DAEMON_UNREACHABLE_HINT,
   remoteDaemonUnavailableError,
 } from './daemon-lifecycle-errors.ts';
-
-/** The transport's side of one failed send: how to probe, resend and refuse for that request. */
-export type RemoteResendPort = {
-  info: DaemonInfo;
-  /** The command's budget and its end on the `performance.now()` clock, when it has one. */
-  timeoutMs: number | undefined;
-  deadline: number | undefined;
-  signal: AbortSignal | undefined;
-  /** Sends the request once more, with `timeoutMs` as its budget. */
-  resend(timeoutMs: number | undefined): Promise<DaemonResponse>;
-  /** A live `/health` read that refuses a skewed protocol. */
-  readHealth(probeTimeoutMs: number | undefined): Promise<RemoteDaemonHealth>;
-  /** A `/health` read through the process cache, as the recovery loop probes. */
-  probeHealth(probeTimeoutMs: number, signal: AbortSignal | undefined): Promise<RemoteDaemonHealth>;
-  invalidateHealth(): Promise<void>;
-  /** Throws the typed cancellation when the caller has aborted. */
-  refuseIfAborted(): void;
-  /** The timeout refusal for a budget spent before anything was resent. */
-  budgetSpent(): Error;
-  /** Whether a failure is a transport failure that makes the cached health stale. */
-  isTransportFailure(error: unknown): boolean;
-  /** The `/health` probe's own time limit. */
-  healthProbeTimeoutMs: number;
-};
 
 /**
  * Answers a failed checked call. Only a connection that never opened is acted on. A refused one fails

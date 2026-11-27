@@ -139,6 +139,12 @@ export type RemoteConnectionProfileFields = {
   daemonAuthToken?: string;
   daemonTransport?: DaemonTransportPreference;
   daemonServerMode?: DaemonServerMode;
+  /**
+   * How a remote command is sent; see `DaemonRpcMode`. The CLI sets it only from the connection
+   * `connect` recorded. An SDK caller that sets `checked` opts in explicitly: a remote that does not
+   * serve the checked route answers 404, which fails typed (`remote_checked_rpc_unsupported`) and
+   * is never resent.
+   */
   daemonRpc?: DaemonRpcMode;
   tenant?: string;
   sessionIsolation?: SessionIsolationMode;
