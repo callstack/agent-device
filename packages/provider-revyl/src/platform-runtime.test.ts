@@ -92,7 +92,9 @@ test('a live session binds the interactor-backed operations and refuses the rest
   assert.ok(binding.operations.openApplication);
   assert.ok(binding.operations.home);
   assert.equal(binding.operations.tapRef, undefined);
-  assert.equal(binding.operations.performGesturePlan, undefined);
+  assert.ok(binding.operations.performGesturePlan);
+  assert.ok(binding.operations.performDirectionalFlingPlan);
+  assert.equal(binding.operations.performMultiTouchGesturePlan, undefined);
   assert.equal(binding.operations.keyboardStatus, undefined);
   assert.equal(binding.operations.screenRecordingStart, undefined);
   assert.equal(binding.operations.appLogInspect, undefined);

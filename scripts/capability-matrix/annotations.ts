@@ -145,6 +145,16 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         link: docs('commands', 'pointer-and-gestures'),
         advertises: ['performGesturePlan', 'captureSnapshot'],
         note: 'Multi-touch plans are part of `gesture` where the target runs them; a plan using an operation the target lacks fails at that step.',
+        cells: {
+          'revyl-ios': {
+            text: 'One-finger only, on a worker that reports drag duration',
+            admits: ['performGesturePlan', 'captureSnapshot'],
+          },
+          'revyl-android': {
+            text: 'One-finger only, on a worker that reports drag duration',
+            admits: ['performGesturePlan', 'captureSnapshot'],
+          },
+        },
       },
       {
         id: 'hover-viewport',

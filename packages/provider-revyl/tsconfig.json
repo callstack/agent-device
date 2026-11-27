@@ -22,6 +22,9 @@
       "path": "../contracts"
     },
     {
+      "path": "../gestures"
+    },
+    {
       "path": "../host-kit"
     },
     {
