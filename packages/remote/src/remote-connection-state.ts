@@ -41,6 +41,8 @@ export type RemoteConnectionState = {
     baseUrl?: string;
     transport?: CliFlags['daemonTransport'];
     serverMode?: CliFlags['daemonServerMode'];
+    /** Set only by `connect`, after every link of the remote advertised `checked-rpc`. */
+    rpc?: 'checked';
   };
   tenant: string;
   runId: string;
@@ -395,13 +397,14 @@ export function writeRemoteConnectionState(options: {
 export function buildRemoteConnectionDaemonState(
   flags: Pick<
     CliFlags,
-    'daemonBaseUrl' | 'daemonAuthToken' | 'daemonTransport' | 'daemonServerMode'
+    'daemonBaseUrl' | 'daemonAuthToken' | 'daemonTransport' | 'daemonServerMode' | 'daemonRpc'
   >,
 ): RemoteConnectionState['daemon'] {
   return {
     baseUrl: sanitizeDaemonBaseUrl(flags.daemonBaseUrl),
     transport: flags.daemonTransport,
     serverMode: flags.daemonServerMode,
+    ...(flags.daemonRpc === 'checked' ? { rpc: 'checked' as const } : {}),
   };
 }
 
@@ -546,6 +549,8 @@ function remoteConnectionDefaults(
       daemonAuthToken: profile.daemonAuthToken,
       daemonTransport: state.daemon?.transport ?? profile.daemonTransport,
       daemonServerMode: state.daemon?.serverMode ?? profile.daemonServerMode,
+      // Only the mode `connect` checked; the profile's own value is never read here.
+      daemonRpc: state.daemon?.rpc,
       ...leaseScopeToCommandFlags(leaseScope),
       sessionIsolation: 'tenant',
       session: state.session,

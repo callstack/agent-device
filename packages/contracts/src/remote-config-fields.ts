@@ -28,8 +28,8 @@ export type ProviderDeviceType = (typeof PROVIDER_DEVICE_TYPES)[number];
 /**
  * How a client sends a remote command. `health` reads `/health` before each command RPC. `checked`
  * sends a standalone command on the checked RPC route, where the server refuses protocol skew
- * itself, so the command takes one round trip. Only a remote endpoint that advertises `checked-rpc`
- * accepts it.
+ * itself, so the command takes one round trip. Only the remote-config profile sets it, and
+ * `connect` records it only when every link of the remote advertises `checked-rpc`.
  */
 export const DAEMON_RPC_MODES = ['health', 'checked'] as const;
 export type DaemonRpcMode = (typeof DAEMON_RPC_MODES)[number];

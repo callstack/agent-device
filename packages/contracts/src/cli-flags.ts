@@ -41,6 +41,7 @@ export type CliFlags = CloudProviderProfileFields &
     daemonAuthToken?: string;
     daemonTransport?: DaemonTransportPreference;
     daemonServerMode?: DaemonServerMode;
+    /** No CLI token: the connection `connect` recorded sets it. */
     daemonRpc?: DaemonRpcMode;
     proxyHost?: string;
     proxyPort?: number;

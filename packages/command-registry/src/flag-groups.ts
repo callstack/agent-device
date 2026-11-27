@@ -76,7 +76,6 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'daemonAuthToken',
   'daemonTransport',
   'daemonServerMode',
-  'daemonRpc',
   'tenant',
   'sessionIsolation',
   'runId',

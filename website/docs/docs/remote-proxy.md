@@ -363,9 +363,9 @@ for the API.
 
 Remote clients read `/health` before sending commands and compare the daemon RPC protocol version. Keep client and proxy versions close: patch-level differences usually work, and incompatible RPC protocol versions fail before any command runs.
 
-### Send each command in one round trip
+### Send standalone commands in one round trip
 
-By default every command makes two requests: `GET /health`, then `POST /rpc`. Add `"daemonRpc": "checked"` to the connection profile to send most commands as one `POST /rpc/checked` instead. The proxy and the daemon behind it then check the RPC protocol themselves, after the token, and refuse a mismatch with the same upgrade message before anything runs.
+Without the field, a command's dispatch makes two requests: `GET /health`, then `POST /rpc`. Uploads, artifact downloads, and lease calls are separate. Add `"daemonRpc": "checked"` to the remote-config profile to send that dispatch as one `POST /rpc/checked` instead. The proxy and the daemon behind it then check the RPC protocol themselves, after authentication, and refuse a mismatch with the same upgrade message before anything runs.
 
 ```json
 {
@@ -374,10 +374,10 @@ By default every command makes two requests: `GET /health`, then `POST /rpc`. Ad
 }
 ```
 
-`connect` accepts the field only when the proxy and its daemon both list `checked-rpc` in `capabilities` on `/health`. `--daemon-rpc checked` and `AGENT_DEVICE_DAEMON_RPC=checked` set it for one command or shell; `--daemon-rpc health` turns it off.
+Only `connect` turns the field on, and only when the proxy, and the daemon behind it, list `checked-rpc` in `capabilities` on `/health`. Otherwise `connect` fails with `reason: "remote_checked_rpc_unsupported"` and `dispatched: "no"`. No flag or environment variable turns it on.
 
-- `install` and `reinstall` still read `/health` first, because they can upload an app before the command runs.
-- If the remote stops serving the route, for example after a rollback, commands fail with `reason: "remote_checked_rpc_unsupported"` and `dispatched: "unknown"`. The client never resends them. Update the proxy and daemon, or remove `daemonRpc`.
+- A command that allocates or renews its lease first, and `install` or `reinstall`, still read `/health` first. Their command must reach the daemon that holds the lease or the upload.
+- If the remote stops serving the route later, for example after a rollback, commands fail with `reason: "remote_checked_rpc_unsupported"` and `dispatched: "unknown"`. The client never resends them. Update the proxy and daemon, or remove `daemonRpc` and run `connect --force`.
 - Set it only when everything between you and the proxy forwards `/rpc/checked` and its `x-agent-device-rpc-protocol` header unchanged.
 
 `/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field. `leaseBackends` lists the lease backends the daemon admits (`macos-app` only on a macOS host); a host

@@ -490,11 +490,16 @@ async function resolveRemoteContext(
   }
 
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
-    const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
-      host: ctx.host,
-      devicePin: ctx.devicePin,
-      transport: createClientDaemonTransport(transport),
-    });
+    // Lease allocate and heartbeat calls act on the remote before the command, so they go
+    // health-first with the instance fences, never on the checked route.
+    const materializationClient = createAgentDeviceClient(
+      { ...buildClientConfig(ctx), daemonRpc: undefined },
+      {
+        host: ctx.host,
+        devicePin: ctx.devicePin,
+        transport: createClientDaemonTransport(transport),
+      },
+    );
     const { materializeRemoteConnectionForCommand } =
       await import('./cli/commands/connection-runtime.ts');
     const materialized = await materializeRemoteConnectionForCommand({

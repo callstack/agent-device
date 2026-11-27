@@ -223,7 +223,7 @@ function resolveRemoteClientSettings(
   const remoteBaseUrl = resolveRemoteDaemonBaseUrl(rawBaseUrl);
   const authToken = suppliedAuthToken ?? env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   validateRemoteDaemonTrust(remoteBaseUrl, authToken);
-  const daemonRpc = resolveDaemonRpcMode(req.flags?.daemonRpc ?? env.AGENT_DEVICE_DAEMON_RPC);
+  const daemonRpc = resolveDaemonRpcMode(req.flags?.daemonRpc);
   return { rawBaseUrl, remoteBaseUrl, authToken, daemonRpc };
 }
 
@@ -337,6 +337,7 @@ async function ensureRemoteDaemon(
       recovery: healthRecovery,
       deadline,
       hint: REMOTE_DAEMON_UNREACHABLE_HINT,
+      probe: async (probeMs, signal) => await cachedRemoteDaemonHealth(remoteInfo, probeMs, signal),
     });
   }
   remoteInfo.capabilities = (health.upstream ?? health).capabilities;

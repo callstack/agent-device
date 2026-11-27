@@ -20,7 +20,11 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
-import { createRequestGuard, sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
+import {
+  createRequestGuard,
+  readRemoteDaemonHealth,
+  sendRequest as sendDaemonRequest,
+} from './daemon-client-transport.ts';
 import { isRemoteDaemon, readRegisteredDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 import type {
@@ -461,16 +465,35 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
 }
 
 /**
- * Refuses `daemonRpc: checked` unless the remote endpoint, and the daemon behind it when it is a
- * proxy, advertise the `checked-rpc` capability in `/health`. `connect` runs it before it saves the
- * connection.
+ * Refuses `daemonRpc: checked` unless the remote endpoint advertises the `checked-rpc` capability in
+ * `/health`, and, when it is a proxy, so does the daemon behind it. The probe goes through the same
+ * base URL and trust validation as every remote request. `connect` runs it before it records the mode.
  */
-export async function assertRemoteServesCheckedRpc(params: {
-  baseUrl: string;
-  token: string | undefined;
-}): Promise<void> {
-  const { assertRemoteServesCheckedRpc: assert } = await import('./daemon-client-checked-rpc.ts');
-  await assert(params);
+export async function assertRemoteServesCheckedRpc(
+  flags: Pick<DaemonRequest['flags'] & object, 'daemonBaseUrl'> & { daemonAuthToken?: string },
+  host: HostEnvironment,
+): Promise<void> {
+  const [{ resolveClientSettings }, { assertHealthServesCheckedRpc }] = await Promise.all([
+    import('./daemon-client-lifecycle.ts'),
+    import('./daemon-client-checked-rpc.ts'),
+  ]);
+  const settings = resolveClientSettings(
+    {
+      session: 'default',
+      command: 'connect',
+      positionals: [],
+      flags: { daemonBaseUrl: flags.daemonBaseUrl },
+    },
+    flags.daemonAuthToken,
+    host,
+  );
+  if (!settings.remoteBaseUrl) return;
+  const info: DaemonInfo = {
+    token: settings.remoteAuthToken ?? '',
+    pid: 0,
+    baseUrl: settings.remoteBaseUrl,
+  };
+  assertHealthServesCheckedRpc(await readRemoteDaemonHealth(info), info);
 }
 
 /** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */

@@ -137,6 +137,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         CLIENT_CHECKED_RPC,
         'isCheckedRpcOutcomeResponse',
         'CheckedRpcOutcome',
+        'ReadHealthLink',
         'readCheckedRpcOutcome',
         'checkedRpcRefusalError',
         'protocolMismatchError',

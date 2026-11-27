@@ -1,8 +1,13 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { expect, test } from 'vitest';
-import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
+import { expect, test, vi } from 'vitest';
+import {
+  closeLoopbackServer,
+  createTestHostEnvironment,
+  listenOnLoopback,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import {
   DAEMON_HTTP_REFUSAL_HEADER,
   DAEMON_HTTP_RPC_PROTOCOL_HEADER,
@@ -141,7 +146,7 @@ test('a JSON-RPC 404 under checked RPC is the daemon answer, not a route miss', 
   }
 });
 
-test('an upstream protocol refusal keeps the upgrade message and names the daemon behind the proxy', async () => {
+test('an upstream protocol refusal keeps the upgrade message, the typed reason and the refusing side', async () => {
   const daemon = await remoteDaemon({
     status: 409,
     headers: { [DAEMON_HTTP_REFUSAL_HEADER]: 'upstream-protocol-mismatch' },
@@ -165,7 +170,14 @@ test('an upstream protocol refusal keeps the upgrade message and names the daemo
       message: expect.stringContaining(
         'the agent-device-daemon behind agent-device-proxy runs 9.0.0 (RPC protocol 99)',
       ),
-      details: { upgradeSide: 'client-and-proxy', remoteRpcProtocolVersion: 99, dispatched: 'no' },
+      details: {
+        reason: 'remote_rpc_protocol_mismatch',
+        service: 'agent-device-daemon',
+        version: '9.0.0',
+        rpcProtocolVersion: 99,
+        upgradeSide: 'client-and-proxy',
+        dispatched: 'no',
+      },
     });
     expect(routes(daemon.seen)).toEqual(['POST /rpc/checked']);
   } finally {
@@ -173,35 +185,45 @@ test('an upstream protocol refusal keeps the upgrade message and names the daemo
   }
 });
 
-test('a script-artifacts refusal is not dispatched and removes the publication record', async () => {
+test('a refusal value this build does not know is an unreadable reply, never a protocol mismatch', async () => {
   const daemon = await remoteDaemon({
     status: 409,
-    headers: { [DAEMON_HTTP_REFUSAL_HEADER]: 'script-artifacts' },
+    headers: { [DAEMON_HTTP_REFUSAL_HEADER]: 'future-precondition' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 'test', error: { code: -32001, message: 'no' } }),
   });
-  const root = mkdtempForTestSync('checked-script-');
-  const stateDir = path.join(root, 'state');
   try {
-    await expect(
-      sendToDaemon({
-        command: 'open',
-        session: 'owned',
-        positionals: ['Demo'],
-        flags: {
-          daemonBaseUrl: daemon.baseUrl,
-          daemonRpc: 'checked',
-          saveScript: path.join(root, 'journey.ad'),
-          stateDir,
-        },
-      }),
-    ).rejects.toMatchObject({
-      details: { reason: 'remote_script_artifacts_unsupported', dispatched: 'no' },
-    });
-    const records = path.join(stateDir, 'remote-connections', 'session-scripts');
-    expect(fs.existsSync(records) ? fs.readdirSync(records) : []).toEqual([]);
+    const error = await sendToDaemon(sessionList(daemon.baseUrl, { daemonRpc: 'checked' })).catch(
+      (error: unknown) => error,
+    );
+    expect(error).toMatchObject({ details: { reason: 'daemon_response_invalid' } });
+    expect(error).not.toMatchObject({ details: { dispatched: 'no' } });
+    expect(routes(daemon.seen)).toEqual(['POST /rpc/checked']);
   } finally {
     await daemon.close();
   }
+});
+
+test('a checked open proven undispatched removes its publication record', async () => {
+  const daemon = await remoteDaemon();
+  const { baseUrl } = daemon;
+  await daemon.close();
+  const root = mkdtempForTestSync('checked-script-');
+  const stateDir = path.join(root, 'state');
+  await expect(
+    sendToDaemon({
+      command: 'open',
+      session: 'owned',
+      positionals: ['Demo'],
+      flags: {
+        daemonBaseUrl: baseUrl,
+        daemonRpc: 'checked',
+        saveScript: path.join(root, 'journey.ad'),
+        stateDir,
+      },
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'remote_daemon_unavailable', dispatched: 'no' } });
+  const records = path.join(stateDir, 'remote-connections', 'session-scripts');
+  expect(fs.existsSync(records) ? fs.readdirSync(records) : []).toEqual([]);
 });
 
 test('a refused connection under checked RPC fails at once as an unavailable remote', async () => {
@@ -218,26 +240,39 @@ test.each([
   { name: 'a daemon with it', health: { capabilities: ['checked-rpc'] }, served: true },
   {
     name: 'a proxy whose daemon lacks it',
-    health: { capabilities: ['checked-rpc'], upstream: { capabilities: [] } },
+    health: {
+      service: 'agent-device-proxy',
+      capabilities: ['checked-rpc'],
+      upstream: { capabilities: [] },
+    },
+    served: false,
+  },
+  {
+    name: 'a proxy that reports no daemon behind it',
+    health: { service: 'agent-device-proxy', capabilities: ['checked-rpc'], upstream: null },
     served: false,
   },
   {
     name: 'a proxy whose daemon has it',
-    health: { capabilities: ['checked-rpc'], upstream: { capabilities: ['checked-rpc'] } },
+    health: {
+      service: 'agent-device-proxy',
+      capabilities: ['checked-rpc'],
+      upstream: { capabilities: ['checked-rpc'] },
+    },
     served: true,
   },
 ])(
-  'connect accepts daemonRpc checked only when $name advertises checked-rpc',
+  'assertRemoteServesCheckedRpc accepts only when $name proves checked-rpc on every link',
   async ({ health, served }) => {
     const server = http.createServer((_req, res) => {
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ ok: true, ...health }));
     });
     try {
-      const verdict = assertRemoteServesCheckedRpc({
-        baseUrl: `http://127.0.0.1:${await listenOnLoopback(server)}`,
-        token: undefined,
-      });
+      const verdict = assertRemoteServesCheckedRpc(
+        { daemonBaseUrl: `http://127.0.0.1:${await listenOnLoopback(server)}` },
+        createTestHostEnvironment(),
+      );
       if (served) await expect(verdict).resolves.toBeUndefined();
       else
         await expect(verdict).rejects.toMatchObject({
@@ -248,3 +283,24 @@ test.each([
     }
   },
 );
+
+test('the connect probe is refused by remote trust validation before any request leaves', async () => {
+  const requests = vi.spyOn(http, 'request');
+  try {
+    await expect(
+      assertRemoteServesCheckedRpc(
+        { daemonBaseUrl: 'http://remote-mac.example.test:7777/agent-device' },
+        createTestHostEnvironment(),
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    await expect(
+      assertRemoteServesCheckedRpc(
+        { daemonBaseUrl: 'ftp://remote-mac.example.test/agent-device', daemonAuthToken: 'secret' },
+        createTestHostEnvironment(),
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    expect(requests).not.toHaveBeenCalled();
+  } finally {
+    requests.mockRestore();
+  }
+});

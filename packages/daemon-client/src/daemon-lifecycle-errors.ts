@@ -111,10 +111,6 @@ export function daemonStopCommand(stateDir: string): string {
  * one when it re-probed within the command's budget. `healthRecoveryBudgetMs` is present only when
  * that budget ran out, which tells a spent budget from a single failed probe.
  */
-/** What a caller does about a remote daemon that answers nothing. */
-export const REMOTE_DAEMON_UNREACHABLE_HINT =
-  'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.';
-
 export function remoteDaemonUnavailableError(params: {
   daemonBaseUrl: string | undefined;
   attempts: number;
@@ -131,6 +127,10 @@ export function remoteDaemonUnavailableError(params: {
     ...(hint !== undefined ? { hint } : {}),
   });
 }
+
+/** What a caller does about a remote daemon that answers nothing. */
+export const REMOTE_DAEMON_UNREACHABLE_HINT =
+  'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.';
 
 /** A daemon won a startup race that this caller may not settle by retiring it. */
 export function daemonContendedError(): AppError {

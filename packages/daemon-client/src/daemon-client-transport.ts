@@ -18,7 +18,6 @@ import {
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
-  DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
   DAEMON_HTTP_CHECKED_RPC_ROUTE,
   DAEMON_HTTP_RPC_PROTOCOL_HEADER,
   DAEMON_HTTP_INSTANCE_HEADER,
@@ -38,14 +37,15 @@ import {
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { RemoteResendPort } from './daemon-client-remote-resend.ts';
 import type {
   DaemonProbeVerdict,
   LoopbackConnectDenial,
   LoopbackTransport,
 } from './daemon-client-loopback-probe.ts';
 
-export type ResolvedDaemonTransport = LoopbackTransport;
-export type SendRequestOptions = {
+type ResolvedDaemonTransport = LoopbackTransport;
+type SendRequestOptions = {
   /** The host whose working directory and environment this request's client-side work reads. */
   host: HostEnvironment;
   onProgress?: RequestProgressSink;
@@ -103,7 +103,7 @@ function abortedRequestError(
  * Refuses a send attempt that starts while the caller's signal is already aborted: nothing may leave
  * the process, so this never touches a connection and the refusal carries `details.dispatched: 'no'`.
  */
-export function refuseAbortedRequest(signal: AbortSignal | undefined, requestId?: string): void {
+function refuseAbortedRequest(signal: AbortSignal | undefined, requestId?: string): void {
   if (!signal?.aborted) return;
   throw abortedRequestError(signal, 'no', requestId);
 }
@@ -154,7 +154,7 @@ export function createRequestGuard(params: {
 }
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
-export const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
+const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
 
 export function isDaemonTransportUnavailableError(error: unknown): boolean {
   return (
@@ -183,17 +183,15 @@ export type RemoteDaemonHealth = {
   instanceId?: string;
   hostArch?: string;
   capabilities?: DaemonInfo['capabilities'];
-  /** This link serves the checked RPC route. */
-  checkedRpc?: true;
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
   /** The probe ran out of its time budget before an answer, rather than failing outright. */
   timedOut?: true;
 };
 
-type RemoteDaemonHealthLink = Omit<
+type RemoteDaemonHealthLink = Pick<
   RemoteDaemonHealth,
-  'reachable' | 'statusCode' | 'upstream' | 'timedOut'
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'capabilities'
 >;
 
 export async function probeDaemonReachability(
@@ -372,7 +370,7 @@ function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' |
   }
 }
 
-export function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
+function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink {
   return {
     service: isHealthService(parsed.service) ? parsed.service : undefined,
     version: readHealthVersion(parsed.version),
@@ -383,10 +381,6 @@ export function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHea
     ...(parsed.capabilities === undefined
       ? {}
       : { capabilities: readDaemonCapabilities(parsed.capabilities) }),
-    ...(Array.isArray(parsed.capabilities) &&
-    parsed.capabilities.includes(DAEMON_HTTP_CHECKED_RPC_CAPABILITY)
-      ? { checkedRpc: true as const }
-      : {}),
   };
 }
 
@@ -509,22 +503,46 @@ async function sendRequestWithFallback(
       trackCheckedConnect: info.checkedRpc,
     });
   } catch (error) {
-    const attempt = { info, req, statePaths, timeoutMs, deadline, transport, options };
     // Loaded only on these failures: the two remote resend rules live in one module.
-    if (info.checkedRpc) {
-      const { sendCheckedRpcAfterConnectFailure } =
-        await import('./daemon-client-remote-resend.ts');
-      return await sendCheckedRpcAfterConnectFailure(error, attempt);
-    }
-    if (info.baseUrl && isRemoteInstanceMismatch(error)) {
-      const { retryAfterRemoteInstanceMismatch } = await import('./daemon-client-remote-resend.ts');
-      return await retryAfterRemoteInstanceMismatch(attempt);
+    if (info.checkedRpc || (info.baseUrl && isRemoteInstanceMismatch(error))) {
+      const resend = await import('./daemon-client-remote-resend.ts');
+      const port = remoteResendPort(info, req, statePaths, transport, timeoutMs, deadline, options);
+      return info.checkedRpc
+        ? await resend.sendCheckedRpcAfterConnectFailure(error, port)
+        : await resend.retryAfterRemoteInstanceMismatch(port, req.meta?.scriptPublicationId);
     }
     if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
     const fallback = chooseAutoFallbackTransport(info, preference, transport);
     if (!fallback || !isSafeAutoTransportFallbackError(error, transport)) throw error;
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, fallback, options);
   }
+}
+
+/** What the resend rules may do for one failed request: every transport power they use, bound to it. */
+function remoteResendPort(
+  info: DaemonInfo,
+  req: DaemonWireRequest,
+  statePaths: DaemonPaths,
+  transport: ResolvedDaemonTransport,
+  timeoutMs: number | undefined,
+  deadline: number | undefined,
+  options: SendRequestOptions,
+): RemoteResendPort {
+  return {
+    info,
+    timeoutMs,
+    deadline,
+    signal: options.signal,
+    resend: async (budgetMs) =>
+      await sendRequestWithTransport(info, req, statePaths, budgetMs, transport, options),
+    readHealth: async (probeMs) => await readRemoteDaemonHealth(info, probeMs, options.signal),
+    probeHealth: async (probeMs, signal) => await cachedRemoteDaemonHealth(info, probeMs, signal),
+    invalidateHealth: async () => await invalidateRemoteDaemonHealth(info),
+    refuseIfAborted: () => refuseAbortedRequest(options.signal, req.meta?.requestId),
+    budgetSpent: () => requestTimeoutError(timeoutMs ?? 0, req.meta?.requestId, false),
+    isTransportFailure: isRemoteTransportFailure,
+    healthProbeTimeoutMs: REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS,
+  };
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {
@@ -534,7 +552,7 @@ function isRemoteInstanceMismatch(error: unknown): boolean {
   );
 }
 
-export function isRemoteTransportFailure(error: unknown): boolean {
+function isRemoteTransportFailure(error: unknown): boolean {
   return (
     error instanceof AppError &&
     (error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason ||
@@ -543,7 +561,7 @@ export function isRemoteTransportFailure(error: unknown): boolean {
   );
 }
 
-export async function sendRequestWithTransport(
+async function sendRequestWithTransport(
   info: DaemonInfo,
   req: DaemonWireRequest,
   statePaths: DaemonPaths,
@@ -735,7 +753,7 @@ async function sendSocketRequest(
   });
 }
 
-export function requestTimeoutError(
+function requestTimeoutError(
   timeoutMs: number,
   requestId: string | undefined,
   daemonRequestSent: boolean,
@@ -837,7 +855,7 @@ async function sendHttpRequest(
       },
       (res) => {
         if (checkedRpc?.isCheckedRpcOutcomeResponse(res.statusCode, res.headers ?? {})) {
-          void checkedRpc.readCheckedRpcOutcome(res, info).then((outcome) => {
+          void checkedRpc.readCheckedRpcOutcome(res, info, readHealthLink).then((outcome) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
             if (outcome.kind === 'answer') handleBody(outcome.body);
             else rejectOnce(outcome.error);
@@ -957,7 +975,7 @@ async function sendHttpRequest(
 const loadRemoteHealthCache = () => import('./daemon-client-remote-health-cache.ts');
 
 /** Drops a remote daemon's cached health; a local daemon has none, so its failure loads nothing. */
-export async function invalidateRemoteDaemonHealth(info: DaemonInfo): Promise<void> {
+async function invalidateRemoteDaemonHealth(info: DaemonInfo): Promise<void> {
   if (!info.baseUrl) return;
   (await loadRemoteHealthCache()).invalidateRemoteDaemonHealth(info);
 }

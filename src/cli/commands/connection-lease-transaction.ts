@@ -121,7 +121,7 @@ export async function acquireConnectionLease(options: {
   nextFlags: CliFlags;
   positionals?: string[];
   leaseLedger: LeaseLedger;
-}): Promise<{ state: RemoteConnectionState; changed: boolean }> {
+}): Promise<{ state: RemoteConnectionState; changed: boolean; leasePrepared: boolean }> {
   const { command, client, state, nextFlags, leaseLedger } = options;
   const deferredAppSelection = connectionProviderCapabilities(
     state.leaseProvider,
@@ -151,7 +151,9 @@ export async function acquireConnectionLease(options: {
     platform: carriedConnectionPlatform(state.session, nextState, nextFlags),
   };
   nextFlags.platform = nextState.platform;
-  return { state: nextState, changed };
+  // An allocate or heartbeat just ran on the remote, so the command that uses the lease must reach
+  // the same daemon: the caller sends it health-first, with the instance fences.
+  return { state: nextState, changed, leasePrepared: leasePolicy.shouldAllocate(command) };
 }
 
 /**

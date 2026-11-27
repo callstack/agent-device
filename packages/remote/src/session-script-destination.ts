@@ -31,8 +31,8 @@ type RemoteEndpoint = DaemonArtifactEndpoint & {
  * Sends a remote `open --save-script`. Before the open leaves, the client mints a publication ID
  * and records the caller destination and the `--force` grant under it. The serialized request
  * carries the ID and omits the destination. A daemon answer that does not name the ID removes the
- * record, and so does a failure that proves nothing was dispatched. Any other failed open may still
- * have armed the recording, so it keeps the record. A record that outlives its open stays inert:
+ * record, and so does a checked open's failure that proves nothing was dispatched. Any other
+ * failed open may still have armed the recording, so it keeps the record. A record that outlives its open stays inert:
  * only artifacts of its own ID match it.
  */
 export async function sendRemoteScriptOpen(
@@ -54,7 +54,9 @@ export async function sendRemoteScriptOpen(
   try {
     response = await send({ ...req, meta });
   } catch (error) {
-    if (error instanceof AppError && error.details?.dispatched === 'no') await discard();
+    if (info.checkedRpc && error instanceof AppError && error.details?.dispatched === 'no') {
+      await discard();
+    }
     throw error;
   }
   if (!response.ok || response.data?.scriptPublicationId !== publicationId) await discard();

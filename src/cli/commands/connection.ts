@@ -126,16 +126,13 @@ export const connectCommand: ClientCommandHandler = async ({
 };
 
 /**
- * `daemonRpc: checked` skips the `/health` probe on later commands, so `connect` accepts it only
+ * `daemonRpc: checked` skips the `/health` probe on later commands, so `connect` records it only
  * when every link of the remote advertises `checked-rpc`.
  */
 async function assertCheckedRpcServed(flags: CliFlags, host: HostEnvironment): Promise<void> {
-  if (flags.daemonRpc !== 'checked' || !flags.daemonBaseUrl) return;
+  if (flags.daemonRpc !== 'checked') return;
   const { assertRemoteServesCheckedRpc } = await import('@agent-device/daemon-client');
-  await assertRemoteServesCheckedRpc({
-    baseUrl: flags.daemonBaseUrl,
-    token: flags.daemonAuthToken ?? host.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN,
-  });
+  await assertRemoteServesCheckedRpc(flags, host);
 }
 
 function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
@@ -334,18 +331,20 @@ function scopeConnectProfile(
     cwd: host.cwd,
     env: host.env,
   }).profile;
+  // The profile is the only source of `daemonRpc`; `connect` checks it before recording it.
+  const resolvedFlags = { ...resolved.flags, daemonRpc: profile.daemonRpc };
   if (!flags.remoteConfig || flags.session === undefined) {
-    return { flags: resolved.flags, connection: buildRemoteConnectionRequestMetadata(profile) };
+    return { flags: resolvedFlags, connection: buildRemoteConnectionRequestMetadata(profile) };
   }
   const scope = sessionLeaseScope(
-    { ...profile, leaseId: resolved.flags.leaseId, runId: profile.runId },
+    { ...profile, leaseId: resolvedFlags.leaseId, runId: profile.runId },
     flags.session,
   );
   return {
     flags:
-      resolved.flags.runId === profile.runId
-        ? { ...resolved.flags, runId: scope.runId }
-        : resolved.flags,
+      resolvedFlags.runId === profile.runId
+        ? { ...resolvedFlags, runId: scope.runId }
+        : resolvedFlags,
     connection: buildRemoteConnectionRequestMetadata({ ...profile, clientId: scope.clientId }),
   };
 }

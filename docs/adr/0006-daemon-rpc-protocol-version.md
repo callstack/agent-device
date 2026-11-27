@@ -8,6 +8,7 @@ Accepted
 
 - Before remote JSON-RPC requests, compare the daemon's `rpcProtocolVersion` from `/health`, or send them on the checked route, where the server makes that comparison.
 - The checked route reaches its authentication verdict exactly as `/rpc` does, then refuses protocol skew before dispatch, with HTTP 409 and a typed `x-agent-device-refusal` header.
+- A client uses the checked route only when `connect` recorded it for the connection. It never resends a checked call on a response, and never falls back to `/rpc` after one.
 - Package `version` is diagnostic only and must not be used as a compatibility gate.
 - Allow a missing `rpcProtocolVersion` unless a later security or protocol decision explicitly retires legacy compatibility.
 - A persistent client may cache a successful probe if `/health` advertises an instance ID for the daemon endpoint and, for a proxy, for its upstream daemon.
@@ -92,6 +93,12 @@ A daemon that serves `checked-rpc` also serves `script-artifacts`, so the route 
 
 The route, not a header, is what makes the check safe.
 Released daemons and proxies answer an unknown route with 404 before dispatch, and they ignore unknown headers on `/rpc`.
+A 404 is still not proof of non-dispatch, because a gateway can answer for a command that ran.
+So a client does not discover the route.
+`connect` records `daemonRpc: "checked"` from the remote-config profile only when `/health` advertises `checked-rpc` on the endpoint and, for a proxy, on its `upstream`.
+With it recorded, a 404 that is not a JSON-RPC answer fails with `remote_checked_rpc_unsupported` and `dispatched: 'unknown'`, and the client does not resend.
+A flow with remote side effects before its command keeps the `/health` probe and the instance headers for every call: an upload, and a lease allocate or heartbeat.
+Only a connect that never opened is evidence that nothing left: a refused one fails at once, and a timed-out one runs fresh `/health` probes within the command's budget, then sends once.
 
 ## Alternatives Considered
 
@@ -102,6 +109,7 @@ Released daemons and proxies answer an unknown route with 404 before dispatch, a
 - **Negotiate full schemas.** This is more precise, but it is too much machinery for the current JSON-RPC boundary.
 - **Persist the `/health` answer in the client state directory (#5134).** It saves the probe across CLI processes, but it adds a local trust boundary and cache rules, and a rollback to a daemon that ignores instance headers would dispatch on a stale view.
 - **Send the protocol as a header on `/rpc`.** Released daemons ignore unknown headers and dispatch anyway.
+- **Fall back to `/health` and `/rpc` after a 404 on the checked route.** A 404 can come after dispatch, so the fallback could run a command twice.
 
 ## Consequences
 

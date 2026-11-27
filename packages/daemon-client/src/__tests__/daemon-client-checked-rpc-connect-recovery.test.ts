@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
 import { afterEach, test, vi } from 'vitest';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { sendToDaemon } from '../index.ts';
 
 type Call = { method: string; path: string; at: number };
@@ -19,8 +20,11 @@ function fakeResponse(): EventEmitter {
   });
 }
 
-/** The first checked POST hangs before its socket connects; everything after it answers. */
-function firstConnectHangs(): Call[] {
+/**
+ * The first checked POST hangs before its socket connects. `/health` answers with `healthStatus`
+ * (and an instance ID, so a usable answer is cached); every other request answers.
+ */
+function firstCheckedConnectHangs(healthStatus = 200): Call[] {
   const calls: Call[] = [];
   vi.spyOn(http, 'request').mockImplementation(((
     options: { method?: string; path?: string },
@@ -31,9 +35,9 @@ function firstConnectHangs(): Call[] {
       path: options.path ?? '',
       at: performance.now(),
     };
+    const checked = call.path.endsWith('/rpc/checked');
+    const hangs = checked && !calls.some((seen) => seen.path.endsWith('/rpc/checked'));
     calls.push(call);
-    const hangs =
-      calls.filter((seen) => seen.method === 'POST').length === 1 && call.method === 'POST';
     const req = Object.assign(new EventEmitter(), {
       write: () => {},
       destroy: () => {},
@@ -46,13 +50,20 @@ function firstConnectHangs(): Call[] {
         }
         const body =
           call.method === 'GET'
-            ? JSON.stringify({ ok: true, service: 'agent-device-daemon', rpcProtocolVersion: 3 })
+            ? JSON.stringify({
+                ok: true,
+                service: 'agent-device-daemon',
+                rpcProtocolVersion: 3,
+                instanceId: 'daemon-1',
+              })
             : JSON.stringify({
                 jsonrpc: '2.0',
                 id: 'x',
                 result: { ok: true, data: { sent: true } },
               });
-        const res = fakeResponse();
+        const res = Object.assign(fakeResponse(), {
+          statusCode: call.method === 'GET' ? healthStatus : 200,
+        });
         process.nextTick(() => {
           callback(res);
           res.emit('data', body);
@@ -83,27 +94,27 @@ function driveFakeTime(): () => Promise<void> {
   };
 }
 
+const BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
+
+function sessionList(daemonRpc?: 'checked') {
+  return {
+    session: 'default',
+    command: 'session',
+    positionals: ['list'],
+    flags: { daemonBaseUrl: BASE_URL, ...(daemonRpc ? { daemonRpc } : {}) },
+  };
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 test('a checked connect timeout runs the /health loop, then sends exactly once more', async () => {
-  const calls = firstConnectHangs();
+  const calls = firstCheckedConnectHangs();
   const stopDriving = driveFakeTime();
   try {
-    const response = await sendToDaemon(
-      {
-        session: 'default',
-        command: 'session',
-        positionals: ['list'],
-        flags: {
-          daemonBaseUrl: 'http://remote-mac.example.test:7777/agent-device',
-          daemonRpc: 'checked',
-        },
-      },
-      { authToken: 'remote-secret' },
-    );
+    const response = await sendToDaemon(sessionList('checked'), { authToken: 'remote-secret' });
 
     assert.equal(response.ok, true);
     assert.deepEqual(
@@ -116,6 +127,48 @@ test('a checked connect timeout runs the /health loop, then sends exactly once m
     );
     // The connect timer is the `/health` probe's own 3 s limit; the loop then waits its 1 s interval.
     assert.ok((calls[1]?.at ?? 0) - (calls[0]?.at ?? 0) >= 4_000);
+  } finally {
+    await stopDriving();
+  }
+});
+
+test('a cached /health answer never stands in for the recovery probe after a checked connect timeout', async () => {
+  const calls = firstCheckedConnectHangs();
+  const stopDriving = driveFakeTime();
+  try {
+    // A health-first command in this process caches a usable `/health` answer.
+    await sendToDaemon(sessionList(), { authToken: 'remote-secret' });
+    calls.length = 0;
+    const response = await sendToDaemon(sessionList('checked'), { authToken: 'remote-secret' });
+
+    assert.equal(response.ok, true);
+    assert.deepEqual(
+      calls.map(({ method, path }) => `${method} ${path}`),
+      [
+        'POST /agent-device/rpc/checked',
+        'GET /agent-device/health',
+        'POST /agent-device/rpc/checked',
+      ],
+    );
+  } finally {
+    await stopDriving();
+  }
+});
+
+test('an abort during checked connect recovery rejects with the typed cancellation', async () => {
+  firstCheckedConnectHangs(503);
+  const stopDriving = driveFakeTime();
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 6_000);
+  try {
+    const outcome = await sendToDaemon(sessionList('checked'), {
+      authToken: 'remote-secret',
+      signal: controller.signal,
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    assert.ok(isRequestCanceledError(outcome), `unexpected outcome: ${String(outcome)}`);
   } finally {
     await stopDriving();
   }
