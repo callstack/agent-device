@@ -2,6 +2,7 @@ import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
@@ -35,7 +36,7 @@ type MockHttpResponse = EventEmitter & {
 async function withRemoteDaemonEnv<T>(callback: () => Promise<T>): Promise<T> {
   const previousBaseUrl = process.env.AGENT_DEVICE_DAEMON_BASE_URL;
   const previousAuthToken = process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
-  process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
+  process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'https://remote-mac.example.test:7777/agent-device';
   process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN = 'remote-secret';
 
   try {
@@ -56,8 +57,8 @@ function emitJsonRpcResult(res: MockHttpResponse, id: string, result: unknown): 
 function mockEventHttpRequest(
   handler: (context: { options: Record<string, any>; body: string; res: MockHttpResponse }) => void,
 ): () => void {
-  const originalHttpRequest = http.request;
-  (http as unknown as { request: typeof http.request }).request = ((
+  const originalHttpRequest = https.request;
+  (https as unknown as { request: typeof https.request }).request = ((
     options: any,
     callback: (res: any) => void,
   ) => {
@@ -84,10 +85,10 @@ function mockEventHttpRequest(
       });
     };
     return req as any;
-  }) as typeof http.request;
+  }) as typeof https.request;
 
   return () => {
-    (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
+    (https as unknown as { request: typeof https.request }).request = originalHttpRequest;
   };
 }
 
@@ -340,8 +341,8 @@ test('sendToDaemon forwards replay test progress before the HTTP NDJSON response
   const stderrCapture = beginStderrCapture();
   const seenPaths: string[] = [];
   const progressEvents: RequestProgressEvent[] = [];
-  const originalHttpRequest = http.request;
-  (http as unknown as { request: typeof http.request }).request = ((
+  const originalHttpRequest = https.request;
+  (https as unknown as { request: typeof https.request }).request = ((
     options: any,
     callback: (res: any) => void,
   ) => {
@@ -408,7 +409,7 @@ test('sendToDaemon forwards replay test progress before the HTTP NDJSON response
       });
     };
     return req as any;
-  }) as typeof http.request;
+  }) as typeof https.request;
 
   try {
     await withRemoteDaemonEnv(async () => {
@@ -434,7 +435,7 @@ test('sendToDaemon forwards replay test progress before the HTTP NDJSON response
       assert.equal(progressEvent.title, 'Payments flow');
     }
   } finally {
-    (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
+    (https as unknown as { request: typeof https.request }).request = originalHttpRequest;
     stderrCapture.restore();
   }
 });
@@ -511,8 +512,8 @@ test('sendToDaemon uses explicit remote daemon base URL and auth token', async (
   let rpcRequest: Record<string, unknown> | null = null;
   const seenPaths: string[] = [];
   let healthcheckTimeout: number | undefined;
-  const originalHttpRequest = http.request;
-  (http as unknown as { request: typeof http.request }).request = ((
+  const originalHttpRequest = https.request;
+  (https as unknown as { request: typeof https.request }).request = ((
     options: any,
     callback: (res: any) => void,
   ) => {
@@ -573,11 +574,11 @@ test('sendToDaemon uses explicit remote daemon base URL and auth token', async (
       });
     };
     return req as any;
-  }) as typeof http.request;
+  }) as typeof https.request;
 
   const previousBaseUrl = process.env.AGENT_DEVICE_DAEMON_BASE_URL;
   const previousAuthToken = process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
-  process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
+  process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'https://remote-mac.example.test:7777/agent-device';
   process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN = 'ambient-token';
 
   try {
@@ -603,7 +604,7 @@ test('sendToDaemon uses explicit remote daemon base URL and auth token', async (
     assert.equal((rpcRequest as any)?.params?.token, 'remote-secret');
     assert.equal((rpcRequest as any)?.params?.flags?.daemonAuthToken, undefined);
   } finally {
-    (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
+    (https as unknown as { request: typeof https.request }).request = originalHttpRequest;
     if (previousBaseUrl === undefined) delete process.env.AGENT_DEVICE_DAEMON_BASE_URL;
     else process.env.AGENT_DEVICE_DAEMON_BASE_URL = previousBaseUrl;
     if (previousAuthToken === undefined) delete process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
@@ -706,8 +707,8 @@ test.each([
 
 test('sendToDaemon sends lease helpers as top-level JSON-RPC methods over HTTP', async () => {
   const rpcRequests: Record<string, unknown>[] = [];
-  const originalHttpRequest = http.request;
-  (http as unknown as { request: typeof http.request }).request = ((
+  const originalHttpRequest = https.request;
+  (https as unknown as { request: typeof https.request }).request = ((
     options: any,
     callback: (res: any) => void,
   ) => {
@@ -766,11 +767,11 @@ test('sendToDaemon sends lease helpers as top-level JSON-RPC methods over HTTP',
       });
     };
     return req as any;
-  }) as typeof http.request;
+  }) as typeof https.request;
 
   const previousBaseUrl = process.env.AGENT_DEVICE_DAEMON_BASE_URL;
   const previousAuthToken = process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
-  process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
+  process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'https://remote-mac.example.test:7777/agent-device';
   process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN = 'remote-secret';
 
   try {
@@ -841,7 +842,7 @@ test('sendToDaemon sends lease helpers as top-level JSON-RPC methods over HTTP',
       leaseId: 'lease-new',
     });
   } finally {
-    (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
+    (https as unknown as { request: typeof https.request }).request = originalHttpRequest;
     if (previousBaseUrl === undefined) delete process.env.AGENT_DEVICE_DAEMON_BASE_URL;
     else process.env.AGENT_DEVICE_DAEMON_BASE_URL = previousBaseUrl;
     if (previousAuthToken === undefined) delete process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;

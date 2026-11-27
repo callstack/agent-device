@@ -422,6 +422,22 @@ test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
   );
 });
 
+test('prepareMetroRuntime refuses a bridge bearer token over plain http off loopback', async () => {
+  await assert.rejects(
+    () =>
+      prepareMetroRuntime(
+        {
+          publicBaseUrl: 'https://sandbox.example.test',
+          proxyBaseUrl: 'http://proxy.example.test',
+          env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: TEST_TOKEN },
+        },
+        createTestHostEnvironment(),
+      ),
+    (error) =>
+      error instanceof AppError && error.details?.reason === 'insecure_credential_transport',
+  );
+});
+
 test('prepareMetroRuntime falls back to daemon auth token for proxy auth', async () => {
   await assert.rejects(
     () =>

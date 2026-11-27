@@ -1,4 +1,5 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/daemon-http';
 import { readCloudJsonResponse } from './cloud-response.ts';
 
 const HTTP_TIMEOUT_MS = 15_000;
@@ -31,6 +32,7 @@ export async function postCloudAuthJson<T>(options: {
 }): Promise<T> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const requestUrl = new URL(options.pathName, options.baseUrl);
+  assertSecureCredentialTransport(requestUrl, 'AGENT_DEVICE_CLOUD_BASE_URL');
   const post: RequestInit = {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

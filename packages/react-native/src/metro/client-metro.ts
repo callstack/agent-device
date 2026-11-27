@@ -21,6 +21,7 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/daemon-http';
 import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import type {
   MetroBridgeDescriptor,
@@ -629,6 +630,7 @@ function resolveProxySettings(
       'metro prepare requires --proxy-base-url when proxy auth is provided.',
     );
   }
+  if (proxyBaseUrl) assertSecureCredentialTransport(proxyBaseUrl, 'metro prepare --proxy-base-url');
   return {
     proxyEnabled: Boolean(proxyBaseUrl && resolvedProxyBearerToken),
     proxyBaseUrl,

@@ -1,19 +1,19 @@
 // The remote `/health` gate re-probes a daemon that answers 5xx for the command's own budget. This
-// drives a whole default budget on fake time: `http.request` answers on the next tick, so no real
+// drives a whole default budget on fake time: `https.request` answers on the next tick, so no real
 // timer or socket is involved.
 
 import assert from 'node:assert/strict';
-import http from 'node:http';
+import https from 'node:https';
 import { EventEmitter } from 'node:events';
 import { afterEach, test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { sendToDaemon } from '../index.ts';
 
-/** Replaces `http.request` with one that answers every request 503, recording each probe's time. */
+/** Replaces `https.request` with one that answers every request 503, recording each probe's time. */
 function answerEveryRequest503(): { probeTimes: number[]; rpcs: () => number } {
   const probeTimes: number[] = [];
   let rpcs = 0;
-  vi.spyOn(http, 'request').mockImplementation(((
+  vi.spyOn(https, 'request').mockImplementation(((
     options: { method?: string },
     callback: (res: EventEmitter) => void,
   ) => {
@@ -35,7 +35,7 @@ function answerEveryRequest503(): { probeTimes: number[]; rpcs: () => number } {
       },
     });
     return req;
-  }) as unknown as typeof http.request);
+  }) as unknown as typeof https.request);
   return { probeTimes, rpcs: () => rpcs };
 }
 
@@ -66,7 +66,7 @@ function remoteSessionList() {
     session: 'default',
     command: 'session',
     positionals: ['list'],
-    flags: { daemonBaseUrl: 'http://remote-mac.example.test:7777/agent-device' },
+    flags: { daemonBaseUrl: 'https://remote-mac.example.test:7777/agent-device' },
     meta: { requestId: 'req-remote-budget' },
   };
 }

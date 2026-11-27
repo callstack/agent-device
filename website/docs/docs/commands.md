@@ -445,7 +445,7 @@ Exact behavior: `agent-device help telephony`.
 Remote daemons and tenants:
 
 - `--tenant`, `--session-isolation tenant`, `--run-id`, and `--lease-id` enforce lease admission on tenant-scoped daemons.
-- `--daemon-base-url http(s)://host:port[/base-path]` calls a remote HTTP daemon instead of a local one. Add `--daemon-auth-token <token>` (or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`) for a non-loopback URL.
+- `--daemon-base-url https://host[:port][/base-path]` calls a remote HTTP daemon instead of a local one. Add `--daemon-auth-token <token>` (or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`) for a non-loopback URL. The client sends a token only over https, or over plain http to a loopback host (`127.0.0.0/8`, `::1`, or `localhost`). It refuses a plain http URL to any other host before it sends a request, with `details.reason: "insecure_credential_transport"`. To reach a host on your LAN or VPN, use https, or forward a local port to it, for example `ssh -L 4310:127.0.0.1:4310 <host>`, and connect to `http://127.0.0.1:4310`.
 - Remote screenshots download to the path you pass. When a remote `record stop` names no destination, the client saves the file in your working directory and warns.
 - To drive a Mac's simulators from another machine, see [Remote proxy](#remote-proxy). For hosted devices in CI, see [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), or [TestMu AI](/docs/testmu). For `connect --remote-config`, see [Remote Metro workflow](#remote-metro-workflow).
 

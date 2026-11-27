@@ -27,7 +27,7 @@ agent-device proxy --port 4310 --public-origin https://example.trycloudflare.com
 
 The command prints the local proxy URL and a `daemon auth token`. Keep the token secret: anyone who has it can control the daemon behind the proxy.
 
-By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you want the proxy reachable from the host network.
+By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you want the proxy reachable from the host network. A client on another machine still has to reach it over https, for example through a TLS-terminating reverse proxy, or through a port forward to its own loopback.
 
 ## Connect from the agent machine
 
@@ -45,6 +45,8 @@ agent-device disconnect
 ```
 
 Every command on a proxy connection that takes a session must name it, with `AGENT_DEVICE_SESSION`, `--session <name>`, or a `session` in your config. The same applies to every device-cloud connection. A command that names none fails with `INVALID_ARGS` and `details.reason: "REMOTE_SESSION_REQUIRED"`, and sends nothing to the proxy. It never falls back to the connection that another agent on the same machine saved last. This includes `connect proxy` and `open --remote-config <file>` with a proxy profile. The client and run that the proxy leases under come from the session name, so two agents with different names never share a lease.
+
+The client sends a token only over https, or over plain http to a loopback host (`127.0.0.0/8`, `::1`, or `localhost`). It refuses a plain http URL to any other host before it sends a request, with `details.reason: "insecure_credential_transport"`. To reach a host on your LAN or VPN, use https, or forward a local port to it, for example `ssh -L 4310:127.0.0.1:4310 <host>`, and connect to `http://127.0.0.1:4310`.
 
 `--daemon-auth-token <token>` works instead of the environment variable, but it authenticates only the command you pass it to. Later commands need the token again through the environment variable, a `daemonAuthToken` entry in your remote config profile, or the flag on each command.
 

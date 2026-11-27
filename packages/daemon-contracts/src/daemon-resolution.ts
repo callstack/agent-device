@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import {
   admitPrivateRoot,
@@ -13,6 +12,7 @@ import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import { isLoopbackHostname } from '@agent-device/contracts/daemon-http';
 import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonServerMode, DaemonTransportPreference } from '@agent-device/kernel/contracts';
 export type { DaemonServerMode, DaemonTransportPreference };
@@ -276,11 +276,6 @@ export function serverModeAnswersTransport(
   return preference === 'http' ? mode !== 'socket' : mode !== 'http';
 }
 
-const LOOPBACK_BLOCK_LIST = new net.BlockList();
-LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
-LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
-LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
-
 /**
  * Whether a daemon base URL addresses this machine. A caller on a non-loopback daemon drives devices
  * hosted elsewhere, so it must not read this machine's state to answer a question about them.
@@ -295,18 +290,6 @@ export function daemonBaseUrlIsLocal(raw: string | undefined): boolean {
     return false;
   }
   return isLoopbackHostname(hostname);
-}
-
-/** Whether an address names this machine: `localhost` or a loopback literal. */
-export function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname
-    .trim()
-    .toLowerCase()
-    .replace(/^\[(.*)\]$/, '$1');
-  if (normalized === 'localhost') return true;
-  if (net.isIPv4(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv4');
-  if (net.isIPv6(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv6');
-  return false;
 }
 
 export function resolveDaemonTransportPreference(

@@ -15,7 +15,10 @@ import {
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
+  assertSecureCredentialTransport,
   isLoopbackHostname,
+} from '@agent-device/contracts/daemon-http';
+import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
@@ -610,8 +613,13 @@ function validateRemoteDaemonTrust(
 ): void {
   if (!remoteBaseUrl) return;
   const hostname = new URL(remoteBaseUrl).hostname;
+  if (remoteAuthToken?.trim()) {
+    // Every remote request (health, rpc, probes, transfers, diagnostics) sends the token to this
+    // base URL, so the refusal comes before the first request.
+    assertSecureCredentialTransport(remoteBaseUrl, 'Remote daemon base URL');
+    return;
+  }
   if (isLoopbackHostname(hostname)) return;
-  if (typeof remoteAuthToken === 'string' && remoteAuthToken.trim().length > 0) return;
   throw new AppError(
     'INVALID_ARGS',
     'Remote daemon base URL for non-loopback hosts requires daemon authentication',

@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpLeaseHeaders,
+  isSecureCredentialDestination,
 } from '@agent-device/contracts/daemon-http';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
 import {
@@ -371,12 +372,28 @@ function parseUploadPreflightResult(value: unknown): UploadPreflightResult | und
   if (!isStringRecord(headers)) {
     return undefined;
   }
+  // A ticket that would send a daemon credential over plain http off loopback is not usable; the
+  // upload takes the legacy route through the base URL the client already admitted.
+  if (carriesDaemonCredential(headers)) {
+    const ticketUrl = URL.parse(upload.url);
+    if (!ticketUrl || !isSecureCredentialDestination(ticketUrl)) return undefined;
+  }
   return {
     kind: 'direct-upload',
     uploadId: preflight.uploadId,
     url: upload.url,
     headers,
   };
+}
+
+const DAEMON_CREDENTIAL_HEADER_NAMES = new Set(
+  Object.keys(buildDaemonHttpAuthHeaders('credential')),
+);
+
+function carriesDaemonCredential(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((name) =>
+    DAEMON_CREDENTIAL_HEADER_NAMES.has(name.toLowerCase()),
+  );
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

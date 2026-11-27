@@ -163,3 +163,19 @@ test.each([
     expect(other.received).toEqual([]);
   },
 );
+
+test('a cloud base URL over plain http off loopback is refused before anything is sent', async () => {
+  let sent = 0;
+  const refusal = await postCloudAuthJson({
+    baseUrl: 'http://cloud.example.test',
+    pathName: '/start',
+    body: BODY,
+    fetchImpl: async () => {
+      sent += 1;
+      return new Response('{}');
+    },
+  }).catch(normalizeError);
+
+  expect(refusal).toMatchObject({ details: { reason: 'insecure_credential_transport' } });
+  expect(sent).toBe(0);
+});

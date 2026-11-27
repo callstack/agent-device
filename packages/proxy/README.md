@@ -152,7 +152,10 @@ const proxy = createDaemonProxy({
 ```
 
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
-daemon's `Response`. Abort the exchange when `request.signal` aborts.
+daemon's `Response`. Abort the exchange when `request.signal` aborts. The request carries the
+upstream token, so your transport must keep it confidential. Without `upstreamFetch`,
+`upstreamBaseUrl` must use https, or plain http to a loopback host; the proxy refuses any other
+http URL at construction with `details.reason: "insecure_credential_transport"`.
 
 Honor `request.redirect`. On `/rpc/checked` it is `'error'`: never follow a redirect there, because
 a followed redirect resends the call with the daemon token, possibly to the unchecked `/rpc`. The

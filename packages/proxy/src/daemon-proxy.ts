@@ -12,6 +12,7 @@ import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
+  assertSecureCredentialTransport,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
   isTenantOwnedSessionName,
@@ -65,7 +66,10 @@ export type DaemonProxyAuthenticate = (
 ) => Promise<DaemonProxyAuthenticatedClient | null> | DaemonProxyAuthenticatedClient | null;
 
 export type DaemonProxyOptions = {
-  /** Base URL of the upstream agent-device daemon HTTP server. */
+  /**
+   * Base URL of the upstream agent-device daemon HTTP server. Without `upstreamFetch` it must use
+   * https, or http on loopback, because every upstream request carries `upstreamToken`.
+   */
   upstreamBaseUrl: string;
   /** Auth token of the upstream daemon. Never leaves the proxy. */
   upstreamToken: string;
@@ -571,6 +575,9 @@ function rewriteUploadDirectUrl(
 function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOptions {
   const upstreamBaseUrl = normalizeBaseUrl(options.upstreamBaseUrl, 'upstreamBaseUrl');
   const upstreamToken = normalizeToken(options.upstreamToken, 'upstreamToken');
+  if (!options.upstreamFetch) {
+    assertSecureCredentialTransport(upstreamBaseUrl, 'Proxy upstreamBaseUrl');
+  }
   const clientToken = options.authenticate
     ? undefined
     : normalizeToken(options.clientToken ?? '', 'clientToken');

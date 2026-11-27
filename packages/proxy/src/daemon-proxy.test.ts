@@ -677,12 +677,33 @@ test.each([
 ])('rejects invalid public origin %s at construction', (publicOrigin) => {
   expect(() =>
     createDaemonProxy({
-      upstreamBaseUrl: 'http://daemon',
+      upstreamBaseUrl: 'http://127.0.0.1:4310',
       upstreamToken: 'secret',
       clientToken: 'client',
       publicOrigin,
     }),
   ).toThrow();
+});
+
+test('the default transport refuses an upstream token for plain http off loopback at construction', () => {
+  let refusal: unknown;
+  try {
+    createDaemonProxy({
+      upstreamBaseUrl: 'http://daemon.internal:4310',
+      upstreamToken: 'secret',
+      clientToken: 'client',
+    });
+  } catch (error) {
+    refusal = error;
+  }
+  expect(refusal).toBeInstanceOf(AppError);
+  expect((refusal as AppError).details?.reason).toBe('insecure_credential_transport');
+
+  for (const upstreamBaseUrl of ['http://127.0.0.1:4310', 'https://daemon.internal']) {
+    expect(() =>
+      createDaemonProxy({ upstreamBaseUrl, upstreamToken: 'secret', clientToken: 'client' }),
+    ).not.toThrow();
+  }
 });
 
 test('malformed successful tickets fail without exposing upstream credentials', async () => {

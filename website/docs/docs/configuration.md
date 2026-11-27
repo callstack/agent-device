@@ -68,8 +68,9 @@ variables, or `connect`/`--remote-config`. For example, your user config can con
 
 For CI, provide both `AGENT_DEVICE_DAEMON_BASE_URL` and `AGENT_DEVICE_DAEMON_AUTH_TOKEN` from
 protected, operator-controlled configuration. Do not put either value in `./agent-device.json`.
-Remote daemon URLs that aren't loopback always require authentication. Saved `connect` profiles and
-explicit `--remote-config` files also work; generated profiles do not store tokens.
+Remote daemon URLs that aren't loopback always require authentication, and they must use https:
+the client never sends a token over plain http to a host that is not loopback. Saved `connect`
+profiles and explicit `--remote-config` files also work; generated profiles do not store tokens.
 
 When a command fails against a remote daemon, its `Log:` path is on your machine; see
 [Capture a clean repro window](/docs/debugging-profiling#capture-a-clean-repro-window).
