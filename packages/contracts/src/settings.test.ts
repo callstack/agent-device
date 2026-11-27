@@ -3,6 +3,7 @@ import {
   describeSettingRead,
   describeSettingWrite,
   parseAppearanceAction,
+  parseLocaleId,
   parsePermissionAction,
   parsePermissionTarget,
   parseSettingsMutation,
@@ -46,6 +47,7 @@ describe('settings usage', () => {
       'settings appearance <light|dark|toggle>',
       `settings text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`,
       'settings timezone <iana-zone|reset>',
+      'settings locale <locale-id|reset>',
       'settings <faceid|touchid> <match|nonmatch|enroll|unenroll>',
       'settings fingerprint <match|nonmatch>',
       'settings clear-app-state [app-id]',
@@ -276,6 +278,47 @@ describe('timezone', () => {
   });
 });
 
+describe('locale', () => {
+  test('a locale id is carried as its BCP 47 tag whichever separator and casing it uses', () => {
+    expect(parseSettingsMutation(['Locale', 'en_in'])).toEqual({
+      setting: 'locale',
+      state: 'en-IN',
+    });
+    expect(parseLocaleId('fr-CA')).toBe('fr-CA');
+    expect(parseLocaleId(' zh_hans_cn ')).toBe('zh-Hans-CN');
+    expect(parseLocaleId('es_419')).toBe('es-419');
+    expect(parseLocaleId('EN')).toBe('en');
+  });
+
+  test('a locale with an extension or variant, or no language, is refused before dispatch', () => {
+    for (const value of ['en-US-u-ca-buddhist', 'en_US_POSIX', 'english', 'x', '']) {
+      expectInvalidArgs(() => parseLocaleId(value), `Invalid locale id: ${value}.`);
+    }
+  });
+
+  test('reset is a state of its own, and locale takes exactly one value', () => {
+    expect(parseSettingsMutation(['locale', 'RESET'])).toEqual({
+      setting: 'locale',
+      state: 'reset',
+    });
+    expectInvalidArgs(
+      () => parseSettingsMutation(['locale']),
+      'settings locale requires a state: <locale-id|reset>.',
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['locale', 'en_IN', 'extra']),
+      SETTINGS_INVALID_ARGS_MESSAGE,
+    );
+  });
+
+  test('locale writes answer with the locale set or the reset', () => {
+    expect(describeSettingWrite('locale', 'en-IN', undefined)).toBe('Locale set to en-IN');
+    expect(describeSettingWrite('locale', 'reset', undefined)).toBe(
+      'Locale reset to the device default',
+    );
+  });
+});
+
 describe('owner parsers', () => {
   test('parsePermissionTarget accepts the mobile targets only', () => {
     expect(parsePermissionTarget(' Camera ')).toBe('camera');
@@ -333,6 +376,12 @@ describe('settingsAppScope device-wide settings', () => {
     expect(settingsAppScope('apple', 'timezone', 'reset')).toBe('device-level');
     expect(settingsAppScope('mobile', 'timezone', 'Asia/Kolkata')).toBe('device-level');
     expect(settingsAppScope('macos-host', 'timezone', 'reset')).toBe('unknown');
+  });
+
+  test('locale changes the whole device on every mobile family', () => {
+    expect(settingsAppScope('apple', 'locale', 'reset')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'locale', 'en-IN')).toBe('device-level');
+    expect(settingsAppScope('macos-host', 'locale', 'reset')).toBe('unknown');
   });
 
   test.each(['mobile-data', 'keep-awake', 'bluetooth'])(

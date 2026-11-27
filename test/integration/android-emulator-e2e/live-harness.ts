@@ -88,6 +88,7 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
       ['bind fixture before Android permission reset', ['open', context.appId]],
       ['reset Android microphone permission', ['settings', 'permission', 'reset', 'microphone']],
       ['reset Android time zone', ['settings', 'timezone', 'reset']],
+      ['reset Android locale', ['settings', 'locale', 'reset']],
     ] as const) {
       try {
         await runStep(context, `cleanup: ${step}`, [...args]);

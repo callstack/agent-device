@@ -283,7 +283,8 @@ async function readInstalledAndroidPackageSha256(
   }
 }
 
-function readBaseApkPath(output: string): string | undefined {
+/** The base APK path among the `package:` lines `pm path` prints. */
+export function readBaseApkPath(output: string): string | undefined {
   return output
     .split(/\r?\n/)
     .map((line) => (line.startsWith('package:') ? line.slice('package:'.length).trim() : ''))

@@ -25,7 +25,7 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const SETTINGS_COMMAND_NAME = 'settings';
 const settingsCommandDescription =
-  'Read or change supported operating-system settings, animation scales, appearance, time zone, or app permissions on the selected target. Platform support varies by setting and action.';
+  'Read or change supported operating-system settings, animation scales, appearance, locale, time zone, or app permissions on the selected target. Platform support varies by setting and action.';
 
 const settingsCommandMetadata = defineFieldCommandMetadata(
   SETTINGS_COMMAND_NAME,
@@ -35,7 +35,7 @@ const settingsCommandMetadata = defineFieldCommandMetadata(
     // A readable setting answers with no state; the parse decides per setting.
     state: stringField(),
     app: stringField(
-      'App the change targets, by bundle id, package name, or app name: the app `clear-app-state` clears, or the app a `permission` change (or an iOS-simulator `location on|off` privacy change) lands on. A name resolves to the installed app as `open` resolves it: an iOS simulator, local or Limrun, matches display names and accepts only an installed bundle id, and Android accepts only an installed package and refuses a name that resolves to an intent with `setting_app_not_package`. One that resolves to nothing is refused with `app_not_installed` before anything changes. The app need not be running. Without it the session app is used; a device-wide change (`location set` on any target, the Android `location on|off` toggle, `mobile-data`, `keep-awake`, `bluetooth`, `timezone`, macOS permissions) refuses one with `setting_app_not_consumed`. The CLI reads it only from this invocation, never from `AGENT_DEVICE_TARGET_APP` or config `targetApp`.',
+      'App the change targets, by bundle id, package name, or app name: the app `clear-app-state` clears, or the app a `permission` change (or an iOS-simulator `location on|off` privacy change) lands on. A name resolves to the installed app as `open` resolves it: an iOS simulator, local or Limrun, matches display names and accepts only an installed bundle id, and Android accepts only an installed package and refuses a name that resolves to an intent with `setting_app_not_package`. One that resolves to nothing is refused with `app_not_installed` before anything changes. The app need not be running. Without it the session app is used; a device-wide change (`location set` on any target, the Android `location on|off` toggle, `mobile-data`, `keep-awake`, `bluetooth`, `locale`, `timezone`, macOS permissions) refuses one with `setting_app_not_consumed`. The CLI reads it only from this invocation, never from `AGENT_DEVICE_TARGET_APP` or config `targetApp`.',
     ),
     latitude: numberField(),
     longitude: numberField(),
@@ -101,7 +101,7 @@ export const settingsCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Change OS settings and app permissions',
-    searchHint: 'wifi airplane location dark mode permission grant revoke timezone',
+    searchHint: 'wifi airplane location dark mode permission grant revoke language timezone',
     cliDetail: [
       'A bare readable setting reads the value the target holds. A target that does not serve a setting refuses it with UNSUPPORTED_OPERATION before anything changes.',
       '',

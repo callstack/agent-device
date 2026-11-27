@@ -187,7 +187,7 @@ Remote simulator logs do not include sender or process image paths. Filters that
 
 On iOS, `settings` supports `appearance`, `permission`, `location`, `wifi`, `airplane`, `faceid`, `touchid`, `text-size`, and `clear-app-state`, with the same arguments as a local simulator. You can also read the current text size.
 
-Wi-Fi and airplane settings change the status-bar appearance; they do not disconnect the simulator. `clear-app-state` stops your app and removes its data. Use `open` when you are ready to launch it again. `reset-keychain`, `mobile-data`, and `timezone` are unavailable on Limrun iOS. On Android, `settings mobile-data on|off` and `settings timezone <iana-zone|reset>` work as on a local device. Fold commands are unavailable on Limrun.
+Wi-Fi and airplane settings change the status-bar appearance; they do not disconnect the simulator. `clear-app-state` stops your app and removes its data. Use `open` when you are ready to launch it again. `reset-keychain`, `mobile-data`, `locale`, and `timezone` are unavailable on Limrun iOS. On Android, `settings mobile-data on|off`, `settings locale <locale-id|reset>`, and `settings timezone <iana-zone|reset>` work as on a local device. Fold commands are unavailable on Limrun.
 
 To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp). For Limrun, `artifacts` lists the network capture file only when you connect with `--provider-network-logs`; otherwise there are no provider artifacts to fetch.
 

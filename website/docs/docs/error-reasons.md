@@ -375,6 +375,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `mobile-data-unreadable` | The device answered the mobile-data read-back with a value that is neither 0 nor 1. |
 | `keep-awake-not-applied` | The device kept the screen turning off after `svc power stayon` accepted the request. |
 | `keep-awake-unreadable` | The device answered the keep-awake read-back with a value that is not a stay-on mask. |
+| `locale-not-applied` | The Android system locale list did not start with the requested locale after the update. |
 | `time-zone-not-applied` | `persist.sys.timezone` did not hold the requested zone after `cmd alarm set-timezone`. |
 | `setting_app_not_package` | The named app resolves to an intent such as `settings`, not to an installed package. |
 | `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |

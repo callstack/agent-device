@@ -134,26 +134,35 @@ test.each([
   {
     appleOs: 'ios',
     kind: 'simulator',
-    served: ['wifi', 'location', 'text-size', 'timezone', 'faceid', 'touchid', 'reset-keychain'],
+    served: [
+      'wifi',
+      'location',
+      'text-size',
+      'locale',
+      'timezone',
+      'faceid',
+      'touchid',
+      'reset-keychain',
+    ],
     refused: ['animations', 'fingerprint'],
   },
   {
     appleOs: 'ipados',
     kind: 'simulator',
-    served: ['appearance', 'text-size', 'timezone', 'faceid', 'touchid'],
+    served: ['appearance', 'text-size', 'locale', 'timezone', 'faceid', 'touchid'],
     refused: ['animations', 'fingerprint'],
   },
   {
     appleOs: 'tvos',
     kind: 'simulator',
     served: ['wifi', 'appearance', 'clear-app-state'],
-    refused: ['text-size', 'timezone', 'faceid', 'touchid'],
+    refused: ['text-size', 'locale', 'timezone', 'faceid', 'touchid'],
   },
   {
     appleOs: 'macos',
     kind: 'device',
     served: ['appearance', 'permission'],
-    refused: ['wifi', 'text-size', 'timezone', 'clear-app-state', 'reset-keychain'],
+    refused: ['wifi', 'text-size', 'locale', 'timezone', 'clear-app-state', 'reset-keychain'],
   },
 ] as const)('an Apple $appleOs $kind serves each setting on its own fact', (row) => {
   const { setSetting } = appleSystemFacts(appleDevice(row.appleOs, row.kind));

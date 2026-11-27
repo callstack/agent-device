@@ -198,6 +198,7 @@ export function limrunAndroidSettingsFacts(
       appearance: available,
       'text-size': available,
       timezone: available,
+      locale: available,
       fingerprint: available,
       'clear-app-state': available,
       permission: available,
@@ -224,6 +225,10 @@ export function limrunAppleSettingsFacts(
             timezone: unavailableFact(
               PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
               'Limrun iOS does not expose simulator launchd time zone overrides; set it on a local simulator.',
+            ),
+            locale: unavailableFact(
+              PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
+              'Limrun iOS does not expose simulator locale preferences; set it on a local simulator.',
             ),
           },
         }
