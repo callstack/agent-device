@@ -21,7 +21,6 @@ import {
   DAEMON_INSTANCE_REASONS,
   DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
   DAEMON_HTTP_CHECKED_RPC_ROUTE,
-  DAEMON_HTTP_REFUSAL_HEADER,
   DAEMON_HTTP_RPC_PROTOCOL_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
@@ -37,6 +36,9 @@ import {
  * transport, such as a WebSocket tunnel. Abort the exchange when `request.signal` aborts.
  *
  * A custom transport owns its phase guarantees and must observe `request.signal` on every route.
+ * It must also honor `request.redirect`: the checked RPC route sets `'error'`, so the transport must
+ * never follow a redirect there. The proxy refuses a checked answer that is a redirect or that
+ * reports `redirected`, but it cannot undo a resend the transport already made.
  * On transfer routes, the proxy bounds its own response and body waits, even if the transport
  * ignores cancellation. It cannot forcibly join work started by that transport.
  */
@@ -380,22 +382,25 @@ async function forwardProxyRequest(params: {
 }): Promise<Response> {
   const { request, route, options, rpcBody, caller } = params;
   const body = resolveUpstreamBody(request, route, rpcBody, options.upstreamToken, caller.tenantId);
+  const checked = route === DAEMON_HTTP_CHECKED_RPC_ROUTE;
   const upstreamResponse = await options.upstreamTransport(
     route,
     forwardedRequest(request, buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
       method: request.method,
       headers: buildUpstreamHeaders(request.headers, options.upstreamToken, route, caller.tenantId),
       signal: upstreamSignal(request, options),
+      // A redirect would resend the call with the daemon token, possibly to unchecked `/rpc`.
+      ...(checked ? { redirect: 'error' as const } : {}),
       ...(body ? { body, duplex: 'half' as const } : {}),
     }),
   );
+  if (checked) {
+    const { localCheckedRpcRefusal } = await import('./checked-rpc-admission.ts');
+    const refusal = await localCheckedRpcRefusal(upstreamResponse, request, readJsonRpcId(rpcBody));
+    if (refusal) return refusal;
+  }
 
   const headers = copyProxyResponseHeaders(upstreamResponse, request, route);
-  if (route === DAEMON_HTTP_CHECKED_RPC_ROUTE) {
-    const { forwardedCheckedRpcRefusal } = await import('./checked-rpc-admission.ts');
-    const refusal = forwardedCheckedRpcRefusal(upstreamResponse);
-    if (refusal) headers.set(DAEMON_HTTP_REFUSAL_HEADER, refusal);
-  }
   if (isUploadPreflightRoute(route)) {
     return await rewrittenUploadPreflightResponse({
       request,

@@ -287,7 +287,7 @@ start the daemon with a policy that requires one (`leases.require`, below). The 
 by every client of the proxy, so a host serving several clients through one proxy authenticates each
 client itself and sets each request's tenant, session isolation, and lease before forwarding it.
 Embedding `@agent-device/proxy` with its `authenticate` option does the tenant and session
-isolation part: the proxy sends each client's requests as the tenant `authenticate` returns. A tenant id is 1-128 letters, numbers, dots, underscores or hyphens; any other id fails the request with a 500. On `/rpc` the proxy accepts only `agent_device.command` and the `agent_device.lease.*` methods, and refuses others with a 401. Upload tickets carry the client's own `authorization` and `x-agent-device-token` headers, or the `uploadHeaders` that `authenticate` returns, and never the daemon's token.
+isolation part: the proxy sends each client's requests as the tenant `authenticate` returns. A tenant id is 1-128 letters, numbers, dots, underscores or hyphens; any other id fails the request with a 500. On `/rpc` and `/rpc/checked` the proxy accepts only `agent_device.command` and the `agent_device.lease.*` methods, and refuses others with a 401. Upload tickets carry the client's own `authorization` and `x-agent-device-token` headers, or the `uploadHeaders` that `authenticate` returns, and never the daemon's token.
 
 ## Restrict what clients can do
 
@@ -328,7 +328,7 @@ stop that daemon first. A denied request fails with `UNAUTHORIZED` and
 
 ## What the proxy exposes
 
-The proxy serves only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token. `GET /artifacts` lists the caller tenant's downloadable artifacts. An entry has `sessionName` when the daemon registered it outside a request reply, for example a recording kept when its leased session ended.
+The proxy serves only the daemon HTTP contract: `/health`, `/rpc`, `/rpc/checked` (which requires the `x-agent-device-rpc-protocol` header), `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token. `GET /artifacts` lists the caller tenant's downloadable artifacts. An entry has `sessionName` when the daemon registered it outside a request reply, for example a recording kept when its leased session ended.
 
 The proxy passes the daemon's HTTP status through. Most failed upload and artifact requests answer
 a JSON body `{ "ok": false, "error": "...", "code": "..." }`. When the daemon writes this body, it

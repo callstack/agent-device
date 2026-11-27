@@ -173,7 +173,7 @@ export type CheckedRpcProtocolRefusal =
   | typeof DAEMON_HTTP_REFUSALS.protocolMismatch;
 
 /** Why a checked RPC call failed. */
-export const DAEMON_CHECKED_RPC_REASONS = {
+const DAEMON_CHECKED_RPC_REASONS = {
   // The checked RPC call named no RPC protocol. An intermediary that strips request headers causes
   // this.
   protocolMissing: { reason: 'remote_rpc_protocol_missing' },
@@ -195,6 +195,69 @@ export function checkedRpcProtocolRefusal(
   return Number(headerValue) === DAEMON_RPC_PROTOCOL_VERSION
     ? undefined
     : DAEMON_HTTP_REFUSALS.protocolMismatch;
+}
+
+/**
+ * The JSON-RPC id a checked-route refusal echoes: a bounded correlation token or a safe integer.
+ * Anything else, such as an object, a URL or a long string, is answered as `null`.
+ */
+export function checkedRpcRefusalId(id: unknown): string | number | null {
+  if (typeof id === 'number') return Number.isSafeInteger(id) ? id : null;
+  return typeof id === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(id) ? id : null;
+}
+
+/** The refusing side of a protocol refusal, named in the `/health` vocabulary. */
+export type CheckedRpcRefusalSide = Pick<
+  DaemonHealthPayload,
+  'service' | 'version' | 'rpcProtocolVersion'
+>;
+
+/** The refusing side a protocol refusal names, or `undefined` unless every value is bounded and valid. */
+export function readCheckedRpcRefusalSide(details: unknown): CheckedRpcRefusalSide | undefined {
+  if (!details || typeof details !== 'object') return undefined;
+  const { service, version, rpcProtocolVersion } = details as Record<string, unknown>;
+  if (service !== 'agent-device-daemon' && service !== 'agent-device-proxy') return undefined;
+  if (
+    typeof version !== 'string' ||
+    !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]{1,48})?$/.test(version)
+  ) {
+    return undefined;
+  }
+  if (typeof rpcProtocolVersion !== 'number' || !Number.isSafeInteger(rpcProtocolVersion)) {
+    return undefined;
+  }
+  return { service, version, rpcProtocolVersion };
+}
+
+/**
+ * The JSON-RPC body of a protocol refusal, built from local values only: the refusal's reason,
+ * `dispatched: 'no'`, a bounded id, and the refusing side when the caller passed authentication.
+ */
+export function buildCheckedRpcProtocolRefusal(
+  id: unknown,
+  refusal: CheckedRpcProtocolRefusal | typeof DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch,
+  side?: CheckedRpcRefusalSide,
+) {
+  const missing = refusal === DAEMON_HTTP_REFUSALS.protocolMissing;
+  const message = missing
+    ? `Checked RPC requires the ${DAEMON_HTTP_RPC_PROTOCOL_HEADER} header`
+    : 'The remote speaks a different RPC protocol from the caller';
+  const reason = missing
+    ? DAEMON_CHECKED_RPC_REASONS.protocolMissing.reason
+    : DAEMON_CHECKED_RPC_REASONS.protocolMismatch.reason;
+  return {
+    jsonrpc: '2.0' as const,
+    id: checkedRpcRefusalId(id),
+    error: {
+      code: -32001,
+      message,
+      data: {
+        code: 'COMMAND_FAILED',
+        message,
+        details: { reason, dispatched: 'no', ...side },
+      },
+    },
+  };
 }
 
 export function buildDaemonInstanceMismatchRpcResponse<Id>(

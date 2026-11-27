@@ -1,3 +1,4 @@
+import http from 'node:http';
 import { expect, test } from 'vitest';
 import {
   DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
@@ -181,4 +182,98 @@ test('proxy health advertises the checked route', async () => {
 
   const health = (await response.json()) as { capabilities: string[] };
   expect(health.capabilities).toEqual([DAEMON_HTTP_CHECKED_RPC_CAPABILITY]);
+});
+
+test('the proxy protocol refusal echoes only a bounded id', async () => {
+  const upstream = recordingUpstream(() => Response.json({}));
+  const response = await tokenProxy(upstream.fetch).handle(
+    checkedRequest(
+      { ...COMMAND, id: { internal: 'http://10.0.0.1/private' } },
+      { [DAEMON_HTTP_RPC_PROTOCOL_HEADER]: '999' },
+    ),
+  );
+
+  expect(response.status).toBe(409);
+  expect(((await response.json()) as { id: unknown }).id).toBeNull();
+});
+
+test('an upstream protocol refusal is rebuilt from validated values, never copied', async () => {
+  const upstream = recordingUpstream(() =>
+    Response.json(
+      {
+        jsonrpc: '2.0',
+        id: 'upstream-id',
+        error: {
+          code: -32001,
+          message: 'see http://10.0.0.1/internal',
+          data: {
+            details: {
+              service: 'agent-device-daemon',
+              version: '9.0.0',
+              rpcProtocolVersion: 99,
+              internal: 'http://10.0.0.1/internal',
+            },
+          },
+        },
+      },
+      {
+        status: 409,
+        headers: {
+          [DAEMON_HTTP_REFUSAL_HEADER]: 'protocol-mismatch',
+          'x-request-id': 'http://10.0.0.1/trace',
+        },
+      },
+    ),
+  );
+  const response = await tokenProxy(upstream.fetch).handle(checkedRequest(COMMAND));
+
+  expect(response.status).toBe(409);
+  expect(response.headers.get(DAEMON_HTTP_REFUSAL_HEADER)).toBe('upstream-protocol-mismatch');
+  expect(response.headers.get('x-request-id')).not.toContain('10.0.0.1');
+  const text = await response.text();
+  expect(text).not.toContain('10.0.0.1');
+  expect(JSON.parse(text)).toMatchObject({
+    id: 1,
+    error: {
+      data: {
+        details: {
+          reason: 'remote_rpc_protocol_mismatch',
+          dispatched: 'no',
+          service: 'agent-device-daemon',
+          version: '9.0.0',
+          rpcProtocolVersion: 99,
+        },
+      },
+    },
+  });
+});
+
+test('a checked call never follows an upstream redirect to /rpc', async () => {
+  let rpcHits = 0;
+  const daemon = http.createServer((req, res) => {
+    req.resume();
+    if (req.url === '/rpc/checked') {
+      res.writeHead(307, { location: '/rpc' });
+      res.end();
+      return;
+    }
+    rpcHits += 1;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { ok: true, data: {} } }));
+  });
+  try {
+    await new Promise<void>((resolve) => daemon.listen(0, '127.0.0.1', resolve));
+    const { port } = daemon.address() as { port: number };
+    const proxy = createDaemonProxy({
+      upstreamBaseUrl: `http://127.0.0.1:${port}`,
+      upstreamToken: 'daemon-secret',
+      clientToken: 'client-secret',
+    });
+    const response = await proxy.handle(checkedRequest(COMMAND));
+
+    expect(response.status).not.toBe(200);
+    expect(rpcHits).toBe(0);
+  } finally {
+    await new Promise<void>((resolve) => daemon.close(() => resolve()));
+  }
 });

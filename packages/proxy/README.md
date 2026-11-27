@@ -7,8 +7,10 @@ The proxy:
 
 - authenticates clients with a token you choose, or with your own check, and never exposes the
   daemon's own token;
-- forwards only the routes a remote client needs: `/health`, `/rpc`, uploads, artifacts, and
-  request diagnostics;
+- forwards only the routes a remote client needs: `/health`, `/rpc`, `/rpc/checked`, uploads,
+  artifacts, and request diagnostics, each also under `/agent-device/`;
+- refuses a `/rpc/checked` call whose `x-agent-device-rpc-protocol` header is missing or names
+  another RPC protocol, with a 409 before it forwards anything;
 - refuses install sources that name a file on the daemon host;
 - rewrites upload tickets so clients upload through the proxy, not to the daemon directly.
 
@@ -152,6 +154,11 @@ const proxy = createDaemonProxy({
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
 daemon's `Response`. Abort the exchange when `request.signal` aborts.
 
+Honor `request.redirect`. On `/rpc/checked` it is `'error'`: never follow a redirect there, because
+a followed redirect resends the call with the daemon token, possibly to the unchecked `/rpc`. The
+proxy refuses a checked answer that is a redirect or reports `redirected`, but it cannot undo a
+request your transport already resent.
+
 On transfer routes, the proxy bounds its wait for your transport and response body. It settles on
 your abort, your `upstreamTimeoutMs`, its 600-second aggregate and its demand-aware response-body
 inactivity limit. Work your transport starts can keep running if it ignores `request.signal`. The
@@ -165,8 +172,9 @@ pull alone does not confirm that an outgoing byte was sent.
 ### Authenticate each client yourself
 
 One `clientToken` is shared by every client. To give each client its own credential, pass
-`authenticate` instead. It receives each client request (with its JSON body on `/rpc`) and returns
-the tenant the client acts as, or `null` to refuse it with a 401:
+`authenticate` instead. It receives each client request (with its body on `/rpc` and
+`/rpc/checked`) and returns the tenant the client acts as, or `null` to refuse it with a 401. On
+`/rpc/checked` it runs before the envelope check, so the body may not be JSON:
 
 ```ts
 const proxy = createDaemonProxy({
@@ -182,8 +190,8 @@ const proxy = createDaemonProxy({
 The proxy then sends every authenticated request to the daemon as that tenant, whatever tenant the
 client named, and isolates its sessions from other tenants' sessions. `GET /health` is not
 authenticated and carries no tenant. A tenant id is 1-128 letters, numbers, dots, underscores or
-hyphens; any other id fails the request with a 500. On `/rpc` the proxy accepts only
-`agent_device.command` and the `agent_device.lease.*` methods (or the same names spelled
+hyphens; any other id fails the request with a 500. On `/rpc` and `/rpc/checked` the proxy accepts
+only `agent_device.command` and the `agent_device.lease.*` methods (or the same names spelled
 `agent-device.command` and `agent-device.lease.*`), and refuses others with a 401.
 
 Clients upload files with a ticket that names the headers to send. The proxy builds that ticket

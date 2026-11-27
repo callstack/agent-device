@@ -86,7 +86,9 @@ import {
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import {
   readCheckedRpcProtocolRefusal,
+  refuseCheckedRpcCredential,
   sendCheckedRpcProtocolRefusal,
+  withUnregisteredTrackingId,
 } from './http-checked-rpc.ts';
 
 const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
@@ -329,16 +331,13 @@ async function handleRpcRequest(params: {
   checked: boolean;
 }): Promise<void> {
   const { req, res, body, authHook, expectedToken, instanceId, handleRequest, checked } = params;
-  // A checked call on another protocol takes the `/rpc` flow up to its auth gates, and is refused
-  // in place of any later answer. One this build cannot decode is refused without the version.
+  // A checked call proves its credential before anything reads its protocol or method. One on
+  // another protocol then takes the `/rpc` flow and is refused only once every auth gate passed.
+  if (checked && refuseCheckedRpcCredential(req, res, body, expectedToken)) return;
   const protocolRefusal = readCheckedRpcProtocolRefusal(req, checked);
   const validated = validateRpcRequestEnvelope(body);
   if (!validated.ok) {
-    if (protocolRefusal) {
-      sendCheckedRpcProtocolRefusal(res, validated.refusal.response.id, protocolRefusal, false);
-    } else {
-      sendRpcRefusal(res, validated.refusal);
-    }
+    sendRpcRefusal(res, validated.refusal);
     return;
   }
 
@@ -380,11 +379,7 @@ async function handleRpcRequest(params: {
     // or a duplicate tracking id. The failure answer is on its way, so a socket closing
     // after it is not a client walking out on work still in flight.
     lifetime.markHandlerCompleted();
-    if (protocolRefusal) {
-      sendCheckedRpcProtocolRefusal(res, validated.rpcRequest.id ?? null, protocolRefusal, false);
-    } else {
-      sendRpcRequestFailure(res, validated.rpcRequest.id, normalizeError(error));
-    }
+    sendRpcRequestFailure(res, validated.rpcRequest.id, normalizeError(error));
   } finally {
     lifetime.release();
   }
@@ -615,10 +610,6 @@ async function admitRpcRequest(params: {
   const wireRequest = methodToDaemonRequest(method, params.params, req.headers);
   // A command call naming no command is params the router cannot route.
   if (namesNoCommand(method, wireRequest)) {
-    if (protocolRefusal) {
-      sendCheckedRpcProtocolRefusal(res, rpcRequest.id ?? null, protocolRefusal, false);
-      return { outcome: 'answered' };
-    }
     return {
       outcome: 'rejected',
       refusal: rpcRefusal(
@@ -629,7 +620,10 @@ async function admitRpcRequest(params: {
       ),
     };
   }
-  const daemonRequest = lifetime.admit(wireRequest);
+  // A call that will be refused never reserves its tracking id: only a call that can run registers.
+  const daemonRequest = protocolRefusal
+    ? withUnregisteredTrackingId(wireRequest, rpcRequest.id)
+    : lifetime.admit(wireRequest);
 
   // Captured before the hook runs: what the caller claimed is an input to the trust
   // decision, never an identity.
@@ -659,7 +653,7 @@ async function admitRpcRequest(params: {
     return refused(rpcRequest, -32000, tokenError, 401);
   }
   if (protocolRefusal) {
-    sendCheckedRpcProtocolRefusal(res, rpcRequest.id ?? null, protocolRefusal, true);
+    sendCheckedRpcProtocolRefusal(res, rpcRequest.id, protocolRefusal);
     return { outcome: 'answered' };
   }
   if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) {

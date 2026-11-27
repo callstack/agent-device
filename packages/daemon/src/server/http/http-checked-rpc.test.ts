@@ -158,21 +158,105 @@ test('an unattested tenant gets the /rpc tenant refusal on the checked route, no
   }
 });
 
-test('a skewed call this build cannot decode is refused without the daemon version', async (t) => {
+test('a wrong credential on the checked route gets 401 before the protocol or method is read', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await checkedDaemon();
   try {
-    const refused = await daemon.call({
+    for (const body of [
+      { jsonrpc: '2.0', id: 'req-3', method: 'agent_device.future_method', params: {} },
+      { jsonrpc: '2.0', id: 'req-4', method: 'agent_device.command', params: {} },
+      'not json',
+    ]) {
+      const refused = await daemon.call({ protocol: '999', token: 'wrong-token', body });
+      assert.equal(refused.status, 401);
+      assert.equal(refused.headers.get(DAEMON_HTTP_REFUSAL_HEADER), null);
+    }
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('a skewed call that fails before the auth hook passes gets the ordinary rejection, never the protocol 409', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const daemon = await checkedDaemon();
+  try {
+    const undecodable = await daemon.call({
       protocol: '999',
-      body: { jsonrpc: '2.0', id: 'req-3', method: 'agent_device.future_method', params: {} },
+      body: { jsonrpc: '2.0', id: 'req-5', method: 'agent_device.future_method', params: {} },
     });
-    assert.equal(refused.status, 409);
-    assert.equal(refused.headers.get(DAEMON_HTTP_REFUSAL_HEADER), 'protocol-mismatch');
-    const refusal = await details(refused);
-    assert.equal(refusal?.reason, 'remote_rpc_protocol_mismatch');
-    assert.equal(refusal?.version, undefined);
-    assert.equal(refusal?.service, undefined);
+    assert.equal(undecodable.status, 404);
+    assert.equal(undecodable.headers.get(DAEMON_HTTP_REFUSAL_HEADER), null);
+    const noCommand = await daemon.call({
+      protocol: '999',
+      body: { jsonrpc: '2.0', id: 'req-6', method: 'agent_device.command', params: {} },
+    });
+    assert.equal(noCommand.status, 400);
+    assert.equal(noCommand.headers.get(DAEMON_HTTP_REFUSAL_HEADER), null);
     assert.equal(daemon.handlerCalls(), 0);
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('an auth hook that throws on a skewed checked call never yields the protocol 409', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const daemon = await checkedDaemon("export default () => { throw new Error('hook down'); };\n");
+  try {
+    const refused = await daemon.call({ protocol: '999' });
+    assert.notEqual(refused.status, 409);
+    assert.equal(refused.headers.get(DAEMON_HTTP_REFUSAL_HEADER), null);
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('a protocol refusal echoes only a bounded id', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const daemon = await checkedDaemon();
+  try {
+    const refusalId = async (id: unknown) => {
+      const response = await daemon.call({
+        protocol: '999',
+        body: {
+          jsonrpc: '2.0',
+          id,
+          method: 'agent_device.command',
+          params: { command: 'devices', positionals: [] },
+        },
+      });
+      assert.equal(response.status, 409);
+      return ((await response.json()) as { id: unknown }).id;
+    };
+    assert.equal(await refusalId('req-7'), 'req-7');
+    assert.equal(await refusalId(42), 42);
+    assert.equal(await refusalId({ internal: true }), null);
+    assert.equal(await refusalId('http://10.0.0.1/private'), null);
+    assert.equal(await refusalId('x'.repeat(200)), null);
+  } finally {
+    await daemon.close();
+  }
+});
+
+test('a refused checked call never reserves its request id from a concurrent /rpc call', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // Holds only checked calls in the hook, so the /rpc call runs while the refusal is pending.
+  const daemon = await checkedDaemon(
+    'export default async ({ headers }) => {\n' +
+      "  if (headers['x-agent-device-rpc-protocol']) await new Promise((r) => setTimeout(r, 300));\n" +
+      "  return { tenantId: 'tenant-a' };\n};\n",
+  );
+  try {
+    const body = {
+      jsonrpc: '2.0',
+      id: 'rpc-1',
+      method: 'agent_device.command',
+      params: { command: 'devices', positionals: [], meta: { requestId: 'shared-id' } },
+    };
+    const refused = daemon.call({ protocol: '999', body });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const legacy = await daemon.call({ route: '/rpc', body });
+    assert.equal(legacy.status, 200);
+    assert.equal((await refused).status, 409);
   } finally {
     await daemon.close();
   }

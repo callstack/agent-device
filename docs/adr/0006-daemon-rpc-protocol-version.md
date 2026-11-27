@@ -80,8 +80,11 @@ A missing header or another protocol gets HTTP 409, `x-agent-device-refusal: pro
 The daemon runs a checked call through the `/rpc` flow: the same envelope, decoding, auth hook, tenant-trust and token gates, from the same inputs.
 It answers the protocol refusal in place of any later answer, after those gates and before the instance precondition.
 Only then do the error details name the refusing `service`, its `version`, and its `rpcProtocolVersion`.
-A call that this build cannot decode cannot be authenticated the way `/rpc` would, so its refusal carries no version.
-A proxy authenticates, then checks the protocol, then the envelope; its authentication does not decode the body.
+A daemon checks the transport credential, from the headers or the JSON frame's `params.token`, before it compares the protocol or decodes the method, so a wrong credential always gets 401.
+A checked call that fails before every auth gate passes, including a hook that throws, gets the ordinary `/rpc` rejection, never the protocol refusal; a refused call never reserves its request id.
+A proxy authenticates, then checks the protocol, then the envelope; its default token check reads `params.token` from the body, and `authenticate` may receive a body that is not JSON.
+Every refusal is built from local values: a bounded id (a short token or a safe integer, else `null`), the reason, and validated diagnostic values; a proxy never copies an upstream refusal's body or headers.
+A proxy never follows a redirect on the checked route, and a custom upstream transport must not either.
 A proxy admits `/rpc` and the checked route through one path: body limit, authentication, tenant method rules, credential rewriting, and public-only stamping.
 It forwards a checked call to the daemon's checked route, which checks again, and marks a forwarded daemon protocol refusal as `upstream-protocol-mismatch`.
 `/health` advertises `checked-rpc` on each link that serves the route.
