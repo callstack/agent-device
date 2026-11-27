@@ -845,6 +845,22 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
+test.skipIf(process.platform === 'win32')(
+  'connect succeeds with a fresh state directory under umask 002',
+  async () => {
+    const base = cloudEnv();
+    const stateDir = path.join(base.AGENT_DEVICE_STATE_DIR, 'state');
+    const fetchMock = stubCloudApi();
+    const previousUmask = process.umask(0o002);
+    const result = await runCliCapture(connectArgs, {
+      env: { ...base, AGENT_DEVICE_STATE_DIR: stateDir },
+    }).finally(() => process.umask(previousUmask));
+    expect(result.code, result.stderr || result.stdout).toBeNull();
+    expect(fs.statSync(stateDir).mode & 0o777).toBe(0o700);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  },
+);
+
 test('a direct leased disconnect consumes endedLeases without reacquiring its connection lock', async () => {
   const workspace = proxyWorkspace('direct-disconnect-lock-', { leaseId: 'fixture-lease' });
   const provider = { warnings: [{ code: 'fixture', message: 'provider closed the session' }] };

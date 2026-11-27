@@ -309,3 +309,34 @@ test('a legacy whitespace-only provider does not make a stored connection leased
   const written = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
   assert.equal(Object.hasOwn(written, 'leaseProvider'), false);
 });
+
+test.skipIf(process.platform === 'win32')(
+  'writeRemoteConnectionState creates a fresh state directory privately under umask 002',
+  async () => {
+    const root = await mkdtempForTest('agent-device-connection-umask-');
+    const stateDir = path.join(root, 'state');
+    const remoteConfigPath = path.join(root, 'remote.json');
+    fs.writeFileSync(remoteConfigPath, '{}');
+    const now = new Date().toISOString();
+    const previousUmask = process.umask(0o002);
+    try {
+      writeRemoteConnectionState({
+        stateDir,
+        state: {
+          version: 1,
+          session: 'umask-qa',
+          remoteConfigPath,
+          remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+          tenant: 'tenant-a',
+          runId: 'run-a',
+          connectedAt: now,
+          updatedAt: now,
+        },
+      });
+    } finally {
+      process.umask(previousUmask);
+    }
+    assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(path.join(stateDir, 'remote-connections')).mode & 0o777, 0o700);
+  },
+);

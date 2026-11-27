@@ -71,6 +71,7 @@ export async function withConnectionLock<T>(
   task: () => Promise<T>,
   onContention?: () => void,
 ): Promise<T> {
+  ensurePrivateStateRoot(stateDir);
   return await withProcessLock({
     acquire: () =>
       acquireProcessLock({
@@ -86,6 +87,7 @@ export async function tryWithConnectionLock(
   location: ConnectionLocation,
   task: () => Promise<void> | void,
 ): Promise<void> {
+  ensurePrivateStateRoot(location.stateDir);
   const lock = tryAcquireProcessLock(connectionLockOptions(location));
   if (lock.status !== 'acquired') return;
   await withProcessLock({
@@ -130,6 +132,7 @@ export function admitCloudCredentialDirectory(
   location: ConnectionLocation,
   create = false,
 ): boolean {
+  if (create) ensurePrivateStateRoot(location.stateDir);
   if (!admitCloudStateRoot(location.stateDir)) return false;
   const directory = cloudConnectionDir(location);
   const cloud = path.dirname(directory);
@@ -146,10 +149,22 @@ function readCloudDirectory(entry: string, create: boolean): fs.Stats | undefine
   if (existing || !create) return existing;
   try {
     fs.mkdirSync(entry, { mode: 0o700 });
+    fs.chmodSync(entry, 0o700);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
   }
   return lstatIfPresent(entry);
+}
+
+function ensurePrivateStateRoot(stateDir: string): void {
+  if (lstatIfPresent(stateDir)) return;
+  let created: string | undefined;
+  try {
+    created = fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+  if (created !== undefined) fs.chmodSync(stateDir, 0o700);
 }
 
 function admitCloudStateRoot(stateDir: string): boolean {

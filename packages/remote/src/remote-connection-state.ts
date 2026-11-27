@@ -409,7 +409,7 @@ export function writeRemoteConnectionState(options: {
     stateDir: options.stateDir,
     session: options.state.session,
   });
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
   writeJsonFile(statePath, {
     ...options.state,
     leaseProvider: canonicalLeaseProvider(options.state.leaseProvider),
