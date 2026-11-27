@@ -151,7 +151,8 @@ const proxy = createDaemonProxy({
 
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
 daemon's `Response`. Abort the exchange when `request.signal` aborts. The request carries the
-upstream token and `redirect: 'error'`; never follow a redirect with it.
+upstream token and `redirect: 'manual'`: return a 3xx response as it is and never follow it. The
+proxy relays a 3xx, such as the daemon's `308` resume response, to its client unchanged.
 
 `upstreamBaseUrl` must use https, or plain http to a loopback host, with or without
 `upstreamFetch`. With your own transport, give it a logical URL that meets this rule, such as

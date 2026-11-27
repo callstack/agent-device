@@ -34,8 +34,9 @@ import {
  * the proxy reaches the daemon over `node:http(s)` on artifact transfer routes and over the global
  * `fetch` on `/rpc`, health and diagnostics; plain http goes direct, never through an environment
  * proxy. Supply your own to reach the daemon over another transport, such as a WebSocket tunnel.
- * Abort the exchange when `request.signal` aborts. Every request carries `redirect: 'error'`:
- * never follow a redirect, because the request carries the upstream token.
+ * Abort the exchange when `request.signal` aborts. Every request carries `redirect: 'manual'`:
+ * return a 3xx as the response and never follow it, because the request carries the upstream
+ * token. The proxy relays the 3xx to its client, which applies its own redirect rules.
  *
  * A custom transport owns its phase guarantees and must observe `request.signal` on every route.
  * It must also honor `request.redirect`: the checked RPC route sets `'error'`, so the transport must
@@ -436,7 +437,7 @@ function keepAliveWith(owner: object, request: Request): Request {
 
 /** Builds a request for `owner` to send on, kept reachable for as long as `owner` is. */
 function forwardedRequest(owner: Request, url: string | URL, init: RequestInit): Request {
-  return keepAliveWith(owner, new Request(url, { ...init, redirect: 'error' }));
+  return keepAliveWith(owner, new Request(url, { ...init, redirect: 'manual' }));
 }
 
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {

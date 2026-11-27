@@ -84,7 +84,7 @@ test.each([
   },
 );
 
-test('an upstream redirect is never followed, so its target receives no token', async () => {
+test('an upstream redirect is relayed, never followed, so its target receives no token', async () => {
   const reached: string[] = [];
   const target = await serve((req, res) => {
     reached.push(`${req.method} ${req.url} ${req.headers['x-agent-device-token'] ?? ''}`);
@@ -115,7 +115,7 @@ test('an upstream redirect is never followed, so its target receives no token', 
   await (
     await proxy.handle(new Request('https://gateway.example.test/agent-device/health'))
   ).text();
-  expect((await proxy.handle(rpc())).status).toBeGreaterThanOrEqual(400);
+  expect((await proxy.handle(rpc())).status).toBe(307);
 
   expect(reached).toEqual([]);
 });
