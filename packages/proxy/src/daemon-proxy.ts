@@ -32,13 +32,13 @@ import {
 /**
  * Carries one request to the upstream daemon and resolves with its response. Without `upstreamFetch`
  * the proxy reaches the daemon over `node:http(s)` on artifact transfer routes and over the global
- * `fetch` on `/rpc`, health and diagnostics; plain http goes direct, never through an environment
- * proxy. Supply your own to reach the daemon over another transport, such as a WebSocket tunnel.
- * Abort the exchange when `request.signal` aborts. Every request carries `redirect: 'manual'`:
- * honor it by returning a 3xx as the response and never following it, because the request carries
- * the upstream token. The proxy relays a 3xx to its client, which applies its own redirect rules.
- * On the checked RPC route and the health probe it refuses a 3xx or `redirected` answer instead,
- * but it cannot undo a resend the transport already made.
+ * `fetch` on `/rpc`, health and diagnostics. Supply your own to reach the daemon over another
+ * transport, such as a WebSocket tunnel. Abort the exchange when `request.signal` aborts. Every
+ * request carries `redirect: 'manual'`: honor it by returning a 3xx as the response and never
+ * following it, because the request carries the upstream token. The proxy relays a 3xx to its
+ * client, which applies its own redirect rules. On the checked RPC route and the health probe it
+ * refuses a 3xx or `redirected` answer instead, but it cannot undo a resend the transport already
+ * made.
  *
  * A custom transport owns its phase guarantees and must observe `request.signal` on every route.
  * On transfer routes, the proxy bounds its own response and body waits, even if the transport
@@ -369,8 +369,8 @@ async function readUpstreamHealth(
       signal,
     }),
   );
-  const { isRedirectAnswer } = await import('./upstream-response-relay.ts');
-  if (isRedirectAnswer(response)) {
+  // A redirect the proxy did not follow, or one a custom transport did, is not the daemon's health.
+  if (response.redirected || (response.status >= 300 && response.status < 400)) {
     await response.body?.cancel();
     throw new AppError('COMMAND_FAILED', 'The daemon answered the health check with a redirect', {
       hint: 'The proxy never follows a redirect. Point upstreamBaseUrl at the daemon itself.',
@@ -583,13 +583,8 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     (upstreamAdmission ??= import('./upstream-admission.ts').then(({ assertAdmittedUpstream }) => {
       assertAdmittedUpstream(upstreamBaseUrl);
     }));
+  const upstreamFetch = options.upstreamFetch ?? ((request) => fetch(request));
   const customUpstreamFetch = options.upstreamFetch;
-  const upstreamFetch: DaemonProxyUpstreamFetch =
-    customUpstreamFetch ??
-    (async (request) => {
-      const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
-      return await fetchWithCredential(request, {}, { subject: 'Proxy upstreamBaseUrl' });
-    });
   return {
     upstreamBaseUrl,
     publicOrigin:

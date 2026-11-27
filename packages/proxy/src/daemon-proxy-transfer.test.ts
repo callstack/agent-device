@@ -285,9 +285,7 @@ test('a custom transport receives every route family including transfers', async
   ).toBe(true);
 });
 
-// A plain-http upstream is loopback, and it goes direct over Node on every route, so neither a
-// patched global fetch nor an environment proxy sees its token.
-test('a plain-http upstream takes Node on every admitted route, never the global fetch', async () => {
+test('admitted transfers use Node while RPC and diagnostics use Fetch', async () => {
   const daemon = await listen(
     http.createServer((req, res) => {
       req.resume();
@@ -333,8 +331,8 @@ test('a plain-http upstream takes Node on every admitted route, never the global
     );
     expect(response.status, path).toBe(200);
     await response.text();
-    expect(node.mock.calls.length, `${path} transfer=${transfer}`).toBe(1);
-    expect(fetch.mock.calls.length, path).toBe(0);
+    expect(node.mock.calls.length, path).toBe(transfer ? 1 : 0);
+    expect(fetch.mock.calls.length, path).toBe(transfer ? 0 : 1);
   }
   for (const [method, path] of [
     ['GET', '/upload'],

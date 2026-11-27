@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   createRevylClient,
@@ -25,49 +22,8 @@ test('uses the public Revyl backend when no URL is configured', () => {
   assert.equal(client.backendUrl, REVYL_DEFAULT_BACKEND_URL);
 });
 
-test('a loopback backend and upload URL are reached directly, never through global fetch', async () => {
-  const received: string[] = [];
-  const lengths: Array<string | undefined> = [];
-  const server = http.createServer((req, res) => {
-    received.push(`${req.method} ${req.url} ${req.headers.authorization ?? ''}`.trim());
-    if (req.method === 'PUT') lengths.push(req.headers['content-length']);
-    req.resume();
-    req.on('end', () => res.end('{}'));
-  });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const proxied = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
-  try {
-    const client = createRevylClient({
-      apiKey: 'test-key',
-      backendUrl: origin,
-      clientVersion: '0.0.0-test',
-    });
-    await client.verifyCredentials();
-    const { size } = await fs.stat(import.meta.filename);
-    await client.uploadSessionArtifact(
-      `${origin}/upload?signature=signed`,
-      { filePath: import.meta.filename, size },
-      'application/zip',
-    );
-    // A presigned PUT declares its length even though the file is streamed.
-    assert.deepEqual(lengths, [String(size)]);
-
-    assert.deepEqual(received, [
-      'GET /api/v1/entity/users/get_user_uuid Bearer test-key',
-      'PUT /upload?signature=signed',
-    ]);
-    assert.equal(proxied.mock.calls.length, 0);
-  } finally {
-    proxied.mockRestore();
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-});
-
 test('a presigned upload URL over plain http off loopback receives nothing', async () => {
-  const sent: unknown[] = [];
-  const requestSpy = vi.spyOn(http, 'request');
+  const sent: string[] = [];
   const client = createRevylClient({
     apiKey: 'test-key',
     clientVersion: '0.0.0-test',
@@ -76,22 +32,18 @@ test('a presigned upload URL over plain http off loopback receives nothing', asy
       return jsonResponse({});
     }),
   });
-  try {
-    await assert.rejects(
-      async () =>
-        await client.uploadSessionArtifact(
-          'http://storage.invalid/upload?signature=signed',
-          { filePath: import.meta.filename, size: 1 },
-          'application/zip',
-        ),
-      (error: unknown) =>
-        error instanceof AppError && error.details?.reason === 'insecure_credential_transport',
-    );
-    assert.deepEqual(sent, []);
-    assert.equal(requestSpy.mock.calls.length, 0);
-  } finally {
-    requestSpy.mockRestore();
-  }
+
+  await assert.rejects(
+    async () =>
+      await client.uploadSessionArtifact(
+        'http://storage.invalid/upload?signature=signed',
+        { filePath: import.meta.filename, size: 1 },
+        'application/zip',
+      ),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'insecure_credential_transport',
+  );
+  assert.deepEqual(sent, []);
 });
 
 test('keeps plain HTTP only on loopback', () => {

@@ -9,7 +9,6 @@ import { afterEach, test, vi } from 'vitest';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertRemoteServesCheckedRpc, createDaemonTransport } from '../index.ts';
-import { resolveClientSettings } from '../daemon-client-lifecycle.ts';
 
 const REQUEST = { session: 'default', command: 'devices', positionals: [], flags: {} };
 
@@ -78,19 +77,4 @@ test('the connect checked-capability probe refuses a plain http daemon off loopb
   assert.equal(refusal.details?.reason, 'insecure_credential_transport');
   assert.doesNotMatch(JSON.stringify([refusal.message, refusal.details]), /remote-mac/);
   for (const spy of opened) assert.equal(spy.mock.calls.length, 0);
-});
-
-test.each([
-  'http://127.0.0.1:4310/agent-device',
-  'http://[::1]:4310/agent-device',
-  'http://localhost:4310/agent-device',
-  'https://remote-mac.example.test/agent-device',
-])('a token for %s is admitted', (daemonBaseUrl) => {
-  const settings = resolveClientSettings(
-    { ...REQUEST, flags: { daemonBaseUrl } },
-    'remote-secret',
-    createTestHostEnvironment(),
-  );
-  assert.equal(settings.remoteBaseUrl, daemonBaseUrl);
-  assert.equal(settings.remoteAuthToken, 'remote-secret');
 });

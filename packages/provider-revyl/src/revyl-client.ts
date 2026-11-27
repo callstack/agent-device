@@ -96,9 +96,6 @@ type RevylProviderReason =
  */
 type RevylRoute = 'session' | 'general';
 
-/** Sends one request that carries the API key or a presigned URL. */
-type RevylTransmit = (url: string | URL, init: RequestInit) => Promise<Response>;
-
 type RevylRequest = Readonly<{
   method: 'GET' | 'POST';
   path: string;
@@ -179,10 +176,7 @@ export type RevylClient = Readonly<{
 
 export function createRevylClient(options: RevylClientOptions): RevylClient {
   const backendUrl = resolveRevylBackendUrl(options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL);
-  const transmit: RevylTransmit = async (url, init) => {
-    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
-    return await fetchWithCredential(url, init, { subject: 'Revyl URL', send: options.fetch });
-  };
+  const fetchImpl = options.fetch ?? fetch;
   const baseHeaders = {
     Authorization: `Bearer ${options.apiKey}`,
     Accept: 'application/json',
@@ -194,7 +188,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
     const retry = request.retry ?? request.method === 'GET';
     const attempts = retry ? RETRY_DELAYS_MS.length + 1 : 1;
     for (let attempt = 1; ; attempt += 1) {
-      const outcome = await sendOnce(backendUrl, transmit, baseHeaders, request);
+      const outcome = await sendOnce(backendUrl, fetchImpl, baseHeaders, request);
       if (!isRetryable(request, outcome) || attempt >= attempts || request.signal?.aborted) {
         if (outcome instanceof Error) throw outcome;
         return outcome;
@@ -322,7 +316,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       };
       let response: Response;
       try {
-        response = await transmit(uploadUrl, init);
+        response = await fetchImpl(uploadUrl, init);
       } catch (error) {
         throw new AppError(
           'COMMAND_FAILED',
@@ -369,7 +363,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
 
 async function sendOnce(
   backendUrl: string,
-  transmit: RevylTransmit,
+  fetchImpl: typeof fetch,
   baseHeaders: Record<string, string>,
   request: RevylRequest,
 ): Promise<RevylResponse | Error> {
@@ -379,7 +373,7 @@ async function sendOnce(
   if (request.workerAction) headers['X-Revyl-Agent'] = REVYL_ATTRIBUTION;
   if (request.body !== undefined) headers['Content-Type'] = 'application/json';
   try {
-    const response = await transmit(new URL(request.path, backendUrl), {
+    const response = await fetchImpl(new URL(request.path, backendUrl), {
       method: request.method,
       headers,
       body: request.body === undefined ? undefined : JSON.stringify(request.body),

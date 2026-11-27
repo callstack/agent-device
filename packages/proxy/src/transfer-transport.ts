@@ -11,7 +11,6 @@ import {
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
   type TransferPhaseWatchdog,
 } from '@agent-device/host-kit/transport';
-import { NULL_BODY_STATUSES, responseHeadersOf } from '@agent-device/host-kit/direct-http';
 
 const PROXY_TRANSFER_AGGREGATE_MS = 600_000;
 
@@ -24,8 +23,9 @@ const TRANSFER_FORWARDING_REASONS = {
   // The upstream daemon closed the connection before it answered, or during a write.
   upstreamClosed: { reason: 'transfer_upstream_closed' },
 } as const satisfies ReasonTable<'proxy'>;
+const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
-/** Forwards one exchange over `node:http(s)`, without redirects or retries; plain http goes direct. */
+/** Forwards one exchange over the runtime's default global Node agent, without redirects or retries. */
 export function createNodeTransferFetch(): (request: Request) => Promise<Response> {
   return async (request) => {
     const exchange = openExchange(request.signal);
@@ -141,10 +141,7 @@ async function exchangeOverNodeHttp(
 ): Promise<Response> {
   const url = new URL(request.url);
   const [transport, { urlToHttpOptions }] = await untilAborted(exchange.signal, () =>
-    Promise.all([
-      loadNodeHttpRequester(url, { subject: 'Proxy upstreamBaseUrl' }),
-      import('node:url'),
-    ]),
+    Promise.all([loadNodeHttpRequester(url.protocol), import('node:url')]),
   );
   exchange.signal.throwIfAborted();
   const { auth: _auth, ...target } = urlToHttpOptions(url);
@@ -208,7 +205,11 @@ async function exchangeOverNodeHttp(
       answered = true;
       outgoingStopped.abort();
       exchange.watchdog.suspend();
-      const headers = responseHeadersOf(res);
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(res.headers)) {
+        if (value === undefined) continue;
+        for (const item of Array.isArray(value) ? value : [value]) headers.append(name, item);
+      }
       if (request.method === 'HEAD' || NULL_BODY_STATUSES.has(status)) {
         res.resume();
         void responseClosed.then(finish);

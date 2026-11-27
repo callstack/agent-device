@@ -8,27 +8,17 @@
  * import of every capability would make those mocks incomplete.
  */
 export async function loadRealHostKitCapabilities() {
-  const [
-    command,
-    diagnostics,
-    directHttp,
-    file,
-    processModule,
-    request,
-    retry,
-    runtimeSlots,
-    version,
-  ] = await Promise.all([
-    import('@agent-device/host-kit/command'),
-    import('@agent-device/host-kit/diagnostics'),
-    import('@agent-device/host-kit/direct-http'),
-    import('@agent-device/host-kit/file'),
-    import('@agent-device/host-kit/process'),
-    import('@agent-device/host-kit/request'),
-    import('@agent-device/host-kit/retry'),
-    import('@agent-device/host-kit/runtime-slots'),
-    import('@agent-device/host-kit/version'),
-  ]);
+  const [command, diagnostics, file, processModule, request, retry, runtimeSlots, version] =
+    await Promise.all([
+      import('@agent-device/host-kit/command'),
+      import('@agent-device/host-kit/diagnostics'),
+      import('@agent-device/host-kit/file'),
+      import('@agent-device/host-kit/process'),
+      import('@agent-device/host-kit/request'),
+      import('@agent-device/host-kit/retry'),
+      import('@agent-device/host-kit/runtime-slots'),
+      import('@agent-device/host-kit/version'),
+    ]);
   return {
     runCmdStreaming: command.runCmdStreaming,
     runCmdBackground: command.runCmdBackground,
@@ -37,7 +27,6 @@ export async function loadRealHostKitCapabilities() {
     commandDeveloperDir: command.commandDeveloperDir,
     emitDiagnostic: diagnostics.emitDiagnostic,
     withDiagnosticTimer: diagnostics.withDiagnosticTimer,
-    fetchWithCredential: directHttp.fetchWithCredential,
     retryWithPolicy: retry.retryWithPolicy,
     isEnvTruthy: retry.isEnvTruthy,
     deadlineFromTimeoutMs: (timeoutMs: number, nowMs?: number) =>

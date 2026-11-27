@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import http, { createServer } from 'node:http';
+import { createServer } from 'node:http';
 import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro } from './index.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -426,7 +426,6 @@ test.for(['http://proxy.example.test', 'http:'])(
   'prepareMetroRuntime never sends a bridge bearer token to %s',
   async (proxyBaseUrl) => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const requestSpy = vi.spyOn(http, 'request');
     try {
       await assert.rejects(
         () =>
@@ -442,10 +441,8 @@ test.for(['http://proxy.example.test', 'http:'])(
           error instanceof AppError && error.details?.reason === 'insecure_credential_transport',
       );
       assert.equal(fetchSpy.mock.calls.length, 0);
-      assert.equal(requestSpy.mock.calls.length, 0);
     } finally {
       fetchSpy.mockRestore();
-      requestSpy.mockRestore();
     }
   },
 );

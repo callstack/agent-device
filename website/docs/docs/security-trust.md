@@ -23,8 +23,7 @@ CLI commands run through a per-user background daemon:
 
 These paths never send a credential over plain http to a host that is not loopback: the daemon client (commands, uploads, artifacts, and diagnostics), the proxy's requests to its upstream daemon, cloud sign-in and cloud profile requests, the Metro host bridge and its companion, Limrun API and download requests, Revyl requests, and the Apple runner. Such a URL is refused before anything is sent to it, with `details.reason: "insecure_credential_transport"`. Use https, or a port forward to loopback.
 
-- `localhost` counts only when it resolves to a loopback address.
-- A credential-bearing request to plain http on loopback connects directly and never goes through an environment proxy (`HTTP_PROXY` with `NODE_USE_ENV_PROXY`).
+- Loopback means `127.0.0.0/8`, `::1`, or `localhost`. Such traffic stays on this machine. If you relay a loopback port to another machine, the relay must encrypt it.
 - A redirect is followed only on the same origin, except by a Limrun download, which also follows https to https and drops its headers when it leaves the origin. The proxy follows no upstream redirect; it relays the redirect response to its client.
 - The Metro companion opens the host bridge's socket only over `wss`, or `ws` to loopback. A request the bridge relays to your dev server with an `Authorization` or `Cookie` header follows the same rule.
 - There is one exception: for a physical iOS device that is not attached over USB, the Apple runner token travels over plain http to the device's CoreDevice tunnel address, and that tunnel encrypts the traffic. The exception relies on two facts: Apple's `devicectl` reports the address for that device, and the address is a unique local IPv6 address (`fd00::/8`). Any other reported address is refused.

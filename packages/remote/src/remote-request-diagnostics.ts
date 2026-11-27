@@ -146,7 +146,7 @@ async function fetchRemoteRequestDiagnostics(params: {
     return 'daemon base URL is not a valid URL';
   }
   try {
-    const transport = await loadNodeHttpRequester(url, { subject: 'Remote daemon base URL' });
+    const transport = await loadNodeHttpRequester(url.protocol);
     await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     return await new Promise<string | undefined>((resolve) => {
       let settled = false;

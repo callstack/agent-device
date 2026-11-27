@@ -9,10 +9,12 @@ import {
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import type { LimrunFileDownload } from '@agent-device/provider-limrun';
-import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
+import {
+  assertSecureCredentialTransport,
+  fetchWithCredential,
+} from '@agent-device/contracts/credential-transport';
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
-const MAX_DOWNLOAD_REDIRECTS = 5;
 
 // Why a Limrun file download did not land. A started download removes its destination on every
 // failure, so each row means "retry from the same URL", and `limrun_download_failed` adds that the
@@ -24,9 +26,6 @@ const LIMRUN_DOWNLOAD_REASONS = {
   timeout: { reason: 'limrun_download_timeout' },
   // The transfer broke for a reason the service never answered with, kept in `details.cause`.
   failed: { reason: 'limrun_download_failed' },
-  // The download got a redirect it does not follow: off https to another origin, to a URL with a
-  // username or password or one that does not parse, or past the fifth hop. Nothing was sent there.
-  redirectRefused: { reason: 'limrun_download_redirect_refused' },
 } as const satisfies ReasonTable<'limrun'>;
 
 /**
@@ -41,7 +40,12 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-    const response = await fetchDownload(url, options.headers, signal);
+    // The URL comes from the provider and can be signed, and the headers carry its bearer token.
+    const response = await fetchWithCredential(
+      url,
+      { headers: options.headers, signal },
+      { subject: 'Limrun download URL', followHttpsOffOrigin: true },
+    );
     if (!response.ok) throw await httpFailure(response, options);
     if (!response.body) {
       throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
@@ -57,47 +61,6 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout, signal);
   }
-}
-
-/**
- * Requests the download and follows its redirects itself. The URL comes from the provider and can
- * be signed, and the headers carry its bearer token, so every hop meets the credential transport
- * rule. A redirect is followed from https to https or on the same origin only, and the headers stay
- * behind once it leaves the origin.
- */
-async function fetchDownload(
-  from: URL,
-  initialHeaders: LimrunFileDownload['headers'],
-  signal: AbortSignal,
-): Promise<Response> {
-  const { fetchWithCredential, isRedirectStatus } =
-    await import('@agent-device/host-kit/direct-http');
-  let url = from;
-  let headers = initialHeaders;
-  for (let redirects = 0; ; redirects += 1) {
-    const response = await fetchWithCredential(
-      url.href,
-      { method: 'GET', headers, redirect: 'manual', signal },
-      { subject: 'Limrun download URL' },
-    );
-    const location = response.headers.get('location');
-    if (!isRedirectStatus(response.status) || location === null) return response;
-    await response.body?.cancel().catch(() => undefined);
-    const target = URL.parse(location, url);
-    if (!target || !isFollowedRedirect(url, target) || redirects >= MAX_DOWNLOAD_REDIRECTS) {
-      throw new AppError('COMMAND_FAILED', 'Limrun download answered with a refused redirect', {
-        reason: LIMRUN_DOWNLOAD_REASONS.redirectRefused.reason,
-        statusCode: response.status,
-      });
-    }
-    if (target.origin !== url.origin) headers = {};
-    url = target;
-  }
-}
-
-function isFollowedRedirect(from: URL, to: URL): boolean {
-  if (to.username || to.password) return false;
-  return (from.protocol === 'https:' && to.protocol === 'https:') || to.origin === from.origin;
 }
 
 async function httpFailure(response: Response, options: LimrunFileDownload): Promise<AppError> {

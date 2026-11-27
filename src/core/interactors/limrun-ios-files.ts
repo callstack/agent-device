@@ -7,6 +7,7 @@ import {
   type AppleToolExecOptions,
 } from '@agent-device/platform-apple/tool-provider';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { downloadLimrunFile } from '../limrun-download-file.ts';
 
@@ -63,21 +64,17 @@ export function createLimrunSimulatorFiles(
   };
   const request = async (method: string, url: URL, signal: AbortSignal, body?: Uint8Array) => {
     signal.throwIfAborted();
-    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
-    const response = await fetchWithCredential(
-      url,
-      {
-        method,
-        headers: {
-          Authorization: `Bearer ${session.token}`,
-          ...(body ? { 'Content-Type': 'application/octet-stream' } : {}),
-        },
-        body: body as BodyInit | undefined,
-        signal,
-        redirect: 'error',
+    assertSecureCredentialTransport(url, 'Limrun API URL');
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${session.token}`,
+        ...(body ? { 'Content-Type': 'application/octet-stream' } : {}),
       },
-      { subject: 'Limrun API URL' },
-    );
+      body: body as BodyInit | undefined,
+      signal,
+      redirect: 'error',
+    });
     if (!response.ok) {
       await response.body?.cancel();
       throw new AppError('COMMAND_FAILED', `Limrun file ${method} failed (${response.status})`, {

@@ -1,9 +1,8 @@
-// The companion's bearer token and its bridge socket URL never leave this machine in cleartext: not
-// to a plain destination off loopback, and not through an environment proxy.
+// The companion's bearer token, its bridge socket URL and relayed credentials never go in cleartext
+// to a destination off loopback.
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import dns from 'node:dns';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -65,25 +64,18 @@ function startWorker(serverBaseUrl: string, localBaseUrl = 'http://127.0.0.1:1')
 }
 
 /**
- * A socket taken from an HTTP server on `upgrade` or `connect` has no `error` listener left, and a
- * peer that dies with it open can reset it. These cases judge what arrived, not how it closed.
+ * A socket taken from an HTTP server on `upgrade` has no `error` listener left, and a peer that
+ * dies with it open can reset it. These cases judge what arrived, not how it closed.
  */
 function tolerateReset(socket: Duplex): void {
   socket.on('error', () => undefined);
 }
 
-/** Where a registration path moved: a constant, never a value taken from the request. */
-function movedTo(path: string | undefined): string | undefined {
-  if (path === REGISTER_PATH) return `${REGISTER_PATH}/moved`;
-  if (path === UNREGISTER_PATH) return `${UNREGISTER_PATH}/moved`;
-  return undefined;
-}
-
 /**
  * A loopback bridge whose registration answers `wsUrl(port)`, recording what reaches it and what
- * the companion sends on the socket. `moved` redirects each registration path once.
+ * the companion sends on the socket.
  */
-async function listenBridge(wsUrl: (port: number) => string, moved = false) {
+async function listenBridge(wsUrl: (port: number) => string) {
   const received: string[] = [];
   let upgrade!: (socket: Duplex) => void;
   const upgraded = new Promise<Duplex>((resolve) => (upgrade = resolve));
@@ -93,11 +85,6 @@ async function listenBridge(wsUrl: (port: number) => string, moved = false) {
   const server = http.createServer((req, res) => {
     received.push(`${req.url} ${req.headers.authorization}`);
     req.resume();
-    const location = moved ? movedTo(req.url) : undefined;
-    if (location) {
-      res.writeHead(307, { location }).end();
-      return;
-    }
     res.end(JSON.stringify({ ok: true, data: { ws_url: wsUrl(port) } }));
   });
   server.on('upgrade', (req, socket) => {
@@ -125,37 +112,18 @@ const registered = `${REGISTER_PATH} Bearer test-token`;
 const unregistered = `${UNREGISTER_PATH} Bearer test-token`;
 
 // A base without a host gains one from the appended path: `https://` would reach `https://api/...`.
-test.for(['http://bridge.invalid', 'http:', 'https://', 'https:'])(
+test.for(['http://bridge.invalid', 'https://'])(
   'the worker never sends its bearer token to %s and exits',
   async (serverBaseUrl) => {
-    const sent: unknown[] = [];
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      sent.push(input);
-      return new Response(null, { status: 401 });
-    });
-    vi.spyOn(http, 'request').mockImplementation(((target: unknown) => {
-      sent.push(target);
-      throw new Error('nothing may be sent');
-    }) as typeof http.request);
+    const send = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 401 }));
 
     await assert.rejects(startWorker(serverBaseUrl).done, isCredentialTransportRefusal);
 
-    assert.deepEqual(sent, []);
+    assert.equal(send.mock.calls.length, 0);
   },
 );
-
-test('the worker reaches a loopback bridge directly, never through global fetch', async () => {
-  const bridge = await listenBridge((port) => `ws://127.0.0.1:${port}/bridge`);
-  const proxied = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
-  const worker = startWorker(bridge.origin);
-
-  (await bridge.upgraded).destroy();
-  await worker.stop();
-
-  assert.equal(bridge.received[0], registered);
-  assert.ok(bridge.received.includes(unregistered), `${bridge.received}`);
-  assert.equal(proxied.mock.calls.length, 0);
-});
 
 /** A TCP listener that records every connection, whatever protocol its caller speaks. */
 async function listenSink() {
@@ -170,13 +138,11 @@ async function listenSink() {
 }
 
 // `0.0.0.0` reaches this machine's listener and is not a loopback address, so a socket opened
-// without the check would show up at the sink. So would `http` or `https` on loopback, which a
-// `WebSocket` accepts.
+// without the check would show up at the sink. So would `http` on loopback, which a `WebSocket`
+// accepts.
 test.for([
   (port: number) => `ws://0.0.0.0:${port}/bridge?ticket=secret`,
-  (port: number) => `ws://0.0.0.0:${port}/bridge`,
   (port: number) => `http://127.0.0.1:${port}/bridge?ticket=secret`,
-  (port: number) => `https://127.0.0.1:${port}/bridge`,
 ])('the worker refuses any socket but wss or loopback ws before it opens', async (wsUrl) => {
   const sink = await listenSink();
   const bridge = await listenBridge(() => wsUrl(sink.port));
@@ -187,9 +153,9 @@ test.for([
   assert.deepEqual(bridge.received, [registered, unregistered]);
 });
 
-/** Runs the worker as its own process against `origin`, with `env` over this one's. */
-function spawnWorker(origin: string, env: NodeJS.ProcessEnv = {}) {
-  const child = spawn(
+test('a refused socket URL ends the worker process as failed', async () => {
+  const bridge = await listenBridge(() => 'ws://0.0.0.0:1/bridge');
+  const worker = spawn(
     process.execPath,
     [
       '--experimental-strip-types',
@@ -199,97 +165,27 @@ function spawnWorker(origin: string, env: NodeJS.ProcessEnv = {}) {
     {
       env: {
         ...process.env,
-        [ENV_COMPANION_TUNNEL_SERVER_BASE_URL]: origin,
+        [ENV_COMPANION_TUNNEL_SERVER_BASE_URL]: bridge.origin,
         [ENV_COMPANION_TUNNEL_BEARER_TOKEN]: 'test-token',
         [ENV_COMPANION_TUNNEL_LOCAL_BASE_URL]: 'http://127.0.0.1:1',
         [ENV_COMPANION_TUNNEL_REGISTER_PATH]: REGISTER_PATH,
         [ENV_COMPANION_TUNNEL_SCOPE_TENANT_ID]: 'tenant-1',
         [ENV_COMPANION_TUNNEL_SCOPE_RUN_ID]: 'run-1',
         [ENV_COMPANION_TUNNEL_SCOPE_LEASE_ID]: 'lease-1',
-        ...env,
       },
       stdio: 'ignore',
     },
   );
-  const exited = once(child, 'exit');
+  const exited = once(worker, 'exit');
   cleanupTasks.push(async () => {
-    child.kill('SIGKILL');
+    worker.kill('SIGKILL');
     await exited;
   });
-  return exited;
-}
 
-test('the worker opens a loopback socket around an environment proxy', async () => {
-  const proxied: string[] = [];
-  const proxy = http.createServer((req, res) => {
-    proxied.push(`${req.method} ${req.url}`);
-    res.writeHead(502).end();
-  });
-  for (const event of ['upgrade', 'connect'] as const) {
-    proxy.on(event, (req: http.IncomingMessage, socket: Duplex) => {
-      tolerateReset(socket);
-      proxied.push(`${event} ${req.url}`);
-      socket.destroy();
-    });
-  }
-  cleanupTasks.push(() => closeLoopbackServer(proxy));
-  const proxyUrl = `http://127.0.0.1:${await listenOnLoopback(proxy)}`;
-  const bridge = await listenBridge((port) => `ws://127.0.0.1:${port}/bridge?ticket=secret`);
-
-  // Node reads `NODE_USE_ENV_PROXY` at startup, so this worker runs as its own process.
-  const exited = spawnWorker(bridge.origin, {
-    NODE_USE_ENV_PROXY: '1',
-    HTTP_PROXY: proxyUrl,
-    http_proxy: proxyUrl,
-    NO_PROXY: '',
-    no_proxy: '',
-  });
-
-  await Promise.race([
-    bridge.upgraded,
-    exited.then(() => assert.fail('the worker exited before it opened the bridge socket')),
-  ]);
-
-  assert.deepEqual(bridge.received, [registered, 'UPGRADE /bridge?ticket=secret']);
-  assert.deepEqual(proxied, []);
-});
-
-test('a refused socket URL ends the worker process as failed', async () => {
-  const bridge = await listenBridge(() => 'ws://0.0.0.0:1/bridge');
-
-  const [exitCode] = await spawnWorker(bridge.origin);
+  const [exitCode] = await exited;
 
   assert.equal(exitCode, 1);
   assert.deepEqual(bridge.received, [registered]);
-});
-
-test('a bridge socket on a localhost that resolves off loopback never opens', async () => {
-  const bridge = await listenBridge((port) => `ws://localhost:${port}/bridge?ticket=secret`);
-  // `0.0.0.0` reaches this machine's listener and is not a loopback address.
-  vi.spyOn(dns, 'lookup').mockImplementation(((
-    _hostname: string,
-    options: dns.LookupOptions,
-    callback: (...answer: unknown[]) => void,
-  ) => {
-    if (options.all) callback(null, [{ address: '0.0.0.0', family: 4 }]);
-    else callback(null, '0.0.0.0', 4);
-  }) as typeof dns.lookup);
-
-  await assert.rejects(startWorker(bridge.origin).done, isCredentialTransportRefusal);
-
-  assert.deepEqual(bridge.received, [registered, unregistered]);
-});
-
-test('registration and unregistration follow a same-origin redirect with the token', async () => {
-  const bridge = await listenBridge((port) => `ws://127.0.0.1:${port}/bridge`, true);
-  const worker = startWorker(bridge.origin);
-
-  (await bridge.upgraded).destroy();
-  await worker.stop();
-
-  for (const path of [REGISTER_PATH, UNREGISTER_PATH]) {
-    assert.ok(bridge.received.includes(`${path}/moved Bearer test-token`), `${bridge.received}`);
-  }
 });
 
 /** A server recording the credential headers of each request that reaches it. */
@@ -353,18 +249,14 @@ test.each([
   assert.deepEqual(local.received, ['/index.bundle -']);
 });
 
-test('a relayed credential reaches loopback directly and stays on its origin', async () => {
+test('a relayed credential stays on the origin of the local base URL', async () => {
   const other = await listenLocalServer();
-  const local = await listenLocalServer(() => `http://0.0.0.0:${other.port}/redirected`);
+  const local = await listenLocalServer(() => `${other.origin}/redirected`);
   const bridge = await relayingBridge(local.origin);
-  const proxied = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
 
-  const direct = await bridge.relay(httpRequest('/secret', { cookie: 'session=app' }));
   const redirected = await bridge.relay(httpRequest('/redirect', { cookie: 'session=app' }));
 
-  assert.equal(direct.status, 200);
   assert.equal(redirected.status, 307);
-  assert.deepEqual(local.received, ['/secret session=app', '/redirect session=app']);
+  assert.deepEqual(local.received, ['/redirect session=app']);
   assert.deepEqual(other.received, []);
-  assert.equal(proxied.mock.calls.length, 0);
 });

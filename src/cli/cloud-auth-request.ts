@@ -1,3 +1,7 @@
+import {
+  fetchWithCredential,
+  isRedirectStatus,
+} from '@agent-device/contracts/credential-transport';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { readCloudJsonResponse } from './cloud-response.ts';
 
@@ -53,8 +57,6 @@ export async function fetchCloudOnOneOrigin(
   // di-seam-approved: the same fetch-global seam as postCloudAuthJson's fetchImpl.
   fetchImpl?: typeof fetch,
 ): Promise<Response> {
-  const { fetchWithCredential, isRedirectStatus } =
-    await import('@agent-device/host-kit/direct-http');
   const response = await fetchWithCredential(
     requestUrl,
     // One timeout covers the whole redirect chain.

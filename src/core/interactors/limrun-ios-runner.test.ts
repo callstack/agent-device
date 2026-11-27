@@ -8,6 +8,8 @@ import {
 } from '@agent-device/host-kit/request';
 import { expect, test, vi } from 'vitest';
 import { fixture } from './limrun-ios-runner.fixtures.ts';
+import { uploadLimrunRunnerProducts } from './limrun-ios-runner-products.ts';
+import { mkdtempForTest } from '@agent-device/test-kit';
 test('stages a token-authenticated runner once and presents forwarded XCTest snapshots', async () => {
   const f = await fixture();
   const snapshot = await f.runner.createInteractor().snapshot({
@@ -48,17 +50,19 @@ test('stages a token-authenticated runner once and presents forwarded XCTest sna
   ).rejects.toThrow();
 });
 
-test('a loopback instance gets sync, launch and runner calls without global fetch', async () => {
-  const f = await fixture();
-  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('proxied'));
+test('a runner upload never sends the instance token over plain http off loopback', async () => {
+  const directory = await mkdtempForTest('limrun-runner-upload-');
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
   try {
-    await f.runner.createInteractor().snapshot({ appBundleId: 'com.apple.Preferences' });
-
-    expect(f.uploads.length).toBeGreaterThan(0);
-    expect(f.requests.filter((url) => url.endsWith('/xctest/run'))).toHaveLength(1);
-    expect(f.command).toMatchObject({ command: 'snapshot' });
+    await expect(
+      uploadLimrunRunnerProducts(
+        directory,
+        'http://limrun.invalid/v1/ios_test/api',
+        'instance-token',
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'insecure_credential_transport' } });
     expect(fetchSpy).not.toHaveBeenCalled();
-    await f.runner.dispose();
   } finally {
     fetchSpy.mockRestore();
   }

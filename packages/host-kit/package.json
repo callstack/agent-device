@@ -44,10 +44,6 @@
       "types": "./src/diagnostics.ts",
       "default": "./src/diagnostics.ts"
     },
-    "./direct-http": {
-      "types": "./src/direct-http.ts",
-      "default": "./src/direct-http.ts"
-    },
     "./doctor-lines": {
       "types": "./src/doctor-lines.ts",
       "default": "./src/doctor-lines.ts"

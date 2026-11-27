@@ -3,7 +3,7 @@ import {
   discloseDispatch,
   AppError,
 } from '@agent-device/kernel/errors';
-import { Deadline, fetchWithCredential, resolveIosPhysicalDeviceControl } from './host.ts';
+import { Deadline, resolveIosPhysicalDeviceControl } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createRunnerCommandRouteResolver,
@@ -105,6 +105,18 @@ export async function postRunnerCommandOverRoute(
       'no',
     );
   }
+  // The request carries the runner token, and a forwarded one the provider's own headers. A
+  // simulator or macOS runner listens on 127.0.0.1, so only another route loads the rule.
+  if (URL.parse(route.url)?.hostname !== '127.0.0.1') {
+    const { assertSecureCredentialTransport } =
+      await import('@agent-device/contracts/credential-transport');
+    assertSecureCredentialTransport(
+      route.url,
+      endpoint.http ? 'Runner forwarding URL' : 'Runner device address',
+      { coreDeviceTunnel: route.coreDeviceTunnel },
+    );
+    throwIfCanceledBeforeSend(signal);
+  }
   const response = await fetchWithTimeout(
     route.url,
     {
@@ -114,11 +126,6 @@ export async function postRunnerCommandOverRoute(
     },
     timeoutMs,
     signal,
-    // The request carries the runner token, and a forwarded one the provider's own headers.
-    {
-      subject: endpoint.http ? 'Runner forwarding URL' : 'Runner device address',
-      coreDeviceTunnel: route.coreDeviceTunnel,
-    },
   );
   if (endpoint.http && [502, 503, 504].includes(response.status)) {
     await response.body?.cancel();
@@ -150,15 +157,12 @@ export async function fetchWithTimeout(
   init: RequestInit,
   timeoutMs: number,
   requestSignal?: AbortSignal,
-  destination: Readonly<{ subject: string; coreDeviceTunnel?: boolean }> = {
-    subject: 'Runner URL',
-  },
 ): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
     // The token travels in a header, so a redirect must never carry it elsewhere.
-    return await fetchWithCredential(url, { ...init, redirect: 'error', signal }, destination);
+    return await fetch(url, { ...init, redirect: 'error', signal });
   } catch (error) {
     // `AbortSignal.timeout` rejects with a bare DOMException that no recovery rule can
     // read. Only a rejection carrying that signal's own reason is our deadline: a

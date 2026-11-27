@@ -128,14 +128,14 @@ On these routes:
 
 Supply `upstreamFetch` if you need those Fetch behaviors or your own routing.
 
-A plain-http upstream is loopback, and the default transport reaches it directly over `node:http`
-on every route. An environment proxy (`HTTP_PROXY` with `NODE_USE_ENV_PROXY=1`) never sees the
-upstream token. As with `fetch`, such a request ends after five minutes of silence from the daemon
-(transfer routes keep their own limits above). An https upstream follows your runtime's
-environment-proxy settings: Node 26.11.1 uses them when `NODE_USE_ENV_PROXY=1`, and Bun 1.4.2 Fetch
-uses them without that opt-in.
+Environment-proxy routing depends on your runtime. In loopback checks, Node 22.12 ignores
+`HTTP_PROXY` and `HTTPS_PROXY` for both transports. Node 26.11.1 uses them when
+`NODE_USE_ENV_PROXY=1`. Bun 1.4.2 Fetch uses them without that opt-in, while the default transfer
+transport requires it. On Node 26.11.1 and Bun 1.4.2, `NO_PROXY=127.0.0.1` bypasses the proxy.
+If your Bun deployment needs proxy routing for transfers, set `NODE_USE_ENV_PROXY=1` or supply
+`upstreamFetch`.
 
-By default, `/rpc`, `/health` and request diagnostics to an https upstream use global `fetch`.
+By default, `/rpc`, `/health` and request diagnostics use global `fetch`.
 
 ### Reach the daemon over your own transport
 
@@ -229,7 +229,7 @@ authenticate: async (request) => {
 | `upstreamToken` | required | The daemon's auth token. |
 | `clientToken` | required without `authenticate` | Token clients must send as their daemon auth token. |
 | `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
-| `upstreamFetch` | none | Sends one request to the daemon. Without it, transfer routes use `node:http(s)`, a plain-http upstream uses `node:http` on every route, and other routes use the global `fetch`. |
+| `upstreamFetch` | none | Sends one request to the daemon. Without it, transfer routes use `node:http(s)` and every other route uses the global `fetch`. |
 | `maxRpcBodyBytes` | 64 MiB, the daemon's own request limit | Larger `/rpc` bodies get a 400 response. |
 | `upstreamTimeoutMs` | none | Independent cap on one daemon request, including its body. `/health` keeps its separate five-second limit. Without this option, other requests last as long as the client waits, bounded by the client's command timeout and, on transfer routes, the 600-second forwarding aggregate. |
 

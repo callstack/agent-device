@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import {
   AppError,
@@ -47,7 +45,6 @@ import {
   sendRunnerCommandOnce,
 } from '../runner-transport.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-import { loadRealHostKitCapabilities } from '@agent-device/test-kit';
 
 // The real `resolveIosPhysicalDeviceControl` resolves the CoreDevice tunnel IP
 // through root-level tooling this package cannot reach; a fake control backed
@@ -238,12 +235,21 @@ test('a forwarded runner route never sends its tokens over plain http off loopba
   assert.equal(fetchMock.mock.calls.length, 0);
 });
 
-// The same address is allowed on the tunnel route (the fallback cases below), so the exclusion
+test('the runner sends to a CoreDevice tunnel address with fetch, as a bracketed fd00:: host', async () => {
+  mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
+  stubSuccessfulFetch();
+  mockRunCmd.mockImplementation(makeTunnelIpLookup('fda3:3a9e:368d::1'));
+
+  await sendRunnerCommandOnce(iosDevice, RUNNER_ENDPOINT_FIXTURE, { command: 'uptime' });
+
+  const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+  assert.equal(url, 'http://[fda3:3a9e:368d::1]:8100/command');
+  assert.equal(init?.redirect, 'error');
+});
+
+// The same address is allowed on the tunnel route above, so the exclusion
 // follows how the route was resolved, not what the address looks like.
-test.each([
-  ['whose endpoint carries its forwarding', { url: 'http://[fd00::123]:8100/command' }],
-  ['whose endpoint names no forwarding', undefined],
-])('a forwarded route to a tunnel-shaped address %s is refused', async (_label, http) => {
+test('a route CoreDevice did not report is refused even at a tunnel-shaped address', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   const route = {
@@ -255,7 +261,7 @@ test.each([
   await assert.rejects(
     () =>
       postRunnerCommandOverRoute(iosDevice, route, {
-        endpoint: { ...RUNNER_ENDPOINT_FIXTURE, ...(http ? { http } : {}) },
+        endpoint: RUNNER_ENDPOINT_FIXTURE,
         command: { command: 'uptime' },
         timeoutMs: 5_000,
       }),
@@ -391,37 +397,4 @@ test('a cancellation during route resolution discloses that the command was neve
     },
   );
   assert.equal(vi.mocked(fetch).mock.calls.length, 0);
-});
-
-test('the real transport sends a loopback runner command around global fetch', async () => {
-  const hostKit = await loadRealHostKitCapabilities();
-  appleRunnerTestHost.update({ fetchWithCredential: hostKit.fetchWithCredential });
-  const received: string[] = [];
-  const runner = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (chunk) => (body += String(chunk)));
-    req.on('end', () => {
-      received.push(`${req.url} ${req.headers['content-length']} ${body.length}`);
-      if (req.url === '/moved') res.writeHead(307, { location: '/target' }).end();
-      else res.end('{}');
-    });
-  });
-  await new Promise<void>((resolve) => runner.listen(0, '127.0.0.1', resolve));
-  const origin = `http://127.0.0.1:${(runner.address() as AddressInfo).port}`;
-  const proxied = vi.fn().mockRejectedValue(new Error('proxied'));
-  vi.stubGlobal('fetch', proxied);
-
-  try {
-    const post = { method: 'POST', body: 'command' };
-    assert.equal((await fetchWithTimeout(`${origin}/command`, post, 5_000)).status, 200);
-    // The runner token travels in a header, so the redirect target gets nothing.
-    await assert.rejects(() => fetchWithTimeout(`${origin}/moved`, post, 5_000), TypeError);
-
-    assert.deepEqual(received, ['/command 7 7', '/moved 7 7']);
-    assert.equal(proxied.mock.calls.length, 0);
-  } finally {
-    vi.unstubAllGlobals();
-    runner.closeAllConnections();
-    await new Promise<void>((resolve) => runner.close(() => resolve()));
-  }
 });

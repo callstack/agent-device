@@ -14,6 +14,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError, TIMEOUT_REASONS } from '@agent-device/kernel/errors';
 import { readVersion } from '@agent-device/host-kit/version';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import {
   prepareLimrunRunnerProducts,
   uploadLimrunRunnerProducts,
@@ -163,25 +164,21 @@ export async function createLimrunIosRunner(
       const remainingMs = deadline?.remainingMs() ?? 120_000;
       const launchTimeoutMs = Math.max(1, Math.floor(Math.min(90_000, remainingMs * 0.75)));
       const launchSignal = AbortSignal.any([signal, AbortSignal.timeout(launchTimeoutMs)]);
-      const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+      assertSecureCredentialTransport(apiUrl, 'Limrun API URL');
       response = await retryWithPolicy(
         async () => {
           runRequested = true;
           const result = await awaitWithSignal(
-            fetchWithCredential(
-              `${apiUrl}/xctest/run`,
-              {
-                method: 'POST',
-                headers: { ...headers, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  root: path.basename(directory),
-                  xctestrun: 'Runner.xctestrun',
-                }),
-                signal,
-                redirect: 'error',
-              },
-              { subject: 'Limrun API URL' },
-            ),
+            fetch(`${apiUrl}/xctest/run`, {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                root: path.basename(directory),
+                xctestrun: 'Runner.xctestrun',
+              }),
+              signal,
+              redirect: 'error',
+            }),
             launchSignal,
           );
           if (!result.ok) {

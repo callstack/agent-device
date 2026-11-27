@@ -144,7 +144,7 @@ test('the health leg rides a fresh connection, never the keep-alive pool', async
     else primed = true;
     res.end('{}');
   });
-  const httpRequester = await loadNodeHttpRequester(new URL('http://127.0.0.1'));
+  const httpRequester = await loadNodeHttpRequester('http:');
   await withLoopback(server, async (port) => {
     // Prime: a full keep-alive request/response whose socket returns to the global pool.
     await new Promise<void>((resolve, reject) => {

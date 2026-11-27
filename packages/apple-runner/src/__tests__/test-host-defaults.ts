@@ -94,9 +94,8 @@ function appleToolingTestAdapters(): Pick<
  * environment, and the explicit Apple adapters above. It reads no platform-apple or root code.
  */
 export async function createAppleRunnerTestHostDefaults(): Promise<AppleRunnerHost> {
-  const hostKit = await loadRealHostKitCapabilities();
   return {
-    ...hostKit,
+    ...(await loadRealHostKitCapabilities()),
     ...appleToolingTestAdapters(),
     hostEnvironment: createLiveTestHostEnvironment,
     shellQuote,
@@ -105,13 +104,6 @@ export async function createAppleRunnerTestHostDefaults(): Promise<AppleRunnerHo
     isRecord,
     classifyBootFailure,
     bootFailureHint,
-    // An explicit network adapter: the real rule, with global `fetch` as its sender, so a suite that
-    // stubs `fetch` observes every runner send. The real capability sends plain http around it.
-    fetchWithCredential: (input, init, destination) =>
-      hostKit.fetchWithCredential(input, init, {
-        ...destination,
-        send: async (to, request) => await fetch(to, request),
-      }),
     leaseOwnerStateDir: () => undefined,
     hasDeviceClaimAuthority: () => false,
   };

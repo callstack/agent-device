@@ -338,13 +338,13 @@ async function requestUploadControl(
   watchdog.signal.throwIfAborted();
   watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
   try {
-    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
     // Redirects could forward the daemon token, so these control requests never follow them.
-    const response = await fetchWithCredential(
-      url,
-      { ...init, method: 'POST', redirect: 'error', signal: watchdog.signal },
-      { subject: 'Upload URL' },
-    );
+    const response = await fetch(url, {
+      ...init,
+      method: 'POST',
+      redirect: 'error',
+      signal: watchdog.signal,
+    });
     const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
     watchdog.signal.throwIfAborted();
     return { response, body };

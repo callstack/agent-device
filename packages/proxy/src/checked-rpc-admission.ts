@@ -13,7 +13,6 @@ import {
   DAEMON_HTTP_RPC_PROTOCOL_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
-import { isRedirectAnswer } from './upstream-response-relay.ts';
 
 /** The most of an upstream refusal body the proxy reads for its bounded diagnostic values. */
 const UPSTREAM_REFUSAL_MAX_BYTES = 64 * 1024;
@@ -52,7 +51,10 @@ export async function localCheckedRpcRefusal(
   request: Request,
   rpcId: unknown,
 ): Promise<Response | null> {
-  if (isRedirectAnswer(upstreamResponse)) {
+  if (
+    upstreamResponse.redirected ||
+    (upstreamResponse.status >= 300 && upstreamResponse.status < 400)
+  ) {
     await upstreamResponse.body?.cancel();
     throw new AppError('COMMAND_FAILED', 'The daemon answered a checked call with a redirect', {
       hint: 'The proxy never follows a redirect on the checked route. Point upstreamBaseUrl at the daemon itself.',

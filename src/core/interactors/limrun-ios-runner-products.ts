@@ -12,6 +12,7 @@ import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 import { extractArchiveSafely } from '@agent-device/host-kit/archive';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { downloadLimrunFile } from '../limrun-download-file.ts';
 
 /** Stages the version-matched release runner, or an explicitly supplied development build. */
@@ -246,26 +247,22 @@ export async function uploadLimrunRunnerProducts(
       for (const file of payloads)
         yield* createReadStream(path.join(directory, file.path), { signal });
     }
-    const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
+    assertSecureCredentialTransport(apiUrl, 'Limrun API URL');
     const stream = createGzip();
     const compression = pipeline(Readable.from(body()), stream, { signal }).catch(() => {});
     try {
-      const response = await fetchWithCredential(
-        `${apiUrl}/sync`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/octet-stream',
-            'Content-Encoding': 'gzip',
-          },
-          body: Readable.toWeb(stream) as ReadableStream<Uint8Array>,
-          duplex: 'half',
-          signal,
-          redirect: 'error',
-        } as RequestInit & { duplex: 'half' },
-        { subject: 'Limrun API URL' },
-      );
+      const response = await fetch(`${apiUrl}/sync`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/octet-stream',
+          'Content-Encoding': 'gzip',
+        },
+        body: Readable.toWeb(stream) as ReadableStream<Uint8Array>,
+        duplex: 'half',
+        signal,
+        redirect: 'error',
+      } as RequestInit & { duplex: 'half' });
       if (!response.ok) {
         await response.body?.cancel();
         throw limrunRunnerError(

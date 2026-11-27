@@ -23,7 +23,7 @@ import {
 import { sleep } from '@agent-device/host-kit/retry';
 import {
   assertSecureCredentialTransport,
-  isCredentialTransportRefusal,
+  fetchWithCredential,
 } from '@agent-device/contracts/credential-transport';
 import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import type {
@@ -458,7 +458,6 @@ function isRetryableBridgeError(error: unknown): boolean {
 
 async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<MetroBridgeResult> {
   const bridgeUrl = `${input.baseUrl}/api/metro/bridge`;
-  const { fetchWithCredential } = await import('@agent-device/host-kit/direct-http');
   let response: Response;
 
   try {
@@ -477,7 +476,6 @@ async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<M
       { subject: 'Metro bridge URL' },
     );
   } catch (error) {
-    if (isCredentialTransportRefusal(error)) throw error;
     if (error instanceof Error && error.name === 'TimeoutError') {
       throw createMetroBridgeRequestError(
         `/api/metro/bridge timed out after ${input.timeoutMs}ms calling ${input.baseUrl}/api/metro/bridge`,

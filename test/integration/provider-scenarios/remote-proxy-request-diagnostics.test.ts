@@ -4,7 +4,6 @@ import http from 'node:http';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
-import { loadDirectHttpAgent } from '@agent-device/host-kit/direct-http';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -103,13 +102,9 @@ test('Provider-backed integration local proxy serves the daemon diagnostics reco
         method?: string;
         path?: string;
         headers?: Record<string, string>;
-        agent?: http.Agent;
       };
       assert.equal(directRequestSpy.mock.calls.length, 1);
-      // The token travels over plain http to loopback, so the request takes the direct agent that
-      // never routes through an environment proxy.
       assert.deepEqual(directOptions, {
-        agent: await loadDirectHttpAgent(),
         protocol: 'http:',
         host: '127.0.0.1',
         port: String(daemon.httpPort),

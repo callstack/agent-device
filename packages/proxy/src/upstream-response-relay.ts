@@ -28,11 +28,6 @@ export type RelayedResponse = {
   publicOrigin: string | undefined;
 };
 
-/** Whether the upstream answered with a redirect, or its transport reports that it followed one. */
-export function isRedirectAnswer(response: Response): boolean {
-  return response.redirected || (response.status >= 300 && response.status < 400);
-}
-
 /** The headers a proxied response carries: the allowlist, the request id, and a safe `Location`. */
 export function relayedResponseHeaders(relay: RelayedResponse): Headers {
   const headers = new Headers();

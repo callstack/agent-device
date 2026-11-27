@@ -159,9 +159,7 @@ async function requestRemoteArtifact<T>(
     materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
   },
 ): Promise<T> {
-  const transport = await loadNodeHttpRequester(params.artifactUrl, {
-    subject: 'Artifact download URL',
-  });
+  const transport = await loadNodeHttpRequester(params.artifactUrl.protocol);
   await destination.prepare();
   return await new Promise<T>((resolve, reject) => {
     let settled = false;

@@ -1,6 +1,5 @@
 import type * as HostCommand from '@agent-device/host-kit/command';
 import type * as HostDiagnostics from '@agent-device/host-kit/diagnostics';
-import type * as HostDirectHttp from '@agent-device/host-kit/direct-http';
 import type * as HostFile from '@agent-device/host-kit/file';
 import type * as HostProcess from '@agent-device/host-kit/process';
 import type * as HostRequest from '@agent-device/host-kit/request';
@@ -99,7 +98,6 @@ export type AppleRunnerHost = Pick<
   | 'commandDeveloperDir'
 > &
   Pick<typeof HostDiagnostics, 'emitDiagnostic' | 'withDiagnosticTimer'> &
-  Pick<typeof HostDirectHttp, 'fetchWithCredential'> &
   Pick<typeof HostRetry, 'retryWithPolicy' | 'isEnvTruthy'> &
   Pick<
     typeof HostProcess,
@@ -200,7 +198,6 @@ export const hostEnvironment = delegate('hostEnvironment');
 export const shellQuote = delegate('shellQuote');
 export const emitDiagnostic = delegate('emitDiagnostic');
 export const withDiagnosticTimer = delegate('withDiagnosticTimer');
-export const fetchWithCredential = delegate('fetchWithCredential');
 export const retryWithPolicy = delegate('retryWithPolicy');
 export const isEnvTruthy = delegate('isEnvTruthy');
 export const isProcessAlive = delegate('isProcessAlive');
