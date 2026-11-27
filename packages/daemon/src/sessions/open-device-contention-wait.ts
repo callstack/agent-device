@@ -132,11 +132,9 @@ function findSessionHoldingDevice(
   sessionName: string | undefined,
   suiteHostSession?: string,
 ): ReturnType<SessionStore['findByDevice']> {
-  const inUse = sessionStore.findByDevice(deviceId);
-  if (!inUse) return undefined;
-  if (inUse.address !== sessionName && inUse.address !== suiteHostSession) return inUse;
-  if (suiteHostSession === undefined) return undefined;
-  return sessionStore.findByDeviceExcluding(deviceId, [sessionName, suiteHostSession]);
+  const excludedAddresses =
+    suiteHostSession === undefined ? [sessionName] : [sessionName, suiteHostSession];
+  return sessionStore.findByDevice(deviceId, excludedAddresses);
 }
 
 /**

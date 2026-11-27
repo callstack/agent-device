@@ -21,3 +21,17 @@ test('findByDevice finds a session on an overlapping device: a host and its app 
   desktop.publish('desktop', makeMacOsSession('desktop'));
   assert.equal(desktop.findByDevice(textEdit.id)?.address, 'desktop');
 });
+
+test('findByDevice skips excluded session addresses when checking device ownership', () => {
+  const store = makeSessionStore();
+  const textEdit = hostAppDevice(MACOS_DEVICE, 'com.apple.TextEdit');
+  store.publish('outer', makeMacOsSession('outer', { device: textEdit }));
+
+  assert.equal(store.findByDevice(MACOS_DEVICE.id, ['outer']), undefined);
+  assert.equal(store.findByDevice(MACOS_DEVICE.id, ['other'])?.address, 'outer');
+
+  const second = makeSessionStore();
+  second.publish('outer', makeMacOsSession('outer', { device: textEdit }));
+  second.publish('foreign', makeMacOsSession('foreign', { device: MACOS_DEVICE }));
+  assert.equal(second.findByDevice(MACOS_DEVICE.id, ['outer'])?.address, 'foreign');
+});

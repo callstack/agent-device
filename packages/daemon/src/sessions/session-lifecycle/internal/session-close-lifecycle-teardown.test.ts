@@ -432,3 +432,49 @@ test('close --shutdown tells the platform that shutdown was requested', async ()
   );
   expect(finalizations).toEqual([expect.objectContaining({ shutdownTarget: true })]);
 });
+
+test.each([true, false])(
+  'suite-owned attempt close keeps leaseRetainedBySuite active so leaseWillEnd=false and retainRunner=%s',
+  async (retainExecutionHost) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = `suite-attempt-${retainExecutionHost}`;
+    const leaseRegistry = new LeaseRegistry();
+    const lease = leaseRegistry.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseBackend: 'ios-simulator',
+      deviceKey: 'ios:sim-1',
+      clientId: 'client-a',
+      retainOnClose: false,
+    });
+    const leaseScope = {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    };
+    publishSession(sessionStore, sessionName, IOS_SIMULATOR, { lease: leaseScope });
+
+    const { response, finalizations, platformResourceCleanup } = await closeSession({
+      sessionStore,
+      sessionName,
+      retainExecutionHost,
+      leaseRegistry,
+      internal: {
+        cleanupIntent: 'suite-owned-test-session',
+        admittedLease: lease,
+      },
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+      expect.objectContaining({ leaseWillEnd: false }),
+    );
+    expect(finalizations).toEqual([expect.objectContaining({ retainRunner: retainExecutionHost })]);
+    expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+  },
+);

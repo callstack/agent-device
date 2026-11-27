@@ -3,7 +3,10 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { deviceClaimConflictError } from './device-claim-conflict.ts';
+import {
+  deviceClaimConflictError,
+  isBorrowedSuiteHostClaimConflict,
+} from './device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
   abandonDeviceClaim,
@@ -100,11 +103,11 @@ export function createDeviceClaimAdmission(params: {
       const held = result.conflict.claim;
       if (held && acquired.some((ownership) => ownership.ownerToken === held.ownerToken)) return;
       if (
-        params.coveredHostSession !== undefined &&
-        result.conflict.classification === 'live' &&
-        held?.claimOwnerKind === 'open-session' &&
-        held.session === params.coveredHostSession &&
-        held.stateDir === params.stateDir
+        isBorrowedSuiteHostClaimConflict({
+          result,
+          hostSession: params.coveredHostSession,
+          stateDir: params.stateDir,
+        })
       ) {
         return;
       }

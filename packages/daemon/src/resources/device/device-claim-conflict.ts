@@ -9,6 +9,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import {
   deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
+  type DeviceClaimAcquireResult,
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
@@ -115,4 +116,25 @@ function conflictReason(classification: DeviceClaimClassification): DeviceClaimC
     case 'inconsistent':
       return DEVICE_CLAIM_CONFLICT_REASONS.ownerUncertain.reason;
   }
+}
+
+/**
+ * Returns true when an ordinary device-claim conflict is a live `open-session` claim held by the
+ * enclosing `test` outer host session in the same daemon state directory, which nested attempts
+ * borrow rather than failing or taking over.
+ */
+export function isBorrowedSuiteHostClaimConflict(params: {
+  result: DeviceClaimAcquireResult;
+  hostSession: string | undefined;
+  stateDir: string;
+}): boolean {
+  const { result, hostSession, stateDir } = params;
+  if (!hostSession || result.status !== 'conflict') return false;
+  const claim = result.conflict.claim;
+  return (
+    result.conflict.classification === 'live' &&
+    claim?.claimOwnerKind === 'open-session' &&
+    claim.session === hostSession &&
+    claim.stateDir === stateDir
+  );
 }

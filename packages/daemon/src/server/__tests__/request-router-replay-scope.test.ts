@@ -52,6 +52,8 @@ import { awaitFixtureReadiness } from '../../__tests__/support/application-lifec
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
+pinOwnProcessStartTime(hostProcess);
+
 beforeEach(() => {
   gestureRuntimeSpies.scrollDirection.mockClear();
   systemRuntimeSpies.appSwitcher.mockClear();
@@ -298,7 +300,6 @@ test('test runs a one-case suite whose script leaves a session open, passes, and
 });
 
 test('test --maestro borrows the outer session device and claim without releasing either (#5129)', async () => {
-  pinOwnProcessStartTime(hostProcess);
   const root = mkdtempForTestSync('agent-device-replay-test-outer-open-');
   const claimsDir = mkdtempForTestSync('agent-device-replay-test-outer-claims-');
   const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
@@ -367,7 +368,6 @@ test('test --maestro borrows the outer session device and claim without releasin
 });
 
 test('test still refuses DEVICE_IN_USE when another session holds the device (#5129)', async () => {
-  pinOwnProcessStartTime(hostProcess);
   const root = mkdtempForTestSync('agent-device-replay-test-foreign-conflict-');
   const otherRoot = mkdtempForTestSync('agent-device-replay-test-foreign-holder-');
   const claimsDir = mkdtempForTestSync('agent-device-replay-test-foreign-claims-');

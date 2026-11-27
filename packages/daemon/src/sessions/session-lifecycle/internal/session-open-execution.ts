@@ -76,7 +76,10 @@ import {
   type TakenOverDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
 import { appendResponseWarning } from './session-open-warnings.ts';
-import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
+import {
+  buildDeviceClaimConflictError,
+  isBorrowedSuiteHostClaimConflict,
+} from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
@@ -573,7 +576,7 @@ async function acquireDeviceClaimForOwner(params: {
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,
       });
-      if (isBorrowedSuiteHostClaimConflict({ req, result: acquired, sessionStore, stateDir })) {
+      if (isBorrowedOpenSuiteHostClaimConflict({ req, result: acquired, sessionStore, stateDir })) {
         return { status: 'not-required' };
       }
       return acquired;
@@ -581,7 +584,7 @@ async function acquireDeviceClaimForOwner(params: {
   }
 }
 
-function isBorrowedSuiteHostClaimConflict(params: {
+function isBorrowedOpenSuiteHostClaimConflict(params: {
   req: DaemonRequest;
   result: DeviceClaimAcquireResult;
   sessionStore: SessionStore;
@@ -589,12 +592,13 @@ function isBorrowedSuiteHostClaimConflict(params: {
 }): boolean {
   const { req, result, sessionStore, stateDir } = params;
   const suiteHostSession = req.internal?.suiteHostSession;
-  if (!suiteHostSession || result.status !== 'conflict') return false;
-  const claim = result.conflict.claim;
-  if (!claim || result.conflict.classification !== 'live') return false;
   return (
-    claim.session === suiteHostSession &&
-    claim.stateDir === stateDir &&
+    isBorrowedSuiteHostClaimConflict({
+      result,
+      hostSession: suiteHostSession,
+      stateDir,
+    }) &&
+    suiteHostSession !== undefined &&
     sessionStore.get(suiteHostSession) !== undefined
   );
 }
