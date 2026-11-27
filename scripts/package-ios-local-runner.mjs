@@ -19,7 +19,8 @@ function requireSafeRelativePath(relativePath) {
   if (
     typeof relativePath !== 'string' ||
     relativePath.split('/').some((part) => !part || part === '.' || part === '..') ||
-    /[\\\x00-\x1f]/.test(relativePath)
+    relativePath.includes('\\') ||
+    Array.from(relativePath).some((char) => char.charCodeAt(0) < 32)
   ) {
     throw new Error(`Unsafe local runner path: ${relativePath}`);
   }
@@ -47,8 +48,15 @@ function validateXctestrunPaths(value, key) {
       return;
     }
     for (const item of value.split(':')) {
-      if (item.startsWith('/')) throw new Error(`Absolute path in xctestrun: ${key}`);
-      const reference = /^__[A-Z_]+__\/(.*)$/.exec(item);
+      // Xcode emits a /private prefix for a TESTROOT on the canonical macOS path.
+      const portable = item.replace(/^\/private(?=__TESTROOT__\/)/, '');
+      if (
+        portable.startsWith('/') &&
+        !(key === 'DYLD_INSERT_LIBRARIES' && portable === '/usr/lib/libRPAC.dylib')
+      ) {
+        throw new Error(`Absolute path in xctestrun: ${key}`);
+      }
+      const reference = /^__[A-Z_]+__\/(.*)$/.exec(portable);
       if (reference) requireSafeRelativePath(reference[1]);
     }
   }
@@ -120,7 +128,12 @@ function packageLocalRunner(version, derivedPath, xctestrunPath, outputDir) {
 
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-local-runner-'));
   try {
-    fs.copyFileSync(sourceXctestrun, path.join(stage, xctestrun));
+    const stagedXctestrun = path.join(stage, xctestrun);
+    execFileSync('plutil', ['-convert', 'xml1', '-o', stagedXctestrun, sourceXctestrun]);
+    fs.writeFileSync(
+      stagedXctestrun,
+      fs.readFileSync(stagedXctestrun, 'utf8').replaceAll('/private__TESTROOT__/', '__TESTROOT__/'),
+    );
     for (const app of appPaths) {
       const source = path.join(products, app);
       if (fs.realpathSync(source) !== path.join(realProducts, app)) {

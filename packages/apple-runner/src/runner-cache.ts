@@ -151,9 +151,9 @@ function resolveRunnerXctestrunCacheLockPath(derived: string): string {
 export async function cleanRunnerDerivedBeforeEvaluation(
   derived: string,
   forceRebuild: boolean,
-): Promise<void> {
+): Promise<boolean> {
   if (!shouldCleanDerived() && !forceRebuild && !badRunnerArtifactsForRun().has(derived)) {
-    return;
+    return false;
   }
   emitRunnerXctestrunDecision('clean', forceRebuild ? 'forced_rebuild' : 'forced_clean', {
     derived,
@@ -161,6 +161,7 @@ export async function cleanRunnerDerivedBeforeEvaluation(
   assertSafeDerivedCleanup(derived);
   await cleanRunnerDerivedArtifacts(derived);
   badRunnerArtifactsForRun().delete(derived);
+  return true;
 }
 
 /**
@@ -417,6 +418,7 @@ export function emitRunnerXctestrunDecision(
     | 'forced_rebuild'
     | 'bad_artifact'
     | 'built_new'
+    | 'release_artifact'
     | 'external_xctestrun'
     | 'external_bad_artifact'
     | 'uncertifiable_products'

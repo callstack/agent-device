@@ -104,6 +104,14 @@ export const appleRunnerHost: AppleRunnerHost = {
   withProcessLock,
   withKeyedLock,
   publishFileSync,
+  async extractRunnerReleaseArchive(options) {
+    const { ArchiveBudget, extractArchiveSafely } = await import('@agent-device/host-kit/archive');
+    await extractArchiveSafely({
+      ...options,
+      type: 'tgz',
+      budget: new ArchiveBudget({ maxBytes: 48 * 1024 * 1024, maxEntries: 256 }),
+    });
+  },
   classifyOwnerLiveness,
   readHostCpuArchSync,
   parseBooleanLiteral,

@@ -13,11 +13,13 @@ const XCTESTRUN_PRODUCT_REFERENCE_KEYS = new Set([
 
 export async function resolveExistingXctestrunProductPaths(
   xctestrunPath: string,
+  requireRelativeProducts = false,
 ): Promise<string[] | null> {
   const values = await resolveXctestrunProductReferences(xctestrunPath);
   if (!values || values.length === 0) {
     return null;
   }
+  if (requireRelativeProducts && !values.every(isRelativeProductReference)) return null;
   const testRoot = path.dirname(xctestrunPath);
   const resolvedPaths = new Set<string>();
   const hostProducts = collectResolvedTestHostProducts(values, testRoot);
@@ -37,6 +39,15 @@ export async function resolveExistingXctestrunProductPaths(
   }
 
   return Array.from(resolvedPaths);
+}
+
+function isRelativeProductReference(value: string): boolean {
+  const relative = /^(?:__TESTROOT__|__TESTHOST__)\/(.+)$/.exec(value)?.[1];
+  return (
+    relative !== undefined &&
+    !relative.includes('\\') &&
+    relative.split('/').every((component) => component && component !== '.' && component !== '..')
+  );
 }
 
 function collectResolvedTestHostProducts(

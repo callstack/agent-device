@@ -106,11 +106,14 @@ jobs:
           DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
           RELEASE_ASSET_DIR: ${{ github.workspace }}/.tmp/release-assets
           RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           XCTESTRUN_PATH: ${{ steps.package.outputs.xctestrun_path }}
         run: |
           set -euo pipefail
-          # Historical checkout refs may predate local runner packaging.
-          if [[ -f scripts/package-ios-local-runner.mjs ]]; then
+          # A local runner can be loaded by the npm package, so ship bytes from its tagged source.
+          if [[ -f scripts/package-ios-local-runner.mjs
+            && "$GITHUB_REF" == "refs/tags/$RELEASE_TAG"
+            && "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]; then
             node scripts/package-ios-local-runner.mjs \
               "$RELEASE_VERSION" "$DERIVED_PATH" "$XCTESTRUN_PATH" "$RELEASE_ASSET_DIR"
           fi

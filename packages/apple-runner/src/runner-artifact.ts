@@ -597,18 +597,16 @@ async function ensureXctestrunUnderCacheLock(params: {
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
   unlinkSymlinkedManagedRunnerKey(derived);
-  await cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
+  const cleaned = await cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
   const existing = await evaluateExistingXctestrun({
     derived,
     expectedCacheMetadata,
   });
-  const cache = existing.reason === 'reuse_ready' ? 'exact' : 'miss';
   const reusable = await resolveReusableXctestrunArtifact({
     device,
     derived,
     expectedCacheMetadata,
     existing,
-    cache,
   });
   if (reusable) return holdForLaunch(device, reusable);
   if (existing.reason !== 'reuse_ready') {
@@ -621,6 +619,14 @@ async function ensureXctestrunUnderCacheLock(params: {
     assertSafeDerivedCleanup(derived);
     await cleanRunnerDerivedArtifacts(derived);
   }
+  if (!cleaned && existing.reason === 'cache_metadata_missing') {
+    const { resolveReleasedXctestrunArtifact } = await import('./runner-release-artifact.ts');
+    const release = await resolveReleasedXctestrunArtifact({
+      ...params,
+      assertAdmitted: () => assertRunnerStartAdmitsPreparation(device.id, options.startAdmission),
+    });
+    if (release) return holdForLaunch(device, release);
+  }
   return holdForLaunch(
     device,
     await buildXctestrunArtifact({
@@ -629,7 +635,7 @@ async function ensureXctestrunUnderCacheLock(params: {
       projectRoot,
       expectedCacheMetadata,
       derived,
-      cache,
+      cache: existing.reason === 'reuse_ready' ? 'exact' : 'miss',
       reason: existing.reason,
     }),
   );
@@ -649,9 +655,8 @@ async function resolveReusableXctestrunArtifact(params: {
   derived: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   existing: ExistingXctestrunState;
-  cache: Exclude<RunnerXctestrunArtifact['cache'], 'external'>;
 }): Promise<RunnerXctestrunArtifact | null> {
-  const { device, derived, expectedCacheMetadata, existing, cache } = params;
+  const { device, derived, expectedCacheMetadata, existing } = params;
   if (existing.reason !== 'reuse_ready') return null;
   const reusableXctestrun = await tryReuseExistingXctestrun(
     device,
@@ -663,7 +668,7 @@ async function resolveReusableXctestrunArtifact(params: {
   return {
     xctestrunPath: reusableXctestrun,
     derived,
-    cache,
+    cache: 'exact',
     cacheKey: resolveRunnerCacheKey(expectedCacheMetadata),
     artifact: 'valid',
     buildMs: 0,

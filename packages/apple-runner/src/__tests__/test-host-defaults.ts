@@ -97,6 +97,7 @@ export async function createAppleRunnerTestHostDefaults(): Promise<AppleRunnerHo
   return {
     ...(await loadRealHostKitCapabilities()),
     ...appleToolingTestAdapters(),
+    extractRunnerReleaseArchive: async () => unavailable('extractRunnerReleaseArchive'),
     hostEnvironment: createLiveTestHostEnvironment,
     shellQuote,
     withKeyedLock,
