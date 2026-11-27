@@ -1810,7 +1810,7 @@ Language and region:
 - `settings locale <locale-id>` sets the language and region together on iPhone and iPad simulators and on Android devices and emulators, and takes `reset`. Each response reports the previous locale as `previousLocale`.
 - A locale id is a language with an optional script and region, written with `-` or `_`, such as `en_IN`, `fr-CA`, or `zh-Hans-CN`. Extensions and variants are refused with `INVALID_ARGS` before anything changes.
 - On iOS simulators, a running app keeps its old locale until `open <app> --relaunch`. `settings locale reset` removes the override, which leaves English with no region. The reported `previousLocale` is a value `settings locale` accepts, and `previousLanguages` lists every preferred language.
-- On Android devices and emulators, running apps take the new locale at once. `settings locale reset` applies `ro.product.locale`, the locale the system image boots with.
+- On Android devices and emulators, running apps take the new locale at once. Android before 8.0 refuses with `locale-api-level-unsupported`. `settings locale reset` applies `ro.product.locale`, the locale the system image boots with.
 
 Time zone:
 

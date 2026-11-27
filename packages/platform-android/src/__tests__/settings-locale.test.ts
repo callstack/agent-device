@@ -17,9 +17,8 @@ const APK = `/data/app/~~a1==/${PACKAGE}-b2==/base.apk`;
 const VERSION_QUERY = `shell cmd package list packages --show-versioncode ${PACKAGE}`;
 const LOCALE_COMMAND =
   /^shell env '?CLASSPATH=([^'\s]+)'? app_process \/system\/bin \S+\.SystemLocaleCommand (\S+)$/;
-const STAGED_APK = /^\/data\/local\/tmp\/agent-device-locale-[0-9a-f]{16}\.apk$/;
 
-/** The helper package the device reports, and the files its shell can copy and adb can pull. */
+/** The helper package the device reports, and the files adb can pull. */
 type HelperDevice = {
   apkPath: string;
   /** Undefined while no package is installed under the helper name. */
@@ -39,7 +38,7 @@ beforeEach(() => {
 
 /**
  * Runs `settings locale` through the real helper install step against a fake device. Its package
- * manager reports {@link HelperDevice}, its shell copies and removes files, `adb pull` reads them,
+ * manager reports {@link HelperDevice}, `adb pull` reads its files,
  * and `app_process` answers like the helper class with `previous=` and `current=` lines.
  */
 async function withHelperDevice<T>(
@@ -54,6 +53,7 @@ async function withHelperDevice<T>(
     /** The bytes a helper install leaves at the base APK path. */
     installs?: string;
     defaultLocale?: string;
+    sdkInt?: number;
     applied?: (requested: string) => string;
     override?: Override;
     device?: DeviceInfo;
@@ -73,7 +73,6 @@ async function withHelperDevice<T>(
       const overridden = options.override?.(args, helper);
       if (overridden !== undefined) return overridden;
       const flat = args.join(' ');
-      const words = args.map((word) => word.replace(/^'(.*)'$/, '$1'));
       if (flat === VERSION_QUERY) {
         return helper.versionCode === undefined
           ? { stderr: '', exitCode: 1 }
@@ -83,18 +82,9 @@ async function withHelperDevice<T>(
         // A split comes first: only the base APK holds the helper classes.
         return `package:${helper.apkPath.replace('base.apk', 'split_config.arm64_v8a.apk')}\npackage:${helper.apkPath}\n`;
       }
+      if (flat === 'shell getprop ro.build.version.sdk') return `${options.sdkInt ?? 36}\n`;
       if (flat === 'shell getprop ro.product.locale')
         return `${options.defaultLocale ?? 'en-US'}\n`;
-      if (words[1] === 'cp' && words.length === 4) {
-        const bytes = helper.files.get(words[2]!);
-        if (bytes === undefined) return { stderr: `cp: ${words[2]}: No such file`, exitCode: 1 };
-        helper.files.set(words[3]!, bytes);
-        return '';
-      }
-      if (words[1] === 'rm' && words[2] === '-f' && words.length === 4) {
-        helper.files.delete(words[3]!);
-        return '';
-      }
       const launch = LOCALE_COMMAND.exec(flat);
       if (launch) {
         helper.launches.push(launch[1]!);
@@ -190,18 +180,16 @@ test('settings locale reset refuses with dispatched no when ro.product.locale is
   );
 });
 
-test('settings locale runs app_process from the staged copy whose digest it verified on a cache hit', async () => {
+test('settings locale runs app_process from the base APK whose digest it verified on a cache hit', async () => {
   await withHelperDevice(async ({ calls, device, helper }) => {
     await setAndroidSetting(device, 'locale', 'en-IN');
     const firstCalls = calls.length;
     helper.pulls.length = 0;
     await setAndroidSetting(device, 'locale', 'de-DE');
-    // The cached install decision skipped the package manager, yet the staged copy was hashed.
+    // The cached install decision skipped the package manager, yet the base APK was hashed.
     expect(calls.slice(firstCalls).map((args) => args.join(' '))).not.toContain(VERSION_QUERY);
-    const launched = helper.launches.at(-1);
-    expect(launched).toMatch(STAGED_APK);
-    expect(helper.pulls).toEqual([launched]);
-    expect([...helper.files.keys()]).toEqual([APK]);
+    expect(helper.pulls).toEqual([APK]);
+    expect(helper.launches).toEqual([APK, APK]);
   });
 });
 
@@ -213,11 +201,10 @@ test('settings locale refuses a newer installed helper APK whose digest the mani
         details: {
           reason: 'locale-helper-apk-unverified',
           dispatched: 'no',
-          installedApkPath: APK,
+          apkPath: APK,
         },
       });
       expect(helper.launches).toEqual([]);
-      expect([...helper.files.keys()]).toEqual([APK]);
     },
     { versionCode: VERSION_CODE + 1, bytes: 'another-apk' },
   );
@@ -234,7 +221,7 @@ test('settings locale refuses a helper package replaced after a cached install d
       details: {
         reason: 'locale-helper-apk-unverified',
         dispatched: 'no',
-        installedApkPath: helper.apkPath,
+        apkPath: helper.apkPath,
       },
     });
     expect(calls.slice(firstCall).map((args) => args.join(' '))).not.toContain(VERSION_QUERY);
@@ -247,6 +234,20 @@ test('settings locale refuses a helper package replaced after a cached install d
     expect(calls.slice(firstCall).map((args) => args.join(' '))).toContain(VERSION_QUERY);
     expect(helper.launches).toHaveLength(2);
   });
+});
+
+test('settings locale refuses Android before 8.0 before it prepares the helper', async () => {
+  await withHelperDevice(
+    async ({ calls, device, helper }) => {
+      await expect(setAndroidSetting(device, 'locale', 'en-IN')).rejects.toMatchObject({
+        code: 'UNSUPPORTED_OPERATION',
+        details: { reason: 'locale-api-level-unsupported', dispatched: 'no', sdkInt: 25 },
+      });
+      expect(calls.map((args) => args.join(' '))).toEqual(['shell getprop ro.build.version.sdk']);
+      expect(helper.launches).toEqual([]);
+    },
+    { sdkInt: 25 },
+  );
 });
 
 test('settings locale names the helper install it completed before a refusal', async () => {
@@ -315,7 +316,7 @@ test('settings locale keeps the adb classification when pm path fails on the tra
   );
 });
 
-test('settings locale keeps the adb failure when the staged copy cannot be pulled', async () => {
+test('settings locale keeps the adb failure when the base APK cannot be pulled', async () => {
   await withHelperDevice(
     async ({ device, helper }) => {
       const failure = setAndroidSetting(device, 'locale', 'en-IN');
@@ -330,8 +331,11 @@ test('settings locale keeps the adb failure when the staged copy cannot be pulle
     },
     {
       versionCode: VERSION_CODE + 1,
-      // The copy reports success but writes nothing, so the pull finds no staged file.
-      override: (args) => (args[1] === 'cp' ? '' : undefined),
+      // `pm path` names a base APK that the pull cannot read.
+      override: (args) =>
+        args.join(' ') === `shell pm path ${PACKAGE}`
+          ? `package:/data/app/~~e5==/${PACKAGE}-f6==/base.apk\n`
+          : undefined,
     },
   );
 });
