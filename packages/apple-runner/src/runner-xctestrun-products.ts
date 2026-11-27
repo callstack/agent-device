@@ -13,7 +13,7 @@ const XCTESTRUN_PRODUCT_REFERENCE_KEYS = new Set([
 
 export async function resolveExistingXctestrunProductPaths(
   xctestrunPath: string,
-  requireRelativeProducts = false,
+  { requireRelativeProducts = false }: { requireRelativeProducts?: boolean } = {},
 ): Promise<string[] | null> {
   const values = await resolveXctestrunProductReferences(xctestrunPath);
   if (!values || values.length === 0) {

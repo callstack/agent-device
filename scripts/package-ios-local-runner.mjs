@@ -95,6 +95,16 @@ function includeProductEntry(source) {
   return true;
 }
 
+function resolveReleaseSourceFingerprint(builtSourceFingerprint) {
+  if (builtSourceFingerprint !== computeRunnerSourceFingerprint(process.cwd())) {
+    throw new Error('Apple runner sources changed after the build was certified');
+  }
+  if (!fs.existsSync('dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj')) {
+    throw new Error('Local runner requires the packaged Apple sources');
+  }
+  return computeRunnerSourceFingerprint(process.cwd(), 'packaged');
+}
+
 function packageLocalRunner(version, derivedPath, xctestrunPath, outputDir) {
   const derived = path.resolve(derivedPath);
   const products = path.join(derived, 'Build', 'Products');
@@ -102,8 +112,15 @@ function packageLocalRunner(version, derivedPath, xctestrunPath, outputDir) {
   const sourceXctestrun = path.resolve(xctestrunPath);
   const xctestrun = requireSafeRelativePath(path.basename(sourceXctestrun));
   // The build script writes this after checking the build log and certifying the on-disk products.
-  const { artifacts, xcodeVersion, xcodeBuildVersion, sdkName, sdkVersion, sdkBuildVersion } =
-    JSON.parse(fs.readFileSync(path.join(derived, '.agent-device-runner-cache.json'), 'utf8'));
+  const {
+    artifacts,
+    xcodeVersion,
+    xcodeBuildVersion,
+    sdkName,
+    sdkVersion,
+    sdkBuildVersion,
+    runnerSourceFingerprint: builtSourceFingerprint,
+  } = JSON.parse(fs.readFileSync(path.join(derived, '.agent-device-runner-cache.json'), 'utf8'));
   if (
     sdkName !== 'iphonesimulator' ||
     ![xcodeVersion, xcodeBuildVersion, sdkVersion, sdkBuildVersion].every(
@@ -120,10 +137,7 @@ function packageLocalRunner(version, derivedPath, xctestrunPath, outputDir) {
     throw new Error('Local runner requires a certified iOS simulator build');
   }
   validateXctestrunPaths(plist(sourceXctestrun));
-  if (!fs.existsSync('dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj')) {
-    throw new Error('Local runner requires the packaged Apple sources');
-  }
-  const runnerSourceFingerprint = computeRunnerSourceFingerprint(process.cwd(), 'packaged');
+  const runnerSourceFingerprint = resolveReleaseSourceFingerprint(builtSourceFingerprint);
 
   const appPaths = new Set();
   for (const product of artifacts.productPaths) {
@@ -172,6 +186,7 @@ function packageLocalRunner(version, derivedPath, xctestrunPath, outputDir) {
       xcodeVersion,
       xcodeBuildVersion,
       sdkName,
+      architecture: 'arm64',
       sdkVersion,
       sdkBuildVersion,
       runnerSourceFingerprint,

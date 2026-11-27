@@ -32,9 +32,21 @@ const expectedCacheMetadata: RunnerXctestrunCacheMetadata = {
   sdkBuildVersion: '24A94232',
 };
 
-it.each(['match', 'different toolchain', 'different source', 'bad checksum'] as const)(
-  'certifies only matching, checksum-verified release products (%s)',
-  async (outcome) => {
+it.each([
+  { name: 'matching archive', match: true },
+  { name: 'wrong package version', manifest: { version: '0.0.1' } },
+  { name: 'wrong Xcode version', manifest: { xcodeVersion: '27.2' } },
+  { name: 'wrong Xcode build', manifest: { xcodeBuildVersion: 'other' } },
+  { name: 'wrong SDK name', manifest: { sdkName: 'iphoneos' } },
+  { name: 'wrong SDK version', manifest: { sdkVersion: '27.2' } },
+  { name: 'wrong SDK build', manifest: { sdkBuildVersion: 'other' } },
+  { name: 'wrong architecture', manifest: { architecture: 'x64' } },
+  { name: 'wrong sources', manifest: { runnerSourceFingerprint: 'other' } },
+  { name: 'checksum mismatch', download: 'wrong bytes' },
+  { name: 'archive missing', archiveStatus: 404 },
+])(
+  'certifies only matching release products ($name)',
+  async ({ match, manifest, download, archiveStatus }) => {
     const derived = await makeScratchDir();
     const xctestrun = 'runner.xctestrun';
     const archive = 'test archive';
@@ -53,18 +65,12 @@ it.each(['match', 'different toolchain', 'different source', 'bad checksum'] as 
         ? Response.json({
             ...expectedCacheMetadata,
             version: expectedCacheMetadata.packageVersion,
-            xcodeBuildVersion:
-              outcome === 'different toolchain' ? 'other' : expectedCacheMetadata.xcodeBuildVersion,
-            runnerSourceFingerprint:
-              outcome === 'different source'
-                ? 'other'
-                : expectedCacheMetadata.runnerSourceFingerprint,
-            sha256: createHash('sha256')
-              .update(outcome === 'bad checksum' ? 'untrusted' : archive)
-              .digest('hex'),
+            architecture: 'arm64',
+            sha256: createHash('sha256').update(archive).digest('hex'),
             xctestrun,
+            ...manifest,
           })
-        : new Response(archive),
+        : new Response(archiveStatus ? null : (download ?? archive), { status: archiveStatus }),
     );
     vi.stubGlobal('fetch', fetch);
     onTestFinished(() => {
@@ -77,8 +83,9 @@ it.each(['match', 'different toolchain', 'different source', 'bad checksum'] as 
       options: {},
       assertAdmitted: () => {},
     });
-    expect(fetch).toHaveBeenCalledTimes(outcome.startsWith('different ') ? 1 : 2);
-    if (outcome === 'match') {
+    expect(fetch).toHaveBeenCalledTimes(manifest ? 1 : 2);
+    if (match) {
+      expect(result?.cache).toBe('release');
       expect(result?.xctestrunPath).toContain(xctestrun);
       expect(extractRunnerReleaseArchive).toHaveBeenCalledOnce();
       const existing = await evaluateExistingXctestrun({ derived, expectedCacheMetadata });
@@ -90,3 +97,42 @@ it.each(['match', 'different toolchain', 'different source', 'bad checksum'] as 
     }
   },
 );
+
+it.each([
+  { name: 'HTTP 404', reply: async () => new Response(null, { status: 404 }), calls: 1 },
+  {
+    name: 'connection failure',
+    reply: async () => {
+      throw new Error('offline');
+    },
+    calls: 1,
+  },
+  { name: 'Intel host', arch: 'x64', calls: 0 },
+  { name: 'older Xcode', xcodeVersion: '26.2', calls: 0 },
+] as const)('falls back without creating products ($name)', async (scenario) => {
+  const derived = await makeScratchDir();
+  const extractRunnerReleaseArchive = vi.fn();
+  appleRunnerTestHost.update({
+    readHostCpuArchSync: () => scenario.arch ?? 'arm64',
+    extractRunnerReleaseArchive,
+  });
+  const fetch = vi.fn('reply' in scenario ? scenario.reply : undefined);
+  vi.stubGlobal('fetch', fetch);
+  onTestFinished(() => {
+    vi.unstubAllGlobals();
+  });
+  await expect(
+    resolveReleasedXctestrunArtifact({
+      derived,
+      expectedCacheMetadata: {
+        ...expectedCacheMetadata,
+        xcodeVersion: scenario.xcodeVersion ?? expectedCacheMetadata.xcodeVersion,
+      },
+      options: {},
+      assertAdmitted: () => {},
+    }),
+  ).resolves.toBeNull();
+  expect(fetch).toHaveBeenCalledTimes(scenario.calls);
+  expect(extractRunnerReleaseArchive).not.toHaveBeenCalled();
+  expect(fs.readdirSync(derived)).toEqual([]);
+});

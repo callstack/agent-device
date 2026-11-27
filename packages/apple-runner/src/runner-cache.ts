@@ -50,7 +50,7 @@ const BAD_ARTIFACTS_SLOT = Symbol('apple-runner-bad-artifacts');
 const badRunnerArtifactsForRun = () =>
   runnerRuntimeSlot(BAD_ARTIFACTS_SLOT, () => new Set<string>());
 
-export type RunnerXctestrunCacheKind = 'exact' | 'miss' | 'external';
+export type RunnerXctestrunCacheKind = 'exact' | 'miss' | 'release' | 'external';
 
 export type ExistingXctestrunState =
   | {
@@ -148,6 +148,7 @@ function resolveRunnerXctestrunCacheLockPath(derived: string): string {
   return path.join(path.dirname(derived), `${path.basename(derived)}.lock`);
 }
 
+/** Returns whether cleanup was requested, even if best-effort deletion leaves entries behind. */
 export async function cleanRunnerDerivedBeforeEvaluation(
   derived: string,
   forceRebuild: boolean,

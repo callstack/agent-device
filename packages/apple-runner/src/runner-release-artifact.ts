@@ -77,6 +77,7 @@ function readMatchingManifest(data: Buffer, expected: RunnerXctestrunCacheMetada
     manifest.xcodeVersion !== expected.xcodeVersion ||
     manifest.xcodeBuildVersion !== expected.xcodeBuildVersion ||
     manifest.sdkName !== expected.sdkName ||
+    manifest.architecture !== 'arm64' ||
     manifest.sdkVersion !== expected.sdkVersion ||
     manifest.sdkBuildVersion !== expected.sdkBuildVersion ||
     manifest.runnerSourceFingerprint !== expected.runnerSourceFingerprint ||
@@ -90,6 +91,13 @@ function readMatchingManifest(data: Buffer, expected: RunnerXctestrunCacheMetada
   return { sha256: manifest.sha256, xctestrun: manifest.xctestrun };
 }
 
+function createReleaseExtractionSignal(budget: RunnerPhaseBudget | undefined) {
+  const remaining = requireRunnerPhaseRemainingMs(budget, 'runner_release_extract');
+  if (remaining === undefined) return budget?.signal;
+  const timeout = AbortSignal.timeout(remaining);
+  return budget?.signal ? AbortSignal.any([budget.signal, timeout]) : timeout;
+}
+
 /** Stages a complete release product set under the caller's existing runner cache lock. */
 async function stageRunnerReleaseArtifact(
   derived: string,
@@ -99,22 +107,27 @@ async function stageRunnerReleaseArtifact(
   if (!acceptsRelease(expected)) return null;
   const remaining = requireRunnerPhaseRemainingMs(budget, 'runner_release_lookup');
   const timeout = AbortSignal.timeout(Math.min(RELEASE_FETCH_TIMEOUT_MS, remaining ?? Infinity));
-  const signal = budget?.signal ? AbortSignal.any([budget.signal, timeout]) : timeout;
+  const downloadSignal = budget?.signal ? AbortSignal.any([budget.signal, timeout]) : timeout;
   const version = expected.packageVersion;
   const base = `https://github.com/callstack/agent-device/releases/download/v${version}/agent-device-ios-local-runner-${version}`;
   let download: string | undefined;
   let directory: string | undefined;
   let staged = false;
   try {
-    const data = await fetchReleaseFile(`${base}.manifest.json`, MANIFEST_MAX_BYTES, signal);
+    const data = await fetchReleaseFile(
+      `${base}.manifest.json`,
+      MANIFEST_MAX_BYTES,
+      downloadSignal,
+    );
     const manifest = data && readMatchingManifest(data, expected);
     if (!manifest) return null;
-    const archive = await fetchReleaseFile(`${base}.tar.gz`, ARCHIVE_MAX_BYTES, signal);
+    const archive = await fetchReleaseFile(`${base}.tar.gz`, ARCHIVE_MAX_BYTES, downloadSignal);
     if (!archive) return null;
     if (createHash('sha256').update(archive).digest('hex') !== manifest.sha256) {
       throw new Error('Apple runner release checksum mismatch');
     }
 
+    const signal = createReleaseExtractionSignal(budget);
     const build = path.join(derived, 'Build');
     await fs.mkdir(build, { recursive: true });
     download = await fs.mkdtemp(path.join(build, 'ReleaseProducts-'));
@@ -123,10 +136,12 @@ async function stageRunnerReleaseArtifact(
     await fs.writeFile(archivePath, archive, { mode: 0o600, signal });
     await extractRunnerReleaseArchive({ archivePath, outputRoot: directory, signal });
     const xctestrunPath = path.join(directory, manifest.xctestrun);
-    const productPaths = await resolveExistingXctestrunProductPaths(xctestrunPath, true);
+    const productPaths = await resolveExistingXctestrunProductPaths(xctestrunPath, {
+      requireRelativeProducts: true,
+    });
     if (!productPaths?.length)
       throw new Error('Apple runner release is missing its launch products');
-    signal.throwIfAborted();
+    signal?.throwIfAborted();
     staged = true;
     return { directory, xctestrunPath, productPaths };
   } catch (error) {
@@ -180,7 +195,7 @@ export async function resolveReleasedXctestrunArtifact(params: {
   return {
     xctestrunPath,
     derived,
-    cache: 'miss',
+    cache: 'release',
     cacheKey: resolveRunnerCacheKey(expectedCacheMetadata),
     artifact: 'valid',
     buildMs: 0,

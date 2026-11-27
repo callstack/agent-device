@@ -524,7 +524,7 @@ export async function ensureXctestrunArtifact(
         }),
     });
   });
-  if (artifact.artifact === 'rebuilt' || artifact.cache === 'miss') {
+  if (artifact.artifact === 'rebuilt' || artifact.cache === 'release') {
     void evictStaleRunnerCachesBestEffort(derived);
   }
   return artifact;
@@ -597,7 +597,7 @@ async function ensureXctestrunUnderCacheLock(params: {
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
   unlinkSymlinkedManagedRunnerKey(derived);
-  const cleaned = await cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
+  const cleanupRequested = await cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
   const existing = await evaluateExistingXctestrun({
     derived,
     expectedCacheMetadata,
@@ -619,7 +619,7 @@ async function ensureXctestrunUnderCacheLock(params: {
     assertSafeDerivedCleanup(derived);
     await cleanRunnerDerivedArtifacts(derived);
   }
-  if (!cleaned && existing.reason === 'cache_metadata_missing') {
+  if (!cleanupRequested && existing.reason === 'cache_metadata_missing') {
     const { resolveReleasedXctestrunArtifact } = await import('./runner-release-artifact.ts');
     const release = await resolveReleasedXctestrunArtifact({
       ...params,

@@ -222,6 +222,26 @@ const IGNORED_SOURCE_DIRECTORY_NAMES = [
   'xcuserdata',
 ];
 
+test('release and installed runner fingerprints identify the same packaged sources', () => {
+  const root = makeTempRoot();
+  for (const directory of [
+    'dist/apple/runner/AgentDeviceRunner',
+    'dist/apple/snapshot-presentation',
+  ]) {
+    const source = path.join(root, directory);
+    fs.mkdirSync(source, { recursive: true });
+    fs.writeFileSync(path.join(source, 'Runner.swift'), '// packaged');
+  }
+  const installedFingerprint = computeRunnerSourceFingerprint(root);
+  assert.equal(computeRunnerSourceFingerprint(root, 'packaged'), installedFingerprint);
+
+  const checkout = path.join(root, 'apple/runner/AgentDeviceRunner');
+  fs.mkdirSync(checkout, { recursive: true });
+  fs.writeFileSync(path.join(checkout, 'Runner.swift'), '// checkout');
+  assert.notEqual(computeRunnerSourceFingerprint(root), installedFingerprint);
+  assert.equal(computeRunnerSourceFingerprint(root, 'packaged'), installedFingerprint);
+});
+
 function makeTempRoot(): string {
   const root = mkdtempForTestSync('agent-device-runner-source-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));

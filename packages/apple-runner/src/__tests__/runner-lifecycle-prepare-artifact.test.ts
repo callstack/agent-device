@@ -181,27 +181,30 @@ test('a refused restored artifact whose retry runs out of prepare deadline is cl
 // admission token owned by the prepare loop, so the rebuild is the retry a fence governs rather
 // than a fresh start that slips past it (#3220).
 
-test('prepareIosRunner rebuilds a restored artifact whose runner refuses the connection twice', async () => {
-  const fixtures = makeBadCacheRecoveryFixtures();
+test.each(['exact', 'release'] as const)(
+  'prepareIosRunner rebuilds a %s artifact whose runner refuses the connection twice',
+  async (cache) => {
+    const fixtures = makeBadCacheRecoveryFixtures(cache);
 
-  mockEnsureRunnerSession
-    .mockResolvedValueOnce(fixtures.restoredSession)
-    .mockResolvedValueOnce(fixtures.retrySession)
-    .mockResolvedValueOnce(fixtures.rebuiltSession);
-  mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
-    .mockResolvedValueOnce({ uptimeMs: 42 });
+    mockEnsureRunnerSession
+      .mockResolvedValueOnce(fixtures.restoredSession)
+      .mockResolvedValueOnce(fixtures.retrySession)
+      .mockResolvedValueOnce(fixtures.rebuiltSession);
+    mockExecuteRunnerCommandWithSession
+      .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+      .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+      .mockResolvedValueOnce({ uptimeMs: 42 });
 
-  const result = await prepareIosRunner(IOS_SIMULATOR, {
-    healthTimeoutMs: 90_000,
-    buildTimeoutMs: 300_000,
-  });
+    const result = await prepareIosRunner(IOS_SIMULATOR, {
+      healthTimeoutMs: 90_000,
+      buildTimeoutMs: 300_000,
+    });
 
-  assertRecoveredPrepareResult(result);
-  assertBadCacheRecoverySideEffects(fixtures);
-  assertRecoveredPrepareDiagnostics();
-});
+    assertRecoveredPrepareResult(result);
+    assertBadCacheRecoverySideEffects(fixtures);
+    assertRecoveredPrepareDiagnostics();
+  },
+);
 
 test('prepareIosRunner invalidates rebuilt sessions when bad-cache recovery health fails', async () => {
   const restoredArtifact = makeRunnerArtifact({
@@ -266,10 +269,10 @@ test('prepareIosRunner invalidates rebuilt sessions when bad-cache recovery heal
   ]);
 });
 
-function makeBadCacheRecoveryFixtures() {
+function makeBadCacheRecoveryFixtures(cache: 'exact' | 'release' = 'exact') {
   const restoredArtifact = makeRunnerArtifact({
     xctestrunPath: '/tmp/restored.xctestrun',
-    cache: 'exact',
+    cache,
     artifact: 'valid',
   });
   const rebuiltArtifact = makeRunnerArtifact({
