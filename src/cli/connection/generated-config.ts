@@ -11,7 +11,7 @@ import type {
   RemoteConfigProfile,
   ResolvedRemoteConfigProfile,
 } from '@agent-device/remote/remote-config-schema';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { ensurePrivateDirectorySync, publishFileSync } from '@agent-device/host-kit/file';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -29,7 +29,7 @@ export function writeGeneratedRemoteConfig(options: {
   const configDir = path.join(options.stateDir, 'remote-connections', 'generated');
   const saved = findMatchingGeneratedProfile(options, configDir, normalized);
   if (saved) return saved;
-  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  ensurePrivateDirectorySync(configDir);
   const configPath = path.join(
     configDir,
     `${safeProviderName(options.provider)}-${profileHash(normalized)}.json`,

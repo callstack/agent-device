@@ -310,7 +310,7 @@ test('a legacy whitespace-only provider does not make a stored connection leased
   assert.equal(Object.hasOwn(written, 'leaseProvider'), false);
 });
 
-test.skipIf(process.platform === 'win32').each([0o002, 0o700])(
+test.skipIf(process.platform === 'win32').each([0o002, 0o200, 0o700])(
   'writeRemoteConnectionState creates missing directories privately at 0o700 under umask %o',
   async (umaskValue) => {
     const root = await mkdtempForTest('agent-device-connection-umask-');

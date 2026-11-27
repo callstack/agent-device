@@ -395,11 +395,10 @@ async function resolveRunContextOrExit(
       flags,
       explicitFlagKeys,
       readDefaults:
-        base.command !== 'connect' &&
-        base.command !== 'connection' &&
-        runsOnRemoteConnection(base.command),
+        !['connect', 'connection'].includes(base.command) && runsOnRemoteConnection(base.command),
       materializes: shouldMaterializeRemoteConnection(base.command),
       claimForDisconnect: base.command === 'disconnect',
+      establishRoot: base.command === 'connect',
     });
     const { resolveCloudAdmission } = await import('./cli/connection/active-connection.ts');
     const cloudSession = defaults?.cloudSession;

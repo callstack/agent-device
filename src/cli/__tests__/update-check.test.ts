@@ -252,3 +252,33 @@ test('a failed check after a channel switch records the new channel and drops th
   assert.equal(cache.latestVersion, undefined);
   assert.equal(cache.checkedAt, '2026-03-31T10:00:00.000Z');
 });
+
+test('notifier and update worker skip creating a missing state root', async () => {
+  vi.mocked(runCmdDetached).mockClear();
+  const root = makeTempStateDir();
+  cleanupPaths.push(root);
+  const missingStateDir = path.join(root, 'absent-state');
+  const cachePath = path.join(missingStateDir, 'update-check.json');
+
+  withStreamTty(process.stderr, true, () => {
+    maybeRunUpgradeNotifier({
+      command: 'connect',
+      currentVersion: '0.11.3',
+      stateDir: missingStateDir,
+      flags: {},
+    });
+  });
+
+  assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 0);
+  assert.equal(fs.existsSync(missingStateDir), false);
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '0.13.0' }),
+    }),
+  );
+  await runUpdateCheckWorker({ cachePath, currentVersion: '0.11.3' });
+  assert.equal(fs.existsSync(missingStateDir), false);
+});

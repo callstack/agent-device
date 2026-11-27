@@ -34,6 +34,7 @@ type CommandConnectionOptions = {
   readDefaults: boolean;
   materializes: boolean;
   claimForDisconnect?: boolean;
+  establishRoot?: boolean;
 };
 
 type CommandConnectionContext = {
@@ -48,7 +49,8 @@ export function resolveCommandConnection(
 ): CommandConnectionContext {
   const { host, flags, explicitFlagKeys } = options;
   const paths = resolveDaemonPaths(flags.stateDir, host);
-  admitDaemonStateRoot({ paths, mode: 'repair' });
+  const rootMode = options.establishRoot ? 'establish' : 'repair';
+  admitDaemonStateRoot({ paths, mode: rootMode, refuseWritableRoot: true });
   const request = { ...host, session: flags.session, remoteConfig: flags.remoteConfig };
   if (options.claimForDisconnect) {
     const defaults = claimRemoteConnectionDefaults({ ...request, stateDir: paths.baseDir });
@@ -127,6 +129,7 @@ function resolveMaterializingConnection(
     storedState,
     session: merged.session ?? 'default',
     requestedSession: flags.session,
+    establishRoot: options.establishRoot,
   });
   // The discovery record can point at a profile that redirects the state directory. Once that
   // happens, only the record from the effective directory supplies connection defaults.
@@ -162,10 +165,15 @@ function selectCommandRecord(options: {
   storedState: RemoteConnectionState | null;
   session: string;
   requestedSession: string | undefined;
+  establishRoot?: boolean;
 }): RemoteConnectionState | null {
   const { daemonPaths, redirected, storedState, session, requestedSession } = options;
   if (!redirected) return storedState?.session === session ? storedState : null;
-  admitDaemonStateRoot({ paths: daemonPaths, mode: 'repair' });
+  admitDaemonStateRoot({
+    paths: daemonPaths,
+    mode: options.establishRoot ? 'establish' : 'repair',
+    refuseWritableRoot: true,
+  });
   const selected = readRemoteConnectionState({ stateDir: daemonPaths.baseDir, session });
   if (selected) requireLeasedConnectionSession(selected, requestedSession);
   return selected;

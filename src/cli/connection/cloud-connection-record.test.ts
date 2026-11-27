@@ -140,3 +140,72 @@ test.skipIf(process.platform === 'win32')(
     );
   },
 );
+
+test('locked writeCloudConnection refuses without recreating a vanished or replaced state root', async () => {
+  const parent = mkdtempForTestSync('cloud-locked-vanished-');
+  const stateDir = path.join(parent, 'state');
+  const location = { stateDir, session: 'locked-vanished' };
+  const record = sampleRecord(location.session);
+
+  await expect(
+    withConnectionLock(stateDir, location.session, async () => {
+      fs.rmSync(stateDir, { recursive: true, force: true });
+      writeCloudConnection(location, record);
+    }),
+  ).rejects.toMatchObject({
+    details: { reason: 'cloud_credential_store_unsafe' },
+  });
+  expect(fs.existsSync(stateDir)).toBe(false);
+
+  await expect(
+    withConnectionLock(stateDir, location.session, async () => {
+      fs.rmSync(stateDir, { recursive: true, force: true });
+      fs.mkdirSync(stateDir, { mode: 0o700 });
+      writeCloudConnection(location, record);
+    }),
+  ).rejects.toMatchObject({
+    details: { reason: 'cloud_credential_store_unsafe' },
+  });
+});
+
+test('tryWithConnectionLock refuses without recreating a state root that vanished before lock acquisition', async () => {
+  const parent = mkdtempForTestSync('cloud-try-lock-vanished-');
+  const stateDir = path.join(parent, 'state');
+  const location = { stateDir, session: 'try-vanished' };
+  const originalOpen = fs.openSync;
+  vi.spyOn(fs, 'openSync').mockImplementation((...args) => {
+    if (String(args[0]).endsWith('.reclaim.lock')) {
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+    return Reflect.apply(originalOpen, fs, args);
+  });
+
+  await expect(tryWithConnectionLock(location, () => {})).rejects.toMatchObject({
+    details: { reason: 'cloud_credential_store_unsafe' },
+  });
+  expect(fs.existsSync(stateDir)).toBe(false);
+});
+
+test.skipIf(process.platform === 'win32')(
+  'cloud admission refuses a symlink state root pointing to an owned 0o700 directory',
+  async () => {
+    const parent = mkdtempForTestSync('cloud-symlink-root-');
+    const outside = path.join(parent, 'outside');
+    fs.mkdirSync(outside, { mode: 0o700 });
+    fs.chmodSync(outside, 0o700);
+    const link = path.join(parent, 'state-link');
+    fs.symlinkSync(outside, link);
+    const location = { stateDir: link, session: 'symlink-root' };
+
+    await expect(
+      withConnectionLock(link, location.session, async () => readCloudConnection(location)),
+    ).rejects.toMatchObject({
+      details: { reason: 'cloud_credential_store_unsafe' },
+    });
+    expect(() => writeCloudConnection(location, sampleRecord(location.session))).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({ reason: 'cloud_credential_store_unsafe' }),
+      }),
+    );
+  },
+);

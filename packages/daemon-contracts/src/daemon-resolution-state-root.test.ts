@@ -210,6 +210,21 @@ test.skipIf(!posix || process.getuid?.() === 0)(
 // The repair #4649 asks for: an owned, real, safely-rooted root that is open only through its OWN bits is made
 // 0700 and admitted, on both modes. Neither mode creates anything below the root: the daemon makes its own names
 // when it needs them, and a state directory the daemon does not write into stays empty.
+test.skipIf(!posix).each([0o775, 0o777])(
+  'refuseWritableRoot leaves a caller-owned %o root unchanged and refuses before repair',
+  (mode) => {
+    const under = mkdtempForTestSync('state-admit-writable-preserve-');
+    const root = makePrivateRoot(under, 'writable');
+    fs.chmodSync(root, mode);
+
+    const details = refusalOf(() =>
+      admitDaemonStateRoot({ paths: pathsOf(root), mode: 'establish', refuseWritableRoot: true }),
+    );
+    expect(details).toMatchObject({ problem: 'not-private', component: root });
+    expect(fs.statSync(root).mode & 0o777).toBe(mode);
+  },
+);
+
 test.skipIf(!posix)(
   'an owned root at mode 0755 or 0770 is repaired to 0700, and nothing is created below it',
   () => {

@@ -137,6 +137,7 @@ type ProcessLockOptions = {
   lockDirPath: string;
   owner: ProcessLockOwner;
   description?: string;
+  ensureParentDir?: boolean;
 };
 
 export function inspectProcessLock(lockDirPath: string): ProcessLockInspection {
@@ -177,7 +178,9 @@ function inspectProcessLockWith(
  * See docs/adr/0030-process-lock-exclusion.md for the migration contract.
  */
 export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAttempt {
-  fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
+  if (params.ensureParentDir !== false) {
+    fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
+  }
   const reading = readProcessLockOwner(path.join(params.lockDirPath, OWNER_FILE_NAME));
   const liveness =
     reading.kind === 'owner' ? classifyOwnerLiveness({ owner: reading.owner }) : undefined;
@@ -394,7 +397,9 @@ export async function acquireProcessLockAcquisition(
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
   throwIfCanceled(params.signal);
   const observe = await createWaitObservers();
-  fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
+  if (params.ensureParentDir !== false) {
+    fs.mkdirSync(path.dirname(params.lockDirPath), { recursive: true });
+  }
   do {
     throwIfCanceled(params.signal);
     const attempt = attemptProcessLock(params, await gatherWaitEvidence(params, observe));

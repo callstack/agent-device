@@ -38,6 +38,9 @@ type UpdateCheckWorkerOptions = {
 export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
   if (!shouldEnableUpgradeNotifier(options)) return;
 
+  const stateRoot = fs.lstatSync(options.stateDir, { throwIfNoEntry: false });
+  if (!stateRoot || !stateRoot.isDirectory()) return;
+
   const now = Date.now();
   const cachePath = path.join(options.stateDir, UPDATE_CHECK_CACHE_FILE);
   const cache = readUpdateCheckCache(cachePath);
@@ -131,8 +134,12 @@ function readUpdateCheckCache(cachePath: string): UpdateCheckCache {
 
 function writeUpdateCheckCache(cachePath: string, cache: UpdateCheckCache): void {
   try {
-    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-    fs.writeFileSync(cachePath, `${JSON.stringify(cache, null, 2)}\n`, 'utf8');
+    const parent = fs.lstatSync(path.dirname(cachePath), { throwIfNoEntry: false });
+    if (!parent || !parent.isDirectory()) return;
+    fs.writeFileSync(cachePath, `${JSON.stringify(cache, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
   } catch {
     // Best effort only.
   }

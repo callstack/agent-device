@@ -1,14 +1,18 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
   acquireProcessLock,
+  ensurePrivateChildDirectorySync,
+  ensurePrivateDirectorySync,
   lstatIfPresent,
   openVerifiedFileForRead,
+  PrivateDirectoryUnsafeError,
   publishFileSync,
   tryAcquireProcessLock,
+  verifyDirectoryIdentityNoFollow,
   withProcessLock,
-  ensurePrivateDirectorySync,
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
@@ -62,6 +66,14 @@ function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+type VerifiedCloudStateRoot = Readonly<{
+  stateDir: string;
+  dev: number | bigint;
+  ino: number | bigint;
+}>;
+
+const lockedCloudStateRoot = new AsyncLocalStorage<VerifiedCloudStateRoot>();
+
 export function cloudConnectionDir({ stateDir, session }: ConnectionLocation): string {
   return path.join(stateDir, 'cloud-connections', hash(session));
 }
@@ -72,15 +84,28 @@ export async function withConnectionLock<T>(
   task: () => Promise<T>,
   onContention?: () => void,
 ): Promise<T> {
-  ensurePrivateDirectorySync(stateDir);
+  withCredentialStoreSafety(() => ensurePrivateDirectorySync(stateDir));
+  const expectedRoot = requireCloudStateRootIdentity(stateDir);
   return await withProcessLock({
-    acquire: () =>
-      acquireProcessLock({
-        ...connectionLockOptions({ stateDir, session }),
-        timeoutMs: 180_000,
-        onContention,
-      }),
-    task,
+    acquire: async () => {
+      try {
+        return await acquireProcessLock({
+          ...connectionLockOptions({ stateDir, session }),
+          ensureParentDir: false,
+          timeoutMs: 180_000,
+          onContention,
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
+          throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+        }
+        throw error;
+      }
+    },
+    task: async () => {
+      assertLockedCloudStateRoot(expectedRoot);
+      return await lockedCloudStateRoot.run(expectedRoot, task);
+    },
   });
 }
 
@@ -88,12 +113,27 @@ export async function tryWithConnectionLock(
   location: ConnectionLocation,
   task: () => Promise<void> | void,
 ): Promise<void> {
-  ensurePrivateDirectorySync(location.stateDir);
-  const lock = tryAcquireProcessLock(connectionLockOptions(location));
+  withCredentialStoreSafety(() => ensurePrivateDirectorySync(location.stateDir));
+  const expectedRoot = requireCloudStateRootIdentity(location.stateDir);
+  let lock;
+  try {
+    lock = tryAcquireProcessLock({
+      ...connectionLockOptions(location),
+      ensureParentDir: false,
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    throw error;
+  }
   if (lock.status !== 'acquired') return;
   await withProcessLock({
     acquire: async () => lock.acquisition.release,
-    task: async () => await task(),
+    task: async () => {
+      assertLockedCloudStateRoot(expectedRoot);
+      return await lockedCloudStateRoot.run(expectedRoot, async () => await task());
+    },
   });
 }
 
@@ -129,44 +169,84 @@ function connectionLockOptions({ stateDir, session }: ConnectionLocation) {
   };
 }
 
+function withCredentialStoreSafety<T>(run: () => T): T {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof PrivateDirectoryUnsafeError) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    throw error;
+  }
+}
+
 export function admitCloudCredentialDirectory(
   location: ConnectionLocation,
   create = false,
 ): boolean {
-  if (create) ensurePrivateDirectorySync(location.stateDir);
-  if (!admitCloudStateRoot(location.stateDir)) return false;
-  const directory = cloudConnectionDir(location);
-  const cloud = path.dirname(directory);
-  for (const entry of [cloud, directory]) {
-    const status = readCloudDirectory(entry, create);
-    if (!status) return false;
-    assertOwnedEntry(status, status.isDirectory(), entry === directory ? 0o077 : 0o022);
-  }
-  return true;
+  return withCredentialStoreSafety(() => {
+    const lockedRoot = lockedCloudStateRoot.getStore();
+    if (lockedRoot && lockedRoot.stateDir === path.resolve(location.stateDir)) {
+      // Under an active connection lock, never recreate a vanished root or accept a substituted one.
+      assertLockedCloudStateRoot(lockedRoot);
+    } else {
+      if (create) ensurePrivateDirectorySync(location.stateDir);
+      if (!admitCloudStateRootIdentity(location.stateDir)) return false;
+    }
+    const directory = cloudConnectionDir(location);
+    const cloud = path.dirname(directory);
+    for (const entry of [cloud, directory]) {
+      const status = readCloudDirectory(entry, create);
+      if (!status) return false;
+      assertOwnedEntry(
+        status,
+        !status.isSymbolicLink() && status.isDirectory(),
+        entry === directory ? 0o077 : 0o022,
+      );
+      verifyDirectoryIdentityNoFollow(entry, status);
+    }
+    return true;
+  });
 }
 
 function readCloudDirectory(entry: string, create: boolean): fs.Stats | undefined {
   const existing = lstatIfPresent(entry);
   if (existing || !create) return existing;
-  try {
-    fs.mkdirSync(entry, { mode: 0o700 });
-    if (process.platform !== 'win32') fs.chmodSync(entry, 0o700);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-  }
+  ensurePrivateChildDirectorySync(path.dirname(entry), path.basename(entry));
   return lstatIfPresent(entry);
 }
 
 function admitCloudStateRoot(stateDir: string): boolean {
-  let status;
-  try {
-    status = fs.statSync(stateDir);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
+  return admitCloudStateRootIdentity(stateDir) !== undefined;
+}
+
+function requireCloudStateRootIdentity(stateDir: string): VerifiedCloudStateRoot {
+  const verified = admitCloudStateRootIdentity(stateDir);
+  if (!verified) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
   }
-  assertOwnedEntry(status, status.isDirectory(), 0o022);
-  return true;
+  return verified;
+}
+
+function assertLockedCloudStateRoot(expected: VerifiedCloudStateRoot): void {
+  const current = admitCloudStateRootIdentity(expected.stateDir);
+  if (!current || current.dev !== expected.dev || current.ino !== expected.ino) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+  }
+}
+
+function admitCloudStateRootIdentity(stateDir: string): VerifiedCloudStateRoot | undefined {
+  return withCredentialStoreSafety(() => {
+    const resolved = path.resolve(stateDir);
+    const status = lstatIfPresent(resolved);
+    if (!status) return undefined;
+    assertOwnedEntry(status, !status.isSymbolicLink() && status.isDirectory(), 0o022);
+    if (process.platform !== 'win32' && (status.mode & 0o700) !== 0o700) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason);
+    }
+    verifyDirectoryIdentityNoFollow(resolved, status);
+    return { stateDir: resolved, dev: status.dev, ino: status.ino };
+  });
 }
 
 function assertOwnedEntry(status: fs.Stats, correctKind: boolean, exposure: number): void {
