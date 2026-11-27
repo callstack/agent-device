@@ -61,6 +61,7 @@ const CLIENT_RPC = 'packages/daemon-client/src/daemon-client-rpc.ts';
 const CLIENT_PROGRESS = 'packages/daemon-client/src/daemon-client-progress.ts';
 const CLIENT_TRANSPORT = 'packages/daemon-client/src/daemon-client-transport.ts';
 const DAEMON_PROXY = 'packages/proxy/src/daemon-proxy.ts';
+const PROXY_CHECKED_RPC = 'packages/proxy/src/checked-rpc-admission.ts';
 const UPLOAD_CLIENT = 'packages/remote/src/upload-client.ts';
 const REMOTE_ARTIFACTS = 'packages/remote/src/daemon-artifacts.ts';
 const ARTIFACT_DOWNLOAD = 'packages/remote/src/artifact-download.ts';
@@ -103,20 +104,18 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DAEMON_HTTP_RPC_PROTOCOL_HEADER',
         'DAEMON_HTTP_REFUSAL_HEADER',
         'DAEMON_HTTP_REFUSALS',
-        'DaemonHttpRefusal',
-        'readDaemonRpcProtocolHeader',
+        'CheckedRpcProtocolRefusal',
         'checkedRpcProtocolRefusal',
-        'checkedRpcProtocolRefusalError',
       ),
-      ...from(
-        HTTP_CHECKED_RPC,
-        'refuseCheckedRpcProtocol',
-        'refuseUnservedCheckedRequest',
-        'sendCheckedRpcRefusal',
-        'readStableRpcFrame',
-      ),
+      ...from(HTTP_CHECKED_RPC, 'readCheckedRpcProtocolRefusal', 'sendCheckedRpcProtocolRefusal'),
       ...from(HTTP_SERVER, 'DAEMON_HTTP_CAPABILITIES'),
-      ...from(DAEMON_PROXY, 'isRpcRoute', 'refuseCheckedRpcProtocol', 'forwardedCheckedRpcRefusal'),
+      ...from(DAEMON_PROXY, 'isRpcRoute'),
+      ...from(
+        PROXY_CHECKED_RPC,
+        'refuseCheckedRpcProtocol',
+        'checkedRpcProtocolRefusalError',
+        'forwardedCheckedRpcRefusal',
+      ),
       ...from(
         DAEMON_PROXY,
         'refuseStaleProxyInstance',

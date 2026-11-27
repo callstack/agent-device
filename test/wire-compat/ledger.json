@@ -199,19 +199,16 @@
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_CHECKED_RPC_CAPABILITY": "sha256:1a240ea04287b52e304bd845e8a0344649ed2e0f754c9ec80f8ea3fb10b971e7",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_RPC_PROTOCOL_HEADER": "sha256:7ce3188527c391c6f08f069d38438e70ad6ecdc257e44613b8f46055c5037766",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_REFUSAL_HEADER": "sha256:914b491b3f169de831e6758269a363f85778629286afc542646373c48d3145d3",
-    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_REFUSALS": "sha256:202d236bc4b854fc992e7b5efb930e60215d253b49c870b87027a1255c6c5c18",
-    "packages/contracts/src/daemon-http.ts#DaemonHttpRefusal": "sha256:7900a17fee213477f4199f9bb38032f0ccf98e2b6ab79e8339b18399ab8ab35b",
-    "packages/contracts/src/daemon-http.ts#readDaemonRpcProtocolHeader": "sha256:755934987d438c05ab5e0fa16270723730a6dd56f73663335fa5d21935166f29",
-    "packages/contracts/src/daemon-http.ts#checkedRpcProtocolRefusal": "sha256:1015f40e770d069c83512f1333a8849f3d068d33820e1e480f4baa7106ca9d83",
-    "packages/contracts/src/daemon-http.ts#checkedRpcProtocolRefusalError": "sha256:a10e59ba9ad68af096b1a3fd6f8bd433d9a3e71dde0e930151ddbb434459d7ff",
-    "packages/daemon/src/server/http/http-checked-rpc.ts#refuseCheckedRpcProtocol": "sha256:87ebbeb38e45182ab1bce146ec7f45934c4569fcdb4872111ff05d0b772e6c7e",
-    "packages/daemon/src/server/http/http-checked-rpc.ts#refuseUnservedCheckedRequest": "sha256:27693cf9bd251e8af0e725a394688b6b141755be8dee29b828640d21a4b598fa",
-    "packages/daemon/src/server/http/http-checked-rpc.ts#sendCheckedRpcRefusal": "sha256:0b5c6247382aa05a01fb6b6ac1a669008d3bbc46b6999f23aab58b968abd3146",
-    "packages/daemon/src/server/http/http-checked-rpc.ts#readStableRpcFrame": "sha256:41492bb873e3c3825c1e75e6247105271bbe6691c2a478211f6cf3690c23c3e6",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_REFUSALS": "sha256:99c46b14d91cc6f9eb6c55bfa96b8d89d33cc4087beac5313c5276ccdbecaf7d",
+    "packages/contracts/src/daemon-http.ts#checkedRpcProtocolRefusal": "sha256:a4efad68779436fa678c01e1c071ff45f52dcaa2e9902cd8be830937037174ef",
+    "packages/contracts/src/daemon-http.ts#CheckedRpcProtocolRefusal": "sha256:75b71253734f2a7e1bc34c42d4c9caca0c2eb25d809e5efb2ae0df58ae694202",
+    "packages/daemon/src/server/http/http-checked-rpc.ts#readCheckedRpcProtocolRefusal": "sha256:4c8924d8480a6af3acec96883d53636e33a199649bdd8ff63087dcf2ebaf4d29",
+    "packages/daemon/src/server/http/http-checked-rpc.ts#sendCheckedRpcProtocolRefusal": "sha256:d69a4d6b39cb747ca373bab42b753c14e00817d2cf6e6ca5529f2e232344b591",
     "packages/daemon/src/server/http/http-server.ts#DAEMON_HTTP_CAPABILITIES": "sha256:bac67f03945b928de4fece3a5e02386ebba9b7b957b1107f76c84bc8ca574f94",
     "packages/proxy/src/daemon-proxy.ts#isRpcRoute": "sha256:1bf3b68f6bc855bd87ee7c0bbdef467c3c76232238885ae6c67bcf245ce9b846",
-    "packages/proxy/src/daemon-proxy.ts#refuseCheckedRpcProtocol": "sha256:251a3dd674dbaea3fc40886ee3040ffbe50ff6b49ba38570e9f82d9b2e12d7b4",
-    "packages/proxy/src/daemon-proxy.ts#forwardedCheckedRpcRefusal": "sha256:ccb68925299f664ab18fff97b021c10b9a154a60a72055874868a24dad989399",
+    "packages/proxy/src/checked-rpc-admission.ts#refuseCheckedRpcProtocol": "sha256:96097745ef9845f473948e5b4a3a9fe872f034c4437ef08b722d9af69be21b00",
+    "packages/proxy/src/checked-rpc-admission.ts#checkedRpcProtocolRefusalError": "sha256:bb94640118109e802b5c73d943aec56e7aeff85f2cf88446bcd46c0e72d3c130",
+    "packages/proxy/src/checked-rpc-admission.ts#forwardedCheckedRpcRefusal": "sha256:be0fcba16fcee9e7592191325a6f0acb95316f9adbfa2f4a84c9a5240d62c691",
     "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:5c39c2b5a1b4bc897a2b01ac47c6856af47e787e8cc5798657f0ae24fd1c78e0",
     "packages/proxy/src/daemon-proxy.ts#sendInstanceMismatch": "sha256:a196304a18d0a37cb259d94dd67efeffe08afb6caf6a3461ab0870ef8c7bbda4",
     "packages/contracts/src/daemon-http.ts#buildDaemonInstanceMismatchRpcResponse": "sha256:24e50130bbd0c4a21dfc51005cabf118525b9121f918719a2c16f73fcfcfbcf9",
@@ -232,7 +229,7 @@
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadDirectUrl": "sha256:b121db3ffb5a520b4b31810a2e28ff01c1a15d959514c9fbe2a61cd960d2af93",
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadPreflightResponse": "sha256:332820b6f10e079632330c2c4996c4faa6f339e921f12f287bd83c9296df5ccd",
     "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:21d633d947cd72f5008bcc886a8f3ecd4f778b594d0654b8d0741db8594003db",
-    "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
+    "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:4ff6eba594b923a1d8f46a5856c42132b7ecd3a63d40f26c42972e06cb5a0a04",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:ba600575e06995bc903c107477b23f7853e920751452a50a9734fab6677326bf",
@@ -676,6 +673,11 @@
       "declaration": "packages/kernel/src/contracts.ts#DaemonInstallSource",
       "digest": "sha256:adfde90c81de72009bf0e092b95fcb41cece2ecd44e936dcb1f6beb220287f02",
       "rationale": "Removes the github-actions-artifact variant. A new client never sends it. A released client that sends it to a new daemon gets a normal INVALID_ARGS error (source.kind must be \"url\"), not a misread payload. No local daemon ever materialized it: it always failed with UNSUPPORTED_OPERATION. The url and path variants are unchanged."
+    },
+    {
+      "declaration": "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES",
+      "digest": "sha256:4ff6eba594b923a1d8f46a5856c42132b7ecd3a63d40f26c42972e06cb5a0a04",
+      "rationale": "Adds the checked-rpc capability (ADR 0006). readDaemonCapabilities filters to known names, so a released client drops it, and a released daemon never lists it; a client treats an absent capability as cannot-do. The existing quiesce and script-artifacts entries are unchanged."
     }
   ]
 }

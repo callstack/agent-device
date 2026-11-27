@@ -22,11 +22,8 @@ import {
   DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
   DAEMON_HTTP_CHECKED_RPC_ROUTE,
   DAEMON_HTTP_REFUSAL_HEADER,
-  DAEMON_HTTP_REFUSALS,
   DAEMON_HTTP_RPC_PROTOCOL_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
-  checkedRpcProtocolRefusal,
-  checkedRpcProtocolRefusalError,
 } from '@agent-device/contracts/daemon-http';
 import {
   carriesUnbackedHostPathInstallSource,
@@ -210,7 +207,10 @@ async function handleProxyRequest(
   } catch (error) {
     return rpcErrorResponse(null, error);
   }
-  const envelopeRefusal = refuseInvalidRpcEnvelope(rpcBody);
+  // The checked route checks its envelope after authentication and the protocol: a caller on
+  // another protocol is told so before the proxy reads what its own protocol defines.
+  const envelopeRefusal =
+    route === DAEMON_HTTP_CHECKED_RPC_ROUTE ? null : refuseInvalidRpcEnvelope(rpcBody);
   if (envelopeRefusal) return envelopeRefusal;
   try {
     return await handleDaemonRoute(request, route, options, instanceId, rpcBody);
@@ -230,8 +230,14 @@ async function handleDaemonRoute(
   if (!caller) {
     return unauthorizedResponse(route, readJsonRpcId(rpcBody));
   }
-  const protocolRefusal = await refuseCheckedRpcProtocol(request, route, readJsonRpcId(rpcBody));
-  if (protocolRefusal) return protocolRefusal;
+  if (route === DAEMON_HTTP_CHECKED_RPC_ROUTE) {
+    // Loaded only on the checked route: authentication, then the protocol, then the envelope.
+    const { refuseCheckedRpcProtocol } = await import('./checked-rpc-admission.ts');
+    const refusal =
+      (await refuseCheckedRpcProtocol(request, readJsonRpcId(rpcBody))) ??
+      refuseInvalidRpcEnvelope(rpcBody ?? '');
+    if (refusal) return refusal;
+  }
   if (caller.tenantId && !isRouteWithinTenant(route, caller.tenantId)) {
     return Response.json(
       { ok: false, error: 'Session is outside this tenant', code: 'UNAUTHORIZED' },
@@ -385,6 +391,11 @@ async function forwardProxyRequest(params: {
   );
 
   const headers = copyProxyResponseHeaders(upstreamResponse, request, route);
+  if (route === DAEMON_HTTP_CHECKED_RPC_ROUTE) {
+    const { forwardedCheckedRpcRefusal } = await import('./checked-rpc-admission.ts');
+    const refusal = forwardedCheckedRpcRefusal(upstreamResponse);
+    if (refusal) headers.set(DAEMON_HTTP_REFUSAL_HEADER, refusal);
+  }
   if (isUploadPreflightRoute(route)) {
     return await rewrittenUploadPreflightResponse({
       request,
@@ -433,29 +444,7 @@ function copyProxyResponseHeaders(
     if (value) headers.set(name, value);
   }
   if (!headers.has('x-request-id')) headers.set('x-request-id', resolveRequestId(request));
-  const refusal = forwardedCheckedRpcRefusal(upstreamResponse, route);
-  if (refusal) headers.set(DAEMON_HTTP_REFUSAL_HEADER, refusal);
   return headers;
-}
-
-/**
- * The refusal header a checked call's 409 carries back through the proxy. A protocol refusal of the
- * daemon behind the proxy says so, so the client names that daemon and not the proxy. Only the
- * known values pass, and only on a 409 of the checked route.
- */
-function forwardedCheckedRpcRefusal(upstreamResponse: Response, route: string): string | undefined {
-  if (route !== DAEMON_HTTP_CHECKED_RPC_ROUTE || upstreamResponse.status !== 409) return undefined;
-  switch (upstreamResponse.headers.get(DAEMON_HTTP_REFUSAL_HEADER)) {
-    case DAEMON_HTTP_REFUSALS.protocolMismatch:
-    case DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch:
-      return DAEMON_HTTP_REFUSALS.upstreamProtocolMismatch;
-    case DAEMON_HTTP_REFUSALS.protocolMissing:
-      return DAEMON_HTTP_REFUSALS.protocolMissing;
-    case DAEMON_HTTP_REFUSALS.scriptArtifacts:
-      return DAEMON_HTTP_REFUSALS.scriptArtifacts;
-    default:
-      return undefined;
-  }
 }
 
 /** `content-length` stays off the preflight route because the proxy rewrites that body. */
@@ -871,31 +860,6 @@ function sendInstanceMismatch(rpcId: unknown): Response {
       ),
     ),
     { status: 409, headers: { [DAEMON_HTTP_INSTANCE_MISMATCH_HEADER]: 'true' } },
-  );
-}
-
-/**
- * Refuses an authenticated checked call whose RPC protocol header is absent or names another
- * protocol, before the proxy reads anything its own protocol defines or forwards a byte.
- */
-async function refuseCheckedRpcProtocol(
-  request: Request,
-  route: string,
-  rpcId: unknown,
-): Promise<Response | null> {
-  if (route !== DAEMON_HTTP_CHECKED_RPC_ROUTE) return null;
-  const refusal = checkedRpcProtocolRefusal(request.headers.get(DAEMON_HTTP_RPC_PROTOCOL_HEADER));
-  if (!refusal) return null;
-  const { readVersion } = await import('@agent-device/host-kit/version');
-  const error = normalizeError(
-    checkedRpcProtocolRefusalError(refusal, {
-      service: 'agent-device-proxy',
-      version: readVersion(),
-    }),
-  );
-  return Response.json(
-    { jsonrpc: '2.0', id: rpcId, error: { code: -32001, message: error.message, data: error } },
-    { status: 409, headers: { [DAEMON_HTTP_REFUSAL_HEADER]: refusal } },
   );
 }
 

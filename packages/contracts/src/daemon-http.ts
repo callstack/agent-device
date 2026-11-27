@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 
 // The daemon HTTP wire vocabulary shared by the daemon server, the remote
 // proxy, and every client that talks to them: the base path, the tenant, lease
@@ -166,59 +166,35 @@ export const DAEMON_HTTP_REFUSALS = {
   protocolMismatch: 'protocol-mismatch',
   /** A proxy forwards the protocol refusal of the daemon behind it. */
   upstreamProtocolMismatch: 'upstream-protocol-mismatch',
-  /** The call records a session script, and the daemon cannot deliver one. */
-  scriptArtifacts: 'script-artifacts',
 } as const;
-export type DaemonHttpRefusal = (typeof DAEMON_HTTP_REFUSALS)[keyof typeof DAEMON_HTTP_REFUSALS];
+/** The refusals a checked call's own protocol header can earn. */
+export type CheckedRpcProtocolRefusal =
+  | typeof DAEMON_HTTP_REFUSALS.protocolMissing
+  | typeof DAEMON_HTTP_REFUSALS.protocolMismatch;
 
-/** Why the checked RPC route refused a call. Each refusal comes before dispatch. */
+/** Why a checked RPC call failed. */
 export const DAEMON_CHECKED_RPC_REASONS = {
   // The checked RPC call named no RPC protocol. An intermediary that strips request headers causes
   // this.
   protocolMissing: { reason: 'remote_rpc_protocol_missing' },
-  // The daemon or proxy speaks another RPC protocol than the caller; `details.service`,
-  // `details.version` and `details.rpcProtocolVersion` name the side that refused.
+  // The daemon or proxy speaks a different RPC protocol from the caller. After authentication,
+  // `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused.
   protocolMismatch: { reason: 'remote_rpc_protocol_mismatch' },
 } as const satisfies ReasonTable<'remote connection'>;
 
-/** The RPC protocol a checked call names, or `undefined` when its header is absent or malformed. */
-export function readDaemonRpcProtocolHeader(value: unknown): number | undefined {
-  return typeof value === 'string' && /^[0-9]{1,9}$/.test(value) ? Number(value) : undefined;
-}
-
-/** The protocol refusal of a checked call on this build, or `undefined` when its protocol matches. */
-export function checkedRpcProtocolRefusal(headerValue: unknown): DaemonHttpRefusal | undefined {
-  const protocol = readDaemonRpcProtocolHeader(headerValue);
-  if (protocol === undefined) return DAEMON_HTTP_REFUSALS.protocolMissing;
-  return protocol === DAEMON_RPC_PROTOCOL_VERSION
+/**
+ * The protocol refusal of a checked call on this build, or `undefined` when its protocol matches. A
+ * header that is absent or not a plain integer is `protocol-missing`.
+ */
+export function checkedRpcProtocolRefusal(
+  headerValue: unknown,
+): CheckedRpcProtocolRefusal | undefined {
+  if (typeof headerValue !== 'string' || !/^[0-9]{1,9}$/.test(headerValue)) {
+    return DAEMON_HTTP_REFUSALS.protocolMissing;
+  }
+  return Number(headerValue) === DAEMON_RPC_PROTOCOL_VERSION
     ? undefined
     : DAEMON_HTTP_REFUSALS.protocolMismatch;
-}
-
-/**
- * The error a daemon or proxy answers a refused checked call with. Its details name the refusing
- * side in the `/health` vocabulary, so a client can name who must upgrade.
- */
-export function checkedRpcProtocolRefusalError(
-  refusal: DaemonHttpRefusal,
-  side: Pick<DaemonHealthPayload, 'service' | 'version'>,
-): AppError {
-  const missing = refusal === DAEMON_HTTP_REFUSALS.protocolMissing;
-  return new AppError(
-    'COMMAND_FAILED',
-    missing
-      ? `Checked RPC requires the ${DAEMON_HTTP_RPC_PROTOCOL_HEADER} header`
-      : `The ${side.service} speaks RPC protocol ${DAEMON_RPC_PROTOCOL_VERSION}`,
-    {
-      reason: missing
-        ? DAEMON_CHECKED_RPC_REASONS.protocolMissing.reason
-        : DAEMON_CHECKED_RPC_REASONS.protocolMismatch.reason,
-      dispatched: 'no',
-      service: side.service,
-      version: side.version,
-      rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
-    },
-  );
 }
 
 export function buildDaemonInstanceMismatchRpcResponse<Id>(

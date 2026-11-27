@@ -147,6 +147,32 @@ test('a refusal header the upstream sets on /rpc never reaches the client', asyn
   expect(response.headers.get(DAEMON_HTTP_REFUSAL_HEADER)).toBeNull();
 });
 
+test.each([
+  ['an unauthenticated caller', { authorization: 'Bearer wrong' }, 401, null],
+  ['a skewed caller', { [DAEMON_HTTP_RPC_PROTOCOL_HEADER]: '999' }, 409, 'protocol-mismatch'],
+  ['a matching caller', { [DAEMON_HTTP_RPC_PROTOCOL_HEADER]: PROTOCOL }, 400, null],
+])(
+  'a malformed checked body from %s is answered by auth, then protocol, then the envelope',
+  async (_name, headers, status, refusal) => {
+    const upstream = recordingUpstream(() => Response.json({}));
+    const response = await tokenProxy(upstream.fetch).handle(
+      new Request(`${PROXY_ORIGIN}/agent-device/rpc/checked`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer client-secret',
+          'content-type': 'application/json',
+          ...headers,
+        },
+        body: 'not json',
+      }),
+    );
+
+    expect(response.status).toBe(status);
+    expect(response.headers.get(DAEMON_HTTP_REFUSAL_HEADER)).toBe(refusal);
+    expect(upstream.requests).toHaveLength(0);
+  },
+);
+
 test('proxy health advertises the checked route', async () => {
   const upstream = recordingUpstream(() => Response.json({ ok: true }));
   const response = await tokenProxy(upstream.fetch).handle(
