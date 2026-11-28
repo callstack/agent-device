@@ -673,6 +673,7 @@ agent-device prepare ios-runner --platform ios --timeout 240000
 - CI may cache `~/.agent-device/apple-runner/derived` when the cache key includes the exact agent-device package contents and Xcode version. agent-device rebuilds a cached runner whose files changed, and trims old cache entries; see `AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP` in [Configuration](/docs/configuration#supported-environment-variables).
 - `runner_cache_uncertifiable` means the build products could not be verified. Point `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` at a plain directory you own, or follow the error hint.
 - `~/.agent-device/ios-runner` belongs to older versions. Delete it once no older version runs.
+- On Apple silicon with Xcode 27.x, a stable release can download a matching iOS Simulator runner on the first launch without a local runner cache. If the download is unavailable or the exact Xcode and SDK builds differ, the CLI builds locally.
 - Runner build and start output goes to the session's `runner.log`. `daemon.log` covers daemon startup.
 
 ## TV targets
