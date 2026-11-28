@@ -401,6 +401,44 @@ function openInputFixture(overrides: Partial<OpenApplicationInput> = {}): OpenAp
   };
 }
 
+test('openApplication refuses a launch arg that is not a plain word before any app operation', async () => {
+  const hdc = vi.mocked(runHarmonyShell);
+  hdc.mockReset();
+  const interactor = { open: vi.fn(async () => undefined), close: vi.fn(async () => undefined) };
+  const binding = await createHarmonyPlatformRuntime({
+    processTransports: { resolve: async () => ({ mode: 'local' as const }) },
+    localInteractors: { resolve: async () => interactor },
+  } as unknown as PlatformRuntimeHost).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  const openApplication = binding.operations.openApplication;
+  if (!openApplication) throw new Error('openApplication was not admitted for this binding');
+
+  for (const launchArg of [String.raw`$(id)"q"\c`, 'hello world', 'a;b', '']) {
+    await expect(
+      openApplication(
+        openInputFixture({
+          relaunch: true,
+          target: 'com.example.harmony',
+          execution: { launchArgs: ['--ps', launchArg] },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'INVALID_ARGS',
+      details: { reason: 'launch-arg-not-a-plain-word', launchArg, dispatched: 'no' },
+    });
+  }
+  expect(hdc).not.toHaveBeenCalled();
+  expect(interactor.open).not.toHaveBeenCalled();
+  expect(interactor.close).not.toHaveBeenCalled();
+});
+
 test('openApplication verifies the launched bundle in the foreground after the direct dispatch', async () => {
   launchDumpHdc();
   const hdc = vi.mocked(runHarmonyShell);

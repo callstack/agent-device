@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { ShellWord } from '@agent-device/kernel/device-shell';
+import { shellQuoteIfNeeded, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type {
   OpenApplicationInput,
@@ -197,6 +197,8 @@ const HARMONY_LOCKED_SCREEN_LAUNCH_ERROR = /Error Code: ?10106102/;
 const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
   // --activity is not an ability name the module.json5 format can carry.
   invalidAbilityName: { reason: 'invalid-harmony-ability-name' },
+  // A HarmonyOS --launch-args entry is not a nonempty plain word of letters, digits, and _@%+=:,./-.
+  launchArgNotPlainWord: { reason: 'launch-arg-not-a-plain-word' },
 } as const satisfies ReasonTable<'open'>;
 
 /** Why a HarmonyOS open reports that the launched app did not take the foreground. */
@@ -216,10 +218,30 @@ function requireHarmonyAbilityName(ability: string): void {
   });
 }
 
+/**
+ * Refuses a `--launch-args` entry that is not a nonempty plain word. Such a word needs no shell
+ * quoting, so it reaches `aa start` as one literal operand whether or not hdc quotes the elements
+ * it forwards. The open lifecycle runs this before any app operation, a relaunch force-stop included.
+ */
+export function requireHarmonyPlainLaunchArgs(launchArgs: readonly string[] | undefined): void {
+  for (const word of launchArgs ?? []) requireHarmonyPlainLaunchWord(word);
+}
+
+function requireHarmonyPlainLaunchWord(word: string): void {
+  if (shellQuoteIfNeeded(word) === word) return;
+  throw new AppError('INVALID_ARGS', `Invalid HarmonyOS launch argument: ${word}`, {
+    reason: HARMONY_LIFECYCLE_REFUSAL_REASONS.launchArgNotPlainWord.reason,
+    launchArg: word,
+    dispatched: 'no',
+    hint: 'Pass each HarmonyOS --launch-args entry as a plain word of letters, digits, and _@%+=:,./-.',
+  });
+}
+
+/** Launches a bundle's ability; each `launchArgs` entry lands as one `aa start` argument, after the open lifecycle checked it. */
 export async function openHarmonyApp(
   device: DeviceInfo,
   bundleId: string,
-  options?: { activity?: string; signal?: AbortSignal },
+  options?: { activity?: string; launchArgs?: string[]; signal?: AbortSignal },
 ): Promise<void> {
   if (options?.activity !== undefined) requireHarmonyAbilityName(options.activity);
   const launchTarget = options?.activity
@@ -243,6 +265,7 @@ export async function openHarmonyApp(
   }
   const words: ShellWord[] = ['aa', 'start', '-a', launchTarget.ability, '-b', bundleId];
   if (launchTarget.module) words.push('-m', launchTarget.module);
+  words.push(...(options?.launchArgs ?? []));
   const result = await runHarmonyShell(device, words, { signal: options?.signal });
   if (!result.stdout.includes('start ability successfully')) {
     if (HARMONY_LOCKED_SCREEN_LAUNCH_ERROR.test(result.stdout)) {

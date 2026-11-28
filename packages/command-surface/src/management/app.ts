@@ -57,7 +57,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'File path on the daemon host for the stdout and stderr of the initial app launch. Local or Limrun iOS simulator direct app launches only; not for URL opens.',
     ),
     launchArgs: stringArrayField(
-      'Launch arguments forwarded verbatim to the platform launch command.',
+      'Launch arguments forwarded verbatim to the platform launch command; on HarmonyOS each must be a plain word of letters, digits, and _@%+=:,./-.',
     ),
     relaunch: booleanField('Force relaunch.'),
     timeoutMs: integerField(

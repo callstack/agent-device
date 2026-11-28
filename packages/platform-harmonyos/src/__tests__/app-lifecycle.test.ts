@@ -115,6 +115,46 @@ test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async
   assert.deepEqual(invalidateHarmonyGestureViewport.mock.calls, [[DEVICE], [DEVICE]]);
 });
 
+test('openHarmonyApp keeps the module flag ahead of launch args on the bm dump route', async () => {
+  mockRunCmd
+    .mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: `com.example.application:\n${JSON.stringify({
+        hapModuleInfos: [{ moduleName: 'entry', mainElementName: 'EntryAbility' }],
+      })}`,
+      stderr: '',
+    })
+    .mockResolvedValueOnce({ exitCode: 0, stdout: 'start ability successfully', stderr: '' });
+
+  await openHarmonyApp(DEVICE, 'com.example.application', {
+    launchArgs: ['--ps', 'configKey', 'debug'],
+  });
+
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.slice(0, 2), [
+    'hdc',
+    ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-n', 'com.example.application'],
+  ]);
+  assert.deepEqual(mockRunCmd.mock.calls[1]?.slice(0, 2), [
+    'hdc',
+    [
+      '-t',
+      'harmony-1',
+      'shell',
+      'aa',
+      'start',
+      '-a',
+      'EntryAbility',
+      '-b',
+      'com.example.application',
+      '-m',
+      'entry',
+      '--ps',
+      'configKey',
+      'debug',
+    ],
+  ]);
+});
+
 test('openHarmonyApp refuses an ability name outside the module grammar before any hdc call', async () => {
   for (const activity of ['Entry$(id)', 'Entry;reboot', 'Entry Ability', '1Entry', 'Entry"x', '']) {
     await assert.rejects(
