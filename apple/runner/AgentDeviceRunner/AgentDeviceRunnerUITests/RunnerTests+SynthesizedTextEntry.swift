@@ -329,6 +329,18 @@ extension RunnerTests {
   ) throws -> SynthesizedReplacementRouteOutcome {
 #if os(iOS)
     NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
+    func replacementResult(failure: TextEntryFailure?) -> SynthesizedReplacementRouteOutcome {
+      .completed(
+        TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: request.text,
+          observedText: nil,
+          textEntryRoute: "synthesized-first-responder-replacement",
+          failure: failure
+        )
+      )
+    }
     let plan = Self.synthesizedTextPlan(
       characterCount: request.text.count,
       delaySeconds: request.delaySeconds,
@@ -341,16 +353,7 @@ extension RunnerTests {
         request.text.count,
         SynthesizedDeliveryBudget.maxTextLength(delaySeconds: request.delaySeconds)
       )
-      return .completed(
-        TextEntryResult(
-          verified: nil,
-          repaired: false,
-          expectedText: request.text,
-          observedText: nil,
-          textEntryRoute: "synthesized-first-responder-replacement",
-          failure: .synthesisBudgetExceeded
-        )
-      )
+      return replacementResult(failure: .synthesisBudgetExceeded)
     }
     var clearOutcome: SynthesizedClearOutcome?
     // A private synthesis channel that is gone mid-plan leaves the command the same
@@ -403,16 +406,7 @@ extension RunnerTests {
         chars: request.text.count,
         mode: .replacement
       )
-      return .completed(
-        TextEntryResult(
-          verified: nil,
-          repaired: false,
-          expectedText: request.text,
-          observedText: nil,
-          textEntryRoute: "synthesized-first-responder-replacement",
-          failure: .clearNotObserved
-        )
-      )
+      return replacementResult(failure: .clearNotObserved)
     }
     if synthesisAvailable.stoppedEarly {
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
@@ -454,16 +448,7 @@ extension RunnerTests {
       chars: request.text.count,
       mode: .replacement
     )
-    return .completed(
-      TextEntryResult(
-        verified: nil,
-        repaired: false,
-        expectedText: request.text,
-        observedText: nil,
-        textEntryRoute: "synthesized-first-responder-replacement",
-        failure: Self.textEntryFailure(forCommitOutcome: commit)
-      )
-    )
+    return replacementResult(failure: Self.textEntryFailure(forCommitOutcome: commit))
 #else
     return .notApplicable
 #endif
