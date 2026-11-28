@@ -330,6 +330,34 @@ export async function releaseRemoteConnectionLease(
 }
 
 /**
+ * Releases the lease of a proxy-front attachment through the hosted daemon that issued it. The
+ * attachment token authorizes the release, so the connection's own daemon settings are not used.
+ */
+export async function releaseProxyFrontConnectionLease(
+  client: AgentDeviceClient,
+  state: RemoteConnectionState,
+  attachment: { daemonBaseUrl: string; daemonAuthToken: string },
+): ReturnType<AgentDeviceClient['leases']['release']> {
+  if (!state.leaseId || isHostAllocatedLease(state)) return { released: false };
+  try {
+    return await client.leases.release({
+      tenant: state.tenant,
+      runId: state.runId,
+      leaseId: state.leaseId,
+      leaseBackend: state.leaseBackend,
+      daemonBaseUrl: attachment.daemonBaseUrl,
+      daemonAuthToken: attachment.daemonAuthToken,
+      daemonTransport: 'http',
+      ...buildRemoteConnectionRequestMetadata(state),
+    });
+  } catch (error) {
+    // An inactive lease is already gone, so the release has nothing left to do.
+    if (isInactiveLeaseError(error)) return { released: false, absent: true };
+    throw error;
+  }
+}
+
+/**
  * The release that ends a lease this command allocated, scoped exactly as the allocation was: the
  * ledger holds it from the moment the provider grants the lease, so any later cleanup — this
  * command's failure path or a binding that refuses the lease — ends the same lease the same way.

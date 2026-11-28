@@ -1,11 +1,13 @@
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { resolveRemoteAuthForCli } from '../auth-session.ts';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   type ConnectionLocation,
+  type ProxyFrontAttachment,
   CLOUD_CONNECTION_REASONS,
   cleanExpiredCloudAttachments,
   cloudConnectionUnavailable,
@@ -19,6 +21,11 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 
 export async function resolveCloudAdmission(options: {
+  /** Ends the lease of an expired proxy front, through the hosted daemon that issued it. */
+  releaseProxyFrontLease?: (
+    state: RemoteConnectionState,
+    attachment: ProxyFrontAttachment,
+  ) => Promise<void>;
   command: string;
   usesSessions: boolean;
   stateDir: string;
@@ -30,10 +37,28 @@ export async function resolveCloudAdmission(options: {
 }) {
   const { command, usesSessions, stateDir, session, binding } = options;
   if (!usesSessions || command === 'auth') return;
-  await cleanExpiredCloudAttachments(stateDir, async (location, generation) => {
-    const { stopHostedLimrunDaemon } = await import('./cloud-limrun.ts');
-    await stopHostedLimrunDaemon(location, generation, options.host);
-  });
+  await cleanExpiredCloudAttachments(
+    stateDir,
+    async (location, generation) => {
+      const { stopHostedLimrunDaemon } = await import('./cloud-limrun.ts');
+      await stopHostedLimrunDaemon(location, generation, options.host);
+    },
+    async (location, attachment) => {
+      const release = options.releaseProxyFrontLease;
+      const state = readRemoteConnectionState(location);
+      if (!release || !state) return;
+      try {
+        await release(state, attachment);
+      } catch (error) {
+        // The attachment is removed either way; the front ends the lease when heartbeats stop.
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'proxy_front_lease_release_failed',
+          data: { session: location.session, message: errorMessage(error) },
+        });
+      }
+    },
+  );
   if (command === 'connect' || command === 'connection' || command === 'disconnect') return;
   if (!binding && isLegacyCloudProfile(stateDir, options.remoteConfig)) {
     throw new AppError(

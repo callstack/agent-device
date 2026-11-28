@@ -1,11 +1,13 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   readRemoteConnectionState,
   removeRemoteConnectionState,
   type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   createCloudSession,
   deleteCloudSession,
@@ -19,6 +21,7 @@ import {
   cloudConnectionUnavailable,
   CLOUD_CONNECTION_REASONS,
   prepareCloudConnection,
+  readProxyFrontAttachment,
   removeCloudAttachment,
   removeCloudConnection,
   writeCloudConnection,
@@ -26,6 +29,7 @@ import {
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
 import { stopHostedLimrunDaemon } from './cloud-limrun.ts';
+import { releaseProxyFrontConnectionLease } from '../commands/connection-lease-transaction.ts';
 import { resolveHostedCloudAccess, type HostedCloudAccess } from './cloud-access.ts';
 import { removeGeneratedRemoteConfigIfUnused } from './generated-config.ts';
 import { stopMetroCleanup } from '../commands/connection-metro-runtime.ts';
@@ -116,14 +120,51 @@ function markCloudConnectionClosing(
   writeCloudConnection(location, record);
 }
 
+export type CloudConnectionRelease = {
+  cloudSessionId?: string;
+  /** Set when a proxy front did not confirm its lease release. Its lease ends by TTL instead. */
+  leaseReleaseError?: string;
+};
+
+/** Returns the release failure to report, if any. A front without state has no lease id to release. */
+async function releaseProxyFrontTeardownLease(
+  client: AgentDeviceClient,
+  location: ConnectionLocation,
+  state: RemoteConnectionState | null,
+): Promise<string | undefined> {
+  const proxyFront = readProxyFrontAttachment(location);
+  if (!proxyFront) return undefined;
+  if (!state) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'proxy_front_attachment_without_state',
+      data: { session: location.session },
+    });
+    return undefined;
+  }
+  try {
+    const release = await releaseProxyFrontConnectionLease(client, state, proxyFront);
+    return state.leaseId && !release.released && !release.absent
+      ? 'the proxy front did not confirm the lease release'
+      : undefined;
+  } catch (error) {
+    return errorMessage(error);
+  }
+}
+
 export async function releaseCloudConnection(options: {
+  client: AgentDeviceClient;
   location: ConnectionLocation;
   state: RemoteConnectionState | null;
   record: CloudConnectionRecord | null;
   host: HostEnvironment;
-}): Promise<string | undefined> {
-  const { location, state, record, host } = options;
+}): Promise<CloudConnectionRelease> {
+  const { client, location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
+  // The lease release needs the attachment token, so it runs before the attachment is removed. A
+  // failed release does not stop teardown: the attachment and its token are removed either way,
+  // and a proxy front ends a lease whose heartbeats stop once its TTL passes.
+  const leaseReleaseError = await releaseProxyFrontTeardownLease(client, location, state);
   markCloudConnectionClosing(location, record);
   removeCloudAttachment(location);
   const daemonGeneration =
@@ -152,7 +193,7 @@ export async function releaseCloudConnection(options: {
   }
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudState(location, state, record);
-  return releasedId ?? record?.id;
+  return { cloudSessionId: releasedId ?? record?.id, leaseReleaseError };
 }
 
 async function releaseBrokerSession(options: {

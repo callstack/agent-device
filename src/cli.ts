@@ -32,7 +32,6 @@ import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
 import {
   applyDefaultPlatformBinding,
   type DevicePin,
-  getCommandSchema,
   isFlagSupportedForCommand,
   readCliBatchStepsJson,
   resolveBindingSettings,
@@ -372,6 +371,7 @@ async function resolveRunContextOrExit(
       configuredPlatform: parsed.flags.platform,
       configuredSession: parsed.flags.session,
     });
+    const { bindRunPlatform } = await import('./cli/run-platform-binding.ts');
     const flags = bindRunPlatform(parsed.flags, base.command, base.host, binding);
     if (base.command === 'connect' && flags.remoteConfig) {
       const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
@@ -404,6 +404,10 @@ async function resolveRunContextOrExit(
     const { resolveCloudAdmission } = await import('./cli/connection/active-connection.ts');
     const cloudSession = defaults?.cloudSession;
     const admitConnection = await resolveCloudAdmission({
+      releaseProxyFrontLease: (state, attachment) =>
+        import('./cli/connection/proxy-front-release.ts').then((module) =>
+          module.releaseExpiredProxyFrontLease(base.host, state, attachment),
+        ),
       command: base.command,
       usesSessions: runsOnRemoteConnection(base.command),
       stateDir: daemonPaths.baseDir,
@@ -453,23 +457,6 @@ async function resolveRunContextOrExit(
   }
 }
 
-function bindRunPlatform(
-  flags: CliFlags,
-  command: string,
-  host: HostEnvironment,
-  binding: ReturnType<typeof resolveBindingSettings>,
-): CliFlags {
-  if (binding.lockPolicy || getCommandSchema(command)?.explicitOnlyFlags?.includes('platform')) {
-    return { ...flags };
-  }
-  return applyDefaultPlatformBinding(flags, {
-    env: host.env,
-    policyOverrides: flags,
-    configuredPlatform: flags.platform,
-    configuredSession: flags.session,
-  });
-}
-
 async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
   const { runReactDevtoolsCommand } = await import('./cli/commands/react-devtools.ts');
   return await runReactDevtoolsCommand(ctx.positionals, {
@@ -495,7 +482,7 @@ async function applySavedCloudAttachment(ctx: CliRunContext): Promise<void> {
   ctx.cloudDaemonStateDir = attachment.daemonStateDir;
   ctx.hostedLease = attachment.hostedLease;
   ctx.effectiveFlags = attachment.flags;
-  if (session.transport === 'agent-device-daemon') {
+  if (session.transport === 'agent-device-daemon' && !attachment.proxyFront) {
     ctx.connectionMetadata = undefined;
     ctx.commandConnection = null;
   }

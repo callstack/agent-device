@@ -1,5 +1,13 @@
+import { randomBytes } from 'node:crypto';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  buildConnectionDeviceKey,
+  resolveConnectionDeviceScope,
+} from '@agent-device/remote/remote-connection-state';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DaemonResponse } from '@agent-device/daemon-client';
 import { vi } from 'vitest';
+import type { CapturedDaemonRequest } from './cli-capture.ts';
 
 export const sessionName = 'cloud-qa';
 export const hostedDevice = {
@@ -60,4 +68,69 @@ export function timeOutNextCreate(
 
 export function postKey(init: RequestInit): string | null {
   return new Headers(init.headers).get('Idempotency-Key');
+}
+
+/** The same hosted daemon, announced as a proxy front that requires a lease before commands. */
+export const proxyFrontDevice = {
+  ...hostedDevice,
+  attach: { ...hostedDevice.attach, leasing: 'proxy-front' as const },
+};
+
+const HOSTED_UDID = '0CD5D6AC-2B14-4C16-8360-8FA5EB7ECD54';
+
+function mintLeaseId(): string {
+  return randomBytes(16).toString('hex');
+}
+
+/**
+ * Answers the proxy lease RPCs a proxy front serves: the allocate names the device, a lease id the
+ * front already holds is reused, and a release ends it. Every other request goes to `inner`.
+ */
+export function withLeaseAllocation(
+  inner?: (req: CapturedDaemonRequest) => Promise<DaemonResponse> | DaemonResponse,
+) {
+  const device = { udid: HOSTED_UDID, model: 'iPhone 16', osVersion: '26.2', physical: false };
+  const deviceKey = buildConnectionDeviceKey(
+    resolveConnectionDeviceScope({
+      id: HOSTED_UDID,
+      platform: 'ios',
+      target: 'mobile',
+      device,
+    } as unknown as DeviceInfo),
+  );
+  const activeLeaseIds = new Set<string>();
+  return async (req: CapturedDaemonRequest): Promise<DaemonResponse> => {
+    if (req.command === 'lease_allocate' || req.command === 'lease_heartbeat') {
+      const { tenantId, runId, clientId } = req.meta ?? {};
+      // The client names the lease when its connection is a proxy; the front mints one otherwise.
+      const leaseId = typeof req.meta?.leaseId === 'string' ? req.meta.leaseId : mintLeaseId();
+      const reused = activeLeaseIds.has(leaseId);
+      activeLeaseIds.add(leaseId);
+      return {
+        ok: true,
+        data: {
+          lease: {
+            leaseId,
+            tenantId,
+            runId,
+            backend: 'ios-instance',
+            leaseProvider: 'proxy',
+            deviceKey,
+            clientId,
+            device,
+          },
+          reused,
+        },
+      };
+    }
+    if (req.command === 'lease_release') {
+      const leaseId = req.meta?.leaseId;
+      if (typeof leaseId !== 'string' || !activeLeaseIds.has(leaseId)) {
+        return { ok: true, data: { released: false, absent: true } };
+      }
+      activeLeaseIds.delete(leaseId);
+      return { ok: true, data: { released: true } };
+    }
+    return inner ? await inner(req) : { ok: true, data: {} };
+  };
 }

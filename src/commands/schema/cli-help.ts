@@ -522,6 +522,7 @@ Cloud session security and recovery:
   Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing.
   Authenticate to the hosted API with agent-device auth login or AGENT_DEVICE_CLOUD_API_KEY.
   After a connect timeout, retry with the same session and allocation options, or run disconnect to end the pending session.
+  A hosted session behind a proxy front leases its device like connect proxy. Run open before commands that use the device: devices runs without it, and any other command before that lease exists fails with run open first. disconnect releases the lease before the session ends. After the session deadline, the next session command or disconnect removes the expired session; if the front cannot be reached then, its lease ends when its heartbeats stop.
 
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:

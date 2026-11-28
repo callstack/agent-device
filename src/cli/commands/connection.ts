@@ -13,7 +13,12 @@ import {
   removeCloudConnection,
   withConnectionLock,
 } from '../connection/cloud-connection-record.ts';
-import { connectCloudSession, releaseCloudConnection } from '../connection/cloud-connect.ts';
+import {
+  connectCloudSession,
+  releaseCloudConnection,
+  type CloudConnectionRelease,
+} from '../connection/cloud-connect.ts';
+import { writeStderr } from '../process-exit.ts';
 import {
   isLegacyCloudProfile,
   requireLegacyTeardownCredential,
@@ -130,7 +135,17 @@ export const connectCommand: ClientCommandHandler = async (input) => {
   );
 };
 
-type CloudConnection = Parameters<typeof releaseCloudConnection>[0];
+type CloudConnection = Omit<Parameters<typeof releaseCloudConnection>[0], 'client'>;
+
+function leaseReleaseWarning(session: string, leaseReleaseError: string): string {
+  return `Warning: the proxy front for session "${session}" did not confirm its lease release (${leaseReleaseError}); the lease ends when its heartbeats stop.`;
+}
+
+function warnLeaseReleaseFailure(release: CloudConnectionRelease, session: string): void {
+  if (release.leaseReleaseError) {
+    writeStderr(`${leaseReleaseWarning(session, release.leaseReleaseError)}\n`);
+  }
+}
 type ConnectionCommandParams = Parameters<ClientCommandHandler>[0];
 
 async function connectDirectProfile(
@@ -151,7 +166,10 @@ async function connectDirectProfile(
   if (!replacingCloud) return await saveConnectProfile(params, stateDir, resolved);
   return await saveConnectProfile(params, stateDir, resolved, {
     beforeCommit: async () => {
-      await releaseCloudConnection(connection);
+      warnLeaseReleaseFailure(
+        await releaseCloudConnection({ ...connection, client: params.client }),
+        connection.location.session,
+      );
     },
     onCommitted: () => removeCloudConnection(connection.location),
   });
@@ -177,7 +195,12 @@ async function connectCloudProfile(
     interactive: true,
     savedOrigin: pending?.origin,
   });
-  if (!pending && (record || state?.cloudSession)) await releaseCloudConnection(connection);
+  if (!pending && (record || state?.cloudSession)) {
+    warnLeaseReleaseFailure(
+      await releaseCloudConnection({ ...connection, client: params.client }),
+      connection.location.session,
+    );
+  }
   const replacingDirect = pending && state && !state.cloudSession;
   const connectParams = replacingDirect
     ? { ...params, flags: { ...params.flags, force: true } }
@@ -558,7 +581,7 @@ export const disconnectCommand: ClientCommandHandler = async ({
           ? current
           : claimDisconnectTarget(claimedConnection, stateDir, flags.session);
       if (record || state?.cloudSession) {
-        return await disconnectCloud({ location, state, record, host }, flags);
+        return await disconnectCloud({ location, state, record, host }, flags, client);
       }
       if (!state) {
         await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
@@ -618,15 +641,31 @@ async function releaseLegacyCloudLease(
   }
 }
 
-async function disconnectCloud(connection: CloudConnection, flags: CliFlags): Promise<boolean> {
+async function disconnectCloud(
+  connection: CloudConnection,
+  flags: CliFlags,
+  client: ConnectionCommandParams['client'],
+): Promise<boolean> {
   if (flags.session === undefined) throw remoteSessionRequiredError(undefined);
-  const id = await releaseCloudConnection(connection);
+  const { cloudSessionId, leaseReleaseError } = await releaseCloudConnection({
+    ...connection,
+    client,
+  });
   removeCloudConnection(connection.location);
   const { session } = connection.location;
   await writeCommandOutput(
     flags,
-    { connected: false, session, cloudSessionId: id, released: true },
-    () => `Ended cloud session "${session}".`,
+    {
+      connected: false,
+      session,
+      cloudSessionId,
+      released: true,
+      ...(leaseReleaseError ? { leaseReleaseError } : {}),
+    },
+    () =>
+      leaseReleaseError
+        ? `Ended cloud session "${session}". ${leaseReleaseWarning(session, leaseReleaseError)}`
+        : `Ended cloud session "${session}".`,
   );
   return true;
 }

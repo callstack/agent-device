@@ -3,6 +3,10 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture } from '../../__tests__/cli-capture.ts';
+import {
+  proxyFrontDevice,
+  withLeaseAllocation,
+} from '../../__tests__/cli-cloud-session.fixtures.ts';
 import { cloudAttachmentPath, readCloudConnection } from './cloud-connection-record.ts';
 
 const sessionName = 'restart-qa';
@@ -34,7 +38,7 @@ function locationOf(stateDir: string) {
 }
 
 // A broker with one hold per idempotency key, as the real create endpoint keeps.
-function stubBroker() {
+function stubBroker(attachment: typeof attach = attach) {
   const byKey = new Map<string, { id: string; running: boolean }>();
   const calls: Array<{ method: string; path: string; key: string | null; body?: unknown }> = [];
   const deadlineAt = new Date(Date.now() + 3600_000).toISOString();
@@ -45,7 +49,7 @@ function stubBroker() {
     platform: 'ios',
     deadlineAt,
     viewerUrl: 'https://viewer.example/session?token=private',
-    attach,
+    attach: attachment,
   });
   const loseNextCreateResponse = { armed: false };
   const fetchMock = vi.fn(async (url: URL, init: RequestInit) => {
@@ -88,6 +92,50 @@ function stubBroker() {
     posts: () => calls.filter((call) => call.method === 'POST'),
     deletes: () => calls.filter((call) => call.method === 'DELETE'),
   };
+}
+
+test('a named restart of a proxy front reuses the first run lease id', async () => {
+  const stateDir = freshStateDir();
+  stubBroker(proxyFrontDevice.attach);
+  // One front serves both CLI invocations, so it still holds the lease the first run allocated.
+  const served = withLeaseAllocation();
+  const answers: Array<{ command: string; data?: unknown }> = [];
+  const front = async (req: Parameters<typeof served>[0]) => {
+    const response = await served(req);
+    answers.push({ command: req.command, data: response.ok ? response.data : undefined });
+    return response;
+  };
+  expect((await runCliCapture(connectArgs, { env: processEnv(stateDir) })).code).toBeNull();
+
+  const first = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+    env: processEnv(stateDir),
+    sendToDaemon: front,
+  });
+  expect(first.code, first.stderr || first.stdout).toBeNull();
+  const leaseId = first.calls.find((call) => call.command === 'lease_allocate')?.meta?.leaseId;
+  expect(leaseId).toEqual(expect.any(String));
+
+  const restarted = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+    env: processEnv(stateDir),
+    sendToDaemon: front,
+  });
+  expect(restarted.code, restarted.stderr || restarted.stdout).toBeNull();
+  const leaseRpcs = restarted.calls.filter((call) => call.command.startsWith('lease_'));
+  expect(leaseRpcs.length).toBeGreaterThan(0);
+  for (const call of leaseRpcs) expect(call.meta?.leaseId).toBe(leaseId);
+  expect(restarted.calls.at(-1)).toMatchObject({ command: 'open', meta: { leaseId } });
+  expect(
+    answers.some((answer) => answer.command.startsWith('lease_') && isReused(answer.data)),
+  ).toBe(true);
+  expect(
+    (await runCliCapture(['disconnect', '--json'], { env: processEnv(stateDir) })).code,
+  ).toBeNull();
+});
+
+function isReused(data: unknown): boolean {
+  return (
+    typeof data === 'object' && data !== null && (data as { reused?: unknown }).reused === true
+  );
 }
 
 afterEach(() => {
