@@ -469,6 +469,7 @@ test('open under the lease keeps the session and app and drops the host paths an
       },
       runtimeHintCount: () => 0,
       sessionReused: false,
+      hidePreviousClaimOwner: true,
     }),
   };
 

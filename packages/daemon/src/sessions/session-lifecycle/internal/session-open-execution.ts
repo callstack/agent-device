@@ -14,14 +14,7 @@ import {
 } from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type {
-  LaunchConfirmationAbsent,
-  LaunchConfirmationOutcome,
-  LaunchConfirmationUnansweredReason,
-  OpenApplicationOutcome,
-  OpenApplicationTiming,
-  OpenForegroundVerification,
-} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -127,20 +120,6 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
 }
 
 /**
- * What the caller's `open` output says when a claim was taken over because its device rebooted. A
- * `macos-app` lease tenant is not told whose claim it was: that belongs to the host (packages/daemon/docs/remote-device-lease-contracts.md).
- */
-function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim, req: DaemonRequest): string {
-  if (req.internal?.admittedLease?.backend === 'macos-app') {
-    return 'Took the device over: it rebooted after its previous claim was taken, so the previous app was already gone.';
-  }
-  return (
-    `Took the device from session "${tookOver.session}" in workspace "${tookOver.workspace}": ` +
-    'that device rebooted after its claim was taken, so its app and runner were already gone.'
-  );
-}
-
-/**
  * After the launch, the app the new hints bind to is the only one that keeps native hints. The
  * open already succeeded, so a failed removal from the replaced app becomes a warning, as close
  * treats its own clear as cleanup.
@@ -162,80 +141,6 @@ async function clearReplacedRuntimeHints(
     });
     return `The earlier runtime hints could not be removed from ${replaced.applied.appId}: ${message}`;
   }
-}
-
-/** What the caller's `open` output says about the launch-confirmation probe on this outcome. */
-function launchConfirmationReport(
-  outcome: OpenApplicationOutcome,
-): LaunchConfirmationOutcome | LaunchConfirmationAbsent {
-  switch (outcome.launchConfirmation) {
-    case 'accepted':
-      return { launchConfirmation: 'accepted' };
-    case 'unanswered':
-      return {
-        launchConfirmation: 'unanswered',
-        launchConfirmationReason: outcome.launchConfirmationReason,
-      };
-    default:
-      // Keeps the typed probe-failure step on the response beside its warning, so a machine
-      // reader tells "no prompt" from "prompt state unreadable" without parsing prose.
-      return outcome.launchConfirmationProbeFailure
-        ? { launchConfirmationProbeFailure: outcome.launchConfirmationProbeFailure }
-        : {};
-  }
-}
-
-/** What the caller's `open` output says when a confirmation probe step failed unverified. */
-function launchConfirmationProbeFailureWarning(): string {
-  return (
-    'agent-device could not read whether iOS is asking to confirm the launch URL, so the launch ' +
-    'URL may still be held by a prompt. Check with `alert get` before retrying.'
-  );
-}
-
-/** What the caller's `open` output says when the launch confirmation it saw stayed unanswered. */
-function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnansweredReason): string {
-  if (reason === 'url-owner-unresolved') {
-    return (
-      'iOS is still holding the launch confirmation and the installed app that owns the launch ' +
-      "URL's scheme could not be resolved, so this launch URL has not reached the app. Answer it " +
-      'with `alert accept`.'
-    );
-  }
-  return (
-    'iOS shows an alert this open did not recognize (alert-unrecognized), so it left the launch ' +
-    'URL unconfirmed. The alert can be the launch confirmation in another language, or an alert ' +
-    "of the app's own, such as a permission prompt. Read it with `alert get`. Answer with " +
-    '`alert accept` only when it is the launch confirmation; answer any other alert on its own ' +
-    'terms.'
-  );
-}
-
-/** What the caller's `open` output says when the probe never read one foreground app. */
-function openProbeUnreadableWarning(): string {
-  return (
-    'The launch dispatch succeeded, but the foreground probe could not read the device within 5s ' +
-    '(open-foreground-probe-unreadable). This claims nothing about whether the app reached the ' +
-    'foreground; check the device connection, then run the open again.'
-  );
-}
-
-/** What the caller's `open` output says when the launched app never held the foreground. */
-function openNotForegroundWarning(verification: OpenForegroundVerification): string {
-  const read =
-    verification.state === 'other-foreground'
-      ? `HarmonyOS read that the foreground app stayed "${verification.foregroundPackage}"`
-      : 'HarmonyOS read no mission in the foreground';
-  return (
-    `The launch dispatch succeeded, but ${read} within 5s of the launch ` +
-    '(open-not-foreground). A lock screen over the device is a typical cause. Unlock the device, ' +
-    'then run the open again.'
-  );
-}
-
-/** What the caller's `open` output says when the app already held the foreground at open time. */
-function alreadyForegroundWarning(): string {
-  return 'App was already foreground; open re-activated it without restarting. Use --relaunch to restart.';
 }
 
 // Default-on for emulators, opt-in via --test-ime on real devices; --no-test-ime forces off.
@@ -287,7 +192,6 @@ export async function renewOpenSessionClaim(
   );
 }
 
-// fallow-ignore-next-line complexity
 export async function completeOpenCommand(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -444,33 +348,11 @@ export async function completeOpenCommand(params: {
     runtimeHintCount: countConfiguredRuntimeHints,
     sessionReused: existingSession !== undefined,
     selection: preparedSelection,
-    launchConfirmation: launchConfirmationReport(outcome),
+    outcome,
+    tookOverDeviceClaim,
+    hidePreviousClaimOwner: req.internal?.admittedLease?.backend === 'macos-app',
+    replacedRuntimeHintsWarning,
   });
-  if (tookOverDeviceClaim) {
-    appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim, req));
-  }
-  if (replacedRuntimeHintsWarning) appendResponseWarning(openResult, replacedRuntimeHintsWarning);
-  if (outcome.launchConfirmation === 'unanswered') {
-    appendResponseWarning(
-      openResult,
-      launchConfirmationUnansweredWarning(outcome.launchConfirmationReason),
-    );
-  }
-  if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
-    appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
-  }
-  const foregroundVerification = outcome.timing.foregroundVerification;
-  if (foregroundVerification) {
-    appendResponseWarning(
-      openResult,
-      foregroundVerification.state === 'probe-failed'
-        ? openProbeUnreadableWarning()
-        : openNotForegroundWarning(foregroundVerification),
-    );
-  }
-  if (outcome.alreadyForeground) {
-    appendResponseWarning(openResult, alreadyForegroundWarning());
-  }
   const nextRef = publishOpenSession({
     req,
     sessionStore,
@@ -482,30 +364,57 @@ export async function completeOpenCommand(params: {
     appName,
     deviceClaim,
   });
-  sessionStore.clearCloseEffectsUnconfirmed(nextRef);
-  const nextSession = sessionStore.requireCurrent(nextRef);
-  markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
-  if (req.runtime !== undefined) {
-    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, sessionAppBundleId);
-  } else if (runtimeHints) {
-    bindStoredRuntimeHintsToApp(sessionStore, sessionName, sessionAppBundleId);
-  }
-  applyOrdinaryScriptRecordingOpenOutcome({
-    session: nextSession,
-    existingSession: existingRef ? nextSession : undefined,
-    saveScriptRequested: Boolean(req.flags?.saveScript),
-    remoteDelivery: remoteScriptOpen(req.meta),
-    responseData: openResult,
-    hostCwd: sessionStore.host.cwd,
-  });
-  sessionStore.recordAction(nextRef, {
-    command: 'open',
+  recordPublishedOpen({
+    req,
+    sessionStore,
+    sessionName,
+    ref: nextRef,
+    appBundleId: sessionAppBundleId,
+    runtimeHints,
+    sessionReused: existingRef !== undefined,
     positionals: openPositionals,
-    flags: req.flags ?? {},
-    runtime: req.runtime !== undefined ? runtimeHints : undefined,
+    postOpenObservation: timing.postOpenObservation,
     result: openResult,
   });
   return { type: 'opened', ref: nextRef, response: { ok: true, data: openResult } };
+}
+
+function recordPublishedOpen(params: {
+  req: DaemonRequest;
+  sessionStore: SessionStore;
+  sessionName: string;
+  ref: SessionRef;
+  appBundleId: string | undefined;
+  runtimeHints: SessionRuntimeHints | undefined;
+  sessionReused: boolean;
+  positionals: string[];
+  postOpenObservation: OpenTiming['postOpenObservation'];
+  result: Record<string, unknown>;
+}): void {
+  const { req, sessionStore, sessionName, ref, appBundleId, runtimeHints, result } = params;
+  sessionStore.clearCloseEffectsUnconfirmed(ref);
+  const session = sessionStore.requireCurrent(ref);
+  markPostOpenStabilization(session, params.postOpenObservation, req.flags);
+  if (req.runtime !== undefined) {
+    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, appBundleId);
+  } else if (runtimeHints) {
+    bindStoredRuntimeHintsToApp(sessionStore, sessionName, appBundleId);
+  }
+  applyOrdinaryScriptRecordingOpenOutcome({
+    session,
+    existingSession: params.sessionReused ? session : undefined,
+    saveScriptRequested: Boolean(req.flags?.saveScript),
+    remoteDelivery: remoteScriptOpen(req.meta),
+    responseData: result,
+    hostCwd: sessionStore.host.cwd,
+  });
+  sessionStore.recordAction(ref, {
+    command: 'open',
+    positionals: params.positionals,
+    flags: req.flags ?? {},
+    runtime: req.runtime !== undefined ? runtimeHints : undefined,
+    result,
+  });
 }
 
 async function prepareOpenDispatchSession(params: {
