@@ -204,7 +204,7 @@ extension RunnerTests {
       var dispatched: ObjCBool = false
       let failure = RunnerSynthesizedGesture.synthesizeGesture(
         withApplication: app,
-        resolvedWindow: planned.context.resolvedWindow,
+        resolvedWindow: planned.context.dispatchWindow,
         interfaceOrientation: planned.orientation,
         pointerSamples: planned.pointerSamples,
         dispatched: &dispatched

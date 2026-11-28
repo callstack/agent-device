@@ -189,7 +189,8 @@ extension RunnerTests {
         }
         var fallback: GestureFallback?
         if command.synthesized == true {
-          switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y) {
+          let context = deferredWindowTapContext(app: activeApp)
+          switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y, context: context) {
           case .performed(let timing):
             rememberTextEntryTap(textInput)
             return gestureResponse(message: "tapped", timing: timing)

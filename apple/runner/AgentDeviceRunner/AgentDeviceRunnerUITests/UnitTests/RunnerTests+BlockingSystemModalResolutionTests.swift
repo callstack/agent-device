@@ -27,6 +27,32 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  /// No SpringBoard modal, the common case, costs one windows query for both modal types.
+  @MainActor
+  func testNoBlockingSystemModalCostsOneWindowsQuery() throws {
+    var queries = 0
+    modalElementsQueryOverrideForTesting = {
+      queries += 1
+      return []
+    }
+    defer { modalElementsQueryOverrideForTesting = nil }
+    XCTAssertNil(try firstBlockingSystemModal(in: springboard))
+    XCTAssertEqual(queries, 1)
+  }
+
+  /// The one windows query matches a window holding an alert or a sheet, and nothing else.
+  func testBlockingSystemModalWindowQueryMatchesAlertsAndSheetsOnly() {
+    let predicate = Self.blockingSystemModalWindowPredicate
+    let matches: (XCUIElement.ElementType) -> Bool = {
+      predicate.evaluate(with: ["elementType": $0.rawValue])
+    }
+    XCTAssertTrue(matches(.alert))
+    XCTAssertTrue(matches(.sheet))
+    for other: XCUIElement.ElementType in [.window, .other, .button, .staticText, .dialog] {
+      XCTAssertFalse(matches(other), "\(other.rawValue)")
+    }
+  }
+
   @MainActor
   func testAlertRequiredQueryFailureNeverReportsAbsence() throws {
     modalElementsQueryOverrideForTesting = {

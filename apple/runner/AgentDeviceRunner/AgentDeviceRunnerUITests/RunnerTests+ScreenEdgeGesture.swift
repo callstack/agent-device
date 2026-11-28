@@ -47,7 +47,7 @@ extension RunnerTests {
     var failure: NSString?
     guard let touch = RunnerSimulatorEdgeTouch.prepare(
       application: app,
-      resolvedWindow: planned.context.resolvedWindow,
+      resolvedWindow: planned.context.dispatchWindow,
       failure: &failure
     ) else {
       return .notSent(message: (failure as String?) ?? "the edge touch could not be prepared", hint: hint)

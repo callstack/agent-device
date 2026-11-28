@@ -49,6 +49,18 @@ struct SynthesizedCoordinateContext {
   /// This call's own windows query answered no window and the sole-screen route supplied the frame,
   /// so XCTest cannot anchor a coordinate on the app's tree.
   var treeUnreadable: Bool = false
+  /// The call skipped the windows query because a sole-screen iPhone's screen is its window, so
+  /// nothing yet proves whether the tree answers. A fallback decision runs the query first.
+  var windowQueryDeferred: Bool = false
+  /// The resolved window fills an iPhone's only screen, so the record routes to that screen.
+  var windowFillsSoleScreen: Bool = false
+
+  /// The window a synthesized record routes by, or nil for the sole-screen route. A window that fills
+  /// an iPhone's only screen is on that screen's display, so the record skips re-reading the
+  /// window's frame and screen at dispatch, two XCTest round trips per gesture.
+  var dispatchWindow: XCUIElement? {
+    windowFillsSoleScreen ? nil : resolvedWindow
+  }
 
   /// The keyboard probe is not free — `visibleKeyboardFrame` resolves `app.keyboards.firstMatch`
   /// with a live AX fetch — so `.unavailable` skips it: there the fetch is known not to answer,
@@ -160,6 +172,7 @@ extension RunnerTests {
       logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
       return .performed(timing: timing)
     }
+    let context = context.map { provingDeferredWindowQuery($0, app: app) }
     let fallbackAllowed = kind.allowsXCTestCoordinateFallback(
       accessibilityHealth: context?.accessibilityHealth ?? mainOwned.accessibilityHealth,
       treeUnreadable: context?.treeUnreadable ?? false

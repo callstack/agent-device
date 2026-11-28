@@ -304,7 +304,8 @@ static NSString * _Nullable RunnerCreateEventRecord(
   if (missing != nil) return missing;
 
   NSUInteger displayID = 0;
-  // A nil window is the caller's sole-screen route: the app tree could not name its window.
+  // A nil window is the caller's sole-screen route: the app tree could not name its window, or the
+  // window it named fills an iPhone's only screen.
   // Re-asking here, at dispatch, is what keeps the record's display the one the app fills now.
   id soleScreen = nil;
   NSString *displayError = resolvedWindow == nil
