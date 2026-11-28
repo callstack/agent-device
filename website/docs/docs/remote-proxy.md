@@ -23,7 +23,7 @@ Read the public HTTPS origin printed by the tunnel. In a second terminal, start 
 agent-device proxy --port 4310 --public-origin https://example.trycloudflare.com
 ```
 
-**`--public-origin` is required when the tunnel terminates TLS**, so app uploads use HTTPS. Use the scheme, host and optional port, without the `/agent-device` path. If the tunnel URL changes, restart the proxy with the new origin.
+**Set `--public-origin` when the tunnel terminates TLS.** It gives direct-upload tickets the tunnel's HTTPS origin. Without it, the client does not use the plain HTTP ticket (unless `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1` is set) and uploads through the HTTPS daemon URL instead. Older clients send that upload over plain HTTP. Use the scheme, host and optional port, without the `/agent-device` path. If the tunnel URL changes, restart the proxy with the new origin.
 
 The command prints the local proxy URL and a `daemon auth token`. Keep the token secret: anyone who has it can control the daemon behind the proxy.
 

@@ -29,6 +29,19 @@ test('an insecure destination is warned about once per origin and not refused', 
   expect(stderr[1]).toContain('http://once.example.test:8888');
 });
 
+test('a stderr that fails does not change the outcome', () => {
+  const listeners = process.stderr.listenerCount('error');
+  let listenersAtWrite = 0;
+  vi.mocked(process.stderr.write).mockImplementation(() => {
+    // A closed reader reports EPIPE as an event; without a listener at write time it is fatal.
+    listenersAtWrite = process.stderr.listenerCount('error');
+    throw new Error('EPIPE');
+  });
+
+  expect(() => admitCredentialDestination('http://broken-stderr.example.test', {})).not.toThrow();
+  expect(listenersAtWrite).toBe(listeners + 1);
+});
+
 test('a secure destination and the override stay silent', () => {
   admitCredentialDestination('https://quiet.example.test', {});
   admitCredentialDestination('http://127.0.0.1:4310', {});

@@ -6,7 +6,8 @@ const warnedOrigins = new Set<string>();
 
 /**
  * The one warn-or-refuse decision for a configured URL that receives a first-party credential.
- * 0.21.x warns on stderr, once per origin per process. 0.22 throws the refusal instead.
+ * 0.21.x warns on stderr, once per origin per loaded package: each published bundle holds its own
+ * copy of this module. 0.22 throws the refusal instead.
  */
 export function admitCredentialDestination(
   url: string,
@@ -18,10 +19,15 @@ export function admitCredentialDestination(
   const origin = String(refusal.details?.origin);
   if (warnedOrigins.has(origin)) return;
   warnedOrigins.add(origin);
-  process.stderr.write(
-    escapeTerminalText(
-      `Warning: credentials for ${origin} are sent in cleartext. agent-device 0.22 will refuse this. ` +
-        `${String(refusal.details?.hint)}\n`,
-    ),
-  );
+  // The warning is optional output and must not change what the command does. A closed stderr
+  // reports EPIPE as an 'error' event, which neither a write callback nor `catch` receives.
+  try {
+    process.stderr.once('error', () => {});
+    process.stderr.write(
+      escapeTerminalText(
+        `Warning: credentials for ${origin} are sent in cleartext. agent-device 0.22 will refuse this. ` +
+          `${String(refusal.details?.hint)}\n`,
+      ),
+    );
+  } catch {}
 }

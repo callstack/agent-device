@@ -88,6 +88,10 @@ query or fragment. With the CLI, run
 tunnel, obtain its public name first, then configure and restart the proxy. This replaces the
 previous first-`X-Forwarded-Proto` behavior.
 
+The setting gives direct-upload tickets an HTTPS origin. Without it, the agent-device client does
+not use a plain HTTP ticket (unless `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1` is set) and uploads
+through the HTTPS daemon URL instead. Older clients send that upload over plain HTTP.
+
 Without a fixed origin, the Node listener uses the actual socket scheme and one validated `Host`
 header. Actual Node HTTPS sockets are supported. A custom direct-daemon HTTP embedding behind TLS
 termination can pass `publicOrigin` to `createDaemonHttpServer`. The built-in daemon listens on
