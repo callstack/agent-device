@@ -636,11 +636,9 @@ function formatUsdMicros(micros: string): string {
 
 export async function deleteCloudSession(access: CloudAccess, id: string): Promise<void> {
   if (!isSessionId(id) || containsCloudCredential(id, [access.accessToken])) throw invalidSession();
-  const response = await fetchCloudApi(new URL(`${SESSIONS_PATH}/${id}`, access.cloudBaseUrl), {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${access.accessToken}` },
-    signal: AbortSignal.timeout(30_000),
-  });
+  const url = new URL(`${SESSIONS_PATH}/${id}`, access.cloudBaseUrl);
+  const response = await fetchCloudRelease(url, access, 'DELETE');
+  if (response.ok) return;
   if (response.status === 404) {
     await response.body?.cancel().catch(() => undefined);
     throw new AppError('COMMAND_FAILED', 'The hosted broker could not find the session.', {
@@ -649,25 +647,45 @@ export async function deleteCloudSession(access: CloudAccess, id: string): Promi
       hint: 'Check the session under the owning account and retry agent-device disconnect.',
     });
   }
-  if (response.status === 409 && (await cloudSessionIsTerminal(access, id))) {
-    await response.body?.cancel().catch(() => undefined);
-    return;
-  }
-  if (!response.ok) {
+  const rejectedMessage = 'Cloud session API could not end the session.';
+  try {
+    if (response.status === 409 && (await cloudSessionIsTerminal(url, access, id))) {
+      await response.body?.cancel().catch(() => undefined);
+      return;
+    }
     await readCloudJsonResponse(response, {
       invalidJsonMessage: 'Cloud session API returned invalid JSON.',
-      rejectedMessage: 'Cloud session API could not end the session.',
+      rejectedMessage,
     });
+  } catch (error) {
+    if (error instanceof AppError) {
+      error.details = { ...error.details, status: response.status };
+      throw error;
+    }
+    throw new AppError('COMMAND_FAILED', rejectedMessage, { status: response.status }, error);
   }
 }
 
-async function cloudSessionIsTerminal(access: CloudAccess, id: string): Promise<boolean> {
-  const response = await fetchCloudApi(new URL(`${SESSIONS_PATH}/${id}`, access.cloudBaseUrl), {
-    method: 'GET',
-    headers: { authorization: `Bearer ${access.accessToken}` },
-    signal: AbortSignal.timeout(30_000),
-  });
-  const body = asCloudRecord(await response.json().catch(() => undefined));
+function fetchCloudRelease(url: URL, access: CloudAccess, method: 'DELETE' | 'GET') {
+  return fetchCloudApi(
+    url,
+    {
+      method,
+      headers: { authorization: `Bearer ${access.accessToken}` },
+      signal: AbortSignal.timeout(30_000),
+    },
+    { preserveCause: true },
+  );
+}
+
+async function cloudSessionIsTerminal(url: URL, access: CloudAccess, id: string): Promise<boolean> {
+  const response = await fetchCloudRelease(url, access, 'GET');
+  const body = asCloudRecord(
+    await response.json().catch((error: unknown) => {
+      if (!(error instanceof SyntaxError)) throw error;
+      return undefined;
+    }),
+  );
   return response.ok && body?.id === id && (body.state === 'failed' || body.state === 'settled');
 }
 

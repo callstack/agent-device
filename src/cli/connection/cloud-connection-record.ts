@@ -354,6 +354,7 @@ export function readCurrentCloudConnection(
   if (
     !record ||
     record.phase !== 'committed' ||
+    record.brokerReleased ||
     record.generation !== generation ||
     state?.session !== location.session ||
     !binding ||
