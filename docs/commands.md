@@ -192,7 +192,7 @@ Aliases: `launch`, `relaunch`.
 | `--no-test-ime` | open/test/replay: keep the real Android keyboard even on emulators (opt out of the headless test IME; on test/replay it applies to the sessions the flow opens) |
 | `--activity <component>` | Android launch activity (package/Class, .Class, or Class) or HarmonyOS ability name; not for URL opens |
 | `--launch-console <path>` | open: capture the initial local or Limrun iOS simulator launch console window to a file |
-| `--launch-args <arg>` | open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args). Linux and macOS reject the flag. |
+| `--launch-args <arg>` | open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args; HarmonyOS aa start args, each a plain word of letters, digits, and _@%+=:,./-). Linux and macOS reject the flag. |
 | `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
 | `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
 | `--relaunch` | open: terminate app process before launching it |
@@ -613,6 +613,7 @@ agent-device capabilities --session checkout --json
 HarmonyOS support uses HDC and ArkUI `uitest`. On API 24 devices it supports lifecycle and HAP deployment, ArkUI snapshot/screenshot and selector reads, one-pointer touch and text actions, keyboard `enter`/`dismiss`, app logs, foreground app state, process RSS samples, and `settings clear-app-state`. Run `agent-device capabilities --platform harmonyos` for the command list of a selected device.
 
 - Gestures use one pointer. Multi-touch gestures and `gesture drag` return `UNSUPPORTED_OPERATION`.
+- `open --launch-args` appends each argument unchanged to the `aa start` command, such as `--launch-args --ps --launch-args configKey --launch-args debug` for a string extra. Each argument must be a plain word of letters, digits, and `_@%+=:,./-`; other arguments return `INVALID_ARGS` before any app operation, such as a relaunch force-stop. Device selection can still query HDC.
 - Physical devices support whole-screen recording with `record start <path> --scope device` or `--scope system`, without `--fps`, `--quality`, or `--hide-touches`. Emulator recording is refused.
 - Not available: orientation, clipboard, alerts, network/audio capture, push and app-event delivery, React Native helpers, and trace capture. `settings` supports only `clear-app-state`. `perf memory sample` reports process RSS only.
 
