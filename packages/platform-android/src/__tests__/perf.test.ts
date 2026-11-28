@@ -335,35 +335,47 @@ test('parseAndroidFramePerfSample treats a reset idle window as an available zer
   assert.equal(sample.source, 'android-gfxinfo-summary');
 });
 
-test('startAndroidSimpleperfProfile resolves pid and starts a bounded simpleperf recorder', async () => {
-  const calls: (readonly string[])[] = [];
-  const adb: AndroidAdbExecutor = async (args) => {
-    calls.push(args);
-    if (args.join('\0') === ['shell', 'pidof', 'com.example.app'].join('\0')) {
-      return { exitCode: 0, stdout: '1234\n', stderr: '' };
-    }
-    if (args[0] === 'shell' && args[1]?.includes("command -v 'simpleperf'")) {
-      return { exitCode: 0, stdout: '/system/bin/simpleperf\n', stderr: '' };
-    }
-    if (args[0] === 'shell' && args[1]?.includes('simpleperf')) {
-      return { exitCode: 0, stdout: '5678\n', stderr: '' };
-    }
-    throw new Error(`Unexpected adb call: ${args.join(' ')}`);
-  };
+test.each([
+  { buildType: 'user', target: /'--app' 'com\.example\.app'/, other: /'-p'/ },
+  { buildType: 'userdebug', target: /'-p' '1234'/, other: /'--app'/ },
+])(
+  'startAndroidSimpleperfProfile starts a bounded simpleperf recorder on a $buildType build',
+  async ({ buildType, target, other }) => {
+    const calls: (readonly string[])[] = [];
+    const adb: AndroidAdbExecutor = async (args) => {
+      calls.push(args);
+      if (args.join('\0') === ['shell', 'pidof', 'com.example.app'].join('\0')) {
+        return { exitCode: 0, stdout: '1234\n', stderr: '' };
+      }
+      if (args.join('\0') === ['shell', 'getprop', 'ro.build.type'].join('\0')) {
+        return { exitCode: 0, stdout: `${buildType}\n`, stderr: '' };
+      }
+      if (args[0] === 'shell' && args[1]?.includes("command -v 'simpleperf'")) {
+        return { exitCode: 0, stdout: '/system/bin/simpleperf\n', stderr: '' };
+      }
+      if (args[0] === 'shell' && args[1]?.includes('simpleperf')) {
+        return { exitCode: 0, stdout: '5678\n', stderr: '' };
+      }
+      throw new Error(`Unexpected adb call: ${args.join(' ')}`);
+    };
 
-  const result = await startAndroidSimpleperfProfile(
-    ANDROID_EMULATOR,
-    'com.example.app',
-    '/tmp/cpu.perf.data',
-    { adb },
-  );
+    const result = await startAndroidSimpleperfProfile(
+      ANDROID_EMULATOR,
+      'com.example.app',
+      '/tmp/cpu.perf.data',
+      { adb },
+    );
 
-  assert.equal(result.kind, 'simpleperf');
-  assert.equal(result.type, 'cpu-profile');
-  assert.equal(result.appPid, '1234');
-  assert.equal(result.profilerPid, '5678');
-  assert.match(calls[2]?.[1] ?? '', /simpleperf.+record.+-p.+1234/);
-});
+    assert.equal(result.kind, 'simpleperf');
+    assert.equal(result.type, 'cpu-profile');
+    assert.equal(result.appPid, '1234');
+    assert.equal(result.profilerPid, '5678');
+    const command = calls.at(-1)?.[1] ?? '';
+    assert.match(command, /simpleperf.+record/);
+    assert.match(command, target);
+    assert.doesNotMatch(command, other);
+  },
+);
 
 test('stopAndroidSimpleperfProfile pulls the profile artifact and reports compact metadata', async () => {
   const tmpDir = await mkdtempForTest('agent-device-simpleperf-test-');

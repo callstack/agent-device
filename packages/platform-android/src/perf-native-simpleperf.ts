@@ -20,6 +20,7 @@ import {
   ANDROID_NATIVE_MAX_SECONDS,
   ANDROID_NATIVE_PROFILE_TIMEOUT_MS,
   ANDROID_NATIVE_REMOTE_DIR,
+  ANDROID_PERF_TIMEOUT_MS,
   ANDROID_SIMPLEPERF_METHOD,
   type AndroidNativePerfOptions,
   type AndroidNativePerfSession,
@@ -130,9 +131,10 @@ async function startAndroidSimpleperfBackgroundTool(
   packageName: string,
 ): Promise<string> {
   try {
+    const target = await resolveSimpleperfRecordTarget(adb, appPid, packageName);
     const result = await runAdbShell(
       adb,
-      [shellFragment(buildSimpleperfStartCommand(appPid, remotePath))],
+      [shellFragment(buildSimpleperfStartCommand(target, remotePath))],
       {
         timeoutMs: ANDROID_NATIVE_PROFILE_TIMEOUT_MS,
       },
@@ -149,15 +151,27 @@ async function startAndroidSimpleperfBackgroundTool(
   }
 }
 
-function buildSimpleperfStartCommand(appPid: string, remotePath: string): string {
+// On `user` builds shell cannot attach to an app pid; `--app` records from the app's own context.
+async function resolveSimpleperfRecordTarget(
+  adb: AndroidAdbExecutor,
+  appPid: string,
+  packageName: string,
+): Promise<string[]> {
+  const result = await runAdbShell(adb, ['getprop', 'ro.build.type'], {
+    allowFailure: true,
+    timeoutMs: ANDROID_PERF_TIMEOUT_MS,
+  });
+  return result.stdout.trim() === 'user' ? ['--app', packageName] : ['-p', appPid];
+}
+
+function buildSimpleperfStartCommand(target: string[], remotePath: string): string {
   return buildBackgroundShellCommand(
     [
       'simpleperf',
       'record',
       '-e',
       'cpu-clock:u',
-      '-p',
-      appPid,
+      ...target,
       '-o',
       remotePath,
       '--duration',
