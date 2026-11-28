@@ -237,7 +237,15 @@ export async function releaseCloudConnection(options: {
   const binding = cloudBindingForTeardown(location, state, record);
   const brokerRelease = await verifyBrokerRelease({ location, record, host, binding });
   const releasedId = await releaseBrokerSession(brokerRelease);
-  if (releasedId && record) record.brokerReleased = true;
+  if (releasedId && record) {
+    record.brokerReleased = true;
+    // Keep proof of the release even if the subsequent closing transition fails.
+    try {
+      writeCloudConnection(location, record);
+    } catch {
+      writeCloudConnection(location, record);
+    }
+  }
   markCloudConnectionClosing(location, record);
   // The lease release needs the attachment token. If it fails, the front ends the lease by TTL.
   const leaseReleaseError = await releaseProxyFrontTeardownLease(client, location, state);
@@ -306,6 +314,8 @@ async function releaseBrokerSession(target: VerifiedBrokerRelease | undefined) {
           : new AppError(
               'COMMAND_FAILED',
               'Could not confirm that the hosted broker ended the session.',
+              undefined,
+              error,
             );
       const retry = failure.details?.hint ?? 'Retry agent-device disconnect.';
       failure.details = { ...failure.details, hint: `${retry} ${CLOUD_CONNECTION_FORGET_HINT}` };
