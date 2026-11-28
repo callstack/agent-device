@@ -14,13 +14,14 @@ ADR 0006 continues to govern checked RPC.
 2. **One admission rule.** Before agent-device sends a first-party credential to a URL that an operator configured, the URL must use `https:` or name a loopback host over `http:`.
    Otherwise the client refuses with `INVALID_ARGS` and `details.reason: 'insecure_credential_transport'`.
    The refusal happens before any network I/O.
-   It names the URL origin and the override, and never the credential.
+   It names the URL origin and the fix, and never the credential.
 3. **Loopback** is `localhost` or an IPv4, IPv6, or IPv4-mapped loopback literal, after WHATWG URL parsing.
    The rule never resolves names and never infers encryption from a private range, a DNS suffix, or an interface.
 4. **One operator override.** `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1` in the sending process's environment admits plain HTTP to any host.
    It relaxes only this rule.
    It never relaxes URL validation, the remote authentication requirement, cloud issuer binding, or checked RPC.
    Only the operator's environment sets it. A fetched profile, ticket, bridge message, or remote request cannot set it.
+   `@agent-device/proxy` has no override: its own upstream is the local daemon, and an embedder routes elsewhere with HTTPS or its own `upstreamFetch`.
 5. **Admission points.** The rule applies at these destinations:
    - the remote daemon base URL, from any source (flag, environment, SDK, connection profile, cloud profile);
    - the cloud base URL, including the issuer stored at login when a refresh uses it;
@@ -61,7 +62,7 @@ The proxy's other upstream requests use `fetch` defaults. Their upstream is the 
 ## Consequences
 
 - An existing LAN `http://` deployment must move to HTTPS or `ssh -L`, or set the override.
-- An `@agent-device/proxy` embedder with a non-loopback HTTP upstream and the default transport must set the override or supply `upstreamFetch`.
+- An `@agent-device/proxy` embedder with a non-loopback HTTP upstream and the default transport must use HTTPS or supply `upstreamFetch`.
 - A misconfigured `--public-origin` costs an extra transfer through the daemon instead of a cleartext credential.
 - The operator keeps these duties, which the supported setup already meets:
   keep the daemon token secret, set `--public-origin` behind a TLS terminator, keep the onward hop from a TLS terminator on loopback, and bypass any environment HTTP proxy for every loopback host they use (for example `NO_PROXY=localhost,127.0.0.1,::1`).
