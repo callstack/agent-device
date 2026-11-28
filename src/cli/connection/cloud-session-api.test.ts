@@ -65,6 +65,17 @@ test.each([
   },
 );
 
+test('classifies a generic DELETE 404 without querying the session', async () => {
+  const fetchMock = vi.fn(async () => new Response('<h1>Not Found</h1>', { status: 404 }));
+  vi.stubGlobal('fetch', fetchMock);
+
+  await expect(deleteCloudSession(access, response.id)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'cloud_session_not_found', status: 404 },
+  });
+  expect(fetchMock).toHaveBeenCalledOnce();
+});
+
 test('POSTs the requested limits with the cloud key and delivers the scoped attachment', async () => {
   const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) =>
     Response.json(response, { status: 201 }),

@@ -6,7 +6,7 @@ import {
   type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { settleWithin } from '@agent-device/host-kit/settle-within';
 import {
@@ -236,34 +236,15 @@ export async function releaseCloudConnection(options: {
   const { client, location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
   const brokerRelease = await verifyBrokerRelease({ location, record, host, binding });
-  // The lease release needs the attachment token, so it runs before the attachment is removed. A
-  // failed release does not stop teardown: the attachment and its token are removed either way,
-  // and a proxy front ends a lease whose heartbeats stop once its TTL passes.
-  const leaseReleaseError = await releaseProxyFrontTeardownLease(client, location, state);
+  const releasedId = await releaseBrokerSession(brokerRelease);
+  if (releasedId && record) record.brokerReleased = true;
   markCloudConnectionClosing(location, record);
+  // The lease release needs the attachment token. If it fails, the front ends the lease by TTL.
+  const leaseReleaseError = await releaseProxyFrontTeardownLease(client, location, state);
   removeCloudAttachment(location);
   const daemonGeneration =
     binding?.transport === 'agent-device-daemon' ? undefined : (record ?? binding)?.generation;
-  const retirementFailure = await stopHostedLimrunDaemon(location, daemonGeneration, host).then(
-    () => undefined,
-    (error: unknown) => error,
-  );
-  const releasedId = await releaseBrokerSession(brokerRelease).catch((error: unknown) => {
-    if (!retirementFailure) throw error;
-    const retirement = asAppError(retirementFailure, 'COMMAND_FAILED');
-    const broker = asAppError(error, 'COMMAND_FAILED');
-    throw new AppError(retirement.code, retirement.message, {
-      ...retirement.details,
-      brokerReleaseReason: broker.details?.reason ?? broker.code,
-    });
-  });
-  if (retirementFailure) {
-    if (releasedId && record) {
-      record.brokerReleased = true;
-      writeCloudConnection(location, record);
-    }
-    throw retirementFailure;
-  }
+  await stopHostedLimrunDaemon(location, daemonGeneration, host);
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudState(location, state, record);
   return { cloudSessionId: releasedId ?? record?.id, leaseReleaseError };
@@ -315,7 +296,22 @@ async function verifyBrokerRelease(options: {
 }
 
 async function releaseBrokerSession(target: VerifiedBrokerRelease | undefined) {
-  if (target?.active) await deleteCloudSession(target.access, target.id);
+  if (target?.active) {
+    try {
+      await deleteCloudSession(target.access, target.id);
+    } catch (error) {
+      const failure =
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'COMMAND_FAILED',
+              'Could not confirm that the hosted broker ended the session.',
+            );
+      const retry = failure.details?.hint ?? 'Retry agent-device disconnect.';
+      failure.details = { ...failure.details, hint: `${retry} ${CLOUD_CONNECTION_FORGET_HINT}` };
+      throw failure;
+    }
+  }
   return target?.id;
 }
 
