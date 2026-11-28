@@ -71,7 +71,7 @@ test('connect cloud never sends its bearer token to a plain http cloud off loopb
   }
 });
 
-test('a redirected profile request reaches another origin without the bearer token', async () => {
+test('a redirected profile request fails without reaching the other origin', async () => {
   const other = await serveCloud((res) => res.writeHead(401).end('{}'));
   const cloud = await serveCloud((res) =>
     res.writeHead(307, { location: `${other.origin}/profile` }).end(),
@@ -85,5 +85,5 @@ test('a redirected profile request reaches another origin without the bearer tok
   await assert.rejects(async () => await connectCloud(stateDir));
 
   assert.deepEqual(cloud.received, ['Bearer adc_agent_cloud']);
-  assert.deepEqual(other.received, [undefined]);
+  assert.deepEqual(other.received, []);
 });
