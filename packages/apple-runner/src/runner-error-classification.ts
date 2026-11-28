@@ -736,7 +736,9 @@ export function isStructuredRunnerFailure(error: unknown): error is AppError {
 }
 
 /**
- * True when usbmuxd answered and the device is simply not attached by cable.
+ * True when usbmuxd answered and the device is simply not attached by cable, or was listed only
+ * through its Wi-Fi sync entry — which the runner refuses, so the usbmux transport does not dial it
+ * for a device that owns a CoreDevice tunnel (#4107).
  * A CoreDevice-backed device falls back to its network tunnel; an XCTest-backed
  * device has no second route, so this verdict is terminal rather than retryable.
  *

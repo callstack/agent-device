@@ -2840,6 +2840,7 @@ Provider plugins add device providers that agent-device does not bundle. Install
 For CLI-discoverable setup guidance, run `agent-device help physical-device`.
 
 - Older devices found only through `xctrace` use the XCTest backend. Keep them connected by cable.
+- CoreDevice-backed devices use USB (usbmux) when connected by cable and the CoreDevice tunnel over Wi-Fi. agent-device selects the tunnel even when Finder's "Show this iPhone when on Wi-Fi" is enabled.
 - XCTest-backed devices support open, close, interactions, snapshots, and screenshots. App inventory, install, logs, performance sampling, recording, deep links, and launch arguments need CoreDevice.
 - For Xcode, pairing, Developer Mode, and Apple runner signing, see [Installation](/docs/installation#ios-physical-device-prerequisites).
 

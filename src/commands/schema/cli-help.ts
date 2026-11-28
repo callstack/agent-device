@@ -412,6 +412,9 @@ Android physical-device prerequisites:
   Enable USB debugging and confirm the device appears in agent-device devices --platform android.
   Android does not need the iOS runner signing setup. For React Native/Expo Metro reachability, read help react-native.
 
+iOS runner transport:
+  CoreDevice-backed devices use USB (usbmux) when connected by cable and the CoreDevice tunnel over Wi-Fi. agent-device selects the tunnel even when Finder's "Show this iPhone when on Wi-Fi" is enabled.
+
 Runner and daemon lifecycle (applies to simulators too):
   open without --relaunch is idempotent-foreground for an already-running app, except native macOS app opens keep it in the background (help macos); neither restarts the process. open --relaunch restarts the app; on iOS simulators this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch.
   If a relaunch leaves an existing session's device effects unconfirmed, close can release its claim; idle shutdown retries cleanup and leaves an unconfirmed claim stale, while embedded runtimes and AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS=0 require close because they do not shut down for idleness.

@@ -3,6 +3,7 @@ import type { Server } from 'node:net';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { createUsbmuxRunnerTransport } from '../runner-usbmux.ts';
+import { IOS_DEVICE } from './device-fixtures.ts';
 import {
   buildPacket,
   cleanupUsbmuxFixtures,
@@ -13,6 +14,7 @@ import {
 } from './runner-usbmux-fixtures.ts';
 
 const DEVICE_UDID = '00008020-001C2D2234567890';
+const DEVICE: typeof IOS_DEVICE = { ...IOS_DEVICE, id: DEVICE_UDID };
 const RUNNER_PORT = 51_234;
 const RUNNER_ENDPOINT = { port: RUNNER_PORT, token: 'runner-token-fixture' };
 const openServers: Server[] = [];
@@ -126,7 +128,7 @@ async function post(
   signal?: AbortSignal,
 ): Promise<Response> {
   return await createUsbmuxRunnerTransport(socketPath).postCommand(
-    DEVICE_UDID,
+    DEVICE,
     RUNNER_ENDPOINT,
     { command: 'uptime' },
     timeoutMs,
