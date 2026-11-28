@@ -325,6 +325,38 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
   }
 });
 
+test('restart recovers a lease in both records once using the expired record', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const live = new LeaseRegistry().allocateLease({
+    tenantId: 't',
+    runId: 'run-1',
+    leaseProvider: 'revyl',
+  });
+  const expired = { ...live, expiresAt: live.expiresAt + 1_000 };
+  const journalPath = path.join(stateDir, 'live-provider-leases.json');
+  const expiredPath = path.join(stateDir, 'expired-provider-leases.json');
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const restartedDaemon = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease,
+    stateDir,
+    recoverableProviderIds: ['revyl'],
+  });
+
+  try {
+    fs.writeFileSync(journalPath, JSON.stringify({ version: 1, leases: [live] }));
+    fs.writeFileSync(expiredPath, JSON.stringify({ version: 1, leases: [expired] }));
+
+    await restartedDaemon.recoverInherited();
+
+    expect(recoverExpiredLease.mock.calls).toEqual([[expired]]);
+    expect(fs.existsSync(journalPath)).toBe(false);
+    expect(fs.existsSync(expiredPath)).toBe(false);
+  } finally {
+    restartedDaemon.shutdown();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('a provider lease released before the daemon stops is not recovered again', async () => {
   const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
   const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
