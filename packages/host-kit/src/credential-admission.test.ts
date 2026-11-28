@@ -5,9 +5,10 @@ let stderr: string[] = [];
 
 beforeEach(() => {
   stderr = [];
-  vi.spyOn(process.stderr, 'write').mockImplementation((chunk, callback) => {
+  vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown, ...rest: unknown[]) => {
     stderr.push(String(chunk));
-    if (typeof callback === 'function') callback();
+    const callback = rest.find((arg): arg is () => void => typeof arg === 'function');
+    callback?.();
     return true;
   });
 });
