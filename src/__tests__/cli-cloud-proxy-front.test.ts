@@ -78,6 +78,31 @@ test('a proxy-front command after open carries the lease scope the front refuses
   ).toBeNull();
 });
 
+test('disconnect after close ends cleanly: the lease close ended is not released again', async () => {
+  const env = cloudEnv();
+  stubCloudApi(proxyFrontDevice);
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const served = withLeaseAllocation();
+  expect(
+    (
+      await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+        env,
+        sendToDaemon: served,
+      })
+    ).code,
+  ).toBeNull();
+  const closed = await runCliCapture(['close', '--json'], { env, sendToDaemon: served });
+  expect(closed.code, closed.stderr || closed.stdout).toBeNull();
+
+  const disconnected = await runCliCapture(['disconnect', '--json'], {
+    env,
+    sendToDaemon: served,
+  });
+  expect(disconnected.code, disconnected.stderr || disconnected.stdout).toBeNull();
+  expect(JSON.parse(disconnected.stdout).data.leaseReleaseError).toBeUndefined();
+  expect(disconnected.calls.map(({ command }) => command)).not.toContain('lease_release');
+});
+
 test('a proxy-front attachment refuses a command before open, and a daemon attachment does not', async () => {
   const proxyEnv = cloudEnv();
   stubCloudApi(proxyFrontDevice);

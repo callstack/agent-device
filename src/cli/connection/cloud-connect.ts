@@ -3,6 +3,7 @@ import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   readRemoteConnectionState,
   removeRemoteConnectionState,
+  writeRemoteConnectionState,
   type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
@@ -24,6 +25,7 @@ import {
   readProxyFrontAttachment,
   removeCloudAttachment,
   removeCloudConnection,
+  tryWithConnectionLock,
   writeCloudConnection,
   type CloudConnectionRecord,
   type ConnectionLocation,
@@ -125,6 +127,30 @@ export type CloudConnectionRelease = {
   /** Set when a proxy front did not confirm its lease release. Its lease ends by TTL instead. */
   leaseReleaseError?: string;
 };
+
+/**
+ * Records that a `close` on a proxy front ended the stored lease. The front has already ended it,
+ * so the next `disconnect` has nothing to release and sends no release.
+ */
+export async function recordProxyFrontCloseEndedLease(
+  location: ConnectionLocation,
+  cloudGeneration: string,
+): Promise<void> {
+  if (!readProxyFrontAttachment(location)) return;
+  await tryWithConnectionLock(location, () => {
+    const state = readRemoteConnectionState(location);
+    if (!state?.leaseId || state.cloudSession?.generation !== cloudGeneration) return;
+    writeRemoteConnectionState({
+      stateDir: location.stateDir,
+      state: {
+        ...state,
+        leaseId: undefined,
+        endedLeaseId: state.leaseId,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  });
+}
 
 /** Returns the release failure to report, if any. A front without state has no lease id to release. */
 async function releaseProxyFrontTeardownLease(

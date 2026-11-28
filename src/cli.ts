@@ -236,6 +236,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           replayTestReporterRuntime,
           commandProgress,
           cloudGeneration: ctx.cloudSession?.generation,
+          cloudLocation: { stateDir: ctx.daemonPaths.baseDir, session: ctx.sessionName },
           transport,
         });
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
@@ -866,11 +867,23 @@ type CliDaemonTransportSetup = {
   commandProgress: CommandProgressState;
   transport: CliDaemonTransport;
   cloudGeneration?: string;
+  cloudLocation?: { stateDir: string; session: string };
 };
 
 function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
-  const { flags, host, cloudGeneration } = options;
+  const { flags, host, cloudGeneration, cloudLocation } = options;
   const send = createCliProgressTransport(options);
+  if (options.command === 'close' && cloudGeneration !== undefined && cloudLocation) {
+    return async (req, context) => {
+      const response = await send(req, context);
+      if (response.ok) {
+        const { recordProxyFrontCloseEndedLease } =
+          await import('./cli/connection/cloud-connect.ts');
+        await recordProxyFrontCloseEndedLease(cloudLocation, cloudGeneration);
+      }
+      return response;
+    };
+  }
   if (!flags.remoteConfig || options.command === 'connect' || options.command === 'disconnect')
     return send;
   return async (req, context) => {

@@ -108,13 +108,20 @@ export function withLeaseAllocation(
     } as unknown as DeviceInfo),
   );
   const activeLeases = new Map<string, ActiveLease>();
+  // Leases that a `close` ended. The real front answers a release of one with `released: false`
+  // and no `absent`, because its end is still pending.
+  const endedByClose = new Set<string>();
   return async (req: CapturedDaemonRequest): Promise<DaemonResponse> => {
     if (req.command === 'lease_allocate' || req.command === 'lease_heartbeat') {
       return allocateOrRenew(req, activeLeases, device, deviceKey);
     }
-    if (req.command === 'lease_release') return releaseLease(req, activeLeases);
+    if (req.command === 'lease_release') return releaseLease(req, activeLeases, endedByClose);
     const refusal = refuseWithoutLeaseMeta(req, activeLeases);
     if (refusal) return refusal;
+    if (req.command === 'close' && typeof req.meta?.leaseId === 'string') {
+      endedByClose.add(req.meta.leaseId);
+      activeLeases.delete(req.meta.leaseId);
+    }
     return inner ? await inner(req) : { ok: true, data: {} };
   };
 }
@@ -158,9 +165,13 @@ function allocateOrRenew(
 function releaseLease(
   req: CapturedDaemonRequest,
   activeLeases: Map<string, ActiveLease>,
+  endedByClose: ReadonlySet<string>,
 ): DaemonResponse {
   const leaseId = req.meta?.leaseId;
   const held = typeof leaseId === 'string' ? activeLeases.get(leaseId) : undefined;
+  if (typeof leaseId === 'string' && endedByClose.has(leaseId)) {
+    return { ok: true, data: { released: false } };
+  }
   if (typeof leaseId !== 'string' || held === undefined) {
     return { ok: true, data: { released: false, absent: true } };
   }
