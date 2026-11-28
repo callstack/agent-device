@@ -28,6 +28,7 @@ export async function resolveCloudAdmission(options: {
   ) => Promise<void>;
   command: string;
   usesSessions: boolean;
+  forget?: boolean;
   stateDir: string;
   host: HostEnvironment;
   session: string | undefined;
@@ -36,7 +37,7 @@ export async function resolveCloudAdmission(options: {
   remoteRoute?: boolean;
 }) {
   const { command, usesSessions, stateDir, session, binding } = options;
-  if (!usesSessions || command === 'auth') return;
+  if (!usesSessions || command === 'auth' || (command === 'disconnect' && options.forget)) return;
   await cleanExpiredCloudAttachments(
     stateDir,
     async (location, generation) => {
