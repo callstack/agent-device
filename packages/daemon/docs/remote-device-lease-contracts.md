@@ -107,9 +107,9 @@ These commands keep the heartbeat:
 - A command that prepares a Metro runtime, which registers remote work under the lease before the command.
 - A command whose daemon URL, tenant, run, lease backend, or device key differs from the saved connection, or that has no saved connection.
 - A command whose stored lease id is not canonical lower-case hex.
-- A by-spec `open` that allocates fresh: the connection names no device, or the request names a device spec or a device selector.
+- A by-spec allocation (`open`, `install`, `reinstall`, `uninstall`, or `install-from-source` through a proxy) that allocates fresh: the connection names no device, or the request names a device spec or a device selector.
 
-A by-spec `open` that names no spec or selector reuses the stored device without a heartbeat.
+A by-spec allocation that names no spec or selector reuses the stored device without a heartbeat.
 
 ## Admitted request work
 
