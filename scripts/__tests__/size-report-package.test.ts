@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { formatMarkdown } from '../size-report.mjs';
+import { planPluginSizes } from '../size-report-plugin-plan.mjs';
 import {
   assertBundledLicenseNotices,
   assertPublishPackageContents,
@@ -659,82 +660,78 @@ test('Markdown compares measured plugins and labels added and removed packages',
   );
   assert.match(markdown, /\| `@agent-device\/new` \| 60 B \(new\)/);
   assert.match(markdown, /\| `@agent-device\/old` \| 60 B → removed/);
+  assert.doesNotMatch(formatMarkdown(core, { ...core, plugins: [plugin] }), /Affected plugins/);
+  assert.match(
+    formatMarkdown({ ...core, plugins: [] }, { ...core, plugins: [plugin] }),
+    /\| `@agent-device\/one` \| 60 B → removed/,
+  );
 });
 
-test('plugin plan follows changed build inputs on both compared revisions', async () => {
-  const cwd = await mkdtempForTest('size-plugin-plan-');
-  const git = async (...args: string[]) =>
-    (await execFileAsync('git', args, { cwd })).stdout.trim();
-  const write = async (file: string, text: string) => {
-    await mkdir(dirname(join(cwd, file)), { recursive: true });
-    await writeFile(join(cwd, file), text);
-  };
-  const commit = async (subject: string) => {
-    await git('add', '-A');
-    await git(
-      '-c',
-      'user.name=Fixture',
-      '-c',
-      'user.email=fixture@example.test',
-      'commit',
-      '-qm',
-      subject,
-    );
-    return await git('rev-parse', 'HEAD');
-  };
-  const plan = async (base: string, head: string) => {
-    const output = join(cwd, '.git', 'plan');
-    await execFileAsync(
-      process.execPath,
-      [join(import.meta.dirname, '../size-report-plugin-plan.mjs'), base, head, output],
-      { cwd },
-    );
-    const readSide = async (side: string) =>
-      (JSON.parse(await readFile(join(output, `${side}.json`), 'utf8')) as { name: string }[]).map(
-        ({ name }) => name,
-      );
-    return { base: await readSide('base'), head: await readSide('head') };
-  };
-  const one = '@agent-device/one';
-  const two = '@agent-device/two';
-  const dep = '@agent-device/build-piece';
-  await git('init', '-q');
-  await write(
-    'packages/one/package.json',
-    JSON.stringify({ name: one, 'agent-device': {}, devDependencies: { [dep]: 'workspace:*' } }),
+const one = {
+  directory: 'packages/one',
+  manifest: {
+    name: '@agent-device/one',
+    'agent-device': {},
+    devDependencies: { '@agent-device/build-piece': 'workspace:*' },
+  },
+};
+const two = {
+  directory: 'packages/two',
+  manifest: { name: '@agent-device/two', agentDevicePlugin: {} },
+};
+const buildPiece = {
+  directory: 'packages/build-piece',
+  manifest: { name: '@agent-device/build-piece', private: true },
+};
+const workspace = [one, two, buildPiece];
+const oneEntry = { directory: one.directory, name: one.manifest.name };
+const twoEntry = { directory: two.directory, name: two.manifest.name };
+
+test('plugin plan follows changed build inputs without selecting unrelated plugins', () => {
+  assert.deepEqual(
+    planPluginSizes(workspace, workspace, ['src/cli.ts', 'packages/one/src/only.test.ts']),
+    { base: [], head: [] },
   );
-  await write('packages/two/package.json', JSON.stringify({ name: two, agentDevicePlugin: {} }));
-  await write('packages/build-piece/package.json', JSON.stringify({ name: dep, private: true }));
-  await write('pnpm-lock.yaml', 'importers:\n  packages/one: {}\n  packages/two: {}\n');
-  const base = await commit('base');
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['packages/build-piece/src/index.ts']), {
+    base: [oneEntry],
+    head: [oneEntry],
+  });
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['bundler/two/build.mjs']), {
+    base: [twoEntry],
+    head: [twoEntry],
+  });
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['tsconfig.lib.json']), {
+    base: [oneEntry, twoEntry],
+    head: [oneEntry, twoEntry],
+  });
+});
 
-  await write('src/cli.ts', 'export {};');
-  await write('packages/one/src/only.test.ts', 'export {};');
-  const unrelated = await commit('unrelated CLI and plugin test');
-  assert.deepEqual(await plan(base, unrelated), { base: [], head: [] });
+test('plugin plan follows a changed lockfile importer', () => {
+  const base = { importers: { 'packages/one': {}, 'packages/two': {} } };
+  const head = {
+    importers: {
+      ...base.importers,
+      'packages/two': {
+        dependencies: { 'external-lib': { specifier: '^1.0.0', version: '1.0.0' } },
+      },
+    },
+  };
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['pnpm-lock.yaml'], { base, head }), {
+    base: [twoEntry],
+    head: [twoEntry],
+  });
+});
 
-  await write('packages/build-piece/src/index.ts', 'export {};');
-  const dependency = await commit('plugin dependency');
-  assert.deepEqual(await plan(unrelated, dependency), { base: [one], head: [one] });
-
-  await write(
-    'pnpm-lock.yaml',
-    'importers:\n  packages/one: {}\n  packages/two:\n    dependencies:\n      external-lib: {specifier: "^1.0.0", version: 1.0.0}\n',
-  );
-  const lock = await commit('one package changes its external dependency');
-  assert.deepEqual(await plan(dependency, lock), { base: [two], head: [two] });
-
-  await write('bundler/two/build.mjs', 'export {};');
-  const bundler = await commit('one plugin changes its build');
-  assert.deepEqual(await plan(lock, bundler), { base: [two], head: [two] });
-
-  await write('tsconfig.lib.json', '{}');
-  const shared = await commit('shared TypeScript configuration');
-  assert.deepEqual(await plan(bundler, shared), { base: [one, two], head: [one, two] });
-
-  await rm(join(cwd, 'packages/one'), { recursive: true });
-  const removed = await commit('remove plugin');
-  assert.deepEqual(await plan(shared, removed), { base: [one], head: [] });
+test('plugin plans measure added and removed plugins only where they exist', () => {
+  const other = [two, buildPiece];
+  assert.deepEqual(planPluginSizes(other, workspace, ['packages/one/package.json']), {
+    base: [],
+    head: [oneEntry],
+  });
+  assert.deepEqual(planPluginSizes(workspace, other, ['packages/one/package.json']), {
+    base: [oneEntry],
+    head: [],
+  });
 });
 
 test('base measurement uses the measured revision package asset policy', async () => {

@@ -207,6 +207,8 @@ function walk(root) {
 }
 
 function formatMarkdown(report, baseReport) {
+  const pluginSizes =
+    report.plugins === undefined ? '' : formatPluginSizes(report.plugins, baseReport?.plugins);
   const rows = [
     metricRow(
       'Installed (including dependencies)',
@@ -227,7 +229,7 @@ function formatMarkdown(report, baseReport) {
 |---|---:|---:|---:|
 ${rows.join('\n')}
 
-${formatStartupBenchmarks(report.startup, baseReport?.startup)}${formatPluginSizes(report.plugins, baseReport?.plugins)}`;
+${formatStartupBenchmarks(report.startup, baseReport?.startup)}${pluginSizes}`;
 }
 
 function metricRow(label, base, current) {

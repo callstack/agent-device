@@ -118,7 +118,10 @@ function affectedPlugins(workspace, files, lock, knownBuildOwners) {
   });
 }
 
-function plan(base, head, files, lock) {
+export function planPluginSizes(base, head, files, lockfiles) {
+  const lock = lockfiles
+    ? changedLockInputs(lockfiles.base, lockfiles.head)
+    : { shared: false, directories: new Set() };
   const knownBuildOwners = new Set(
     [...base, ...head].filter(isPublishedPlugin).map((pkg) => pkg.manifest.name.split('/').at(-1)),
   );
@@ -145,13 +148,13 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
     throw new Error('Usage: node scripts/size-report-plugin-plan.mjs <base> <head> <output-dir>');
   }
   const files = git('diff', '--name-only', '--no-renames', '-z', base, head, '--').split('\0');
-  const lock = files.includes('pnpm-lock.yaml')
-    ? changedLockInputs(
-        parse(git('show', `${base}:pnpm-lock.yaml`)),
-        parse(git('show', `${head}:pnpm-lock.yaml`)),
-      )
-    : { shared: false, directories: new Set() };
-  const plugins = plan(workspaceAt(base), workspaceAt(head), files, lock);
+  const lockfiles = files.includes('pnpm-lock.yaml')
+    ? {
+        base: parse(git('show', `${base}:pnpm-lock.yaml`)),
+        head: parse(git('show', `${head}:pnpm-lock.yaml`)),
+      }
+    : undefined;
+  const plugins = planPluginSizes(workspaceAt(base), workspaceAt(head), files, lockfiles);
   fs.mkdirSync(output, { recursive: true });
   for (const [side, entries] of Object.entries(plugins)) {
     fs.writeFileSync(path.join(output, `${side}.json`), JSON.stringify(entries));

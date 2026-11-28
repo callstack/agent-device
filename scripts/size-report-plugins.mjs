@@ -23,27 +23,18 @@ function measurePlugin(root, { name, directory }) {
     const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
     if (manifest.name !== name) throw new Error(`Expected to pack ${name}, got ${manifest.name}.`);
     const unpackedBytes = measureDirectory(packageDir).packageBytes;
-    const hasDependencies =
-      Object.keys({
-        ...manifest.dependencies,
-        ...manifest.optionalDependencies,
-        ...manifest.peerDependencies,
-      }).length > 0;
     return {
       name,
       unpackedBytes,
       tarballBytes: fs.statSync(tarball).size,
-      installedBytes:
-        hasDependencies || manifest.bin
-          ? measureCleanInstalledPackage(tarball, name).totalBytes
-          : unpackedBytes,
+      installedBytes: measureCleanInstalledPackage(tarball, name).totalBytes,
     };
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 }
 
-export function formatPluginSizes(plugins = [], basePlugins = []) {
+export function formatPluginSizes(plugins, basePlugins = []) {
   const current = new Map(plugins.map((plugin) => [plugin.name, plugin]));
   const base = new Map(basePlugins.map((plugin) => [plugin.name, plugin]));
   const names = [...new Set([...current.keys(), ...base.keys()])].sort();
