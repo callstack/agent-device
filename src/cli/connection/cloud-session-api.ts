@@ -49,7 +49,7 @@ const CLOUD_SESSION_API_REASONS = {
   sessionNotFound: { reason: 'cloud_session_not_found', commands: ['disconnect', 'connect'] },
 } as const satisfies ReasonTable<'cloud sessions'>;
 
-type CloudAccess = { cloudBaseUrl: string; accessToken: string };
+type CloudAccess = { cloudBaseUrl: string; accessToken: string; credentials?: ReadonlySet<string> };
 
 export type CreatedCloudSession = {
   binding: Omit<CloudSessionBinding, 'generation'>;
@@ -160,6 +160,7 @@ export type CloudSessionRequest = ReturnType<typeof readCloudSessionRequest>;
 type CloudCreateAttempt = {
   key: string;
   observeId: (id: string) => void;
+  observeInitialRejection?: () => void;
 };
 
 export async function createCloudSession(
@@ -210,9 +211,8 @@ export async function lookupCloudSession(
       rejectedMessage: 'Cloud session API could not look up the session.',
     }),
   );
-  if (!body || !isSessionId(body.id) || containsCloudCredential(body.id, [access.accessToken])) {
-    throw invalidSession();
-  }
+  if (!body || !isSessionId(body.id)) throw invalidSession();
+  assertSafeAllocationId(body.id, access, body);
   switch (body.state) {
     case 'running':
     case 'allocating':
@@ -294,6 +294,7 @@ async function postCloudSession(
   };
   const body = JSON.stringify(request);
   const deadline = Date.now() + CONNECT_TIMEOUT_MS;
+  let initial = true;
   for (let remaining = CONNECT_TIMEOUT_MS; remaining > 0; remaining = deadline - Date.now()) {
     const value = await requestCreateResponse(
       url,
@@ -305,12 +306,19 @@ async function postCloudSession(
         signal: AbortSignal.timeout(Math.min(remaining, CREATE_REQUEST_TIMEOUT_MS)),
       },
       request.needs,
-      request.app
-        ? [access.accessToken, request.app.url, encodeURIComponent(request.app.url)]
-        : [access.accessToken],
-    );
+      [
+        access.accessToken,
+        ...(access.credentials ?? []),
+        ...(request.app ? [request.app.url, encodeURIComponent(request.app.url)] : []),
+      ],
+    ).catch((error: unknown) => {
+      if (initial && isInitialCreateRejection(error)) attempt.observeInitialRejection?.();
+      throw error;
+    });
+    initial = false;
     if (value !== RETRY_CREATION) {
-      observeCloudAllocation(value, access.accessToken, attempt);
+      assertSafeAllocationId(value.id, access, value.kind === 'created' ? value.body : undefined);
+      attempt.observeId(value.id);
       if (value.kind === 'created') return value;
     }
     const wait = Math.min(CREATE_RETRY_INTERVAL_MS, deadline - Date.now());
@@ -321,18 +329,28 @@ async function postCloudSession(
   });
 }
 
-function observeCloudAllocation(
-  value: CreateResponse,
-  brokerToken: string,
-  attempt: CloudCreateAttempt,
+function assertSafeAllocationId(
+  id: string,
+  access: CloudAccess,
+  body?: Record<string, unknown>,
 ): void {
-  const scoped =
-    value.kind === 'created'
-      ? readScopedToken(value.body.attach, value.body.transport === 'limrun')
-      : undefined;
-  const credentials = scoped ? [brokerToken, scoped] : [brokerToken];
-  if (containsCloudCredential(value.id, credentials)) throw invalidSession();
-  attempt.observeId(value.id);
+  const credentials = [
+    access.accessToken,
+    ...(access.credentials ?? []),
+    readScopedToken(body?.attach, false),
+    readScopedToken(body?.attach, true),
+  ].filter((value): value is string => value !== undefined);
+  if (containsCloudCredential(id, credentials)) throw invalidSession();
+}
+
+function isInitialCreateRejection(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  const status = error.details?.status;
+  return (
+    status === 404 ||
+    status === 405 ||
+    (status !== 409 && status !== 429 && isDefinitiveCloudCreateRejection(error))
+  );
 }
 
 type CreateResponse = CreatedResponse | { kind: 'allocating'; id: string };
@@ -378,8 +396,9 @@ async function readCreateResponse(
     await response.body?.cancel();
     return RETRY_CREATION;
   }
-  if (url.pathname !== SESSIONS_PATH && (status === 404 || status === 405)) {
-    await response.body?.cancel();
+  if (status === 404 || status === 405) {
+    await response.body?.cancel().catch(() => undefined);
+    if (url.pathname === SESSIONS_PATH) throw genericCreateRejection(status);
     throw url.pathname === PRELOADED_SESSIONS_PATH
       ? appSourceUnsupported(status)
       : budgetCapUnsupported(status);
@@ -635,7 +654,8 @@ function formatUsdMicros(micros: string): string {
 }
 
 export async function deleteCloudSession(access: CloudAccess, id: string): Promise<void> {
-  if (!isSessionId(id) || containsCloudCredential(id, [access.accessToken])) throw invalidSession();
+  if (!isSessionId(id)) throw invalidSession();
+  assertSafeAllocationId(id, access);
   const url = new URL(`${SESSIONS_PATH}/${id}`, access.cloudBaseUrl);
   const response = await fetchCloudRelease(url, access, 'DELETE');
   if (response.ok) return;
@@ -666,15 +686,11 @@ export async function deleteCloudSession(access: CloudAccess, id: string): Promi
 }
 
 function fetchCloudRelease(url: URL, access: CloudAccess, method: 'DELETE' | 'GET') {
-  return fetchCloudApi(
-    url,
-    {
-      method,
-      headers: { authorization: `Bearer ${access.accessToken}` },
-      signal: AbortSignal.timeout(30_000),
-    },
-    { preserveCause: true },
-  );
+  return fetchCloudApi(url, {
+    method,
+    headers: { authorization: `Bearer ${access.accessToken}` },
+    signal: AbortSignal.timeout(30_000),
+  });
 }
 
 async function cloudSessionIsTerminal(url: URL, access: CloudAccess, id: string): Promise<boolean> {

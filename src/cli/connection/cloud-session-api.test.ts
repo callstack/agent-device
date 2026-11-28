@@ -6,6 +6,7 @@ import {
   createCloudSession,
   deleteCloudSession,
   isDefinitiveCloudCreateRejection,
+  lookupCloudSession,
   parseMaxUsdMicros,
 } from './cloud-session-api.ts';
 
@@ -64,6 +65,33 @@ test.each([
     ]);
   },
 );
+
+test('reports the original network cause for allocation lookup', async () => {
+  const cause = new Error('Lookup connection closed');
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(cause));
+  await expect(lookupCloudSession(access, attempt.key)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    cause,
+  });
+});
+
+test('does not report an initial rejection after an uncertain POST', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(Response.json({ error: 'invalid_request' }, { status: 400 })),
+  );
+  const observeInitialRejection = vi.fn();
+  const refused = expect(
+    createCloudSession(access, request, { ...attempt, observeInitialRejection }),
+  ).rejects.toMatchObject({ details: { status: 400 } });
+  await vi.advanceTimersByTimeAsync(2000);
+  await refused;
+  expect(observeInitialRejection).not.toHaveBeenCalled();
+});
 
 test('cancels the DELETE body when its terminal-state probe fails', async () => {
   const cancel = vi.fn();

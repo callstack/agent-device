@@ -36,6 +36,7 @@ import { isLegacyCloudProfile } from './active-connection.ts';
 import { releaseProxyFrontConnectionLease } from '../commands/connection-lease-transaction.ts';
 import {
   hostedCloudAccountBinding,
+  matchesHostedCloudAccount,
   resolveHostedCloudAccess,
   type HostedCloudAccess,
 } from './cloud-access.ts';
@@ -59,8 +60,14 @@ export async function connectCloudSession<T>(options: {
   writeCloudConnection(location, record);
   removeCloudAttachment(location);
   let attaching = false;
+  let rejectedBeforeRetry = false;
   try {
-    const session = await createCloudSession(access, request, cloudAttempt(location, record));
+    const session = await createCloudSession(access, request, {
+      ...cloudAttempt(location, record),
+      observeInitialRejection: () => {
+        rejectedBeforeRetry = !pending;
+      },
+    });
     const binding = { ...session.binding, generation: record.generation };
     record.deadlineAt = session.binding.deadlineAt;
     writeCloudConnection(location, record);
@@ -71,7 +78,14 @@ export async function connectCloudSession<T>(options: {
     });
   } catch (error) {
     if (record.phase !== 'committed') {
-      await cleanRejectedConnection(location, record, access, error, attaching);
+      await cleanRejectedConnection(
+        location,
+        record,
+        access,
+        error,
+        attaching,
+        rejectedBeforeRetry,
+      );
     }
     throw error;
   }
@@ -83,6 +97,7 @@ async function cleanRejectedConnection(
   access: HostedCloudAccess,
   error: unknown,
   attaching: boolean,
+  rejectedBeforeRetry: boolean,
 ): Promise<void> {
   if (attaching || invalidCreatedSession(error)) {
     if (!record.id) return;
@@ -93,7 +108,7 @@ async function cleanRejectedConnection(
     } catch {
       throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.rollbackFailed.reason);
     }
-  } else if (!(await confirmsRejectedAllocation(access, record, error))) {
+  } else if (!rejectedBeforeRetry && !(await confirmsRejectedAllocation(access, record, error))) {
     return;
   }
   removeCloudState(location, readRemoteConnectionState(location), record);
@@ -123,8 +138,7 @@ async function confirmsRejectedAllocation(
 
 function sameHostedAccount(record: CloudConnectionRecord, access: HostedCloudAccess): boolean {
   return (
-    record.accountBinding !== undefined &&
-    record.accountBinding === hostedCloudAccountBinding(access)
+    record.accountBinding !== undefined && matchesHostedCloudAccount(access, record.accountBinding)
   );
 }
 
@@ -242,8 +256,22 @@ export async function releaseCloudConnection(options: {
     // Keep proof of the release even if the subsequent closing transition fails.
     try {
       writeCloudConnection(location, record);
-    } catch {
-      writeCloudConnection(location, record);
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'hosted_release_proof_write_retry',
+        data: { error: errorMessage(error) },
+      });
+      try {
+        writeCloudConnection(location, record);
+      } catch (retryError) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Could not save confirmation that the hosted broker ended the session.',
+          { hint: CLOUD_CONNECTION_FORGET_HINT, retryWriteError: errorMessage(retryError) },
+          error,
+        );
+      }
     }
   }
   markCloudConnectionClosing(location, record);
