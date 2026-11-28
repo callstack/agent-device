@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { CloudAttachment } from './cloud-attachment-schema.ts';
@@ -13,30 +14,74 @@ import {
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
 
-test('unreadable cloud state keeps a typed I/O code without exposing the local error', () => {
-  const stateDir = mkdtempForTestSync('cloud-record-unreadable-');
-  const original = fs.lstatSync;
-  const lstat = vi.spyOn(fs, 'lstatSync').mockImplementation((...args) => {
-    if (String(args[0]).startsWith(stateDir)) {
-      throw Object.assign(new Error('private state details'), { code: 'EACCES' });
-    }
-    return Reflect.apply(original, fs, args);
-  });
-  try {
-    const error = expect(() => readCloudConnection({ stateDir, session: 'fixture' }));
-    error.toThrow(
-      expect.objectContaining({
-        details: expect.objectContaining({
-          reason: 'cloud_connection_record_unreadable',
-          recordReadCode: 'EACCES',
-        }),
-      }),
-    );
-    error.not.toThrow(/private state details/);
-  } finally {
-    lstat.mockRestore();
-  }
+test('a missing cloud record is absent even when its credential directory exists', () => {
+  const location = { stateDir: mkdtempForTestSync('cloud-record-missing-'), session: 'fixture' };
+  expect(readCloudConnection(location)).toBeNull();
+  fs.mkdirSync(cloudConnectionDir(location), { recursive: true, mode: 0o700 });
+  expect(readCloudConnection(location)).toBeNull();
 });
+
+test.each([
+  'null',
+  'false',
+  '0',
+  '""',
+  '{',
+  '{}',
+  '{"generation":"g","origin":"https://cloud.example","fingerprint":"f","phase":"pending"}',
+])('a private cloud record containing %s is malformed', (contents) => {
+  const location = { stateDir: mkdtempForTestSync('cloud-record-malformed-'), session: 'fixture' };
+  const directory = cloudConnectionDir(location);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(directory, 'record.json'), contents, { mode: 0o600 });
+  expect(() => readCloudConnection(location)).toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'cloud_connection_record_malformed' }),
+    }),
+  );
+});
+
+test('an exposed cloud record has the unsafe credential store outcome', () => {
+  const location = { stateDir: mkdtempForTestSync('cloud-record-exposed-'), session: 'fixture' };
+  const directory = cloudConnectionDir(location);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const file = path.join(directory, 'record.json');
+  fs.writeFileSync(file, 'null');
+  fs.chmodSync(file, 0o644);
+  expect(() => readCloudConnection(location)).toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'cloud_credential_store_unsafe' }),
+    }),
+  );
+});
+
+test.each(['EACCES', 'EIO'])(
+  'unreadable cloud state reports %s without exposing the local error',
+  (code) => {
+    const stateDir = mkdtempForTestSync('cloud-record-unreadable-');
+    const original = fs.lstatSync;
+    const lstat = vi.spyOn(fs, 'lstatSync').mockImplementation((...args) => {
+      if (String(args[0]).startsWith(stateDir)) {
+        throw Object.assign(new Error('private state details'), { code });
+      }
+      return Reflect.apply(original, fs, args);
+    });
+    try {
+      const error = expect(() => readCloudConnection({ stateDir, session: 'fixture' }));
+      error.toThrow(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            reason: 'cloud_connection_record_unreadable',
+            recordReadCode: code,
+          }),
+        }),
+      );
+      error.not.toThrow(/private state details/);
+    } finally {
+      lstat.mockRestore();
+    }
+  },
+);
 
 const proxyFrontAttachment = {
   kind: 'agent-device-daemon',

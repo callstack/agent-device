@@ -53,6 +53,9 @@ export function resolveCommandConnection(
   const establishes = disconnects || options.command === 'connect';
   admitDaemonStateRoot({ paths, mode: establishes ? 'establish' : 'repair' });
   const request = { ...host, session: flags.session, remoteConfig: flags.remoteConfig };
+  if (disconnects && flags.forget) {
+    return { daemonPaths: paths, effectiveFlags: flags, defaults: null, connection: null };
+  }
   if (disconnects) {
     const defaults = claimRemoteConnectionDefaults({ ...request, stateDir: paths.baseDir });
     const merged = mergeConnectionFlags(flags, defaults.flags, explicitFlagKeys);

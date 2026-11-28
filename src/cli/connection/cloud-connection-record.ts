@@ -23,6 +23,12 @@ import { parseCloudAttachment, type CloudAttachment } from './cloud-attachment-s
 export const CLOUD_CONNECTION_REASONS = {
   // A cloud credential directory or file is unsafe to reuse.
   credentialStoreUnsafe: { reason: 'cloud_credential_store_unsafe' },
+  // The saved cloud connection record does not have a valid format.
+  recordMalformed: { reason: 'cloud_connection_record_malformed' },
+  // The current credential does not match the account that started the allocation.
+  credentialMismatch: { reason: 'cloud_connection_credential_mismatch' },
+  // The cloud cannot confirm the allocation for this record and credential.
+  allocationUnconfirmed: { reason: 'cloud_connection_allocation_unconfirmed' },
   // The saved cloud connection record cannot be read safely.
   recordUnreadable: { reason: 'cloud_connection_record_unreadable' },
   // The saved cloud connection belongs to another named session.
@@ -51,6 +57,7 @@ export type CloudConnectionRecord = {
   phase: 'pending' | 'committed' | 'closing';
   origin: string;
   fingerprint: string;
+  accountBinding?: string;
   accepts?: CloudSessionRequest['accepts'];
   id?: string;
   deadlineAt?: string;
@@ -192,8 +199,48 @@ export function readCloudCredentialJson(file: string): unknown {
   }
 }
 
-function readRecordFile(file: string): CloudConnectionRecord | null {
-  return (readCloudCredentialJson(file) ?? null) as CloudConnectionRecord | null;
+function admitPrivateCloudFile(file: string): boolean {
+  const status = lstatIfPresent(file);
+  if (!status) return false;
+  assertOwnedEntry(status, status.isFile(), 0o077);
+  return true;
+}
+
+/** Returns whether any hosted files exist and refuses files that are unsafe to remove. */
+export function admitCloudConnectionFilesForForget(location: ConnectionLocation): boolean {
+  if (!admitCloudCredentialDirectory(location)) return false;
+  const hasRecord = admitPrivateCloudFile(recordPath(location));
+  const hasAttachment = admitPrivateCloudFile(cloudAttachmentPath(location));
+  return hasRecord || hasAttachment;
+}
+
+function readRecordFile(file: string): CloudConnectionRecord | undefined {
+  if (!admitPrivateCloudFile(file)) return undefined;
+  const value = readCloudCredentialJson(file);
+  if (value === undefined) return undefined;
+  const record = asCloudRecord(value);
+  if (!isCloudConnectionRecord(record)) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordMalformed.reason);
+  }
+  return record;
+}
+
+function isCloudConnectionRecord(
+  record: Record<string, unknown> | undefined,
+): record is CloudConnectionRecord {
+  return (
+    typeof record?.session === 'string' &&
+    typeof record.generation === 'string' &&
+    typeof record.origin === 'string' &&
+    typeof record.fingerprint === 'string' &&
+    (record.accountBinding === undefined || typeof record.accountBinding === 'string') &&
+    (record.id === undefined || typeof record.id === 'string') &&
+    (record.deadlineAt === undefined || typeof record.deadlineAt === 'string') &&
+    (record.hostedLeaseId === undefined || typeof record.hostedLeaseId === 'string') &&
+    (record.brokerReleased === undefined || record.brokerReleased === true) &&
+    hasValidStoredAccepts(record.accepts) &&
+    (record.phase === 'pending' || record.phase === 'committed' || record.phase === 'closing')
+  );
 }
 
 export function readCloudConnection(location: ConnectionLocation): CloudConnectionRecord | null {
@@ -201,27 +248,20 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
     if (!admitCloudCredentialDirectory(location)) return null;
     const record = readRecordFile(recordPath(location));
     if (!record) return null;
-    if (
-      typeof record?.generation === 'string' &&
-      typeof record.origin === 'string' &&
-      typeof record.fingerprint === 'string' &&
-      hasValidStoredAccepts(record.accepts) &&
-      ['pending', 'committed', 'closing'].includes(record.phase)
-    ) {
-      assertCloudRecordSession(location, record);
-      return record;
-    }
+    assertCloudRecordSession(location, record);
+    return record;
   } catch (error) {
     if (error instanceof AppError) throw error;
+    if (error instanceof SyntaxError) {
+      throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordMalformed.reason);
+    }
     const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
-    if (code === 'ENOENT') return null;
     const ioCode =
       code === 'EACCES' || code === 'EPERM' || code === 'EIO' || code === 'ENOTDIR'
         ? code
         : undefined;
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason, ioCode);
   }
-  throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason);
 }
 
 function hasValidStoredAccepts(accepts: unknown): boolean {
@@ -446,7 +486,7 @@ function readExpiredAttachmentLocation(
 ): ConnectionLocation | undefined {
   const status = lstatIfPresent(dir);
   if (!status?.isDirectory() || !isOwnedEntry(status, 0o077)) return undefined;
-  let record: CloudConnectionRecord | null;
+  let record: CloudConnectionRecord | undefined;
   try {
     record = readRecordFile(path.join(dir, 'record.json'));
   } catch {
@@ -494,6 +534,27 @@ export function cloudConnectionUnavailable(
   return new AppError('COMMAND_FAILED', 'The cloud connection cannot serve this command.', {
     reason,
     ...(recordReadCode ? { recordReadCode } : {}),
-    hint: 'Run agent-device disconnect in this session to recover it, then reconnect.',
+    hint: cloudConnectionRecoveryHint(reason),
   });
+}
+
+export const CLOUD_CONNECTION_FORGET_HINT =
+  'To clear local state only, run agent-device disconnect --forget --session <name>. The rental may continue until its deadline.';
+
+function cloudConnectionRecoveryHint(
+  reason: Parameters<typeof cloudConnectionUnavailable>[0],
+): string {
+  switch (reason) {
+    case CLOUD_CONNECTION_REASONS.recordMalformed.reason:
+    case CLOUD_CONNECTION_REASONS.recordUnreadable.reason:
+      return `Verify the allocation with the hosted broker under the original account and end any active session there. ${CLOUD_CONNECTION_FORGET_HINT}`;
+    case CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason:
+      return 'Verify the allocation with the hosted broker under the original account. End any active session there before repairing the local record or credential store.';
+    case CLOUD_CONNECTION_REASONS.credentialMismatch.reason:
+      return `Sign back in to the owning hosted account or use the original API key. ${CLOUD_CONNECTION_FORGET_HINT}`;
+    case CLOUD_CONNECTION_REASONS.allocationUnconfirmed.reason:
+      return `Check the allocation with the hosted broker under the original account and retry. ${CLOUD_CONNECTION_FORGET_HINT}`;
+    default:
+      return 'Run agent-device disconnect in this session to recover it, then reconnect.';
+  }
 }

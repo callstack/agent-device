@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture } from './cli-capture.ts';
-import { cloudAttachmentPath } from '../cli/connection/cloud-connection-record.ts';
+import {
+  cloudAttachmentPath,
+  readCloudConnection,
+} from '../cli/connection/cloud-connection-record.ts';
 import {
   cloudEnv,
   connectArgs,
@@ -13,6 +17,7 @@ import {
 } from './cli-cloud-session.fixtures.ts';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -76,6 +81,41 @@ test('a proxy-front command after open carries the lease scope the front refuses
   expect(
     (await runCliCapture(['disconnect', '--json'], { env, sendToDaemon: served })).code,
   ).toBeNull();
+});
+
+test('a refused disconnect leaves the original proxy-front lease usable', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const fetchMock = stubCloudApi(proxyFrontDevice);
+  const sendToDaemon = withLeaseAllocation();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const opened = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+    env,
+    sendToDaemon,
+  });
+  expect(opened.code).toBeNull();
+  const attachment = fs.readFileSync(cloudAttachmentPath(location), 'utf8');
+
+  const refused = await runCliCapture(['disconnect', '--json'], {
+    env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: 'other-account-api-key' },
+    sendToDaemon,
+  });
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe(
+    'cloud_connection_credential_mismatch',
+  );
+  expect(refused.calls).toEqual([]);
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(cloudAttachmentPath(location), 'utf8')).toBe(attachment);
+
+  const snapshot = await runCliCapture(['snapshot', '--json'], { env, sendToDaemon });
+  expect(snapshot.code, snapshot.stdout).toBeNull();
+  expect(snapshot.calls.map(({ command }) => command)).toEqual(['lease_heartbeat', 'snapshot']);
+  expect(snapshot.calls[1]?.meta?.leaseId).toBe(opened.calls[1]?.meta?.leaseId);
+
+  const ended = await runCliCapture(['disconnect', '--json'], { env, sendToDaemon });
+  expect(ended.code, ended.stdout).toBeNull();
+  expect(ended.calls.map(({ command }) => command)).toEqual(['lease_release']);
+  expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
 });
 
 test('disconnect after close ends cleanly: the lease close ended is not released again', async () => {
@@ -156,6 +196,64 @@ test('disconnect releases a proxy-front lease with the attachment token before t
   expect(releasedBeforeDelete).toBe(true);
   expect(fetchMock.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(true);
 });
+
+test.each(['succeeds', 'fails', 'times out'] as const)(
+  'forget clears state when proxy-front lease release %s',
+  async (outcome) => {
+    const env = cloudEnv();
+    const location = locationOf(env);
+    const attachment = cloudAttachmentPath(location);
+    const broker = stubCloudApi(proxyFrontDevice);
+    const front = withLeaseAllocation();
+    expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+    const opened = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+      env,
+      sendToDaemon: front,
+    });
+    expect(opened.code).toBeNull();
+
+    let attachmentWasPresent = false;
+    let markReleaseStarted!: () => void;
+    const releaseStarted = new Promise<void>((resolve) => {
+      markReleaseStarted = resolve;
+    });
+    if (outcome === 'times out') vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const forgetting = runCliCapture(
+      ['disconnect', '--forget', '--session', location.session, '--json'],
+      {
+        env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
+        sendToDaemon: async (request) => {
+          attachmentWasPresent = fs.existsSync(attachment);
+          markReleaseStarted();
+          if (outcome === 'times out') await new Promise<void>(() => {});
+          if (outcome === 'fails')
+            return {
+              ok: false,
+              error: { code: 'COMMAND_FAILED', message: 'fixture release failure' },
+            };
+          return await front(request);
+        },
+      },
+    );
+    if (outcome === 'times out') {
+      await releaseStarted;
+      await vi.advanceTimersByTimeAsync(2000);
+    }
+    const forgotten = await forgetting;
+    expect(forgotten.code, forgotten.stdout).toBeNull();
+    expect(forgotten.calls.map(({ command }) => command)).toEqual(['lease_release']);
+    expect(forgotten.calls[0]?.meta?.leaseId).toBe(opened.calls[0]?.meta?.leaseId);
+    expect(forgotten.transportOptions[0]?.authToken).toBe(hostedDevice.attach.daemonAuthToken);
+    expect(forgotten.stderr).toContain(
+      'A rental may still exist on the hosted broker until its deadline.',
+    );
+    expect(attachmentWasPresent).toBe(true);
+    expect(readCloudConnection(location)).toBeNull();
+    expect(readRemoteConnectionState(location)).toBeNull();
+    expect(fs.existsSync(attachment)).toBe(false);
+    expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST']);
+  },
+);
 
 test('disconnect sends no lease release for a daemon attachment without the proxy-front field', async () => {
   const env = cloudEnv();

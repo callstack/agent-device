@@ -15,6 +15,7 @@ import {
 } from '../connection/cloud-connection-record.ts';
 import {
   connectCloudSession,
+  forgetCloudConnection,
   releaseCloudConnection,
   type CloudConnectionRelease,
 } from '../connection/cloud-connect.ts';
@@ -568,12 +569,20 @@ export const disconnectCommand: ClientCommandHandler = async ({
   host,
   claimedConnection,
 }) => {
+  if (flags.forget && flags.session === undefined) throw remoteSessionRequiredError(undefined);
+  if (flags.forget && flags.shutdown) {
+    throw new AppError('INVALID_ARGS', 'Use disconnect --forget separately from --shutdown.');
+  }
   const stateDir = resolveConnectionStateDir(flags, host);
   const location = { stateDir, session: flags.session ?? 'default' };
   return await withConnectionLock(
     stateDir,
     location.session,
     async () => {
+      if (flags.forget) {
+        const state = readRemoteConnectionState(location);
+        return await disconnectForget({ client, location, state, host }, flags);
+      }
       const record = readCloudConnection(location);
       const current = readRemoteConnectionState(location);
       const state =
@@ -604,9 +613,36 @@ export const disconnectCommand: ClientCommandHandler = async ({
       }
       return await disconnectProvider(flags, client, stateDir, state);
     },
-    () => refuseContendedConnection(location, 'disconnect', claimedConnection),
+    flags.forget
+      ? undefined
+      : () => refuseContendedConnection(location, 'disconnect', claimedConnection),
   );
 };
+
+async function disconnectForget(
+  connection: Parameters<typeof forgetCloudConnection>[0],
+  flags: CliFlags,
+): Promise<boolean> {
+  const { location } = connection;
+  const forgotten = await forgetCloudConnection(connection);
+  if (!forgotten) {
+    await writeNoRemoteConnectionOutput(flags, location.session);
+    return true;
+  }
+  writeStderr('Warning: A rental may still exist on the hosted broker until its deadline.\n');
+  if (forgotten.daemonStateDir) {
+    const stateDir = shellQuoteIfNeeded(forgotten.daemonStateDir);
+    writeStderr(
+      `Warning: The local daemon may still be running. Stop it with agent-device daemon stop --state-dir ${stateDir}\n`,
+    );
+  }
+  await writeCommandOutput(
+    flags,
+    { connected: false, session: location.session, released: false, forgotten: true },
+    () => `Cleared local hosted connection "${location.session}".`,
+  );
+  return true;
+}
 
 async function disconnectLegacyCloud(
   flags: CliFlags,

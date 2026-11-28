@@ -420,6 +420,16 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: true,
   },
   {
+    key: 'forget',
+    names: ['--forget'],
+    type: 'boolean',
+    usageLabel: '--forget',
+    usageDescription:
+      'Disconnect: clear the named hosted connection locally. The rental may continue until its deadline',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'clean',
     names: ['--clean'],
     type: 'boolean',

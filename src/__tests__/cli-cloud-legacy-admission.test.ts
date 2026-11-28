@@ -83,8 +83,10 @@ test('connection commands refuse lock contention before and during allocation', 
         env,
       },
     );
-  const fetchMock = vi.fn(
-    async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
+  const fetchMock = vi.fn(async (_url: URL, init: RequestInit) =>
+    init.method === 'GET'
+      ? Response.json({ id, state: 'running' })
+      : new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   const acquire = hostFiles.acquireProcessLock;
@@ -116,7 +118,7 @@ test('connection commands refuse lock contention before and during allocation', 
       expect(readCloudConnection(location)).toEqual(pending);
     });
     expect((await disconnect()).code).toBeNull();
-    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['DELETE']);
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['GET', 'DELETE']);
     expect(readCloudConnection(location)).toBeNull();
   } finally {
     acquireSpy.mockRestore();
@@ -139,12 +141,13 @@ test('disconnect waits for the lock on a committed cloud session', async () => {
     origin,
     null,
   );
-  writeCloudConnection(location, {
-    ...record,
-    phase: 'committed',
-    id: '00000000-0000-4000-8000-000000000001',
-  });
-  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+  const id = '00000000-0000-4000-8000-000000000001';
+  writeCloudConnection(location, { ...record, phase: 'committed', id });
+  const fetchMock = vi.fn(async (_url: URL, init: RequestInit) =>
+    init.method === 'GET'
+      ? Response.json({ id, state: 'running' })
+      : new Response(null, { status: 204 }),
+  );
   vi.stubGlobal('fetch', fetchMock);
   let observedContention!: () => void;
   const contention = new Promise<void>((resolve) => {
@@ -169,7 +172,7 @@ test('disconnect waits for the lock on a committed cloud session', async () => {
       return { result };
     });
     expect(JSON.parse((await disconnect.result).stdout).data.released).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['GET', 'DELETE']);
     expect(readCloudConnection(location)).toBeNull();
   } finally {
     acquireSpy.mockRestore();
@@ -305,8 +308,10 @@ test('a pending hosted session takes teardown precedence over a legacy profile',
   );
   record.id = '00000000-0000-4000-8000-000000000001';
   writeCloudConnection(location, record);
-  const fetchMock = vi.fn(
-    async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
+  const fetchMock = vi.fn(async (_url: URL, init: RequestInit) =>
+    init.method === 'GET'
+      ? Response.json({ id: record.id, state: 'running' })
+      : new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   try {
@@ -322,6 +327,7 @@ test('a pending hosted session takes teardown precedence over a legacy profile',
     expect(disconnected.code, disconnected.stdout).toBeNull();
     expect(disconnected.calls).toEqual([]);
     expect(fetchMock.mock.calls.map(([url, init]) => [url.pathname, init.method])).toEqual([
+      ['/v1/sessions', 'GET'],
       [`/v1/sessions/${record.id}`, 'DELETE'],
     ]);
     expect(readCloudConnection(location)).toBeNull();
@@ -359,11 +365,55 @@ test('a credential-bound legacy record without a lease clears locally', async ()
   }
 });
 
-test('disconnect uses the saved custom origin and clears a binding without a transaction record', async () => {
+test.each([
+  { profile: 'legacy hosted', forgotten: true },
+  { profile: 'direct remote', forgotten: false },
+])('local forget handles a $profile profile', async ({ forgotten }) => {
+  const { stateDir, session } = seedLegacyConnection('fixture-legacy-lease');
+  const location = { stateDir, session };
+  const seeded = readRemoteConnectionState(location)!;
+  const profile = forgotten
+    ? seeded.remoteConfigPath
+    : path.join(path.dirname(seeded.remoteConfigPath), 'direct-fixture.json');
+  if (!forgotten) {
+    fs.renameSync(seeded.remoteConfigPath, profile);
+    seedConnectionState({ stateDir, state: { ...seeded, remoteConfigPath: profile } });
+  }
+  const saved = readRemoteConnectionState(location);
+  expect(saved?.cloudSession).toBeUndefined();
+  expect(readCloudConnection(location)).toBeNull();
+
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const result = await runCliCapture(['disconnect', '--forget', '--session', session, '--json'], {
+      env: { AGENT_DEVICE_STATE_DIR: stateDir },
+    });
+    expect(result.code, result.stdout).toBeNull();
+    expect(result.calls).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    if (forgotten) {
+      expect(JSON.parse(result.stdout).data).toMatchObject({ forgotten: true, released: false });
+      expect(result.stderr).toContain(
+        'A rental may still exist on the hosted broker until its deadline.',
+      );
+      expect(readRemoteConnectionState(location)).toBeNull();
+      expect(fs.existsSync(profile)).toBe(false);
+    } else {
+      expect(readRemoteConnectionState(location)).toEqual(saved);
+      expect(fs.existsSync(profile)).toBe(true);
+    }
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test('disconnect proves a saved binding without a transaction record before DELETE', async () => {
   const { stateDir, session, cloudBaseUrl } = seedLegacyConnection();
   const location = { stateDir, session };
   const state = readRemoteConnectionState(location)!;
   const id = '00000000-0000-4000-8000-000000000001';
+  const generation = 'fixture-generation';
   seedConnectionState({
     stateDir,
     state: {
@@ -371,31 +421,66 @@ test('disconnect uses the saved custom origin and clears a binding without a tra
       cloudSession: {
         id,
         vendor: 'provider-a',
-        generation: 'fixture-generation',
+        generation,
         transport: 'agent-device-daemon',
         baseUrl: cloudBaseUrl,
         deadlineAt: new Date(Date.now() + 3600_000).toISOString(),
       },
     },
   });
+  const saved = readRemoteConnectionState(location);
+  const env = {
+    AGENT_DEVICE_STATE_DIR: stateDir,
+    AGENT_DEVICE_SESSION: session,
+    AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-key',
+    AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: cloudBaseUrl,
+  };
   const fetchMock = vi.fn(
     async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   try {
-    const result = await runCliCapture(['disconnect', '--json'], {
-      env: {
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_SESSION: session,
-        AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-key',
-        AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: cloudBaseUrl,
-      },
+    const noCredential = await runCliCapture(['disconnect', '--json'], {
+      env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
     });
+    const { error } = JSON.parse(noCredential.stdout);
+    expect(error).toMatchObject({
+      code: 'UNAUTHORIZED',
+      details: { reason: 'cloud_api_key_required' },
+    });
+    expect(error.hint).toContain('agent-device auth login');
+    expect(error.hint).toContain('agent-device disconnect --forget --session <name>');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(readRemoteConnectionState(location)).toEqual(saved);
+    expect(readCloudConnection(location)).toBeNull();
+
+    for (const reply of [
+      Response.json({ error: 'not_found' }, { status: 404 }),
+      Response.json({ id: '00000000-0000-4000-8000-000000000002', state: 'running' }),
+    ]) {
+      fetchMock.mockResolvedValueOnce(reply);
+      const refused = await runCliCapture(['disconnect', '--json'], { env });
+      expect(JSON.parse(refused.stdout).error).toMatchObject({
+        details: { reason: 'cloud_connection_allocation_unconfirmed' },
+        hint: expect.stringContaining('disconnect --forget'),
+      });
+      expect(readRemoteConnectionState(location)).toEqual(saved);
+      expect(readCloudConnection(location)).toBeNull();
+    }
+
+    fetchMock.mockResolvedValueOnce(Response.json({ id, state: 'running' }));
+    const result = await runCliCapture(['disconnect', '--json'], { env });
     expect(result.code, result.stdout).toBeNull();
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
-      new URL(`/v1/sessions/${id}`, cloudBaseUrl),
-      expect.objectContaining({ method: 'DELETE' }),
-    );
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual([
+      'GET',
+      'GET',
+      'GET',
+      'DELETE',
+    ]);
+    const lookup = new URL('/v1/sessions', cloudBaseUrl);
+    lookup.searchParams.set('idempotencyKey', generation);
+    for (const [url] of fetchMock.mock.calls.slice(0, 3)) expect(url).toEqual(lookup);
+    expect(fetchMock.mock.calls[3]![0]).toEqual(new URL(`/v1/sessions/${id}`, cloudBaseUrl));
     expect(readRemoteConnectionState(location)).toBeNull();
   } finally {
     vi.unstubAllGlobals();

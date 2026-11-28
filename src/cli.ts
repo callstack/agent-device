@@ -411,6 +411,7 @@ async function resolveRunContextOrExit(
         ),
       command: base.command,
       usesSessions: runsOnRemoteConnection(base.command),
+      forget: effectiveFlags.forget,
       stateDir: daemonPaths.baseDir,
       host: base.host,
       session: effectiveFlags.session ?? flags.session,

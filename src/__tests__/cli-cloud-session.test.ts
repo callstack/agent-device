@@ -357,7 +357,14 @@ test.each([
         status,
       }),
     );
-    expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+    const result = await runCliCapture(['disconnect', '--json'], { env });
+    if (status === 404) {
+      expect(JSON.parse(result.stdout).error.details.reason).toBe(
+        'cloud_connection_allocation_unconfirmed',
+      );
+    } else {
+      expect(result.code, result.stdout).toBeNull();
+    }
     const [, first] = fetchMock.mock.calls[0]!;
     const [lookup, recovery] = fetchMock.mock.calls[1]!;
     expect(lookup.searchParams.get('idempotencyKey')).toBe(postKey(first));
@@ -365,7 +372,11 @@ test.each([
     expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(
       deletes ? ['POST', 'GET', 'DELETE'] : ['POST', 'GET'],
     );
-    expect(readCloudConnection(location)).toBeNull();
+    if (status === 404) {
+      expect(readCloudConnection(location)?.generation).toBe(postKey(first));
+    } else {
+      expect(readCloudConnection(location)).toBeNull();
+    }
   },
 );
 
@@ -374,6 +385,7 @@ test.each([
   { status: 402, reason: 'insufficient_balance', code: 'INVALID_ARGS', clears: true },
   { status: 422, reason: 'no_vendor_matches', code: 'COMMAND_FAILED', clears: true },
   { status: 409, reason: 'session_not_running', code: 'COMMAND_FAILED', clears: true },
+  { status: 409, reason: 'session_not_running', code: 'COMMAND_FAILED', clears: false },
   { status: 409, reason: 'other_conflict', code: 'COMMAND_FAILED', clears: false },
 ])(
   'create rejection $status $reason clears pending state ($clears)',
@@ -389,12 +401,20 @@ test.each([
         { status },
       ),
     );
+    if (clears) {
+      fetchMock.mockResolvedValueOnce(Response.json({ id: hostedDevice.id, state: 'settled' }));
+    }
     const refused = await runCliCapture(connectArgs, { env });
     expect(JSON.parse(refused.stdout).error).toMatchObject({
       code,
       details: { status, ...(reason === 'other_conflict' ? {} : { reason }) },
     });
     if (reason === 'other_conflict') expect(refused.stdout).not.toContain(reason);
+    if (clears) {
+      const [url, init] = fetchMock.mock.calls[1]!;
+      expect(init.method).toBe('GET');
+      expect(url.searchParams.get('idempotencyKey')).toBe(postKey(fetchMock.mock.calls[0]![1]));
+    }
     expect(readCloudConnection(locationOf(env))?.phase).toBe(clears ? undefined : 'pending');
   },
 );
@@ -916,7 +936,7 @@ test('retains an unknown attempt when lookup only returns a bare 404', async () 
   expect((await runCliCapture(connectArgs, { env })).code).toBe(1);
   fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBe(1);
-  expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'closing' });
+  expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'pending' });
   expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
 });
 
@@ -949,7 +969,13 @@ test('an invalid ID cannot replace an attempt key or enter a DELETE URL', async 
   expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'pending' });
   expect(readCloudConnection(locationOf(env))?.id).toBeUndefined();
   fetchMock.mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
-  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+  const result = await runCliCapture(['disconnect', '--json'], { env });
+  expect(JSON.parse(result.stdout).error.details.reason).toBe(
+    'cloud_connection_allocation_unconfirmed',
+  );
+  expect(readCloudConnection(locationOf(env))?.generation).toBe(
+    postKey(fetchMock.mock.calls[0]![1]),
+  );
   expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
 });
 
