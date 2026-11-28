@@ -218,10 +218,16 @@ export class SessionStore {
 
   /**
    * The session currently bound to `deviceId` or to a device that overlaps it (a host and its app
-   * devices), with its address, or `undefined` if none is.
+   * devices), with its address, ignoring any addresses in `excludedAddresses` (such as the
+   * caller's own session or the outer host session of a nested `test` run), or `undefined` if
+   * none is.
    */
-  findByDevice(deviceId: string): SessionRef | undefined {
+  findByDevice(
+    deviceId: string,
+    excludedAddresses: readonly (string | undefined)[] = [],
+  ): SessionRef | undefined {
     for (const [address, entry] of this.sessions) {
+      if (excludedAddresses.includes(address)) continue;
       if (devicesOverlap(entry.current.device.id, deviceId)) return this.captureRef(address, entry);
     }
     return undefined;

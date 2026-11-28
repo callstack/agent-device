@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type { CloseApplicationFinalizationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   bindTestCommandHost,
@@ -72,6 +72,12 @@ async function closeSession(params: {
   sessionStore: SessionStore;
   sessionName: string;
   retainExecutionHost: boolean;
+  retainExecutionHostAfterClose?: (input: {
+    device: DeviceInfo;
+    shutdownRequested: boolean;
+    hasScreenRecording: boolean;
+    leaseWillEnd: boolean;
+  }) => boolean;
   positionals?: string[];
   flags?: Record<string, unknown>;
   internal?: DaemonRequest['internal'];
@@ -79,7 +85,8 @@ async function closeSession(params: {
   events?: string[];
 }) {
   const platformResourceCleanup = platformResourceCleanupFixture({
-    retainExecutionHostAfterClose: () => params.retainExecutionHost,
+    retainExecutionHostAfterClose:
+      params.retainExecutionHostAfterClose ?? (() => params.retainExecutionHost),
   });
   const finalizations: CloseApplicationFinalizationInput[] = [];
   const bindDevice: Parameters<typeof handleSessionCommands>[0]['bindDevice'] = async (
@@ -431,4 +438,99 @@ test('close --shutdown tells the platform that shutdown was requested', async ()
     expect.objectContaining({ shutdownRequested: true }),
   );
   expect(finalizations).toEqual([expect.objectContaining({ shutdownTarget: true })]);
+});
+
+test.each([true, false])(
+  'suite-owned attempt close keeps leaseRetainedBySuite active when another session holds the lease so leaseWillEnd=false and retainRunner=%s',
+  async (retainExecutionHost) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = `suite-attempt-${retainExecutionHost}`;
+    const outerHostSession = `suite-outer-${retainExecutionHost}`;
+    const leaseRegistry = new LeaseRegistry();
+    const lease = leaseRegistry.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseBackend: 'ios-simulator',
+      deviceKey: 'ios:sim-1',
+      clientId: 'client-a',
+      retainOnClose: false,
+    });
+    const leaseScope = {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    };
+    publishSession(sessionStore, outerHostSession, IOS_SIMULATOR, { lease: leaseScope });
+    publishSession(sessionStore, sessionName, IOS_SIMULATOR, { lease: leaseScope });
+
+    const { response, finalizations, platformResourceCleanup } = await closeSession({
+      sessionStore,
+      sessionName,
+      retainExecutionHost,
+      leaseRegistry,
+      internal: { cleanupIntent: 'suite-owned-test-session' },
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+      expect.objectContaining({ leaseWillEnd: false }),
+    );
+    expect(finalizations).toEqual([expect.objectContaining({ retainRunner: retainExecutionHost })]);
+    expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(sessionStore.get(outerHostSession)).toBeDefined();
+  },
+);
+
+test('suite-owned attempt close with suiteLeaseId and no outer session stops simulator runner while preserving lease (#5129)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'suite-attempt-request-only-lease';
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-simulator',
+    deviceKey: 'ios:sim-1',
+    clientId: 'client-a',
+    retainOnClose: false,
+  });
+  publishSession(sessionStore, sessionName, IOS_SIMULATOR, {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    },
+  });
+
+  const { response, finalizations, platformResourceCleanup } = await closeSession({
+    sessionStore,
+    sessionName,
+    retainExecutionHost: false,
+    retainExecutionHostAfterClose: (input) =>
+      isIosFamily(input.device) &&
+      input.device.kind === 'simulator' &&
+      !input.shutdownRequested &&
+      !input.hasScreenRecording &&
+      !input.leaseWillEnd,
+    leaseRegistry,
+    internal: { cleanupIntent: 'suite-owned-test-session', suiteLeaseId: lease.leaseId },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+    expect.objectContaining({ device: IOS_SIMULATOR, leaseWillEnd: true }),
+  );
+  expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveReturnedWith(false);
+  expect(finalizations).toEqual([expect.objectContaining({ retainRunner: false })]);
+  expect(sessionStore.listRetainedExecutionHosts(lease.leaseId)).toEqual([]);
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
 });

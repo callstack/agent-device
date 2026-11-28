@@ -46,6 +46,8 @@ export function createDeviceClaimAdmission(params: {
    * covered claim must also record this request's workspace.
    */
   session: string;
+  /** Outer `test` host session currently alive in this daemon whose session claim covers nested attempts. */
+  coveredHostSession?: string;
   workspace: string;
   /**
    * The caller's raw cwd when the request carried one, or nothing for a caller without a
@@ -80,7 +82,9 @@ export function createDeviceClaimAdmission(params: {
     const result = await acquireTransientDeviceClaim({
       device,
       command: params.command,
-      coveredBySession: params.session,
+      coveredBySession: params.coveredHostSession
+        ? [params.session, params.coveredHostSession]
+        : params.session,
       coveredClaimIsOwnedByRequest: (claim) =>
         !requestScopeRoot || params.resolveScopeRoot(claim.workspace) === requestScopeRoot,
       workspace: params.workspace,

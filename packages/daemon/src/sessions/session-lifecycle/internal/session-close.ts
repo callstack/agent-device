@@ -134,6 +134,27 @@ async function prepareRepairClose(params: {
   };
 }
 
+function resolveSuiteAttemptLeaseRetention(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionName: string;
+  sessionStore: SessionStore;
+}): { leaseRetainedByOtherSession: boolean; skipProviderLeaseRelease: boolean } {
+  const { req, session, sessionName, sessionStore } = params;
+  if (req.internal?.cleanupIntent !== 'suite-owned-test-session' || !session.lease) {
+    return { leaseRetainedByOtherSession: false, skipProviderLeaseRelease: false };
+  }
+  const leaseId = session.lease.leaseId;
+  const leaseRetainedByOtherSession = sessionStore
+    .listRefs()
+    .some((other) => other.address !== sessionName && other.session.lease?.leaseId === leaseId);
+  // A suite request lease outlives individual attempts so later scripts reuse it until suite end,
+  // but without an outer live session each attempt still stops its runner host when !retainOnClose.
+  const skipProviderLeaseRelease =
+    leaseRetainedByOtherSession || req.internal?.suiteLeaseId === leaseId;
+  return { leaseRetainedByOtherSession, skipProviderLeaseRelease };
+}
+
 async function releaseProviderLeaseForClose(params: {
   shutdownPrepared: boolean;
   cleanupFailures: SessionCleanupFailure[];
@@ -435,6 +456,14 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
   } = params;
   const { address: sessionName } = ref;
+  const initialSession = sessionStore.requireCurrent(ref);
+  const { leaseRetainedByOtherSession, skipProviderLeaseRelease } =
+    resolveSuiteAttemptLeaseRetention({
+      req,
+      session: initialSession,
+      sessionName,
+      sessionStore,
+    });
   const cleanupFailures: SessionCleanupFailure[] = [];
   const {
     platformCloseError,
@@ -452,6 +481,7 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
     cleanupFailures,
     repairArmed: params.repairArmed,
+    leaseRetainedBySuite: leaseRetainedByOtherSession,
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
     platformResourceCleanup: params.platformResourceCleanup,
@@ -478,16 +508,18 @@ async function runCloseTeardownAndRelease(params: {
       throw claimBlockingError;
     }
   }
-  const leaseRelease = await releaseProviderLeaseForClose({
-    req,
-    session,
-    leaseRegistry,
-    leaseLifecycleProvider,
-    lifecycle,
-    shutdownPrepared,
-    cleanupFailures,
-    sessionName,
-  });
+  const leaseRelease = skipProviderLeaseRelease
+    ? {}
+    : await releaseProviderLeaseForClose({
+        req,
+        session,
+        leaseRegistry,
+        leaseLifecycleProvider,
+        lifecycle,
+        shutdownPrepared,
+        cleanupFailures,
+        sessionName,
+      });
   if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;
   const cleanupError = closeCleanupError(sessionName, cleanupFailures, { sessionKept: false });

@@ -76,7 +76,10 @@ import {
   type TakenOverDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
 import { appendResponseWarning } from './session-open-warnings.ts';
-import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
+import {
+  buildDeviceClaimConflictError,
+  isBorrowedSuiteHostClaimConflict,
+} from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
@@ -562,17 +565,42 @@ async function acquireDeviceClaimForOwner(params: {
   switch (deviceClaimRuleForOwner(owner)) {
     case 'none':
       return { status: 'not-required' };
-    case 'ordinary':
-      return await acquireDeviceClaim({
+    case 'ordinary': {
+      const stateDir = sessionStore.resolveDaemonStateDir();
+      const acquired = await acquireDeviceClaim({
         device,
         session: sessionName,
         workspace: requestCwd(req, params.host),
-        stateDir: sessionStore.resolveDaemonStateDir(),
+        stateDir,
         env: params.host.env,
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,
       });
+      if (isBorrowedOpenSuiteHostClaimConflict({ req, result: acquired, sessionStore, stateDir })) {
+        return { status: 'not-required' };
+      }
+      return acquired;
+    }
   }
+}
+
+function isBorrowedOpenSuiteHostClaimConflict(params: {
+  req: DaemonRequest;
+  result: DeviceClaimAcquireResult;
+  sessionStore: SessionStore;
+  stateDir: string;
+}): boolean {
+  const { req, result, sessionStore, stateDir } = params;
+  const suiteHostSession = req.internal?.suiteHostSession;
+  return (
+    isBorrowedSuiteHostClaimConflict({
+      result,
+      hostSession: suiteHostSession,
+      stateDir,
+    }) &&
+    suiteHostSession !== undefined &&
+    sessionStore.get(suiteHostSession) !== undefined
+  );
 }
 
 export async function openNewSessionWithDeviceClaim(params: {

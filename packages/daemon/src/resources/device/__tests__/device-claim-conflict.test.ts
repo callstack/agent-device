@@ -4,8 +4,12 @@ import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   buildDeviceClaimConflictError,
   buildDeviceClaimInspectionCommand,
+  isBorrowedSuiteHostClaimConflict,
 } from '../device-claim-conflict.ts';
-import type { InspectedDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import type {
+  DeviceClaimAcquireResult,
+  InspectedDeviceClaim,
+} from '@agent-device/daemon-contracts/device-claims';
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -98,4 +102,58 @@ test('an app device refused by its host claim names the host as the device in th
   assert.deepEqual(response.error.details?.recovery, {
     command: 'agent-device device status --platform macos --udid host-mac',
   });
+});
+
+test('isBorrowedSuiteHostClaimConflict matches only live open-session host claims in the same stateDir', () => {
+  const held = conflict('live');
+  const asConflict = (
+    override: Partial<NonNullable<InspectedDeviceClaim['claim']>>,
+  ): DeviceClaimAcquireResult => ({
+    status: 'conflict',
+    conflict: {
+      ...held,
+      claim: { ...held.claim!, ...override },
+    },
+  });
+
+  assert.equal(
+    isBorrowedSuiteHostClaimConflict({
+      result: asConflict({}),
+      hostSession: 'checkout',
+      stateDir: '/state/checkout',
+    }),
+    true,
+  );
+  assert.equal(
+    isBorrowedSuiteHostClaimConflict({
+      result: asConflict({ claimOwnerKind: 'transient-command', transientCommand: 'press' }),
+      hostSession: 'checkout',
+      stateDir: '/state/checkout',
+    }),
+    false,
+  );
+  assert.equal(
+    isBorrowedSuiteHostClaimConflict({
+      result: asConflict({ session: 'other' }),
+      hostSession: 'checkout',
+      stateDir: '/state/checkout',
+    }),
+    false,
+  );
+  assert.equal(
+    isBorrowedSuiteHostClaimConflict({
+      result: asConflict({ stateDir: '/state/other' }),
+      hostSession: 'checkout',
+      stateDir: '/state/checkout',
+    }),
+    false,
+  );
+  assert.equal(
+    isBorrowedSuiteHostClaimConflict({
+      result: { status: 'conflict', conflict: conflict('owner-process-dead') },
+      hostSession: 'checkout',
+      stateDir: '/state/checkout',
+    }),
+    false,
+  );
 });

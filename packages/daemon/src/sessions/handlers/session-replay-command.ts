@@ -34,7 +34,9 @@ import { buildRuntimeCaptureInput } from '../../core/snapshot-runtime-capture-in
 import type { BoundSnapshotCapture } from '../../core/snapshot-runtime-binding.ts';
 import { resolveObservationCapture } from '../../core/observation-capture.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
-import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
+import { onDelegatingLedger, recordEndedLease } from '../../core/request-ended-leases.ts';
+import { buildSessionLeaseFromRequest } from '../../core/lease-context.ts';
+import { releaseSessionLease } from '../lease-lifecycle.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';
 
@@ -134,30 +136,53 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         },
       }
     : req;
-  return await runReplayTestCommand({
-    ...splitReplayCommandRequest(suiteRequest),
-    host,
-    session: createReplaySession(sessionName, logPath, sessionStore, capture),
-    createSession: (testSessionName, testLogPath) =>
-      createReplaySession(testSessionName, testLogPath, sessionStore, capture),
-    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
-    dependencies: replayDaemonDependencies,
-    cleanupSession: async (testSessionName) =>
-      await closeReplayTestSession({
-        host,
+  const attemptReq: DaemonRequest = {
+    ...req,
+    internal: {
+      ...req.internal,
+      suiteHostSession: sessionName,
+    },
+  };
+  let suiteRetainedLease = false;
+  try {
+    return await runReplayTestCommand({
+      ...splitReplayCommandRequest(suiteRequest),
+      host,
+      session: createReplaySession(sessionName, logPath, sessionStore, capture),
+      createSession: (testSessionName, testLogPath) =>
+        createReplaySession(testSessionName, testLogPath, sessionStore, capture),
+      invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, attemptReq),
+      dependencies: replayDaemonDependencies,
+      cleanupSession: async (testSessionName) =>
+        await closeReplayTestSession({
+          host,
+          req,
+          sessionName: testSessionName,
+          logPath,
+          sessionStore,
+          leaseRegistry,
+          leaseLifecycleProvider,
+          inspectFacts,
+          bindDevice,
+          platformServices,
+          platformResourceCleanup,
+          onRetainedSuiteLease: () => {
+            suiteRetainedLease = true;
+          },
+        }),
+      ...(video ? { video } : {}),
+    });
+  } finally {
+    if (suiteRetainedLease) {
+      await releaseUnheldSuiteRequestLease({
         req,
-        sessionName: testSessionName,
-        logPath,
+        sessionName,
         sessionStore,
         leaseRegistry,
         leaseLifecycleProvider,
-        inspectFacts,
-        bindDevice,
-        platformServices,
-        platformResourceCleanup,
-      }),
-    ...(video ? { video } : {}),
-  });
+      });
+    }
+  }
 };
 
 /**
@@ -311,11 +336,44 @@ type ReplayTestSessionCleanupParams = Readonly<{
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup: PlatformResourceCleanup;
+  onRetainedSuiteLease: () => void;
 }>;
+
+async function releaseUnheldSuiteRequestLease(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+}): Promise<void> {
+  const { req, sessionName, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
+  const admittedLease = req.internal?.admittedLease;
+  const requestLease = admittedLease ? buildSessionLeaseFromRequest(req, admittedLease) : undefined;
+  if (!requestLease) return;
+  if (req.internal?.endedLeases?.some((entry) => entry.leaseId === requestLease.leaseId)) {
+    return;
+  }
+  if (
+    sessionStore.listRefs().some((other) => other.session.lease?.leaseId === requestLease.leaseId)
+  ) {
+    return;
+  }
+  const { endedLeaseId } = await releaseSessionLease({
+    session: { name: sessionName, lease: requestLease },
+    leaseRegistry,
+    leaseLifecycleProvider,
+  });
+  if (endedLeaseId) recordEndedLease(req, endedLeaseId);
+}
 
 async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
   const { req, sessionName, logPath, sessionStore } = params;
-  if (!sessionStore.get(sessionName)) return;
+  const closingSession = sessionStore.get(sessionName);
+  if (!closingSession) return;
+  const suiteLeaseId = req.internal?.admittedLease?.leaseId;
+  if (suiteLeaseId && closingSession.lease?.leaseId === suiteLeaseId) {
+    params.onRetainedSuiteLease();
+  }
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
     req: onDelegatingLedger(
@@ -326,7 +384,10 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
         positionals: [],
         flags: {},
         meta: req.meta,
-        internal: { cleanupIntent: 'suite-owned-test-session' },
+        internal: {
+          cleanupIntent: 'suite-owned-test-session',
+          ...(suiteLeaseId ? { suiteLeaseId } : {}),
+        },
       },
       req,
     ),

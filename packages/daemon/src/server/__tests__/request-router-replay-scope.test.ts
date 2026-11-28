@@ -29,14 +29,19 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
   };
 });
 
+import { isIosFamily } from '@agent-device/kernel/device';
 import {
   IOS_SIMULATOR,
   mkdtempForTestSync,
   createTestHostEnvironment,
+  pinOwnProcessStartTime,
 } from '@agent-device/test-kit';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
+import * as hostProcess from '@agent-device/host-kit/process';
 import {
   createRequestHandler,
   gestureRuntimeSpies,
@@ -48,6 +53,8 @@ import { awaitFixtureReadiness } from '../../__tests__/support/application-lifec
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
+
+pinOwnProcessStartTime(hostProcess);
 
 beforeEach(() => {
   gestureRuntimeSpies.scrollDirection.mockClear();
@@ -293,6 +300,528 @@ test('test runs a one-case suite whose script leaves a session open, passes, and
   });
   expect(sessionStore.listRefs()).toHaveLength(0);
 });
+
+test('test --maestro borrows the outer session device and claim without releasing either (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-outer-open-');
+  const claimsDir = mkdtempForTestSync('agent-device-replay-test-outer-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const flowPath = path.join(root, 'first-launch.yaml');
+  fs.writeFileSync(
+    flowPath,
+    ['appId: com.example.app', 'name: First launch', '---', '- launchApp', ''].join('\n'),
+  );
+  const sessionStore = makeSessionStore('agent-device-replay-test-outer-open-');
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry: new LeaseRegistry(),
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const openResponse = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'open',
+      positionals: ['com.example.app'],
+      flags: { platform: 'ios' },
+      meta: { cwd: root, requestId: 'outer-open-5129' },
+    });
+    expect(openResponse.ok).toBe(true);
+    const claimsBefore = inspectDeviceClaims({ udid: IOS_SIMULATOR.id }, process.env);
+    expect(claimsBefore).toHaveLength(1);
+    const ownerTokenBefore = claimsBefore[0]?.claim?.ownerToken;
+
+    const testResponse = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'test',
+      positionals: [flowPath],
+      flags: { platform: 'ios', replayBackend: 'maestro' },
+      meta: { cwd: root, requestId: 'suite-outer-open-5129' },
+    });
+
+    expect(testResponse).toMatchObject({
+      ok: true,
+      data: expect.objectContaining({
+        total: 1,
+        passed: 1,
+        failed: 0,
+      }),
+    });
+    // Attempt cleanup retired the temporary attempt session without disturbing the outer session or its disk claim.
+    expect(sessionStore.listRefs()).toHaveLength(1);
+    const claimsAfter = inspectDeviceClaims({ udid: IOS_SIMULATOR.id }, process.env);
+    expect(claimsAfter).toHaveLength(1);
+    expect(claimsAfter[0]?.claim?.ownerToken).toBe(ownerTokenBefore);
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('test still refuses DEVICE_IN_USE when another session holds the device (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-foreign-conflict-');
+  const otherRoot = mkdtempForTestSync('agent-device-replay-test-foreign-holder-');
+  const claimsDir = mkdtempForTestSync('agent-device-replay-test-foreign-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const flowPath = path.join(root, 'first-launch.yaml');
+  fs.writeFileSync(flowPath, ['appId: com.example.app', '---', '- launchApp', ''].join('\n'));
+  const sessionStore = makeSessionStore('agent-device-replay-test-foreign-');
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry: new LeaseRegistry(),
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const foreignOpen = await handler({
+      token: 'test-token',
+      session: 'foreign',
+      command: 'open',
+      positionals: ['com.example.app'],
+      flags: { platform: 'ios' },
+      meta: { cwd: otherRoot, requestId: 'foreign-open-5129' },
+    });
+    expect(foreignOpen.ok).toBe(true);
+
+    const testResponse = await handler({
+      token: 'test-token',
+      session: 'caller',
+      command: 'test',
+      positionals: [flowPath],
+      flags: { platform: 'ios', replayBackend: 'maestro' },
+      meta: { cwd: root, requestId: 'caller-test-5129' },
+    });
+
+    expect(testResponse.ok).toBe(true);
+    if (!testResponse.ok) return;
+    expect(testResponse.data).toMatchObject({ total: 1, passed: 0, failed: 1 });
+    const tests = testResponse.data?.tests as Array<{
+      error?: { details?: { divergence?: { cause?: { code?: string; message?: string } } } };
+    }>;
+    expect(tests[0]?.error?.details?.divergence?.cause?.code).toBe('DEVICE_IN_USE');
+    expect(tests[0]?.error?.details?.divergence?.cause?.message).toMatch(/foreign/);
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(otherRoot, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('two-script test with a request lease and no open preserves the unused request lease (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-request-lease-end-');
+  fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nwait 1\n');
+  fs.writeFileSync(path.join(root, '02-second.ad'), 'context platform=ios\nwait 1\n');
+  const sessionStore = makeSessionStore('agent-device-replay-test-request-lease-end-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'proxy',
+    runId: 'run-5129-request-only',
+    leaseProvider: 'proxy',
+    leaseBackend: 'ios-instance',
+    clientId: 'client-5129',
+    deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
+  });
+  const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        async release(releasedLease) {
+          releaseCalls.push(releasedLease.leaseId);
+          return undefined;
+        },
+      },
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      flags: {
+        platform: 'ios',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        udid: IOS_SIMULATOR.id,
+      },
+      meta: {
+        cwd: root,
+        requestId: 'suite-request-lease-end-5129',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        deviceKey: lease.deviceKey,
+      },
+    });
+
+    expect(response.ok ? undefined : response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      ok: true,
+      data: expect.objectContaining({
+        total: 2,
+        passed: 2,
+        failed: 0,
+      }),
+    });
+    if (!response.ok) return;
+    expect(response.data?.endedLeases).toBeUndefined();
+    expect(releaseCalls).toEqual([]);
+    expect(
+      leaseRegistry.getLease({
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        deviceKey: lease.deviceKey,
+      }),
+    ).toBeDefined();
+    expect(sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('two-script test with wait then open ends the unheld request lease once without duplicate endedLeases (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-wait-then-open-');
+  fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nwait 1\n');
+  fs.writeFileSync(
+    path.join(root, '02-second.ad'),
+    'context platform=ios\nopen "com.example.app"\n',
+  );
+  const sessionStore = makeSessionStore('agent-device-replay-test-wait-then-open-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'proxy',
+    runId: 'run-5129-mixed',
+    leaseProvider: 'proxy',
+    leaseBackend: 'ios-instance',
+    clientId: 'client-5129',
+    deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
+  });
+  const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        async release(releasedLease) {
+          releaseCalls.push(releasedLease.leaseId);
+          return undefined;
+        },
+      },
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      flags: {
+        platform: 'ios',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        udid: IOS_SIMULATOR.id,
+      },
+      meta: {
+        cwd: root,
+        requestId: 'suite-mixed-lease-end-5129',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        deviceKey: lease.deviceKey,
+      },
+    });
+
+    expect(response.ok ? undefined : response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      ok: true,
+      data: expect.objectContaining({
+        total: 2,
+        passed: 2,
+        failed: 0,
+        endedLeases: [{ leaseId: lease.leaseId, outcome: 'released' }],
+      }),
+    });
+    expect(releaseCalls).toEqual([lease.leaseId]);
+    expect(sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('two-script test with a request-only lease and two open scripts ends the lease once at suite end (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-two-opens-request-lease-');
+  fs.writeFileSync(
+    path.join(root, '01-first.ad'),
+    'context platform=ios\nopen "com.example.app"\n',
+  );
+  fs.writeFileSync(
+    path.join(root, '02-second.ad'),
+    'context platform=ios\nopen "com.example.app"\n',
+  );
+  const sessionStore = makeSessionStore('agent-device-replay-test-two-opens-request-lease-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'proxy',
+    runId: 'run-5129-two-opens',
+    leaseProvider: 'proxy',
+    leaseBackend: 'ios-instance',
+    clientId: 'client-5129',
+    deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
+  });
+  const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        async release(releasedLease) {
+          releaseCalls.push(releasedLease.leaseId);
+          return undefined;
+        },
+      },
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      flags: {
+        platform: 'ios',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        udid: IOS_SIMULATOR.id,
+      },
+      meta: {
+        cwd: root,
+        requestId: 'suite-two-opens-request-lease-5129',
+        leaseId: lease.leaseId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        deviceKey: lease.deviceKey,
+      },
+    });
+
+    expect(response.ok ? undefined : response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      ok: true,
+      data: expect.objectContaining({
+        total: 2,
+        passed: 2,
+        failed: 0,
+        endedLeases: [{ leaseId: lease.leaseId, outcome: 'released' }],
+      }),
+    });
+    expect(releaseCalls).toEqual([lease.leaseId]);
+    expect(
+      leaseRegistry.getLease({
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        deviceKey: lease.deviceKey,
+      }),
+    ).toBeUndefined();
+    expect(sessionStore.listRefs()).toHaveLength(0);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledTimes(2);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        device: expect.objectContaining({ id: IOS_SIMULATOR.id }),
+        leaseWillEnd: true,
+      }),
+    );
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        device: expect.objectContaining({ id: IOS_SIMULATOR.id }),
+        leaseWillEnd: true,
+      }),
+    );
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(1, false);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(2, false);
+    expect(sessionStore.listRetainedExecutionHosts(lease.leaseId)).toEqual([]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('suite attempt cleanup keeps a shared provider lease active when an outer session holds it (#5129)', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-test-lease-retention-');
+  fs.writeFileSync(path.join(root, '01-case.ad'), 'context platform=ios\nopen "com.example.app"\n');
+  fs.writeFileSync(path.join(root, '02-case.ad'), 'context platform=ios\nopen "com.example.app"\n');
+  const sessionStore = makeSessionStore('agent-device-replay-test-lease-retention-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'proxy',
+    runId: 'run-5129',
+    leaseProvider: 'proxy',
+    leaseBackend: 'ios-instance',
+    clientId: 'client-5129',
+    deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
+  });
+  const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
+
+  try {
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        async release(releasedLease) {
+          releaseCalls.push(releasedLease.leaseId);
+          return undefined;
+        },
+      },
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+
+    const leaseFlags = {
+      platform: 'ios' as const,
+      leaseId: lease.leaseId,
+      leaseBackend: lease.backend,
+      udid: IOS_SIMULATOR.id,
+    };
+    const leaseMeta = {
+      cwd: root,
+      leaseId: lease.leaseId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      clientId: lease.clientId,
+      deviceKey: lease.deviceKey,
+    };
+    const outerOpen = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'open',
+      positionals: ['com.example.app'],
+      flags: leaseFlags,
+      meta: { ...leaseMeta, requestId: 'outer-open-lease-retention-5129' },
+    });
+    expect(outerOpen.ok ? undefined : outerOpen.error).toBeUndefined();
+
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'test',
+      positionals: [root],
+      flags: leaseFlags,
+      meta: { ...leaseMeta, requestId: 'suite-lease-retention-5129' },
+    });
+
+    expect(response.ok ? undefined : response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      ok: true,
+      data: expect.objectContaining({ total: 2, passed: 2, failed: 0 }),
+    });
+    if (!response.ok) return;
+    expect(response.data?.endedLeases).toBeUndefined();
+    expect(releaseCalls).toEqual([]);
+    expect(
+      leaseRegistry.getLease({
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        clientId: lease.clientId,
+        leaseBackend: lease.backend,
+        leaseProvider: lease.leaseProvider,
+        deviceKey: lease.deviceKey,
+      }),
+    ).toBeDefined();
+    expect(sessionStore.listRefs()).toHaveLength(1);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledTimes(2);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(1, true);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(2, true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function iosSimulatorRetentionCleanupFixture() {
+  return platformResourceCleanupFixture({
+    retainExecutionHostAfterClose: (params) =>
+      isIosFamily(params.device) &&
+      params.device.kind === 'simulator' &&
+      !params.shutdownRequested &&
+      !params.hasScreenRecording &&
+      !params.leaseWillEnd,
+  });
+}
 
 function requestPlatformProvidersFake(): {
   providers: RequestPlatformProviders;
