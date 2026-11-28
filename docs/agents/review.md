@@ -36,6 +36,16 @@ Reopen a resolved concern only when new evidence changes the conclusion.
   The table names who chooses the path, what the kernel resolves, what can change between checks, where bytes are first written, which failures keep the action result, and the accepted cases.
   If prose, tests, configuration, or dependencies change the security contract, review again.
   Fix a regression that this change introduces at every entry point.
+- Credential transport: apply `docs/adr/0041-credential-transport.md` and the credential transport section of `docs/agents/security.md`.
+  A finding must name the actor, the capability that the actor needs, and the credential that the actor reads.
+  If the actor needs a capability that the threat model excludes, reject the finding.
+  A finding against the supported remote setup must give reproduction steps that start from that setup.
+  If the steps depart from the setup, name the departure.
+  If the departure is not a configuration that the docs support or a likely operator mistake, reject the finding.
+  For a redirect finding, name the party that issues the redirect.
+  If only the operator's own service can issue it, reject the finding.
+  If the party that issues it can already read the first request, treat the finding as a plaintext finding, not a redirect finding.
+  Before you request a new protection layer, check whether a change at one existing owner, or a deletion, keeps the invariant.
 - Bulk prose rewrites (docs, ADRs, help): get a review from another model provider.
   The reviewer compares each changed sentence with the base. A self-review is not evidence.
 
