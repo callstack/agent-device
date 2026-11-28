@@ -32,13 +32,14 @@ const LEASE_SCOPE = {
   deviceKey: 'android:mobile:emulator-9999',
 } as const;
 
-test.for<[string, string[]]>([
-  ['snapshot', ['snapshot']],
-  // Loopback with no listener: nothing leaves the host if the daemon gets as far as the download.
-  ['install_source', ['install-from-source', 'http://127.0.0.1:1/app.apk']],
+test.for<[string, string[], string | undefined]>([
+  ['snapshot', ['snapshot'], LEASE_SCOPE.leaseProvider],
+  // A `proxy` provider connection reallocates an install by spec, and this daemon has no device to
+  // grant. The URL is a loopback port with no listener, so a download never leaves the host.
+  ['install_source', ['install-from-source', 'http://127.0.0.1:1/app.apk'], undefined],
 ])(
   'a dropped lease is reallocated for %s through the proxy without a heartbeat',
-  async ([command, argv], t) => {
+  async ([command, argv, leaseProvider], t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
     await withProxiedDaemon(async ({ baseUrl, project, stateDir, upstream, cli }) => {
       const client = createAgentDeviceClient({
@@ -46,9 +47,10 @@ test.for<[string, string[]]>([
         daemonAuthToken: 'client-secret',
         daemonTransport: 'http',
       });
-      const lease = await client.leases.allocate({ ...LEASE_SCOPE, leaseId: 'b'.repeat(32) });
-      writeConnection(stateDir, project, baseUrl, lease.leaseId);
-      await client.leases.release({ ...LEASE_SCOPE, leaseId: lease.leaseId });
+      const scope = { ...LEASE_SCOPE, leaseProvider };
+      const lease = await client.leases.allocate({ ...scope, leaseId: 'b'.repeat(32) });
+      writeConnection(stateDir, project, baseUrl, lease.leaseId, leaseProvider);
+      await client.leases.release({ ...scope, leaseId: lease.leaseId });
       upstream.length = 0;
 
       const result = await cli(argv);
@@ -156,7 +158,13 @@ async function describe(request: Request): Promise<string> {
   return `${route} ${body.method === 'agent_device.command' ? body.params?.command : body.method}`;
 }
 
-function writeConnection(stateDir: string, project: string, baseUrl: string, leaseId: string) {
+function writeConnection(
+  stateDir: string,
+  project: string,
+  baseUrl: string,
+  leaseId: string,
+  leaseProvider: string | undefined,
+) {
   const remoteConfigPath = path.join(project, 'agent.remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
   const now = new Date().toISOString();
@@ -172,7 +180,7 @@ function writeConnection(stateDir: string, project: string, baseUrl: string, lea
       runId: LEASE_SCOPE.runId,
       leaseId,
       leaseBackend: LEASE_SCOPE.leaseBackend,
-      leaseProvider: LEASE_SCOPE.leaseProvider,
+      leaseProvider,
       clientId: LEASE_SCOPE.clientId,
       deviceKey: LEASE_SCOPE.deviceKey,
       platform: 'android',

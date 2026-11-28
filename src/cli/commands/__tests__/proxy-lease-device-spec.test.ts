@@ -640,6 +640,32 @@ test('a new spec lease for another device than the requested --udid is released 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('install-from-source on a proxy connection with no lease allocates one by spec', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-install-source-');
+  const requests: LeaseAllocateRequest[] = [];
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'install-from-source',
+    positionals: ['https://example.com/app.apk'],
+    flags,
+    client: createTestClient({
+      listDevices: unexpectedCommandCall,
+      allocate: async (request) => {
+        requests.push(request);
+        return grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY });
+      },
+      release: unexpectedCommandCall,
+    }),
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.deviceKey, undefined);
+  assert.equal(materialized.flags.udid, 'SIM-REMOTE');
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, 'lease-1');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('a lease re-allocated by its stored device for a non-allocating command does not carry the spec', async () => {
   const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-device-spec-snapshot-', {
     leaseId: 'lease-1',
