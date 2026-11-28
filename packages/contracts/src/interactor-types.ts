@@ -322,51 +322,11 @@ export type SnapshotRuntimeResult = SnapshotResult | SnapshotRuntimeAcquiredResu
 /** The application an owner's launch reports it started, when the launch names one. */
 export type ApplicationLaunchReport = Readonly<{ launchedAppBundleId?: string }>;
 
-export type Interactor = {
-  open(
-    app: string,
-    options?: {
-      activity?: string;
-      appBundleId?: string;
-      launchConsole?: string;
-      launchArgs?: string[];
-      terminateRunningApp?: boolean;
-      url?: string;
-    },
-  ): Promise<ApplicationLaunchReport | void>;
-  openDevice(): Promise<void>;
-  close(app: string): Promise<void>;
+export type InteractorAppActions = {
   tap(x: number, y: number): Promise<Record<string, unknown> | void>;
   /** Complete point-press semantics for owners with fused series, alternate buttons, or surfaces. */
   pressPoint?(point: Point, options: PressPointOptions): Promise<Record<string, unknown> | void>;
-  /** Alternate mouse buttons for owners that otherwise use the shared point-press series. */
-  alternateClick?(
-    point: Point,
-    button: 'secondary' | 'middle',
-  ): Promise<Record<string, unknown> | void>;
-  /** Owner-native ref routes; currently the managed web runtime is their only local owner. */
-  tapRef?(ref: string): Promise<Record<string, unknown> | void>;
-  tapElementSelector?(selector: ElementSelectorTapOptions): Promise<Record<string, unknown> | void>;
-  /**
-   * Fused double-click for owners that have one. The shared `--count` series cannot stand in for it —
-   * it spaces and jitters independent presses rather than firing one pair the target reads as a
-   * double — so an owner with no such mechanic leaves this undefined and `press --double` reports the
-   * gap instead of resolving a denial.
-   */
-  doubleTap?(x: number, y: number): Promise<Record<string, unknown> | void>;
   longPress(x: number, y: number, durationMs?: number): Promise<Record<string, unknown> | void>;
-  /**
-   * How the app the runner context names is running, as the platform reports it. The Apple runner
-   * reads `XCUIApplication.state`; owners that read the foreground elsewhere leave it undefined.
-   */
-  appState?(): Promise<AppStateRuntimeResult>;
-  /**
-   * Move the pointer to a point without pressing. Only pointer-driven
-   * platforms (web today) implement it; touch platforms have no hover state
-   * and leave it undefined, which the `hover` command reports as unsupported.
-   */
-  hover?(x: number, y: number): Promise<Record<string, unknown> | void>;
-  hoverRef?(ref: string): Promise<Record<string, unknown> | void>;
   focus(x: number, y: number): Promise<Record<string, unknown> | void>;
   type(text: string, delayMs?: number): Promise<TypeTextBackendResult | void>;
   /**
@@ -382,11 +342,56 @@ export type Interactor = {
     delayMs?: number,
     options?: { allowNonHittableCoordinateFallback?: boolean },
   ): Promise<Record<string, unknown> | void>;
-  fillRef?(ref: string, text: string, delayMs?: number): Promise<Record<string, unknown> | void>;
   scroll(
     direction: ScrollDirection,
     options?: ScrollExecutionOptions,
   ): Promise<Record<string, unknown> | void>;
+  back(mode?: BackMode): Promise<void>;
+  setOrientation(orientation: DeviceRotation): Promise<{ orientation?: DeviceRotation } | void>;
+};
+
+export type Interactor = InteractorAppActions & {
+  open(
+    app: string,
+    options?: {
+      activity?: string;
+      appBundleId?: string;
+      launchConsole?: string;
+      launchArgs?: string[];
+      terminateRunningApp?: boolean;
+      url?: string;
+    },
+  ): Promise<ApplicationLaunchReport | void>;
+  openDevice(): Promise<void>;
+  close(app: string): Promise<void>;
+  /** Alternate mouse buttons for owners that otherwise use the shared point-press series. */
+  alternateClick?(
+    point: Point,
+    button: 'secondary' | 'middle',
+  ): Promise<Record<string, unknown> | void>;
+  /** Owner-native ref routes; currently the managed web runtime is their only local owner. */
+  tapRef?(ref: string): Promise<Record<string, unknown> | void>;
+  tapElementSelector?(selector: ElementSelectorTapOptions): Promise<Record<string, unknown> | void>;
+  /**
+   * Fused double-click for owners that have one. The shared `--count` series cannot stand in for it —
+   * it spaces and jitters independent presses rather than firing one pair the target reads as a
+   * double — so an owner with no such mechanic leaves this undefined and `press --double` reports the
+   * gap instead of resolving a denial.
+   */
+  doubleTap?(x: number, y: number): Promise<Record<string, unknown> | void>;
+  /**
+   * How the app the runner context names is running, as the platform reports it. The Apple runner
+   * reads `XCUIApplication.state`; owners that read the foreground elsewhere leave it undefined.
+   */
+  appState?(): Promise<AppStateRuntimeResult>;
+  /**
+   * Move the pointer to a point without pressing. Only pointer-driven
+   * platforms (web today) implement it; touch platforms have no hover state
+   * and leave it undefined, which the `hover` command reports as unsupported.
+   */
+  hover?(x: number, y: number): Promise<Record<string, unknown> | void>;
+  hoverRef?(ref: string): Promise<Record<string, unknown> | void>;
+  fillRef?(ref: string, text: string, delayMs?: number): Promise<Record<string, unknown> | void>;
   screenshot(outPath: string, options?: ScreenshotOptions): Promise<ScreenshotCaptureFacts | void>;
   setViewport?(width: number, height: number): Promise<Record<string, unknown> | void>;
   snapshot(options?: SnapshotOptions): Promise<SnapshotRuntimeResult>;
@@ -417,7 +422,6 @@ export type Interactor = {
     found: boolean;
   }>;
   gestureViewport?(includesKeyboard?: true): Promise<Rect>;
-  back(mode?: BackMode): Promise<void>;
   /**
    * Optional (parity with `actionButton`): opens the springboard, a control not every owner
    * carries. An owner without it leaves it undefined; its fact refuses the press before binding,
@@ -425,7 +429,6 @@ export type Interactor = {
    * successful no-op.
    */
   home?(): Promise<void>;
-  setOrientation(orientation: DeviceRotation): Promise<{ orientation?: DeviceRotation } | void>;
   /** Hands rotation back to the sensor; only an owner whose `setOrientation` locks it carries this. */
   unlockOrientation?(): Promise<void>;
   performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
