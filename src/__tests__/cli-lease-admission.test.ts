@@ -112,6 +112,9 @@ function transportTo(daemon: Daemon) {
     }
     if (daemon.refusal && scopeOf(req, 'leaseId') === STORED_LEASE) throw daemon.refusal();
     if (req.command === 'open') return { ok: true, data: { session: req.session } };
+    if (req.command === 'install_source') {
+      return { ok: true, data: { launchTarget: 'com.example' } };
+    }
     return { ok: true, data: { nodes: [], truncated: false } };
   };
 }
@@ -151,6 +154,11 @@ function markedOf(result: Awaited<ReturnType<typeof run>>): boolean[] {
 test.each([
   ['snapshot -i', ['snapshot', '-i'], 'snapshot'],
   ['a proxy open on the stored device', ['open', 'com.example'], 'open'],
+  [
+    'an install from a URL the daemon downloads',
+    ['install-from-source', 'https://example.com/app.apk'],
+    'install_source',
+  ],
 ])('%s reaches a lease-admission daemon without a heartbeat', async (_name, argv, command) => {
   const ws = workspace();
   const result = await run(ws, argv, transportTo({ leaseAdmission: true }));
@@ -288,7 +296,7 @@ test.each<[string, string[], Partial<RemoteConnectionState>]>([
     { leaseProvider: 'limrun' },
   ],
   ['an install that uploads a local artifact first', ['install', 'com.example', 'app.apk'], {}],
-  ['an install from a source', ['install-from-source', 'https://example.com/app.apk'], {}],
+  ['an install-from-source naming a local path', ['install-from-source', 'app.apk'], {}],
   [
     'a stored lease id that is not canonical',
     ['snapshot'],
@@ -313,6 +321,18 @@ test.each<[string, string[], Partial<RemoteConnectionState>]>([
 
   assert.equal(commandsOf(result)[0], 'lease_heartbeat', result.stdout);
   assert.equal(markedOf(result).includes(true), false);
+
+  fs.rmSync(ws.root, { recursive: true, force: true });
+});
+
+// Without its own backend, nothing says the stored lease is on the one this command asks for.
+test('a stored lease with no backend of its own is not left to admission', async () => {
+  const ws = workspace({ leaseBackend: undefined });
+  const result = await run(ws, ['snapshot'], transportTo({ leaseAdmission: true }));
+
+  assert.equal(result.code, null, result.stdout);
+  assert.deepEqual(commandsOf(result), ['lease_allocate', 'snapshot']);
+  assert.deepEqual(markedOf(result), [false, false]);
 
   fs.rmSync(ws.root, { recursive: true, force: true });
 });

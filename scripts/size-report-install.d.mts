@@ -5,6 +5,7 @@ export type DirectoryMeasurement = { packageBytes: number; files: number };
 export function measureCleanInstalledPackage(
   tarballPath: string,
   packageName: string,
+  timeout?: number,
 ): DirectoryMeasurement & { totalBytes: number };
 
 export function assertInstalledSnapshotBridge(packageDir: string): void;

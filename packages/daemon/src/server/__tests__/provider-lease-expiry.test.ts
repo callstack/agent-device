@@ -196,6 +196,125 @@ test('does not release until the expired lease record is durable', async () => {
   }
 });
 
+test.each(['timer', 'drain', 'shutdown', 'persistent failure'] as const)(
+  '%s retires a stale recovery record after provider confirmation',
+  async (retry) => {
+    vi.useFakeTimers();
+    const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
+    const recordPath = path.join(stateDir, 'expired-provider-leases.json');
+    const lease = new LeaseRegistry().allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'limrun',
+    });
+    const removeFile = fs.rmSync;
+    const remove = vi.spyOn(fs, 'rmSync');
+    const recoverExpiredLease = vi.fn(async () => {
+      remove.mockImplementation((file, options) => {
+        if (file === recordPath) throw new Error('temporary disk failure');
+        removeFile(file, options);
+      });
+    });
+    const releaser = createExpiredProviderLeaseReleaser({
+      recoverExpiredLease,
+      stateDir,
+      recoverableProviderIds: ['limrun'],
+      retryDelayMs: 10,
+    });
+
+    try {
+      releaser.beginShutdown();
+      await expect(releaser.release(lease)).resolves.toEqual({ status: 'released' });
+      expect(JSON.parse(fs.readFileSync(recordPath, 'utf8')).leases).toEqual([lease]);
+
+      if (retry === 'persistent failure') {
+        await vi.advanceTimersByTimeAsync(10);
+        expect(fs.existsSync(recordPath)).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      }
+      if (retry !== 'shutdown') remove.mockRestore();
+      if (retry === 'timer') {
+        await vi.advanceTimersByTimeAsync(10);
+        expect(fs.existsSync(recordPath)).toBe(false);
+      }
+      expect(await releaser.drain(10)).toEqual({ pending: [], unknown: [], released: [lease] });
+      expect(fs.existsSync(recordPath)).toBe(retry === 'shutdown');
+
+      remove.mockRestore();
+      releaser.shutdown();
+      expect(fs.existsSync(recordPath)).toBe(false);
+      expect(recoverExpiredLease).toHaveBeenCalledExactlyOnceWith(lease);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      remove.mockRestore();
+      releaser.shutdown();
+      vi.useRealTimers();
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test.each(['before handoff', 'after handoff'] as const)(
+  'a recovery confirmation %s cannot leave disk work running past registration',
+  async (confirmation) => {
+    vi.useFakeTimers();
+    const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
+    const recordPath = path.join(stateDir, 'expired-provider-leases.json');
+    const lease = new LeaseRegistry().allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'limrun',
+    });
+    const release = Promise.withResolvers<void>();
+    const recoverExpiredLease = vi.fn(() => release.promise);
+    const releaser = createExpiredProviderLeaseReleaser({
+      recoverExpiredLease,
+      stateDir,
+      recoverableProviderIds: ['limrun'],
+      retryDelayMs: 10,
+    });
+
+    try {
+      releaser.beginShutdown();
+      const admitted = releaser.release(lease);
+      const drained = releaser.drain(10);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(await drained).toEqual({ pending: [lease], unknown: [lease], released: [] });
+      releaser.shutdown();
+
+      if (confirmation === 'before handoff') {
+        const removeFile = fs.rmSync;
+        const remove = vi.spyOn(fs, 'rmSync').mockImplementation((file, options) => {
+          if (file === recordPath) throw new Error('temporary disk failure');
+          removeFile(file, options);
+        });
+        try {
+          release.resolve();
+          await expect(admitted).resolves.toEqual({ status: 'released' });
+          expect(fs.existsSync(recordPath)).toBe(true);
+        } finally {
+          remove.mockRestore();
+        }
+        releaser.finishPersistence({ retainRegistration: false });
+        expect(fs.existsSync(recordPath)).toBe(false);
+      } else {
+        releaser.finishPersistence({ retainRegistration: false });
+        const inheritedRecord = fs.readFileSync(recordPath, 'utf8');
+        release.resolve();
+        await expect(admitted).resolves.toEqual({ status: 'released' });
+        expect(fs.readFileSync(recordPath, 'utf8')).toBe(inheritedRecord);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+      expect(recoverExpiredLease).toHaveBeenCalledExactlyOnceWith(lease);
+    } finally {
+      releaser.shutdown();
+      release.resolve();
+      vi.useRealTimers();
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  },
+);
+
 test('shutdown drain reports releases completed before and during its final retry', async () => {
   const leaseRegistry = new LeaseRegistry();
   const releasedBeforeShutdown = leaseRegistry.allocateLease({
@@ -321,6 +440,38 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
     expect(recoverExpiredLease).toHaveBeenCalledTimes(1);
     thirdDaemon.shutdown();
   } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('restart recovers a lease in both records once using the expired record', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const live = new LeaseRegistry().allocateLease({
+    tenantId: 't',
+    runId: 'run-1',
+    leaseProvider: 'revyl',
+  });
+  const expired = { ...live, expiresAt: live.expiresAt + 1_000 };
+  const journalPath = path.join(stateDir, 'live-provider-leases.json');
+  const expiredPath = path.join(stateDir, 'expired-provider-leases.json');
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const restartedDaemon = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease,
+    stateDir,
+    recoverableProviderIds: ['revyl'],
+  });
+
+  try {
+    fs.writeFileSync(journalPath, JSON.stringify({ version: 1, leases: [live] }));
+    fs.writeFileSync(expiredPath, JSON.stringify({ version: 1, leases: [expired] }));
+
+    await restartedDaemon.recoverInherited();
+
+    expect(recoverExpiredLease.mock.calls).toEqual([[expired]]);
+    expect(fs.existsSync(journalPath)).toBe(false);
+    expect(fs.existsSync(expiredPath)).toBe(false);
+  } finally {
+    restartedDaemon.shutdown();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

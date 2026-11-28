@@ -1,6 +1,8 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   commandMeetsLeaseAdmission,
   isDelegatingCompositeCommand,
+  resolveDaemonCommandName,
 } from '@agent-device/command-registry/registry';
 import {
   isUndispatchedInactiveLeaseRefusal,
@@ -46,7 +48,8 @@ export type AdmissionCheckedLease = Readonly<{
  * - a host-allocated `macos-app` lease has its own refusal;
  * - a provider with a runtime runs lifecycle hooks on a heartbeat, such as an instance liveness check;
  * - a command exempt from lease admission is never checked there;
- * - an upload of a local artifact runs before admission, under the lease;
+ * - an upload of a local artifact runs before admission, under the lease. Of the commands that can
+ *   upload, only an `install_source` of an http(s) URL uploads nothing: the daemon downloads it;
  * - Metro preparation registers remote work under the lease before the command;
  * - a composite (`batch`, `replay`, `test`) reads local scripts while it builds its request, and
  *   `fill --text-stdin` reads a pipe: a refusal must come before either, and a rerun could not read
@@ -61,6 +64,7 @@ export type AdmissionCheckedLease = Readonly<{
 export function leaseCheckedByAdmission(
   options: Readonly<{
     command: string;
+    positionals: readonly string[] | undefined;
     state: RemoteConnectionState;
     /** The stored connection record, absent while the connection is still built from flags. */
     savedState: RemoteConnectionState | undefined;
@@ -73,6 +77,7 @@ export function leaseCheckedByAdmission(
   }>,
 ): AdmissionCheckedLease | undefined {
   const { state, flags, check } = options;
+  const command = resolveDaemonCommandName(options.command);
   if (
     !check?.byAdmission ||
     !state.leaseId ||
@@ -80,10 +85,10 @@ export function leaseCheckedByAdmission(
     state.leaseBackend !== options.leaseBackend ||
     state.leaseBackend === 'macos-app' ||
     leaseProviderRequiringRuntime({ leaseProvider: state.leaseProvider }) !== undefined ||
-    !commandMeetsLeaseAdmission(options.command) ||
-    requestUploadsArtifacts({ command: options.command }) ||
+    !commandMeetsLeaseAdmission(command) ||
+    uploadsBeforeAdmission(command, options.positionals) ||
     options.preparesRuntime ||
-    isDelegatingCompositeCommand({ command: options.command, positionals: [] }) ||
+    isDelegatingCompositeCommand({ command, positionals: [] }) ||
     flags.textStdin === true ||
     flags.saveScript !== undefined ||
     !namesSavedConnection(options.savedState, state, flags) ||
@@ -93,6 +98,17 @@ export function leaseCheckedByAdmission(
   }
   const leaseTtlMs = options.policy.ttlMs(state);
   return { leaseId: state.leaseId, ...(leaseTtlMs === undefined ? {} : { leaseTtlMs }) };
+}
+
+/** Whether sending the command may upload a local artifact first. */
+function uploadsBeforeAdmission(
+  command: string,
+  positionals: readonly string[] | undefined,
+): boolean {
+  if (!requestUploadsArtifacts({ command })) return false;
+  if (command !== INTERNAL_COMMANDS.installSource) return true;
+  const protocol = URL.parse(positionals?.[0] ?? '')?.protocol;
+  return protocol !== 'http:' && protocol !== 'https:';
 }
 
 /** Whether the command goes to the saved connection's daemon, under its owner scope. */
