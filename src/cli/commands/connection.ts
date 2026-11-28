@@ -13,7 +13,12 @@ import {
   removeCloudConnection,
   withConnectionLock,
 } from '../connection/cloud-connection-record.ts';
-import { connectCloudSession, releaseCloudConnection } from '../connection/cloud-connect.ts';
+import {
+  connectCloudSession,
+  releaseCloudConnection,
+  type CloudConnectionRelease,
+} from '../connection/cloud-connect.ts';
+import { writeStderr } from '../process-exit.ts';
 import {
   isLegacyCloudProfile,
   requireLegacyTeardownCredential,
@@ -131,6 +136,16 @@ export const connectCommand: ClientCommandHandler = async (input) => {
 };
 
 type CloudConnection = Omit<Parameters<typeof releaseCloudConnection>[0], 'client'>;
+
+function leaseReleaseWarning(session: string, leaseReleaseError: string): string {
+  return `Warning: the proxy front for session "${session}" did not confirm its lease release (${leaseReleaseError}); the lease ends when its heartbeats stop.`;
+}
+
+function warnLeaseReleaseFailure(release: CloudConnectionRelease, session: string): void {
+  if (release.leaseReleaseError) {
+    writeStderr(`${leaseReleaseWarning(session, release.leaseReleaseError)}\n`);
+  }
+}
 type ConnectionCommandParams = Parameters<ClientCommandHandler>[0];
 
 async function connectDirectProfile(
@@ -151,7 +166,10 @@ async function connectDirectProfile(
   if (!replacingCloud) return await saveConnectProfile(params, stateDir, resolved);
   return await saveConnectProfile(params, stateDir, resolved, {
     beforeCommit: async () => {
-      await releaseCloudConnection({ ...connection, client: params.client });
+      warnLeaseReleaseFailure(
+        await releaseCloudConnection({ ...connection, client: params.client }),
+        connection.location.session,
+      );
     },
     onCommitted: () => removeCloudConnection(connection.location),
   });
@@ -178,7 +196,10 @@ async function connectCloudProfile(
     savedOrigin: pending?.origin,
   });
   if (!pending && (record || state?.cloudSession)) {
-    await releaseCloudConnection({ ...connection, client: params.client });
+    warnLeaseReleaseFailure(
+      await releaseCloudConnection({ ...connection, client: params.client }),
+      connection.location.session,
+    );
   }
   const replacingDirect = pending && state && !state.cloudSession;
   const connectParams = replacingDirect
@@ -643,7 +664,7 @@ async function disconnectCloud(
     },
     () =>
       leaseReleaseError
-        ? `Ended cloud session "${session}". Warning: the proxy front did not confirm its lease release (${leaseReleaseError}); the lease ends when its heartbeats stop.`
+        ? `Ended cloud session "${session}". ${leaseReleaseWarning(session, leaseReleaseError)}`
         : `Ended cloud session "${session}".`,
   );
   return true;

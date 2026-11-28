@@ -358,7 +358,13 @@ export function readProxyFrontAttachment(
       return undefined;
     }
     return { ...attachment, leasing: 'proxy-front' };
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.details?.reason === CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason
+    ) {
+      throw error;
+    }
     return undefined;
   }
 }

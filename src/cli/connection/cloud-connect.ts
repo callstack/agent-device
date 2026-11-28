@@ -7,6 +7,7 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   createCloudSession,
   deleteCloudSession,
@@ -139,6 +140,14 @@ export async function releaseCloudConnection(options: {
   // and a proxy front ends a lease whose heartbeats stop once its TTL passes.
   const proxyFront = readProxyFrontAttachment(location);
   let leaseReleaseError: string | undefined;
+  if (proxyFront && !state) {
+    // Without state there is no lease id, so the front's lease cannot be released from here.
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'proxy_front_attachment_without_state',
+      data: { session: location.session },
+    });
+  }
   if (proxyFront && state) {
     try {
       const release = await releaseProxyFrontConnectionLease(client, state, proxyFront);

@@ -6,7 +6,9 @@ import { writeCloudAttachment } from './cloud-attachment.ts';
 import {
   cleanExpiredCloudAttachments,
   cloudAttachmentPath,
+  cloudConnectionDir,
   readCloudConnection,
+  readProxyFrontAttachment,
   writeCloudConnection,
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
@@ -89,4 +91,20 @@ test('an expired proxy-front attachment is removed even when its release fails',
   );
   expect(attempts).toEqual([proxyFrontAttachment]);
   expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+});
+
+test('reading a proxy-front attachment from an unsafe credential store refuses instead of reading as none', () => {
+  const stateDir = mkdtempForTestSync('cloud-record-unsafe-');
+  const location = { stateDir, session: 'unsafe-qa' };
+  writeCloudAttachment(location, proxyFrontAttachment as CloudAttachment);
+  expect(readProxyFrontAttachment(location)).toEqual({
+    ...proxyFrontAttachment,
+    leasing: 'proxy-front',
+  });
+  fs.chmodSync(cloudConnectionDir(location), 0o755);
+  expect(() => readProxyFrontAttachment(location)).toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'cloud_credential_store_unsafe' }),
+    }),
+  );
 });

@@ -144,3 +144,28 @@ test('a proxy-front command ignores a lease id passed on its command line', asyn
   expect(allocate?.meta?.leaseId).not.toBe('caller-supplied-lease');
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
 });
+
+test('a connect replacement whose proxy-front lease release fails prints the warning', async () => {
+  const env = cloudEnv();
+  stubCloudApi(proxyFrontDevice);
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  expect(
+    (
+      await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+        env,
+        sendToDaemon: withLeaseAllocation(),
+      })
+    ).code,
+  ).toBeNull();
+
+  const replaced = await runCliCapture([...connectArgs, '--force'], {
+    env,
+    sendToDaemon: async () => ({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', message: 'the proxy front is unreachable' },
+    }),
+  });
+  expect(replaced.stderr).toContain('did not confirm its lease release');
+  expect(replaced.stderr).toContain('unreachable');
+  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+});
