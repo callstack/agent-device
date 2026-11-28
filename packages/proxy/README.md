@@ -137,6 +137,13 @@ If your Bun deployment needs proxy routing for transfers, set `NODE_USE_ENV_PROX
 
 By default, `/rpc`, `/health` and request diagnostics use global `fetch`.
 
+The default transport sends `upstreamToken` to `upstreamBaseUrl`, so use `https://`, or `http://`
+to a loopback host (`localhost`, `127.0.0.0/8`, or `::1`). For any other URL, 0.21.x
+`createDaemonProxy` warns on stderr, and 0.22 refuses to send the token, with reason
+`insecure_credential_transport`. To allow plain HTTP, set `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1`
+and pass `env: process.env`. With `upstreamFetch`, the URL is not checked: your transport owns the
+route.
+
 ### Reach the daemon over your own transport
 
 Pass `upstreamFetch` when the daemon is only reachable some other way, such as a tunnel the device
@@ -215,6 +222,7 @@ authenticate: async (request) => {
 | --- | --- | --- |
 | `upstreamBaseUrl` | required | Base URL of the daemon's HTTP server. |
 | `upstreamToken` | required | The daemon's auth token. |
+| `env` | none | This process's environment, usually `process.env`. The proxy reads only `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT` from it. |
 | `clientToken` | required without `authenticate` | Token clients must send as their daemon auth token. |
 | `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
 | `upstreamFetch` | none | Sends one request to the daemon. Without it, transfer routes use `node:http(s)` and every other route uses the global `fetch`. |

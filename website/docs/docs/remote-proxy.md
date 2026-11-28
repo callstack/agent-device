@@ -29,6 +29,8 @@ The command prints the local proxy URL and a `daemon auth token`. Keep the token
 
 By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you want the proxy reachable from the host network.
 
+Reach the proxy from another machine over an `https://` tunnel URL, or forward a local port with `ssh -L 4310:127.0.0.1:4310 <host>` and connect to `http://127.0.0.1:4310`. If the client would send the token over plain HTTP to a host that is not loopback, 0.21.x warns on stderr, and 0.22 refuses with `details.reason: "insecure_credential_transport"`. `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1` in the client's environment allows plain HTTP. See [Remote access](./security-trust.md#remote-access).
+
 ## Connect from the agent machine
 
 On the machine running the agent, connect to the public tunnel URL with the `/agent-device` base path and the printed token. The connection profile stores only routing metadata, never the token, so export the token once and every command in the shell picks it up. Name the session the same way:

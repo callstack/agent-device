@@ -2,7 +2,11 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  beginStderrCapture,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../companion/client-metro-companion.ts', () => ({
@@ -550,3 +554,56 @@ test('prepareMetroRuntime retries malformed retryable bridge responses after com
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test.each([
+  ['warns before', 'http://bridge.example.test', {}, /http:\/\/bridge\.example\.test are sent/],
+  [
+    'honors the host override for',
+    'http://allowed-bridge.example.test',
+    { AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT: '1' },
+    /^$/,
+  ],
+] as const)(
+  'prepareMetroRuntime %s a plain http bridge that gets the bearer',
+  async (_label, proxyBaseUrl, env, expected) => {
+    const projectRoot = mkdtempForTestSync('agent-device-metro-transport-');
+    fs.writeFileSync(
+      path.join(projectRoot, 'package.json'),
+      JSON.stringify({ name: 'metro-transport-test', dependencies: { 'react-native': '0' } }),
+    );
+    const stderr = beginStderrCapture();
+    const atBridgeSend: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/status')) return new Response('packager-status:running');
+        atBridgeSend.push(stderr.read());
+        return new Response('{}', { status: 401 });
+      }),
+    );
+
+    try {
+      await assert.rejects(
+        prepareMetroRuntime(
+          {
+            projectRoot,
+            proxyBaseUrl,
+            proxyBearerToken: 'shared-token',
+            bridgeScope: TEST_BRIDGE_SCOPE,
+            reuseExisting: true,
+            installDependenciesIfNeeded: false,
+          },
+          createTestHostEnvironment({ env }),
+        ),
+        /401/,
+      );
+    } finally {
+      stderr.restore();
+      vi.unstubAllGlobals();
+    }
+
+    assert.equal(atBridgeSend.length, 1);
+    assert.match(atBridgeSend[0]!, expected);
+    assert.doesNotMatch(atBridgeSend[0]!, /shared-token/);
+  },
+);

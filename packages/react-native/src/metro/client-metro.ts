@@ -21,6 +21,7 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
+import { admitCredentialDestination } from '@agent-device/host-kit/credential-admission';
 import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import type {
   MetroBridgeDescriptor,
@@ -707,6 +708,8 @@ function resolveMetroPrepareSettings(
     normalizeOptionalString(input.proxyBearerToken) ?? '',
     env,
   );
+  // The bearer goes to this URL. `input.env` does not decide the transport; the host does.
+  if (proxyEnabled) admitCredentialDestination(proxyBaseUrl, host.env);
 
   return {
     env,

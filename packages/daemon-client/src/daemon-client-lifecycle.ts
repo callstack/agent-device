@@ -5,6 +5,8 @@ import type {
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { isLoopbackHostname } from '@agent-device/contracts/loopback-host';
+import { admitCredentialDestination } from '@agent-device/host-kit/credential-admission';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
@@ -15,7 +17,6 @@ import {
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  isLoopbackHostname,
   resolveDaemonPaths,
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
@@ -254,6 +255,8 @@ function resolveRemoteClientSettings(
   const remoteBaseUrl = resolveRemoteDaemonBaseUrl(rawBaseUrl);
   const authToken = suppliedAuthToken ?? env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   validateRemoteDaemonTrust(remoteBaseUrl, authToken);
+  // Every remote request sends the token to this base URL.
+  if (remoteBaseUrl) admitCredentialDestination(remoteBaseUrl, env);
   const daemonRpc = resolveDaemonRpcMode(req.flags?.daemonRpc);
   return { rawBaseUrl, remoteBaseUrl, authToken, daemonRpc };
 }

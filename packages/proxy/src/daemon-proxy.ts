@@ -65,8 +65,16 @@ export type DaemonProxyAuthenticate = (
 ) => Promise<DaemonProxyAuthenticatedClient | null> | DaemonProxyAuthenticatedClient | null;
 
 export type DaemonProxyOptions = {
-  /** Base URL of the upstream agent-device daemon HTTP server. */
+  /**
+   * Base URL of the upstream agent-device daemon HTTP server. Without `upstreamFetch`, use https,
+   * or plain http to loopback: the proxy sends `upstreamToken` to it.
+   */
   upstreamBaseUrl: string;
+  /**
+   * The environment of this process, usually `process.env`. The proxy reads only
+   * `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT` from it.
+   */
+  env?: Readonly<Record<string, string | undefined>>;
   /** Auth token of the upstream daemon. Never leaves the proxy. */
   upstreamToken: string;
   /** Fixed public HTTP(S) origin for upload tickets. */
@@ -574,8 +582,22 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
   const clientToken = options.authenticate
     ? undefined
     : normalizeToken(options.clientToken ?? '', 'clientToken');
-  const upstreamFetch = options.upstreamFetch ?? ((request) => fetch(request));
   const customUpstreamFetch = options.upstreamFetch;
+  // Judged once, here, and only for the default transport: a custom one owns its route. The module
+  // loads outside the proxy entry, so the default transport waits for the verdict before it sends.
+  const admission = customUpstreamFetch
+    ? undefined
+    : import('@agent-device/host-kit/credential-admission').then((module) =>
+        module.admitCredentialDestination(upstreamBaseUrl, options.env ?? {}),
+      );
+  // A refusal reaches every request that waits for the verdict.
+  admission?.catch(() => {});
+  const upstreamFetch: DaemonProxyUpstreamFetch =
+    customUpstreamFetch ??
+    (async (request) => {
+      await admission;
+      return fetch(request);
+    });
   return {
     upstreamBaseUrl,
     publicOrigin:
@@ -592,12 +614,14 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
       if (!isTransferRoute(route, request.method)) return upstreamFetch(request);
       const { createNodeTransferFetch, settleUpstreamFetch } =
         await import('./transfer-transport.ts');
-      return customUpstreamFetch
-        ? settleUpstreamFetch(
-            (forwarded) => customUpstreamFetch(keepAliveWith(request, forwarded)),
-            request,
-          )
-        : createNodeTransferFetch()(request);
+      if (customUpstreamFetch) {
+        return settleUpstreamFetch(
+          (forwarded) => customUpstreamFetch(keepAliveWith(request, forwarded)),
+          request,
+        );
+      }
+      await admission;
+      return createNodeTransferFetch()(request);
     },
   };
 }
