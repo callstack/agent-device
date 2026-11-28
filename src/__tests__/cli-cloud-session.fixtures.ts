@@ -82,9 +82,18 @@ function mintLeaseId(): string {
   return randomBytes(16).toString('hex');
 }
 
+type ActiveLease = {
+  tenantId: unknown;
+  runId: unknown;
+  clientId: unknown;
+  deviceKey: string;
+};
+
 /**
  * Answers the proxy lease RPCs a proxy front serves: the allocate names the device, a lease id the
- * front already holds is reused, and a release ends it. Every other request goes to `inner`.
+ * front already holds is reused, and a release ends it. Every other request goes to `inner`, except
+ * that a command the front does not serve is refused unless it carries the lease metadata of an
+ * active lease, as the real front does.
  */
 export function withLeaseAllocation(
   inner?: (req: CapturedDaemonRequest) => Promise<DaemonResponse> | DaemonResponse,
@@ -98,14 +107,14 @@ export function withLeaseAllocation(
       device,
     } as unknown as DeviceInfo),
   );
-  const activeLeaseIds = new Set<string>();
+  const activeLeases = new Map<string, ActiveLease>();
   return async (req: CapturedDaemonRequest): Promise<DaemonResponse> => {
     if (req.command === 'lease_allocate' || req.command === 'lease_heartbeat') {
       const { tenantId, runId, clientId } = req.meta ?? {};
       // The client names the lease when its connection is a proxy; the front mints one otherwise.
       const leaseId = typeof req.meta?.leaseId === 'string' ? req.meta.leaseId : mintLeaseId();
-      const reused = activeLeaseIds.has(leaseId);
-      activeLeaseIds.add(leaseId);
+      const reused = activeLeases.has(leaseId);
+      activeLeases.set(leaseId, { tenantId, runId, clientId, deviceKey });
       return {
         ok: true,
         data: {
@@ -125,12 +134,38 @@ export function withLeaseAllocation(
     }
     if (req.command === 'lease_release') {
       const leaseId = req.meta?.leaseId;
-      if (typeof leaseId !== 'string' || !activeLeaseIds.has(leaseId)) {
+      if (typeof leaseId !== 'string' || !activeLeases.has(leaseId)) {
         return { ok: true, data: { released: false, absent: true } };
       }
-      activeLeaseIds.delete(leaseId);
+      activeLeases.delete(leaseId);
       return { ok: true, data: { released: true } };
     }
+    const refusal = refuseWithoutLeaseMeta(req, activeLeases);
+    if (refusal) return refusal;
     return inner ? await inner(req) : { ok: true, data: {} };
   };
+}
+
+/** Mirrors the real proxy front: a command must name an active lease with its scope, or it is refused. */
+function refuseWithoutLeaseMeta(
+  req: CapturedDaemonRequest,
+  activeLeases: ReadonlyMap<string, ActiveLease>,
+): DaemonResponse | undefined {
+  const meta = req.meta ?? {};
+  const lease = typeof meta.leaseId === 'string' ? activeLeases.get(meta.leaseId) : undefined;
+  const scopeMatches =
+    lease !== undefined &&
+    typeof meta.tenantId === 'string' &&
+    typeof meta.runId === 'string' &&
+    typeof meta.clientId === 'string' &&
+    meta.tenantId === lease.tenantId &&
+    meta.runId === lease.runId &&
+    meta.clientId === lease.clientId &&
+    meta.deviceKey === lease.deviceKey;
+  if (scopeMatches) return undefined;
+  const message =
+    req.command === 'open'
+      ? 'Proxy open requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.'
+      : `Proxy ${req.command} requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.`;
+  return { ok: false, error: { code: 'INVALID_ARGS', message } };
 }
