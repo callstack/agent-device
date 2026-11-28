@@ -47,7 +47,7 @@ extension RunnerTests {
     var dispatched: ObjCBool = false
     let failure = RunnerSynthesizedGesture.synthesizeDrag(
       withApplication: app,
-      resolvedWindow: context.resolvedWindow,
+      resolvedWindow: context.dispatchWindow,
       interfaceOrientation: geometry.orientation,
       drag: RunnerSynthesizedDrag(start: start, end: end, durationMs: durationMs,
                                   controlledScroll: ObjCBool(profile == .controlledScroll)),
@@ -432,40 +432,86 @@ extension RunnerTests {
   func synthesizedCoordinateContext(app: XCUIApplication) throws -> SynthesizedCoordinateContext? {
 #if os(iOS)
     var health = mainOwned.accessibilityHealth
-    let window: XCUIElement?
+    let windowSource: SynthesizedWindowSource
     let referenceFrame: CGRect
-    var treeUnreadable = false
     if requestLitPanel != nil {
       let booked = try requireRequestLitPanelSurface(app: app)
       guard let context = SynthesizedCoordinateContext(
-        validating: booked.geometry, resolvedWindow: booked.window, accessibilityHealth: health
+        validating: booked.geometry,
+        windowSource: .resolved(booked.window, fillsSoleScreen: false),
+        accessibilityHealth: health
       ) else { throw RunnerAppScreenCaptureFailure.unresolvedScreen }
       return context
     }
     if let resolved = resolveRunnerWindowElement(app: app) {
-      window = resolved.window
       referenceFrame = resolved.frame
-    } else if let soleScreenFrame = soleScreenReferenceFrame(app: app) {
-      window = nil
+      windowSource = .resolved(
+        resolved.window,
+        fillsSoleScreen: soleScreenReferenceFrame(app: app, phoneOnly: true) == resolved.frame
+      )
+    } else {
+      let soleScreenFrame = soleScreenReferenceFrame(app: app)
+      NSLog(
+        "AGENT_DEVICE_RUNNER_SYNTHESIZED_SOLE_SCREEN_ROUTE resolved=%@",
+        soleScreenFrame.map { NSCoder.string(for: $0) } ?? "none"
+      )
+      guard let soleScreenFrame else { return nil }
       referenceFrame = soleScreenFrame
       // The windows query just failed on this tree, so this gesture's keyboard probes and XCTest
       // fallbacks would fail on it too, after XCTest's own retries.
       health = .unavailable
-      treeUnreadable = true
-    } else {
-      return nil
+      windowSource = .soleScreen
     }
     return SynthesizedCoordinateContext(
       validating: surfaceGeometry(windowFrame: referenceFrame, app: app),
-      resolvedWindow: window,
-      accessibilityHealth: health,
-      treeUnreadable: treeUnreadable
+      windowSource: windowSource,
+      accessibilityHealth: health
     )
 #else
     return nil
 #endif
   }
 
+  /// A coordinate tap's context that needs no windows query, or nil when the tap must resolve its
+  /// window. On an iPhone with one screen the app fills that screen, so the screen in the app's
+  /// orientation is the window frame and the record routes to the screen, so the windows query (three
+  /// XCTest round trips on every tap) would only repeat it. Only an XCTest fallback needs what the
+  /// query proves, so a failed synthesis runs it then (`provingDeferredWindowQuery`).
+  @MainActor
+  func deferredWindowTapContext(app: XCUIApplication) -> SynthesizedCoordinateContext? {
+#if os(iOS)
+    guard requestLitPanel == nil, let frame = soleScreenReferenceFrame(app: app, phoneOnly: true) else { return nil }
+    return SynthesizedCoordinateContext(
+      validating: surfaceGeometry(windowFrame: frame, app: app),
+      windowSource: .deferred,
+      accessibilityHealth: mainOwned.accessibilityHealth
+    )
+#else
+    return nil
+#endif
+  }
+
+  /// `context` with its deferred windows query run: a tree that answers no window is unreadable
+  /// for the fallback decision, as when the query ran up front.
+  @MainActor
+  func provingDeferredWindowQuery(
+    _ context: SynthesizedCoordinateContext,
+    app: XCUIApplication
+  ) -> SynthesizedCoordinateContext {
+    guard case .deferred = context.windowSource else { return context }
+    guard let resolved = resolveRunnerWindowElement(app: app) else {
+      return SynthesizedCoordinateContext(
+        geometry: context.geometry,
+        windowSource: .soleScreen,
+        accessibilityHealth: .unavailable
+      )
+    }
+    return SynthesizedCoordinateContext(
+      geometry: context.geometry,
+      windowSource: .resolved(resolved.window, fillsSoleScreen: resolved.frame == context.geometry.windowOnScreen.rect),
+      accessibilityHealth: context.accessibilityHealth
+    )
+  }
 
 #if os(iOS)
   /// The reference frame of the sole-screen route, read without the app's accessibility tree: when
@@ -475,18 +521,18 @@ extension RunnerTests {
   /// `RunnerResolveSoleScreen` owns which devices prove that — an iPhone always, an iPad only while
   /// the app fills the screen — so this reads the same answer the record's routing takes, and
   /// anything else (a windowed iPad, a multi-screen foldable) keeps requiring a window.
+  /// `phoneOnly` admits by the phone idiom alone, the rule `RunnerResolveSoleScreen` applies to an
+  /// iPhone, and names no frame elsewhere: the screen size read already requires exactly one screen,
+  /// so a caller asking on every gesture skips the admission's screens query, which dispatch repeats
+  /// anyway, and never pays an iPad's fills-screen probe.
   @MainActor
-  func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
-    guard soleScreenRouteAdmits(app) else { return nil }
+  func soleScreenReferenceFrame(app: XCUIApplication, phoneOnly: Bool = false) -> CGRect? {
+    let admitted = phoneOnly ? UIDevice.current.userInterfaceIdiom == .phone : soleScreenRouteAdmits(app)
+    guard admitted else { return nil }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    let frame = soleDisplayPortraitSize().flatMap {
+    return soleDisplayPortraitSize().flatMap {
       Self.soleScreenReferenceFrame(portraitSize: $0, interfaceOrientation: orientation)
     }
-    NSLog(
-      "AGENT_DEVICE_RUNNER_SYNTHESIZED_SOLE_SCREEN_ROUTE resolved=%@",
-      frame.map { NSCoder.string(for: $0) } ?? "none"
-    )
-    return frame
   }
 
   /// The sole-screen admission rule `RunnerResolveSoleScreen` owns: an iPhone by its idiom, an iPad
@@ -562,7 +608,7 @@ extension RunnerTests {
         return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture.rawValue))
       }
       let point = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
-      return .target(point: point, resolvedWindow: context.resolvedWindow, referenceFrame: context.geometry.windowOnScreen.rect, orientation: geometry.orientation)
+      return .target(point: point, resolvedWindow: context.dispatchWindow, referenceFrame: context.geometry.windowOnScreen.rect, orientation: geometry.orientation)
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     if let unrotated = unrotatedSoleScreenPoint(app: app, x: x, y: y, interfaceOrientation: orientation) {
@@ -890,7 +936,7 @@ extension RunnerTests {
     }
     return try dispatchSynthesizedPointerSamples(
       app: app,
-      window: planned.context.resolvedWindow,
+      window: planned.context.dispatchWindow,
       orientation: planned.orientation,
       pointerSamples: planned.pointerSamples
     )

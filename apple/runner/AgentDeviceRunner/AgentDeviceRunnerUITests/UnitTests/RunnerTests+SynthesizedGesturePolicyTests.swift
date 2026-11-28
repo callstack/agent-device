@@ -192,9 +192,8 @@ extension RunnerTests {
   ) -> SynthesizedCoordinateContext {
     SynthesizedCoordinateContext(
       geometry: SurfaceGeometry(windowOnScreen: SurfaceRect(CGRect(x: 0, y: 0, width: 390, height: 844)), panelNativeSize: nil, orientation: 1),
-      resolvedWindow: app.windows.firstMatch,
-      accessibilityHealth: accessibilityHealth,
-      treeUnreadable: treeUnreadable
+      windowSource: treeUnreadable ? .soleScreen : .resolved(app.windows.firstMatch, fillsSoleScreen: false),
+      accessibilityHealth: accessibilityHealth
     )
   }
 

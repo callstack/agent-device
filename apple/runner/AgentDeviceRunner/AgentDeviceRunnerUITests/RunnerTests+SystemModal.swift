@@ -110,25 +110,33 @@ extension RunnerTests {
     let window: XCUIElement
   }
 
+  /// An alert in any window wins over a sheet. One windows query answers both types, so the
+  /// common case, no modal at all, costs one SpringBoard round trip rather than one per type.
   func firstBlockingSystemModal(
     in springboard: XCUIApplication,
     deadline: Date = .distantFuture
   ) throws -> SpringBoardModal? {
-    if let alert = try firstBlockingSystemModal(in: springboard, matching: .alert, deadline: deadline) {
+    let windows = try readModalElements(deadline: deadline) {
+      springboard.windows.containing(Self.blockingSystemModalWindowPredicate).allElementsBoundByIndex
+    }
+    if windows.isEmpty { return nil }
+    if let alert = try firstBlockingSystemModal(in: windows, matching: .alert, deadline: deadline) {
       return alert
     }
-
-    return try firstBlockingSystemModal(in: springboard, matching: .sheet, deadline: deadline)
+    return try firstBlockingSystemModal(in: windows, matching: .sheet, deadline: deadline)
   }
 
+  static let blockingSystemModalWindowPredicate = NSPredicate(
+    format: "elementType == %lu OR elementType == %lu",
+    XCUIElement.ElementType.alert.rawValue,
+    XCUIElement.ElementType.sheet.rawValue
+  )
+
   private func firstBlockingSystemModal(
-    in springboard: XCUIApplication,
+    in windows: [XCUIElement],
     matching type: XCUIElement.ElementType,
     deadline: Date
   ) throws -> SpringBoardModal? {
-    let windows = try readModalElements(deadline: deadline) {
-      springboard.windows.containing(type, identifier: nil).allElementsBoundByIndex
-    }
     for window in windows {
       let modals = try readModalElements(deadline: deadline) {
         window.descendants(matching: type).allElementsBoundByIndex

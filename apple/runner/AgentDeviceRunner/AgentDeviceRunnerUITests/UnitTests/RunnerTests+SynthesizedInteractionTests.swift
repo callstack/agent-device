@@ -178,7 +178,7 @@ extension RunnerTests {
         context = try XCTUnwrap(
           SynthesizedCoordinateContext(
             validating: surfaceGeometry(windowFrame: windowFrame ?? resolved.frame, app: app),
-            resolvedWindow: resolved.window,
+            windowSource: .resolved(resolved.window, fillsSoleScreen: false),
             accessibilityHealth: .healthy
           )
         )
@@ -401,22 +401,8 @@ extension RunnerTests {
     guard case .ready(let fling) = try prepareDeviceBackFling(app: app, context: context) else {
       return XCTFail("a readable tree resolves the fling")
     }
-    let selector = NSSelectorFromString("allElementsBoundByIndex")
-    let query = try XCTUnwrap(class_getInstanceMethod(XCUIElementQuery.self, selector))
-    let originalQuery = method_getImplementation(query)
-    var queries = 0
-    let countedQuery = imp_implementationWithBlock({ (target: AnyObject) -> NSArray in
-      queries += 1
-      typealias Query = @convention(c) (AnyObject, Selector) -> NSArray
-      return unsafeBitCast(originalQuery, to: Query.self)(target, selector)
-    } as @convention(block) (AnyObject) -> NSArray)
-    method_setImplementation(query, countedQuery)
-    defer {
-      method_setImplementation(query, originalQuery)
-      imp_removeBlock(countedQuery)
-    }
-
-    guard case .sent = try fling() else { return XCTFail("the fling must be sent") }
+    let (dispatch, queries) = try countingElementQueries { try fling() }
+    guard case .sent = dispatch else { return XCTFail("the fling must be sent") }
 
     XCTAssertEqual(queries, 0, "no windows query runs inside the gap")
   }
