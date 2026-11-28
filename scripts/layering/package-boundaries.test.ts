@@ -840,7 +840,6 @@ test('the real tree parses, declares, and passes R11', () => {
     ],
   );
   assert.deepEqual([...providerLimrunPackage.workspaceDependencies].sort(), [
-    '@agent-device/build-config',
     '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/host-kit',
@@ -867,7 +866,7 @@ test('the real tree parses, declares, and passes R11', () => {
   }
   assert.ok(
     !rootExternalDependencies.has('@limrun/api'),
-    'core must not depend on the Limrun SDK; the Limrun plugin installs it',
+    'core must not depend on the Limrun SDK; the Limrun plugin bundles it',
   );
   const xmlPackage = packages.find((pkg) => pkg.name === '@agent-device/xml');
   assert.ok(xmlPackage, 'xml package must exist');

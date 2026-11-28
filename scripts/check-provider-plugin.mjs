@@ -21,9 +21,9 @@ const home = path.join(scratch, 'home');
 const installation = crypto.randomUUID();
 const project = path.join(home, 'plugins', installation);
 let rejectCredentials = true;
-const requests = [];
+const requestUserAgents = [];
 const server = http.createServer((request, response) => {
-  requests.push(request.url);
+  requestUserAgents.push(request.headers['user-agent']);
   const result = fixture.respond
     ? fixture.respond(request.url, rejectCredentials)
     : { status: 500, body: { error: 'this fixture answers no requests' } };
@@ -180,7 +180,12 @@ globalThis.fetch = (input, init) => {
   }
   const connected = await connect();
   assert.equal(connected.code, undefined, connected.stdout + connected.stderr);
-  if (fixture.respond) assert.ok(requests.length > 0);
+  if (fixture.respond) assert.ok(requestUserAgents.length > 0);
+  if (fixture.userAgentPattern) {
+    for (const userAgent of requestUserAgents) {
+      assert.match(userAgent ?? '', fixture.userAgentPattern);
+    }
+  }
   console.log(
     `Packed ${manifest.name}: isolated install${fixture.respond ? ', host-recognized errors,' : ''} and CLI connect passed.`,
   );

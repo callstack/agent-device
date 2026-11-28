@@ -35,6 +35,9 @@ importers:
       '@agent-device/browserstack':
         specifier: workspace:*
         version: link:packages/provider-browserstack
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:packages/build-config
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:packages/capture-kit
@@ -74,9 +77,6 @@ importers:
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:packages/host-kit
-      '@agent-device/host-swift':
-        specifier: workspace:*
-        version: link:packages/host-swift
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
@@ -1024,13 +1024,31 @@ importers:
 
   packages/provider-limrun:
     dependencies:
-      '@limrun/api':
-        specifier: ^0.69.1
-        version: 0.69.1(supports-color@7.2.0)
+      '@limrun/xdelta3-wasm':
+        specifier: 0.2.0
+        version: 0.2.0
+      eventsource-client:
+        specifier: ^1.2.0
+        version: 1.2.0
+      https-proxy-agent:
+        specifier: 7.0.6
+        version: 7.0.6(supports-color@7.2.0)
+      ignore:
+        specifier: ^7.0.5
+        version: 7.0.6
+      proxy-from-env:
+        specifier: ^2.1.0
+        version: 2.1.0
+      undici:
+        specifier: 7.30.1
+        version: 7.30.1
+      ws:
+        specifier: ^8.21.1
+        version: 8.21.3
+      yauzl:
+        specifier: ^3.4.0
+        version: 3.4.0
     devDependencies:
-      '@agent-device/build-config':
-        specifier: workspace:*
-        version: link:../build-config
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
@@ -1055,6 +1073,9 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+      '@limrun/api':
+        specifier: 0.69.1
+        version: 0.69.1(supports-color@7.2.0)
       agent-device:
         specifier: workspace:*
         version: link:../..

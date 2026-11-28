@@ -24,6 +24,7 @@
     "packages/replay/test/packed-runtime.mjs",
     "packages/maestro/test/packed-runtime.mjs",
     "build/maestro/tsdown.config.ts",
+    "bundler/limrun/build.mjs",
     "packages/maestro/src/plugin.ts",
     "packages/replay/src/plugin.ts",
     "packages/replay/tsdown.config.ts",
