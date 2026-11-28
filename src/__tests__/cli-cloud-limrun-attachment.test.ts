@@ -176,23 +176,29 @@ test.each([undefined, 'current'] as const)(
   },
 );
 
-test('fences and retires the attachment before a missing broker credential prevents release', async () => {
+test.each([
+  { key: undefined, reason: 'cloud_api_key_required' },
+  { key: 'other-account-api-key', reason: 'cloud_connection_credential_mismatch' },
+])('leaves the hosted daemon and attachment untouched after $reason', async ({ key, reason }) => {
   const env = limrunEnv('current');
   const location = locationOf(env);
   const mock = stubCloudApi();
   mock.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
   expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
   writeHostedDaemonRegistration(location);
+  const attachment = fs.readFileSync(cloudAttachmentPath(location), 'utf8');
+  const record = readCloudConnection(location);
   const result = await runCliCapture(['disconnect', '--json'], {
-    env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
+    env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: key },
   });
-  expect(JSON.parse(result.stdout).error.details.reason).toBe('cloud_api_key_required');
-  expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', id: hostedDevice.id });
-  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
-  expect(stop).toHaveBeenCalledOnce();
+  expect(JSON.parse(result.stdout).error.details.reason).toBe(reason);
+  expect(readCloudConnection(location)).toEqual(record);
+  expect(fs.readFileSync(cloudAttachmentPath(location), 'utf8')).toBe(attachment);
+  expect(stop).not.toHaveBeenCalled();
   expect(mock.mock.calls).toHaveLength(1);
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
   expect(mock.mock.calls[1]?.[1].method).toBe('DELETE');
+  expect(stop).toHaveBeenCalledOnce();
 });
 
 test('expires remote daemon credentials without trying to stop a local daemon', async () => {
@@ -558,6 +564,13 @@ test('hosted daemon ownership precedes credential read and bounds allocation ove
     });
     expect(localOnly.code).toBe(1);
     expect(releaseMock).not.toHaveBeenCalled();
+    expect(readCloudConnection(location)?.phase).toBe('committed');
+    const verified = await runCliCapture(['disconnect', '--json'], { env });
+    expect(JSON.parse(verified.stdout).error.details.reason).toBe(
+      'cloud_attachment_daemon_stop_unconfirmed',
+    );
+    expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', brokerReleased: true });
+    expect(releaseMock.mock.calls.map(([, init]) => init.method)).toEqual(['DELETE']);
     vi.unstubAllGlobals();
     expect(await sendDaemonRequest(info, request, 'socket', paths, 3_000, { host })).toMatchObject({
       ok: false,
@@ -741,7 +754,7 @@ test('a conflicting active hosted lease keeps its authoritative id', async () =>
   expect(allocations[0]).toEqual(expect.any(String));
 });
 
-test('disconnect reports both unconfirmed local retirement and missing hosted access', async () => {
+test('disconnect reports both unconfirmed local retirement and broker release failure', async () => {
   const env = limrunEnv('current');
   const location = locationOf(env);
   const broker = stubCloudApi();
@@ -750,17 +763,16 @@ test('disconnect reports both unconfirmed local retirement and missing hosted ac
   writeHostedDaemonRegistration(location);
   stop.mockRejectedValueOnce(new Error('private retirement failure'));
 
-  const result = await runCliCapture(['disconnect', '--json'], {
-    env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
-  });
+  broker.mockResolvedValueOnce(new Response(null, { status: 503 }));
+  const result = await runCliCapture(['disconnect', '--json'], { env });
 
   expect(result.code).toBe(1);
   expect(JSON.parse(result.stdout).error.details).toMatchObject({
     reason: 'cloud_attachment_daemon_stop_unconfirmed',
-    brokerReleaseReason: 'cloud_api_key_required',
+    brokerReleaseReason: 'COMMAND_FAILED',
   });
   expect(readCloudConnection(location)).toMatchObject({ phase: 'closing' });
-  expect(broker).toHaveBeenCalledTimes(1);
+  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
 });
 
 test('a stale materialization cannot overwrite the replacement cloud session', async () => {

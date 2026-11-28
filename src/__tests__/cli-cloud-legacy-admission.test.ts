@@ -365,11 +365,12 @@ test('a credential-bound legacy record without a lease clears locally', async ()
   }
 });
 
-test('disconnect uses the saved custom origin and clears a binding without a transaction record', async () => {
+test('disconnect proves a saved binding without a transaction record before DELETE', async () => {
   const { stateDir, session, cloudBaseUrl } = seedLegacyConnection();
   const location = { stateDir, session };
   const state = readRemoteConnectionState(location)!;
   const id = '00000000-0000-4000-8000-000000000001';
+  const generation = 'fixture-generation';
   seedConnectionState({
     stateDir,
     state: {
@@ -377,31 +378,52 @@ test('disconnect uses the saved custom origin and clears a binding without a tra
       cloudSession: {
         id,
         vendor: 'provider-a',
-        generation: 'fixture-generation',
+        generation,
         transport: 'agent-device-daemon',
         baseUrl: cloudBaseUrl,
         deadlineAt: new Date(Date.now() + 3600_000).toISOString(),
       },
     },
   });
+  const saved = readRemoteConnectionState(location);
+  const env = {
+    AGENT_DEVICE_STATE_DIR: stateDir,
+    AGENT_DEVICE_SESSION: session,
+    AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-key',
+    AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: cloudBaseUrl,
+  };
   const fetchMock = vi.fn(
     async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   try {
-    const result = await runCliCapture(['disconnect', '--json'], {
-      env: {
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_SESSION: session,
-        AGENT_DEVICE_CLOUD_API_KEY: 'fixture-cloud-key',
-        AGENT_DEVICE_CLOUD_API_KEY_ORIGIN: cloudBaseUrl,
-      },
-    });
+    for (const reply of [
+      Response.json({ error: 'not_found' }, { status: 404 }),
+      Response.json({ id: '00000000-0000-4000-8000-000000000002', state: 'running' }),
+    ]) {
+      fetchMock.mockResolvedValueOnce(reply);
+      const refused = await runCliCapture(['disconnect', '--json'], { env });
+      expect(JSON.parse(refused.stdout).error).toMatchObject({
+        details: { reason: 'cloud_connection_allocation_unconfirmed' },
+        hint: expect.stringContaining('disconnect --forget'),
+      });
+      expect(readRemoteConnectionState(location)).toEqual(saved);
+      expect(readCloudConnection(location)).toBeNull();
+    }
+
+    fetchMock.mockResolvedValueOnce(Response.json({ id, state: 'running' }));
+    const result = await runCliCapture(['disconnect', '--json'], { env });
     expect(result.code, result.stdout).toBeNull();
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
-      new URL(`/v1/sessions/${id}`, cloudBaseUrl),
-      expect.objectContaining({ method: 'DELETE' }),
-    );
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual([
+      'GET',
+      'GET',
+      'GET',
+      'DELETE',
+    ]);
+    const lookup = new URL('/v1/sessions', cloudBaseUrl);
+    lookup.searchParams.set('idempotencyKey', generation);
+    for (const [url] of fetchMock.mock.calls.slice(0, 3)) expect(url).toEqual(lookup);
+    expect(fetchMock.mock.calls[3]![0]).toEqual(new URL(`/v1/sessions/${id}`, cloudBaseUrl));
     expect(readRemoteConnectionState(location)).toBeNull();
   } finally {
     vi.unstubAllGlobals();

@@ -78,6 +78,41 @@ test('a proxy-front command after open carries the lease scope the front refuses
   ).toBeNull();
 });
 
+test('a refused disconnect leaves the original proxy-front lease usable', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const fetchMock = stubCloudApi(proxyFrontDevice);
+  const sendToDaemon = withLeaseAllocation();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const opened = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+    env,
+    sendToDaemon,
+  });
+  expect(opened.code).toBeNull();
+  const attachment = fs.readFileSync(cloudAttachmentPath(location), 'utf8');
+
+  const refused = await runCliCapture(['disconnect', '--json'], {
+    env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: 'other-account-api-key' },
+    sendToDaemon,
+  });
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe(
+    'cloud_connection_credential_mismatch',
+  );
+  expect(refused.calls).toEqual([]);
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(cloudAttachmentPath(location), 'utf8')).toBe(attachment);
+
+  const snapshot = await runCliCapture(['snapshot', '--json'], { env, sendToDaemon });
+  expect(snapshot.code, snapshot.stdout).toBeNull();
+  expect(snapshot.calls.map(({ command }) => command)).toEqual(['lease_heartbeat', 'snapshot']);
+  expect(snapshot.calls[1]?.meta?.leaseId).toBe(opened.calls[1]?.meta?.leaseId);
+
+  const ended = await runCliCapture(['disconnect', '--json'], { env, sendToDaemon });
+  expect(ended.code, ended.stdout).toBeNull();
+  expect(ended.calls.map(({ command }) => command)).toEqual(['lease_release']);
+  expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
+});
+
 test('disconnect after close ends cleanly: the lease close ended is not released again', async () => {
   const env = cloudEnv();
   stubCloudApi(proxyFrontDevice);

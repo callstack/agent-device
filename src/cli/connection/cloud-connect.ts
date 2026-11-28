@@ -141,7 +141,10 @@ function requireMatchingAccount(access: HostedCloudAccess, record: CloudConnecti
   }
 }
 
-async function lookupRecordedAllocation(access: HostedCloudAccess, record: CloudConnectionRecord) {
+async function lookupRecordedAllocation(
+  access: HostedCloudAccess,
+  record: Pick<CloudConnectionRecord, 'generation' | 'id' | 'accountBinding'>,
+) {
   const found = await lookupCloudSession(access, record.generation).catch((error: unknown) => {
     if (
       record.accountBinding !== undefined &&
@@ -228,6 +231,7 @@ export async function releaseCloudConnection(options: {
 }): Promise<CloudConnectionRelease> {
   const { client, location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
+  const brokerRelease = await verifyBrokerRelease({ location, record, host, binding });
   // The lease release needs the attachment token, so it runs before the attachment is removed. A
   // failed release does not stop teardown: the attachment and its token are removed either way,
   // and a proxy front ends a lease whose heartbeats stop once its TTL passes.
@@ -240,17 +244,15 @@ export async function releaseCloudConnection(options: {
     () => undefined,
     (error: unknown) => error,
   );
-  const releasedId = await releaseBrokerSession({ location, record, host, binding }).catch(
-    (error: unknown) => {
-      if (!retirementFailure) throw error;
-      const retirement = asAppError(retirementFailure, 'COMMAND_FAILED');
-      const broker = asAppError(error, 'COMMAND_FAILED');
-      throw new AppError(retirement.code, retirement.message, {
-        ...retirement.details,
-        brokerReleaseReason: broker.details?.reason ?? broker.code,
-      });
-    },
-  );
+  const releasedId = await releaseBrokerSession(brokerRelease).catch((error: unknown) => {
+    if (!retirementFailure) throw error;
+    const retirement = asAppError(retirementFailure, 'COMMAND_FAILED');
+    const broker = asAppError(error, 'COMMAND_FAILED');
+    throw new AppError(retirement.code, retirement.message, {
+      ...retirement.details,
+      brokerReleaseReason: broker.details?.reason ?? broker.code,
+    });
+  });
   if (retirementFailure) {
     if (releasedId && record) {
       record.brokerReleased = true;
@@ -263,23 +265,40 @@ export async function releaseCloudConnection(options: {
   return { cloudSessionId: releasedId ?? record?.id, leaseReleaseError };
 }
 
-async function releaseBrokerSession(options: {
+type VerifiedBrokerRelease = { access: HostedCloudAccess; id: string; active: boolean };
+
+async function verifyBrokerRelease(options: {
   location: ConnectionLocation;
   record: CloudConnectionRecord | null;
   host: HostEnvironment;
   binding?: CloudSessionBinding;
-}): Promise<string | undefined> {
+}): Promise<VerifiedBrokerRelease | undefined> {
   const { location, record, host, binding } = options;
-  if (record?.brokerReleased) return undefined;
+  const allocation = record ?? binding;
+  if (!allocation || record?.brokerReleased) return undefined;
   const access = await resolveHostedCloudAccess({
     env: host.env,
     stateDir: location.stateDir,
     interactive: false,
     savedOrigin: record?.origin ?? binding?.baseUrl,
   });
-  const id = await cloudSessionIdForRelease(access, location, record, binding?.id);
-  if (id) await deleteCloudSession(access, id);
-  return id;
+  if (record) {
+    requireMatchingAccount(access, record);
+    if (record.id && record.accountBinding !== undefined) {
+      return { access, id: record.id, active: true };
+    }
+  }
+  const found = await lookupRecordedAllocation(access, allocation);
+  if (record) {
+    record.accountBinding ??= hostedCloudAccountBinding(access);
+    record.id = found.id;
+  }
+  return { access, ...found };
+}
+
+async function releaseBrokerSession(target: VerifiedBrokerRelease | undefined) {
+  if (target?.active) await deleteCloudSession(target.access, target.id);
+  return target?.id;
 }
 
 function cloudBindingForTeardown(
@@ -296,24 +315,6 @@ function cloudBindingForTeardown(
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.changed.reason);
   }
   return binding;
-}
-
-async function cloudSessionIdForRelease(
-  access: HostedCloudAccess,
-  location: ConnectionLocation,
-  record: CloudConnectionRecord | null,
-  bindingId: string | undefined,
-): Promise<string | undefined> {
-  const id = record?.id ?? bindingId;
-  if (!record) return id;
-  requireMatchingAccount(access, record);
-  if (id && record.accountBinding !== undefined) return id;
-  const found = await lookupRecordedAllocation(access, record);
-  if (!found.active) return undefined;
-  record.accountBinding ??= hostedCloudAccountBinding(access);
-  record.id = found.id;
-  writeCloudConnection(location, record);
-  return found.id;
 }
 
 export async function forgetCloudConnection(options: {
