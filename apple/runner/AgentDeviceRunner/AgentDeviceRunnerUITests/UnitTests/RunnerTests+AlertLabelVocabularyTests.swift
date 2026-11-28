@@ -58,15 +58,18 @@ extension RunnerTests {
   }
 
   /// A Chinese device words the notification, tracking, and location prompts in labels no English
-  /// entry matches, which answered ALERT_BUTTON_NOT_FOUND before the built-in table.
+  /// entry matches, which answered ALERT_BUTTON_NOT_FOUND before the built-in table. Shipped iOS
+  /// versions word the tracking decline two ways, so the same prompt is resolved for each wording.
   func testChineseDeviceVocabularyResolvesTheSystemPermissionPrompts() {
     let notifications = ["不允许", "允许"]
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "dismiss", vocabulary: .device), 0)
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "accept", vocabulary: .device), 1)
 
-    let tracking = ["要求App不跟踪", "允许"]
-    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "dismiss", vocabulary: .device), 0)
-    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "accept", vocabulary: .device), 1)
+    for decline in ["要求App不跟踪", "要求App不追踪"] {
+      let tracking = [decline, "允许"]
+      XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "dismiss", vocabulary: .device), 0, decline)
+      XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "accept", vocabulary: .device), 1, decline)
+    }
 
     let location = ["允许一次", "使用App时允许", "不允许"]
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: location, action: "dismiss", vocabulary: .device), 2)
@@ -114,28 +117,32 @@ extension RunnerTests {
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS) && targetEnvironment(simulator)
 extension RunnerTests {
-  /// Every built-in device row is a pair the OS itself ships: the row equals one (english,
-  /// localized) pair in `fromSystemStrings(languages: ["zh-Hans"])`, so a row can never drift from
-  /// the wording a zh-Hans device shows — except a wording the table carries for another shipped
-  /// iOS version's zh_CN (`versionedRows`): the OS of the lane this test runs on words that
-  /// prompt one way, and the physical-device run that pinned the other row ran on an OS whose
-  /// string files this lane cannot read. The read must also succeed — a failed read would make
-  /// this assertion vacuous — which the unwrapped table guarantees.
-  func testDeviceVocabularyRowsArePairsTheOSShipsForZhHans() throws {
-    let system = RunnerAlertLabelVocabulary.fromSystemStrings(languages: ["zh-Hans"])
-    let osPairs = system.rows.map { ($0.english, $0.localized) }
-    XCTAssertFalse(osPairs.isEmpty, "the OS string read answered nothing, so the rows are unverified")
-    let versionedRows: Set<String> = ["要求App不跟踪"]
-    for row in RunnerAlertLabelVocabulary.deviceTranslations where !versionedRows.contains(row.localized) {
+  /// Every row of the built-in table is a pair this runtime's zh_CN strings ship, except the two
+  /// wordings listed here, each shown by a different build.
+  ///
+  /// zh_CN words the App Tracking Transparency decline two ways and one build shows one of them:
+  /// 要求App不跟踪 on the iOS 18.1 iPhone 12 Pro Max run, 要求App不追踪 in the iOS 27.0 and 27.1
+  /// runtime images, read from TCC's `REQUEST_ACCESS_DENY_kTCCServiceUserTracking`
+  /// (`docs/evidence/ios-zh-hans-att-wording-os-builds-2026-11-28.md`). They differ in one character,
+  /// so normalization cannot bridge them and the table keeps a row for each. One runtime's read can
+  /// pair at most one, so both are exempted here. The Chinese prompt test holds both rows and compiles
+  /// into the nightly iOS bundle, so the exemption cannot hide a dropped row. Run 46108117499 is what
+  /// the unexempted form reached: it failed 要求App不追踪 on the pinned
+  /// iOS 26.2 runtime, whose strings nothing here has read, proving only that the wording was not
+  /// that build's. Every other row stays held to this runtime's own strings, on a read asserted
+  /// non-empty.
+  func testDeviceVocabularyRowsArePairsTheOSShipsForZhHans() {
+    let observedWordings: [(english: String, localized: String)] = [
+      ("Ask App Not to Track", "要求App不跟踪"),
+      ("Ask App Not to Track", "要求App不追踪")
+    ]
+    let osRows = RunnerAlertLabelVocabulary.fromSystemStrings(languages: ["zh-Hans"]).rows
+    XCTAssertFalse(osRows.isEmpty, "the OS string read answered nothing, so the rows are unverified")
+    for row in RunnerAlertLabelVocabulary.deviceTranslations {
+      if observedWordings.contains(where: { $0.english == row.english && $0.localized == row.localized }) { continue }
       XCTAssertTrue(
-        osPairs.contains { $0.0 == row.english && $0.1 == row.localized },
+        osRows.contains(where: { $0.english == row.english && $0.localized == row.localized }),
         "\(row.english) → \(row.localized) is not a pair the OS ships in zh-Hans"
-      )
-    }
-    for wording in versionedRows {
-      XCTAssertTrue(
-        RunnerAlertLabelVocabulary.deviceTranslations.contains { $0.localized == wording },
-        "the cross-version zh_CN wording \(wording) a physical device showed is missing from the table"
       )
     }
   }

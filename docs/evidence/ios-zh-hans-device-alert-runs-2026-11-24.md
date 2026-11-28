@@ -58,10 +58,13 @@ $ agent-device alert dismiss --json
 # run repeated after the fix.
 ```
 
-The device words the decline button 要求App不**跟踪**, iOS 26.5–27.x's zh_CN
+The device words the decline button 要求App不**跟踪**, iOS 27.0–27.1's zh_CN
 ships 要求App不**追踪** (TCC `REQUEST_ACCESS_DENY_kTCCServiceUserTracking`, read
 off the CoreSimulator runtime images): a version split no single-runtime
 `fromSystemStrings` read can see. The table now carries both rows.
+(The "26.5–27.x" range first written here was too wide: the pinned iOS 26.2 CI
+runtime ships no 追踪 pair. See `ios-zh-hans-att-wording-os-builds-2026-11-28.md`
+for what each build shows.)
 
 After the fix (table carries both wordings, same head otherwise):
 
