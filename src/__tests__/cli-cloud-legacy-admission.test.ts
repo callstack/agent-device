@@ -365,6 +365,49 @@ test('a credential-bound legacy record without a lease clears locally', async ()
   }
 });
 
+test.each([
+  { profile: 'legacy hosted', forgotten: true },
+  { profile: 'direct remote', forgotten: false },
+])('local forget handles a $profile profile', async ({ forgotten }) => {
+  const { stateDir, session } = seedLegacyConnection('fixture-legacy-lease');
+  const location = { stateDir, session };
+  const seeded = readRemoteConnectionState(location)!;
+  const profile = forgotten
+    ? seeded.remoteConfigPath
+    : path.join(path.dirname(seeded.remoteConfigPath), 'direct-fixture.json');
+  if (!forgotten) {
+    fs.renameSync(seeded.remoteConfigPath, profile);
+    seedConnectionState({ stateDir, state: { ...seeded, remoteConfigPath: profile } });
+  }
+  const saved = readRemoteConnectionState(location);
+  expect(saved?.cloudSession).toBeUndefined();
+  expect(readCloudConnection(location)).toBeNull();
+
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const result = await runCliCapture(['disconnect', '--forget', '--session', session, '--json'], {
+      env: { AGENT_DEVICE_STATE_DIR: stateDir },
+    });
+    expect(result.code, result.stdout).toBeNull();
+    expect(result.calls).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    if (forgotten) {
+      expect(JSON.parse(result.stdout).data).toMatchObject({ forgotten: true, released: false });
+      expect(result.stderr).toContain(
+        'A rental may still exist on the hosted broker until its deadline.',
+      );
+      expect(readRemoteConnectionState(location)).toBeNull();
+      expect(fs.existsSync(profile)).toBe(false);
+    } else {
+      expect(readRemoteConnectionState(location)).toEqual(saved);
+      expect(fs.existsSync(profile)).toBe(true);
+    }
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 test('disconnect proves a saved binding without a transaction record before DELETE', async () => {
   const { stateDir, session, cloudBaseUrl } = seedLegacyConnection();
   const location = { stateDir, session };

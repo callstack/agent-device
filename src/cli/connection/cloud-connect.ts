@@ -31,6 +31,7 @@ import {
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
 import { stopHostedLimrunDaemon } from './cloud-limrun.ts';
+import { isLegacyCloudProfile } from './active-connection.ts';
 import { releaseProxyFrontConnectionLease } from '../commands/connection-lease-transaction.ts';
 import {
   hostedCloudAccountBinding,
@@ -342,15 +343,19 @@ export async function forgetCloudConnection(options: {
   const { client, location, state, host } = options;
   const hasFiles = hasPrivateCloudConnectionFiles(location);
   const binding = cloudBindingForTeardown(location, state, null);
-  if (!hasFiles && !binding) return false;
+  const hostedState =
+    state && (binding || isLegacyCloudProfile(location.stateDir, state.remoteConfigPath))
+      ? state
+      : null;
+  if (!hasFiles && !hostedState) return false;
   if (binding?.transport === 'agent-device-daemon') {
     await releaseProxyFrontTeardownLease(client, location, state);
   } else {
     await stopHostedLimrunDaemon(location, binding?.generation, host);
   }
-  await stopMetroCleanup(binding ? state?.metro : undefined);
+  await stopMetroCleanup(hostedState?.metro);
   removeCloudAttachment(location);
-  removeCloudState(location, state, null);
+  if (hostedState) removeSavedCloudProfile(location, hostedState);
   removeCloudConnection(location);
   return true;
 }
@@ -362,6 +367,10 @@ function removeCloudState(
 ): void {
   if (!state?.cloudSession || (record && state.cloudSession.generation !== record.generation))
     return;
+  removeSavedCloudProfile(location, state);
+}
+
+function removeSavedCloudProfile(location: ConnectionLocation, state: RemoteConnectionState): void {
   removeRemoteConnectionState(location);
   removeGeneratedRemoteConfigIfUnused({
     stateDir: location.stateDir,
