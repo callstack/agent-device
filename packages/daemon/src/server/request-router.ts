@@ -10,6 +10,7 @@ import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/c
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform-module';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   AppError,
@@ -203,6 +204,28 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     ? restrictDeviceInventoryToDaemonPolicy(deps.deviceInventoryGateways, daemonPolicy)
     : deps.deviceInventoryGateways;
 
+  function createExecutionScope(
+    req: DaemonRequest,
+    platformRequestScope: PlatformRequestScope,
+  ): Promise<RequestExecutionScope> {
+    return createRequestExecutionScope({
+      host,
+      req,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider,
+      deviceRuntimeGateway,
+      platformServices,
+      claimRecoveryGateway,
+      trackClaimRecoveryDisposal,
+      platformRequestScope,
+      platformResourceCleanup,
+      providerAppCatalog,
+      daemonPolicy,
+      endSessionsForLease,
+    });
+  }
+
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
     if (resolveDaemonRequestTimeoutMs(req) !== undefined) {
       req = {
@@ -294,22 +317,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         },
         async () =>
           await withResolveTargetDeviceCacheScope(async () => {
-            scope = await createRequestExecutionScope({
-              host,
-              req,
-              sessionStore,
-              leaseRegistry,
-              leaseLifecycleProvider,
-              deviceRuntimeGateway,
-              platformServices,
-              claimRecoveryGateway,
-              trackClaimRecoveryDisposal,
-              platformRequestScope,
-              platformResourceCleanup,
-              providerAppCatalog,
-              daemonPolicy,
-              endSessionsForLease,
-            });
+            scope = await createExecutionScope(req, platformRequestScope);
             return await executeRequestScope(scope);
           }),
       );
@@ -474,22 +482,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       let response: DaemonResponse;
       try {
         const scopedReq = bindReplayDeviceExecutionLock(req, parentScope);
-        childScope = await createRequestExecutionScope({
-          host,
-          req: scopedReq,
-          sessionStore,
-          leaseRegistry,
-          leaseLifecycleProvider,
-          deviceRuntimeGateway,
-          platformServices,
-          claimRecoveryGateway,
-          trackClaimRecoveryDisposal,
-          platformRequestScope: createPlatformRequestScope(scopedReq),
-          platformResourceCleanup,
-          providerAppCatalog,
-          daemonPolicy,
-          endSessionsForLease,
-        });
+        childScope = await createExecutionScope(scopedReq, createPlatformRequestScope(scopedReq));
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref
         // finalization. A same-session replay action reuses that admitted scope
