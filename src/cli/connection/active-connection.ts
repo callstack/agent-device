@@ -6,6 +6,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   type ConnectionLocation,
+  type ProxyFrontAttachment,
   CLOUD_CONNECTION_REASONS,
   cleanExpiredCloudAttachments,
   cloudConnectionUnavailable,
@@ -19,6 +20,14 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 
 export async function resolveCloudAdmission(options: {
+  /**
+   * Ends the lease of an expired proxy front, through the hosted daemon that issued it. Without it,
+   * an expired proxy front keeps its attachment for a later sweep.
+   */
+  releaseProxyFrontLease?: (
+    state: RemoteConnectionState,
+    attachment: ProxyFrontAttachment,
+  ) => Promise<void>;
   command: string;
   usesSessions: boolean;
   stateDir: string;
@@ -30,10 +39,19 @@ export async function resolveCloudAdmission(options: {
 }) {
   const { command, usesSessions, stateDir, session, binding } = options;
   if (!usesSessions || command === 'auth') return;
-  await cleanExpiredCloudAttachments(stateDir, async (location, generation) => {
-    const { stopHostedLimrunDaemon } = await import('./cloud-limrun.ts');
-    await stopHostedLimrunDaemon(location, generation, options.host);
-  });
+  await cleanExpiredCloudAttachments(
+    stateDir,
+    async (location, generation) => {
+      const { stopHostedLimrunDaemon } = await import('./cloud-limrun.ts');
+      await stopHostedLimrunDaemon(location, generation, options.host);
+    },
+    async (location, attachment) => {
+      const release = options.releaseProxyFrontLease;
+      if (!release) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.expired.reason);
+      const state = readRemoteConnectionState(location);
+      if (state) await release(state, attachment);
+    },
+  );
   if (command === 'connect' || command === 'connection' || command === 'disconnect') return;
   if (!binding && isLegacyCloudProfile(stateDir, options.remoteConfig)) {
     throw new AppError(

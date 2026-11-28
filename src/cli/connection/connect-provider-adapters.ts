@@ -149,7 +149,16 @@ export async function resolveCloudSessionProfile(
       ...context,
       flags,
       provider: 'cloud',
-      profile: { ...profile, tenant: flags.tenant, session: flags.session, clientId },
+      profile: {
+        ...profile,
+        tenant: flags.tenant,
+        session: flags.session,
+        clientId,
+        // A proxy front leases its device like `connect proxy`: the same lease flow and refusals.
+        ...(attachment.kind === 'agent-device-daemon' && attachment.leasing === 'proxy-front'
+          ? { leaseProvider: 'proxy' }
+          : {}),
+      },
     }),
     provider: 'cloud',
   };

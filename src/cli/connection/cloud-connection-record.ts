@@ -18,6 +18,7 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { asCloudRecord } from '../cloud-response.ts';
 import type { CloudSessionRequest } from './cloud-session-api.ts';
+import { parseCloudAttachment, type CloudAttachment } from './cloud-attachment-schema.ts';
 
 export const CLOUD_CONNECTION_REASONS = {
   // A cloud credential directory or file is unsafe to reuse.
@@ -331,8 +332,34 @@ function assertCloudConnectionDeadline(
   transport: 'agent-device-daemon' | 'limrun',
 ): void {
   if (isExpired(record)) {
-    if (transport === 'agent-device-daemon') removeCloudAttachment(location);
+    // A proxy front keeps its attachment until expiry cleanup releases its lease with the token.
+    if (transport === 'agent-device-daemon' && !readProxyFrontAttachment(location)) {
+      removeCloudAttachment(location);
+    }
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.expired.reason);
+  }
+}
+
+export type ProxyFrontAttachment = Extract<CloudAttachment, { kind: 'agent-device-daemon' }> & {
+  leasing: 'proxy-front';
+};
+
+/**
+ * The saved attachment when it names a proxy front, which leases its device before commands. An
+ * unreadable or invalid attachment names no proxy front: its teardown keeps the existing path.
+ */
+export function readProxyFrontAttachment(
+  location: ConnectionLocation,
+): ProxyFrontAttachment | undefined {
+  try {
+    if (!admitCloudCredentialDirectory(location)) return undefined;
+    const attachment = parseCloudAttachment(readCloudCredentialJson(cloudAttachmentPath(location)));
+    if (attachment?.kind !== 'agent-device-daemon' || attachment.leasing !== 'proxy-front') {
+      return undefined;
+    }
+    return { ...attachment, leasing: 'proxy-front' };
+  } catch {
+    return undefined;
   }
 }
 
@@ -343,6 +370,10 @@ function isExpired(record: CloudConnectionRecord): boolean {
 export async function cleanExpiredCloudAttachments(
   stateDir: string,
   retireExpiredDaemon: (location: ConnectionLocation, generation: string) => Promise<void>,
+  releaseExpiredProxyFront: (
+    location: ConnectionLocation,
+    attachment: ProxyFrontAttachment,
+  ) => Promise<void>,
 ): Promise<void> {
   const root = path.join(stateDir, 'cloud-connections');
   const status = lstatIfPresent(root);
@@ -360,14 +391,22 @@ export async function cleanExpiredCloudAttachments(
     await tryWithConnectionLock(location, async () => {
       let current: CloudConnectionRecord | null;
       let kind: unknown;
+      let proxyFront: ProxyFrontAttachment | undefined;
       try {
         current = readCloudConnection(location);
         if (!current || !isExpired(current)) return;
         kind = readExpiredAttachmentKind(location);
+        proxyFront =
+          kind === 'agent-device-daemon' ? readProxyFrontAttachment(location) : undefined;
       } catch {
         return;
       }
-      if (current.phase === 'pending' || kind === 'agent-device-daemon') {
+      if (proxyFront && current.phase !== 'pending') {
+        await releaseExpiredProxyFront(location, proxyFront).then(
+          () => removeCloudAttachment(location),
+          () => undefined,
+        );
+      } else if (current.phase === 'pending' || kind === 'agent-device-daemon') {
         removeCloudAttachment(location);
       } else {
         await retireExpiredDaemon(location, current.generation).then(

@@ -130,7 +130,7 @@ export const connectCommand: ClientCommandHandler = async (input) => {
   );
 };
 
-type CloudConnection = Parameters<typeof releaseCloudConnection>[0];
+type CloudConnection = Omit<Parameters<typeof releaseCloudConnection>[0], 'client'>;
 type ConnectionCommandParams = Parameters<ClientCommandHandler>[0];
 
 async function connectDirectProfile(
@@ -151,7 +151,7 @@ async function connectDirectProfile(
   if (!replacingCloud) return await saveConnectProfile(params, stateDir, resolved);
   return await saveConnectProfile(params, stateDir, resolved, {
     beforeCommit: async () => {
-      await releaseCloudConnection(connection);
+      await releaseCloudConnection({ ...connection, client: params.client });
     },
     onCommitted: () => removeCloudConnection(connection.location),
   });
@@ -177,7 +177,9 @@ async function connectCloudProfile(
     interactive: true,
     savedOrigin: pending?.origin,
   });
-  if (!pending && (record || state?.cloudSession)) await releaseCloudConnection(connection);
+  if (!pending && (record || state?.cloudSession)) {
+    await releaseCloudConnection({ ...connection, client: params.client });
+  }
   const replacingDirect = pending && state && !state.cloudSession;
   const connectParams = replacingDirect
     ? { ...params, flags: { ...params.flags, force: true } }
@@ -558,7 +560,7 @@ export const disconnectCommand: ClientCommandHandler = async ({
           ? current
           : claimDisconnectTarget(claimedConnection, stateDir, flags.session);
       if (record || state?.cloudSession) {
-        return await disconnectCloud({ location, state, record, host }, flags);
+        return await disconnectCloud({ location, state, record, host }, flags, client);
       }
       if (!state) {
         await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
@@ -618,9 +620,13 @@ async function releaseLegacyCloudLease(
   }
 }
 
-async function disconnectCloud(connection: CloudConnection, flags: CliFlags): Promise<boolean> {
+async function disconnectCloud(
+  connection: CloudConnection,
+  flags: CliFlags,
+  client: ConnectionCommandParams['client'],
+): Promise<boolean> {
   if (flags.session === undefined) throw remoteSessionRequiredError(undefined);
-  const id = await releaseCloudConnection(connection);
+  const id = await releaseCloudConnection({ ...connection, client });
   removeCloudConnection(connection.location);
   const { session } = connection.location;
   await writeCommandOutput(

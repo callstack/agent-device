@@ -100,6 +100,8 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
   token: string;
   daemonStateDir?: string;
   hostedLease?: HostedConnectionLease;
+  /** A proxy front keeps the connection's lease scope, so its commands carry the lease. */
+  proxyFront: boolean;
 } {
   const attachment = resolveCloudAttachment(options.location, options.session);
   const env = { ...options.host.env };
@@ -141,22 +143,29 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
         id: hostedLeaseId,
         replaceSettled: (id) => replaceHostedLeaseId(location, session.generation, id),
       },
+      proxyFront: false,
     };
   }
+  const proxyFront = attachment.leasing === 'proxy-front';
   return {
     host: { ...options.host, env },
     token: attachment.daemonAuthToken,
+    proxyFront,
     flags: {
       ...options.flags,
       remoteConfig: undefined,
       daemonBaseUrl: attachment.daemonBaseUrl,
       daemonAuthToken: attachment.daemonAuthToken,
       daemonTransport: 'http',
-      tenant: undefined,
-      runId: undefined,
-      sessionIsolation: undefined,
-      leaseId: undefined,
-      leaseBackend: undefined,
+      ...(proxyFront
+        ? {}
+        : {
+            tenant: undefined,
+            runId: undefined,
+            sessionIsolation: undefined,
+            leaseId: undefined,
+            leaseBackend: undefined,
+          }),
     },
   };
 }

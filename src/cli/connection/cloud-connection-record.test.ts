@@ -1,7 +1,15 @@
 import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { readCloudConnection } from './cloud-connection-record.ts';
+import type { CloudAttachment } from './cloud-attachment-schema.ts';
+import { writeCloudAttachment } from './cloud-attachment.ts';
+import {
+  cleanExpiredCloudAttachments,
+  cloudAttachmentPath,
+  readCloudConnection,
+  writeCloudConnection,
+  type ConnectionLocation,
+} from './cloud-connection-record.ts';
 
 test('unreadable cloud state keeps a typed I/O code without exposing the local error', () => {
   const stateDir = mkdtempForTestSync('cloud-record-unreadable-');
@@ -26,4 +34,56 @@ test('unreadable cloud state keeps a typed I/O code without exposing the local e
   } finally {
     lstat.mockRestore();
   }
+});
+
+const proxyFrontAttachment = {
+  kind: 'agent-device-daemon',
+  daemonBaseUrl: 'https://daemon.example/device',
+  daemonAuthToken: 'scoped-daemon-token',
+  leasing: 'proxy-front',
+};
+
+function expiredProxyFrontLocation(): ConnectionLocation {
+  const stateDir = mkdtempForTestSync('cloud-record-expiry-');
+  const location = { stateDir, session: 'expiry-qa' };
+  writeCloudConnection(location, {
+    session: location.session,
+    generation: 'generation-1',
+    phase: 'committed',
+    origin: 'https://cloud.example',
+    fingerprint: 'fingerprint-1',
+    id: '00000000-0000-4000-8000-000000000001',
+    deadlineAt: new Date(Date.now() - 1000).toISOString(),
+  });
+  writeCloudAttachment(location, proxyFrontAttachment as CloudAttachment);
+  return location;
+}
+
+test('an expired proxy front is released with its attachment before the attachment is removed', async () => {
+  const location = expiredProxyFrontLocation();
+  const released: unknown[] = [];
+  await cleanExpiredCloudAttachments(
+    location.stateDir,
+    async () => {
+      throw new Error('a limrun daemon is not retired for a proxy front');
+    },
+    async (_location, attachment) => {
+      expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
+      released.push(attachment);
+    },
+  );
+  expect(released).toEqual([proxyFrontAttachment]);
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+});
+
+test('a failed proxy-front release keeps the expired attachment for a later sweep', async () => {
+  const location = expiredProxyFrontLocation();
+  await cleanExpiredCloudAttachments(
+    location.stateDir,
+    async () => undefined,
+    async () => {
+      throw new Error('the front did not confirm the release');
+    },
+  );
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
 });

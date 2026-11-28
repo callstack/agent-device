@@ -1,4 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   readRemoteConnectionState,
   removeRemoteConnectionState,
@@ -19,6 +20,7 @@ import {
   cloudConnectionUnavailable,
   CLOUD_CONNECTION_REASONS,
   prepareCloudConnection,
+  readProxyFrontAttachment,
   removeCloudAttachment,
   removeCloudConnection,
   writeCloudConnection,
@@ -26,6 +28,7 @@ import {
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
 import { stopHostedLimrunDaemon } from './cloud-limrun.ts';
+import { releaseProxyFrontConnectionLease } from '../commands/connection-lease-transaction.ts';
 import { resolveHostedCloudAccess, type HostedCloudAccess } from './cloud-access.ts';
 import { removeGeneratedRemoteConfigIfUnused } from './generated-config.ts';
 import { stopMetroCleanup } from '../commands/connection-metro-runtime.ts';
@@ -117,13 +120,20 @@ function markCloudConnectionClosing(
 }
 
 export async function releaseCloudConnection(options: {
+  client: AgentDeviceClient;
   location: ConnectionLocation;
   state: RemoteConnectionState | null;
   record: CloudConnectionRecord | null;
   host: HostEnvironment;
 }): Promise<string | undefined> {
-  const { location, state, record, host } = options;
+  const { client, location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
+  // Before the attachment is removed: the lease release needs its token. A failure keeps the
+  // connection, so a retry of disconnect can still reach the lease.
+  const proxyFront = readProxyFrontAttachment(location);
+  if (proxyFront && state) {
+    await releaseProxyFrontConnectionLease(client, state, proxyFront);
+  }
   markCloudConnectionClosing(location, record);
   removeCloudAttachment(location);
   const daemonGeneration =
