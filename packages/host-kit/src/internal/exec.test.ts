@@ -525,3 +525,27 @@ test.skipIf(process.platform === 'win32')(
     assert.equal('signal' in exited, false);
   },
 );
+
+test('the streams and error argv stay byte for byte', async () => {
+  const echoed =
+    '-authenticationKeyPath /secrets/AuthKey_ABCDEF1234.p8 -authenticationKeyID KID12345';
+  const result = await runCmdStreaming(process.execPath, [
+    '-e',
+    `process.stdout.write(${JSON.stringify(echoed)})`,
+    '--',
+    echoed,
+  ]);
+  assert.equal(result.stdout, echoed, 'the retained output is untouched');
+  const failure = await runCmdStreaming(process.execPath, [
+    '-e',
+    'process.exit(3)',
+    '--',
+    echoed,
+  ]).catch((error: unknown) => error as AppError);
+  assert.ok(failure instanceof AppError, 'the failing run is an AppError');
+  assert.deepEqual(
+    failure.details?.args,
+    ['-e', 'process.exit(3)', '--', echoed],
+    'the argv is raw',
+  );
+});

@@ -37,6 +37,7 @@ export {
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerPerformanceBuildSettings,
+  resolveRunnerProvisioningAuthArgs,
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
   type RunnerXctestrunCacheMetadata,
