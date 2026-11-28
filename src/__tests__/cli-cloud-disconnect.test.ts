@@ -142,6 +142,7 @@ test('disconnect preserves both errors when saving broker confirmation fails twi
     cause: { message: firstError.message },
     details: { retryWriteError: retryError.message },
   });
+  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
   expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
 });
 
