@@ -80,7 +80,10 @@ export async function cleanupExpiredLeasedSession(params: {
   teardownSession: SessionTeardown;
   /** Starts the daemon's lease end outside this request's execution locks. */
   queueLeaseEnd?: (leaseId: string) => Promise<void>;
-  /** False for a `close` planned before its session existed: locks are planned before they are taken. */
+  /**
+   * Can be false for a `close` planned before its session existed, because locks are planned before
+   * they are taken. A `close` whose device flags select the session device still plans both keys.
+   */
   holdsSessionLocks: (ref: SessionRef) => boolean;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
