@@ -475,6 +475,7 @@ export async function resolveCliSessionAccess(options: {
   catalog?: true;
 }): Promise<{
   accessToken: string;
+  accountId?: string;
   expiresAt?: string;
   cloudBaseUrl: string;
   catalogCredentials?: ReadonlySet<string>;
@@ -501,6 +502,7 @@ export async function resolveCliSessionAccess(options: {
   if (!exchanged) return null;
   return {
     accessToken: exchanged.accessToken,
+    accountId: exchanged.session.accountId,
     catalogCredentials,
     ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
     // The refresh went to the stored URL. A same-origin override still names the connection.

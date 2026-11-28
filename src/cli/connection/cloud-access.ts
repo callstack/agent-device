@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
@@ -14,7 +15,19 @@ const CLOUD_ACCESS_REASONS = {
   savedOriginMismatch: { reason: 'cloud_origin_mismatch', commands: ['connect'] },
 } as const satisfies ReasonTable<'cloud access'>;
 
-export type HostedCloudAccess = { accessToken: string; cloudBaseUrl: string };
+export type HostedCloudAccess = {
+  accessToken: string;
+  cloudBaseUrl: string;
+  accountBinding?: string;
+};
+
+export function hostedCloudAccountBinding(access: HostedCloudAccess): string | undefined {
+  return access.accountBinding;
+}
+
+function bindHostedAccount(accountId: unknown): string | undefined {
+  if (typeof accountId === 'string' && accountId.trim()) return `account:${accountId}`;
+}
 
 export async function resolveHostedCloudAccess(options: {
   stateDir: string;
@@ -26,12 +39,19 @@ export async function resolveHostedCloudAccess(options: {
   const { env, stateDir, savedOrigin } = options;
   const { cloudBaseUrl, authEnv } = resolveHostedOrigin(env, savedOrigin);
   const key = resolveBoundCloudApiKey(env, cloudBaseUrl, hostedOriginMismatch);
-  if (key) return { accessToken: key, cloudBaseUrl };
+  if (key) {
+    return {
+      accessToken: key,
+      cloudBaseUrl,
+      accountBinding: `api-key:${createHash('sha256').update(key).digest('hex')}`,
+    };
+  }
   const flags = { json: false, help: false, version: false };
   const access = await readHostedLogin({ env: authEnv, stateDir, flags });
   if (access)
     return {
       accessToken: access.accessToken,
+      accountBinding: bindHostedAccount(access.accountId),
       cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl),
     };
   if (!options.interactive || options.noLogin || detectAuthMode(authEnv) === 'non-interactive')
@@ -45,6 +65,7 @@ export async function resolveHostedCloudAccess(options: {
   return {
     cloudBaseUrl: parseCloudOrigin(login.session.cloudBaseUrl),
     accessToken: login.accessToken,
+    accountBinding: bindHostedAccount(login.session.accountId),
   };
 }
 

@@ -55,18 +55,22 @@ test('the hosted auth gate accepts a padded cloud provider with a spend cap', as
 });
 
 test.each([404, 405])(
-  'reports budget_cap_unsupported on HTTP %i without another POST and clears pending intent',
+  'reports budget_cap_unsupported on HTTP %i and clears the intent after an absent lookup',
   async (status) => {
     const env = cloudEnv();
     const fetchMock = stubCloudApi();
-    fetchMock.mockResolvedValueOnce(new Response(null, { status }));
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status }))
+      .mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
     const refused = await runCliCapture(cappedArgs, { env });
     expect(JSON.parse(refused.stdout).error).toMatchObject({
       code: 'COMMAND_FAILED',
       details: { status, reason: 'budget_cap_unsupported' },
     });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0]![0].pathname).toBe('/v1/sessions/bounded');
+    expect(fetchMock.mock.calls.map(([url, init]) => [init.method, url.pathname])).toEqual([
+      ['POST', '/v1/sessions/bounded'],
+      ['GET', '/v1/sessions'],
+    ]);
     expect(readCloudConnection(locationOf(env))).toBeNull();
     expect(readRemoteConnectionState(locationOf(env))).toBeNull();
   },
@@ -90,20 +94,21 @@ test.each([
   { status: 404, body: null },
   { status: 405, body: null },
   { status: 400, body: { error: 'app_source_unsupported' } },
-])('preload refusal $status leaves no pending connection', async ({ status, body }) => {
+])('preload refusal $status clears the intent after an absent lookup', async ({ status, body }) => {
   const env = cloudEnv();
   const fetchMock = stubCloudApi();
-  fetchMock.mockResolvedValueOnce(
-    body ? Response.json(body, { status }) : new Response(null, { status }),
-  );
+  fetchMock
+    .mockResolvedValueOnce(body ? Response.json(body, { status }) : new Response(null, { status }))
+    .mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
   const refused = await runCliCapture(
     [...cappedArgs, '--app-url', 'https://artifacts.example/app.zip'],
     { env },
   );
   expect(JSON.parse(refused.stdout).error.details.reason).toBe('app_source_unsupported');
-  expect(fetchMock).toHaveBeenCalledOnce();
-  expect(fetchMock.mock.calls[0]![0].pathname).toBe('/v1/sessions/preloaded');
-  expect(fetchMock.mock.calls[0]![1].method).toBe('POST');
+  expect(fetchMock.mock.calls.map(([url, init]) => [init.method, url.pathname])).toEqual([
+    ['POST', '/v1/sessions/preloaded'],
+    ['GET', '/v1/sessions'],
+  ]);
   expect(readCloudConnection(locationOf(env))).toBeNull();
   expect(readRemoteConnectionState(locationOf(env))).toBeNull();
 });
@@ -125,11 +130,13 @@ test.each([
     body: { error: 'budget_exceeded', maxUsdMicros: '100000', minimumUsdMicros: '200000' },
   },
 ])(
-  'typed money rejection $status clears pending intent and keeps bounded details',
+  'money rejection $status preserves its details after an absent lookup clears the intent',
   async (rejection) => {
     const env = cloudEnv();
     const fetchMock = stubCloudApi();
-    fetchMock.mockResolvedValueOnce(Response.json(rejection.body, { status: rejection.status }));
+    fetchMock
+      .mockResolvedValueOnce(Response.json(rejection.body, { status: rejection.status }))
+      .mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
     const refused = await runCliCapture(cappedArgs, { env });
     const { error } = JSON.parse(refused.stdout);
     expect(error.code).toBe('INVALID_ARGS');
@@ -139,7 +146,7 @@ test.each([
       reason: rejection.status === 422 ? 'budget_exceeded' : 'insufficient_balance',
       ...Object.fromEntries(Object.entries(rejection.body).filter(([key]) => key !== 'error')),
     });
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
     expect(readCloudConnection(locationOf(env))).toBeNull();
   },
 );

@@ -30,7 +30,11 @@ import {
 } from './cloud-connection-record.ts';
 import { stopHostedLimrunDaemon } from './cloud-limrun.ts';
 import { releaseProxyFrontConnectionLease } from '../commands/connection-lease-transaction.ts';
-import { resolveHostedCloudAccess, type HostedCloudAccess } from './cloud-access.ts';
+import {
+  hostedCloudAccountBinding,
+  resolveHostedCloudAccess,
+  type HostedCloudAccess,
+} from './cloud-access.ts';
 import { removeGeneratedRemoteConfigIfUnused } from './generated-config.ts';
 import { stopMetroCleanup } from '../commands/connection-metro-runtime.ts';
 
@@ -46,11 +50,16 @@ export async function connectCloudSession<T>(options: {
 }): Promise<T> {
   const { location, request, access, pending, attach } = options;
   const record = prepareCloudConnection(location.session, request, access.cloudBaseUrl, pending);
+  if (!pending) record.accountBinding = hostedCloudAccountBinding(access);
   writeCloudConnection(location, record);
   removeCloudAttachment(location);
   let attaching = false;
   try {
-    const session = await createCloudSession(access, request, cloudAttempt(location, record));
+    const session = await createCloudSession(
+      access,
+      request,
+      cloudAttempt(location, record, access),
+    );
     const binding = { ...session.binding, generation: record.generation };
     record.deadlineAt = session.binding.deadlineAt;
     writeCloudConnection(location, record);
@@ -83,11 +92,39 @@ async function cleanRejectedConnection(
     } catch {
       throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.rollbackFailed.reason);
     }
-  } else if (record.id || !isDefinitiveCloudCreateRejection(error)) {
+  } else if (!(await confirmsRejectedAllocation(access, record, error))) {
     return;
   }
   removeCloudState(location, readRemoteConnectionState(location), record);
   removeCloudConnection(location);
+}
+
+async function confirmsRejectedAllocation(
+  access: HostedCloudAccess,
+  record: CloudConnectionRecord,
+  error: unknown,
+): Promise<boolean> {
+  if (
+    record.id ||
+    !sameHostedAccount(record, access) ||
+    !isDefinitiveCloudCreateRejection(error) ||
+    (error instanceof AppError && error.details?.status === 429)
+  ) {
+    return false;
+  }
+  try {
+    const found = await lookupCloudSession(access, record.generation);
+    return !found?.active;
+  } catch {
+    return false;
+  }
+}
+
+function sameHostedAccount(record: CloudConnectionRecord, access: HostedCloudAccess): boolean {
+  return (
+    record.accountBinding !== undefined &&
+    record.accountBinding === hostedCloudAccountBinding(access)
+  );
 }
 
 function invalidCreatedSession(error: unknown) {
@@ -99,11 +136,18 @@ function invalidCreatedSession(error: unknown) {
   );
 }
 
-function cloudAttempt(location: ConnectionLocation, record: CloudConnectionRecord) {
+function cloudAttempt(
+  location: ConnectionLocation,
+  record: CloudConnectionRecord,
+  access: HostedCloudAccess,
+) {
   return {
     key: record.generation,
     observeId: (id: string) => {
       if (record.id === id) return;
+      if (record.accountBinding && !sameHostedAccount(record, access)) {
+        throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialMismatch.reason);
+      }
       if (record.id) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.idChanged.reason);
       record.id = id;
       writeCloudConnection(location, record);
@@ -239,6 +283,9 @@ async function cloudSessionIdForRelease(
 ): Promise<string | undefined> {
   const id = record?.id ?? bindingId;
   if (id || !record) return id;
+  if (!sameHostedAccount(record, access)) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialMismatch.reason);
+  }
   const found = await lookupCloudSession(access, record.generation);
   if (!found?.active) return undefined;
   record.id = found.id;
