@@ -110,6 +110,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   const pendingLiveLeases = new Map<string, DeviceLease>();
   const pendingRecoveryLeases = new Map<string, DeviceLease>();
   const persistedRecoveryLeaseIds = new Set<string>();
+  let pendingRetirementWrite = false;
   let inherited = false;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
@@ -159,6 +160,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       writeLeaseRecord(options.stateDir, PENDING_RELEASES_FILE, [
         ...pendingRecoveryLeases.values(),
       ]);
+      pendingRetirementWrite = false;
       persistedRecoveryLeaseIds.clear();
       for (const leaseId of pendingRecoveryLeases.keys()) {
         persistedRecoveryLeaseIds.add(leaseId);
@@ -260,7 +262,8 @@ export function createExpiredProviderLeaseReleaser(options: {
       // inherits whatever these lease records still hold.
       phase === 'closed' ||
       retryTimer ||
-      (!hasRetryableLiveLease(pendingLiveLeases, options.providerRuntimeIds) &&
+      (!pendingRetirementWrite &&
+        !hasRetryableLiveLease(pendingLiveLeases, options.providerRuntimeIds) &&
         !hasRetryableRecoveryLease(pendingRecoveryLeases, options.recoverableProviderIds))
     ) {
       return;
@@ -285,7 +288,12 @@ export function createExpiredProviderLeaseReleaser(options: {
     activeReleaseAttempts.set(key, attempt);
     const finish = (): void => {
       if (activeReleaseAttempts.get(key) === attempt) activeReleaseAttempts.delete(key);
-      if (pendingLiveLeases.size === 0 && pendingRecoveryLeases.size === 0 && retryTimer) {
+      if (
+        retryTimer &&
+        !pendingRetirementWrite &&
+        pendingLiveLeases.size === 0 &&
+        pendingRecoveryLeases.size === 0
+      ) {
         clearTimeout(retryTimer);
         retryTimer = undefined;
       } else {
@@ -322,13 +330,14 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
         pendingRecoveryLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
-        persistPendingLeases();
+        if (!persistPendingLeases()) pendingRetirementWrite = true;
       }
     })();
     return trackReleaseAttempt(key, attempt);
   };
 
   const retryPending = async (): Promise<void> => {
+    if (phase !== 'closed' && pendingRetirementWrite && !persistPendingLeases()) scheduleRetry();
     const attempts = [
       ...[...pendingLiveLeases.values()].map(ensureLiveReleaseAttempt),
       ...[...pendingRecoveryLeases.values()].map(ensureRecoveryReleaseAttempt),
@@ -427,16 +436,15 @@ export function createExpiredProviderLeaseReleaser(options: {
       return result;
     },
     shutdown: () => {
+      if (phase === 'closed') return;
       advancePhase('closed');
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = undefined;
-      if (journalRetryTimer) {
-        // One last attempt, so a journal that a retry was still owed does not outlive this daemon stale.
-        // The closed phase keeps this the last lease record write that is owed a retry.
-        clearTimeout(journalRetryTimer);
-        journalRetryTimer = undefined;
-        writeJournal();
-      }
+      const journalWriteOwed = journalRetryTimer !== undefined;
+      if (journalRetryTimer) clearTimeout(journalRetryTimer);
+      journalRetryTimer = undefined;
+      const persistedRetirement = pendingRetirementWrite && persistPendingLeases();
+      if (journalWriteOwed && !persistedRetirement) writeJournal();
     },
   };
 }

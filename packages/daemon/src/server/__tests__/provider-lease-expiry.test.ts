@@ -196,6 +196,59 @@ test('does not release until the expired lease record is durable', async () => {
   }
 });
 
+test.each(['timer', 'drain', 'shutdown'] as const)(
+  '%s retires a stale recovery record after provider confirmation',
+  async (retry) => {
+    vi.useFakeTimers();
+    const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
+    const recordPath = path.join(stateDir, 'expired-provider-leases.json');
+    const lease = new LeaseRegistry().allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'limrun',
+    });
+    const removeFile = fs.rmSync;
+    const remove = vi.spyOn(fs, 'rmSync');
+    const recoverExpiredLease = vi.fn(async () => {
+      remove.mockImplementation((file, options) => {
+        if (file === recordPath) throw new Error('temporary disk failure');
+        removeFile(file, options);
+      });
+    });
+    const releaser = createExpiredProviderLeaseReleaser({
+      recoverExpiredLease,
+      stateDir,
+      recoverableProviderIds: ['limrun'],
+      retryDelayMs: 10,
+    });
+
+    try {
+      releaser.beginShutdown();
+      await expect(releaser.release(lease)).resolves.toEqual({ status: 'released' });
+      expect(JSON.parse(fs.readFileSync(recordPath, 'utf8')).leases).toEqual([lease]);
+
+      if (retry !== 'shutdown') remove.mockRestore();
+      if (retry === 'timer') {
+        await vi.advanceTimersByTimeAsync(10);
+        expect(fs.existsSync(recordPath)).toBe(false);
+      }
+      expect(await releaser.drain(10)).toEqual({ pending: [], unknown: [], released: [lease] });
+      expect(fs.existsSync(recordPath)).toBe(retry === 'shutdown');
+
+      remove.mockRestore();
+      releaser.shutdown();
+      expect(fs.existsSync(recordPath)).toBe(false);
+      expect(recoverExpiredLease).toHaveBeenCalledExactlyOnceWith(lease);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      remove.mockRestore();
+      releaser.shutdown();
+      vi.useRealTimers();
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  },
+);
+
 test('shutdown drain reports releases completed before and during its final retry', async () => {
   const leaseRegistry = new LeaseRegistry();
   const releasedBeforeShutdown = leaseRegistry.allocateLease({
