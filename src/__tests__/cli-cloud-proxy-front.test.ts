@@ -31,6 +31,7 @@ test('a proxy-front attachment allocates its lease before open and sends that le
   const [allocate, open] = opened.calls;
   expect(allocate?.flags?.daemonBaseUrl).toBe(hostedDevice.attach.daemonBaseUrl);
   expect(allocate?.meta?.leaseProvider).toBe('proxy');
+  expect(typeof allocate?.meta?.leaseId).toBe('string');
   expect(open?.meta?.leaseId).toBe(allocate?.meta?.leaseId);
   expect(opened.transportOptions[0]).toMatchObject({
     authToken: hostedDevice.attach.daemonAuthToken,
@@ -83,6 +84,7 @@ test('disconnect releases a proxy-front lease with the attachment token before t
   expect(disconnected.calls.map(({ command }) => command)).toEqual(['lease_release']);
   const [release] = disconnected.calls;
   expect(release?.flags?.daemonBaseUrl).toBe(hostedDevice.attach.daemonBaseUrl);
+  expect(typeof leaseId).toBe('string');
   expect(release?.meta?.leaseId).toBe(leaseId);
   expect(disconnected.transportOptions[0]).toMatchObject({
     authToken: hostedDevice.attach.daemonAuthToken,
@@ -126,4 +128,19 @@ test('a failed proxy-front lease release still ends disconnect and removes the a
   expect(disconnected.code, disconnected.stderr || disconnected.stdout).toBeNull();
   expect(JSON.parse(disconnected.stdout).data.leaseReleaseError).toContain('unreachable');
   expect(fs.existsSync(cloudAttachmentPath(locationOf(env)))).toBe(false);
+});
+
+test('a proxy-front command ignores a lease id passed on its command line', async () => {
+  const env = cloudEnv();
+  stubCloudApi(proxyFrontDevice);
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const opened = await runCliCapture(
+    ['open', 'com.apple.Preferences', '--lease-id', 'caller-supplied-lease', '--json'],
+    { env, sendToDaemon: withLeaseAllocation() },
+  );
+  expect(opened.code, opened.stderr || opened.stdout).toBeNull();
+  const allocate = opened.calls.find((call) => call.command === 'lease_allocate');
+  expect(typeof allocate?.meta?.leaseId).toBe('string');
+  expect(allocate?.meta?.leaseId).not.toBe('caller-supplied-lease');
+  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
 });

@@ -141,7 +141,10 @@ export async function releaseCloudConnection(options: {
   let leaseReleaseError: string | undefined;
   if (proxyFront && state) {
     try {
-      await releaseProxyFrontConnectionLease(client, state, proxyFront);
+      const release = await releaseProxyFrontConnectionLease(client, state, proxyFront);
+      if (state.leaseId && !release.released && !release.absent) {
+        leaseReleaseError = 'the proxy front did not confirm the lease release';
+      }
     } catch (error) {
       leaseReleaseError = errorMessage(error);
     }

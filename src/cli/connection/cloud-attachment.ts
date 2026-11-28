@@ -157,15 +157,11 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
       daemonBaseUrl: attachment.daemonBaseUrl,
       daemonAuthToken: attachment.daemonAuthToken,
       daemonTransport: 'http',
-      ...(proxyFront
-        ? {}
-        : {
-            tenant: undefined,
-            runId: undefined,
-            sessionIsolation: undefined,
-            leaseId: undefined,
-            leaseBackend: undefined,
-          }),
+      tenant: undefined,
+      runId: undefined,
+      sessionIsolation: undefined,
+      leaseId: undefined,
+      leaseBackend: undefined,
     },
   };
 }

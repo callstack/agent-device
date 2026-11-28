@@ -124,7 +124,11 @@ export function withLeaseAllocation(
       };
     }
     if (req.command === 'lease_release') {
-      if (typeof req.meta?.leaseId === 'string') activeLeaseIds.delete(req.meta.leaseId);
+      const leaseId = req.meta?.leaseId;
+      if (typeof leaseId !== 'string' || !activeLeaseIds.has(leaseId)) {
+        return { ok: true, data: { released: false, absent: true } };
+      }
+      activeLeaseIds.delete(leaseId);
       return { ok: true, data: { released: true } };
     }
     return inner ? await inner(req) : { ok: true, data: {} };
