@@ -967,3 +967,38 @@ test('MCP screenshot and record schemas do not advertise the retired maxSize inp
     assert.equal('maxSize' in (tool.inputSchema.properties ?? {}), false);
   }
 });
+
+// A rejected positional can be a credential the caller typed into the wrong slot, and the
+// structured result reaches the transcript like the text line does, so the INVALID_ARGS
+// message gets the same display scrub on both routes.
+test('MCP tool error result scrubs the INVALID_ARGS message in structuredContent', async () => {
+  const executor = createCommandToolExecutor({ structuredContent: 'declared' });
+
+  const result = await executor.errorResult(
+    new AppError(
+      'INVALID_ARGS',
+      'fill accepts at most 2 positional argument(s), received 3: @e1 Sup3rSecretPass!2026 extra',
+    ),
+  );
+
+  const structured = result.structuredContent as { code: string; message: string };
+  assert.equal(result.isError, true);
+  assert.equal(structured.code, 'INVALID_ARGS');
+  assert.equal(
+    structured.message,
+    'fill accepts at most 2 positional argument(s), received 3: @e1 <redacted len=20> extra',
+  );
+  assert.equal((result.content[0]?.text ?? '').includes('Sup3rSecretPass!2026'), false);
+});
+
+test('MCP tool error result keeps non-INVALID_ARGS structuredContent as typed', async () => {
+  const executor = createCommandToolExecutor({ structuredContent: 'declared' });
+
+  const result = await executor.errorResult(
+    new AppError('COMMAND_FAILED', 'the daemon rejected credential Sup3rSecretPass!2026'),
+  );
+
+  const structured = result.structuredContent as { code: string; message: string };
+  assert.equal(structured.code, 'COMMAND_FAILED');
+  assert.equal(structured.message, 'the daemon rejected credential Sup3rSecretPass!2026');
+});

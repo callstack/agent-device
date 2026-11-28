@@ -395,3 +395,50 @@ test('formatHumanError adds the command synopsis to an INVALID_ARGS Next step', 
   const notArgs = formatHumanError(new AppError('COMMAND_FAILED', 'boom'), { synopsis });
   assert.equal(notArgs.summary.includes('Usage:'), false);
 });
+
+// --- INVALID_ARGS display lines scrub secret-like argv echoes ---
+
+test('formatHumanError redacts a secret-like value an INVALID_ARGS message echoes', () => {
+  const err = new AppError(
+    'INVALID_ARGS',
+    'fill accepts at most 2 positional argument(s), received 3: @e1 Sup3rSecretPass!2026 extra',
+  );
+
+  const output = renderLines(err, { synopsis: 'agent-device fill <target> <text>' });
+
+  assert.match(output, /received 3: @e1 <redacted len=20> extra/);
+  assert.equal(output.includes('Sup3rSecretPass!2026'), false);
+  assert.match(output, /Usage: agent-device fill <target> <text>/);
+});
+
+test('formatHumanError scrubs an INVALID_ARGS message for the model reader too', () => {
+  const err = new AppError(
+    'INVALID_ARGS',
+    'fill accepts at most 2 positional argument(s), received 3: @e1 Sup3rSecretPass!2026 extra',
+  );
+
+  const output = renderLines(err, { reader: 'model' });
+
+  assert.equal(output.includes('Sup3rSecretPass!2026'), false);
+  assert.match(output, /<redacted len=20>/);
+});
+
+test('formatHumanError keeps ordinary INVALID_ARGS arguments as typed', () => {
+  const err = new AppError(
+    'INVALID_ARGS',
+    'press accepts at most 2 positional argument(s), received 3: @e1 hello world',
+  );
+
+  const output = renderLines(err);
+
+  assert.match(output, /received 3: @e1 hello world/);
+  assert.equal(output.includes('<redacted'), false);
+});
+
+test('formatHumanError leaves messages of other codes untouched', () => {
+  const err = new AppError('COMMAND_FAILED', 'the daemon rejected credential Sup3rSecretPass!2026');
+
+  const output = renderLines(err);
+
+  assert.match(output, /Sup3rSecretPass!2026/);
+});
