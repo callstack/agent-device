@@ -178,7 +178,7 @@ extension RunnerTests {
         context = try XCTUnwrap(
           SynthesizedCoordinateContext(
             validating: surfaceGeometry(windowFrame: windowFrame ?? resolved.frame, app: app),
-            resolvedWindow: resolved.window,
+            windowSource: .resolved(resolved.window, fillsSoleScreen: false),
             accessibilityHealth: .healthy
           )
         )

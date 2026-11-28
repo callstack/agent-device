@@ -42,24 +42,43 @@ enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
   }
 }
 
+/// Where a synthesized gesture's window frame came from, which decides both where its records
+/// route and what the frame proves about the app's tree.
+enum SynthesizedWindowSource {
+  /// This call's windows query named the window. One that fills an iPhone's only screen is on that
+  /// screen's display, so its records route to the screen and dispatch skips re-reading the window's
+  /// frame and screen, two XCTest round trips per gesture.
+  case resolved(XCUIElement, fillsSoleScreen: Bool)
+  /// This call's windows query answered no window and the sole-screen route supplied the frame, so
+  /// XCTest cannot anchor a coordinate on the app's tree.
+  case soleScreen
+  /// The call skipped the windows query because a sole-screen iPhone's screen is its window, so
+  /// nothing yet proves whether the tree answers. A fallback decision runs the query first
+  /// (`provingDeferredWindowQuery`).
+  case deferred
+}
+
 struct SynthesizedCoordinateContext {
   let geometry: SurfaceGeometry
-  let resolvedWindow: XCUIElement?
+  let windowSource: SynthesizedWindowSource
   let accessibilityHealth: RunnerAccessibilityHealth
-  /// This call's own windows query answered no window and the sole-screen route supplied the frame,
-  /// so XCTest cannot anchor a coordinate on the app's tree.
-  var treeUnreadable: Bool = false
-  /// The call skipped the windows query because a sole-screen iPhone's screen is its window, so
-  /// nothing yet proves whether the tree answers. A fallback decision runs the query first.
-  var windowQueryDeferred: Bool = false
-  /// The resolved window fills an iPhone's only screen, so the record routes to that screen.
-  var windowFillsSoleScreen: Bool = false
 
-  /// The window a synthesized record routes by, or nil for the sole-screen route. A window that fills
-  /// an iPhone's only screen is on that screen's display, so the record skips re-reading the
-  /// window's frame and screen at dispatch, two XCTest round trips per gesture.
+  /// The window this call's windows query named, or nil when it named none or did not run.
+  var resolvedWindow: XCUIElement? {
+    guard case .resolved(let window, _) = windowSource else { return nil }
+    return window
+  }
+
+  /// This call's windows query ran and answered no window.
+  var treeUnreadable: Bool {
+    guard case .soleScreen = windowSource else { return false }
+    return true
+  }
+
+  /// The window a synthesized record routes by, or nil for the sole-screen route.
   var dispatchWindow: XCUIElement? {
-    windowFillsSoleScreen ? nil : resolvedWindow
+    guard case .resolved(let window, fillsSoleScreen: false) = windowSource else { return nil }
+    return window
   }
 
   /// The keyboard probe is not free — `visibleKeyboardFrame` resolves `app.keyboards.firstMatch`
@@ -217,10 +236,14 @@ extension RunnerTests {
       return "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue)"
         + " context=unavailable fallbackAttempted=\(fallbackAttempted)"
     }
-    // A deferred windows query has not run, so the fallback decision is not known yet.
-    let fallbackAllowed = context.windowQueryDeferred
-      ? "unproven"
-      : "\(kind.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth, treeUnreadable: context.treeUnreadable))"
+    let fallbackAllowed: String
+    switch context.windowSource {
+    case .deferred:
+      // The windows query has not run, so the fallback decision is not known yet.
+      fallbackAllowed = "unproven"
+    case .resolved, .soleScreen:
+      fallbackAllowed = "\(kind.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth, treeUnreadable: context.treeUnreadable))"
+    }
     return "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue)"
       + " axHealth=\(context.accessibilityHealth.rawValue)"
       + " fallbackAllowed=\(fallbackAllowed)"
@@ -232,16 +255,10 @@ extension SynthesizedCoordinateContext {
   /// Nil when the window has no finite, non-empty box.
   init?(
     validating geometry: SurfaceGeometry,
-    resolvedWindow: XCUIElement?,
-    accessibilityHealth: RunnerAccessibilityHealth,
-    treeUnreadable: Bool = false
+    windowSource: SynthesizedWindowSource,
+    accessibilityHealth: RunnerAccessibilityHealth
   ) {
     guard SnapshotGeometry.isPositiveFinite(geometry.windowOnScreen.rect) else { return nil }
-    self.init(
-      geometry: geometry,
-      resolvedWindow: resolvedWindow,
-      accessibilityHealth: accessibilityHealth,
-      treeUnreadable: treeUnreadable
-    )
+    self.init(geometry: geometry, windowSource: windowSource, accessibilityHealth: accessibilityHealth)
   }
 }

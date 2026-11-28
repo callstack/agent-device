@@ -48,8 +48,10 @@ extension RunnerTests {
     let tapContext = try XCTUnwrap(booked)
 
     XCTAssertEqual(queries, 0, "the tap's context runs no windows query")
-    XCTAssertTrue(tapContext.windowQueryDeferred)
-    XCTAssertNil(tapContext.resolvedWindow)
+    guard case .deferred = tapContext.windowSource else {
+      return XCTFail("the tap defers its windows query: \(tapContext.windowSource)")
+    }
+    XCTAssertNil(tapContext.dispatchWindow)
     XCTAssertFalse(tapContext.treeUnreadable, "nothing proved the tree unreadable")
     XCTAssertEqual(tapContext.accessibilityHealth, windowContext.accessibilityHealth)
     XCTAssertEqual(tapContext.geometry.windowOnScreen.rect, windowContext.geometry.windowOnScreen.rect)
@@ -84,7 +86,7 @@ extension RunnerTests {
     let restoreXCTest = try simulateUnserializableAppTree()
     defer { restoreXCTest() }
     let unreadable = try XCTUnwrap(deferredWindowTapContext(app: app))
-    XCTAssertTrue(unreadable.windowQueryDeferred)
+    guard case .deferred = unreadable.windowSource else { return XCTFail("the tap defers its windows query") }
     guard case .refused = try performSynthesizedGesture(
       app, kind: .coordinateTap, context: unreadable, synthesize: failing
     ) else {
@@ -97,9 +99,8 @@ extension RunnerTests {
       "a deferred context logs no fallback decision it has not proven"
     )
     let proven = provingDeferredWindowQuery(unreadable, app: app)
-    XCTAssertTrue(proven.treeUnreadable)
+    guard case .soleScreen = proven.windowSource else { return XCTFail("a tree with no window is unreadable") }
     XCTAssertEqual(proven.accessibilityHealth, .unavailable)
-    XCTAssertFalse(proven.windowQueryDeferred)
     XCTAssertTrue(
       Self.synthesizedGesturePolicyLine(kind: .coordinateTap, context: proven, fallbackAttempted: false)
         .contains(" fallbackAllowed=false ")
@@ -118,14 +119,12 @@ extension RunnerTests {
       app.terminate()
     }
     let context = try XCTUnwrap(try synthesizedCoordinateContext(app: app))
+    guard case .resolved(_, fillsSoleScreen: true) = context.windowSource else {
+      return XCTFail("the fixture window fills the screen: \(context.windowSource)")
+    }
     XCTAssertNotNil(context.resolvedWindow)
-    XCTAssertTrue(context.windowFillsSoleScreen)
     XCTAssertNil(context.dispatchWindow)
-
-    let screen = context.geometry.windowOnScreen.rect
-    XCTAssertTrue(fillsSoleIPhoneScreen(screen, app: app))
-    XCTAssertFalse(fillsSoleIPhoneScreen(screen.insetBy(dx: 0, dy: 20), app: app), "a placed window keeps its own route")
-    XCTAssertFalse(fillsSoleIPhoneScreen(screen.offsetBy(dx: 1, dy: 0), app: app))
+    XCTAssertEqual(soleScreenReferenceFrame(app: app, phoneOnly: true), context.geometry.windowOnScreen.rect)
   }
 
   /// The coordinate tap command itself, with the daemon's evidence that no text input is under the
