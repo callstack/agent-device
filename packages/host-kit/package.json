@@ -40,6 +40,10 @@
       "types": "./src/command.ts",
       "default": "./src/command.ts"
     },
+    "./credential-admission": {
+      "types": "./src/credential-admission.ts",
+      "default": "./src/credential-admission.ts"
+    },
     "./diagnostics": {
       "types": "./src/diagnostics.ts",
       "default": "./src/diagnostics.ts"

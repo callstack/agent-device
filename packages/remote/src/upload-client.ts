@@ -1,4 +1,4 @@
-import type { EnvMap } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -27,7 +27,7 @@ type UploadArtifactOptions = {
   baseUrl: string;
   token: string;
   platform?: string;
-  /** The environment a packaging command (`tar`) starts from. */
+  /** The host environment: packaging commands (`tar`) start from it, and it judges ticket URLs. */
   env: Readonly<EnvMap>;
   /** The lease this upload is for; every request to the daemon names it in a header. */
   leaseId?: string;
@@ -92,6 +92,7 @@ async function uploadArtifactWithinBudget(
       leaseId: options.leaseId,
       artifact: prepared,
       uploadAttemptId,
+      env: options.env,
       signal: options.signal,
     });
 
@@ -106,6 +107,7 @@ async function uploadArtifactWithinBudget(
         artifact: prepared,
         preflight,
         uploadAttemptId,
+        env: options.env,
         onProgress: options.onProgress,
         signal: options.signal,
       });
@@ -146,6 +148,7 @@ async function tryDirectUploadWithResume(options: {
   artifact: PreparedUploadArtifact;
   preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
   uploadAttemptId: string;
+  env: HostEnvironment['env'];
   onProgress?: UploadProgressSink;
   signal: AbortSignal;
 }): Promise<string | undefined> {
@@ -189,6 +192,7 @@ async function retryDirectUpload(
     leaseId?: string;
     artifact: PreparedUploadArtifact;
     uploadAttemptId: string;
+    env: HostEnvironment['env'];
     onProgress?: UploadProgressSink;
     signal: AbortSignal;
   },
@@ -202,6 +206,7 @@ async function retryDirectUpload(
     leaseId: options.leaseId,
     artifact: options.artifact,
     uploadAttemptId: options.uploadAttemptId,
+    env: options.env,
     signal: options.signal,
   });
   if (retryPreflight?.kind === 'cache-hit') {
@@ -278,6 +283,7 @@ async function requestUploadPreflight(options: {
   leaseId?: string;
   artifact: PreparedUploadArtifact;
   uploadAttemptId: string;
+  env: HostEnvironment['env'];
   signal?: AbortSignal;
 }): Promise<UploadPreflightResult | undefined> {
   const preflightUrl = new URL('upload/preflight', options.normalizedBase);
@@ -317,7 +323,13 @@ async function requestUploadPreflight(options: {
     return undefined;
   }
 
-  return parseUploadPreflightResult(result.body);
+  const preflight = parseUploadPreflightResult(result.body);
+  if (preflight?.kind !== 'direct-upload') return preflight;
+  // A ticket can carry a credential in its headers or query. One that breaks the transport rule is
+  // dropped unsent, and the upload takes the legacy route through the daemon base URL.
+  const { credentialTransportRefusal } =
+    await import('@agent-device/contracts/credential-transport');
+  return credentialTransportRefusal(preflight.url, options.env) ? undefined : preflight;
 }
 
 async function requestUploadControl(

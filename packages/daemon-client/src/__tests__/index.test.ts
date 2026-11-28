@@ -1,5 +1,5 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
@@ -37,10 +37,13 @@ async function withRemoteDaemonEnv<T>(callback: () => Promise<T>): Promise<T> {
   const previousAuthToken = process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
   process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN = 'remote-secret';
+  // This host is not loopback: the transport warning would reach the tests that read stderr.
+  vi.stubEnv('AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT', '1');
 
   try {
     return await callback();
   } finally {
+    vi.unstubAllEnvs();
     if (previousBaseUrl === undefined) delete process.env.AGENT_DEVICE_DAEMON_BASE_URL;
     else process.env.AGENT_DEVICE_DAEMON_BASE_URL = previousBaseUrl;
     if (previousAuthToken === undefined) delete process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;

@@ -164,6 +164,10 @@
       "types": "./src/command-policy.ts",
       "default": "./src/command-policy.ts"
     },
+    "./credential-transport": {
+      "types": "./src/credential-transport.ts",
+      "default": "./src/credential-transport.ts"
+    },
     "./daemon-command-surface": {
       "types": "./src/daemon-command-surface.ts",
       "default": "./src/daemon-command-surface.ts"
@@ -279,6 +283,10 @@
     "./interactor-types": {
       "types": "./src/interactor-types.ts",
       "default": "./src/interactor-types.ts"
+    },
+    "./loopback-host": {
+      "types": "./src/loopback-host.ts",
+      "default": "./src/loopback-host.ts"
     },
     "./unsupported-interactor": {
       "types": "./src/unsupported-interactor.ts",

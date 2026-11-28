@@ -88,6 +88,10 @@ query or fragment. With the CLI, run
 tunnel, obtain its public name first, then configure and restart the proxy. This replaces the
 previous first-`X-Forwarded-Proto` behavior.
 
+The setting gives direct-upload tickets an HTTPS origin. Without it, the agent-device client does
+not use a plain HTTP ticket (unless `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1` is set) and uploads
+through the HTTPS daemon URL instead. Older clients send that upload over plain HTTP.
+
 Without a fixed origin, the Node listener uses the actual socket scheme and one validated `Host`
 header. Actual Node HTTPS sockets are supported. A custom direct-daemon HTTP embedding behind TLS
 termination can pass `publicOrigin` to `createDaemonHttpServer`. The built-in daemon listens on
@@ -136,6 +140,12 @@ If your Bun deployment needs proxy routing for transfers, set `NODE_USE_ENV_PROX
 `upstreamFetch`.
 
 By default, `/rpc`, `/health` and request diagnostics use global `fetch`.
+
+The default transport sends `upstreamToken` to `upstreamBaseUrl`, so use https, a loopback
+upstream (`localhost`, `127.0.0.0/8`, or `::1`), or your own `upstreamFetch`. For any other URL,
+0.21.x `createDaemonProxy` warns on stderr, and 0.22 refuses to send the token, with reason
+`insecure_credential_transport`. With `upstreamFetch`, the URL is not checked: your transport owns
+the route.
 
 ### Reach the daemon over your own transport
 

@@ -1,6 +1,12 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { readCloudJsonResponse } from './cloud-response.ts';
 
+/**
+ * Judges a cloud URL that receives a credential. A flow calls it where it reads the URL, before its
+ * first request: login for start, poll and exchange, and a refresh for the stored issuer.
+ */
+export { admitCredentialDestination as admitCloudUrl } from '@agent-device/host-kit/credential-admission';
+
 const HTTP_TIMEOUT_MS = 15_000;
 const MAX_CLOUD_AUTH_REDIRECTS = 3;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);

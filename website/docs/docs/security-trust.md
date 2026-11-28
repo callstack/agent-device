@@ -31,6 +31,26 @@ Holds and leases live in memory; neither survives a daemon restart.
 
 When a hook is configured, it must attest a `tenantId` on every request it wants admitted. If the hook's result has no `tenantId`, the daemon rejects the request with 401. It never falls back to a tenant the client declares (RPC body `meta.tenantId` or `flags.tenant`, or the `x-agent-device-tenant` header on the upload, artifact-download, and diagnostics routes), and it never admits the request unscoped. This keeps a caller with a shared token from claiming another tenant's identity, or from reading a tenant-owned session or artifact by declaring no tenant. Deployments without a hook are unaffected.
 
+## Remote access
+
+The supported remote setup keeps the daemon and proxy HTTP listeners on `127.0.0.1` and reaches them through an encrypted channel:
+
+- Run `agent-device proxy` on the device host. It binds to `127.0.0.1` by default.
+- Expose it through a TLS tunnel such as cloudflared, ngrok, or Tailscale Serve, and start the proxy with `--public-origin` set to the tunnel's HTTPS origin. Or forward it over SSH with `ssh -L`.
+- Connect from the agent machine with the `https://` tunnel URL, or with the forwarded `http://127.0.0.1` URL, and the daemon auth token.
+
+In this setup the token and your device traffic travel between the two machines only inside TLS or SSH. See [Remote proxy setup](./remote-proxy.md) for the commands.
+
+Before agent-device sends a credential to a plain `http://` URL whose host is not loopback (`localhost`, `127.0.0.0/8`, or `::1`), agent-device 0.21.x warns on stderr, once per origin per loaded package. agent-device 0.22 refuses instead: it fails before it opens a connection, with reason `insecure_credential_transport`. This applies to the remote daemon URL, the cloud URL, the Metro bridge URL, and the upstream URL of [`@agent-device/proxy`](https://www.npmjs.com/package/@agent-device/proxy) with its default transport. Upload tickets are already refused: if a ticket points to plain HTTP, for example because `--public-origin` is missing, the client does not use it and uploads through the daemon URL instead.
+
+If your network already encrypts the route, for example a WireGuard or Tailscale address, you can allow plain HTTP for one process with `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1`. This silences the warning and lifts the refusal. With this setting, anyone who can read the network path can read your token. Prefer Tailscale Serve or `ssh -L`, which need no override. `@agent-device/proxy` does not read this setting: give its default transport an https or loopback upstream, or supply your own `upstreamFetch`.
+
+You stay responsible for these points:
+
+- Keep the daemon auth token secret. Anyone who has it can control the devices behind the proxy. To replace a leaked token, restart the proxy without `--daemon-auth-token`. It prints a new random token.
+- If you run a TLS terminator on another machine, protect the hop from it to the proxy.
+- If you set `HTTP_PROXY` and your runtime uses it (Bun by default, Node with `NODE_USE_ENV_PROXY=1`), bypass it for every loopback host you use (for example `NO_PROXY=localhost,127.0.0.1,::1`).
+
 ## Apple runner
 
 Apple targets (iOS, tvOS, visionOS, and macOS) are driven through an XCTest runner that listens on its own port, separate from the daemon:

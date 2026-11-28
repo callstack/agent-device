@@ -38,6 +38,7 @@ export async function resolveCloudConnectProfile(options: {
   const profile = await fetchConnectionProfile({
     cloudBaseUrl: auth.cloudBaseUrl,
     accessToken: auth.accessToken,
+    env: options.env,
     fetchImpl: options.fetchImpl,
   });
   const clientId = buildConnectClientId(
@@ -67,11 +68,14 @@ export async function resolveCloudConnectProfile(options: {
 async function fetchConnectionProfile(options: {
   cloudBaseUrl: string;
   accessToken: string;
+  env: EnvMap;
   // di-seam-approved: same fetch-global seam as resolveCloudConnectProfile's fetchImpl above,
   // on the request itself.
   fetchImpl?: typeof fetch;
 }): Promise<RemoteConfigProfile> {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const admission = await import('@agent-device/host-kit/credential-admission');
+  admission.admitCredentialDestination(options.cloudBaseUrl, options.env);
   const response = await fetchImpl(new URL(CONNECTION_PROFILE_PATH, options.cloudBaseUrl), {
     method: 'GET',
     headers: { authorization: `Bearer ${options.accessToken}` },

@@ -245,6 +245,7 @@ export async function loginWithDeviceAuth(options: {
     throw buildNonInteractiveLoginError(options.commandLabel ?? 'agent-device connect', env);
   }
   const cloudBaseUrl = resolveCloudBaseUrl(env);
+  (await import('./cloud-auth-request.ts')).admitCloudUrl(cloudBaseUrl, env);
   const start = await postCloudAuthJson<DeviceAuthStartResponse>({
     baseUrl: cloudBaseUrl,
     pathName: DEVICE_AUTH_START_PATH,
@@ -551,6 +552,7 @@ async function resolveCliSessionAccess(options: {
       const session = readExchangeableCliSession(stateDir);
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
       assertStoredSessionOrigin(session, env);
+      (await import('./cloud-auth-request.ts')).admitCloudUrl(session.cloudBaseUrl, env);
       return await exchangeCliSessionAccess({ stateDir, session, flags, io });
     },
     { io },
