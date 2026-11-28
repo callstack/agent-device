@@ -41,6 +41,7 @@
 | [0037 Web Session Devices](0037-web-session-devices.md) | web sessions as devices of their own, the session name rule, the `p_`/`t_` backend key and tenant isolation, and first-open locking for web |
 | [0038 Snapshot capture source routing](0038-snapshot-capture-source-routing.md) | the source router for multi-source owners, one fallback, refusal scopes, surface proof, and the producer registry |
 | [0039 Pre-dispatch admission](0039-pre-dispatch-admission.md) | one admission step for resolved-target input: ordered typed checks, one request-bound wait loop, one evidence path, and no extra reads for an idle target |
+| [0041 Credential Transport](0041-credential-transport.md) | URLs that receive a first-party credential, the HTTPS-or-loopback admission rule, `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT`, the supported remote setup, upload tickets, proxy upstreams, and redirects as a credential concern |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.

@@ -5,6 +5,7 @@ The client trusts a remote daemon for data and validated identifiers.
 Scripts and remote record stop reject daemon paths (#4518). Trace and perf take them.
 The daemon admits its state directory. Nobody trusts the network or other local users.
 Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
+ADR 0041 owns credential transport.
 
 ## Applied today
 
@@ -16,4 +17,4 @@ Remote script delivery caps in-memory bytes and error answers.
 
 #4669 proposes private writes for credentials, client state, and daemon state (#4649): create each under a verified state root, and never write through a link at the final name.
 Do not apply these before #4669 is approved.
-Do not apply the ADR 0016 walk to other caller outputs. Screenshot `--out`, contact sheets, the JUnit reporter, and trace and recording outputs keep a plain write to the path the caller names.
+Do not apply the ADR 0016 walk to other outputs. Screenshot `--out`, contact sheets, JUnit, traces, recordings keep a plain write to the path the caller names.
