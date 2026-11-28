@@ -65,6 +65,26 @@ test.each([
   },
 );
 
+test('cancels the DELETE body when its terminal-state probe fails', async () => {
+  const cancel = vi.fn();
+  const body = new ReadableStream({ cancel });
+  const cause = new Error('Could not read terminal state');
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(new Response(body, { status: 409 }))
+      .mockRejectedValueOnce(cause),
+  );
+
+  await expect(deleteCloudSession(access, response.id)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    cause,
+    details: { status: 409 },
+  });
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
 test('classifies a generic DELETE 404 without querying the session', async () => {
   const fetchMock = vi.fn(async () => new Response('<h1>Not Found</h1>', { status: 404 }));
   vi.stubGlobal('fetch', fetchMock);

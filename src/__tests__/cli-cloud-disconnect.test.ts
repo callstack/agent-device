@@ -4,6 +4,7 @@ import { readRemoteConnectionState } from '@agent-device/remote/remote-connectio
 import {
   cloudAttachmentPath,
   readCloudConnection,
+  writeCloudConnection,
 } from '../cli/connection/cloud-connection-record.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
@@ -106,6 +107,22 @@ test('disconnect resumes local cleanup if the closing record write fails after r
   expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
   expect(readCloudConnection(location)).toBeNull();
   expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+});
+
+test('connect refuses to resume a pending allocation with saved release confirmation', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const broker = stubCloudApi();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  writeCloudConnection(location, {
+    ...readCloudConnection(location)!,
+    phase: 'pending',
+    brokerReleased: true,
+  });
+
+  const refused = await runCliCapture(connectArgs, { env });
+  expect(refused.code).toBe(1);
+  expect(broker).toHaveBeenCalledOnce();
 });
 
 test.each([

@@ -649,10 +649,7 @@ export async function deleteCloudSession(access: CloudAccess, id: string): Promi
   }
   const rejectedMessage = 'Cloud session API could not end the session.';
   try {
-    if (response.status === 409 && (await cloudSessionIsTerminal(url, access, id))) {
-      await response.body?.cancel().catch(() => undefined);
-      return;
-    }
+    if (response.status === 409 && (await cloudSessionIsTerminal(url, access, id))) return;
     await readCloudJsonResponse(response, {
       invalidJsonMessage: 'Cloud session API returned invalid JSON.',
       rejectedMessage,
@@ -663,6 +660,8 @@ export async function deleteCloudSession(access: CloudAccess, id: string): Promi
       throw error;
     }
     throw new AppError('COMMAND_FAILED', rejectedMessage, { status: response.status }, error);
+  } finally {
+    await response.body?.cancel().catch(() => undefined);
   }
 }
 

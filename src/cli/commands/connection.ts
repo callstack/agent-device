@@ -112,7 +112,7 @@ export const connectCommand: ClientCommandHandler = async (input) => {
       if (flags.session === undefined && (cloud || record || previous?.cloudSession)) {
         throw remoteSessionRequiredError(undefined);
       }
-      const pending = record?.phase === 'pending' ? record : null;
+      const pending = record?.phase === 'pending' && !record.brokerReleased ? record : null;
       if (pending && !cloud)
         throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.pendingConflict.reason);
       if (previous && (previous.cloudSession || cloud) && !pending && !flags.force) {
