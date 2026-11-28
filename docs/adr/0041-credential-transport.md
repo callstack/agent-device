@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-11-28). agent-device 0.21.x warns before sending a credential that fails the rule; 0.22 refuses as described below.
+Accepted (2026-11-28).
 ADR 0006 continues to govern checked RPC.
 
 ## Rules at a glance
@@ -45,11 +45,12 @@ One check at the place that reads each configured URL prevents both mistakes.
 Redirects need no general policy.
 An on-path observer of a plaintext request already has the credential, so refusing its redirect protects nothing.
 Over TLS, only the server that the operator configured can issue a redirect.
-The paths that carry the daemon token already do not follow redirects: the daemon client uses `node:http`, upload preflight uses `redirect: 'error'`, and the checked RPC route forbids redirects.
+The daemon client uses `node:http`, which never follows redirects, upload preflight uses `redirect: 'error'`, and the checked RPC route forbids redirects.
+The proxy's other upstream requests use `fetch` defaults. Their upstream is the operator's own daemon, so only the operator's own service can issue those redirects.
 
 ## Rejected alternatives
 
-- **Warn and continue.** The credential leaks before anyone reads the warning. It is rejected as the permanent design and used only as the one-release transition in 0.21.x, so existing setups get notice before 0.22.
+- **Warn and continue.** The credential leaks before anyone reads the warning. A temporary warning before the refusal ships is a release choice, outside this decision.
 - **Infer encryption** from RFC 1918, CGNAT, IPv6 ULA, `.ts.net`, or interface membership. An address does not prove the route. Tailscale users can use Tailscale Serve for HTTPS, or set the override.
 - **Per-host override list** (as Docker `--insecure-registry` and `GOINSECURE` do). A client process has one daemon destination. A boolean is enough.
 - **General redirect inspection or a custom HTTP client.** No realistic actor gains from it. Redirect issuers are the operator's own services.
@@ -59,12 +60,11 @@ The paths that carry the daemon token already do not follow redirects: the daemo
 
 ## Consequences
 
-- The 0.21.x warning names the URL origin and the fixes.
 - An existing LAN `http://` deployment must move to HTTPS or `ssh -L`, or set the override.
 - An `@agent-device/proxy` embedder with a non-loopback HTTP upstream and the default transport must set the override or supply `upstreamFetch`.
 - A misconfigured `--public-origin` costs an extra transfer through the daemon instead of a cleartext credential.
 - The operator keeps these duties, which the supported setup already meets:
-  keep the daemon token secret, set `--public-origin` behind a TLS terminator, keep the onward hop from a TLS terminator on loopback, and bypass any environment HTTP proxy for loopback (`NO_PROXY=127.0.0.1,localhost`).
+  keep the daemon token secret, set `--public-origin` behind a TLS terminator, keep the onward hop from a TLS terminator on loopback, and bypass any environment HTTP proxy for every loopback host they use (for example `NO_PROXY=localhost,127.0.0.1,::1`).
 
 ## Review rules
 
