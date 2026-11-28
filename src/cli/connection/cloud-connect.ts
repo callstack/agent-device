@@ -24,6 +24,7 @@ import {
   CLOUD_CONNECTION_REASONS,
   admitCloudConnectionFilesForForget,
   prepareCloudConnection,
+  prepareReleasedCloudConnection,
   readProxyFrontAttachment,
   removeCloudAttachment,
   removeCloudConnection,
@@ -251,28 +252,9 @@ export async function releaseCloudConnection(options: {
   const binding = cloudBindingForTeardown(location, state, record);
   const brokerRelease = await verifyBrokerRelease({ location, record, host, binding });
   const releasedId = await releaseBrokerSession(brokerRelease);
-  if (releasedId && record) {
-    record.brokerReleased = true;
-    // Keep proof of the release even if the subsequent closing transition fails.
-    try {
-      writeCloudConnection(location, record);
-    } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'hosted_release_proof_write_retry',
-        data: { error: errorMessage(error) },
-      });
-      try {
-        writeCloudConnection(location, record);
-      } catch (retryError) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          'Could not save confirmation that the hosted broker ended the session.',
-          { hint: CLOUD_CONNECTION_FORGET_HINT, retryWriteError: errorMessage(retryError) },
-          error,
-        );
-      }
-    }
+  if (releasedId) {
+    const proofRecord = record ?? (binding && prepareReleasedCloudConnection(location, binding));
+    if (proofRecord) persistBrokerRelease(location, proofRecord);
   }
   markCloudConnectionClosing(location, record);
   // The lease release needs the attachment token. If it fails, the front ends the lease by TTL.
@@ -284,6 +266,30 @@ export async function releaseCloudConnection(options: {
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudState(location, state, record);
   return { cloudSessionId: releasedId ?? record?.id, leaseReleaseError };
+}
+
+function persistBrokerRelease(location: ConnectionLocation, record: CloudConnectionRecord): void {
+  record.brokerReleased = true;
+  // Keep proof of the release even if the subsequent closing transition fails.
+  try {
+    writeCloudConnection(location, record);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'hosted_release_proof_write_retry',
+      data: { error: errorMessage(error) },
+    });
+    try {
+      writeCloudConnection(location, record);
+    } catch (retryError) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Could not save confirmation that the hosted broker ended the session.',
+        { hint: CLOUD_CONNECTION_FORGET_HINT, retryWriteError: errorMessage(retryError) },
+        error,
+      );
+    }
+  }
 }
 
 type VerifiedBrokerRelease = { access: HostedCloudAccess; id: string; active: boolean };
