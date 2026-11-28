@@ -2563,7 +2563,7 @@ Exact behavior: `agent-device help proxy`.
 
 <!-- /generated -->
 
-Run `proxy` on the machine that can reach the simulator, emulator, or device, and drive it from another machine through an HTTP tunnel. It prints a daemon auth token: anyone who has it can control the daemon behind the proxy. Pass `--public-origin` when the tunnel terminates TLS, so app uploads use HTTPS. See [Remote proxy](/docs/remote-proxy) for the tunnel setup and `connect proxy`.
+Run `proxy` on the machine that can reach the simulator, emulator, or device, and drive it from another machine through an HTTP tunnel. It prints a daemon auth token: anyone who has it can control the daemon behind the proxy. Pass `--public-origin` when the tunnel terminates TLS. It gives direct-upload tickets an HTTPS origin; without it, the client uploads through the HTTPS daemon URL instead, and older clients send that upload over plain HTTP. See [Remote proxy](/docs/remote-proxy) for the tunnel setup and `connect proxy`.
 
 ## Remote Metro workflow
 
