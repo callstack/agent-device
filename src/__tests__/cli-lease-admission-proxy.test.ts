@@ -105,8 +105,8 @@ type ProxiedDaemon = Readonly<{
   cli: (argv: string[]) => ReturnType<typeof runCliCapture>;
 }>;
 
-/** Runs `use` against a real daemon behind a real proxy, with an empty CLI workspace. */
-async function withProxiedDaemon(use: (proxied: ProxiedDaemon) => Promise<void>) {
+/** Runs `run` against a real daemon behind a real proxy, with an empty CLI workspace. */
+async function withProxiedDaemon(run: (proxied: ProxiedDaemon) => Promise<void>) {
   const { root, home, project } = makeTempWorkspace();
   const daemon = await startPublicDaemonRuntime({
     serverMode: 'http',
@@ -131,7 +131,7 @@ async function withProxiedDaemon(use: (proxied: ProxiedDaemon) => Promise<void>)
         env: { HOME: home, AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'client-secret' },
         useRealDaemonClient: true,
       });
-    await use({ baseUrl, project, stateDir, upstream, cli });
+    await run({ baseUrl, project, stateDir, upstream, cli });
   } finally {
     await closeLoopbackServer(proxy);
     await daemon.close();
