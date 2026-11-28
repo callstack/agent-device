@@ -7,8 +7,8 @@ reviewable change. Detailed testing and device procedures live in the linked foc
 
 Requirements:
 
-- Node.js 22.13 or newer — the pinned pnpm requires it. The published package keeps a lower
-  `engines.node` floor of 22.17, which CI verifies separately on the installed tarball.
+- Node.js 22.17 or newer, the `engines.node` floor. CI also verifies the installed tarball on
+  22.17.
 - pnpm at the version pinned in `package.json`
 - Android SDK tools (`adb`) for Android work
 - Xcode (`simctl`/`devicectl`) for Apple-platform work

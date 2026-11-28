@@ -76,8 +76,8 @@ function run(command: string, args: string[], cwd: string): string {
 
 /**
  * The two established packaging linters, run against the tarball rather than the working tree.
- * Invoked through their `node_modules/.bin` shims and not `pnpm exec`, because this gate also runs on
- * the minimum supported Node, which the repo's pinned pnpm refuses to start on.
+ * Invoked through their `node_modules/.bin` shims and not `pnpm exec`, because the minimum-Node job
+ * runs this gate with only `node` and `npm`.
  */
 const TARBALL_LINTERS = [
   { dependency: 'publint', bin: 'publint', args: ['--strict'] },
