@@ -69,12 +69,14 @@ export async function dispatchRuntimeInteraction<
     };
     run(runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>): Promise<TResult>;
     /**
-     * May return a warning to append to the successful response (e.g. a pending Android permission
-     * dialog). `readiness` is the Android readiness read taken before the dispatch.
+     * Judges what the dispatch left on screen, after the after-command Android readiness read, and
+     * may return a warning to append to the successful response (e.g. a pending Android permission
+     * dialog). `readiness` is that later read; `beforeDispatchReadiness` is the read taken before it.
      */
     afterRun?(
       result: TResult,
       readiness: AndroidBlockingDialogReadinessResult,
+      beforeDispatchReadiness: AndroidBlockingDialogReadinessResult,
     ): Promise<string | undefined>;
     buildPayloads(
       result: TResult,
@@ -93,20 +95,19 @@ export async function dispatchRuntimeInteraction<
   });
   const actionStartedAt = Date.now();
   try {
-    let afterRunWarning: string | undefined;
     const outcome = await runWithAndroidDialogReadinessCheck(
       session,
       params.req.command,
-      { refContext: options.refContext },
-      async (readiness) => {
-        const result = await options.run(runtime);
-        afterRunWarning = await options.afterRun?.(result, readiness);
-        return result;
+      {
+        refContext: options.refContext,
+        judgeAfterReadiness: (result, afterReadiness, beforeReadiness) =>
+          options.afterRun?.(result, afterReadiness, beforeReadiness),
       },
+      () => options.run(runtime),
       params.androidObservation,
     );
     if (outcome.aborted) return outcome.response;
-    const { readiness, runtimeResult } = outcome;
+    const { readiness, runtimeResult, warning: afterRunWarning } = outcome;
     const actionFinishedAt = Date.now();
     const { result, responseData, recordedTarget } = await options.buildPayloads(runtimeResult);
     // Append, don't clobber — the builder may already carry a warning

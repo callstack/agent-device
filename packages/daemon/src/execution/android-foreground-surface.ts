@@ -11,9 +11,21 @@ export type AndroidEscapeSurface = {
   permissionDialog?: boolean;
 };
 
+export type AndroidEscapeSurfaceOptions = Readonly<{
+  /**
+   * The package a read taken after the action named, when it named one other than the session app.
+   * That read is the evidence this judges on, so the observer spends no read of its own. A read
+   * that named the session app is NOT passed: an action that opens another app flips the focused
+   * window only once the app transition lands, so a read may still name the app after the escape
+   * was already under way, and passing it would judge the transition by its own stale answer.
+   */
+  focusOutsideApp?: string;
+}>;
+
 export async function detectAndroidEscapeSurface(
   session: SessionState,
   observation?: AndroidObservationAdapter,
+  options?: AndroidEscapeSurfaceOptions,
 ): Promise<AndroidEscapeSurface | null> {
   if (
     session.device.platform !== 'android' ||
@@ -31,9 +43,17 @@ export async function detectAndroidEscapeSurface(
     );
   }
 
-  if (await observation.readAppFocus(session.device, session.appBundleId)) return null;
-  const foreground = await observation.readAppState(session.device);
-  const foregroundPackage = foreground.package?.trim();
+  let foregroundPackage: string | undefined;
+  let activity: string | undefined;
+  if (options?.focusOutsideApp !== undefined) {
+    foregroundPackage = options.focusOutsideApp;
+  } else {
+    if (await observation.readAppFocus(session.device, session.appBundleId)) return null;
+    const foreground = await observation.readAppState(session.device);
+    foregroundPackage = foreground.package;
+    activity = foreground.activity;
+  }
+  foregroundPackage = foregroundPackage?.trim();
   if (!foregroundPackage || foregroundPackage === session.appBundleId) return null;
   const permissionDialog = await observation.isPermissionPackage(foregroundPackage);
   if (!looksLikeAndroidEscapeSurface(foregroundPackage) && !permissionDialog) return null;
@@ -41,7 +61,7 @@ export async function detectAndroidEscapeSurface(
   return {
     expectedPackage: session.appBundleId,
     foregroundPackage,
-    activity: foreground.activity,
+    ...(activity ? { activity } : {}),
     hint: buildAndroidEscapeHint(permissionDialog),
     ...(permissionDialog ? { permissionDialog: true } : {}),
   };
