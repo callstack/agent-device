@@ -64,11 +64,25 @@ export type CloudWebDriverBaseSession = {
 export type CloudWebDriverPreparedSession = CloudWebDriverBaseSession & {
   deviceId?: string;
   providerSessionId?: string;
+  /**
+   * Reads what the hub's create-session answer says about the session it rented: the provider's own
+   * session id, for a hub whose artifacts are keyed by an id other than the WebDriver session id, and
+   * the model it actually allocated, for a selector that names a pattern rather than one device.
+   * The device keeps the requested name, because commands select it by that name. When this throws,
+   * the runtime ends the rented session and runs `cleanup` before it fails the allocation.
+   */
+  describeCreatedSession?: (capabilities: Record<string, unknown>) => CloudWebDriverCreatedSession;
   uploadApp?: CloudWebDriverUploadApp;
   listArtifacts?: CloudWebDriverListArtifacts;
   cleanup?: () => Promise<Record<string, unknown> | undefined>;
   providerData?: Record<string, unknown>;
 };
+
+/** What a provider read off a create-session answer; an empty string counts as absent. */
+export type CloudWebDriverCreatedSession = Readonly<{
+  providerSessionId?: string;
+  model?: string;
+}>;
 
 export type CloudWebDriverListArtifacts = (params: {
   provider: string;
