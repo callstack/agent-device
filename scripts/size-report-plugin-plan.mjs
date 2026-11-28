@@ -118,7 +118,7 @@ function affectedPlugins(workspace, files, lock, knownBuildOwners) {
   });
 }
 
-export function planPluginSizes(base, head, files, lockfiles) {
+function affectedPluginNames(base, head, files, lockfiles) {
   const lock = lockfiles
     ? changedLockInputs(lockfiles.base, lockfiles.head)
     : { shared: false, directories: new Set() };
@@ -128,18 +128,24 @@ export function planPluginSizes(base, head, files, lockfiles) {
   // The same Maestro build inputs can feed the core on branches where it is built in.
   knownBuildOwners.add('maestro');
   const productionFiles = files.filter((file) => !TEST_PATH.test(file));
-  const changed = new Set(
+  return new Set(
     [
       ...affectedPlugins(base, productionFiles, lock, knownBuildOwners),
       ...affectedPlugins(head, productionFiles, lock, knownBuildOwners),
     ].map((pkg) => pkg.manifest.name),
   );
-  const side = (workspace) =>
-    workspace
-      .filter(isPublishedPlugin)
-      .filter((pkg) => changed.has(pkg.manifest.name))
-      .map(({ directory, manifest }) => ({ directory, name: manifest.name }));
-  return { base: side(base), head: side(head) };
+}
+
+function measurementEntries(workspace, names) {
+  return workspace
+    .filter(isPublishedPlugin)
+    .filter((pkg) => names.has(pkg.manifest.name))
+    .map(({ directory, manifest }) => ({ directory, name: manifest.name }));
+}
+
+export function planPluginSizes(base, head, files, lockfiles, comparisonBase = base) {
+  const names = affectedPluginNames(base, head, files, lockfiles);
+  return { base: measurementEntries(comparisonBase, names), head: measurementEntries(head, names) };
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
@@ -147,14 +153,22 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   if (!base || !head || !output) {
     throw new Error('Usage: node scripts/size-report-plugin-plan.mjs <base> <head> <output-dir>');
   }
-  const files = git('diff', '--name-only', '--no-renames', '-z', base, head, '--').split('\0');
+  const fork = git('merge-base', base, head).trim();
+  const files = git('diff', '--name-only', '--no-renames', '-z', fork, head, '--').split('\0');
   const lockfiles = files.includes('pnpm-lock.yaml')
     ? {
-        base: parse(git('show', `${base}:pnpm-lock.yaml`)),
+        base: parse(git('show', `${fork}:pnpm-lock.yaml`)),
         head: parse(git('show', `${head}:pnpm-lock.yaml`)),
       }
     : undefined;
-  const plugins = planPluginSizes(workspaceAt(base), workspaceAt(head), files, lockfiles);
+  const forkWorkspace = workspaceAt(fork);
+  const plugins = planPluginSizes(
+    forkWorkspace,
+    workspaceAt(head),
+    files,
+    lockfiles,
+    base === fork ? forkWorkspace : workspaceAt(base),
+  );
   fs.mkdirSync(output, { recursive: true });
   for (const [side, entries] of Object.entries(plugins)) {
     fs.writeFileSync(path.join(output, `${side}.json`), JSON.stringify(entries));

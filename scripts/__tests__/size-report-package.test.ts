@@ -734,6 +734,59 @@ test('plugin plans measure added and removed plugins only where they exist', () 
   });
 });
 
+test('plugin selection ignores upstream-only changes in a diverged checkout', async () => {
+  const cwd = await mkdtempForTest('size-plugin-merge-base-');
+  const git = async (...args: string[]) =>
+    (
+      await execFileAsync(
+        'git',
+        [
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@example.com',
+          '-c',
+          'commit.gpgsign=false',
+          '-c',
+          'core.hooksPath=/dev/null',
+          ...args,
+        ],
+        { cwd },
+      )
+    ).stdout.trim();
+  await git('init', '-q');
+  for (const { directory, manifest } of workspace) {
+    await mkdir(join(cwd, directory), { recursive: true });
+    await writeFile(join(cwd, directory, 'package.json'), JSON.stringify(manifest));
+  }
+  const lock = join(cwd, 'pnpm-lock.yaml');
+  await writeFile(lock, 'settings: {excludeLinksFromLockfile: false}\n');
+  await git('add', '.');
+  await git('commit', '-qm', 'fork point');
+  const fork = await git('rev-parse', 'HEAD');
+  await git('mv', two.directory, 'packages/moved-two');
+  await writeFile(lock, 'settings: {excludeLinksFromLockfile: true}\n');
+  await git('commit', '-qam', 'upstream only');
+  const base = await git('rev-parse', 'HEAD');
+  await git('checkout', '-q', '--detach', fork);
+  await writeFile(
+    lock,
+    'settings: {excludeLinksFromLockfile: false}\nimporters: {packages/two: {}}\n',
+  );
+  await git('commit', '-qam', 'PR change');
+
+  const output = join(cwd, 'plan');
+  await execFileAsync(
+    process.execPath,
+    [join(import.meta.dirname, '../size-report-plugin-plan.mjs'), base, 'HEAD', output],
+    { cwd },
+  );
+  assert.deepEqual(JSON.parse(await readFile(join(output, 'base.json'), 'utf8')), [
+    { ...twoEntry, directory: 'packages/moved-two' },
+  ]);
+  assert.deepEqual(JSON.parse(await readFile(join(output, 'head.json'), 'utf8')), [twoEntry]);
+});
+
 test('base measurement uses the measured revision package asset policy', async () => {
   const workflow = await readFile(
     join(import.meta.dirname, '../../.github/workflows/size.yml'),

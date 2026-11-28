@@ -5,20 +5,39 @@ import path from 'node:path';
 import { formatBytes, formatDiff } from './size-report-format.mjs';
 import { measureCleanInstalledPackage, measureDirectory } from './size-report-install.mjs';
 
+// Base and head each share this allowance across their selected plugins.
+const PLUGIN_MEASUREMENT_BUDGET_MS = 90_000;
+
 export function measurePluginSizes(root, planPath) {
   const plugins = JSON.parse(fs.readFileSync(planPath, 'utf8'));
-  return plugins.map((plugin) => measurePlugin(root, plugin));
+  const deadline = performance.now() + PLUGIN_MEASUREMENT_BUDGET_MS;
+  return plugins.map((plugin) => {
+    try {
+      return measurePlugin(root, plugin, deadline);
+    } catch (error) {
+      throw new Error(`Could not measure plugin ${plugin.name}: ${error.message}`, {
+        cause: error,
+      });
+    }
+  });
 }
 
-function measurePlugin(root, { name, directory }) {
+function remainingTime(deadline) {
+  const timeout = Math.ceil(deadline - performance.now());
+  if (timeout <= 0) throw new Error('Plugin measurement budget exhausted.');
+  return timeout;
+}
+
+function measurePlugin(root, { name, directory }, deadline) {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-plugin-size-'));
   try {
     const tarball = path.join(scratch, 'plugin.tgz');
     execFileSync('pnpm', ['pack', '--out', tarball], {
       cwd: path.join(root, directory),
       stdio: ['ignore', 'ignore', 'inherit'],
+      timeout: remainingTime(deadline),
     });
-    execFileSync('tar', ['-xzf', tarball, '-C', scratch]);
+    execFileSync('tar', ['-xzf', tarball, '-C', scratch], { timeout: remainingTime(deadline) });
     const packageDir = path.join(scratch, 'package');
     const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
     if (manifest.name !== name) throw new Error(`Expected to pack ${name}, got ${manifest.name}.`);
@@ -27,7 +46,8 @@ function measurePlugin(root, { name, directory }) {
       name,
       unpackedBytes,
       tarballBytes: fs.statSync(tarball).size,
-      installedBytes: measureCleanInstalledPackage(tarball, name).totalBytes,
+      installedBytes: measureCleanInstalledPackage(tarball, name, remainingTime(deadline))
+        .totalBytes,
     };
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });

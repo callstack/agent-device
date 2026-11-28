@@ -10,4 +10,5 @@ export function planPluginSizes(
   head: readonly WorkspacePackage[],
   files: readonly string[],
   lockfiles?: { base: Record<string, unknown>; head: Record<string, unknown> },
+  comparisonBase?: readonly WorkspacePackage[],
 ): { base: PluginPlanEntry[]; head: PluginPlanEntry[] };
