@@ -151,6 +151,7 @@ export async function acquireConnectionLease(options: {
   if (leasePolicy.shouldAllocate(command)) {
     const materialized = await materializeLeaseForCommand({
       command,
+      positionals: options.positionals,
       client,
       state,
       nextState,
@@ -204,6 +205,7 @@ function carriedConnectionPlatform(
 
 async function materializeLeaseForCommand(options: {
   command: string;
+  positionals?: string[];
   client: AgentDeviceClient;
   state: RemoteConnectionState;
   nextState: RemoteConnectionState;
@@ -245,6 +247,7 @@ async function materializeLeaseForCommand(options: {
   nextFlags.platform = platform;
   const admissionCheckedLease = leaseCheckedByAdmission({
     command,
+    positionals: options.positionals,
     state: nextState,
     flags: nextFlags,
     leaseBackend,

@@ -32,34 +32,41 @@ const LEASE_SCOPE = {
   deviceKey: 'android:mobile:emulator-9999',
 } as const;
 
-test('a lease the daemon dropped is reallocated through the proxy without a heartbeat', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  await withProxiedDaemon(async ({ baseUrl, project, stateDir, upstream, cli }) => {
-    const client = createAgentDeviceClient({
-      daemonBaseUrl: baseUrl,
-      daemonAuthToken: 'client-secret',
-      daemonTransport: 'http',
+test.for<[string, string[]]>([
+  ['snapshot', ['snapshot']],
+  // Loopback with no listener: nothing leaves the host if the daemon gets as far as the download.
+  ['install_source', ['install-from-source', 'http://127.0.0.1:1/app.apk']],
+])(
+  'a dropped lease is reallocated for %s through the proxy without a heartbeat',
+  async ([command, argv], t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    await withProxiedDaemon(async ({ baseUrl, project, stateDir, upstream, cli }) => {
+      const client = createAgentDeviceClient({
+        daemonBaseUrl: baseUrl,
+        daemonAuthToken: 'client-secret',
+        daemonTransport: 'http',
+      });
+      const lease = await client.leases.allocate({ ...LEASE_SCOPE, leaseId: 'b'.repeat(32) });
+      writeConnection(stateDir, project, baseUrl, lease.leaseId);
+      await client.leases.release({ ...LEASE_SCOPE, leaseId: lease.leaseId });
+      upstream.length = 0;
+
+      const result = await cli(argv);
+
+      const reallocated = readRemoteConnectionState({ stateDir, session: 'agent' })?.leaseId;
+      assert.ok(reallocated && reallocated !== lease.leaseId, result.stdout);
+      // The setup above already cached `/health` for this endpoint in this process, so only RPCs show.
+      assert.deepEqual(
+        upstream.filter((route) => route.startsWith('/rpc')),
+        [`/rpc ${command}`, '/rpc agent_device.lease.allocate', `/rpc ${command}`],
+      );
+      // The resent command passed admission: whatever it answered, it was not the lease refusal.
+      if (result.code !== null) {
+        assert.notEqual(JSON.parse(result.stdout).error.details?.reason, 'LEASE_NOT_FOUND');
+      }
     });
-    const lease = await client.leases.allocate({ ...LEASE_SCOPE, leaseId: 'b'.repeat(32) });
-    writeConnection(stateDir, project, baseUrl, lease.leaseId);
-    await client.leases.release({ ...LEASE_SCOPE, leaseId: lease.leaseId });
-    upstream.length = 0;
-
-    const result = await cli(['snapshot']);
-
-    const reallocated = readRemoteConnectionState({ stateDir, session: 'agent' })?.leaseId;
-    assert.ok(reallocated && reallocated !== lease.leaseId, result.stdout);
-    // The setup above already cached `/health` for this endpoint in this process, so only RPCs show.
-    assert.deepEqual(
-      upstream.filter((route) => route.startsWith('/rpc')),
-      ['/rpc snapshot', '/rpc agent_device.lease.allocate', '/rpc snapshot'],
-    );
-    // The resent command passed admission: whatever it answered, it was not the lease refusal.
-    if (result.code !== null) {
-      assert.notEqual(JSON.parse(result.stdout).error.details?.reason, 'LEASE_NOT_FOUND');
-    }
-  });
-});
+  },
+);
 
 // A reused lease on the connection does not move a command that checks no lease off the checked route.
 test('a checked connection sends a command that checks no lease as its one checked request', async (t) => {

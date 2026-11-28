@@ -99,7 +99,8 @@ These commands keep the heartbeat:
 - A command on a host-allocated `macos-app` lease.
 - A command on a lease whose provider has a runtime. A heartbeat runs its lifecycle hooks, such as the Limrun instance liveness check.
 - A command exempt from lease admission.
-- `install`, `reinstall`, and `install-from-source`, which can upload a local artifact before admission.
+- `install` and `reinstall`, which can upload a local artifact before admission.
+- `install-from-source` without an http(s) URL. With such a URL, the daemon downloads the artifact after admission, and no heartbeat is necessary.
 - A command with `--save-script`.
 - `batch`, `replay`, and `test`, which read local scripts while they build the request. A script path can be a pipe.
 - `fill --text-stdin`, so that a refusal comes before the CLI reads the pipe.
