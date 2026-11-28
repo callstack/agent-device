@@ -109,7 +109,7 @@ These commands keep the heartbeat:
 - A command whose stored lease id is not canonical lower-case hex.
 - A by-spec allocation (`open`, `install`, `reinstall`, `uninstall`, or `install-from-source` through a proxy) that allocates fresh: the connection names no device, or the request names a device spec or a device selector.
 
-A by-spec allocation that names no spec or selector reuses the stored device without a heartbeat.
+A by-spec allocation that names no spec or selector reuses the stored device without a heartbeat, unless another item in this list applies.
 
 ## Admitted request work
 
