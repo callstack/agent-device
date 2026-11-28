@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-11-28).
+Accepted (2026-11-28). Enforcement has not shipped yet; it is tracked in #5179.
 ADR 0006 continues to govern checked RPC.
 
 ## Rules at a glance
@@ -47,7 +47,7 @@ Redirects need no general policy.
 An on-path observer of a plaintext request already has the credential, so refusing its redirect protects nothing.
 Over TLS, only the server that the operator configured can issue a redirect.
 The daemon client uses `node:http`, which never follows redirects, upload preflight uses `redirect: 'error'`, and the checked RPC route forbids redirects.
-The proxy's other upstream requests use `fetch` defaults. Their upstream is the operator's own daemon, so only the operator's own service can issue those redirects.
+The proxy's other RPC, health and diagnostics requests use `fetch` defaults, and its upload and artifact routes use `node:http`, which follows no redirect. Their upstream is the operator's own daemon, so only the operator's own service can issue those redirects.
 
 ## Rejected alternatives
 
