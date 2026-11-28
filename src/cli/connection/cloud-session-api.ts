@@ -293,6 +293,11 @@ async function postCloudSession(
     'Idempotency-Key': attempt.key,
   };
   const body = JSON.stringify(request);
+  const credentials = [
+    access.accessToken,
+    ...(access.credentials ?? []),
+    ...(request.app ? [request.app.url, encodeURIComponent(request.app.url)] : []),
+  ];
   const deadline = Date.now() + CONNECT_TIMEOUT_MS;
   let initial = true;
   for (let remaining = CONNECT_TIMEOUT_MS; remaining > 0; remaining = deadline - Date.now()) {
@@ -306,15 +311,9 @@ async function postCloudSession(
         signal: AbortSignal.timeout(Math.min(remaining, CREATE_REQUEST_TIMEOUT_MS)),
       },
       request.needs,
-      [
-        access.accessToken,
-        ...(access.credentials ?? []),
-        ...(request.app ? [request.app.url, encodeURIComponent(request.app.url)] : []),
-      ],
-    ).catch((error: unknown) => {
-      if (initial && isInitialCreateRejection(error)) attempt.observeInitialRejection?.();
-      throw error;
-    });
+      credentials,
+      initial ? attempt.observeInitialRejection : undefined,
+    );
     initial = false;
     if (value !== RETRY_CREATION) {
       assertSafeAllocationId(value.id, access, value.kind === 'created' ? value.body : undefined);
@@ -360,6 +359,7 @@ async function requestCreateResponse(
   init: RequestInit,
   needs: string[] | undefined,
   credentials: readonly string[],
+  observeInitialRejection: (() => void) | undefined,
 ): Promise<CreateResponse | typeof RETRY_CREATION> {
   try {
     return await readCreateResponse(await fetch(url, init), needs, url);
@@ -368,6 +368,7 @@ async function requestCreateResponse(
     if (containsCloudCredential([error.message, error.details], credentials)) {
       throw invalidSession();
     }
+    if (observeInitialRejection && isInitialCreateRejection(error)) observeInitialRejection();
     throw error;
   }
 }
