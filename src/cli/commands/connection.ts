@@ -624,11 +624,18 @@ async function disconnectForget(
   flags: CliFlags,
 ): Promise<boolean> {
   const { location } = connection;
-  if (!(await forgetCloudConnection(connection))) {
+  const forgotten = await forgetCloudConnection(connection);
+  if (!forgotten) {
     await writeNoRemoteConnectionOutput(flags, location.session);
     return true;
   }
   writeStderr('Warning: A rental may still exist on the hosted broker until its deadline.\n');
+  if (forgotten.daemonStateDir) {
+    const stateDir = shellQuoteIfNeeded(forgotten.daemonStateDir);
+    writeStderr(
+      `Warning: The local daemon may still be running. Stop it with agent-device daemon stop --state-dir ${stateDir}\n`,
+    );
+  }
   await writeCommandOutput(
     flags,
     { connected: false, session: location.session, released: false, forgotten: true },

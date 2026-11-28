@@ -199,22 +199,23 @@ export function readCloudCredentialJson(file: string): unknown {
   }
 }
 
-function hasPrivateCloudFile(file: string): boolean {
+function admitPrivateCloudFile(file: string): boolean {
   const status = lstatIfPresent(file);
   if (!status) return false;
   assertOwnedEntry(status, status.isFile(), 0o077);
   return true;
 }
 
-export function hasPrivateCloudConnectionFiles(location: ConnectionLocation): boolean {
+/** Returns whether any hosted files exist and refuses files that are unsafe to remove. */
+export function admitCloudConnectionFilesForForget(location: ConnectionLocation): boolean {
   if (!admitCloudCredentialDirectory(location)) return false;
-  const hasRecord = hasPrivateCloudFile(recordPath(location));
-  const hasAttachment = hasPrivateCloudFile(cloudAttachmentPath(location));
+  const hasRecord = admitPrivateCloudFile(recordPath(location));
+  const hasAttachment = admitPrivateCloudFile(cloudAttachmentPath(location));
   return hasRecord || hasAttachment;
 }
 
 function readRecordFile(file: string): CloudConnectionRecord | undefined {
-  if (!hasPrivateCloudFile(file)) return undefined;
+  if (!admitPrivateCloudFile(file)) return undefined;
   const value = readCloudCredentialJson(file);
   if (value === undefined) return undefined;
   const record = asCloudRecord(value);

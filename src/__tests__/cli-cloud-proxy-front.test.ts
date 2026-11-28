@@ -17,6 +17,7 @@ import {
 } from './cli-cloud-session.fixtures.ts';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -196,9 +197,9 @@ test('disconnect releases a proxy-front lease with the attachment token before t
   expect(fetchMock.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(true);
 });
 
-test.each([false, true])(
-  'forget attempts proxy-front release even when it fails (%s)',
-  async (fails) => {
+test.each(['succeeds', 'fails', 'times out'] as const)(
+  'forget clears state when proxy-front lease release %s',
+  async (outcome) => {
     const env = cloudEnv();
     const location = locationOf(env);
     const attachment = cloudAttachmentPath(location);
@@ -212,13 +213,20 @@ test.each([false, true])(
     expect(opened.code).toBeNull();
 
     let attachmentWasPresent = false;
-    const forgotten = await runCliCapture(
+    let markReleaseStarted!: () => void;
+    const releaseStarted = new Promise<void>((resolve) => {
+      markReleaseStarted = resolve;
+    });
+    if (outcome === 'times out') vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const forgetting = runCliCapture(
       ['disconnect', '--forget', '--session', location.session, '--json'],
       {
         env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
         sendToDaemon: async (request) => {
           attachmentWasPresent = fs.existsSync(attachment);
-          if (fails)
+          markReleaseStarted();
+          if (outcome === 'times out') await new Promise<void>(() => {});
+          if (outcome === 'fails')
             return {
               ok: false,
               error: { code: 'COMMAND_FAILED', message: 'fixture release failure' },
@@ -227,6 +235,11 @@ test.each([false, true])(
         },
       },
     );
+    if (outcome === 'times out') {
+      await releaseStarted;
+      await vi.advanceTimersByTimeAsync(2000);
+    }
+    const forgotten = await forgetting;
     expect(forgotten.code, forgotten.stdout).toBeNull();
     expect(forgotten.calls.map(({ command }) => command)).toEqual(['lease_release']);
     expect(forgotten.calls[0]?.meta?.leaseId).toBe(opened.calls[0]?.meta?.leaseId);

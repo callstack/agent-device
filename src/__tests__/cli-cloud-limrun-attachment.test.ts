@@ -201,6 +201,49 @@ test.each([
   expect(stop).toHaveBeenCalledOnce();
 });
 
+test('forget clears Limrun state when its daemon stop never confirms', async () => {
+  const env = limrunEnv('current');
+  const location = locationOf(env);
+  const broker = stubCloudApi();
+  broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+  expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+  const record = readCloudConnection(location)!;
+  const state = readRemoteConnectionState(location)!;
+  const daemonDir = cloudLimrunDaemonDir(location, record);
+  writeHostedDaemonRegistration(location);
+  let markStopStarted!: () => void;
+  const stopStarted = new Promise<void>((resolve) => {
+    markStopStarted = resolve;
+  });
+  stop.mockImplementationOnce(async () => {
+    markStopStarted();
+    await new Promise<void>(() => {});
+  });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+  const forgetting = runCliCapture(
+    ['disconnect', '--forget', '--session', location.session, '--json'],
+    { env },
+  );
+  await stopStarted;
+  await vi.advanceTimersByTimeAsync(2000);
+  const result = await forgetting;
+  expect(result.code, result.stdout).toBeNull();
+  expect(JSON.parse(result.stdout).data).toMatchObject({ forgotten: true, released: false });
+  expect(result.stderr).toContain(
+    'A rental may still exist on the hosted broker until its deadline.',
+  );
+  expect(result.stderr).toContain('local daemon may still be running');
+  expect(result.stderr).toContain('agent-device daemon stop --state-dir');
+  expect(result.stderr).toContain(daemonDir);
+  expect(readCloudConnection(location)).toBeNull();
+  expect(readRemoteConnectionState(location)).toBeNull();
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+  expect(fs.existsSync(state.remoteConfigPath)).toBe(false);
+  expect(fs.existsSync(resolveDaemonPaths(daemonDir).infoPath)).toBe(true);
+  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST']);
+});
+
 test('expires remote daemon credentials without trying to stop a local daemon', async () => {
   const env = cloudEnv();
   const location = locationOf(env);

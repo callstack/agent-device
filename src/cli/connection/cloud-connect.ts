@@ -8,6 +8,7 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import {
   createCloudSession,
   deleteCloudSession,
@@ -21,7 +22,7 @@ import {
   cloudConnectionUnavailable,
   CLOUD_CONNECTION_FORGET_HINT,
   CLOUD_CONNECTION_REASONS,
-  hasPrivateCloudConnectionFiles,
+  admitCloudConnectionFilesForForget,
   prepareCloudConnection,
   readProxyFrontAttachment,
   removeCloudAttachment,
@@ -30,7 +31,7 @@ import {
   type CloudConnectionRecord,
   type ConnectionLocation,
 } from './cloud-connection-record.ts';
-import { stopHostedLimrunDaemon } from './cloud-limrun.ts';
+import { cloudLimrunDaemonDir, stopHostedLimrunDaemon } from './cloud-limrun.ts';
 import { isLegacyCloudProfile } from './active-connection.ts';
 import { releaseProxyFrontConnectionLease } from '../commands/connection-lease-transaction.ts';
 import {
@@ -334,30 +335,54 @@ function cloudBindingForTeardown(
   return binding;
 }
 
+const FORGET_TEARDOWN_TIMEOUT_MS = 1000;
+
 export async function forgetCloudConnection(options: {
   client: AgentDeviceClient;
   location: ConnectionLocation;
   state: RemoteConnectionState | null;
   host: HostEnvironment;
-}): Promise<boolean> {
+}): Promise<{ daemonStateDir?: string } | null> {
   const { client, location, state, host } = options;
-  const hasFiles = hasPrivateCloudConnectionFiles(location);
+  const hasFiles = admitCloudConnectionFilesForForget(location);
   const binding = cloudBindingForTeardown(location, state, null);
   const hostedState =
     state && (binding || isLegacyCloudProfile(location.stateDir, state.remoteConfigPath))
       ? state
       : null;
-  if (!hasFiles && !hostedState) return false;
-  if (binding?.transport === 'agent-device-daemon') {
-    await releaseProxyFrontTeardownLease(client, location, state);
-  } else {
-    await stopHostedLimrunDaemon(location, binding?.generation, host);
-  }
-  await stopMetroCleanup(hostedState?.metro);
+  if (!hasFiles && !hostedState) return null;
+  const [daemonStateDir] = await Promise.all([
+    stopHostedDaemonForForget(location, binding, host),
+    binding?.transport === 'agent-device-daemon'
+      ? settleWithin(
+          () => releaseProxyFrontTeardownLease(client, location, hostedState),
+          FORGET_TEARDOWN_TIMEOUT_MS,
+        )
+      : undefined,
+    settleWithin(() => stopMetroCleanup(hostedState?.metro), FORGET_TEARDOWN_TIMEOUT_MS).catch(
+      () => undefined,
+    ),
+  ]);
   removeCloudAttachment(location);
   if (hostedState) removeSavedCloudProfile(location, hostedState);
   removeCloudConnection(location);
-  return true;
+  return { daemonStateDir };
+}
+
+async function stopHostedDaemonForForget(
+  location: ConnectionLocation,
+  binding: CloudSessionBinding | undefined,
+  host: HostEnvironment,
+): Promise<string | undefined> {
+  if (binding?.transport !== 'limrun') return undefined;
+  const stopped = await settleWithin(
+    () => stopHostedLimrunDaemon(location, binding.generation, host),
+    FORGET_TEARDOWN_TIMEOUT_MS,
+  ).then(
+    (result) => result.kind === 'settled',
+    () => false,
+  );
+  if (!stopped) return cloudLimrunDaemonDir(location, binding);
 }
 
 function removeCloudState(
