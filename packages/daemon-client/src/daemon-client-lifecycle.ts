@@ -20,6 +20,7 @@ import {
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
   DAEMON_RETIREMENT_REASONS,
+  remoteDaemonCapabilities,
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
@@ -68,7 +69,8 @@ export type DaemonClientSettings = {
   remoteAuthToken?: string;
   /**
    * The request goes on the checked RPC route without a `/health` probe: its connection sets
-   * `daemonRpc: checked`, and the request has no remote side effect before its command RPC.
+   * `daemonRpc: checked`, the request has no remote side effect before its command RPC, and nothing
+   * about it has to be read from `/health`.
    */
   remoteCheckedRpc?: true;
   /** See {@link DaemonBinding}. Present on a client that is pinned to one daemon instance. */
@@ -105,6 +107,7 @@ export function resolveClientSettings(
   host: HostEnvironment,
   daemonLifecycle: DaemonLifecycle = 'managed',
   daemonBinding: DaemonBinding | undefined = undefined,
+  leaseCheckedByAdmission?: true,
 ): DaemonClientSettings {
   const explicitStateDir = resolveExplicitStateDir(req, host.env);
   const remote = resolveRemoteClientSettings(req, suppliedAuthToken, host.env);
@@ -146,7 +149,9 @@ export function resolveClientSettings(
     ...(remote.remoteBaseUrl &&
     remote.daemonRpc === 'checked' &&
     approvesCheckedRpcTarget(req.flags?.daemonRpcTarget, remote.remoteBaseUrl) &&
-    isStandaloneRemoteRequest(req)
+    isStandaloneRemoteRequest(req) &&
+    // An unchecked lease needs `lease-admission`, which only `/health` reports.
+    !leaseCheckedByAdmission
       ? { remoteCheckedRpc: true as const }
       : {}),
     ...(daemonBinding ? { daemonBinding } : {}),
@@ -372,7 +377,7 @@ async function ensureRemoteDaemon(
       probe: async (probeMs, signal) => await cachedRemoteDaemonHealth(remoteInfo, probeMs, signal),
     });
   }
-  remoteInfo.capabilities = (health.upstream ?? health).capabilities;
+  remoteInfo.capabilities = remoteDaemonCapabilities(health);
   remoteInfo.remoteInstanceId = health.instanceId;
   remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
   return { info: remoteInfo, startedByClient: false };

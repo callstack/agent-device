@@ -93,7 +93,11 @@ import {
 
 const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 /** What this daemon serves over HTTP beyond the base RPC contract, as `/health` advertises it. */
-const DAEMON_HTTP_CAPABILITIES = ['script-artifacts', DAEMON_HTTP_CHECKED_RPC_CAPABILITY];
+const DAEMON_HTTP_CAPABILITIES = [
+  'script-artifacts',
+  DAEMON_HTTP_CHECKED_RPC_CAPABILITY,
+  'lease-admission',
+];
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;

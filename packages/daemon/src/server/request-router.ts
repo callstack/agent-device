@@ -14,6 +14,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import {
   AppError,
   normalizeError,
+  readDispatchDisclosure,
   retriableForErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
@@ -61,6 +62,7 @@ import { saveScriptFlagResponse } from './request-save-script-policy.ts';
 import {
   deviceSpecInvalidError,
   deviceSpecUnsupportedError,
+  LEASE_REASONS,
   readLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
 import {
@@ -306,6 +308,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               platformResourceCleanup,
               providerAppCatalog,
               daemonPolicy,
+              endSessionsForLease,
             });
             return await executeRequestScope(scope);
           }),
@@ -485,6 +488,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           platformResourceCleanup,
           providerAppCatalog,
           daemonPolicy,
+          endSessionsForLease,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref
@@ -625,7 +629,9 @@ const ERROR_TEXT_FIELDS: ReadonlySet<string> = new Set(['message', 'hint', 'caus
  * A backend error can quote the text a sensitive fill failed to type, or the altered text it read
  * back, which `redactFillFailureReadBack` replaces whole. Only that fill's own text is otherwise
  * redacted, and only in the error's text fields: `logPath`, `diagnosticId` and the other
- * daemon-owned fields come back as they are, and so does every other request's error.
+ * daemon-owned fields come back as they are, and so does every other request's error. A typed
+ * `details.dispatched` or a shared lease `details.reason` is daemon vocabulary, so a value that
+ * happens to occur in one (`no`) cannot rewrite it. Any other value in those fields stays redacted.
  */
 function redactSensitiveFillTextInError(req: DaemonRequest, error: DaemonError): DaemonError {
   const text = sensitiveFillText(req);
@@ -635,14 +641,32 @@ function redactSensitiveFillTextInError(req: DaemonRequest, error: DaemonError):
   return Object.fromEntries(
     Object.entries(error).map(([field, value]) => [
       field,
-      ERROR_TEXT_FIELDS.has(field)
-        ? mapErrorStrings(
-            field === 'details' ? redactFillFailureReadBack(value, placeholder) : value,
-            replace,
+      field === 'details'
+        ? withTypedDetails(
+            mapErrorStrings(redactFillFailureReadBack(value, placeholder), replace),
+            error.details,
           )
-        : value,
+        : ERROR_TEXT_FIELDS.has(field)
+          ? mapErrorStrings(value, replace)
+          : value,
     ]),
   ) as DaemonError;
+}
+
+/** The lease reasons a client branches on, which the daemon writes as constants. */
+const LEASE_REASON_VALUES: ReadonlySet<unknown> = new Set(
+  Object.values(LEASE_REASONS).map((row) => row.reason),
+);
+
+function withTypedDetails(redacted: unknown, original: DaemonError['details']): unknown {
+  if (!redacted || typeof redacted !== 'object' || !original) return redacted;
+  const dispatched = readDispatchDisclosure(original);
+  const reason = LEASE_REASON_VALUES.has(original.reason) ? original.reason : undefined;
+  return {
+    ...redacted,
+    ...(reason === undefined ? {} : { reason }),
+    ...(dispatched === undefined ? {} : { dispatched }),
+  };
 }
 
 function mapErrorStrings(value: unknown, replace: (value: string) => string): unknown {

@@ -402,8 +402,10 @@ test('leased session rejects mismatched lease id before dispatch', async () => {
     }),
   );
 
+  // Another live lease: an ended one is refused as inactive instead.
+  const other = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-2' });
   const scope = await createTestRequestScope({
-    req: makeRequest({ command: 'snapshot', meta: { leaseId: '1'.repeat(32) } }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: other.leaseId } }),
     sessionStore,
     leaseRegistry,
   });

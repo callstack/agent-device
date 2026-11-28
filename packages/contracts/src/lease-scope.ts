@@ -471,6 +471,15 @@ export function parseLeaseDeviceKey(
   return { platform: platform!, target: target!, id: id! };
 }
 
+/** A lease id as the registry stores it: trimmed lower-case hex. `undefined` for any other value. */
+export function normalizeLeaseId(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const value = raw.trim();
+  if (!value) return undefined;
+  if (!/^[a-f0-9]{16,128}$/i.test(value)) return undefined;
+  return value.toLowerCase();
+}
+
 export function isProxyLeaseScope(scope: LeaseScope): boolean {
   return scope.leaseProvider === PROXY_LEASE_PROVIDER;
 }
@@ -541,6 +550,19 @@ export function isInactiveLeaseError(error: unknown): boolean {
     INACTIVE_LEASE_REASONS.has(
       (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason,
     )
+  );
+}
+
+/**
+ * Whether `error` is the daemon's lease-admission refusal: the lease is gone, and the request never
+ * reached a handler. A client that let admission check a reused lease (the `lease-admission`
+ * capability) reallocates and resends on this refusal alone.
+ */
+export function isUndispatchedInactiveLeaseRefusal(error: unknown): boolean {
+  return (
+    isInactiveLeaseError(error) &&
+    (error as Readonly<{ details?: Readonly<{ dispatched?: unknown }> }>).details?.dispatched ===
+      'no'
   );
 }
 

@@ -1,5 +1,8 @@
 import type { DaemonConnection, EnsureDaemonOptions } from '@agent-device/contracts/client';
-import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import {
+  assertLeaseAdmissionCapability,
+  type DaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
 import { AppError } from '@agent-device/kernel/errors';
@@ -96,6 +99,7 @@ async function sendToDaemonOnHost(
     host,
     options.daemonLifecycle,
     options.daemonBinding,
+    options.leaseCheckedByAdmission,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
@@ -124,6 +128,8 @@ async function sendToDaemonOnHost(
     );
   });
   const info = daemon.info;
+  // Read from the `/health` gate this request already passed, so the check adds no round trip.
+  if (options.leaseCheckedByAdmission) assertLeaseAdmissionCapability(info.capabilities);
   const preparedRemoteRequest = await cancellation.guard(
     async () =>
       await protectArtifactUploadWithLeaseBeats(
@@ -174,6 +180,7 @@ async function sendToDaemonOnHost(
                 onProgress: options.onProgress,
                 signal: options.signal,
                 timeoutRecovery: resolveTimeoutRecovery(settings),
+                ...(options.leaseCheckedByAdmission ? { leaseCheckedByAdmission: true } : {}),
               },
             );
           if (!info.baseUrl || !request.meta?.clientArtifactPaths?.savedScript)

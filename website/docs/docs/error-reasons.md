@@ -608,6 +608,7 @@ These reasons can come from more than one command.
 | `daemon_state_root_unsafe` | The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it. |
 | `relative_state_dir_without_cwd` | The state dir is a relative path and the caller gave no working directory to resolve it from. |
 | `remote_script_artifacts_unsupported` | The remote daemon reports no script-artifacts capability, so it would record to its own disk. |
+| `lease_admission_unsupported` | The daemon reports no lease-admission capability, so it cannot check a lease no heartbeat checked. |
 | `daemon-busy` | The daemon still holds work, so it refused to leave; `details` counts that work. |
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |

@@ -7,7 +7,7 @@
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   localRuntimeOwner,
@@ -51,7 +51,7 @@ function fillWithStdinText(
 
 function sendToWebSession(
   session: SessionState,
-  request: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>,
+  request: Pick<DaemonRequest, 'command' | 'positionals' | 'flags' | 'meta'>,
   fillFails?: (text: string) => Error,
   fillResult?: Record<string, unknown>,
 ) {
@@ -99,7 +99,7 @@ function sendToWebSession(
     token: 'test-token',
     session: session.name,
     ...request,
-    meta: { requestId: 'req-fill-text-stdin' },
+    meta: { requestId: 'req-fill-text-stdin', ...request.meta },
   });
   return { response, typed, sessionStore };
 }
@@ -224,6 +224,54 @@ test.each([
     if (!errored.ok) expect(errored.error.message).toBe(placeholder);
   },
 );
+
+// A lease-admission client resends only on `dispatched: no`, so a recorded value that occurs in a
+// daemon-owned detail must not rewrite the typed refusal.
+test.each(['no', 'NOT'])(
+  'a --record-as value %s inside a typed detail leaves the lease refusal readable',
+  async (value) => {
+    const { response, typed } = sendToWebSession(
+      makeAuthoringSession('web', { device: WEB_DESKTOP_DEVICE }),
+      {
+        command: 'fill',
+        positionals: ['10', '20', value],
+        flags: { textStdin: true, recordAs: 'CODE' },
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: '0'.repeat(32) },
+      },
+    );
+
+    const result = await response;
+    expect(typed).toEqual([]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNAUTHORIZED');
+      expect(result.error.details).toMatchObject({ reason: 'LEASE_NOT_FOUND', dispatched: 'no' });
+    }
+  },
+);
+
+test('a backend error carrying the value in details.reason or details.dispatched keeps it redacted', async () => {
+  const { response } = fillWithStdinText(
+    makeAuthoringSession('web', { device: WEB_DESKTOP_DEVICE }),
+    { recordAs: 'PASSWORD' },
+    (text) =>
+      new AppError('COMMAND_FAILED', 'could not type', {
+        reason: `rejected-${text}`,
+        // A value outside the type, as an untrusted backend could write it.
+        dispatched: text as DispatchDisclosure,
+      }),
+  );
+
+  const result = await response;
+  expect(result.ok).toBe(false);
+  expect(JSON.stringify(result)).not.toContain(SECRET);
+  if (!result.ok) {
+    expect(result.error.details).toMatchObject({
+      reason: 'rejected-${PASSWORD}',
+      dispatched: '${PASSWORD}',
+    });
+  }
+});
 
 test('a short --text-stdin value is redacted from the error text but not from its log path', async () => {
   // `stdin` also appears in this request's id, which names its diagnostics file.

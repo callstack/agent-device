@@ -45,7 +45,9 @@ import {
   type SessionTeardown,
 } from '../sessions/lease-lifecycle.ts';
 import {
+  applyRequestCommandDefaults,
   existingSessionExecutionLockKeys,
+  holdsSessionExecutionLocks,
   prepareLockedRequestBinding,
   resolveRequestExecutionLockPlan,
   type RequestExecutionLockPlan,
@@ -56,6 +58,7 @@ import {
   readOpenWaitBudgetMs,
 } from '../sessions/open-device-contention-wait.ts';
 import {
+  bindOutsideRequestLocks,
   createRequestExecutionLocks,
   withRequestExecutionLockKeys,
 } from './request-execution-locks.ts';
@@ -98,10 +101,7 @@ import {
   createDeviceClaimAdmission,
   type DeviceClaimAdmission,
 } from '../resources/device/device-claim-admission.ts';
-import {
-  applyCommandDefaults,
-  resolveCommandDeviceClaimPolicy,
-} from '@agent-device/command-registry/registry';
+import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import {
@@ -236,8 +236,11 @@ export async function createRequestExecutionScope(params: {
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
   daemonPolicy?: DaemonPolicy;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
+  // Bound here, before this request takes a lock.
+  const queueLeaseEnd = bindOutsideRequestLocks(params.endSessionsForLease);
   const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
   // A nested batch or replay step arrives with the identity of the request that spawned it, and its
   // own name is already the store key.
@@ -464,12 +467,14 @@ export async function createRequestExecutionScope(params: {
             });
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
-          await cleanupExpiredLeasedSession({
+          const sessionEnded = await cleanupExpiredLeasedSession({
             env: params.host.env,
             sessionName,
             sessionStore,
             leaseRegistry,
-            refuseTeardown: command === 'batch' || command === 'replay' || boundedStep,
+            req: scopedReq,
+            queueLeaseEnd,
+            holdsSessionLocks: (ref) => holdsSessionExecutionLocks(executionLocks, ref),
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,
@@ -487,6 +492,7 @@ export async function createRequestExecutionScope(params: {
             leaseRegistry,
             providerAppCatalog: params.providerAppCatalog,
             daemonPolicy: params.daemonPolicy,
+            sessionEnded,
           });
           scope.req = scopedReq;
           admissionCompleted = true;
@@ -702,16 +708,6 @@ function requirePlatformCleanup(
     );
   }
   return cleanup;
-}
-
-function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
-  const flags = { ...(req.flags ?? {}) };
-  const changed = applyCommandDefaults(req.command, flags);
-  if (!changed) return req;
-  return {
-    ...req,
-    flags: flags as CommandFlags,
-  };
 }
 
 export async function prepareLockedRequestScope(params: {

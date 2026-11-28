@@ -30,11 +30,7 @@ export async function prepareRuntimeForCommand(options: {
   const { command, flags, state, client } = options;
   let nextState = ensureRuntimeLeaseState(options.nextState, flags);
   const nextRuntime = options.runtime;
-  if (
-    !shouldPrepareRuntimeForCommand(command, flags, options.batchSteps, options.positionals) ||
-    !hasDeferredMetroConfig(flags) ||
-    !shouldPrepareRuntime(options.forceRuntimePrepare, nextRuntime, flags.platform)
-  ) {
+  if (!willPrepareRuntime(options)) {
     return { state: nextState, runtime: nextRuntime, changed: false };
   }
   if (!nextState.leaseId) {
@@ -68,6 +64,28 @@ export async function prepareRuntimeForCommand(options: {
     metroCleanupToStop: replacesExistingMetroCleanup ? options.nextState.metro : undefined,
     preparedMetroCleanupOnFailure: replacesExistingMetroCleanup ? prepared.cleanup : undefined,
   };
+}
+
+/**
+ * Whether materializing the command prepares a Metro runtime. Preparation registers remote work
+ * under the connection's lease before the command is sent.
+ */
+export function willPrepareRuntime(
+  options: Readonly<{
+    command: string;
+    flags: CliFlags;
+    runtime?: SessionRuntimeHints;
+    positionals?: string[];
+    batchSteps?: BatchStep[];
+    forceRuntimePrepare?: boolean;
+  }>,
+): boolean {
+  const { command, flags } = options;
+  return (
+    shouldPrepareRuntimeForCommand(command, flags, options.batchSteps, options.positionals) &&
+    hasDeferredMetroConfig(flags) &&
+    shouldPrepareRuntime(options.forceRuntimePrepare, options.runtime, flags.platform)
+  );
 }
 
 function ensureRuntimeLeaseState(

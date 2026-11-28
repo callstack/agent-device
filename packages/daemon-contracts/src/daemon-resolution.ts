@@ -95,6 +95,8 @@ const DAEMON_STATE_ROOT_REASONS = {
 const DAEMON_CAPABILITY_REFUSAL_REASONS = {
   // The remote daemon reports no script-artifacts capability, so it would record to its own disk.
   scriptArtifactsUnsupported: { reason: 'remote_script_artifacts_unsupported' },
+  // The daemon reports no lease-admission capability, so it cannot check a lease no heartbeat checked.
+  leaseAdmissionUnsupported: { reason: 'lease_admission_unsupported' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
@@ -322,8 +324,14 @@ export function resolveDaemonTransportPreference(
 
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
 // `checked-rpc`: the daemon's HTTP server serves the checked RPC route (ADR 0006). Every daemon that
-// serves it also serves `script-artifacts`.
-export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts', 'checked-rpc'] as const;
+// serves it also serves `script-artifacts`. `lease-admission`: request admission refuses an inactive or
+// unknown lease before dispatch with `dispatched: no`, so a client may skip its lease heartbeat.
+export const DAEMON_CAPABILITIES = [
+  'quiesce',
+  'script-artifacts',
+  'checked-rpc',
+  'lease-admission',
+] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
 /**
@@ -467,6 +475,50 @@ export function assertScriptArtifactsCapability(capabilities: readonly string[] 
     daemonRequestSent: false,
     hint: 'Upgrade the daemon that owns the session. Through a proxy, the upstream daemon must report the script-artifacts capability in its /health response.',
   });
+}
+
+/**
+ * The client's own refusal, before the send, of a daemon that does not report `lease-admission`. Only
+ * the client builds this class, so a daemon answer that names the same reason is never one.
+ */
+export class LeaseAdmissionUnsupportedError extends AppError {
+  constructor() {
+    super('UNSUPPORTED_OPERATION', 'The daemon does not check leases at admission.', {
+      reason: DAEMON_CAPABILITY_REFUSAL_REASONS.leaseAdmissionUnsupported.reason,
+      daemonRequestSent: false,
+      dispatched: 'no',
+    });
+  }
+}
+
+/**
+ * Refuses, before the send, a request whose reused lease no heartbeat checked, when the daemon does
+ * not report `lease-admission`. Such a daemon need not refuse an inactive lease before dispatch,
+ * so the caller checks the lease with a heartbeat and sends again.
+ */
+export function assertLeaseAdmissionCapability(capabilities: readonly string[] | undefined): void {
+  if (!capabilities?.includes('lease-admission')) throw new LeaseAdmissionUnsupportedError();
+}
+
+type DaemonHealthIdentity = Readonly<{
+  service?: string;
+  instanceId?: string;
+  capabilities?: readonly DaemonCapability[];
+}>;
+
+/**
+ * The capabilities of the daemon a remote `/health` answer describes. `lease-admission` counts only
+ * when the answer names the instance of every link, the daemon and any proxy in front of it: the
+ * instance fences then hold the next request to the daemon that reported it. A link that calls
+ * itself a proxy is never that daemon, so a proxy counts only through its upstream link.
+ */
+export function remoteDaemonCapabilities(
+  health: DaemonHealthIdentity & Readonly<{ upstream?: DaemonHealthIdentity }>,
+): readonly DaemonCapability[] | undefined {
+  const daemon = health.upstream ?? health;
+  const namesDaemon = daemon.service !== 'agent-device-proxy';
+  if (namesDaemon && health.instanceId && daemon.instanceId) return daemon.capabilities;
+  return daemon.capabilities?.filter((capability) => capability !== 'lease-admission');
 }
 
 export function readDaemonCapabilities(value: unknown): readonly DaemonCapability[] {

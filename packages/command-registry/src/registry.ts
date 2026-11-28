@@ -712,6 +712,15 @@ const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<
   CommandDescriptor & { standaloneCommandProjection: StandaloneCommandProjection | undefined }
 > = new Map(commandDescriptors.map((descriptor) => [descriptor.name, descriptor]));
 
+/**
+ * Whether the daemon admits this command's request against the lease it names (ADR 0007). A name
+ * outside the registry, or a command exempt from lease admission, never meets lease admission.
+ */
+export function commandMeetsLeaseAdmission(command: string): boolean {
+  const daemon = COMMAND_DESCRIPTOR_BY_NAME.get(command)?.daemon;
+  return daemon !== undefined && daemon.leaseAdmissionExempt !== true;
+}
+
 export function resolveCommandCompositeResourceTrait(
   command: string,
 ): CompositeResourceTrait | undefined {

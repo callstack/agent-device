@@ -24,14 +24,10 @@ import {
 import fs from 'node:fs';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
 import type { CommandProgressState } from '@agent-device/command-output';
-import {
-  createCommandProgressState,
-  createStderrCommandProgressSink,
-} from './commands/command-progress.ts';
+import { createCommandProgressState } from './commands/command-progress.ts';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type {
   AgentDeviceClientConfig,
-  AgentDeviceDaemonTransport,
   BatchStep,
   LeaseDevice,
 } from '@agent-device/contracts/client';
@@ -66,6 +62,7 @@ import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
+import type * as LeaseAdmission from './cli/commands/connection-lease-admission.ts';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -74,9 +71,6 @@ type CliDeps = {
 };
 
 type CliDaemonTransport = typeof sendToDaemon;
-type CliDaemonRequest = Parameters<CliDaemonTransport>[0];
-type CliDaemonTransportOptions = Parameters<CliDaemonTransport>[1];
-type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
 
 const printHumanError = async (
   ...args: Parameters<typeof import('./cli/failure-output.ts').printHumanError>
@@ -222,19 +216,27 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         logTailStopper = maybeStartDaemonLogTail(ctx);
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
         const commandProgress = createCommandProgressState();
-        const client = createAgentDeviceClient(buildClientConfig(ctx), {
-          host: ctx.host,
-          devicePin: ctx.devicePin,
-          transport: createCliDaemonTransport({
-            host,
-            command,
-            flags: ctx.effectiveFlags,
-            replayTestReporterRuntime,
-            commandProgress,
-            transport,
-          }),
+        const { dispatchWithLeaseAdmission } =
+          await import('./cli/commands/connection-lease-admission.ts');
+        const { createCliDaemonTransport } = await import('./cli/cli-daemon-transport.ts');
+        await dispatchWithLeaseAdmission(ctx.leaseAdmission?.checked, transport, {
+          rematerialize: async (check) => await resolveRemoteContext(ctx, transport, check),
+          dispatch: async (send) => {
+            const client = createAgentDeviceClient(buildClientConfig(ctx), {
+              host: ctx.host,
+              devicePin: ctx.devicePin,
+              transport: createCliDaemonTransport({
+                host,
+                command,
+                flags: ctx.effectiveFlags,
+                replayTestReporterRuntime,
+                commandProgress,
+                transport: send,
+              }),
+            });
+            await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
+          },
         });
-        await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
       } catch (error) {
         await handleRunCliFailure(error, ctx, logTailStopper);
       } finally {
@@ -369,6 +371,8 @@ type CliRunContext = {
   connectionMetadata: RemoteConnectionRequestMetadata | undefined;
   /** The device a proxy backend granted for the lease's device spec; `open` reports it. */
   leaseDevice?: LeaseDevice;
+  /** The flags before materialization, and the reused lease that the command's admission checks. */
+  leaseAdmission?: { flagsBefore: CliFlags; checked?: LeaseAdmission.AdmissionCheckedLease };
   parsedBatchSteps: BatchStep[] | undefined;
   devicePin: DevicePin | undefined;
 };
@@ -471,6 +475,7 @@ async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
 async function resolveRemoteContext(
   ctx: CliRunContext,
   transport: CliDaemonTransport,
+  check?: LeaseAdmission.ReusedLeaseCheck,
 ): Promise<void> {
   if (ctx.command === 'batch') {
     if (ctx.positionals.length > 0) {
@@ -479,7 +484,7 @@ async function resolveRemoteContext(
     ctx.parsedBatchSteps = readBatchSteps(ctx.flags);
   }
 
-  if (shouldResolveRemoteAuth(ctx.command)) {
+  if (!check && shouldResolveRemoteAuth(ctx.command)) {
     const authResolution = await resolveRemoteAuthForCli({
       command: ctx.command,
       flags: ctx.effectiveFlags,
@@ -490,6 +495,8 @@ async function resolveRemoteContext(
   }
 
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
+    ctx.effectiveFlags = (ctx.leaseAdmission ??= { flagsBefore: ctx.effectiveFlags }).flagsBefore;
+    const { createClientDaemonTransport } = await import('./cli/cli-daemon-transport.ts');
     // Lease allocate and heartbeat calls act on the remote before the command, so they go
     // health-first with the instance fences, never on the checked route.
     const materializationClient = createAgentDeviceClient(
@@ -511,7 +518,9 @@ async function resolveRemoteContext(
       positionals: ctx.positionals,
       batchSteps: ctx.parsedBatchSteps,
       forceRuntimePrepare: hasExplicitMetroRuntimeOverrides(ctx.explicitFlagKeys),
+      reusedLeaseCheck: check ?? { byAdmission: true },
     });
+    ctx.leaseAdmission.checked = materialized.admissionCheckedLease;
     ctx.effectiveFlags = materialized.flags;
     ctx.resolvedRuntime = materialized.runtime;
     ctx.connectionMetadata = materialized.connection;
@@ -550,6 +559,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     runId: currentFlags.runId,
     leaseId: currentFlags.leaseId,
     leaseBackend: currentFlags.leaseBackend,
+    leaseTtlMs: ctx.leaseAdmission?.checked?.leaseTtlMs,
     leaseProvider: connection?.leaseProvider,
     clientId: connection?.clientId,
     deviceKey: connection?.deviceKey,
@@ -863,72 +873,6 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
     }
   }
   return false;
-}
-
-type CliDaemonTransportSetup = {
-  host: HostEnvironment;
-  command: string;
-  flags: CliFlags;
-  replayTestReporterRuntime?: ReplayTestReporterRuntime;
-  commandProgress: CommandProgressState;
-  transport: CliDaemonTransport;
-};
-
-/**
- * A remote connection reads each daemon reply for the leases its request ended, and forgets the
- * stored lease when the reply names it.
- */
-function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
-  const send = createCliProgressTransport(options);
-  if (!options.flags.remoteConfig) return send;
-  return async (req, context) => {
-    const response = await send(req, context);
-    const { forgetEndedConnectionLease } = await import('./cli/connection/ended-lease.ts');
-    forgetEndedConnectionLease(options.flags, response, options.host);
-    return response;
-  };
-}
-
-/**
- * The human CLI renders streamed progress itself: `test` hands its events to the
- * replay-test reporter, every other command streams `command` lines to stderr
- * through `commandProgress`, whose state the output formatters then read (a
- * doctor summary does not repeat checks progress already printed). `--json` opts
- * out of progress entirely, so it installs no sink.
- */
-function createCliProgressTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
-  const { command, flags, replayTestReporterRuntime, transport } = options;
-  if (flags.json) return createClientDaemonTransport(transport);
-  const onProgress =
-    command === 'test' && replayTestReporterRuntime
-      ? replayTestReporterRuntime.onProgress
-      : createStderrCommandProgressSink(options.commandProgress, options.host.env);
-  return async (req, context) => {
-    const transportOptions = { ...context, onProgress };
-    return await sendClientRequestToCliTransport(
-      transport,
-      {
-        ...req,
-        meta: {
-          ...req.meta,
-          requestProgress: command === 'test' ? 'replay-test' : 'command',
-        },
-      },
-      transportOptions,
-    );
-  };
-}
-
-function createClientDaemonTransport(transport: CliDaemonTransport): AgentDeviceDaemonTransport {
-  return async (req, context) => await sendClientRequestToCliTransport(transport, req, context);
-}
-
-async function sendClientRequestToCliTransport(
-  transport: CliDaemonTransport,
-  req: ClientDaemonRequest,
-  options?: CliDaemonTransportOptions,
-): ReturnType<CliDaemonTransport> {
-  return await transport(req as CliDaemonRequest, options);
 }
 
 function guessSessionFromArgv(argv: string[]): string | null {

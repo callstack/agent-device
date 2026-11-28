@@ -48,6 +48,7 @@ type ResolvedDaemonTransport = LoopbackTransport;
 type SendRequestOptions = {
   /** The host whose working directory and environment this request's client-side work reads. */
   host: HostEnvironment;
+  leaseCheckedByAdmission?: true;
   onProgress?: RequestProgressSink;
   /**
    * The caller's per-request cancellation (#3178). Aborted at or before a send attempt, nothing
@@ -536,6 +537,7 @@ function remoteResendPort(
     timeoutMs,
     deadline,
     signal: options.signal,
+    leaseCheckedByAdmission: options.leaseCheckedByAdmission,
     resend: async (budgetMs) =>
       await sendRequestWithTransport(info, req, statePaths, budgetMs, transport, options),
     readHealth: async (probeMs) => await readRemoteDaemonHealth(info, probeMs, options.signal),

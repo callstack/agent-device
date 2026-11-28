@@ -216,7 +216,7 @@
     "packages/contracts/src/daemon-http.ts#CheckedRpcProtocolRefusal": "sha256:75b71253734f2a7e1bc34c42d4c9caca0c2eb25d809e5efb2ae0df58ae694202",
     "packages/daemon/src/server/http/http-checked-rpc.ts#readCheckedRpcProtocolRefusal": "sha256:4c8924d8480a6af3acec96883d53636e33a199649bdd8ff63087dcf2ebaf4d29",
     "packages/daemon/src/server/http/http-checked-rpc.ts#sendCheckedRpcProtocolRefusal": "sha256:0538d0374405a082b3c79b4225124ecbfab49dd0f53f44e401c155834c5518a5",
-    "packages/daemon/src/server/http/http-server.ts#DAEMON_HTTP_CAPABILITIES": "sha256:bac67f03945b928de4fece3a5e02386ebba9b7b957b1107f76c84bc8ca574f94",
+    "packages/daemon/src/server/http/http-server.ts#DAEMON_HTTP_CAPABILITIES": "sha256:02f316135fa0c1e898a38a4fd19becbe1c0f0441455416df3472bce7114a5314",
     "packages/proxy/src/daemon-proxy.ts#isRpcRoute": "sha256:1bf3b68f6bc855bd87ee7c0bbdef467c3c76232238885ae6c67bcf245ce9b846",
     "packages/proxy/src/checked-rpc-admission.ts#refuseCheckedRpcProtocol": "sha256:dd63d879bf97d386889f1c4603b5722b9ad018a7f3415bcf72e44e3e8fefec48",
     "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:5c39c2b5a1b4bc897a2b01ac47c6856af47e787e8cc5798657f0ae24fd1c78e0",
@@ -239,7 +239,7 @@
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadDirectUrl": "sha256:b121db3ffb5a520b4b31810a2e28ff01c1a15d959514c9fbe2a61cd960d2af93",
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadPreflightResponse": "sha256:332820b6f10e079632330c2c4996c4faa6f339e921f12f287bd83c9296df5ccd",
     "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:21d633d947cd72f5008bcc886a8f3ecd4f778b594d0654b8d0741db8594003db",
-    "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:4ff6eba594b923a1d8f46a5856c42132b7ecd3a63d40f26c42972e06cb5a0a04",
+    "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:d4912bf7c2f3b6ad66681eb39df376d6affdf284295fd5581ef015dc55f2745a",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:ba600575e06995bc903c107477b23f7853e920751452a50a9734fab6677326bf",
@@ -694,8 +694,8 @@
     },
     {
       "declaration": "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES",
-      "digest": "sha256:4ff6eba594b923a1d8f46a5856c42132b7ecd3a63d40f26c42972e06cb5a0a04",
-      "rationale": "Adds the checked-rpc capability (ADR 0006). readDaemonCapabilities filters to known names, so a released client drops it, and a released daemon never lists it; a client treats an absent capability as cannot-do. The existing quiesce and script-artifacts entries are unchanged."
+      "digest": "sha256:d4912bf7c2f3b6ad66681eb39df376d6affdf284295fd5581ef015dc55f2745a",
+      "rationale": "Adds the checked-rpc capability (ADR 0006). readDaemonCapabilities filters to known names, so a released client drops it, and a released daemon never lists it; a client treats an absent capability as cannot-do. The existing quiesce and script-artifacts entries are unchanged. Adds the lease-admission capability the same way: the daemon refuses a request that names an inactive lease at admission, before dispatch, with LEASE_NOT_FOUND and dispatched no. A released client drops the unknown name and keeps its lease heartbeat; a released daemon never lists it, so a new client keeps its heartbeat."
     },
     {
       "declaration": "packages/remote/src/session-script-destination.ts#RemoteEndpoint",

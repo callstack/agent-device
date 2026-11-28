@@ -24,6 +24,12 @@ import {
   type ConnectionLeasePolicy,
 } from './connection-lease-policy.ts';
 import { bindLeaseNamedDevice, CONNECTION_SCOPE_REASONS } from './proxy-lease-device.ts';
+import {
+  leaseCheckedByAdmission,
+  leaseOfConnection,
+  type AdmissionCheckedLease,
+  type ReusedLeaseCheck,
+} from './connection-lease-admission.ts';
 
 type LeaseRelease = () => Promise<{ released: boolean }>;
 
@@ -121,7 +127,16 @@ export async function acquireConnectionLease(options: {
   nextFlags: CliFlags;
   positionals?: string[];
   leaseLedger: LeaseLedger;
-}): Promise<{ state: RemoteConnectionState; changed: boolean }> {
+  reusedLeaseCheck?: ReusedLeaseCheck;
+  savedState?: RemoteConnectionState;
+  /** Whether the command prepares a runtime under the lease; unknown counts as yes. */
+  preparesRuntime?: (flags: CliFlags) => boolean;
+}): Promise<{
+  state: RemoteConnectionState;
+  changed: boolean;
+  /** Set when the command's admission, not a heartbeat, checks this reused lease. */
+  admissionCheckedLease?: AdmissionCheckedLease;
+}> {
   const { command, client, state, nextFlags, leaseLedger } = options;
   const deferredAppSelection = connectionProviderCapabilities(
     state.leaseProvider,
@@ -132,6 +147,7 @@ export async function acquireConnectionLease(options: {
   const leasePolicy = connectionLeasePolicyForState(state);
   let nextState = state;
   let changed = false;
+  let admissionCheckedLease: AdmissionCheckedLease | undefined;
   if (leasePolicy.shouldAllocate(command)) {
     const materialized = await materializeLeaseForCommand({
       command,
@@ -142,16 +158,20 @@ export async function acquireConnectionLease(options: {
       initialApp,
       policy: leasePolicy,
       leaseLedger,
+      reusedLeaseCheck: options.reusedLeaseCheck,
+      savedState: options.savedState,
+      preparesRuntime: options.preparesRuntime,
     });
     nextState = materialized.state;
     changed = materialized.changed;
+    admissionCheckedLease = materialized.admissionCheckedLease;
   }
   nextState = {
     ...nextState,
     platform: carriedConnectionPlatform(state.session, nextState, nextFlags),
   };
   nextFlags.platform = nextState.platform;
-  return { state: nextState, changed };
+  return { state: nextState, changed, admissionCheckedLease };
 }
 
 /**
@@ -191,7 +211,14 @@ async function materializeLeaseForCommand(options: {
   initialApp?: string;
   policy: ConnectionLeasePolicy;
   leaseLedger: LeaseLedger;
-}): Promise<{ state: RemoteConnectionState; changed: boolean }> {
+  reusedLeaseCheck?: ReusedLeaseCheck;
+  savedState?: RemoteConnectionState;
+  preparesRuntime?: (flags: CliFlags) => boolean;
+}): Promise<{
+  state: RemoteConnectionState;
+  changed: boolean;
+  admissionCheckedLease?: AdmissionCheckedLease;
+}> {
   const { command, client, state, nextFlags, policy, leaseLedger } = options;
   const preliminaryLeaseBackend = state.leaseBackend ?? resolveRequestedLeaseBackend(nextFlags);
   let nextState = options.nextState;
@@ -216,16 +243,33 @@ async function materializeLeaseForCommand(options: {
   assertRequestedConnectionTarget(state, nextFlags);
   nextState = { ...nextState, platform };
   nextFlags.platform = platform;
-  let materializedLease = await allocateOrReuseLease(
-    client,
-    nextState,
+  const admissionCheckedLease = leaseCheckedByAdmission({
+    command,
+    state: nextState,
+    flags: nextFlags,
     leaseBackend,
     policy,
-    nextFlags,
-    options.initialApp,
-    resolvedLeaseState.allocateBySpec,
-    leaseLedger,
-  );
+    allocateBySpec: resolvedLeaseState.allocateBySpec,
+    savedState: options.savedState,
+    preparesRuntime: options.preparesRuntime?.(nextFlags) ?? true,
+    check: options.reusedLeaseCheck,
+  });
+  let materializedLease = admissionCheckedLease
+    ? {
+        lease: leaseOfConnection(nextState, admissionCheckedLease.leaseId, leaseBackend),
+        acquired: false,
+      }
+    : await allocateOrReuseLease(
+        client,
+        nextState,
+        leaseBackend,
+        policy,
+        nextFlags,
+        options.initialApp,
+        resolvedLeaseState.allocateBySpec,
+        leaseLedger,
+        options.reusedLeaseCheck?.inactiveLeaseId,
+      );
   if (resolvedLeaseState.allocateBySpec) {
     const bound = await bindLeaseNamedDevice({
       client,
@@ -254,7 +298,7 @@ async function materializeLeaseForCommand(options: {
   nextFlags.leaseBackend = leaseBackend;
   nextFlags.target = nextState.target ?? nextFlags.target;
   if (leaseStateMatches(nextState, lease, leaseBackend)) {
-    return { state: nextState, changed: false };
+    return { state: nextState, changed: false, admissionCheckedLease };
   }
   return {
     state: buildMaterializedLeaseState(nextState, lease, leaseBackend, nextFlags),
@@ -364,9 +408,10 @@ async function allocateOrReuseLease(
   initialApp: string | undefined,
   allocateBySpec: boolean | undefined,
   leaseLedger: LeaseLedger,
+  inactiveLeaseId?: string,
 ): Promise<{ lease: Lease; acquired: boolean }> {
   const connection = buildRemoteConnectionRequestMetadata(state);
-  if (state.leaseId && state.leaseBackend === leaseBackend) {
+  if (state.leaseId && state.leaseBackend === leaseBackend && state.leaseId !== inactiveLeaseId) {
     const existing = await heartbeatOrAllocateLease(client, state.leaseId, {
       tenant: state.tenant,
       runId: state.runId,
