@@ -397,6 +397,20 @@ test('disconnect proves a saved binding without a transaction record before DELE
   );
   vi.stubGlobal('fetch', fetchMock);
   try {
+    const noCredential = await runCliCapture(['disconnect', '--json'], {
+      env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
+    });
+    const { error } = JSON.parse(noCredential.stdout);
+    expect(error).toMatchObject({
+      code: 'UNAUTHORIZED',
+      details: { reason: 'cloud_api_key_required' },
+    });
+    expect(error.hint).toContain('agent-device auth login');
+    expect(error.hint).toContain('agent-device disconnect --forget --session <name>');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(readRemoteConnectionState(location)).toEqual(saved);
+    expect(readCloudConnection(location)).toBeNull();
+
     for (const reply of [
       Response.json({ error: 'not_found' }, { status: 404 }),
       Response.json({ id: '00000000-0000-4000-8000-000000000002', state: 'running' }),

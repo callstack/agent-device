@@ -525,6 +525,9 @@ export function cloudConnectionUnavailable(
   });
 }
 
+export const CLOUD_CONNECTION_FORGET_HINT =
+  'To clear local state only, run agent-device disconnect --forget --session <name>. The rental may continue until its deadline.';
+
 function cloudConnectionRecoveryHint(
   reason: Parameters<typeof cloudConnectionUnavailable>[0],
 ): string {
@@ -534,9 +537,9 @@ function cloudConnectionRecoveryHint(
     case CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason:
       return 'Verify the allocation with the hosted broker under the original account. End any active session there before repairing the local record or credential store.';
     case CLOUD_CONNECTION_REASONS.credentialMismatch.reason:
-      return 'Sign back in to the owning hosted account or use the original API key. To clear local state only, run agent-device disconnect --forget --session <name>. The rental may continue until its deadline.';
+      return `Sign back in to the owning hosted account or use the original API key. ${CLOUD_CONNECTION_FORGET_HINT}`;
     case CLOUD_CONNECTION_REASONS.allocationUnconfirmed.reason:
-      return 'Check the allocation with the hosted broker under the original account and retry. To clear local state only, run agent-device disconnect --forget --session <name>. The rental may continue until its deadline.';
+      return `Check the allocation with the hosted broker under the original account and retry. ${CLOUD_CONNECTION_FORGET_HINT}`;
     default:
       return 'Run agent-device disconnect in this session to recover it, then reconnect.';
   }

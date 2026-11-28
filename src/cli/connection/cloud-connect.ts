@@ -19,6 +19,7 @@ import {
 import {
   assertCloudRecordSession,
   cloudConnectionUnavailable,
+  CLOUD_CONNECTION_FORGET_HINT,
   CLOUD_CONNECTION_REASONS,
   prepareCloudConnection,
   readProxyFrontAttachment,
@@ -281,6 +282,20 @@ async function verifyBrokerRelease(options: {
     stateDir: location.stateDir,
     interactive: false,
     savedOrigin: record?.origin ?? binding?.baseUrl,
+  }).catch((error: unknown) => {
+    if (record || !(error instanceof AppError) || error.code !== 'UNAUTHORIZED') throw error;
+    const authHint = error.details?.hint;
+    throw new AppError(
+      error.code,
+      error.message,
+      {
+        ...error.details,
+        hint: authHint
+          ? `${authHint} ${CLOUD_CONNECTION_FORGET_HINT}`
+          : CLOUD_CONNECTION_FORGET_HINT,
+      },
+      error,
+    );
   });
   if (record) {
     requireMatchingAccount(access, record);
