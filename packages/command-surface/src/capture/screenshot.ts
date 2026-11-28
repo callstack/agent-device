@@ -12,6 +12,7 @@ import {
   validateNoRetiredScreenshotMaxSize,
   validateScreenshotScale,
 } from '@agent-device/contracts/capture';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   booleanField,
   enumField,
@@ -24,17 +25,42 @@ import { commonInputFromFlags, optionalString, request } from '../cli-grammar/co
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+import { optionalString as readOptionalString } from '../input-readers.ts';
 
 const SCREENSHOT_COMMAND_NAME = 'screenshot';
 
 const screenshotCommandDescription =
   'Capture a screenshot of the active app or web session. Input fields control capture scope, density, size, and annotations. Use it for visual evidence, or when a snapshot warns that the accessibility tree is sparse: read the image, then press by coordinates. A screenshot alone does not verify a result.';
 
+/**
+ * `--out` is the flag an agent reaches for on this command, and the structured
+ * spelling of that flag used to exist nowhere: a batch step's `{"out":...}`
+ * reached the field projection, which reads `path`, and the value was dropped
+ * without a trace. The `out` key is a second spelling of `path` — read by the
+ * `path` field the way the common table reads `target` through `deviceTarget`,
+ * and declared `alias` so model-facing schemas keep advertising one key.
+ */
+const screenshotPathField = stringField('Output path.');
+
+function readScreenshotOutputPath(record: Record<string, unknown>): string | undefined {
+  const path = readOptionalString(record, 'path');
+  const out = readOptionalString(record, 'out');
+  if (path !== undefined && out !== undefined && path !== out) {
+    throw new AppError('INVALID_ARGS', 'Expected out to match path when both are set.');
+  }
+  return path ?? out;
+}
+
 const screenshotCommandMetadata = defineFieldCommandMetadata(
   SCREENSHOT_COMMAND_NAME,
   screenshotCommandDescription,
   {
-    path: stringField('Output path.'),
+    path: { ...screenshotPathField, read: readScreenshotOutputPath },
+    out: {
+      ...stringField('Alias for path.'),
+      audience: { kind: 'alias', of: 'path' },
+      read: () => undefined,
+    },
     cropOn: stringField(
       'Selector expression; the capture is cropped to the frame the selector resolves on the same screen.',
     ),

@@ -9,7 +9,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   BATCH_AVAILABLE_COMMANDS_HINT,
   readStructuredBatchCommandName,
+  resolveStructuredBatchCommandName,
 } from '@agent-device/command-registry/batch-policy';
+import { commandInputKeys } from '../command-metadata.ts';
 import { assertAllowedKeys } from '../input-readers.ts';
 
 /**
@@ -45,20 +47,33 @@ function readCliBatchStep(step: unknown, stepNumber: number): BatchStep {
       { hint: CLI_BATCH_STEP_SHAPE_HINT },
     );
   }
+  // Resolved without throwing so the step-shape refusal below keeps its place
+  // as the first failure a malformed step sees; the name only feeds the
+  // misplaced-field guidance.
+  const resolvedCommand = resolveStructuredBatchCommandName(record.command);
   assertAllowedKeys(
     record,
     ['command', 'input', 'runtime'],
     `Batch step ${stepNumber}`,
     CLI_BATCH_STEP_SHAPE_HINT,
+    resolvedCommand === undefined
+      ? undefined
+      : { nestedInputKeys: commandInputKeys(resolvedCommand) },
+  );
+  const command = readStructuredBatchCommandName(
+    record.command,
+    stepNumber,
+    CLI_BATCH_AVAILABLE_COMMANDS_HINT,
   );
   const runtime = parseBatchStepRuntime(record.runtime, stepNumber);
   return {
-    command: readStructuredBatchCommandName(
-      record.command,
+    command,
+    input: readBatchStepInputObject(
+      record,
       stepNumber,
-      CLI_BATCH_AVAILABLE_COMMANDS_HINT,
+      CLI_BATCH_STEP_SHAPE_HINT,
+      commandInputKeys(command),
     ),
-    input: readBatchStepInputObject(record, stepNumber, CLI_BATCH_STEP_SHAPE_HINT),
     ...(runtime === undefined ? {} : { runtime }),
   };
 }

@@ -144,6 +144,10 @@ function readBatchStep(
   );
   return {
     command: readBatchStepCommand(record, stepNumber, nestedCommands),
+    // No accepted-key set here: naming a step's closest accepted field needs
+    // the command metadata lookup, and this module sits inside the family
+    // registry's own import subtree. Every surface's steps cross the daemon
+    // projection, which runs the refusal with the same message.
     input: readBatchStepInputObject(record, stepNumber),
     ...readBatchStepRuntimeProperty(record, stepNumber),
   };

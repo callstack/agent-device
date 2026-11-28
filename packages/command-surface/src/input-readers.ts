@@ -1,3 +1,4 @@
+import { BATCH_STEP_INPUT_REFUSALS } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 
 /** Primitive readers shared by the common-field table and the per-command field constructors. */
@@ -107,16 +108,37 @@ export function assertAllowedKeys(
   allowedKeys: readonly string[],
   label: string,
   hint?: string,
+  options?: { nestedInputKeys?: readonly string[] },
 ): void {
   const allowed = new Set(allowedKeys);
   const unknownKeys = Object.keys(record).filter((key) => !allowed.has(key));
-  if (unknownKeys.length > 0) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `${label} has unknown field(s): ${unknownKeys.join(', ')}.`,
-      hint === undefined ? undefined : { hint },
-    );
-  }
+  if (unknownKeys.length === 0) return;
+  // A step-level refusal only guides when it says where the field belongs: a
+  // key that the step's own command accepts as structured input was written at
+  // the step's top level (`--settle` spelled as a step field), and naming the
+  // destination beats the bare unknown-field list (#2062 follow-up). The
+  // misplaced keys travel as data too (`batch_step_misplaced_input_key`), so a
+  // client can branch on the refusal without matching message text.
+  const nestedInputKeys =
+    options?.nestedInputKeys === undefined ? undefined : new Set(options.nestedInputKeys);
+  const misplacedKeys =
+    nestedInputKeys === undefined ? [] : unknownKeys.filter((key) => nestedInputKeys.has(key));
+  const misplacedGuidance =
+    misplacedKeys.length === 0 ? '' : ` Pass ${misplacedKeys.join(', ')} inside the step's input.`;
+  const details =
+    hint === undefined && misplacedKeys.length === 0
+      ? undefined
+      : {
+          ...(hint === undefined ? {} : { hint }),
+          ...(misplacedKeys.length === 0
+            ? {}
+            : { reason: BATCH_STEP_INPUT_REFUSALS.misplacedKey.reason, keys: misplacedKeys }),
+        };
+  throw new AppError(
+    'INVALID_ARGS',
+    `${label} has unknown field(s): ${unknownKeys.join(', ')}.${misplacedGuidance}`,
+    details,
+  );
 }
 
 export function compactRecord(record: Record<string, unknown>): Record<string, unknown> {

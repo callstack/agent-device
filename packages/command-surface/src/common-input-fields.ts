@@ -278,6 +278,15 @@ const COMMON_INPUT_FIELDS = {
 const COMMON_INPUT_ROWS: ReadonlyArray<readonly [string, CommonInputFieldSpec]> =
   Object.entries(COMMON_INPUT_FIELDS);
 
+/**
+ * Every common key a command's structured input recognizes, including the
+ * alias (`target`) and the retired key whose own reader answers with migration
+ * guidance. Batch step admission composes this with a command's own field keys
+ * (`commandInputKeys`), so an unknown-key refusal can never name a key the
+ * nested reader would have accepted.
+ */
+export const COMMON_INPUT_KEYS: readonly string[] = COMMON_INPUT_ROWS.map(([key]) => key);
+
 /** Common keys no model-facing tool schema advertises. */
 export const COMMON_INPUT_AUDIENCE: InputAudienceMap = Object.fromEntries(
   COMMON_INPUT_ROWS.flatMap(([key, field]) => (field.audience ? [[key, field.audience]] : [])),
