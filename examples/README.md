@@ -23,7 +23,7 @@ file:
   them without a build or publish step;
 - imports the package by name (`agent-device/...`), not a relative `src/` path, so it exercises the
   same surface a real consumer sees;
-- is runnable on its own with `node --experimental-strip-types` (repo Node is >=22.12) once the
+- is runnable on its own with `node --experimental-strip-types` (repo Node is >=22.17) once the
   package is built (`pnpm build`) — running for real resolves `agent-device` as a self-referencing
   package, the same way an installed consumer would.
 

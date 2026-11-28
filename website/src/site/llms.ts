@@ -67,7 +67,7 @@ ${docLink('device-clouds', 'hosted devices and the self-hosted remote daemon.')}
 
 llms-small.txt leaves out these pages: ${excludedTitles.join(', ')}. Read them in llms-full.txt or on the site.
 
-${docLink('installation', '`npm install -g agent-device` (Node.js 22.12 or newer), then `agent-device doctor` to check the setup.')}
+${docLink('installation', '`npm install -g agent-device` (Node.js 22.17 or newer), then `agent-device doctor` to check the setup.')}
 ${docLink('introduction', 'Scope, supported workflows, and responsibility boundaries.')}
 ${docLink('agent-setup', 'CLI, skills, MCP, and coding-agent setup.')}
 ${docLink('quick-start', 'First app-verification workflow.')}

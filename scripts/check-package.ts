@@ -82,7 +82,7 @@ function run(command: string, args: string[], cwd: string): string {
 const TARBALL_LINTERS = [
   { dependency: 'publint', bin: 'publint', args: ['--strict'] },
   // The `esm-only` profile is the honest one for this package (`type: module`,
-  // `engines.node >= 22.12`): it keeps every ESM and bundler resolution failing, and drops the
+  // `engines.node >= 22.17`): it keeps every ESM and bundler resolution failing, and drops the
   // CJS-consumer and pre-`exports` node10 rules that no supported consumer can hit.
   { dependency: '@arethetypeswrong/cli', bin: 'attw', args: ['--profile', 'esm-only'] },
 ] as const;

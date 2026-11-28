@@ -107,18 +107,17 @@ jobs:
 
       # The build runs on the default toolchain Node and the package is verified on the minimum
       # supported Node, so this job covers what a user on `engines.node` floor actually installs.
-      - name: Setup Node.js 22.12
+      - name: Setup Node.js 22.17
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
-          node-version: '22.12'
+          node-version: '22.17'
 
       # Packs, lints the tarball with publint/attw, installs it outside the workspace, and imports
       # every published entry point before running the CLI. See scripts/check-package.ts.
       #
-      # Runs the script directly rather than through `pnpm check:package`: the repo's pinned pnpm
-      # requires Node >= 22.13 and refuses to start on the 22.12 floor this job exists to cover. The
-      # gate itself only needs `node` and `npm`, so it is the package.json script minus the launcher.
-      - name: Verify the published package on Node.js 22.12
+      # Runs the script directly rather than through `pnpm check:package`: the gate itself only
+      # needs `node` and `npm`, so it is the package.json script minus the launcher.
+      - name: Verify the published package on Node.js 22.17
         run: node --experimental-strip-types scripts/check-package.ts
 
   # Structural guards and the history-backed compatibility gates share one deep checkout and

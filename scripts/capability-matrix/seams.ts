@@ -186,7 +186,7 @@ export function stubLimrunSdk(): void {
   if (!moduleHooks.register) {
     throw new Error(
       'node:module register is unavailable, so the Limrun SDK cannot be stubbed. ' +
-        'Run the collector on the repository-supported Node (22.12 or later).',
+        'Run the collector on the repository-supported Node (22.17 or later).',
     );
   }
   moduleHooks.register(

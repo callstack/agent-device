@@ -80,7 +80,7 @@
     }
   },
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.17"
   },
   "bin": {
     "agent-device": "bin/agent-device.mjs"

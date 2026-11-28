@@ -12,7 +12,7 @@
     "directory": "packages/proxy"
   },
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.17"
   },
   "exports": {
     ".": {

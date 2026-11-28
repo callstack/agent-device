@@ -7,7 +7,7 @@ Install `agent-device` on the machine where your coding agent runs terminal comm
 
 ## Requirements
 
-- Node.js 22.12 or newer
+- Node.js 22.17 or newer
 - Node.js 24 or newer for web automation. Web commands fail on older Node.js versions, so check
   `node --version` in the shell that runs `agent-device web setup` and `agent-device doctor`
   before you trust a web result.

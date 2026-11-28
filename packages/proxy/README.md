@@ -14,7 +14,7 @@ The proxy:
 - refuses install sources that name a file on the daemon host;
 - rewrites upload tickets so clients upload through the proxy, not to the daemon directly.
 
-Requires Node.js 22.12 or later.
+Requires Node.js 22.17 or later.
 
 ## Install
 
