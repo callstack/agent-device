@@ -21,22 +21,6 @@
 // See docs/agents/testing.md ("Concurrency torture lane") for the seed-replay
 // flag and how failures are reproduced.
 
-type Deferred<T> = {
-  readonly promise: Promise<T>;
-  resolve(value: T): void;
-  reject(error: unknown): void;
-};
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 /** A lock key the harness serializes on, mirroring `RequestExecutionLockKey`. */
 export type LockKey = `session:${string}` | `device:${string}`;
 
@@ -99,7 +83,7 @@ export class DeterministicScheduler {
   private readonly stepLabels = new Map<number, string | undefined>();
   private readonly liveFibers = new Set<number>();
   private readonly fiberNames = new Map<number, string>();
-  private turn: Deferred<void> | null = null;
+  private turn: PromiseWithResolvers<void> | null = null;
   private firstError: unknown;
   private readonly choiceLog: SchedulerChoice[] = [];
   // How many times acquiring a key had to PARK because it was already held —
@@ -155,7 +139,7 @@ export class DeterministicScheduler {
       }
       const choice = candidates[this.pickIndex(candidates.length)] as SchedulerChoice;
       this.choiceLog.push(choice);
-      this.turn = deferred();
+      this.turn = Promise.withResolvers();
       this.applyChoice(choice);
       await this.turn.promise;
       this.turn = null;
@@ -182,7 +166,7 @@ export class DeterministicScheduler {
 
   private makeFiber(id: number, name: string): Fiber {
     const step = (label?: string): Promise<void> => {
-      const gate = deferred<void>();
+      const gate = Promise.withResolvers<void>();
       this.wake.set(id, gate.resolve);
       this.stepLabels.set(id, label);
       this.readySteppers.add(id);
@@ -198,7 +182,7 @@ export class DeterministicScheduler {
         mutex.holder = id;
         return Promise.resolve();
       }
-      const gate = deferred<void>();
+      const gate = Promise.withResolvers<void>();
       this.wake.set(id, gate.resolve);
       mutex.waiters.add(id);
       this.contention.set(key, (this.contention.get(key) ?? 0) + 1);

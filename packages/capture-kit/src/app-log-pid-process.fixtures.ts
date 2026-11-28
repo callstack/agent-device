@@ -1,16 +1,8 @@
 import { vi } from 'vitest';
 import type { AppLogBackgroundProcess } from '@agent-device/contracts/app-log-runtime';
 
-export function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
-}
-
 export function processFixture(
-  wait: ReturnType<typeof deferred<{ stdout: string; stderr: string; exitCode: number }>>,
+  wait: PromiseWithResolvers<{ stdout: string; stderr: string; exitCode: number }>,
 ) {
   const terminate = vi.fn(async () => wait.resolve({ stdout: '', stderr: '', exitCode: 0 }));
   const dispose = vi.fn(async () => {});

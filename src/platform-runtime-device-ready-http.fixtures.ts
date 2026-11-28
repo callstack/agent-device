@@ -16,14 +16,6 @@ import {
 } from '@agent-device/test-kit';
 import { createDaemonPlatformServices } from './platform-runtime-daemon-services.ts';
 
-export function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
-
 let deviceIndex = 0;
 
 export async function route() {
@@ -160,8 +152,8 @@ export async function route() {
       positionals,
       flags: { platform: 'android', serial: device.id },
     };
-    const closed = deferred<void>();
-    const answer = deferred<DaemonResponse>();
+    const closed = Promise.withResolvers<void>();
+    const answer = Promise.withResolvers<DaemonResponse>();
     const request = http.request(
       {
         host: '127.0.0.1',

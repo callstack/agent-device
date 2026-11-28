@@ -183,7 +183,7 @@ class LeaseEntry<Session, Handle, Request> {
   start: Promise<Outcome<Session>> = Promise.resolve({ status: 'failed', error: undefined });
   answered = false;
   readonly answer: Promise<void>;
-  markAnswered: () => void = () => undefined;
+  readonly markAnswered: () => void;
   session: Session | undefined = undefined;
   /** Every rental this lease named, by `handleKey`, in the order named; each stays until stopped. */
   readonly rentals = new Map<string, RentalRecord<Handle>>();
@@ -208,9 +208,9 @@ class LeaseEntry<Session, Handle, Request> {
     this.generation = generation;
     this.request = request;
     this.answerBy = answerBy;
-    this.answer = new Promise((resolve) => {
-      this.markAnswered = resolve;
-    });
+    const { promise, resolve } = Promise.withResolvers<void>();
+    this.answer = promise;
+    this.markAnswered = resolve;
   }
 }
 

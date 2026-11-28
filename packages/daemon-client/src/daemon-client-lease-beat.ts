@@ -137,10 +137,7 @@ export async function runProtectedLeaseWork<T>(
     beatControl.abort();
   };
   let terminalError: unknown;
-  let reportTerminal: ((error: unknown) => void) | undefined;
-  const terminal = new Promise<never>((_, reject) => {
-    reportTerminal = reject;
-  });
+  const { promise: terminal, reject: reportTerminal } = Promise.withResolvers<never>();
   if (callerSignal) callerSignal.addEventListener('abort', stopBeating, { once: true });
 
   const runBeat = (): void => {
@@ -167,7 +164,7 @@ export async function runProtectedLeaseWork<T>(
         return;
       }
       control.abort();
-      reportTerminal?.(error);
+      reportTerminal(error);
     };
     const reportTransientBeatFailure = (error: unknown): void => {
       // A beat the loop itself canceled — for a caller that has already given up — failed for a

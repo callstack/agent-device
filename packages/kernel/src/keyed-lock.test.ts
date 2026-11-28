@@ -10,16 +10,11 @@ import {
 test('canceled queued work returns before its owner and never runs or admits a competing task early', async () => {
   const locks = new Map<string, Promise<unknown>>();
   const controller = new AbortController();
-  let release!: () => void;
-  let markStarted!: () => void;
-  const started = new Promise<void>((resolve) => {
-    markStarted = resolve;
-  });
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  const { promise: started, resolve: markStarted } = Promise.withResolvers<void>();
   const owner = withKeyedLock(locks, 'session', async () => {
     markStarted();
-    await new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    await released;
   });
   await started;
   const expiredTask = vi.fn(async () => {});
@@ -41,20 +36,15 @@ test('canceled queued work returns before its owner and never runs or admits a c
 test('an abort after lock admission waits for the running task to settle', async () => {
   const locks = new Map<string, Promise<unknown>>();
   const controller = new AbortController();
-  let release!: () => void;
-  let markStarted!: () => void;
-  const started = new Promise<void>((resolve) => {
-    markStarted = resolve;
-  });
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  const { promise: started, resolve: markStarted } = Promise.withResolvers<void>();
   let settled = false;
   const running = withKeyedLock(
     locks,
     'session',
     async () => {
       markStarted();
-      await new Promise<void>((resolve) => {
-        release = resolve;
-      });
+      await released;
     },
     controller.signal,
   ).finally(() => {
@@ -100,10 +90,7 @@ test('withKeyedLock serializes work per key', async () => {
 test('withKeyedLock allows reentrant work for the same key while holding the outer lock', async () => {
   const locks = new Map<string, Promise<unknown>>();
   const order: string[] = [];
-  let releaseOuter: (() => void) | undefined;
-  const outerGate = new Promise<void>((resolve) => {
-    releaseOuter = resolve;
-  });
+  const { promise: outerGate, resolve: releaseOuter } = Promise.withResolvers<void>();
 
   const outer = withKeyedLock(locks, 'device-a', async () => {
     order.push('outer-start');
@@ -125,7 +112,7 @@ test('withKeyedLock allows reentrant work for the same key while holding the out
   await new Promise((resolve) => setTimeout(resolve, 15));
   assert.deepEqual(order, ['outer-start', 'inner']);
 
-  releaseOuter?.();
+  releaseOuter();
   await Promise.all([outer, competing]);
 
   assert.deepEqual(order, ['outer-start', 'inner', 'outer-end', 'competing']);
@@ -134,10 +121,7 @@ test('withKeyedLock allows reentrant work for the same key while holding the out
 test('a deferred descendant of a released lock queues behind its current owner', async () => {
   const locks = new Map<string, Promise<unknown>>();
   const order: string[] = [];
-  let timerAttempted!: () => void;
-  const attempted = new Promise<void>((resolve) => {
-    timerAttempted = resolve;
-  });
+  const { promise: attempted, resolve: timerAttempted } = Promise.withResolvers<void>();
   let descendant!: Promise<void>;
   await withKeyedLock(locks, 'device-a', async () => {
     descendant = new Promise<void>((resolve, reject) => {
@@ -149,14 +133,8 @@ test('a deferred descendant of a released lock queues behind its current owner',
       }, 0);
     });
   });
-  let releaseOwner!: () => void;
-  const ownerGate = new Promise<void>((resolve) => {
-    releaseOwner = resolve;
-  });
-  let ownerStarted!: () => void;
-  const started = new Promise<void>((resolve) => {
-    ownerStarted = resolve;
-  });
+  const { promise: ownerGate, resolve: releaseOwner } = Promise.withResolvers<void>();
+  const { promise: started, resolve: ownerStarted } = Promise.withResolvers<void>();
   const owner = withKeyedLock(locks, 'device-a', async () => {
     order.push('owner');
     ownerStarted();
@@ -177,14 +155,8 @@ test.each([false, true])(
   async (reject) => {
     const locks = new Map<string, Promise<unknown>>();
     const order: string[] = [];
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let markStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
+    const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+    const { promise: started, resolve: markStarted } = Promise.withResolvers<void>();
     let descendant!: Promise<void>;
     const owner = withKeyedLock(locks, 'device-a', async () => {
       queueMicrotask(() => {
@@ -223,14 +195,8 @@ test.each([false, true])(
 test('a lock a holder takes partway through is held by later sibling scopes until the holder ends', async () => {
   const locks = new Map<string, Promise<unknown>>();
   const order: string[] = [];
-  let markHeld: () => void = () => {};
-  const held = new Promise<void>((resolve) => {
-    markHeld = resolve;
-  });
-  let finishHolder: () => void = () => {};
-  const holderMayFinish = new Promise<void>((resolve) => {
-    finishHolder = resolve;
-  });
+  const { promise: held, resolve: markHeld } = Promise.withResolvers<void>();
+  const { promise: holderMayFinish, resolve: finishHolder } = Promise.withResolvers<void>();
 
   const holderRun = withKeyedLockHolder(async (holder) => {
     // A first nested scope takes the hold, as a replay action retains its device.
@@ -264,15 +230,8 @@ test('a lock a holder takes partway through is held by later sibling scopes unti
 
 test('a hold cancelled while queued rejects with the signal reason and leaves nothing held', async () => {
   const locks = new Map<string, Promise<unknown>>();
-  let releaseOwner: () => void = () => {};
-  const owner = withKeyedLock(
-    locks,
-    'device:app',
-    async () =>
-      await new Promise<void>((resolve) => {
-        releaseOwner = resolve;
-      }),
-  );
+  const { promise: released, resolve: releaseOwner } = Promise.withResolvers<void>();
+  const owner = withKeyedLock(locks, 'device:app', async () => await released);
   const controller = new AbortController();
   const reason = new Error('request canceled');
 
@@ -348,15 +307,8 @@ test('heldKeyedLockKeys reports exactly the keys withKeyedLock would re-enter fo
 
 test('a scope wanting a key its enclosing holder is still taking re-enters it once taken', async () => {
   const locks = new Map<string, Promise<unknown>>();
-  let releaseOwner: () => void = () => {};
-  const owner = withKeyedLock(
-    locks,
-    'device:app',
-    async () =>
-      await new Promise<void>((resolve) => {
-        releaseOwner = resolve;
-      }),
-  );
+  const { promise: released, resolve: releaseOwner } = Promise.withResolvers<void>();
+  const owner = withKeyedLock(locks, 'device:app', async () => await released);
 
   const outcome = withKeyedLockHolder(async (holder) => {
     const taking = holder.hold(locks, 'device:app');
@@ -389,15 +341,8 @@ test('taking or holding a free key queues it synchronously, so a check just befo
 
 test('a scope waiting on its holder for a key fails with the hold when the hold is cancelled', async () => {
   const locks = new Map<string, Promise<unknown>>();
-  let releaseOwner: () => void = () => {};
-  const owner = withKeyedLock(
-    locks,
-    'device:app',
-    async () =>
-      await new Promise<void>((resolve) => {
-        releaseOwner = resolve;
-      }),
-  );
+  const { promise: released, resolve: releaseOwner } = Promise.withResolvers<void>();
+  const owner = withKeyedLock(locks, 'device:app', async () => await released);
   const controller = new AbortController();
   const reason = new Error('request canceled');
 

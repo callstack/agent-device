@@ -119,10 +119,7 @@ export async function waitForFixture(condition: () => boolean, message: string):
 }
 
 export function createPause(): Readonly<{ wait: () => Promise<void>; release: () => void }> {
-  let release!: () => void;
-  const resumed = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: resumed, resolve: release } = Promise.withResolvers<void>();
   return {
     wait: async () => {
       await resumed;
@@ -260,20 +257,14 @@ class FakeProcess implements SnapshotSourceProcess {
   /** How often the manager asked for the exit status, counting one read still awaiting a result. */
   exitStatusReads = 0;
   private readonly processId: number;
-  private readonly exitStatus: Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  private resolveExitStatus!: (result: {
+  private readonly exitStatus = Promise.withResolvers<{
     stdout: string;
     stderr: string;
     exitCode: number;
-  }) => void;
-  private rejectExitStatus!: (error: Error) => void;
+  }>();
 
   constructor(pid: number) {
     this.processId = pid;
-    this.exitStatus = new Promise((resolve, reject) => {
-      this.resolveExitStatus = resolve;
-      this.rejectExitStatus = reject;
-    });
   }
 
   get pid(): number {
@@ -282,7 +273,7 @@ class FakeProcess implements SnapshotSourceProcess {
 
   get wait(): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     this.exitStatusReads += 1;
-    return this.exitStatus;
+    return this.exitStatus.promise;
   }
 
   isAlive(): boolean {
@@ -292,12 +283,12 @@ class FakeProcess implements SnapshotSourceProcess {
   signal(signal: NodeJS.Signals): void {
     this.signals.push(signal);
     this.alive = false;
-    this.resolveExitStatus({ stdout: '', stderr: '', exitCode: signal === 'SIGKILL' ? 137 : 0 });
+    this.exitStatus.resolve({ stdout: '', stderr: '', exitCode: signal === 'SIGKILL' ? 137 : 0 });
   }
 
   crash(): void {
     this.alive = false;
-    this.resolveExitStatus({ stdout: '', stderr: 'crashed', exitCode: 1 });
+    this.exitStatus.resolve({ stdout: '', stderr: 'crashed', exitCode: 1 });
   }
 
   /** Goes away without ever reporting its status, the way a helper with inherited pipes can. */
@@ -308,7 +299,7 @@ class FakeProcess implements SnapshotSourceProcess {
   /** Goes away with the status read itself failing, the way a launch that never started can. */
   exitWithFailedStatus(): void {
     this.alive = false;
-    this.rejectExitStatus(new Error('helper launch failed'));
+    this.exitStatus.reject(new Error('helper launch failed'));
   }
 
   readLog(): string {

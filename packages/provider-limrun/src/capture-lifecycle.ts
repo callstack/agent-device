@@ -67,10 +67,7 @@ export class LimrunCaptureLifecycle {
     // destination tunnel could be handed to, and nothing here would own it afterwards.
     const session = this.host.liveSessionOf(owner);
     if (!session) return;
-    let reportOpened!: (capture: NetworkCapture) => void;
-    const opening = new Promise<NetworkCapture>((opened) => {
-      reportOpened = opened;
-    });
+    const { promise: opening, resolve: reportOpened } = Promise.withResolvers<NetworkCapture>();
     owner.capture = { phase: 'starting', opening };
     const hosts = hostsToCapture(hostList);
     // Started after the publication above, and nothing between the two lets a second start through. A start

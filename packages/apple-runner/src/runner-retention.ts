@@ -36,10 +36,7 @@ export function observeRunnerListener(
   if (session.state !== 'ready' || !needsListenerWatch(session) || session.listenerWatch) return;
   const socket = net.connect(session.endpoint.port, '127.0.0.1');
   socket.unref();
-  let settle!: (connected: boolean) => void;
-  const ready = new Promise<boolean>((resolve) => {
-    settle = resolve;
-  });
+  const { promise: ready, resolve: settle } = Promise.withResolvers<boolean>();
   const connectTimer = setTimeout(() => socket.destroy(), LISTENER_CONNECT_TIMEOUT_MS);
   connectTimer.unref();
   const watch: RunnerListenerWatch = {

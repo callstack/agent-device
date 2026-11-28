@@ -67,10 +67,7 @@ export function beginTestImeRestoreWrite(serial: string): () => void {
     writes = new Set();
     testImePendingRestoreWrites.set(serial, writes);
   }
-  let settle!: () => void;
-  const settled = new Promise<void>((resolve) => {
-    settle = resolve;
-  });
+  const { promise: settled, resolve: settle } = Promise.withResolvers<void>();
   writes.add(settled);
   return () => {
     writes.delete(settled);

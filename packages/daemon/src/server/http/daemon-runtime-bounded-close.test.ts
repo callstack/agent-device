@@ -193,10 +193,7 @@ test('the executable writes unfinished work to stderr after a close, and a clean
 
 test('unfinished platform owner shutdown is bounded, reports pending and retains ownership', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-bounded-owner-');
-  let finishOwner!: () => void;
-  const ownerClosed = new Promise<void>((resolve) => {
-    finishOwner = resolve;
-  });
+  const { promise: ownerClosed, resolve: finishOwner } = Promise.withResolvers<void>();
   const clearLock = vi.fn(async () => {});
   const pluginShutdown = vi.fn(async () => []);
   // The slot lives on the runtime's one entered store, so its disposer runs exactly when that
@@ -303,14 +300,10 @@ test('daemon close awaits a post-budget claim-recovery disposal and keeps unfini
   const claimPath = writeStaleClaim(claimsDir, ownerStateDir, deviceKey);
   const claimBytes = fs.readFileSync(claimPath, 'utf8');
 
-  let enterRecoveryShutdown!: () => void;
-  const recoveryShutdownEntered = new Promise<void>((resolve) => {
-    enterRecoveryShutdown = resolve;
-  });
-  let finishRecoveryShutdown!: () => void;
-  const recoveryShutdownClosed = new Promise<void>((resolve) => {
-    finishRecoveryShutdown = resolve;
-  });
+  const { promise: recoveryShutdownEntered, resolve: enterRecoveryShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: recoveryShutdownClosed, resolve: finishRecoveryShutdown } =
+    Promise.withResolvers<void>();
   const clearLock = vi.fn(async () => {});
   const disposeState = vi.fn();
   const heldSlot = Symbol('bounded-close-recovery-disposal');
@@ -372,18 +365,12 @@ test('daemon close completes cleanly once a post-budget claim-recovery disposal 
   const claimsDir = mkdtempForTestSync('agent-device-daemon-recovery-settled-claims-');
   writeStaleClaim(claimsDir, ownerStateDir, 'local:android:none:emulator-5554');
 
-  let enterRecoveryShutdown!: () => void;
-  const recoveryShutdownEntered = new Promise<void>((resolve) => {
-    enterRecoveryShutdown = resolve;
-  });
-  let finishRecoveryShutdown!: () => void;
-  const recoveryShutdownClosed = new Promise<void>((resolve) => {
-    finishRecoveryShutdown = resolve;
-  });
-  let enterOwnerShutdown!: () => void;
-  const ownerShutdownEntered = new Promise<void>((resolve) => {
-    enterOwnerShutdown = resolve;
-  });
+  const { promise: recoveryShutdownEntered, resolve: enterRecoveryShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: recoveryShutdownClosed, resolve: finishRecoveryShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: ownerShutdownEntered, resolve: enterOwnerShutdown } =
+    Promise.withResolvers<void>();
   const clearLock = vi.fn(async () => {});
   const finalizeShutdown = vi.fn(async (): Promise<readonly string[]> => []);
   const pluginShutdown = vi.fn(async () => []);
@@ -460,14 +447,10 @@ test('daemon close during an in-flight request recovery disposal grace still tra
   const claimsDir = mkdtempForTestSync('agent-device-daemon-close-mid-grace-claims-');
   const deviceKey = 'local:android:none:emulator-5554';
 
-  let enterRecoveryShutdown!: () => void;
-  const recoveryShutdownEntered = new Promise<void>((resolve) => {
-    enterRecoveryShutdown = resolve;
-  });
-  let finishRecoveryShutdown!: () => void;
-  const recoveryShutdownClosed = new Promise<void>((resolve) => {
-    finishRecoveryShutdown = resolve;
-  });
+  const { promise: recoveryShutdownEntered, resolve: enterRecoveryShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: recoveryShutdownClosed, resolve: finishRecoveryShutdown } =
+    Promise.withResolvers<void>();
   const clearLock = vi.fn(async () => {});
   const disposeState = vi.fn();
   const heldSlot = Symbol('bounded-close-mid-grace');
@@ -556,26 +539,15 @@ test('daemon close awaits a recovery disposal that starts after the owner shutdo
   const claimsDir = mkdtempForTestSync('agent-device-daemon-close-late-compose-claims-');
   const deviceKey = 'local:android:none:emulator-5554';
 
-  let enterReconcile!: () => void;
-  const reconcileEntered = new Promise<void>((resolve) => {
-    enterReconcile = resolve;
-  });
-  let enterOwnerShutdown!: () => void;
-  const ownerShutdownEntered = new Promise<void>((resolve) => {
-    enterOwnerShutdown = resolve;
-  });
-  let finishRootShutdown!: () => void;
-  const rootShutdownClosed = new Promise<void>((resolve) => {
-    finishRootShutdown = resolve;
-  });
-  let enterRecoveryShutdown!: () => void;
-  const recoveryShutdownEntered = new Promise<void>((resolve) => {
-    enterRecoveryShutdown = resolve;
-  });
-  let finishRecoveryShutdown!: () => void;
-  const recoveryShutdownClosed = new Promise<void>((resolve) => {
-    finishRecoveryShutdown = resolve;
-  });
+  const { promise: reconcileEntered, resolve: enterReconcile } = Promise.withResolvers<void>();
+  const { promise: ownerShutdownEntered, resolve: enterOwnerShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: rootShutdownClosed, resolve: finishRootShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: recoveryShutdownEntered, resolve: enterRecoveryShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: recoveryShutdownClosed, resolve: finishRecoveryShutdown } =
+    Promise.withResolvers<void>();
   const clearLock = vi.fn(async () => {});
   const disposeState = vi.fn();
   const heldSlot = Symbol('bounded-close-late-compose');
@@ -693,14 +665,10 @@ test('daemon close reports pending when root gateway rejects while a recovery di
   const claimsDir = mkdtempForTestSync('agent-device-daemon-recovery-and-gateway-fail-claims-');
   writeStaleClaim(claimsDir, ownerStateDir, 'local:android:none:emulator-5554');
 
-  let enterRecoveryShutdown!: () => void;
-  const recoveryShutdownEntered = new Promise<void>((resolve) => {
-    enterRecoveryShutdown = resolve;
-  });
-  let finishRecoveryShutdown!: () => void;
-  const recoveryShutdownClosed = new Promise<void>((resolve) => {
-    finishRecoveryShutdown = resolve;
-  });
+  const { promise: recoveryShutdownEntered, resolve: enterRecoveryShutdown } =
+    Promise.withResolvers<void>();
+  const { promise: recoveryShutdownClosed, resolve: finishRecoveryShutdown } =
+    Promise.withResolvers<void>();
 
   const starting = startDaemonRuntime({
     host: createTestHostEnvironment({

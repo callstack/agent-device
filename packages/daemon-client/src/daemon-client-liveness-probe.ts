@@ -123,10 +123,7 @@ function createProbeLeg(
 } {
   let settled = false;
   let destroy: (() => void) | undefined;
-  let resolveAnswer: (answer: ProbeLegAnswer) => void = () => {};
-  const answer = new Promise<ProbeLegAnswer>((resolve) => {
-    resolveAnswer = resolve;
-  });
+  const { promise: answer, resolve: resolveAnswer } = Promise.withResolvers<ProbeLegAnswer>();
   const deadlineHandle = setTimeout(() => settle(false), Math.max(1, deadlineAtMs - Date.now()));
   deadlineHandle.unref?.();
   function settle(answered: boolean, errno?: string): void {

@@ -18,14 +18,8 @@ test('HTTP request disconnected before response headers cancels the request', as
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP disconnect coverage')) return;
 
   const requestId = 'req-http-pre-header-disconnect';
-  let markHandlerStarted: () => void = () => {};
-  const handlerStarted = new Promise<void>((resolve) => {
-    markHandlerStarted = resolve;
-  });
-  let markAbortObserved: () => void = () => {};
-  const abortObserved = new Promise<void>((resolve) => {
-    markAbortObserved = resolve;
-  });
+  const { promise: handlerStarted, resolve: markHandlerStarted } = Promise.withResolvers<void>();
+  const { promise: abortObserved, resolve: markAbortObserved } = Promise.withResolvers<void>();
 
   const server = await createDaemonHttpServer({
     token: 'provider-scenario-token',
@@ -65,14 +59,8 @@ test('concurrent HTTP requests reject a duplicate request ID without replacing i
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP disconnect coverage')) return;
 
   const requestId = 'req-http-duplicate';
-  let markFirstStarted: () => void = () => {};
-  const firstStarted = new Promise<void>((resolve) => {
-    markFirstStarted = resolve;
-  });
-  let releaseFirst: () => void = () => {};
-  const firstReleased = new Promise<void>((resolve) => {
-    releaseFirst = resolve;
-  });
+  const { promise: firstStarted, resolve: markFirstStarted } = Promise.withResolvers<void>();
+  const { promise: firstReleased, resolve: releaseFirst } = Promise.withResolvers<void>();
   let firstSignal: AbortSignal | undefined;
 
   const server = await createDaemonHttpServer({
@@ -125,18 +113,10 @@ test('disconnecting one HTTP request leaves another request uncanceled', async (
 
   const disconnectedRequestId = 'req-http-disconnected';
   const survivorRequestId = 'req-http-survivor';
-  let markDisconnectedStarted: () => void = () => {};
-  const disconnectedStarted = new Promise<void>((resolve) => {
-    markDisconnectedStarted = resolve;
-  });
-  let markSurvivorStarted: () => void = () => {};
-  const survivorStarted = new Promise<void>((resolve) => {
-    markSurvivorStarted = resolve;
-  });
-  let releaseSurvivor: () => void = () => {};
-  const survivorReleased = new Promise<void>((resolve) => {
-    releaseSurvivor = resolve;
-  });
+  const { promise: disconnectedStarted, resolve: markDisconnectedStarted } =
+    Promise.withResolvers<void>();
+  const { promise: survivorStarted, resolve: markSurvivorStarted } = Promise.withResolvers<void>();
+  const { promise: survivorReleased, resolve: releaseSurvivor } = Promise.withResolvers<void>();
   let survivorSignalAbortedDuringPeerTeardown = false;
 
   const server = await createDaemonHttpServer({

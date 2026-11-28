@@ -125,10 +125,8 @@ vi.mock('@limrun/api/instance-client', () => ({
  */
 
 test('two allocations of one lease rent one instance and start one keep-alive timer', async () => {
-  let reportCreate!: () => void;
-  state.createGate = new Promise<void>((resolve) => {
-    reportCreate = resolve;
-  });
+  const { promise: createGate, resolve: reportCreate } = Promise.withResolvers<void>();
+  state.createGate = createGate;
   const { connects, creates, deletes, disconnects } = limrunActivity();
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key', keepAlive: true },
@@ -167,10 +165,8 @@ test('two allocations of one lease rent one instance and start one keep-alive ti
 });
 
 test('a release that arrives before the create answered ends the instance that create made', async () => {
-  let reportCreate!: () => void;
-  state.createGate = new Promise<void>((resolve) => {
-    reportCreate = resolve;
-  });
+  const { promise: createGate, resolve: reportCreate } = Promise.withResolvers<void>();
+  state.createGate = createGate;
   const { creates, deletes, disconnects } = limrunActivity();
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key', keepAlive: true },
@@ -214,10 +210,8 @@ test('a release that arrives before the create answered ends the instance that c
 });
 
 test('a shutdown while the create runs ends the instance that create made', async () => {
-  let reportCreate!: () => void;
-  state.createGate = new Promise<void>((resolve) => {
-    reportCreate = resolve;
-  });
+  const { promise: createGate, resolve: reportCreate } = Promise.withResolvers<void>();
+  state.createGate = createGate;
   const { creates, deletes } = limrunActivity();
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key', keepAlive: true },
@@ -342,10 +336,8 @@ test('a create that failed after renting keeps its unconfirmed delete for the ne
 
 test('two allocations that ask for traffic logs open one destination tunnel', async () => {
   const { captures, captureCloses } = limrunActivity();
-  let reportTunnel!: () => void;
-  state.tunnelGate = new Promise<void>((resolve) => {
-    reportTunnel = resolve;
-  });
+  const { promise: tunnelGate, resolve: reportTunnel } = Promise.withResolvers<void>();
+  state.tunnelGate = tunnelGate;
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-har-') },
     testDependencies(),
@@ -385,10 +377,8 @@ test('two allocations that ask for traffic logs open one destination tunnel', as
 
 test('a release that arrives while a tunnel is opening ends the tunnel that answers late', async () => {
   const { captures, captureCloses, deletes } = limrunActivity();
-  let reportTunnel!: () => void;
-  state.tunnelGate = new Promise<void>((resolve) => {
-    reportTunnel = resolve;
-  });
+  const { promise: tunnelGate, resolve: reportTunnel } = Promise.withResolvers<void>();
+  state.tunnelGate = tunnelGate;
   const harDir = mkdtempForTestSync('limrun-har-');
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key', networkHarDir: harDir },
@@ -431,10 +421,8 @@ test('a release that arrives while a tunnel is opening ends the tunnel that answ
 test('a release stops waiting on a stuck ADB tunnel, deletes the instance and says what it left', async () => {
   await import('./lease-release.ts');
   const { deletes, disconnects, adbTunnels, tunnelCloses } = limrunActivity();
-  let reportTunnel!: () => void;
-  state.tunnelGate = new Promise<void>((resolve) => {
-    reportTunnel = resolve;
-  });
+  const { promise: tunnelGate, resolve: reportTunnel } = Promise.withResolvers<void>();
+  state.tunnelGate = tunnelGate;
   const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
   const lease = androidLease('lease-stuck-tunnel');
   let refusedCommand: Promise<unknown> | undefined;
@@ -756,10 +744,8 @@ test('a release refuses a delete that never answers, within that delete’s own 
   const { deletes, disconnects } = limrunActivity();
   const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
   const lease = androidLease('lease-silent-delete');
-  let reportDelete!: () => void;
-  state.deleteGate = new Promise<void>((resolve) => {
-    reportDelete = resolve;
-  });
+  const { promise: deleteGate, resolve: reportDelete } = Promise.withResolvers<void>();
+  state.deleteGate = deleteGate;
   vi.useFakeTimers();
   try {
     await runtime.leaseLifecycle.allocate?.(lease);
@@ -785,10 +771,8 @@ test('a release refuses a delete that never answers, within that delete’s own 
 
 test('a create that answers after its disposal gave up ends the instance it rents', async () => {
   const { creates, deletes, connects, disconnects } = limrunActivity();
-  let reportCreate!: () => void;
-  state.createGate = new Promise<void>((resolve) => {
-    reportCreate = resolve;
-  });
+  const { promise: createGate, resolve: reportCreate } = Promise.withResolvers<void>();
+  state.createGate = createGate;
   const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
   const lease = androidLease('lease-late-create');
   try {
@@ -900,10 +884,8 @@ test('a joiner whose own flags are valid allocates despite another caller’s re
 /** A joiner with unsupported flags is refused by a create that is still running, not handed its session. */
 test('a joiner whose own flags are refused is refused while another caller’s create runs', async () => {
   const { creates } = limrunActivity();
-  let reportCreate!: () => void;
-  state.createGate = new Promise<void>((resolve) => {
-    reportCreate = resolve;
-  });
+  const { promise: createGate, resolve: reportCreate } = Promise.withResolvers<void>();
+  state.createGate = createGate;
   const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
   const lease = androidLease('lease-refused-join');
   try {

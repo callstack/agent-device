@@ -158,10 +158,7 @@ test('a failed child join does not prevent teardown from stopping the remaining 
 
 test('exit gates delay the returned launch but are not accepted on companions', async () => {
   const f = fixture();
-  let release!: () => void;
-  const exitGate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: exitGate, resolve: release } = Promise.withResolvers<void>();
   const step = { kind: 'registered' as const, paths: f.paths, fields: {} };
   type RegisteredLaunch = Extract<
     Parameters<typeof f.fixtures.planRegisteredDaemonLaunches>[0][number],

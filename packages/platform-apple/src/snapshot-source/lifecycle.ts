@@ -166,10 +166,7 @@ export class SnapshotBridgeManager {
     action: (turn: OwnedWork) => Promise<T>,
   ): Promise<T> {
     const previous = this.requestQueues.get(udid) ?? Promise.resolve();
-    let releaseTurn!: () => void;
-    const turnFinished = new Promise<void>((resolve) => {
-      releaseTurn = resolve;
-    });
+    const { promise: turnFinished, resolve: releaseTurn } = Promise.withResolvers<void>();
     const turn: OwnedWork = { interrupt: new AbortController(), settled: turnFinished };
     // Registered before the first await, so it happens in the same synchronous step as the `closed`
     // check in `request()`: a turn can never join the active set after `close()` has read it.
@@ -303,10 +300,7 @@ export class SnapshotBridgeManager {
     signal: AbortSignal,
   ): Promise<BridgeSession> {
     const socketPath = snapshotSourceSocketPath(this.host, udid, this.ownerId);
-    let resolveSettled!: () => void;
-    const settled = new Promise<void>((resolve) => {
-      resolveSettled = resolve;
-    });
+    const { promise: settled, resolve: resolveSettled } = Promise.withResolvers<void>();
     const creation: OwnedWork = { interrupt: new AbortController(), settled };
     const expiry = new AbortController();
     const timer = setTimeout(() => expiry.abort(), 10000);

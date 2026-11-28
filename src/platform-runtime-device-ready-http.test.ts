@@ -8,7 +8,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 import { runCmd } from '@agent-device/host-kit/command';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import { bindTestCommandHost } from '@agent-device/test-kit';
-import { deferred, route } from './platform-runtime-device-ready-http.fixtures.ts';
+import { route } from './platform-runtime-device-ready-http.fixtures.ts';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 bindTestCommandHost();
@@ -30,8 +30,8 @@ for (const command of ['snapshot', 'clipboard'] as const) {
     `${command}: caller abort (disconnect=%s) stops Android getprop through real HTTP admission`,
     async (disconnect) => {
       const { server, send, runtime, readClipboard } = await route();
-      const polling = deferred<void>();
-      const release = deferred<typeof BOOTED>();
+      const polling = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<typeof BOOTED>();
       let abortedIo = false;
       mockRunCmd.mockImplementation(async (_command, args, options) => {
         expect(args).toContain('sys.boot_completed');
@@ -76,8 +76,8 @@ for (const command of ['snapshot', 'clipboard'] as const) {
 
   test(`${command}: the descriptor deadline aborts readiness before dispatch or cache publication`, async () => {
     const { server, send, runtime, readClipboard } = await route();
-    const polling = deferred<void>();
-    const release = deferred<typeof BOOTED>();
+    const polling = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<typeof BOOTED>();
     let abortedIo = false;
     mockRunCmd
       .mockImplementationOnce(async (_command, _args, options) => {
@@ -132,8 +132,8 @@ for (const command of ['snapshot', 'clipboard'] as const) {
 
   test(`${command}: readiness just before the descriptor deadline dispatches and caches`, async () => {
     const { server, send, runtime, readClipboard } = await route();
-    const polling = deferred<void>();
-    const release = deferred<typeof BOOTED>();
+    const polling = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<typeof BOOTED>();
     mockRunCmd
       .mockImplementationOnce(async () => {
         polling.resolve();
@@ -169,8 +169,8 @@ for (const command of ['snapshot', 'clipboard'] as const) {
     `${command}: delayed deadline delivery blocks late readiness and preserves earlier caller abort=%s`,
     async (canceled) => {
       const { server, send, runtime, readClipboard } = await route();
-      const polling = deferred<void>();
-      const release = deferred<typeof BOOTED>();
+      const polling = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<typeof BOOTED>();
       let readinessSignal: AbortSignal | undefined;
       mockRunCmd
         .mockImplementationOnce(async (_command, _args, options) => {
@@ -225,8 +225,8 @@ for (const command of ['snapshot', 'clipboard'] as const) {
 
   test(`${command}: an unexpired readiness cache cannot admit the next HTTP clipboard step past its cutoff`, async () => {
     const { server, send, runtime, readClipboard } = await route();
-    const polling = deferred<void>();
-    const release = deferred<typeof BOOTED>();
+    const polling = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<typeof BOOTED>();
     let readinessSignal: AbortSignal | undefined;
     mockRunCmd.mockImplementationOnce(async (_command, _args, options) => {
       readinessSignal = options?.signal;
@@ -298,8 +298,8 @@ test.each([
   '%s %j: caller abort stops sessionless Android readiness through real HTTP admission',
   async (command, positionals) => {
     const { server, send, runtime, unexpected } = await route();
-    const polling = deferred<void>();
-    const release = deferred<typeof BOOTED>();
+    const polling = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<typeof BOOTED>();
     let abortedIo = false;
     mockRunCmd.mockImplementation(async (_command, args, options) => {
       expect(args).toContain('sys.boot_completed');

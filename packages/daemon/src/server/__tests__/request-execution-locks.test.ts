@@ -7,17 +7,12 @@ test.each(['initial', 'retained'] as const)(
   async (kind) => {
     const locks = new Map<string, Promise<unknown>>();
     const controller = new AbortController();
-    let release!: () => void;
-    let entered!: () => void;
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
+    const { promise: released, resolve: release } = Promise.withResolvers<void>();
+    const { promise: started, resolve: entered } = Promise.withResolvers<void>();
     const owner = createRequestExecutionLocks({ locks, initialKeys: ['device:SIM-001'] }).run(
       async () => {
         entered();
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
+        await released;
       },
     );
     await started;
@@ -56,14 +51,8 @@ test('a dynamically retained device lock lasts until the owning request complete
     locks,
     initialKeys: ['session:external', 'device:SIM-001'],
   });
-  let finishReplay: () => void = () => {};
-  const replayFinished = new Promise<void>((resolve) => {
-    finishReplay = resolve;
-  });
-  let markDeviceRetained: () => void = () => {};
-  const deviceRetained = new Promise<void>((resolve) => {
-    markDeviceRetained = resolve;
-  });
+  const { promise: replayFinished, resolve: finishReplay } = Promise.withResolvers<void>();
+  const { promise: deviceRetained, resolve: markDeviceRetained } = Promise.withResolvers<void>();
 
   const replayRun = replayLocks.run(async () => {
     await replayLocks.retainDevice('SIM-001');
@@ -109,10 +98,7 @@ async function crossRetentions(
 ): Promise<unknown[]> {
   const locks = new Map<string, Promise<unknown>>();
   let started = 0;
-  let markBothStarted: () => void = () => {};
-  const bothStarted = new Promise<void>((resolve) => {
-    markBothStarted = resolve;
-  });
+  const { promise: bothStarted, resolve: markBothStarted } = Promise.withResolvers<void>();
   const run = async (request: { keys: RequestExecutionLockKey[]; retain: string }) => {
     const requestLocks = createRequestExecutionLocks({ locks, initialKeys: request.keys });
     return await requestLocks.run(async () => {
@@ -154,14 +140,8 @@ test('a replay that leaves its app for the whole Mac is refused while another re
     locks,
     initialKeys: ['session:fresh', 'device:mac', 'device:mac:app:com.example.one'],
   });
-  let replayHolding: () => void = () => {};
-  const holding = new Promise<void>((resolve) => {
-    replayHolding = resolve;
-  });
-  let continueReplay: () => void = () => {};
-  const freshWaiting = new Promise<void>((resolve) => {
-    continueReplay = resolve;
-  });
+  const { promise: holding, resolve: replayHolding } = Promise.withResolvers<void>();
+  const { promise: freshWaiting, resolve: continueReplay } = Promise.withResolvers<void>();
   let freshEntered = false;
 
   const replayRun = replayLocks.run(async () => {
@@ -201,13 +181,8 @@ test('a second lock on the same Mac is taken while it is free, and other devices
 
   // A lock on another device is still waited for, as before.
   const holder = createRequestExecutionLocks({ locks, initialKeys: ['device:SIM-002'] });
-  let releaseHolder: () => void = () => {};
-  const holderRun = holder.run(
-    async () =>
-      await new Promise<void>((resolve) => {
-        releaseHolder = resolve;
-      }),
-  );
+  const { promise: released, resolve: releaseHolder } = Promise.withResolvers<void>();
+  const holderRun = holder.run(async () => await released);
   const simLocks = createRequestExecutionLocks({ locks, initialKeys: ['device:SIM-001'] });
   const simRun = simLocks.run(async () => {
     await simLocks.retainDevice('SIM-002');
@@ -225,13 +200,8 @@ test('a nested request is refused a busy lock on its parent Mac but still waits 
     locks,
     initialKeys: ['device:mac:app:com.example.two', 'device:SIM-002'],
   });
-  let releaseHolder: () => void = () => {};
-  const holderRun = holder.run(
-    async () =>
-      await new Promise<void>((resolve) => {
-        releaseHolder = resolve;
-      }),
-  );
+  const { promise: released, resolve: releaseHolder } = Promise.withResolvers<void>();
+  const holderRun = holder.run(async () => await released);
   const parent = createRequestExecutionLocks({
     locks,
     initialKeys: ['session:batch', 'device:mac:app:com.example.one'],

@@ -132,10 +132,7 @@ async function serializeResource<Result>(
   task: () => Promise<Result>,
 ): Promise<Result> {
   const previous = resourceFenceTails.get(resourcePath) ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: current, resolve: release } = Promise.withResolvers<void>();
   const tail = previous.catch(() => {}).then(() => current);
   resourceFenceTails.set(resourcePath, tail);
   await previous.catch(() => {});
