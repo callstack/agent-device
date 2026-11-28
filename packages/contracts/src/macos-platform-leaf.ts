@@ -15,7 +15,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { AppsFilter } from './app-inventory.ts';
 import type {
-  Interactor,
+  InteractorAppActions,
   RunnerCallOptions,
   RunnerContext,
   SnapshotResult,
@@ -161,20 +161,7 @@ export type MacOsPressResult = {
  * The interactor members the `native` app backend serves itself. The Apple owner assembles the
  * session's interactor from these and from its own members that never reach the runner.
  */
-export type MacOsNativeAppActions = Required<
-  Pick<
-    Interactor,
-    | 'tap'
-    | 'pressPoint'
-    | 'longPress'
-    | 'focus'
-    | 'type'
-    | 'fill'
-    | 'scroll'
-    | 'back'
-    | 'setOrientation'
-  >
->;
+export type MacOsNativeAppActions = Required<InteractorAppActions>;
 
 /** Every macOS operation the Apple owner delegates, bound to one request's tools. */
 export type MacOsLeafOperations = Readonly<{
@@ -258,7 +245,7 @@ export type MacOsLeafOperations = Readonly<{
    * Apple owner's interactor, which the press of another surface goes back to.
    */
   nativeAppActions(
-    base: Pick<Interactor, 'pressPoint'>,
+    base: Pick<InteractorAppActions, 'pressPoint'>,
     context: RunnerContext,
     env: Readonly<EnvMap>,
   ): Promise<MacOsNativeAppActions>;
