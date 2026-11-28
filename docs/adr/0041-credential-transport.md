@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-11-28). Enforcement has not shipped yet; it is tracked in #5179.
+Accepted (2026-11-28). Enforcement has not shipped yet; it is tracked in #5182.
 ADR 0006 continues to govern checked RPC.
 
 ## Rules at a glance
