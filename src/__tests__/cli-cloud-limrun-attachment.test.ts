@@ -18,6 +18,7 @@ import { bindCloudAttachment, bindHostedDaemon } from '../cli/connection/cloud-a
 import {
   cloudAttachmentPath,
   readCloudConnection,
+  removeCloudConnection,
   writeCloudConnection,
   type ConnectionLocation,
 } from '../cli/connection/cloud-connection-record.ts';
@@ -915,46 +916,55 @@ test('a stale materialization cannot overwrite the replacement cloud session', a
   );
 });
 
-test('a failed local retirement still ends the hosted lease and preserves a fenced recovery record', async () => {
-  const env = limrunEnv('current');
-  const location = locationOf(env);
-  const broker = stubCloudApi();
-  broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
-  expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
-  writeHostedDaemonRegistration(location);
+test.each(['saved record', 'state only'] as const)(
+  'a failed local retirement preserves release confirmation with $0',
+  async (source) => {
+    const env = limrunEnv('current');
+    const location = locationOf(env);
+    const broker = stubCloudApi();
+    broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
+    expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
+    writeHostedDaemonRegistration(location);
+    const methods = ['POST', 'DELETE'];
+    if (source === 'state only') {
+      removeCloudConnection(location);
+      broker.mockResolvedValueOnce(Response.json({ id: hostedDevice.id, state: 'running' }));
+      methods.splice(1, 0, 'GET');
+    }
 
-  stop.mockRejectedValueOnce(new Error('private retirement failure'));
-  const disconnect = await runCliCapture(['disconnect', '--json'], { env });
-  expect(JSON.parse(disconnect.stdout).error.details.reason).toBe(
-    'cloud_attachment_daemon_stop_unconfirmed',
-  );
-  expect(disconnect.stdout + disconnect.stderr).not.toContain('private retirement failure');
-  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
-  expect(readCloudConnection(location)).toMatchObject({
-    phase: 'closing',
-    id: hostedDevice.id,
-    brokerReleased: true,
-  });
-  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
-  const refused = await runCliCapture(['snapshot', '--json'], { env });
-  expect(JSON.parse(refused.stdout).error.details.reason).toBe('cloud_connection_changed');
-  expect(refused.calls).toEqual([]);
+    stop.mockRejectedValueOnce(new Error('private retirement failure'));
+    const disconnect = await runCliCapture(['disconnect', '--json'], { env });
+    expect(JSON.parse(disconnect.stdout).error.details.reason).toBe(
+      'cloud_attachment_daemon_stop_unconfirmed',
+    );
+    expect(disconnect.stdout + disconnect.stderr).not.toContain('private retirement failure');
+    expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(methods);
+    expect(readCloudConnection(location)).toMatchObject({
+      phase: 'closing',
+      id: hostedDevice.id,
+      brokerReleased: true,
+    });
+    expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+    const refused = await runCliCapture(['snapshot', '--json'], { env });
+    expect(JSON.parse(refused.stdout).error.details.reason).toBe('cloud_connection_changed');
+    expect(refused.calls).toEqual([]);
 
-  const retryOptions = { env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined } };
-  stop.mockRejectedValueOnce(new Error('private retirement failure'));
-  const stillClosing = await runCliCapture(['disconnect', '--json'], retryOptions);
-  expect(JSON.parse(stillClosing.stdout).error.details.reason).toBe(
-    'cloud_attachment_daemon_stop_unconfirmed',
-  );
-  expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', brokerReleased: true });
-  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
+    const retryOptions = { env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined } };
+    stop.mockRejectedValueOnce(new Error('private retirement failure'));
+    const stillClosing = await runCliCapture(['disconnect', '--json'], retryOptions);
+    expect(JSON.parse(stillClosing.stdout).error.details.reason).toBe(
+      'cloud_attachment_daemon_stop_unconfirmed',
+    );
+    expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', brokerReleased: true });
+    expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(methods);
 
-  const recovered = await runCliCapture(['disconnect', '--json'], retryOptions);
-  expect(JSON.parse(recovered.stdout).data.released).toBe(true);
-  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
-  expect(stop).toHaveBeenCalledTimes(3);
-  expect(readCloudConnection(location)).toBeNull();
-});
+    const recovered = await runCliCapture(['disconnect', '--json'], retryOptions);
+    expect(JSON.parse(recovered.stdout).data.released).toBe(true);
+    expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(methods);
+    expect(stop).toHaveBeenCalledTimes(3);
+    expect(readCloudConnection(location)).toBeNull();
+  },
+);
 
 test('a signed viewer link carrying the attachment credential stays out of the approved lease', async () => {
   const env = limrunEnv('current');

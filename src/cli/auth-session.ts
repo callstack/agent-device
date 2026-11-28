@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { acquireProcessLock, publishFileSync } from '@agent-device/host-kit/file';
@@ -10,6 +11,7 @@ import {
   parseCliSessionRecord,
   type CliSessionRecord,
 } from './cli-session-format.ts';
+import { containsCloudCredential } from './cloud-response.ts';
 import { writeStderrBestEffort } from './process-exit.ts';
 
 // The transport loads when a request is made, so a command that reads no cloud auth stays off it.
@@ -243,7 +245,7 @@ export async function loginWithDeviceAuth(options: {
   const approvedExpiresAt = hasToken(approved.expiresAt) ? approved.expiresAt : undefined;
   const session: CliSessionRecord = {
     version: CLI_SESSION_FORMAT_VERSION,
-    id: approved.cliSession?.id ?? `cli-${Date.now().toString(36)}`,
+    id: approved.cliSession?.id ?? randomUUID(),
     cloudBaseUrl,
     workspaceId: approved.cliSession?.workspaceId,
     accountId: approved.cliSession?.accountId,
@@ -252,6 +254,11 @@ export async function loginWithDeviceAuth(options: {
     createdAt: nowIso,
     expiresAt: approved.cliSession?.expiresAt,
   };
+  if (
+    containsCloudCredential([session.id, session.accountId], [approvedToken, refreshCredential])
+  ) {
+    throw new AppError('UNAUTHORIZED', 'The hosted login did not return a valid identity.');
+  }
   return await withCliSessionLock(
     options.stateDir,
     async (): Promise<{ accessToken: string; expiresAt?: string; session: CliSessionRecord }> => {
@@ -475,6 +482,7 @@ export async function resolveCliSessionAccess(options: {
   catalog?: true;
 }): Promise<{
   accessToken: string;
+  sessionId: string;
   accountId?: string;
   expiresAt?: string;
   cloudBaseUrl: string;
@@ -502,6 +510,7 @@ export async function resolveCliSessionAccess(options: {
   if (!exchanged) return null;
   return {
     accessToken: exchanged.accessToken,
+    sessionId: exchanged.session.id,
     accountId: exchanged.session.accountId,
     catalogCredentials,
     ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),

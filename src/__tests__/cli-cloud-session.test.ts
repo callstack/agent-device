@@ -385,6 +385,7 @@ test.each([
   { status: 402, reason: 'insufficient_balance', code: 'INVALID_ARGS', clears: true },
   { status: 422, reason: 'no_vendor_matches', code: 'COMMAND_FAILED', clears: true },
   { status: 409, reason: 'session_not_running', code: 'COMMAND_FAILED', clears: true },
+  { status: 405, reason: undefined, code: 'COMMAND_FAILED', clears: true },
   { status: 409, reason: 'session_not_running', code: 'COMMAND_FAILED', clears: false },
   { status: 409, reason: 'other_conflict', code: 'COMMAND_FAILED', clears: false },
 ])(
@@ -401,20 +402,20 @@ test.each([
         { status },
       ),
     );
-    if (clears) {
+    if (status === 409 && clears) {
       fetchMock.mockResolvedValueOnce(Response.json({ id: hostedDevice.id, state: 'settled' }));
     }
     const refused = await runCliCapture(connectArgs, { env });
     expect(JSON.parse(refused.stdout).error).toMatchObject({
       code,
-      details: { status, ...(reason === 'other_conflict' ? {} : { reason }) },
+      details: { status, ...(reason && reason !== 'other_conflict' ? { reason } : {}) },
     });
     if (reason === 'other_conflict') expect(refused.stdout).not.toContain(reason);
-    if (clears) {
+    if (status === 409 && clears) {
       const [url, init] = fetchMock.mock.calls[1]!;
       expect(init.method).toBe('GET');
       expect(url.searchParams.get('idempotencyKey')).toBe(postKey(fetchMock.mock.calls[0]![1]));
-    }
+    } else expect(fetchMock).toHaveBeenCalledTimes(reason === 'session_not_running' ? 2 : 1);
     expect(readCloudConnection(locationOf(env))?.phase).toBe(clears ? undefined : 'pending');
   },
 );

@@ -7,6 +7,7 @@ import {
   loginWithDeviceAuth,
   resolveCliSessionAccess,
 } from '../auth-session.ts';
+import { containsCloudCredential } from '../cloud-response.ts';
 import { parseCloudOrigin } from '../cloud-origin.ts';
 import { cloudApiKeyRequired, resolveBoundCloudApiKey } from './cloud-catalog-access.ts';
 
@@ -18,15 +19,42 @@ const CLOUD_ACCESS_REASONS = {
 export type HostedCloudAccess = {
   accessToken: string;
   cloudBaseUrl: string;
-  accountBinding?: string;
+  accountBinding: string;
+  credentials?: ReadonlySet<string>;
 };
 
-export function hostedCloudAccountBinding(access: HostedCloudAccess): string | undefined {
+export function hostedCloudAccountBinding(access: HostedCloudAccess): string {
   return access.accountBinding;
 }
 
-function bindHostedAccount(accountId: unknown): string | undefined {
-  if (typeof accountId === 'string' && accountId.trim()) return `account:${accountId}`;
+function identityDigest(kind: string, value: string): string {
+  return `${kind}:${createHash('sha256').update(value).digest('hex')}`;
+}
+
+export function matchesHostedCloudAccount(access: HostedCloudAccess, binding: string): boolean {
+  const current = hostedCloudAccountBinding(access);
+  return (
+    current === binding ||
+    (binding.startsWith('account:') &&
+      current === identityDigest('account-sha256', binding.slice('account:'.length)))
+  );
+}
+
+function bindHostedLogin(
+  accountId: unknown,
+  sessionId: unknown,
+  credentials: ReadonlySet<string>,
+): string {
+  if (
+    typeof sessionId !== 'string' ||
+    !sessionId.trim() ||
+    containsCloudCredential([accountId, sessionId], [...credentials])
+  ) {
+    throw new AppError('UNAUTHORIZED', 'The hosted login did not return a valid identity.');
+  }
+  return typeof accountId === 'string' && accountId.trim()
+    ? identityDigest('account-sha256', accountId)
+    : identityDigest('login-sha256', sessionId);
 }
 
 export async function resolveHostedCloudAccess(options: {
@@ -43,17 +71,20 @@ export async function resolveHostedCloudAccess(options: {
     return {
       accessToken: key,
       cloudBaseUrl,
-      accountBinding: `api-key:${createHash('sha256').update(key).digest('hex')}`,
+      accountBinding: identityDigest('api-key', key),
     };
   }
   const flags = { json: false, help: false, version: false };
   const access = await readHostedLogin({ env: authEnv, stateDir, flags });
-  if (access)
+  if (access) {
+    const credentials = new Set([access.accessToken, ...(access.catalogCredentials ?? [])]);
     return {
       accessToken: access.accessToken,
-      accountBinding: bindHostedAccount(access.accountId),
+      accountBinding: bindHostedLogin(access.accountId, access.sessionId, credentials),
       cloudBaseUrl: parseCloudOrigin(access.cloudBaseUrl),
+      credentials,
     };
+  }
   if (!options.interactive || options.noLogin || detectAuthMode(authEnv) === 'non-interactive')
     throw cloudApiKeyRequired();
   const login = await loginWithDeviceAuth({
@@ -62,10 +93,12 @@ export async function resolveHostedCloudAccess(options: {
     flags,
     requiresLiveToken: true,
   });
+  const credentials = new Set([login.accessToken, login.session.refreshCredential]);
   return {
     cloudBaseUrl: parseCloudOrigin(login.session.cloudBaseUrl),
     accessToken: login.accessToken,
-    accountBinding: bindHostedAccount(login.session.accountId),
+    accountBinding: bindHostedLogin(login.session.accountId, login.session.id, credentials),
+    credentials,
   };
 }
 
@@ -85,7 +118,7 @@ function resolveHostedOrigin(env: EnvMap, savedOrigin: string | undefined) {
 
 async function readHostedLogin(options: Parameters<typeof resolveCliSessionAccess>[0]) {
   try {
-    return await resolveCliSessionAccess(options);
+    return await resolveCliSessionAccess({ ...options, catalog: true });
   } catch (error) {
     if (error instanceof AppError && error.code === 'UNAUTHORIZED') {
       throw new AppError(error.code, error.message, {

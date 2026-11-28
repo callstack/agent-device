@@ -1,6 +1,11 @@
+import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import { readCloudConnection } from '../cli/connection/cloud-connection-record.ts';
+import {
+  cloudAttachmentPath,
+  readCloudConnection,
+  writeCloudConnection,
+} from '../cli/connection/cloud-connection-record.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
   cloudEnv,
@@ -65,3 +70,117 @@ test.each([
   expect(readCloudConnection(location)).toBeNull();
   expect(readRemoteConnectionState(location)).toBeNull();
 });
+
+test.each(['DELETE', 'GET'] as const)(
+  'disconnect resumes local cleanup if the closing write fails after release confirmed by %s',
+  async (confirmation) => {
+    const env = cloudEnv();
+    const location = locationOf(env);
+    const broker = stubCloudApi();
+    expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+
+    if (confirmation === 'GET') {
+      writeCloudConnection(location, {
+        ...readCloudConnection(location)!,
+        accountBinding: undefined,
+      });
+      broker.mockResolvedValueOnce(Response.json({ id: hostedDevice.id, state: 'settled' }));
+    }
+
+    const writeFile = fs.writeFileSync;
+    let proofWrites = 0;
+    const write = vi
+      .spyOn(fs, 'writeFileSync')
+      .mockImplementation((destination, contents, options) => {
+        if (typeof contents === 'string' && contents.includes('"brokerReleased":true')) {
+          if (contents.includes('"phase":"closing"') || ++proofWrites === 1) {
+            throw Object.assign(new Error('fixture record write failure'), { code: 'EIO' });
+          }
+        }
+        writeFile(destination, contents, options);
+      });
+    const failed = await runCliCapture(['disconnect', '--json'], { env });
+    write.mockRestore();
+    expect(failed.code).toBe(1);
+    expect(proofWrites).toBe(2);
+    expect(readCloudConnection(location)).toMatchObject({
+      id: hostedDevice.id,
+      brokerReleased: true,
+    });
+    expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
+    const blocked = await runCliCapture(['snapshot', '--json'], { env });
+    expect(JSON.parse(blocked.stdout).error.details.reason).toBe('cloud_connection_changed');
+
+    broker.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    const retried = await runCliCapture(['disconnect', '--json'], { env });
+    expect(retried.code, retried.stdout).toBeNull();
+    expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', confirmation]);
+    expect(readCloudConnection(location)).toBeNull();
+    expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+  },
+);
+
+test('disconnect preserves both errors when saving broker confirmation fails twice', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const broker = stubCloudApi();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const firstError = new Error('First fixture write failure');
+  const retryError = new Error('Retry fixture write failure');
+  const failures = [firstError, retryError];
+  const writeFile = fs.writeFileSync;
+  vi.spyOn(fs, 'writeFileSync').mockImplementation((destination, contents, options) => {
+    if (typeof contents === 'string' && contents.includes('"brokerReleased":true')) {
+      throw failures.shift();
+    }
+    writeFile(destination, contents, options);
+  });
+
+  const result = await runCliCapture(['disconnect', '--json'], { env });
+  expect(result.code).toBe(1);
+  expect(JSON.parse(result.stdout).error).toMatchObject({
+    cause: { message: firstError.message },
+    details: { retryWriteError: retryError.message },
+  });
+  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
+});
+
+test('connect refuses to resume a pending allocation with saved release confirmation', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const broker = stubCloudApi();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  writeCloudConnection(location, {
+    ...readCloudConnection(location)!,
+    phase: 'pending',
+    brokerReleased: true,
+  });
+
+  const refused = await runCliCapture(connectArgs, { env });
+  expect(refused.code).toBe(1);
+  expect(broker).toHaveBeenCalledOnce();
+});
+
+test.each([
+  { status: undefined, cause: new DOMException('Timed out waiting for DELETE', 'TimeoutError') },
+  { status: 503, cause: new Error('Response body connection closed') },
+])(
+  'disconnect preserves the broker release failure cause and status ($status)',
+  async ({ status, cause }) => {
+    const env = cloudEnv();
+    const broker = stubCloudApi();
+    expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+    if (status === undefined) broker.mockRejectedValueOnce(cause);
+    else {
+      const body = new ReadableStream({ start: (stream) => stream.error(cause) });
+      broker.mockResolvedValueOnce(new Response(body, { status }));
+    }
+
+    const result = await runCliCapture(['disconnect', '--json'], { env });
+    expect(result.code).toBe(1);
+    const { error } = JSON.parse(result.stdout);
+    expect(error).toMatchObject({ code: 'COMMAND_FAILED', cause: { message: cause.message } });
+    expect(error.details?.status).toBe(status);
+  },
+);

@@ -56,7 +56,7 @@ export type CloudConnectionRecord = {
   generation: string;
   phase: 'pending' | 'committed' | 'closing';
   origin: string;
-  fingerprint: string;
+  fingerprint?: string;
   accountBinding?: string;
   accepts?: CloudSessionRequest['accepts'];
   id?: string;
@@ -232,7 +232,7 @@ function isCloudConnectionRecord(
     typeof record?.session === 'string' &&
     typeof record.generation === 'string' &&
     typeof record.origin === 'string' &&
-    typeof record.fingerprint === 'string' &&
+    hasValidCloudRecordFingerprint(record) &&
     (record.accountBinding === undefined || typeof record.accountBinding === 'string') &&
     (record.id === undefined || typeof record.id === 'string') &&
     (record.deadlineAt === undefined || typeof record.deadlineAt === 'string') &&
@@ -262,6 +262,16 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
         : undefined;
     throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordUnreadable.reason, ioCode);
   }
+}
+
+function hasValidCloudRecordFingerprint(record: Record<string, unknown>): boolean {
+  return (
+    typeof record.fingerprint === 'string' ||
+    (record.fingerprint === undefined &&
+      record.phase === 'closing' &&
+      record.brokerReleased === true &&
+      typeof record.id === 'string')
+  );
 }
 
 function hasValidStoredAccepts(accepts: unknown): boolean {
@@ -299,6 +309,21 @@ export function writeCloudConnection(
 
 export function removeCloudConnection(location: ConnectionLocation): void {
   if (admitCloudCredentialDirectory(location)) fs.rmSync(recordPath(location), { force: true });
+}
+
+export function prepareReleasedCloudConnection(
+  location: ConnectionLocation,
+  binding: CloudSessionBinding,
+): CloudConnectionRecord {
+  return {
+    session: location.session,
+    generation: binding.generation,
+    phase: 'closing',
+    origin: binding.baseUrl,
+    id: binding.id,
+    deadlineAt: binding.deadlineAt,
+    brokerReleased: true,
+  };
 }
 
 export function prepareCloudConnection(
@@ -354,6 +379,7 @@ export function readCurrentCloudConnection(
   if (
     !record ||
     record.phase !== 'committed' ||
+    record.brokerReleased ||
     record.generation !== generation ||
     state?.session !== location.session ||
     !binding ||
