@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
   admitDaemonStateRoot,
   resolveDaemonPaths,
@@ -33,7 +34,7 @@ type CommandConnectionOptions = {
   explicitFlagKeys: Set<FlagKey>;
   readDefaults: boolean;
   materializes: boolean;
-  claimForDisconnect?: boolean;
+  command?: string;
 };
 
 type CommandConnectionContext = {
@@ -48,12 +49,19 @@ export function resolveCommandConnection(
 ): CommandConnectionContext {
   const { host, flags, explicitFlagKeys } = options;
   const paths = resolveDaemonPaths(flags.stateDir, host);
-  admitDaemonStateRoot({ paths, mode: 'repair' });
+  const disconnects = options.command === 'disconnect';
+  const establishes = disconnects || options.command === 'connect';
+  admitDaemonStateRoot({ paths, mode: establishes ? 'establish' : 'repair' });
   const request = { ...host, session: flags.session, remoteConfig: flags.remoteConfig };
-  if (options.claimForDisconnect) {
+  if (disconnects) {
     const defaults = claimRemoteConnectionDefaults({ ...request, stateDir: paths.baseDir });
     const merged = mergeConnectionFlags(flags, defaults.flags, explicitFlagKeys);
     const effectiveFlags = legacyDisconnectFlags(defaults.claimed, paths.baseDir, merged, options);
+    // The saved profile can name another root, which the disconnect handler locks.
+    const lockPaths = resolveDaemonPaths(effectiveFlags.stateDir, host);
+    if (!fs.existsSync(lockPaths.baseDir)) {
+      admitDaemonStateRoot({ paths: lockPaths, mode: 'establish' });
+    }
     return {
       daemonPaths: paths,
       effectiveFlags,
