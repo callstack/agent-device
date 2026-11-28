@@ -14,10 +14,7 @@ import {
 } from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type {
-  OpenApplicationOutcome,
-  OpenApplicationTiming,
-} from '@agent-device/contracts/application-lifecycle-runtime';
+import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -367,30 +364,57 @@ export async function completeOpenCommand(params: {
     appName,
     deviceClaim,
   });
-  sessionStore.clearCloseEffectsUnconfirmed(nextRef);
-  const nextSession = sessionStore.requireCurrent(nextRef);
-  markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
-  if (req.runtime !== undefined) {
-    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, sessionAppBundleId);
-  } else if (runtimeHints) {
-    bindStoredRuntimeHintsToApp(sessionStore, sessionName, sessionAppBundleId);
-  }
-  applyOrdinaryScriptRecordingOpenOutcome({
-    session: nextSession,
-    existingSession: existingRef ? nextSession : undefined,
-    saveScriptRequested: Boolean(req.flags?.saveScript),
-    remoteDelivery: remoteScriptOpen(req.meta),
-    responseData: openResult,
-    hostCwd: sessionStore.host.cwd,
-  });
-  sessionStore.recordAction(nextRef, {
-    command: 'open',
+  recordPublishedOpen({
+    req,
+    sessionStore,
+    sessionName,
+    ref: nextRef,
+    appBundleId: sessionAppBundleId,
+    runtimeHints,
+    sessionReused: existingRef !== undefined,
     positionals: openPositionals,
-    flags: req.flags ?? {},
-    runtime: req.runtime !== undefined ? runtimeHints : undefined,
+    postOpenObservation: timing.postOpenObservation,
     result: openResult,
   });
   return { type: 'opened', ref: nextRef, response: { ok: true, data: openResult } };
+}
+
+function recordPublishedOpen(params: {
+  req: DaemonRequest;
+  sessionStore: SessionStore;
+  sessionName: string;
+  ref: SessionRef;
+  appBundleId: string | undefined;
+  runtimeHints: SessionRuntimeHints | undefined;
+  sessionReused: boolean;
+  positionals: string[];
+  postOpenObservation: OpenTiming['postOpenObservation'];
+  result: Record<string, unknown>;
+}): void {
+  const { req, sessionStore, sessionName, ref, appBundleId, runtimeHints, result } = params;
+  sessionStore.clearCloseEffectsUnconfirmed(ref);
+  const session = sessionStore.requireCurrent(ref);
+  markPostOpenStabilization(session, params.postOpenObservation, req.flags);
+  if (req.runtime !== undefined) {
+    setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints, appBundleId);
+  } else if (runtimeHints) {
+    bindStoredRuntimeHintsToApp(sessionStore, sessionName, appBundleId);
+  }
+  applyOrdinaryScriptRecordingOpenOutcome({
+    session,
+    existingSession: params.sessionReused ? session : undefined,
+    saveScriptRequested: Boolean(req.flags?.saveScript),
+    remoteDelivery: remoteScriptOpen(req.meta),
+    responseData: result,
+    hostCwd: sessionStore.host.cwd,
+  });
+  sessionStore.recordAction(ref, {
+    command: 'open',
+    positionals: params.positionals,
+    flags: req.flags ?? {},
+    runtime: req.runtime !== undefined ? runtimeHints : undefined,
+    result,
+  });
 }
 
 async function prepareOpenDispatchSession(params: {
