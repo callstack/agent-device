@@ -299,7 +299,7 @@ async function postCloudSession(
     ...(request.app ? [request.app.url, encodeURIComponent(request.app.url)] : []),
   ];
   const deadline = Date.now() + CONNECT_TIMEOUT_MS;
-  let initial = true;
+  let observeInitialRejection = attempt.observeInitialRejection;
   for (let remaining = CONNECT_TIMEOUT_MS; remaining > 0; remaining = deadline - Date.now()) {
     const value = await requestCreateResponse(
       url,
@@ -312,20 +312,29 @@ async function postCloudSession(
       },
       request.needs,
       credentials,
-      initial ? attempt.observeInitialRejection : undefined,
+      observeInitialRejection,
     );
-    initial = false;
-    if (value !== RETRY_CREATION) {
-      assertSafeAllocationId(value.id, access, value.kind === 'created' ? value.body : undefined);
-      attempt.observeId(value.id);
-      if (value.kind === 'created') return value;
-    }
+    observeInitialRejection = undefined;
+    const created = observeCreateResponse(value, access, attempt);
+    if (created) return created;
     const wait = Math.min(CREATE_RETRY_INTERVAL_MS, deadline - Date.now());
     if (wait > 0) await sleep(wait);
   }
   throw new AppError('COMMAND_FAILED', 'Timed out waiting for the cloud session API.', {
     reason: CLOUD_SESSION_API_REASONS.timeout.reason,
   });
+}
+
+function observeCreateResponse(
+  value: CreateResponse | typeof RETRY_CREATION,
+  access: CloudAccess,
+  attempt: CloudCreateAttempt,
+): CreatedResponse | undefined {
+  if (value === RETRY_CREATION) return undefined;
+  const created = value.kind === 'created' ? value : undefined;
+  assertSafeAllocationId(value.id, access, created?.body);
+  attempt.observeId(value.id);
+  return created;
 }
 
 function assertSafeAllocationId(
