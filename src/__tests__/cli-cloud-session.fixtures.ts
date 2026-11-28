@@ -110,50 +110,63 @@ export function withLeaseAllocation(
   const activeLeases = new Map<string, ActiveLease>();
   return async (req: CapturedDaemonRequest): Promise<DaemonResponse> => {
     if (req.command === 'lease_allocate' || req.command === 'lease_heartbeat') {
-      const { tenantId, runId, clientId } = req.meta ?? {};
-      // The client names the lease when its connection is a proxy; the front mints one otherwise.
-      const leaseId = typeof req.meta?.leaseId === 'string' ? req.meta.leaseId : mintLeaseId();
-      const held = activeLeases.get(leaseId);
-      // A renewal names the scope the lease was allocated under; it never replaces that scope.
-      if (held && !sameScope(held, { tenantId, runId, clientId, deviceKey })) {
-        return { ok: false, error: { code: 'INVALID_ARGS', message: 'Lease scope mismatch.' } };
-      }
-      const reused = held !== undefined;
-      activeLeases.set(leaseId, { tenantId, runId, clientId, deviceKey });
-      return {
-        ok: true,
-        data: {
-          lease: {
-            leaseId,
-            tenantId,
-            runId,
-            backend: 'ios-instance',
-            leaseProvider: 'proxy',
-            deviceKey,
-            clientId,
-            device,
-          },
-          reused,
-        },
-      };
+      return allocateOrRenew(req, activeLeases, device, deviceKey);
     }
-    if (req.command === 'lease_release') {
-      const leaseId = req.meta?.leaseId;
-      if (typeof leaseId !== 'string' || !activeLeases.has(leaseId)) {
-        return { ok: true, data: { released: false, absent: true } };
-      }
-      const held = activeLeases.get(leaseId);
-      const meta = req.meta ?? {};
-      if (held && !sameScope(held, scopeOf(meta))) {
-        return { ok: false, error: { code: 'INVALID_ARGS', message: 'Lease scope mismatch.' } };
-      }
-      activeLeases.delete(leaseId);
-      return { ok: true, data: { released: true } };
-    }
+    if (req.command === 'lease_release') return releaseLease(req, activeLeases);
     const refusal = refuseWithoutLeaseMeta(req, activeLeases);
     if (refusal) return refusal;
     return inner ? await inner(req) : { ok: true, data: {} };
   };
+}
+
+const SCOPE_MISMATCH: DaemonResponse = {
+  ok: false,
+  error: { code: 'INVALID_ARGS', message: 'Lease scope mismatch.' },
+};
+
+/** A renewal names the scope the lease was allocated under; it never replaces that scope. */
+function allocateOrRenew(
+  req: CapturedDaemonRequest,
+  activeLeases: Map<string, ActiveLease>,
+  device: Record<string, unknown>,
+  deviceKey: string,
+): DaemonResponse {
+  const { tenantId, runId, clientId } = req.meta ?? {};
+  // The client names the lease when its connection is a proxy; the front mints one otherwise.
+  const leaseId = typeof req.meta?.leaseId === 'string' ? req.meta.leaseId : mintLeaseId();
+  const held = activeLeases.get(leaseId);
+  if (held && !sameScope(held, { tenantId, runId, clientId, deviceKey })) return SCOPE_MISMATCH;
+  activeLeases.set(leaseId, { tenantId, runId, clientId, deviceKey });
+  return {
+    ok: true,
+    data: {
+      lease: {
+        leaseId,
+        tenantId,
+        runId,
+        backend: 'ios-instance',
+        leaseProvider: 'proxy',
+        deviceKey,
+        clientId,
+        device,
+      },
+      reused: held !== undefined,
+    },
+  };
+}
+
+function releaseLease(
+  req: CapturedDaemonRequest,
+  activeLeases: Map<string, ActiveLease>,
+): DaemonResponse {
+  const leaseId = req.meta?.leaseId;
+  const held = typeof leaseId === 'string' ? activeLeases.get(leaseId) : undefined;
+  if (typeof leaseId !== 'string' || held === undefined) {
+    return { ok: true, data: { released: false, absent: true } };
+  }
+  if (!sameScope(held, scopeOf(req.meta ?? {}))) return SCOPE_MISMATCH;
+  activeLeases.delete(leaseId);
+  return { ok: true, data: { released: true } };
 }
 
 /** Mirrors the real proxy front: a command must name an active lease with its scope, or it is refused. */
