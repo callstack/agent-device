@@ -7,8 +7,11 @@ beforeEach(() => {
   stderr = [];
   vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown, ...rest: unknown[]) => {
     stderr.push(String(chunk));
-    const callback = rest.find((arg): arg is () => void => typeof arg === 'function');
-    callback?.();
+    const callback = rest.find(
+      (arg): arg is (error: Error | null) => void => typeof arg === 'function',
+    );
+    // A real stream calls back on a later tick, with null on success.
+    if (callback) process.nextTick(callback, null);
     return true;
   });
 });
@@ -33,19 +36,15 @@ test('an insecure destination is warned about once per origin and not refused', 
 
 test('a stderr that throws does not change the outcome or keep a listener', () => {
   const listeners = process.stderr.listenerCount('error');
-  let listenersAtWrite = 0;
   vi.mocked(process.stderr.write).mockImplementation(() => {
-    // A closed reader reports EPIPE as an event; without a listener at write time it is fatal.
-    listenersAtWrite = process.stderr.listenerCount('error');
     throw new Error('EPIPE');
   });
 
   expect(() => admitCredentialDestination('http://broken-stderr.example.test', {})).not.toThrow();
-  expect(listenersAtWrite).toBe(listeners + 1);
   expect(process.stderr.listenerCount('error')).toBe(listeners);
 });
 
-test('successful warnings for many origins leave no error listener behind', () => {
+test('warnings for 11 origins in one tick leave no error listener behind', async () => {
   const listeners = process.stderr.listenerCount('error');
   const warnings: Error[] = [];
   const onWarning = (warning: Error) => warnings.push(warning);
@@ -54,6 +53,9 @@ test('successful warnings for many origins leave no error listener behind', () =
     for (let index = 0; index < 11; index += 1) {
       admitCredentialDestination(`http://many-${index}.example.test`, {});
     }
+    // Pending writes share at most one listener on the stream.
+    expect(process.stderr.listenerCount('error')).toBeLessThanOrEqual(listeners + 1);
+    await new Promise((resolve) => setImmediate(resolve));
   } finally {
     process.off('warning', onWarning);
   }

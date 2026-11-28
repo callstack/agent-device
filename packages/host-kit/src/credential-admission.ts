@@ -1,8 +1,12 @@
+import { Console } from 'node:console';
 import { credentialTransportRefusal } from '@agent-device/contracts/credential-transport';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
 const warnedOrigins = new Set<string>();
+// Node's Console ignores stream errors (sync throws and async EPIPE) without keeping listeners, so
+// the optional warning never changes what the command does.
+let warningConsole: Console | undefined;
 
 /**
  * The one warn-or-refuse decision for a configured URL that receives a first-party credential.
@@ -19,27 +23,11 @@ export function admitCredentialDestination(
   const origin = String(refusal.details?.origin);
   if (warnedOrigins.has(origin)) return;
   warnedOrigins.add(origin);
-  writeWarning(
+  warningConsole ??= new Console({ stdout: process.stderr, stderr: process.stderr });
+  warningConsole.error(
     escapeTerminalText(
       `Warning: credentials for ${origin} are sent in cleartext. agent-device 0.22 will refuse this. ` +
-        `${String(refusal.details?.hint)}\n`,
+        String(refusal.details?.hint),
     ),
   );
-}
-
-/**
- * The warning is optional output and must not change what the command does. A closed stderr
- * reports EPIPE as an 'error' event after the write callback, so the listener stays only when the
- * write failed; a successful write removes it.
- */
-function writeWarning(text: string): void {
-  const ignore = () => {};
-  process.stderr.on('error', ignore);
-  try {
-    process.stderr.write(text, (error) => {
-      if (!error) process.stderr.off('error', ignore);
-    });
-  } catch {
-    process.stderr.off('error', ignore);
-  }
 }
