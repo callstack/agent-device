@@ -62,6 +62,8 @@ export type ReplayTestOptions = AgentDeviceRequestOverrides &
     timeoutMs?: number;
     retries?: number;
     recordVideo?: boolean;
+    /** With `recordVideo`, skip the touch overlay so each attempt exports its raw recording faster. */
+    hideTouches?: boolean;
     artifactsDir?: string;
     /** @deprecated Use the CLI --reporter junit:<path> or --report-junit <path>. */
     reportJunit?: string;

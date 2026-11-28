@@ -63,7 +63,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--hide-touches'],
     type: 'boolean',
     usageLabel: '--hide-touches',
-    usageDescription: 'Record: skip touch-overlay post-processing for faster raw benchmark videos',
+    usageDescription:
+      'Record, test --record-video: skip touch-overlay post-processing for faster raw videos',
     projectConfig: true,
     recorded: true,
   },

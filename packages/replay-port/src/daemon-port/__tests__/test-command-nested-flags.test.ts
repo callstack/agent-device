@@ -88,3 +88,27 @@ test('buildNestedReplayFlags strips test-only recordVideo before replay actions 
 
   assert.deepEqual(result, { platform: 'ios' });
 });
+
+// `--record-video` and its `--hide-touches` belong to the suite harness, which records each attempt
+// itself. A nested replay that saw them would try to record a second time.
+test('buildNestedReplayFlags strips the suite recording flags from every attempt', () => {
+  const result = buildNestedReplayFlags({
+    parentFlags: { timeoutMs: 5000, recordVideo: true, hideTouches: true },
+    platform: undefined,
+    target: undefined,
+    artifactsDir: '/suite-root/flow/attempt-1',
+  });
+  assert.deepEqual(result, { timeoutMs: 5000, artifactsDir: '/suite-root/flow/attempt-1' });
+});
+
+// A config or env default can set `hideTouches` on every command. Without `--record-video` it has no
+// effect, so it must not reach an attempt either.
+test('buildNestedReplayFlags drops a hideTouches default when the suite records nothing', () => {
+  const result = buildNestedReplayFlags({
+    parentFlags: { hideTouches: true },
+    platform: undefined,
+    target: undefined,
+    artifactsDir: '/suite-root/flow/attempt-1',
+  });
+  assert.deepEqual(result, { artifactsDir: '/suite-root/flow/attempt-1' });
+});

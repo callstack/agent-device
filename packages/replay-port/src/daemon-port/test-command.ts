@@ -136,14 +136,21 @@ export function buildNestedReplayFlags(params: {
 
 /**
  * Strips what belongs to the SUITE rather than to one attempt: the harness's own
- * `--record-video`, and (#1802) `replayScriptSources` — the suite's whole discovery result, which
- * `buildNestedReplayFlags` replaces with the single `replayScriptSource` this attempt runs.
+ * `--record-video` and its `--hide-touches`, and (#1802) `replayScriptSources` — the suite's
+ * whole discovery result, which `buildNestedReplayFlags` replaces with the single
+ * `replayScriptSource` this attempt runs.
  */
 function stripReplayTestHarnessFlags(flags: CommandFlags | undefined): CommandFlags | undefined {
   if (!flags) return flags;
-  if (flags.recordVideo !== true && flags.replayScriptSources === undefined) return flags;
+  if (
+    flags.recordVideo !== true &&
+    flags.hideTouches === undefined &&
+    flags.replayScriptSources === undefined
+  )
+    return flags;
   const nestedFlags = { ...flags };
   delete nestedFlags.recordVideo;
+  delete nestedFlags.hideTouches;
   delete nestedFlags.replayScriptSources;
   return Object.keys(nestedFlags).length > 0 ? nestedFlags : undefined;
 }

@@ -60,7 +60,13 @@ export async function startReplayTestVideoRecordingIfReady(
   });
   params.video.throwIfCanceled();
   const startResponse = await params.video.record(
-    replayVideoRecordRequest({ req, sessionName, phase: 'start', outputPath: videoPath }),
+    replayVideoRecordRequest({
+      req,
+      sessionName,
+      phase: 'start',
+      outputPath: videoPath,
+      hideTouches: req.flags?.hideTouches === true,
+    }),
   );
   if (!startResponse.ok) {
     appendVideoTimingEvent(appendTimingEvent, {
@@ -140,7 +146,7 @@ type ReplayVideoRecordRequestParams = Readonly<{
   req: DaemonWireRequest;
   sessionName: string;
 }> &
-  ({ phase: 'start'; outputPath: string } | { phase: 'stop' });
+  ({ phase: 'start'; outputPath: string; hideTouches: boolean } | { phase: 'stop' });
 
 function replayVideoRecordRequest(
   params: ReplayVideoRecordRequestParams,
@@ -152,6 +158,7 @@ function replayVideoRecordRequest(
       sessionName: params.sessionName,
       phase: 'start',
       outputPath: params.outputPath,
+      hideTouches: params.hideTouches,
     };
   }
   return {
