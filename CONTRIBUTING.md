@@ -7,8 +7,8 @@ reviewable change. Detailed testing and device procedures live in the linked foc
 
 Requirements:
 
-- Node.js 22.18 or a later 22.x, or 24.11 or newer — the build tool, tsdown, declares this range.
-  Website work also needs 22.23.4 or newer (`website/package.json`). The published package keeps a
+- Node.js 22.18 or a later 22.x, 24.11 or a later 24.x, or 26 or newer — the intersection of the
+  ranges tsdown and vitest declare (Node 25 is excluded). Website work also needs 22.23.4 or newer (`website/package.json`). The published package keeps a
   lower `engines.node` floor of 22.12, which CI verifies separately on the installed tarball.
 - pnpm at the version pinned in `package.json`
 - Android SDK tools (`adb`) for Android work
