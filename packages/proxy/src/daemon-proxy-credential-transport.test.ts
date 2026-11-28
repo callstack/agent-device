@@ -18,15 +18,12 @@ afterEach(() => {
 
 const health = () => new Request('https://gateway.example.test/agent-device/health');
 
-function proxyFor(
-  upstreamBaseUrl: string,
-  extra: Pick<DaemonProxyOptions, 'env' | 'upstreamFetch'> = {},
-) {
+function proxyFor(upstreamBaseUrl: string, upstreamFetch?: DaemonProxyOptions['upstreamFetch']) {
   return createDaemonProxy({
     upstreamBaseUrl,
     upstreamToken: 'daemon-secret',
     clientToken: 'client-secret',
-    ...extra,
+    upstreamFetch,
   });
 }
 
@@ -43,24 +40,17 @@ test('construction warns about a plain http upstream off loopback, ahead of any 
 
   await proxy.handle(health());
   expect(atSend).toEqual([stderr]);
-  expect(stderr).not.toContain('daemon-secret');
+  expect(stderr).toContain('Use https, a loopback upstream, or your own upstreamFetch.');
+  expect(stderr).not.toMatch(/daemon-secret|AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT/);
 });
 
 test.each([
-  ['a custom transport', 'http://custom.example.test', { upstreamFetch: true }],
-  [
-    'the override',
-    'http://overridden.example.test',
-    { env: { AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT: '1' } },
-  ],
-  ['a loopback upstream', 'http://127.0.0.1:4310', {}],
-] as const)('%s is not warned about', async (_label, upstreamBaseUrl, setup) => {
+  ['a custom transport', 'http://custom.example.test', true],
+  ['a loopback upstream', 'http://127.0.0.1:4310', false],
+])('%s is not warned about', async (_label, upstreamBaseUrl, custom) => {
   const answer = async () => Response.json({ ok: true });
   vi.spyOn(globalThis, 'fetch').mockImplementation(answer);
-  const proxy = proxyFor(
-    upstreamBaseUrl,
-    'upstreamFetch' in setup ? { upstreamFetch: answer } : setup,
-  );
+  const proxy = proxyFor(upstreamBaseUrl, custom ? answer : undefined);
 
   expect((await proxy.handle(health())).status).toBe(200);
   expect(stderr).toBe('');

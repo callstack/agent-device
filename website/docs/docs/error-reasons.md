@@ -901,7 +901,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `insecure_credential_transport` | A first-party credential would go to a configured URL that is neither https nor plain http to a loopback host, and AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT is not 1. agent-device 0.21.x warns on stderr instead of failing with it; 0.22 refuses with it before sending anything. |
+| `insecure_credential_transport` | A first-party credential would go to a configured URL that is neither https nor plain http to a loopback host, and the CLI or SDK environment does not set AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1 (@agent-device/proxy has no override). agent-device 0.21.x warns on stderr instead of failing with it; 0.22 refuses with it before sending anything. |
 | `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
 | `remote_rpc_protocol_missing` | The checked RPC call named no RPC protocol. An intermediary that strips request headers causes this. |
 | `remote_rpc_protocol_mismatch` | The daemon or proxy speaks a different RPC protocol from the caller. After authentication, `details.service`, `details.version` and `details.rpcProtocolVersion` name the side that refused. |

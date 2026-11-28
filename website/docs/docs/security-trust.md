@@ -43,7 +43,7 @@ In this setup the token and your device traffic travel only inside TLS or SSH. S
 
 Before agent-device sends a credential to a plain `http://` URL whose host is not loopback (`localhost`, `127.0.0.0/8`, or `::1`), agent-device 0.21.x warns on stderr, once per process for each origin. agent-device 0.22 refuses instead: it fails before it opens a connection, with reason `insecure_credential_transport`. This applies to the remote daemon URL, the cloud URL, the Metro bridge URL, and the upstream URL of [`@agent-device/proxy`](https://www.npmjs.com/package/@agent-device/proxy) with its default transport. Upload tickets are already refused: if a ticket points to plain HTTP, for example because `--public-origin` is missing, the client does not use it and uploads through the daemon URL instead.
 
-If your network already encrypts the route, for example a WireGuard or Tailscale address, you can allow plain HTTP for one process with `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1`. This silences the warning and lifts the refusal. With this setting, anyone who can read the network path can read your token. Prefer Tailscale Serve or `ssh -L`, which need no override.
+If your network already encrypts the route, for example a WireGuard or Tailscale address, you can allow plain HTTP for one process with `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT=1`. This silences the warning and lifts the refusal. With this setting, anyone who can read the network path can read your token. Prefer Tailscale Serve or `ssh -L`, which need no override. `@agent-device/proxy` does not read this setting: give its default transport an https or loopback upstream, or supply your own `upstreamFetch`.
 
 You stay responsible for these points:
 

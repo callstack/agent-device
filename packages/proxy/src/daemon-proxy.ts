@@ -70,11 +70,6 @@ export type DaemonProxyOptions = {
    * or plain http to loopback: the proxy sends `upstreamToken` to it.
    */
   upstreamBaseUrl: string;
-  /**
-   * The environment of this process, usually `process.env`. The proxy reads only
-   * `AGENT_DEVICE_ALLOW_INSECURE_TRANSPORT` from it.
-   */
-  env?: Readonly<Record<string, string | undefined>>;
   /** Auth token of the upstream daemon. Never leaves the proxy. */
   upstreamToken: string;
   /** Fixed public HTTP(S) origin for upload tickets. */
@@ -588,7 +583,12 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
   const admission = customUpstreamFetch
     ? undefined
     : import('@agent-device/host-kit/credential-admission').then((module) =>
-        module.admitCredentialDestination(upstreamBaseUrl, options.env ?? {}),
+        // No environment overrides the rule here: an embedder that needs another route owns it.
+        module.admitCredentialDestination(
+          upstreamBaseUrl,
+          {},
+          'Use https, a loopback upstream, or your own upstreamFetch.',
+        ),
       );
   // A refusal reaches every request that waits for the verdict.
   admission?.catch(() => {});
