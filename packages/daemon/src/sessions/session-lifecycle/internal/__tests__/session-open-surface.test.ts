@@ -22,6 +22,7 @@ test('buildOpenResult exposes the Vega serial without leaking an internal platfo
     },
     runtimeHintCount: () => 0,
     sessionReused: false,
+    hidePreviousClaimOwner: false,
   });
 
   assert.equal(result.platform, 'vega');
@@ -45,6 +46,7 @@ const IOS_OPEN_RESULT_BASE = {
 test('buildOpenResult reports the OS version and model the host reported, and omits what it did not', () => {
   const described = buildOpenResult({
     ...IOS_OPEN_RESULT_BASE,
+    hidePreviousClaimOwner: false,
     device: { ...IOS_SIMULATOR, model: 'iPhone 17 Pro', osVersion: '27.0' },
   });
   assert.equal(described.kind, 'simulator');
@@ -53,7 +55,7 @@ test('buildOpenResult reports the OS version and model the host reported, and om
 
   // A host or provider that reports nothing gets no field: the reader cannot tell a
   // guessed OS from a read one, so silence is the only honest answer.
-  const unreported = buildOpenResult({ ...IOS_OPEN_RESULT_BASE, device: IOS_SIMULATOR });
+  const unreported = buildOpenResult({ ...IOS_OPEN_RESULT_BASE, hidePreviousClaimOwner: false });
   assert.equal(unreported.kind, 'simulator');
   assert.equal('model' in unreported, false);
   assert.equal('osVersion' in unreported, false);
@@ -70,6 +72,7 @@ test('buildOpenResult exposes typed device-selection evidence once at response l
     device: IOS_SIMULATOR,
     runtimeHintCount: () => 0,
     sessionReused: false,
+    hidePreviousClaimOwner: false,
     selection: {
       device: IOS_SIMULATOR,
       reason: 'single-booted-local',
@@ -88,7 +91,7 @@ test('buildOpenResult exposes typed device-selection evidence once at response l
 });
 
 test('buildOpenResult reports an answered launch confirmation and omits one that never appeared', () => {
-  const base = IOS_OPEN_RESULT_BASE;
+  const base = { ...IOS_OPEN_RESULT_BASE, hidePreviousClaimOwner: false };
 
   assert.equal(
     buildOpenResult({ ...base, outcome: { timing: {}, launchConfirmation: 'accepted' } })
@@ -113,6 +116,7 @@ test('buildOpenResult orders the claim, runtime hint cleanup, and launch confirm
   const replacedRuntimeHintsWarning = 'The earlier runtime hints could not be removed.';
   const result = buildOpenResult({
     ...IOS_OPEN_RESULT_BASE,
+    hidePreviousClaimOwner: false,
     tookOverDeviceClaim: {
       session: 'previous',
       workspace: '/tmp/previous',
@@ -134,4 +138,39 @@ test('buildOpenResult orders the claim, runtime hint cleanup, and launch confirm
       "the installed app that owns the launch URL's scheme could not be resolved",
     ),
   ]);
+});
+
+const LEASE_TAKEOVER_RESULT = {
+  ...IOS_OPEN_RESULT_BASE,
+  tookOverDeviceClaim: {
+    session: 'previous-owner-session',
+    workspace: '/tmp/previous-owner-workspace',
+    stateDir: '/tmp/previous-owner-state',
+    bootedAtMs: 1,
+  },
+};
+
+test('buildOpenResult hides the previous claim owner from a lease tenant', () => {
+  const result = buildOpenResult({ ...LEASE_TAKEOVER_RESULT, hidePreviousClaimOwner: true });
+
+  expect(result.warnings).toHaveLength(1);
+  expect(JSON.stringify(result.warnings)).not.toContain(
+    LEASE_TAKEOVER_RESULT.tookOverDeviceClaim.session,
+  );
+  expect(JSON.stringify(result.warnings)).not.toContain(
+    LEASE_TAKEOVER_RESULT.tookOverDeviceClaim.workspace,
+  );
+});
+
+test('buildOpenResult hides the previous claim owner when the disclosure decision is missing', () => {
+  // @ts-expect-error Callers must provide the disclosure decision.
+  const result = buildOpenResult(LEASE_TAKEOVER_RESULT);
+
+  expect(result.warnings).toHaveLength(1);
+  expect(JSON.stringify(result.warnings)).not.toContain(
+    LEASE_TAKEOVER_RESULT.tookOverDeviceClaim.session,
+  );
+  expect(JSON.stringify(result.warnings)).not.toContain(
+    LEASE_TAKEOVER_RESULT.tookOverDeviceClaim.workspace,
+  );
 });

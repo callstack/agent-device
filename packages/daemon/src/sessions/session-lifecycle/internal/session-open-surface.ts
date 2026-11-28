@@ -35,7 +35,7 @@ export function buildOpenResult(params: {
   selection?: DeviceSelectionResult;
   outcome?: OpenApplicationOutcome;
   tookOverDeviceClaim?: TakenOverDeviceClaim;
-  hidePreviousClaimOwner?: boolean;
+  hidePreviousClaimOwner: boolean;
   replacedRuntimeHintsWarning?: string;
 }): Record<string, unknown> {
   const {
@@ -123,10 +123,10 @@ function selectionResponseData(
  */
 function deviceClaimTakeoverWarning(
   tookOver: TakenOverDeviceClaim | undefined,
-  hidePreviousClaimOwner = false,
+  hidePreviousClaimOwner: boolean,
 ): string | undefined {
   if (!tookOver) return undefined;
-  if (hidePreviousClaimOwner) {
+  if (hidePreviousClaimOwner !== false) {
     return 'Took the device over: it rebooted after its previous claim was taken, so the previous app was already gone.';
   }
   return (
