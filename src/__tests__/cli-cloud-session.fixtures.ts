@@ -119,8 +119,12 @@ export function withLeaseAllocation(
     const refusal = refuseWithoutLeaseMeta(req, activeLeases);
     if (refusal) return refusal;
     if (req.command === 'close' && typeof req.meta?.leaseId === 'string') {
-      endedByClose.add(req.meta.leaseId);
-      activeLeases.delete(req.meta.leaseId);
+      // The live front ends the lease and names it in the reply as ended.
+      const leaseId = req.meta.leaseId;
+      if (activeLeases.delete(leaseId)) {
+        endedByClose.add(leaseId);
+        return { ok: true, data: { endedLeases: [{ leaseId, outcome: 'released' }] } };
+      }
     }
     return inner ? await inner(req) : { ok: true, data: {} };
   };

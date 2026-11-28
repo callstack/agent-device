@@ -871,25 +871,20 @@ type CliDaemonTransportSetup = {
 };
 
 function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
-  const { flags, host, cloudGeneration, cloudLocation } = options;
+  const { flags, host, command, cloudGeneration, cloudLocation } = options;
   const send = createCliProgressTransport(options);
-  if (options.command === 'close' && cloudGeneration !== undefined && cloudLocation) {
-    return async (req, context) => {
-      const response = await send(req, context);
-      if (response.ok) {
-        const { recordProxyFrontCloseEndedLease } =
-          await import('./cli/connection/cloud-connect.ts');
-        await recordProxyFrontCloseEndedLease(cloudLocation, cloudGeneration);
-      }
-      return response;
-    };
-  }
-  if (!flags.remoteConfig || options.command === 'connect' || options.command === 'disconnect')
-    return send;
+  if (!flags.remoteConfig && cloudGeneration === undefined) return send;
   return async (req, context) => {
     const response = await send(req, context);
-    const { forgetEndedConnectionLease } = await import('./cli/connection/ended-lease.ts');
-    await forgetEndedConnectionLease(flags, response, host, cloudGeneration);
+    const { applyEndedLeaseReplies } = await import('./cli/connection/ended-lease.ts');
+    await applyEndedLeaseReplies({
+      response,
+      flags,
+      host,
+      command,
+      cloudGeneration,
+      cloudLocation,
+    });
     return response;
   };
 }

@@ -11,7 +11,7 @@ import {
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { createAgentDeviceClient } from '@agent-device/client';
 import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/materialize-connection.ts';
-import { forgetEndedConnectionLease } from './ended-lease.ts';
+import { applyEndedLeaseReplies, forgetEndedConnectionLease } from './ended-lease.ts';
 import { withConnectionLock } from './cloud-connection-record.ts';
 import { primeProviderConnection } from './provider-policy.ts';
 
@@ -148,4 +148,56 @@ test('artifacts still sends the lease that a close ended', async () => {
 
   assert.equal(await leaseIdFor('artifacts'), LEASE_ID);
   assert.equal(await leaseIdFor('session'), undefined);
+});
+
+const CLOUD_GENERATION = 'cloud-generation-1';
+const CLOUD_SESSION = {
+  id: 'cloud-session-1',
+  baseUrl: 'https://cloud.example',
+  vendor: 'vendor-a',
+  transport: 'limrun' as const,
+  deadlineAt: new Date(Date.now() + 3_600_000).toISOString(),
+  generation: CLOUD_GENERATION,
+};
+
+// A hosted cloud close reaches the stored connection through the cloud location, not remote-config flags.
+test('a hosted Limrun close forgets the stored lease the reply names as ended', async () => {
+  const flags = seedEndedLeaseConnection({ leaseProvider: 'limrun', cloudSession: CLOUD_SESSION });
+  await applyEndedLeaseReplies({
+    response: { ok: true, data: { session: 'adc-proxy', endedLeases: [...ENDED] } },
+    flags,
+    host: createTestHostEnvironment(),
+    command: 'close',
+    cloudGeneration: CLOUD_GENERATION,
+    cloudLocation: { stateDir: flags.stateDir, session: 'adc-proxy' },
+  });
+  assert.equal(readRemoteConnectionState(flags)?.leaseId, undefined);
+});
+
+test('a hosted proxy-front close keeps the lease id as endedLeaseId', async () => {
+  const flags = seedEndedLeaseConnection({ cloudSession: CLOUD_SESSION });
+  await applyEndedLeaseReplies({
+    response: { ok: true, data: { endedLeases: [...ENDED] } },
+    flags,
+    host: createTestHostEnvironment(),
+    command: 'close',
+    cloudGeneration: CLOUD_GENERATION,
+    cloudLocation: { stateDir: flags.stateDir, session: 'adc-proxy' },
+  });
+  const stored = readRemoteConnectionState(flags);
+  assert.equal(stored?.leaseId, undefined);
+  assert.equal(stored?.endedLeaseId, LEASE_ID);
+});
+
+test('a connect or disconnect reply leaves the stored lease alone', async () => {
+  const flags = seedEndedLeaseConnection({ leaseProvider: 'limrun', cloudSession: CLOUD_SESSION });
+  await applyEndedLeaseReplies({
+    response: { ok: true, data: { endedLeases: [...ENDED] } },
+    flags,
+    host: createTestHostEnvironment(),
+    command: 'disconnect',
+    cloudGeneration: CLOUD_GENERATION,
+    cloudLocation: { stateDir: flags.stateDir, session: 'adc-proxy' },
+  });
+  assert.equal(readRemoteConnectionState(flags)?.leaseId, LEASE_ID);
 });
