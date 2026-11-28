@@ -80,13 +80,21 @@ export async function cleanupExpiredLeasedSession(params: {
   teardownSession: SessionTeardown;
   /** Starts the daemon's lease end outside this request's execution locks. */
   queueLeaseEnd?: (leaseId: string) => Promise<void>;
+  /**
+   * Can be false for a `close` planned before its session existed, because locks are planned before
+   * they are taken. A `close` whose device flags select the session device still plans both keys.
+   */
   holdsSessionLocks: (ref: SessionRef) => boolean;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
+  const kind = classifyEndedLeaseRequest(params.req);
   const expired = params.leaseRegistry.consumeExpiredLease(lease.leaseId, () => {
-    if (!refusesExpiredLeaseTeardown(params.req, params.leaseRegistry)) return;
+    const refuses =
+      kind === 'composite' ||
+      (kind === 'device-work' && namesInactiveLease(params.req, params.leaseRegistry));
+    if (!refuses) return;
     throw new AppError('UNAUTHORIZED', 'Lease is not active', {
       reason: LEASE_REASONS.notFound.reason,
       dispatched: 'no',
@@ -106,43 +114,34 @@ export async function cleanupExpiredLeasedSession(params: {
   }
   if (
     !params.queueLeaseEnd ||
-    doesDeviceWork(params.req) ||
-    isBoundedCompositeRequest(params.req) ||
+    kind === 'composite' ||
+    kind === 'device-work' ||
     params.leaseRegistry.inspectLeaseBackend(lease.leaseId) !== undefined
   ) {
     return false;
   }
   // The lease end locks every session of the lease, so no request waits for it under its own locks.
   void params.queueLeaseEnd(lease.leaseId);
-  if (endsSession(params.req) && params.holdsSessionLocks(ref)) await end();
+  if (kind === 'ends-session' && params.holdsSessionLocks(ref)) await end();
   return true;
 }
 
-function refusesExpiredLeaseTeardown(req: DaemonRequest, leaseRegistry: LeaseRegistry): boolean {
-  return (
-    req.command === 'batch' ||
-    req.command === 'replay' ||
-    isBoundedCompositeRequest(req) ||
-    (doesDeviceWork(req) && namesInactiveLease(req, leaseRegistry))
-  );
+type EndedLeaseRequestKind = 'composite' | 'ends-session' | 'exempt' | 'device-work';
+
+function classifyEndedLeaseRequest(req: DaemonRequest): EndedLeaseRequestKind {
+  if (req.command === 'batch' || req.command === 'replay' || isBoundedCompositeRequest(req)) {
+    return 'composite';
+  }
+  // A `close` ends its session, unless a replay step asks it to close only the app.
+  const releases = resolveCommandDeviceClaimPolicy(req.command) === 'release-session';
+  if (releases && req.internal?.closeAppOnly !== true) return 'ends-session';
+  return isLeaseAdmissionExempt(req.command) ? 'exempt' : 'device-work';
 }
 
 /** Whether admission would refuse the lease the request names, which must then come first. */
 function namesInactiveLease(req: DaemonRequest, leaseRegistry: LeaseRegistry): boolean {
   const { leaseId } = resolveLeaseScope(req);
   return leaseId !== undefined && leaseRegistry.inspectLeaseBackend(leaseId) === undefined;
-}
-
-function doesDeviceWork(req: DaemonRequest): boolean {
-  return !endsSession(req) && !isLeaseAdmissionExempt(req.command);
-}
-
-/** A `close` ends its session, unless a replay step asks it to close only the app. */
-function endsSession(req: DaemonRequest): boolean {
-  return (
-    resolveCommandDeviceClaimPolicy(req.command) === 'release-session' &&
-    req.internal?.closeAppOnly !== true
-  );
 }
 
 /**
