@@ -5,8 +5,9 @@ let stderr: string[] = [];
 
 beforeEach(() => {
   stderr = [];
-  vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+  vi.spyOn(process.stderr, 'write').mockImplementation((chunk, callback) => {
     stderr.push(String(chunk));
+    if (typeof callback === 'function') callback();
     return true;
   });
 });
@@ -29,7 +30,7 @@ test('an insecure destination is warned about once per origin and not refused', 
   expect(stderr[1]).toContain('http://once.example.test:8888');
 });
 
-test('a stderr that fails does not change the outcome', () => {
+test('a stderr that throws does not change the outcome or keep a listener', () => {
   const listeners = process.stderr.listenerCount('error');
   let listenersAtWrite = 0;
   vi.mocked(process.stderr.write).mockImplementation(() => {
@@ -40,6 +41,25 @@ test('a stderr that fails does not change the outcome', () => {
 
   expect(() => admitCredentialDestination('http://broken-stderr.example.test', {})).not.toThrow();
   expect(listenersAtWrite).toBe(listeners + 1);
+  expect(process.stderr.listenerCount('error')).toBe(listeners);
+});
+
+test('successful warnings for many origins leave no error listener behind', () => {
+  const listeners = process.stderr.listenerCount('error');
+  const warnings: Error[] = [];
+  const onWarning = (warning: Error) => warnings.push(warning);
+  process.on('warning', onWarning);
+  try {
+    for (let index = 0; index < 11; index += 1) {
+      admitCredentialDestination(`http://many-${index}.example.test`, {});
+    }
+  } finally {
+    process.off('warning', onWarning);
+  }
+
+  expect(stderr).toHaveLength(11);
+  expect(process.stderr.listenerCount('error')).toBe(listeners);
+  expect(warnings.map((warning) => warning.name)).not.toContain('MaxListenersExceededWarning');
 });
 
 test('a secure destination and the override stay silent', () => {
