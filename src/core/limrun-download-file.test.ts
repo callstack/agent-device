@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, expect, test, vi } from 'vitest';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError, normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { downloadLimrunFile } from './limrun-download-file.ts';
 
@@ -243,3 +243,72 @@ test('an https redirect to another origin is followed without the caller headers
     ['https://storage.example/clip?signature=signed', null],
   ]);
 });
+
+/** A loopback server that answers `redirects` same-origin 307s before it serves the file. */
+async function serveRedirectChain(redirects: number) {
+  const requests: string[] = [];
+  const url = await serve((request, response) => {
+    requests.push(request.headers.authorization ?? '-');
+    if (requests.length > redirects) return void response.end('payload');
+    response.writeHead(307, { location: `/hop-${requests.length}` }).end();
+  });
+  return { url, requests };
+}
+
+test.each([4, 20])('a chain of %i same-origin redirects ends with the file', async (redirects) => {
+  const { url, requests } = await serveRedirectChain(redirects);
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+  await downloadLimrunFile({
+    url,
+    headers: { Authorization: 'Bearer instance-token' },
+    destinationPath,
+    timeoutMs: 5_000,
+  });
+
+  expect(fs.readFileSync(destinationPath, 'utf8')).toBe('payload');
+  expect(requests).toEqual(Array(redirects + 1).fill('Bearer instance-token'));
+});
+
+test('a twenty-first redirect is not followed', async () => {
+  const { url, requests } = await serveRedirectChain(21);
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+  await expect(
+    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
+  ).rejects.toMatchObject({ details: { statusCode: 307 } });
+  expect(requests).toHaveLength(21);
+});
+
+test.each([
+  ['plain http', 'http://storage.example/clip?signature=target-secret'],
+  ['a URL with a username', 'https://target-secret@limrun.example/clip'],
+])(
+  'a redirect to %s is not followed, and its failure keeps no URL, Location or body',
+  async (_label, location) => {
+    const cancel = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      const echo = new TextEncoder().encode(`${location} Bearer instance-token`);
+      const body = new ReadableStream({ start: (stream) => stream.enqueue(echo), cancel });
+      return new Response(body, { status: 307, headers: { location } });
+    });
+    const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+    const failure = await downloadLimrunFile({
+      url: 'https://limrun.example/files?signature=source-secret',
+      headers: { Authorization: 'Bearer instance-token' },
+      destinationPath,
+      timeoutMs: 5_000,
+    }).catch(normalizeError);
+
+    expect(failure).toMatchObject({
+      code: 'COMMAND_FAILED',
+      message: 'Limrun download did not follow a redirect',
+      details: { statusCode: 307, reason: 'limrun_download_http_error' },
+    });
+    expect(JSON.stringify(failure)).not.toMatch(/secret|instance-token|\.example/);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fs.existsSync(destinationPath)).toBe(false);
+  },
+);

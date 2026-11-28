@@ -1,8 +1,14 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
-import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  closeLoopbackServer,
+  createTestHostEnvironment,
+  listenOnLoopback,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../companion/client-metro-companion.ts', () => ({
@@ -22,6 +28,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test('prepareMetroRuntime starts the local companion only after bridge setup needs it', async () => {
@@ -548,5 +555,53 @@ test('prepareMetroRuntime retries malformed retryable bridge responses after com
     assert.equal(fetchMock.mock.calls.length, 4);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a redirected bridge request reaches another origin without the bearer token', async () => {
+  const projectRoot = mkdtempForTestSync('agent-device-metro-redirect-');
+  fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, 'package.json'),
+    JSON.stringify({ name: 'metro-redirect-test', dependencies: { 'react-native': '0.0.0-test' } }),
+  );
+  const received: Array<[string | undefined, string | undefined]> = [];
+  const other = http.createServer((req, res) => {
+    received.push([req.url, req.headers.authorization]);
+    req.resume();
+    res.writeHead(401).end(JSON.stringify({ ok: false }));
+  });
+  const otherPort = await listenOnLoopback(other);
+  // The local dev server and the bridge in one.
+  const bridge = http.createServer((req, res) => {
+    req.resume();
+    if (req.url === '/status') return void res.end('packager-status:running');
+    received.push([req.url, req.headers.authorization]);
+    res.writeHead(307, { location: `http://127.0.0.1:${otherPort}/moved` }).end();
+  });
+  const bridgePort = await listenOnLoopback(bridge);
+
+  try {
+    await assert.rejects(
+      prepareMetroRuntime(
+        {
+          projectRoot,
+          proxyBaseUrl: `http://127.0.0.1:${bridgePort}`,
+          proxyBearerToken: 'shared-token',
+          bridgeScope: TEST_BRIDGE_SCOPE,
+          metroPort: bridgePort,
+          installDependenciesIfNeeded: false,
+        },
+        createTestHostEnvironment(),
+      ),
+    );
+
+    assert.deepEqual(received, [
+      ['/api/metro/bridge', 'Bearer shared-token'],
+      ['/moved', undefined],
+    ]);
+  } finally {
+    await closeLoopbackServer(bridge);
+    await closeLoopbackServer(other);
   }
 });

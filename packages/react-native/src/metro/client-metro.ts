@@ -21,10 +21,7 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import {
-  assertSecureCredentialTransport,
-  fetchWithCredential,
-} from '@agent-device/contracts/credential-transport';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import type {
   MetroBridgeDescriptor,
@@ -457,24 +454,19 @@ function isRetryableBridgeError(error: unknown): boolean {
 }
 
 async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<MetroBridgeResult> {
-  const bridgeUrl = `${input.baseUrl}/api/metro/bridge`;
   let response: Response;
 
   try {
-    response = await fetchWithCredential(
-      bridgeUrl,
-      {
-        method: 'POST',
-        headers: createProxyHeaders(input.baseUrl, input.bearerToken),
-        body: JSON.stringify({
-          ...input.scope,
-          ...(input.runtime ? { ios_runtime: input.runtime } : {}),
-          timeout_ms: input.timeoutMs,
-        }),
-        signal: AbortSignal.timeout(input.timeoutMs),
-      },
-      { subject: 'Metro bridge URL' },
-    );
+    response = await fetch(`${input.baseUrl}/api/metro/bridge`, {
+      method: 'POST',
+      headers: createProxyHeaders(input.baseUrl, input.bearerToken),
+      body: JSON.stringify({
+        ...input.scope,
+        ...(input.runtime ? { ios_runtime: input.runtime } : {}),
+        timeout_ms: input.timeoutMs,
+      }),
+      signal: AbortSignal.timeout(input.timeoutMs),
+    });
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
       throw createMetroBridgeRequestError(

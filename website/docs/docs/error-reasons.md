@@ -816,7 +816,7 @@ These reasons can come from more than one command.
 | `limrun_runner_upload_failed` | The runner app could not be staged on the instance. |
 | `limrun_runner_bind_address_missing` | The simulator never reported the address its HTTP forward listens on. |
 | `limrun_runner_snapshot_unavailable` | The runner's snapshot capture came back too sparse to act on after a failed or unbudgeted capture. |
-| `limrun_download_http_error` | The service answered the download with an error status; `details.statusCode` and `details.body` carry its reply. |
+| `limrun_download_http_error` | The service answered with an error status or a redirect that is not followed. `details.statusCode` carries it; `details.body` carries an error reply, never a redirect's. |
 | `limrun_download_timeout` | The download passed its deadline; `details.timeoutMs` is that deadline. |
 | `limrun_download_failed` | The transfer broke for a reason the service never answered with, kept in `details.cause`. |
 

@@ -189,12 +189,13 @@ test('a refused socket URL ends the worker process as failed', async () => {
 });
 
 /** A server recording the credential headers of each request that reaches it. */
-async function listenLocalServer(location?: () => string) {
+async function listenLocalServer(location?: () => string, redirectPath = '/redirect') {
   const received: string[] = [];
   const server = http.createServer((req, res) => {
-    received.push(`${req.url} ${req.headers.authorization ?? req.headers.cookie ?? '-'}`);
+    const { authorization, cookie, 'x-app-secret': custom } = req.headers;
+    received.push(`${req.url} ${authorization ?? cookie ?? custom ?? '-'}`);
     req.resume();
-    if (location && req.url === '/redirect') res.writeHead(307, { location: location() }).end();
+    if (location && req.url === redirectPath) res.writeHead(307, { location: location() }).end();
     else res.end('bundle');
   });
   cleanupTasks.push(() => closeLoopbackServer(server));
@@ -259,14 +260,57 @@ test.each([
   assert.deepEqual(local.received, ['/index.bundle -']);
 });
 
-test('a relayed credential stays on the origin of the local base URL', async () => {
-  const other = await listenLocalServer();
-  const local = await listenLocalServer(() => `${other.origin}/redirected`);
-  const bridge = await relayingBridge(local.origin);
+test.each(['same origin', 'another origin'])(
+  'a relayed redirect to the %s goes back to the bridge unfollowed',
+  async (target) => {
+    const other = await listenLocalServer();
+    const location = () =>
+      target === 'same origin' ? '/redirected' : `${other.origin}/redirected`;
+    const local = await listenLocalServer(location);
+    const bridge = await relayingBridge(local.origin);
 
-  const redirected = await bridge.relay(httpRequest('/redirect', { cookie: 'session=app' }));
+    // No list names this header, and `fetch` would carry it to any origin it followed to.
+    const answer = await bridge.relay(httpRequest('/redirect', { 'x-app-secret': 'app' }));
 
-  assert.equal(redirected.status, 307);
-  assert.deepEqual(local.received, ['/redirect session=app']);
-  assert.deepEqual(other.received, []);
+    assert.equal(answer.status, 307);
+    assert.equal((answer.headers as Record<string, string>).location, location());
+    assert.deepEqual(local.received, ['/redirect app']);
+    assert.deepEqual(other.received, []);
+  },
+);
+
+test('a relayed socket never opens over plain ws off loopback', async () => {
+  const sink = await listenSink();
+  // Reaches this machine's listener without being a loopback address, as a LAN dev server would.
+  const bridge = await relayingBridge(`http://0.0.0.0:${sink.port}`);
+
+  const opened = await bridge.relay({
+    type: 'ws-open',
+    streamId: 'stream-1',
+    path: '/hot?ticket=secret',
+  });
+
+  assert.equal(opened.success, false);
+  assert.match(String(opened.error), /^Metro companion local base URL must use wss/);
+  assert.deepEqual(sink.connections, []);
+});
+
+test('a redirected registration reaches another origin without the bearer token', async () => {
+  const received: Array<string | undefined> = [];
+  const other = http.createServer((req, res) => {
+    received.push(req.headers.authorization);
+    req.resume();
+    res.writeHead(401).end(JSON.stringify({ ok: false, error: { code: 'UNAUTHORIZED' } }));
+  });
+  cleanupTasks.push(() => closeLoopbackServer(other));
+  const otherPort = await listenOnLoopback(other);
+  const bridge = await listenLocalServer(
+    () => `http://127.0.0.1:${otherPort}${REGISTER_PATH}`,
+    REGISTER_PATH,
+  );
+
+  await startWorker(bridge.origin).done;
+
+  assert.deepEqual(bridge.received, [registered]);
+  assert.deepEqual(received, [undefined]);
 });

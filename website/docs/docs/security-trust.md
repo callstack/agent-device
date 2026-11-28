@@ -24,8 +24,12 @@ CLI commands run through a per-user background daemon:
 These paths never send a credential over plain http to a host that is not loopback: the daemon client (commands, uploads, artifacts, and diagnostics), the proxy's requests to its upstream daemon, cloud sign-in and cloud profile requests, the Metro host bridge and its companion, Limrun API and download requests, Revyl requests, and the Apple runner. Such a URL is refused before anything is sent to it, with `details.reason: "insecure_credential_transport"`. Use https, or a port forward to loopback.
 
 - Loopback means `127.0.0.0/8`, `::1`, or `localhost`. Such traffic stays on this machine. If you relay a loopback port to another machine, the relay must encrypt it.
-- A redirect is followed only on the same origin, except by a Limrun download, which also follows https to https and drops its headers when it leaves the origin. The proxy follows no upstream redirect; it relays the redirect response to its client.
-- The Metro companion opens the host bridge's socket only over `wss`, or `ws` to loopback. A request the bridge relays to your dev server with an `Authorization` or `Cookie` header follows the same rule.
+- A redirect never takes a token or key to another origin:
+  - Cloud sign-in follows redirects only on the same origin.
+  - Cloud profile requests, and Metro host bridge setup and companion registration, use the standard `fetch` redirect handling. It drops `Authorization` on another origin. The request body, which names the tenant, run, lease, and Metro URLs, can still follow a bridge redirect there.
+  - A Limrun download follows redirects on the same origin, and from https to https without its headers.
+  - The proxy follows no upstream redirect. It relays the redirect status without `Location`.
+- The Metro companion opens the host bridge's socket, and every WebSocket the bridge relays to your dev server, only over `wss`, or `ws` to loopback. A dev server on a LAN `http` address gets no relayed WebSocket. A relayed HTTP request with an `Authorization` or `Cookie` header follows the same rule. The companion follows no redirect from your dev server; it returns the redirect to the bridge.
 - There is one exception: for a physical iOS device that is not attached over USB, the Apple runner token travels over plain http to the device's CoreDevice tunnel address, and that tunnel encrypts the traffic. The exception relies on two facts: Apple's `devicectl` reports the address for that device, and the address is a unique local IPv6 address (`fd00::/8`). Any other reported address is refused.
 
 Not covered: WebDriver providers, including their endpoint overrides, the headers you give `install-from-source`, and the Limrun SDK client.

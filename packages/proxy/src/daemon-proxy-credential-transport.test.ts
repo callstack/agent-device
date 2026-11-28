@@ -150,67 +150,28 @@ test('the default transports relay an upstream redirect and never follow it', as
   expect(reached).toEqual([]);
 });
 
-test.each([
-  ['a foreign origin', 'http://attacker.example/x?signature=secret', null],
-  ['userinfo', 'https://user:pass@daemon.example.test/artifacts/x', null],
-  ['the upstream token in its path', '/artifacts/daemon-secret', null],
-  ['the percent-encoded upstream token in its path', '/artifacts/daemon%2Dsecret', null],
-  ['a malformed path escape', '/artifacts/%E0%A4%A', null],
-  [
-    'the percent-encoded upstream token in its query',
-    '/artifacts/other?token=daemon%2Dsecret',
-    'https://gateway.example.test/agent-device/artifacts/other',
-  ],
-  [
-    'the upstream token in its fragment',
-    '/artifacts/other#daemon%2Dsecret',
-    'https://gateway.example.test/agent-device/artifacts/other',
-  ],
-  [
-    'the upstream daemon',
-    '/artifacts/other',
-    'https://gateway.example.test/agent-device/artifacts/other',
-  ],
-] as const)(
-  'a relayed Location that names %s is relayed only on the daemon itself',
-  async (_label, location, relayed) => {
-    const proxy = createDaemonProxy({
-      upstreamBaseUrl: 'https://daemon.example.test',
-      upstreamToken: 'daemon-secret',
-      clientToken: 'client-secret',
-      upstreamFetch: async (request) => {
-        expect(request.redirect).toBe('manual');
-        return new Response(null, { status: 307, headers: { location } });
-      },
-    });
-
-    for (const request of [
-      rpc(),
-      new Request('https://gateway.example.test/agent-device/artifacts/build', {
-        headers: { authorization: 'Bearer client-secret' },
-      }),
-    ]) {
-      const response = await proxy.handle(request);
-      expect(response.status, request.url).toBe(307);
-      expect(response.headers.get('location'), request.url).toBe(relayed);
-    }
-  },
-);
-
-test('a relayed Location is dropped when its path holds the upstream token as written', async () => {
-  // A token that reads differently once decoded: `a%2Fb` decodes to `a/b`.
+test('a relayed upstream redirect keeps its status and carries no Location', async () => {
+  const location = 'https://daemon.example.test/artifacts/other?token=daemon-secret';
   const proxy = createDaemonProxy({
     upstreamBaseUrl: 'https://daemon.example.test',
-    upstreamToken: 'a%2Fb',
+    upstreamToken: 'daemon-secret',
     clientToken: 'client-secret',
-    upstreamFetch: async () =>
-      new Response(null, { status: 307, headers: { location: '/artifacts/a%2Fb' } }),
+    upstreamFetch: async (request) => {
+      expect(request.redirect).toBe('manual');
+      return new Response(null, { status: 307, headers: { location } });
+    },
   });
 
-  const response = await proxy.handle(rpc());
-
-  expect(response.status).toBe(307);
-  expect(response.headers.get('location')).toBe(null);
+  for (const request of [
+    rpc(),
+    new Request('https://gateway.example.test/agent-device/artifacts/build', {
+      headers: { authorization: 'Bearer client-secret' },
+    }),
+  ]) {
+    const response = await proxy.handle(request);
+    expect(response.status, request.url).toBe(307);
+    expect(response.headers.get('location'), request.url).toBe(null);
+  }
 });
 
 test.each([

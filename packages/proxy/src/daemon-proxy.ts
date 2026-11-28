@@ -35,10 +35,9 @@ import {
  * `fetch` on `/rpc`, health and diagnostics. Supply your own to reach the daemon over another
  * transport, such as a WebSocket tunnel. Abort the exchange when `request.signal` aborts. Every
  * request carries `redirect: 'manual'`: honor it by returning a 3xx as the response and never
- * following it, because the request carries the upstream token. The proxy relays a 3xx to its
- * client, which applies its own redirect rules. On the checked RPC route and the health probe it
- * refuses a 3xx or `redirected` answer instead, but it cannot undo a resend the transport already
- * made.
+ * following it, because the request carries the upstream token. The proxy relays a 3xx status to
+ * its client without `Location`. On the checked RPC route and the health probe it refuses a 3xx or
+ * `redirected` answer instead, but it cannot undo a resend the transport already made.
  *
  * A custom transport owns its phase guarantees and must observe `request.signal` on every route.
  * On transfer routes, the proxy bounds its own response and body waits, even if the transport
@@ -149,6 +148,14 @@ const FORWARDED_REQUEST_HEADERS = [
   'x-artifact-hash-algorithm',
   DAEMON_HTTP_TENANT_HEADER,
 ];
+const FORWARDED_RESPONSE_HEADERS = [
+  'content-type',
+  'content-disposition',
+  'x-request-id',
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+];
+const FORWARDED_UPLOAD_CHUNK_RESPONSE_HEADERS = ['range', 'x-upload-offset'];
+const FORWARDED_ARTIFACT_DOWNLOAD_RESPONSE_HEADERS = ['content-length'];
 
 export function createDaemonProxy(options: DaemonProxyOptions): DaemonProxy {
   const normalized = normalizeProxyOptions(options);
@@ -395,10 +402,9 @@ async function forwardProxyRequest(params: {
   await options.admitUpstream();
   const body = resolveUpstreamBody(request, route, rpcBody, options.upstreamToken, caller.tenantId);
   const checked = route === DAEMON_HTTP_CHECKED_RPC_ROUTE;
-  const upstreamUrl = buildUpstreamUrl(options.upstreamBaseUrl, route, request.url);
   const upstreamResponse = await options.upstreamTransport(
     route,
-    forwardedRequest(request, upstreamUrl, {
+    forwardedRequest(request, buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
       method: request.method,
       headers: buildUpstreamHeaders(request.headers, options.upstreamToken, route, caller.tenantId),
       signal: upstreamSignal(request, options),
@@ -411,17 +417,7 @@ async function forwardProxyRequest(params: {
     if (refusal) return refusal;
   }
 
-  const { relayedResponseHeaders } = await import('./upstream-response-relay.ts');
-  const headers = relayedResponseHeaders({
-    upstreamResponse,
-    upstreamUrl,
-    requestUrl: request.url,
-    requestId: resolveRequestId(request),
-    route,
-    upstreamBaseUrl: options.upstreamBaseUrl,
-    upstreamToken: options.upstreamToken,
-    publicOrigin: options.publicOrigin,
-  });
+  const headers = copyProxyResponseHeaders(upstreamResponse, request, route);
   if (isUploadPreflightRoute(route)) {
     return await rewrittenUploadPreflightResponse({
       request,
@@ -460,6 +456,27 @@ function forwardedRequest(owner: Request, url: string | URL, init: RequestInit):
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
   if (options.upstreamTimeoutMs === undefined) return request.signal;
   return AbortSignal.any([request.signal, AbortSignal.timeout(options.upstreamTimeoutMs)]);
+}
+
+function copyProxyResponseHeaders(
+  upstreamResponse: Response,
+  request: Request,
+  route: string,
+): Headers {
+  const headers = new Headers();
+  for (const name of [...FORWARDED_RESPONSE_HEADERS, ...routeResponseHeaders(route)]) {
+    const value = upstreamResponse.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  if (!headers.has('x-request-id')) headers.set('x-request-id', resolveRequestId(request));
+  return headers;
+}
+
+/** `content-length` stays off the preflight route because the proxy rewrites that body. */
+function routeResponseHeaders(route: string): readonly string[] {
+  if (route.startsWith('/upload/direct/')) return FORWARDED_UPLOAD_CHUNK_RESPONSE_HEADERS;
+  if (route.startsWith('/artifacts/')) return FORWARDED_ARTIFACT_DOWNLOAD_RESPONSE_HEADERS;
+  return [];
 }
 
 async function rewrittenUploadPreflightResponse(params: {

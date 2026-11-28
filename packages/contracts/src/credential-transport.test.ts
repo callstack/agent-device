@@ -1,9 +1,8 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   assertSecureCredentialSocket,
   assertSecureCredentialTransport,
-  fetchWithCredential,
 } from './credential-transport.ts';
 import { isLoopbackHostname } from './loopback-host.ts';
 
@@ -95,87 +94,4 @@ test.each([
   expect(() =>
     assertSecureCredentialTransport(url, 'Runner URL', { coreDeviceTunnel: true }),
   ).toThrow();
-});
-
-/** Sends through a transport that answers each URL in `redirects` with that redirect. */
-async function followRedirects(
-  url: string,
-  redirects: Record<string, [status: number, location: string]>,
-  followHttpsOffOrigin = false,
-) {
-  const sent: string[] = [];
-  const response = await fetchWithCredential(
-    url,
-    {
-      method: 'POST',
-      headers: { authorization: 'Bearer secret', 'content-type': 'application/json' },
-      body: 'payload',
-    },
-    {
-      subject: 'Test URL',
-      followHttpsOffOrigin,
-      send: async (input, init) => {
-        const headers = new Headers(init?.headers);
-        const parts = [init?.method, String(input), init?.redirect, init?.body ?? '-'];
-        sent.push(
-          [...parts, headers.get('authorization') ?? '-', headers.get('content-type') ?? '-'].join(
-            ' ',
-          ),
-        );
-        const redirect = redirects[String(input)];
-        if (!redirect) return new Response('done');
-        return new Response(null, { status: redirect[0], headers: { location: redirect[1] } });
-      },
-    },
-  );
-  return { status: response.status, sent };
-}
-
-const A = 'https://a.example/start';
-const first = `POST ${A} manual payload Bearer secret application/json`;
-
-test.each([307, 308])('a same-origin %s resends the method, body and headers', async (status) => {
-  expect(await followRedirects(A, { [A]: [status, '/moved'] })).toEqual({
-    status: 200,
-    sent: [first, 'POST https://a.example/moved manual payload Bearer secret application/json'],
-  });
-});
-
-test.each([301, 302, 303])('a same-origin %s turns a POST into a GET', async (status) => {
-  expect((await followRedirects(A, { [A]: [status, '/moved'] })).sent).toEqual([
-    first,
-    'GET https://a.example/moved manual - Bearer secret -',
-  ]);
-});
-
-test.each([
-  ['another origin', 'https://b.example/start'],
-  ['plain http on the same host', 'http://a.example/start'],
-  ['a URL with a username', 'https://operator@a.example/start'],
-])('a redirect to %s is returned, never followed', async (_label, location) => {
-  expect(await followRedirects(A, { [A]: [307, location] })).toEqual({
-    status: 307,
-    sent: [first],
-  });
-});
-
-test('three same-origin redirects are followed and the fourth is returned', async () => {
-  const { status, sent } = await followRedirects(A, { [A]: [307, A] });
-  expect(status).toBe(307);
-  expect(sent).toHaveLength(4);
-});
-
-test('a download follows https off the origin without headers, and never to plain http', async () => {
-  const b = 'https://b.example/file';
-  expect(
-    await followRedirects(A, { [A]: [307, b], [b]: [307, 'http://b.example/file'] }, true),
-  ).toEqual({ status: 307, sent: [first, `POST ${b} manual payload - -`] });
-});
-
-test('a destination the rule refuses is never sent to', async () => {
-  const send = vi.fn<typeof fetch>();
-  await expect(
-    fetchWithCredential('http://a.example', {}, { subject: 'Test URL', send }),
-  ).rejects.toMatchObject({ details: { reason: 'insecure_credential_transport' } });
-  expect(send).not.toHaveBeenCalled();
 });

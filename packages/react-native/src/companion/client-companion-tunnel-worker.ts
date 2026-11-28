@@ -26,7 +26,6 @@ import { normalizeBaseUrl } from '../metro/base-url.ts';
 import {
   assertSecureCredentialSocket,
   assertSecureCredentialTransport,
-  fetchWithCredential,
   isCredentialTransportRefusal,
 } from '@agent-device/contracts/credential-transport';
 import { fetchRelayedRequest, relayTarget } from './client-companion-local-relay.ts';
@@ -92,16 +91,12 @@ async function registerCompanion(
   const registerUrl = bearerDestination(options.serverBaseUrl, registerPath);
   let response: Response;
   try {
-    response = await fetchWithCredential(
-      registerUrl,
-      {
-        method: 'POST',
-        headers: createHeaders(options.serverBaseUrl, options.bearerToken),
-        body: JSON.stringify(buildCompanionPayload(options)),
-        signal: AbortSignal.timeout(COMPANION_REGISTER_TIMEOUT_MS),
-      },
-      { subject: BRIDGE_URL_SUBJECT },
-    );
+    response = await fetch(registerUrl, {
+      method: 'POST',
+      headers: createHeaders(options.serverBaseUrl, options.bearerToken),
+      body: JSON.stringify(buildCompanionPayload(options)),
+      signal: AbortSignal.timeout(COMPANION_REGISTER_TIMEOUT_MS),
+    });
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
       throw new Error(
@@ -174,11 +169,13 @@ function clampRetryDelay(delayMs: number): number {
 
 /**
  * The URL a bearer request goes to. The base must be a destination on its own: appending a path can
- * give a host to a base without one (`https://` becomes `https://api/...`).
+ * give a host to a base without one (`https://` becomes `https://api/...`). The request keeps
+ * `fetch`'s redirect handling, which drops `authorization` on another origin.
  */
-function bearerDestination(serverBaseUrl: string, path: string): string {
+function bearerDestination(serverBaseUrl: string, path: string): URL {
   assertSecureCredentialTransport(serverBaseUrl, BRIDGE_URL_SUBJECT);
-  return `${normalizeBaseUrl(serverBaseUrl)}${path}`;
+  const url = `${normalizeBaseUrl(serverBaseUrl)}${path}`;
+  return assertSecureCredentialTransport(url, BRIDGE_URL_SUBJECT);
 }
 
 /**
@@ -201,16 +198,12 @@ async function unregisterCompanion(options: CompanionTunnelWorkerOptions): Promi
   if (!unregisterPath) return;
   try {
     const unregisterUrl = bearerDestination(options.serverBaseUrl, unregisterPath);
-    await fetchWithCredential(
-      unregisterUrl,
-      {
-        method: 'POST',
-        headers: createHeaders(options.serverBaseUrl, options.bearerToken),
-        body: JSON.stringify(buildCompanionPayload(options)),
-        signal: AbortSignal.timeout(2_000),
-      },
-      { subject: BRIDGE_URL_SUBJECT },
-    );
+    await fetch(unregisterUrl, {
+      method: 'POST',
+      headers: createHeaders(options.serverBaseUrl, options.bearerToken),
+      body: JSON.stringify(buildCompanionPayload(options)),
+      signal: AbortSignal.timeout(2_000),
+    });
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
   }
@@ -236,7 +229,8 @@ async function parseBridgeMessage(event: MessageEvent): Promise<MetroCompanionRe
 function toUpstreamWebSocketUrl(localBaseUrl: string, requestPath: string): string {
   const upstream = relayTarget(localBaseUrl, requestPath);
   upstream.protocol = upstream.protocol === 'https:' ? 'wss:' : 'ws:';
-  return upstream.toString();
+  // The relay protocol does not say which paths carry a credential, so every one meets the rule.
+  return assertSecureCredentialSocket(upstream.toString(), 'Metro companion local base URL').href;
 }
 
 /**

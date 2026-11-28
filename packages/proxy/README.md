@@ -154,14 +154,11 @@ const proxy = createDaemonProxy({
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
 daemon's `Response`. Abort the exchange when `request.signal` aborts. The request carries the
 upstream token and `redirect: 'manual'`: return a 3xx response as it is and never follow it. The
-proxy relays a 3xx, such as the daemon's `308` resume response, to its client. It relays a
-`Location` only when it targets the daemon itself, as a path on the proxy's client-facing origin
-without its query or fragment. It drops one that points elsewhere, has userinfo, or has the
-upstream token in its path, written or percent-decoded. On `/rpc/checked`, a followed redirect would
-resend the call with the daemon token, possibly to the unchecked `/rpc`; the proxy refuses a checked
-answer that is a 3xx or reports `redirected`, but it cannot undo a request your transport already
-resent. `/health` refuses such an answer too: the proxy then answers `/health` with HTTP 500 and
-`ok: false`.
+proxy relays a 3xx status, such as the daemon's `308` resume response, to its client without a
+`Location` header. On `/rpc/checked`, a followed redirect would resend the call with the daemon
+token, possibly to the unchecked `/rpc`; the proxy refuses a checked answer that is a 3xx or reports
+`redirected`, but it cannot undo a request your transport already resent. `/health` refuses such an
+answer too: the proxy then answers `/health` with HTTP 500 and `ok: false`.
 
 `upstreamBaseUrl` must use https, or plain http to a loopback host, with or without
 `upstreamFetch`, and must not carry a username or password. With your own transport, give it a

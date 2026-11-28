@@ -1,15 +1,16 @@
 import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { CLOUD_LEASE_PROVIDER } from '@agent-device/contracts/lease-scope';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { resolveCloudAccessForConnect } from '../auth-session.ts';
-import { fetchCloudOnOneOrigin } from '../cloud-auth-request.ts';
 import { readCloudJsonResponse } from '../cloud-response.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { buildConnectClientId } from './client-id.ts';
 
 const CONNECTION_PROFILE_PATH = '/api/control-plane/connection-profile';
+const HTTP_TIMEOUT_MS = 15_000;
 
 type CloudConnectionProfileResponse = {
   connection?: {
@@ -71,11 +72,17 @@ async function fetchConnectionProfile(options: {
   // on the request itself.
   fetchImpl?: typeof fetch;
 }): Promise<RemoteConfigProfile> {
-  const response = await fetchCloudOnOneOrigin(
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const profileUrl = assertSecureCredentialTransport(
     new URL(CONNECTION_PROFILE_PATH, options.cloudBaseUrl),
-    { method: 'GET', headers: { authorization: `Bearer ${options.accessToken}` } },
-    options.fetchImpl,
+    'Cloud base URL',
   );
+  // `fetch` drops `authorization` on a redirect to another origin.
+  const response = await fetchImpl(profileUrl, {
+    method: 'GET',
+    headers: { authorization: `Bearer ${options.accessToken}` },
+    signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+  });
   const parsed = await readCloudJsonResponse<unknown>(response, {
     invalidJsonMessage: `Cloud connection profile endpoint returned invalid JSON (${response.status}).`,
     rejectedMessage: 'Cloud connection profile endpoint rejected the request.',

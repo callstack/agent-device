@@ -1,4 +1,4 @@
-import { fetchWithCredential } from '@agent-device/contracts/credential-transport';
+import { assertSecureCredentialTransport } from '@agent-device/contracts/credential-transport';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeBaseUrl } from '../metro/base-url.ts';
 
@@ -25,9 +25,15 @@ export function relayTarget(localBaseUrl: string, requestPath: string): URL {
   return target;
 }
 
-/** Sends one relayed request. One that carries a credential meets the credential transport rule. */
+/**
+ * Sends one relayed request. One that carries a known credential header meets the credential
+ * transport rule. A redirect goes back to the bridge as the answer: `fetch` would resend any
+ * custom header to another origin, and the relay cannot tell which ones are secret.
+ */
 export async function fetchRelayedRequest(target: URL, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (!CREDENTIAL_HEADERS.some((name) => headers.has(name))) return await fetch(target, init);
-  return await fetchWithCredential(target, init, { subject: 'Metro companion local base URL' });
+  if (CREDENTIAL_HEADERS.some((name) => headers.has(name))) {
+    assertSecureCredentialTransport(target, 'Metro companion local base URL');
+  }
+  return await fetch(target, { ...init, redirect: 'manual' });
 }
