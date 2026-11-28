@@ -953,7 +953,7 @@ function makeAppleHitchesXml(): string {
     '<row>',
     '<start-time fmt="00:00.300">300000000</start-time>',
     '<duration fmt="16.67 ms">16666583</duration>',
-    '<process fmt="OtherApp (5001)"><pid fmt="5001">5001</pid></process>',
+    '<process fmt="ExampleDeviceApp (5001)"><pid fmt="5001">5001</pid></process>',
     '<boolean ref="false"/>',
     '<uint32>3</uint32><string>0x3</string><display-name>Display 1</display-name><string></string>',
     '</row>',

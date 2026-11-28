@@ -158,7 +158,7 @@ function matchesAppleFrameProcess(
   processIds: number[],
   processNames: string[],
 ): boolean {
-  if (row.pid !== undefined && processIds.includes(row.pid)) return true;
+  if (row.pid !== undefined) return processIds.includes(row.pid);
   if (!row.processName) return false;
   return processNames.includes(row.processName);
 }
