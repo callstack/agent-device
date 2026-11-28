@@ -91,7 +91,7 @@
     "packages/daemon/src/server/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:24b0fa6b1d965e5cf6503a4665148dc6360c56bf5a0ae710eeaa76a73a62c52a",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:cd2c0dda77d2bc434857aea07206a5491ce5f0b82cb86628569f607d6c2cebcf",
-    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:08d3fd203cd7e47814cf8c50f710e86bee28ac2818dbf93910ae49725b97468a",
+    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:08bac2c80b78af4da35d18ee79b662003b6b3d3853717d48fd4c8ca8dfc46cab",
     "packages/daemon/src/server/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
@@ -354,8 +354,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics",
-      "digest": "sha256:08d3fd203cd7e47814cf8c50f710e86bee28ac2818dbf93910ae49725b97468a",
-      "rationale": "#2198 context: asks isTenantAddressableSessionName instead of applying the prefix rule locally. Same UNAUTHORIZED code, same 'Session is outside this tenant' message and same 401 body for the attested-tenant case the rule still refuses; the only difference a peer can observe is that an unattested tenant now gets the 200 + ndjson record it already knows how to read instead of a 401 it could not act on. Implementation-only HTTP error repair under ADR 0006: setup failures use the shared streamed failure helper. Before headers, it emits the existing REST JSON error shape with an error status; after headers, it destroys the incomplete transfer. Successful diagnostics remain 200 with the same NDJSON bytes. Released clients reject error statuses before reading diagnostic records, so no successful response parser or request requirement changes."
+      "digest": "sha256:08bac2c80b78af4da35d18ee79b662003b6b3d3853717d48fd4c8ca8dfc46cab",
+      "rationale": "Server-side cleanup only. The record read stream is now destroyed once the response finishes, errors or is abandoned, so a caller that hangs up no longer leaks the file descriptor. The response head, body bytes, status codes and JSON error shapes are unchanged, and no request or response field changes, so a released client parses every answer as before."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#LEASE_BACKENDS",

@@ -16,6 +16,7 @@
 
 import fs from 'node:fs';
 import http from 'node:http';
+import { finished } from 'node:stream';
 import { AppError, normalizeError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { isSafeSessionSegment } from '@agent-device/host-kit/session-paths';
@@ -153,6 +154,8 @@ async function handleRequestDiagnostics(
     }
 
     const stream = fs.createReadStream(recordPath);
+    // `pipe` only unpipes from a response that goes away, which would leave the record open.
+    finished(res, () => stream.destroy());
     res.statusCode = 200;
     res.setHeader('content-type', REQUEST_DIAGNOSTICS_CONTENT_TYPE);
     res.setHeader('content-length', String(stats.size));

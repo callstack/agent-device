@@ -17,18 +17,55 @@ import {
 
 const RECORD = '{"phase":"request_start"}\n{"phase":"request_failed"}\n';
 
-function writeRecord(sessionsDir: string, session: string, requestId: string): string {
+// A record large enough that the daemon is still writing the response body when the
+// client hangs up: the read stream is mid-read, which is the state that leaks its fd.
+const LARGE_RECORD_BYTES = 32 * 1024 * 1024;
+
+const OPEN_DENIED = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+
+const realSetTimeout = setTimeout;
+const realClearTimeout = clearTimeout;
+
+/** Bounds an I/O promise the same way `upload-http-deadline.test.ts` does. */
+async function withIO<T>(pending: Promise<T>, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<never>((_, reject) => {
+    timeout = realSetTimeout(() => reject(new Error(`${label} did not complete in 2s`)), 2_000);
+  });
+  try {
+    return await Promise.race([pending, guard]);
+  } finally {
+    realClearTimeout(timeout);
+  }
+}
+
+function writeRecord(
+  sessionsDir: string,
+  session: string,
+  requestId: string,
+  content: string | Buffer = RECORD,
+): string {
   const recordPath = resolveSessionRequestLogPath(
     path.join(sessionsDir, safeSessionName(session)),
     requestId,
   );
   fs.mkdirSync(path.dirname(recordPath), { recursive: true });
-  fs.writeFileSync(recordPath, RECORD);
+  fs.writeFileSync(recordPath, content);
   return recordPath;
 }
 
+/** Resolves once `isDone()` holds, spinning the event loop rather than a clock. */
+async function flushUntilDone(isDone: () => boolean, label: string): Promise<void> {
+  await withIO(
+    (async () => {
+      while (!isDone()) await new Promise((resolve) => setImmediate(resolve));
+    })(),
+    label,
+  );
+}
+
 async function withDiagnosticsServer(
-  run: (context: { baseUrl: string; sessionsDir: string }) => Promise<void>,
+  run: (context: { baseUrl: string; sessionsDir: string; server: http.Server }) => Promise<void>,
   leaseRegistry?: LeaseRegistry,
 ): Promise<void> {
   const stateDir = mkdtempForTestSync('agent-device-request-diagnostics-');
@@ -47,10 +84,94 @@ async function withDiagnosticsServer(
   });
   try {
     const port = await listenOnLoopback(server);
-    await run({ baseUrl: `http://127.0.0.1:${port}`, sessionsDir });
+    await run({ baseUrl: `http://127.0.0.1:${port}`, sessionsDir, server });
   } finally {
     await closeLoopbackServer(server);
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+}
+
+/** `src/daemon.ts` exits on `uncaughtException`, so an abandoned read must never raise one. */
+function watchUncaughtExceptions() {
+  const uncaught: unknown[] = [];
+  const record = (error: unknown) => {
+    uncaught.push(error);
+  };
+  process.on('uncaughtException', record);
+  return { uncaught, stop: () => process.off('uncaughtException', record) };
+}
+
+/** Holds every record open the route starts until the test answers it. */
+function holdRecordOpens() {
+  const createReadStream = fs.createReadStream;
+  const opens: Array<{ stream: fs.ReadStream; answer: (error?: Error) => void }> = [];
+  const spy = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) => {
+    const stream: fs.ReadStream = createReadStream(file, {
+      ...(typeof options === 'object' ? options : {}),
+      fs: {
+        ...fs,
+        open: (openFile, flags, mode, callback) => {
+          const answer = (error?: Error) => {
+            if (error) callback(error);
+            else fs.open(openFile, flags, mode, callback);
+          };
+          opens.push({ stream, answer });
+        },
+      },
+    });
+    return stream;
+  });
+  return { opens, restore: () => spy.mockRestore() };
+}
+
+/** Sends a diagnostics request for the test to abandon before the daemon answers it. */
+function requestToAbandon(server: http.Server, baseUrl: string) {
+  let response: http.ServerResponse | undefined;
+  server.once('request', (_request, res) => {
+    response = res;
+  });
+  let answered = false;
+  const request = http.get(
+    diagnosticsUrl(baseUrl, 'default', 'abc123'),
+    { headers: { authorization: 'Bearer daemon-secret' } },
+    () => {
+      answered = true;
+    },
+  );
+  request.on('error', () => {});
+  return {
+    async hangUp(): Promise<void> {
+      request.destroy();
+      await flushUntilDone(() => response?.destroyed === true, 'the daemon to see the hang-up');
+    },
+    assertNothingWritten(): void {
+      assert.equal(answered, false);
+      assert.equal(response?.headersSent, false);
+      assert.equal(response?.writableEnded, false);
+    },
+  };
+}
+
+/** Answers a held open of an abandoned record and expects the stream to close quietly. */
+async function assertAbandonedRecordCloses(
+  open: ReturnType<typeof holdRecordOpens>['opens'][number],
+  openError: Error | undefined,
+): Promise<void> {
+  const { stream, answer } = open;
+  const exceptions = watchUncaughtExceptions();
+  try {
+    await flushUntilDone(() => stream.destroyed, 'the record read stream to destroy');
+    answer(openError);
+    await flushUntilDone(
+      () => stream.closed || exceptions.uncaught.length > 0,
+      'the record read stream to close',
+    );
+    assert.deepEqual(exceptions.uncaught, []);
+    // `fd` is a runtime-only ReadStream property: null once no descriptor is held.
+    const { fd } = stream as fs.ReadStream & { fd: number | null };
+    assert.equal(fd, null, 'the record fd is released');
+  } finally {
+    exceptions.stop();
   }
 }
 
@@ -121,6 +242,166 @@ test('request diagnostics returns complete JSON when its stream fails before hea
     } finally {
       await response?.body?.cancel().catch(() => {});
       streams.mockRestore();
+    }
+  });
+});
+
+test('request diagnostics answers JSON when the record fails on its first read', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'default', 'abc123');
+    // The open succeeds, so the failure lands after the route took ownership of the
+    // read: a first-read EIO, or a record removed under a Windows handle.
+    const createReadStream = fs.createReadStream;
+    const streams = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) =>
+      createReadStream(file, {
+        ...(typeof options === 'object' ? options : {}),
+        fs: {
+          ...fs,
+          read: (
+            _stream: fs.ReadStream,
+            _buffer: Buffer,
+            _offset: number,
+            _length: number,
+            _position: number | null,
+            callback: (error: Error | null, bytesRead?: number, buffer?: Buffer) => void,
+          ) => {
+            callback(Object.assign(new Error('record read failed'), { code: 'EIO' }));
+          },
+        },
+      }),
+    );
+    let response: Response | undefined;
+    try {
+      response = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+        headers: { authorization: 'Bearer daemon-secret' },
+      });
+      expect(response.status).toBe(500);
+      expect(response.headers.get('content-type')).toBe('application/json');
+      expect(response.headers.get('content-length')).toBeNull();
+      expect(await response.json()).toMatchObject({ ok: false, error: 'record read failed' });
+    } finally {
+      await response?.body?.cancel().catch(() => {});
+      streams.mockRestore();
+    }
+  });
+});
+
+test('a caller that hangs up mid-download releases the record read stream', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'default', 'abc123', Buffer.alloc(LARGE_RECORD_BYTES, 7));
+    const createReadStream = fs.createReadStream;
+    const streams: Array<{ stream: fs.ReadStream; closed: Promise<void> }> = [];
+    const reads = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) => {
+      const stream = createReadStream(file, options);
+      // A bare `close` listener: `once(stream, 'close')` would add an `error` listener the
+      // route is expected to own.
+      streams.push({
+        stream,
+        closed: new Promise<void>((resolve) => {
+          stream.on('close', () => resolve());
+        }),
+      });
+      return stream;
+    });
+    const url = new URL(diagnosticsUrl(baseUrl, 'default', 'abc123'));
+    let status = 0;
+    const hungUp = new Promise<void>((resolve) => {
+      const request = http.request(
+        {
+          host: url.hostname,
+          port: url.port,
+          method: 'GET',
+          path: url.pathname,
+          headers: { authorization: 'Bearer daemon-secret' },
+        },
+        (response) => {
+          status = response.statusCode ?? 0;
+          let received = 0;
+          response.on('data', (chunk: Buffer) => {
+            received += chunk.length;
+            // Hang up once the body is clearly under way: the daemon is mid-read here.
+            if (received >= 64 * 1024) request.destroy();
+          });
+          response.on('error', () => {});
+          response.on('close', () => resolve());
+        },
+      );
+      request.on('error', () => {});
+      request.end();
+    });
+
+    try {
+      await withIO(hungUp, 'the caller hang-up');
+      assert.equal(status, 200);
+      const [record] = streams;
+      assert.ok(record, 'the route opened the record');
+      assert.ok(record.stream.bytesRead > 0, 'the route had started the download');
+      await withIO(record.closed, 'the record read stream to close');
+      assert.equal(record.stream.destroyed, true);
+      // `fd` is a runtime-only ReadStream property: it is the descriptor number while
+      // the record is open and null once the descriptor is released.
+      const { fd } = record.stream as fs.ReadStream & { fd: number | null };
+      assert.equal(fd, null, 'the record fd is released');
+    } finally {
+      reads.mockRestore();
+    }
+  });
+});
+
+test.for([
+  { outcome: 'succeeds', openError: undefined },
+  { outcome: 'fails with EACCES', openError: OPEN_DENIED },
+])(
+  'a caller that hangs up during a record open that then $outcome releases the record',
+  async ({ openError }, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+
+    await withDiagnosticsServer(async ({ baseUrl, sessionsDir, server }) => {
+      writeRecord(sessionsDir, 'default', 'abc123');
+      const held = holdRecordOpens();
+      try {
+        const caller = requestToAbandon(server, baseUrl);
+        await flushUntilDone(() => held.opens.length > 0, 'the route to open the record');
+        await caller.hangUp();
+        await assertAbandonedRecordCloses(held.opens[0]!, openError);
+        caller.assertNothingWritten();
+      } finally {
+        held.restore();
+      }
+    });
+  },
+);
+
+test('a caller gone before the record read stream exists leaves a failed open caught', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir, server }) => {
+    writeRecord(sessionsDir, 'default', 'abc123');
+    const stat = fs.promises.stat;
+    let finishStat: (() => void) | undefined;
+    const stats = vi.spyOn(fs.promises, 'stat').mockImplementationOnce(async (file) => {
+      await new Promise<void>((resolve) => {
+        finishStat = resolve;
+      });
+      return await stat(file);
+    });
+    const held = holdRecordOpens();
+    try {
+      const caller = requestToAbandon(server, baseUrl);
+      await flushUntilDone(() => finishStat !== undefined, 'the route to stat the record');
+      await caller.hangUp();
+      assert.equal(held.opens.length, 0, 'the caller left before the read stream existed');
+      finishStat?.();
+      await flushUntilDone(() => held.opens.length > 0, 'the route to open the record');
+      await assertAbandonedRecordCloses(held.opens[0]!, OPEN_DENIED);
+      caller.assertNothingWritten();
+    } finally {
+      held.restore();
+      stats.mockRestore();
     }
   });
 });
