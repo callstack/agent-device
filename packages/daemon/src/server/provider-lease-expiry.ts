@@ -35,7 +35,7 @@ type Timer = ReturnType<typeof setTimeout>;
  * bounded shutdown window in which the final release attempts run. `closed` starts no provider attempt
  * and arms no timer: its providers may already be disposed, and a timer could fire after this daemon
  * released its registration and rewrite records the next daemon owns. It still writes lease records
- * synchronously, because they are how the next daemon learns what to recover.
+ * synchronously until the registration is handed off, because they tell the next daemon what to recover.
  */
 type ReleaserPhase = 'running' | 'draining' | 'closed';
 
@@ -95,6 +95,8 @@ export type ExpiredProviderLeaseReleaser = {
     released: DeviceLease[];
   }>;
   shutdown: () => void;
+  /** Makes the final pending retirement write and stops all disk writes before registration handoff. */
+  finishPersistence: () => void;
 };
 
 export function createExpiredProviderLeaseReleaser(options: {
@@ -110,7 +112,8 @@ export function createExpiredProviderLeaseReleaser(options: {
   const pendingLiveLeases = new Map<string, DeviceLease>();
   const pendingRecoveryLeases = new Map<string, DeviceLease>();
   const persistedRecoveryLeaseIds = new Set<string>();
-  let pendingRetirementWrite = false;
+  let retirementWrite: 'clean' | 'pending' | 'retry-attempted' = 'clean';
+  let persistenceClosed = false;
   let inherited = false;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
@@ -149,6 +152,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   };
 
   const persistPendingLeases = (): boolean => {
+    if (persistenceClosed) return false;
     if (!options.stateDir) {
       emitPersistenceFailure(
         pendingRecoveryLeases.size,
@@ -160,7 +164,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       writeLeaseRecord(options.stateDir, PENDING_RELEASES_FILE, [
         ...pendingRecoveryLeases.values(),
       ]);
-      pendingRetirementWrite = false;
+      retirementWrite = 'clean';
       persistedRecoveryLeaseIds.clear();
       for (const leaseId of pendingRecoveryLeases.keys()) {
         persistedRecoveryLeaseIds.add(leaseId);
@@ -207,7 +211,7 @@ export function createExpiredProviderLeaseReleaser(options: {
    * that fails is retried with the latest leases until one lands.
    */
   const writeJournal = (): void => {
-    if (!options.stateDir) return;
+    if (persistenceClosed || !options.stateDir) return;
     const unpersisted = [...pendingRecoveryLeases.values()].filter(
       (lease) => !persistedRecoveryLeaseIds.has(lease.leaseId),
     );
@@ -262,7 +266,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       // inherits whatever these lease records still hold.
       phase === 'closed' ||
       retryTimer ||
-      (!pendingRetirementWrite &&
+      (retirementWrite !== 'pending' &&
         !hasRetryableLiveLease(pendingLiveLeases, options.providerRuntimeIds) &&
         !hasRetryableRecoveryLease(pendingRecoveryLeases, options.recoverableProviderIds))
     ) {
@@ -290,7 +294,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (activeReleaseAttempts.get(key) === attempt) activeReleaseAttempts.delete(key);
       if (
         retryTimer &&
-        !pendingRetirementWrite &&
+        retirementWrite !== 'pending' &&
         pendingLiveLeases.size === 0 &&
         pendingRecoveryLeases.size === 0
       ) {
@@ -330,14 +334,18 @@ export function createExpiredProviderLeaseReleaser(options: {
       if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
         pendingRecoveryLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
-        if (!persistPendingLeases()) pendingRetirementWrite = true;
+        if (!persistenceClosed && !persistPendingLeases()) retirementWrite = 'pending';
       }
     })();
     return trackReleaseAttempt(key, attempt);
   };
 
   const retryPending = async (): Promise<void> => {
-    if (phase !== 'closed' && pendingRetirementWrite && !persistPendingLeases()) scheduleRetry();
+    if (phase !== 'closed' && retirementWrite !== 'clean') {
+      // Keep the failed write for drain and shutdown without rearming a timer solely for it.
+      retirementWrite = 'retry-attempted';
+      persistPendingLeases();
+    }
     const attempts = [
       ...[...pendingLiveLeases.values()].map(ensureLiveReleaseAttempt),
       ...[...pendingRecoveryLeases.values()].map(ensureRecoveryReleaseAttempt),
@@ -378,6 +386,18 @@ export function createExpiredProviderLeaseReleaser(options: {
       };
     }
     return { status: 'retrying' };
+  };
+
+  const shutdown = (): void => {
+    if (phase === 'closed') return;
+    advancePhase('closed');
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = undefined;
+    const journalWriteOwed = journalRetryTimer !== undefined;
+    if (journalRetryTimer) clearTimeout(journalRetryTimer);
+    journalRetryTimer = undefined;
+    const persistedRetirement = retirementWrite !== 'clean' && persistPendingLeases();
+    if (journalWriteOwed && !persistedRetirement) writeJournal();
   };
 
   return {
@@ -435,16 +455,12 @@ export function createExpiredProviderLeaseReleaser(options: {
       drainReleasedLeases = new Map();
       return result;
     },
-    shutdown: () => {
-      if (phase === 'closed') return;
-      advancePhase('closed');
-      if (retryTimer) clearTimeout(retryTimer);
-      retryTimer = undefined;
-      const journalWriteOwed = journalRetryTimer !== undefined;
-      if (journalRetryTimer) clearTimeout(journalRetryTimer);
-      journalRetryTimer = undefined;
-      const persistedRetirement = pendingRetirementWrite && persistPendingLeases();
-      if (journalWriteOwed && !persistedRetirement) writeJournal();
+    shutdown,
+    finishPersistence: () => {
+      if (persistenceClosed) return;
+      shutdown();
+      if (retirementWrite !== 'clean') persistPendingLeases();
+      persistenceClosed = true;
     },
   };
 }

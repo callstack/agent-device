@@ -196,7 +196,7 @@ test('does not release until the expired lease record is durable', async () => {
   }
 });
 
-test.each(['timer', 'drain', 'shutdown'] as const)(
+test.each(['timer', 'drain', 'shutdown', 'persistent failure'] as const)(
   '%s retires a stale recovery record after provider confirmation',
   async (retry) => {
     vi.useFakeTimers();
@@ -227,6 +227,11 @@ test.each(['timer', 'drain', 'shutdown'] as const)(
       await expect(releaser.release(lease)).resolves.toEqual({ status: 'released' });
       expect(JSON.parse(fs.readFileSync(recordPath, 'utf8')).leases).toEqual([lease]);
 
+      if (retry === 'persistent failure') {
+        await vi.advanceTimersByTimeAsync(10);
+        expect(fs.existsSync(recordPath)).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      }
       if (retry !== 'shutdown') remove.mockRestore();
       if (retry === 'timer') {
         await vi.advanceTimersByTimeAsync(10);
@@ -243,6 +248,67 @@ test.each(['timer', 'drain', 'shutdown'] as const)(
     } finally {
       remove.mockRestore();
       releaser.shutdown();
+      vi.useRealTimers();
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test.each(['before handoff', 'after handoff'] as const)(
+  'a recovery confirmation %s cannot leave disk work running past registration',
+  async (confirmation) => {
+    vi.useFakeTimers();
+    const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
+    const recordPath = path.join(stateDir, 'expired-provider-leases.json');
+    const lease = new LeaseRegistry().allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'limrun',
+    });
+    const release = Promise.withResolvers<void>();
+    const recoverExpiredLease = vi.fn(() => release.promise);
+    const releaser = createExpiredProviderLeaseReleaser({
+      recoverExpiredLease,
+      stateDir,
+      recoverableProviderIds: ['limrun'],
+      retryDelayMs: 10,
+    });
+
+    try {
+      releaser.beginShutdown();
+      const admitted = releaser.release(lease);
+      const drained = releaser.drain(10);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(await drained).toEqual({ pending: [lease], unknown: [lease], released: [] });
+      releaser.shutdown();
+
+      if (confirmation === 'before handoff') {
+        const removeFile = fs.rmSync;
+        const remove = vi.spyOn(fs, 'rmSync').mockImplementation((file, options) => {
+          if (file === recordPath) throw new Error('temporary disk failure');
+          removeFile(file, options);
+        });
+        try {
+          release.resolve();
+          await expect(admitted).resolves.toEqual({ status: 'released' });
+          expect(fs.existsSync(recordPath)).toBe(true);
+        } finally {
+          remove.mockRestore();
+        }
+        releaser.finishPersistence();
+        expect(fs.existsSync(recordPath)).toBe(false);
+      } else {
+        releaser.finishPersistence();
+        const inheritedRecord = fs.readFileSync(recordPath, 'utf8');
+        release.resolve();
+        await expect(admitted).resolves.toEqual({ status: 'released' });
+        expect(fs.readFileSync(recordPath, 'utf8')).toBe(inheritedRecord);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+      expect(recoverExpiredLease).toHaveBeenCalledExactlyOnceWith(lease);
+    } finally {
+      releaser.shutdown();
+      release.resolve();
       vi.useRealTimers();
       fs.rmSync(stateDir, { recursive: true, force: true });
     }

@@ -569,6 +569,7 @@ async function startDaemonRuntimeOnHost(
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
   });
   rollback.onRollback(async () => {
+    expiredProviderLeaseReleaser.finishPersistence();
     await finishDaemonRegistration({
       registration,
       infoPath,
@@ -875,6 +876,11 @@ async function startDaemonRuntimeOnHost(
       await Promise.allSettled([
         settleWithin(async () => await releasePngWorker(), DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
         Promise.resolve().then(() => pluginClose.close()),
+      ]);
+      await Promise.allSettled([
+        withDaemonDiagnosticsScope({ logPath }, async () => {
+          expiredProviderLeaseReleaser.finishPersistence();
+        }),
       ]);
       await Promise.allSettled([
         finishDaemonRegistration({
