@@ -328,6 +328,9 @@ extension RunnerTests {
         )
       }
     }
+    if Self.xctestQueryCanStart(deadline: processingDeadline, now: Date()) {
+      nodes = graftingAbsorbedResponderInput(into: nodes, context: context, hint: hint)
+    }
 
     return (
       SnapshotAcquisition(
@@ -548,6 +551,9 @@ extension RunnerTests {
     )
     if !nodes.isEmpty {
       Self.publishLitPanelRoot(&nodes[0], surface: context.litPanelSurface)
+    }
+    if nodes.count < Self.rawSnapshotMaxNodes {
+      nodes = graftingAbsorbedResponderInput(into: nodes, context: context, hint: hint)
     }
     return SnapshotAcquisition(
       hint: hint,

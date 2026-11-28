@@ -41,6 +41,22 @@ const DOCKED_KEYBOARD_WINDOW = guestNode('UIRemoteKeyboardWindow', APP_FRAME, [
   ),
 ]);
 
+/**
+ * The app window holding the text field the docked keyboard types into: its traits carry the
+ * text-entry and keyboard-focus bits (`1 << 18 | 1 << 21`), sent as the guest sends them.
+ */
+const FOCUSED_INPUT_WINDOW = guestNode('UIWindow', APP_FRAME, [
+  {
+    ...guestNode('UITextField', { X: 16, Y: 200, Width: 358, Height: 44 }, [], 49),
+    XC_kAXXCAttributeTraits: String((1n << 18n) | (1n << 21n)),
+  },
+]);
+
+/** A docked keyboard whose input is absent from the tree, as an accessible container leaves it. */
+export const DOCKED_KEYBOARD_WITHOUT_FOCUSED_INPUT: readonly Record<string, unknown>[] = [
+  DOCKED_KEYBOARD_WINDOW,
+];
+
 const notObserved = { kind: 'unmeasurable', reason: 'keyboard-not-observed' };
 
 export const ADAPTER_KEYBOARD_CASES: readonly Readonly<{
@@ -51,7 +67,7 @@ export const ADAPTER_KEYBOARD_CASES: readonly Readonly<{
 }>[] = [
   {
     name: 'a docked keyboard',
-    windows: [DOCKED_KEYBOARD_WINDOW],
+    windows: [FOCUSED_INPUT_WINDOW, DOCKED_KEYBOARD_WINDOW],
     truncated: false,
     keyboard: {
       kind: 'derived',

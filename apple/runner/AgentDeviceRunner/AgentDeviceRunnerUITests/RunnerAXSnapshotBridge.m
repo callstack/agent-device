@@ -62,9 +62,25 @@ static atomic_long RunnerAXCustomActionReadBlocked = 0;
 static const NSUInteger RunnerAXCustomActionsMaxPerElement = 8;
 static const NSUInteger RunnerAXCustomActionNameMaxLength = 80;
 
+NSString *const RunnerAXAbsorbedResponderContainerKey = @"container";
+NSString *const RunnerAXAbsorbedResponderInputKey = @"input";
+
+// The AX server's answer for the element that represents the app's first responder. When the
+// responder sits inside an accessibility element, this is that element, not the responder.
+static NSString *const RunnerAXResponderElementAttribute = @"XC_kAXXCAttributeResponderElement";
+
+// Bounds the hit tests one recovery spends inside a responder container: each is one XPC round
+// trip, so a container whose points reach no focused input costs at most this many.
+static const NSUInteger RunnerAXAbsorbedResponderProbeLimit = 8;
+
+// Bounds the container read that supplies the probe points: its own frame and its children's.
+static const NSInteger RunnerAXAbsorbedResponderContainerNodes = 64;
+
 typedef id (*RunnerAXObjectMsgSend)(id, SEL);
 typedef NSInteger (*RunnerAXIntegerMsgSend)(id, SEL);
 typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
+typedef id (*RunnerAXAttributeReadMsgSend)(id, SEL, id, id, NSError **);
+typedef id (*RunnerAXHitTestMsgSend)(id, SEL, id, CGPoint, NSError **);
 
 @implementation RunnerAXSnapshotFrontier
 @end
@@ -639,6 +655,105 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 + (nullable id)accessibilityClient
 {
   return [self objectFrom:XCUIDevice.sharedDevice selectorName:@"accessibilityInterface"];
+}
+
++ (nullable NSDictionary<NSString *, id> *)absorbedResponderInputForApplication:(XCUIApplication *)application
+{
+  @try {
+    id axClient = [self accessibilityClient];
+    SEL readSelector = NSSelectorFromString(@"attributesForElement:attributes:error:");
+    SEL hitTestSelector = NSSelectorFromString(@"hitTestElement:withPoint:error:");
+    if (nil == axClient || ![axClient respondsToSelector:readSelector]
+        || ![axClient respondsToSelector:hitTestSelector]) {
+      return nil;
+    }
+    id target = [self accessibilityApplicationForApplication:application axClient:axClient];
+    if (nil == target) {
+      return nil;
+    }
+    RunnerAXAttributeReadMsgSend read = (RunnerAXAttributeReadMsgSend)objc_msgSend;
+    id values = read(axClient, readSelector, target, @[ RunnerAXResponderElementAttribute ], NULL);
+    id responder = [values isKindOfClass:NSDictionary.class]
+                       ? ((NSDictionary *)values)[RunnerAXResponderElementAttribute]
+                       : nil;
+    if (nil == responder || responder == NSNull.null || [responder isEqual:target]) {
+      return nil;
+    }
+    NSArray *attributes = [self snapshotAttributes];
+    id container = [self requestSnapshotFromClient:axClient
+                                            target:responder
+                                        attributes:attributes
+                                          maxDepth:1
+                                          maxNodes:RunnerAXAbsorbedResponderContainerNodes
+                                             error:NULL];
+    if (nil == container
+        || [[self boolNumberForKey:@"hasKeyboardFocus" snapshot:container defaultValue:NO] boolValue]) {
+      return nil;
+    }
+    RunnerAXHitTestMsgSend hitTest = (RunnerAXHitTestMsgSend)objc_msgSend;
+    for (NSValue *point in [self absorbedResponderProbePointsForContainer:container]) {
+      CGPoint location = CGPointZero;
+      [point getValue:&location];
+      id hit = hitTest(axClient, hitTestSelector, target, location, NULL);
+      if (nil == hit || [hit isEqual:responder]) {
+        continue;
+      }
+      id input = [self requestSnapshotFromClient:axClient
+                                          target:hit
+                                      attributes:attributes
+                                        maxDepth:0
+                                        maxNodes:1
+                                           error:NULL];
+      if (nil != input
+          && [[self boolNumberForKey:@"hasKeyboardFocus" snapshot:input defaultValue:NO] boolValue]) {
+        return @{
+          RunnerAXAbsorbedResponderContainerKey: container,
+          RunnerAXAbsorbedResponderInputKey: input,
+        };
+      }
+    }
+  } @catch (NSException *exception) {
+    return nil;
+  }
+  return nil;
+}
+
+// Where the absorbed input can be: the container's own center, which a container that wraps the
+// input directly or spans its row hits, then the centers of the children the container lists,
+// smallest first, because the wrapper that holds only the input fits it most closely.
++ (NSArray<NSValue *> *)absorbedResponderProbePointsForContainer:(id)container
+{
+  NSMutableArray<NSValue *> *children = [NSMutableArray array];
+  for (id child in [self childrenForSnapshot:container]) {
+    CGRect frame = [self frameForSnapshot:child];
+    if (!CGRectIsEmpty(frame)) {
+      [children addObject:[NSValue valueWithBytes:&frame objCType:@encode(CGRect)]];
+    }
+  }
+  [children sortUsingComparator:^NSComparisonResult(NSValue *left, NSValue *right) {
+    CGRect leftFrame = CGRectZero;
+    CGRect rightFrame = CGRectZero;
+    [left getValue:&leftFrame];
+    [right getValue:&rightFrame];
+    CGFloat leftArea = CGRectGetWidth(leftFrame) * CGRectGetHeight(leftFrame);
+    CGFloat rightArea = CGRectGetWidth(rightFrame) * CGRectGetHeight(rightFrame);
+    return leftArea < rightArea ? NSOrderedAscending : leftArea > rightArea ? NSOrderedDescending : NSOrderedSame;
+  }];
+  CGRect containerFrame = [self frameForSnapshot:container];
+  NSMutableArray<NSValue *> *frames = [NSMutableArray arrayWithObject:[NSValue valueWithBytes:&containerFrame
+                                                                                       objCType:@encode(CGRect)]];
+  [frames addObjectsFromArray:children];
+  NSMutableArray<NSValue *> *points = [NSMutableArray array];
+  for (NSValue *frameValue in frames) {
+    if (points.count == RunnerAXAbsorbedResponderProbeLimit) {
+      break;
+    }
+    CGRect frame = CGRectZero;
+    [frameValue getValue:&frame];
+    CGPoint center = CGPointMake(CGRectGetMidX(frame), CGRectGetMidY(frame));
+    [points addObject:[NSValue valueWithBytes:&center objCType:@encode(CGPoint)]];
+  }
+  return points;
 }
 
 + (nullable id)accessibilityElementForSnapshot:(id)snapshot

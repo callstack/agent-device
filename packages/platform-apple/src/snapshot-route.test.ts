@@ -439,7 +439,8 @@ test('a bridge still being prepared sends only that capture to the runner', asyn
 });
 
 // Each refusal below is evidence about the screen, not the app generation: a rotated system surface
-// (#2612), a permission alert over the app, or an app window that does not fill the screen (#3844).
+// (#2612), a permission alert over the app, an app window that does not fill the screen (#3844), or
+// a keyboard whose focused input the tree leaves out.
 // It is gone after the next keystroke, tap, or resize, so retiring the generation would move every
 // later capture of a healthy app to the runner; it must cost only the captures it covers.
 test.for([
@@ -450,6 +451,7 @@ test.for([
   ['foreground-owner-unverified', 'while another surface owned the foreground'],
   ['foreground-owner-changed', 'while another surface owned the foreground'],
   ['snapshot-tree-changed', 'while the screen changed during the bridge read'],
+  ['keyboard-focus-outside-tree', 'while the focused input was outside the bridge tree'],
   [
     'app-window-not-full-screen',
     'while the app window did not fill the screen; the runner republishes a windowed capture in screen space',

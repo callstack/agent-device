@@ -483,6 +483,48 @@ extension RunnerTests {
       "the runner must not name a type the shared table covers by its raw value"
     )
   }
+
+  /// The responder read runs only when the walk found no focused node. A focused input the tree
+  /// already holds must come out once, in place, in both projections, with no second copy grafted
+  /// from the app's responder element.
+  @MainActor
+  func testTreeWalkKeepsOneCopyOfAFocusedInputTheTreeHolds() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-secure-entry",
+    ]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let field = app.secureTextFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    field.tap()
+
+    for projection in [CaptureHint.Projection.regular, .raw] {
+      let hint = CaptureHint(
+        projection: projection,
+        depth: nil,
+        regularPresentedDepth: nil,
+        interactiveOnly: false,
+        customActions: false
+      )
+      let context = try XCTUnwrap(makeSnapshotTraversalContext(app: app, hint: hint))
+      let nodes = projection == .raw
+        ? try rawTreeSnapshotAcquisition(context: context, hint: hint).nodes
+        : try recursiveTreeSnapshotAcquisition(
+          context: context,
+          hint: hint,
+          processingDeadline: Date().addingTimeInterval(treeCaptureSliceBudget)
+        ).acquisition.nodes
+      let inputs = nodes.filter { $0.identifier == "agent-device-hardware-keyboard-input" }
+      XCTAssertEqual(inputs.count, 1, "\(projection)")
+      XCTAssertEqual(inputs.first?.type, "SecureTextField", "\(projection)")
+      XCTAssertEqual(inputs.first?.focused, true, "\(projection)")
+      XCTAssertEqual(nodes.map(\.index), Array(nodes.indices), "\(projection)")
+    }
+  }
 #endif
 }
 #endif
