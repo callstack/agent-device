@@ -1,4 +1,3 @@
-import { AsyncResource } from 'node:async_hooks';
 import {
   heldKeyedLockKeys,
   withKeyedLock,
@@ -69,16 +68,6 @@ export function createRequestExecutionLocks(params: {
       await holder.hold(locks, key, scope?.signal);
     },
   };
-}
-
-/**
- * `end` bound to the current context. Bound before a request takes a lock, it runs outside that
- * request's locks wherever the request calls it, so it never holds one while it waits for another.
- */
-export function bindOutsideRequestLocks(
-  end: ((leaseId: string) => Promise<void>) | undefined,
-): ((leaseId: string) => Promise<void>) | undefined {
-  return end && AsyncResource.bind(end);
 }
 
 function heldRequestLockKeys(locks: Map<string, Promise<unknown>>): RequestExecutionLockKey[] {
