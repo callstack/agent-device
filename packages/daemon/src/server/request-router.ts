@@ -419,12 +419,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       endSessionsForLease,
       providerAppCatalog,
       invoke: handDownEndedLeases(
-        recordNestedRequests(handleRequest, dispatchLedger),
+        recordNestedRequests(withoutParentNote(handleRequest), dispatchLedger),
         lockedScope.req,
       ),
       invokeReplayAction: allowReplayActions
         ? recordNestedRequests(
-            createReplayScopedActionInvoker(lockedScope, providerScope),
+            withoutParentNote(createReplayScopedActionInvoker(lockedScope, providerScope)),
             dispatchLedger,
           )
         : undefined,
@@ -504,6 +504,19 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   }
 
   return handleRequest;
+}
+
+/**
+ * `meta.note` is the client's text about one request. A nested request (a batch step, a replay
+ * action, a find's delegated action) is a command the daemon runs for that request, so it never
+ * inherits the note. All other meta passes through unchanged.
+ */
+function withoutParentNote(invoke: DaemonInvokeFn): DaemonInvokeFn {
+  return async (req) => {
+    if (req.meta?.note === undefined) return await invoke(req);
+    const { note: _note, ...meta } = req.meta;
+    return await invoke({ ...req, meta });
+  };
 }
 
 function requestCommandEnv(req: DaemonRequest): NodeJS.ProcessEnv | undefined {

@@ -8,7 +8,11 @@ import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagn
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
-import { buildRequestSuccessEventPresentation } from './session-event-request.ts';
+import {
+  buildRequestSuccessEventPresentation,
+  prepareRequestNoteForStorage,
+  readSessionEventString,
+} from './session-event-request.ts';
 import { scanEventLogLines } from './session-event-log-lines.ts';
 import {
   assertSessionEventLogCursorRetained,
@@ -55,6 +59,12 @@ export type SessionEventLogPage = {
 
 export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' | 'session'> & {
   ts?: string;
+  /**
+   * The client-written note of a request event. The writer redacts its first 1,200 code points,
+   * bounds the result to 300 code points, and records it as `details.note`. A note cut by either
+   * bound ends with `…` within the 300.
+   */
+  note?: string;
 };
 
 type ReadSessionEventLogOptions = { cursor?: string; limit?: number | string };
@@ -76,13 +86,24 @@ export function appendSessionEvent(
   /** The runtime host's environment: the source of the active-file rotation cap. */
   env: NodeJS.ProcessEnv,
 ): void {
+  const { note, ...input } = event;
   const entry = redactDiagnosticData({
     version: EVENT_LOG_VERSION,
     ts: event.ts ?? new Date().toISOString(),
     session: sessionName,
-    ...event,
+    ...input,
   } satisfies SessionEventLogEntry);
-  queueEventLogWrite(eventLogPath, `${JSON.stringify(entry)}\n`, env);
+  queueEventLogWrite(eventLogPath, `${JSON.stringify(withNote(entry, note))}\n`, env);
+}
+
+/**
+ * Adds the finished note to `details` after the entry-wide redaction, so that redaction's
+ * 400-code-unit string cap cannot cut the note again.
+ */
+function withNote(entry: SessionEventLogEntry, note: string | undefined): SessionEventLogEntry {
+  if (note === undefined) return entry;
+  const storedNote = prepareRequestNoteForStorage(note);
+  return storedNote ? { ...entry, details: { ...entry.details, note: storedNote } } : entry;
 }
 
 export async function flushSessionEventLogWrites(eventLogPath?: string): Promise<void> {
@@ -196,11 +217,13 @@ export function appendActionEvent(
 
 export function buildRequestStartedEvent(params: { req: DaemonRequest }): SessionEventLogInput {
   const { req } = params;
+  const note = readSessionEventString(req.meta?.note);
   return {
     kind: 'request.started',
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     summary: `Started ${req.command}`,
+    ...(note ? { note } : {}),
   };
 }
 
@@ -210,6 +233,7 @@ export function buildRequestFinishedEvent(params: {
   durationMs: number;
 }): SessionEventLogInput {
   const { req, response, durationMs } = params;
+  const note = readSessionEventString(req.meta?.note);
   if (response.ok) {
     const presentation = buildRequestSuccessEventPresentation(req, response.data);
     return {
@@ -219,6 +243,7 @@ export function buildRequestFinishedEvent(params: {
       status: 'ok',
       summary: presentation.summary ?? `Finished ${req.command}`,
       details: { durationMs, ...presentation.details },
+      ...(note ? { note } : {}),
     };
   }
   return {
@@ -232,6 +257,7 @@ export function buildRequestFinishedEvent(params: {
       code: response.error.code,
       diagnosticId: response.error.diagnosticId,
     },
+    ...(note ? { note } : {}),
   };
 }
 

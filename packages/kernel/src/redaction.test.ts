@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { redactDiagnosticData } from './redaction.ts';
+import { redactDiagnosticData, redactDiagnosticText } from './redaction.ts';
 
 test('stderr retains nested command failure details beyond 400 characters', () => {
   const stderr = `Launch request denied\n${'Context line\n'.repeat(50)}Underlying reason: device locked`;
@@ -70,4 +70,39 @@ test('a diamond chain redacts each shared node once, not once per path', () => {
   }
   assert.deepEqual(node, { token: '[REDACTED]', note: 'leaf' });
   assert.equal(reads, 1);
+});
+
+test('in truncated text, an unterminated quoted sensitive value is masked through the end', () => {
+  for (const quote of ['"', "'"]) {
+    const text = `Signed in with password=${quote}correct horse\nbattery staple`;
+    assert.equal(
+      redactDiagnosticText(text, { truncated: true }),
+      'Signed in with password=[REDACTED]',
+    );
+  }
+});
+
+test('outside truncated text, an unterminated quote masks only its first word', () => {
+  for (const quote of ['"', "'"]) {
+    assert.equal(
+      redactDiagnosticText(`retry api_key: ${quote}correct horse battery`),
+      'retry api_key: [REDACTED] horse battery',
+    );
+  }
+  assert.deepEqual(redactDiagnosticData({ stderr: 'parse token: "\n detail line' }), {
+    stderr: 'parse token: [REDACTED]\n detail line',
+  });
+});
+
+test('a terminated quoted sensitive value is masked only up to its closing quote', () => {
+  for (const quote of ['"', "'"]) {
+    for (const truncated of [false, true]) {
+      assert.equal(
+        redactDiagnosticText(`token=${quote}correct horse battery${quote} then opened settings`, {
+          truncated,
+        }),
+        'token=[REDACTED] then opened settings',
+      );
+    }
+  }
 });

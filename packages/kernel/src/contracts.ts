@@ -147,6 +147,11 @@ export type DaemonRequestMeta = {
   lockPolicy?: DaemonLockPolicy;
   lockPlatform?: PlatformSelector;
   requestProgress?: 'replay-test' | 'command';
+  /**
+   * A short client-written note about the command (intent, observation or result), recorded on
+   * request events only when sent.
+   */
+  note?: string;
 };
 
 export type DaemonRequest = {
