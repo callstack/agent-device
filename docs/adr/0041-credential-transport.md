@@ -65,3 +65,19 @@ The paths that carry the daemon token already do not follow redirects: the daemo
 - A misconfigured `--public-origin` costs an extra transfer through the daemon instead of a cleartext credential.
 - The operator keeps these duties, which the supported setup already meets:
   keep the daemon token secret, set `--public-origin` behind a TLS terminator, keep the onward hop from a TLS terminator on loopback, and bypass any environment HTTP proxy for loopback (`NO_PROXY=127.0.0.1,localhost`).
+
+## Review rules
+
+- A finding must name the actor, the capability that the actor needs, and the credential that the actor reads.
+  If the actor needs a capability that this decision excludes, such as reading TLS traffic or controlling the operator's own server, reject the finding.
+- A finding against the supported remote setup must give reproduction steps that start from that setup.
+  If the steps depart from the setup, name the departure.
+  If the departure is not a configuration that the docs support or a likely operator mistake, reject the finding.
+- For a redirect finding, name the party that issues the redirect.
+  If only the operator's own service can issue it, reject the finding.
+  If that party can already read the first request, treat the finding as a plaintext finding.
+- To add an admission point, show that a first-party credential goes to an operator-configured URL there.
+- Do not add redirect handling for credential secrecy. Keep the redirect rules of ADR 0006, cloud auth, and upload streaming. They protect protocol invariants.
+- If a claim depends on runtime behavior, reproduce it with a script of 20 lines or fewer before you write code.
+  Record the runtime version, the platform, every relevant setting (such as `NODE_USE_ENV_PROXY`, `HTTP_PROXY`, and `NO_PROXY`), and the observed output.
+- Before you request a new protection layer, check whether a change at one existing owner, or a deletion, keeps the invariant.
