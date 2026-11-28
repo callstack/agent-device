@@ -1,4 +1,5 @@
 import type * as HostCommand from '@agent-device/host-kit/command';
+import type * as HostArchive from '@agent-device/host-kit/archive';
 import type * as HostDiagnostics from '@agent-device/host-kit/diagnostics';
 import type * as HostFile from '@agent-device/host-kit/file';
 import type * as HostProcess from '@agent-device/host-kit/process';
@@ -125,6 +126,12 @@ export type AppleRunnerHost = Pick<
   Pick<typeof KernelDeviceShell, 'shellQuote'> &
   Pick<typeof BootDiagnostics, 'classifyBootFailure' | 'bootFailureHint'> &
   AppleRunnerToolPort & {
+    extractRunnerReleaseArchive: (
+      options: Pick<
+        Parameters<typeof HostArchive.extractArchiveSafely>[0],
+        'archivePath' | 'outputRoot' | 'signal'
+      >,
+    ) => Promise<void>;
     /**
      * The environment and working directory the runner reads its configuration from (derived-data
      * overrides, lease directory, bundle ids, signing settings) and starts detached children with.
@@ -214,6 +221,7 @@ export const runnerRuntimeSlot = delegate('runnerRuntimeSlot');
 export const acquireProcessLock = delegate('acquireProcessLock');
 export const withProcessLock = delegate('withProcessLock');
 export const publishFileSync = delegate('publishFileSync');
+export const extractRunnerReleaseArchive = delegate('extractRunnerReleaseArchive');
 export const emitRequestProgress = delegate('emitRequestProgress');
 export const getRequestReadOnlyDeadlineMs = delegate('getRequestReadOnlyDeadlineMs');
 export const getRequestSignal = delegate('getRequestSignal');

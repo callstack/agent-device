@@ -50,7 +50,7 @@ const BAD_ARTIFACTS_SLOT = Symbol('apple-runner-bad-artifacts');
 const badRunnerArtifactsForRun = () =>
   runnerRuntimeSlot(BAD_ARTIFACTS_SLOT, () => new Set<string>());
 
-export type RunnerXctestrunCacheKind = 'exact' | 'miss' | 'external';
+export type RunnerXctestrunCacheKind = 'exact' | 'miss' | 'release' | 'external';
 
 export type ExistingXctestrunState =
   | {
@@ -148,12 +148,13 @@ function resolveRunnerXctestrunCacheLockPath(derived: string): string {
   return path.join(path.dirname(derived), `${path.basename(derived)}.lock`);
 }
 
+/** Returns whether cleanup was requested, even if best-effort deletion leaves entries behind. */
 export async function cleanRunnerDerivedBeforeEvaluation(
   derived: string,
   forceRebuild: boolean,
-): Promise<void> {
+): Promise<boolean> {
   if (!shouldCleanDerived() && !forceRebuild && !badRunnerArtifactsForRun().has(derived)) {
-    return;
+    return false;
   }
   emitRunnerXctestrunDecision('clean', forceRebuild ? 'forced_rebuild' : 'forced_clean', {
     derived,
@@ -161,6 +162,7 @@ export async function cleanRunnerDerivedBeforeEvaluation(
   assertSafeDerivedCleanup(derived);
   await cleanRunnerDerivedArtifacts(derived);
   badRunnerArtifactsForRun().delete(derived);
+  return true;
 }
 
 /**
@@ -417,6 +419,7 @@ export function emitRunnerXctestrunDecision(
     | 'forced_rebuild'
     | 'bad_artifact'
     | 'built_new'
+    | 'release_artifact'
     | 'external_xctestrun'
     | 'external_bad_artifact'
     | 'uncertifiable_products'
