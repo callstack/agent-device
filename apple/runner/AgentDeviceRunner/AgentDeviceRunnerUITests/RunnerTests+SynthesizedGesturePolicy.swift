@@ -217,9 +217,13 @@ extension RunnerTests {
       return "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue)"
         + " context=unavailable fallbackAttempted=\(fallbackAttempted)"
     }
+    // A deferred windows query has not run, so the fallback decision is not known yet.
+    let fallbackAllowed = context.windowQueryDeferred
+      ? "unproven"
+      : "\(kind.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth, treeUnreadable: context.treeUnreadable))"
     return "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue)"
       + " axHealth=\(context.accessibilityHealth.rawValue)"
-      + " fallbackAllowed=\(kind.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth, treeUnreadable: context.treeUnreadable))"
+      + " fallbackAllowed=\(fallbackAllowed)"
       + " fallbackAttempted=\(fallbackAttempted)"
   }
 }

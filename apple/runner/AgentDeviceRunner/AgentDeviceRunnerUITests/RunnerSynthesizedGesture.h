@@ -22,7 +22,8 @@ typedef struct {
 
 // `resolvedWindow` is the app window the caller already resolved for the gesture's reference
 // frame, so the record's display ID is read from that same window. Pass nil for the sole-screen
-// route: the app's tree could not name its window and the screen is proven instead.
+// route, where the screen is proven instead: the app's tree could not name its window, the window
+// fills an iPhone's only screen, or an iPhone coordinate tap skipped the windows query.
 // `interfaceOrientation` is the orientation used to convert the supplied points.
 // `dispatched`, when given, turns YES once the record is handed to XCTest to run.
 + (NSString * _Nullable)synthesizeDragWithApplication:(id)application

@@ -91,10 +91,19 @@ extension RunnerTests {
       return XCTFail("a tree that answers no window refuses the XCTest fallback")
     }
 
+    XCTAssertTrue(
+      Self.synthesizedGesturePolicyLine(kind: .coordinateTap, context: unreadable, fallbackAttempted: false)
+        .contains(" fallbackAllowed=unproven "),
+      "a deferred context logs no fallback decision it has not proven"
+    )
     let proven = provingDeferredWindowQuery(unreadable, app: app)
     XCTAssertTrue(proven.treeUnreadable)
     XCTAssertEqual(proven.accessibilityHealth, .unavailable)
     XCTAssertFalse(proven.windowQueryDeferred)
+    XCTAssertTrue(
+      Self.synthesizedGesturePolicyLine(kind: .coordinateTap, context: proven, fallbackAttempted: false)
+        .contains(" fallbackAllowed=false ")
+    )
   }
 
   /// A resolved window that fills an iPhone's only screen routes its records to that screen, so
