@@ -83,7 +83,7 @@ For the devices, app installation, and supported commands, see the plugin's [REA
 
 ## run.cloud
 
-[run.cloud](https://run.cloud) runs hosted iOS simulators and Android emulators. Its provider is the [`@run-cloud/agent-device`](https://www.npmjs.com/package/@run-cloud/agent-device) plugin, which run.cloud maintains. Install the plugin, then connect with a run.cloud API key:
+[run.cloud](https://run.cloud) runs hosted iOS simulators and Android emulators. Its provider is the [`@run-cloud/agent-device`](https://github.com/newly-app/run-cloud-agent-device) plugin, which run.cloud maintains. Install the plugin, then connect with a run.cloud API key:
 
 ```bash
 agent-device plugins add @run-cloud/agent-device
@@ -92,7 +92,7 @@ export AGENT_DEVICE_SESSION=checkout-ios
 agent-device connect runcloud --platform ios
 ```
 
-Use `--platform android` for an Android emulator. For the devices, app installation, and supported commands, see the plugin's [README](https://www.npmjs.com/package/@run-cloud/agent-device).
+Use `--platform android` for an Android emulator. For the devices, app installation, and supported commands, see the plugin's [README](https://github.com/newly-app/run-cloud-agent-device#readme). Report plugin problems in [its repository](https://github.com/newly-app/run-cloud-agent-device/issues).
 
 ## Expo Simulators
 
