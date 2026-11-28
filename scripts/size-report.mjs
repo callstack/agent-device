@@ -9,6 +9,7 @@ import { formatBytes, formatDiff, formatMaybeBytes } from './size-report-format.
 import { collectNpmPack } from './size-report-package.mjs';
 import { measureCleanInstalledPackage } from './size-report-install.mjs';
 import { preparePublishAssets } from './prepare-publish-assets.mjs';
+import { formatPluginSizes, measurePluginSizes } from './size-report-plugins.mjs';
 
 const COMMENT_MARKER = '<!-- agent-device-size-report -->';
 const GITHUB_REQUEST_ATTEMPTS = 4;
@@ -23,6 +24,7 @@ const VALUE_ARGS = new Map([
   ['--post-comment', 'postComment'],
   ['--pr', 'pr'],
   ['--startup-runs', 'startupRuns'],
+  ['--plugins', 'plugins'],
 ]);
 
 const STARTUP_BENCHMARKS = [
@@ -46,6 +48,7 @@ async function run() {
   const report = collectReport(cwd, {
     startupRuns: parseNonNegativeInteger(args.startupRuns ?? '0', '--startup-runs'),
   });
+  if (args.plugins) report.plugins = measurePluginSizes(cwd, args.plugins);
   const baseReport = args.compare ? JSON.parse(fs.readFileSync(args.compare, 'utf8')) : null;
 
   if (args.json) {
@@ -96,6 +99,7 @@ Options:
   --markdown <path>        Write the markdown report.
   --compare <path>         Compare against a previously written JSON report.
   --startup-runs <count>   Measure startup medians for side-effect-free CLI commands.
+  --plugins <path>        Measure the plugin packages selected in this JSON plan.
   --post-comment <path>    Post or update the markdown report on the current PR.
   --pr <number>            Pull request number for --post-comment.
 `);
@@ -223,7 +227,7 @@ function formatMarkdown(report, baseReport) {
 |---|---:|---:|---:|
 ${rows.join('\n')}
 
-${formatStartupBenchmarks(report.startup, baseReport?.startup)}`;
+${formatStartupBenchmarks(report.startup, baseReport?.startup)}${formatPluginSizes(report.plugins, baseReport?.plugins)}`;
 }
 
 function metricRow(label, base, current) {

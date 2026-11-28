@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
@@ -625,10 +625,116 @@ test('Markdown emphasizes total install size and startup without duplicate break
   assert.match(markdown, /\| Package \(download\) \| 90 B \| 100 B \| \+10 B \|/);
   assert.match(markdown, /\| CLI --help \| 25.0 ms \| 20.0 ms \| -5.0 ms \|/);
   assert.doesNotMatch(markdown, /JS raw|JS gzip|npm bundled|components|Top.*chunks|packed files/);
+  assert.doesNotMatch(markdown, /Affected plugins/);
   assert.match(
     formatMarkdown(current, null),
     /\| Installed \(including dependencies\) \| - \| 350 B \| - \|/,
   );
+});
+
+test('Markdown compares measured plugins and labels added and removed packages', () => {
+  const core = {
+    npmPack: { tarballBytes: 100, unpackedBytes: 300 },
+    cleanInstalled: { totalBytes: 350 },
+  };
+  const plugin = {
+    name: '@agent-device/one',
+    installedBytes: 60,
+    unpackedBytes: 30,
+    tarballBytes: 10,
+  };
+  const markdown = formatMarkdown(
+    {
+      ...core,
+      plugins: [
+        { ...plugin, installedBytes: 65 },
+        { ...plugin, name: '@agent-device/new' },
+      ],
+    },
+    { ...core, plugins: [plugin, { ...plugin, name: '@agent-device/old' }] },
+  );
+  assert.match(
+    markdown,
+    /\| `@agent-device\/one` \| 60 B → 65 B \(\+5 B\) \| 30 B → 30 B \(0 B\) \| 10 B → 10 B \(0 B\) \|/,
+  );
+  assert.match(markdown, /\| `@agent-device\/new` \| 60 B \(new\)/);
+  assert.match(markdown, /\| `@agent-device\/old` \| 60 B → removed/);
+});
+
+test('plugin plan follows changed build inputs on both compared revisions', async () => {
+  const cwd = await mkdtempForTest('size-plugin-plan-');
+  const git = async (...args: string[]) =>
+    (await execFileAsync('git', args, { cwd })).stdout.trim();
+  const write = async (file: string, text: string) => {
+    await mkdir(dirname(join(cwd, file)), { recursive: true });
+    await writeFile(join(cwd, file), text);
+  };
+  const commit = async (subject: string) => {
+    await git('add', '-A');
+    await git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.test',
+      'commit',
+      '-qm',
+      subject,
+    );
+    return await git('rev-parse', 'HEAD');
+  };
+  const plan = async (base: string, head: string) => {
+    const output = join(cwd, '.git', 'plan');
+    await execFileAsync(
+      process.execPath,
+      [join(import.meta.dirname, '../size-report-plugin-plan.mjs'), base, head, output],
+      { cwd },
+    );
+    const readSide = async (side: string) =>
+      (JSON.parse(await readFile(join(output, `${side}.json`), 'utf8')) as { name: string }[]).map(
+        ({ name }) => name,
+      );
+    return { base: await readSide('base'), head: await readSide('head') };
+  };
+  const one = '@agent-device/one';
+  const two = '@agent-device/two';
+  const dep = '@agent-device/build-piece';
+  await git('init', '-q');
+  await write(
+    'packages/one/package.json',
+    JSON.stringify({ name: one, 'agent-device': {}, devDependencies: { [dep]: 'workspace:*' } }),
+  );
+  await write('packages/two/package.json', JSON.stringify({ name: two, agentDevicePlugin: {} }));
+  await write('packages/build-piece/package.json', JSON.stringify({ name: dep, private: true }));
+  await write('pnpm-lock.yaml', 'importers:\n  packages/one: {}\n  packages/two: {}\n');
+  const base = await commit('base');
+
+  await write('src/cli.ts', 'export {};');
+  await write('packages/one/src/only.test.ts', 'export {};');
+  const unrelated = await commit('unrelated CLI and plugin test');
+  assert.deepEqual(await plan(base, unrelated), { base: [], head: [] });
+
+  await write('packages/build-piece/src/index.ts', 'export {};');
+  const dependency = await commit('plugin dependency');
+  assert.deepEqual(await plan(unrelated, dependency), { base: [one], head: [one] });
+
+  await write(
+    'pnpm-lock.yaml',
+    'importers:\n  packages/one: {}\n  packages/two:\n    dependencies:\n      external-lib: {specifier: "^1.0.0", version: 1.0.0}\n',
+  );
+  const lock = await commit('one package changes its external dependency');
+  assert.deepEqual(await plan(dependency, lock), { base: [two], head: [two] });
+
+  await write('bundler/two/build.mjs', 'export {};');
+  const bundler = await commit('one plugin changes its build');
+  assert.deepEqual(await plan(lock, bundler), { base: [two], head: [two] });
+
+  await write('tsconfig.lib.json', '{}');
+  const shared = await commit('shared TypeScript configuration');
+  assert.deepEqual(await plan(bundler, shared), { base: [one, two], head: [one, two] });
+
+  await rm(join(cwd, 'packages/one'), { recursive: true });
+  const removed = await commit('remove plugin');
+  assert.deepEqual(await plan(shared, removed), { base: [one], head: [] });
 });
 
 test('base measurement uses the measured revision package asset policy', async () => {
