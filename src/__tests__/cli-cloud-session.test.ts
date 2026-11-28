@@ -681,7 +681,7 @@ test('disconnect closes a cloud session while an admitted RPC is still in flight
     sendToDaemon: async () => {
       fetchMock.mockImplementationOnce(async (_url, init) => {
         expect(init.method).toBe('DELETE');
-        expect(readCloudConnection(location)?.phase).toBe('closing');
+        expect(readCloudConnection(location)?.phase).toBe('committed');
         return new Response(null, { status: 204 });
       });
       expect(

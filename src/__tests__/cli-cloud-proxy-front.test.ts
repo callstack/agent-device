@@ -162,39 +162,52 @@ test('a proxy-front attachment refuses a command before open, and a daemon attac
   expect((await runCliCapture(['disconnect', '--json'], { env: daemonEnv })).code).toBeNull();
 });
 
-test('disconnect releases a proxy-front lease with the attachment token before the cloud session ends', async () => {
+test('a DELETE 404 preserves the proxy-front lease until a confirmed broker release', async () => {
   const env = cloudEnv();
+  const location = locationOf(env);
   const fetchMock = stubCloudApi(proxyFrontDevice);
+  const front = withLeaseAllocation();
+  const sendToDaemon = vi.fn(front);
   expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
   const opened = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
     env,
-    sendToDaemon: withLeaseAllocation(),
+    sendToDaemon,
   });
   expect(opened.code).toBeNull();
-  const leaseId = opened.calls[0]?.meta?.leaseId;
-
-  let releasedBeforeDelete = false;
-  const front = withLeaseAllocation();
-  const disconnected = await runCliCapture(['disconnect', '--json'], {
-    env,
-    sendToDaemon: async (req) => {
-      if (req.command === 'lease_release') {
-        releasedBeforeDelete = !fetchMock.mock.calls.some(([, init]) => init.method === 'DELETE');
-      }
-      return await front(req);
-    },
-  });
-  expect(disconnected.code, disconnected.stderr || disconnected.stdout).toBeNull();
-  expect(disconnected.calls.map(({ command }) => command)).toEqual(['lease_release']);
-  const [release] = disconnected.calls;
-  expect(release?.flags?.daemonBaseUrl).toBe(hostedDevice.attach.daemonBaseUrl);
+  const leaseId = opened.calls.find(({ command }) => command === 'open')?.meta?.leaseId;
   expect(typeof leaseId).toBe('string');
-  expect(release?.meta?.leaseId).toBe(leaseId);
-  expect(disconnected.transportOptions[0]).toMatchObject({
-    authToken: hostedDevice.attach.daemonAuthToken,
+  const record = readCloudConnection(location);
+  const attachment = fs.readFileSync(cloudAttachmentPath(location), 'utf8');
+
+  fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
+  const refused = await runCliCapture(['disconnect', '--json'], { env, sendToDaemon });
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe('cloud_session_not_found');
+  expect(refused.calls).toEqual([]);
+  expect(readCloudConnection(location)).toEqual(record);
+  expect(fs.readFileSync(cloudAttachmentPath(location), 'utf8')).toBe(attachment);
+  const snapshot = await runCliCapture(['snapshot', '--json'], { env, sendToDaemon });
+  expect(snapshot.code, snapshot.stdout).toBeNull();
+  expect(snapshot.calls.find(({ command }) => command === 'snapshot')?.meta?.leaseId).toBe(leaseId);
+
+  sendToDaemon.mockClear();
+  fetchMock.mockImplementationOnce(async () => {
+    expect(sendToDaemon).not.toHaveBeenCalled();
+    expect(fs.readFileSync(cloudAttachmentPath(location), 'utf8')).toBe(attachment);
+    return new Response(null, { status: 204 });
   });
-  expect(releasedBeforeDelete).toBe(true);
-  expect(fetchMock.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(true);
+  const disconnected = await runCliCapture(['disconnect', '--json'], { env, sendToDaemon });
+  expect(disconnected.code, disconnected.stderr || disconnected.stdout).toBeNull();
+  expect(disconnected.calls).toMatchObject([
+    {
+      command: 'lease_release',
+      flags: { daemonBaseUrl: hostedDevice.attach.daemonBaseUrl },
+      meta: { leaseId },
+    },
+  ]);
+  expect(disconnected.transportOptions[0]?.authToken).toBe(hostedDevice.attach.daemonAuthToken);
+  expect(JSON.parse(disconnected.stdout).data.leaseReleaseError).toBeUndefined();
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
+  expect(readCloudConnection(location)).toBeNull();
 });
 
 test.each(['succeeds', 'fails', 'times out'] as const)(

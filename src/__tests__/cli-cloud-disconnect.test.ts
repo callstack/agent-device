@@ -46,13 +46,12 @@ test.each([
   if (session) fetchMock.mockResolvedValueOnce(Response.json(session));
   const refused = await runCliCapture(['disconnect', '--json'], { env });
   expect(refused.code).toBe(1);
+  const { error } = JSON.parse(refused.stdout);
+  expect(error.hint).toMatch(/retry.*disconnect --forget/i);
   if (reply?.status === 404) {
-    expect(JSON.parse(refused.stdout).error).toMatchObject({
-      details: { reason: 'cloud_session_not_found', status: 404 },
-      hint: expect.stringMatching(/retry agent-device disconnect.*disconnect --forget/),
-    });
+    expect(error.details).toMatchObject({ reason: 'cloud_session_not_found', status: 404 });
   }
-  expect(readCloudConnection(location)).toEqual({ ...record, phase: 'closing' });
+  expect(readCloudConnection(location)).toEqual(record);
   expect(readRemoteConnectionState(location)).toEqual(connection);
 
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();

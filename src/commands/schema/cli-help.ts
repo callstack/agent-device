@@ -523,8 +523,9 @@ Cloud session security and recovery:
   Authenticate to the hosted API with agent-device auth login or AGENT_DEVICE_CLOUD_API_KEY.
   After a connect timeout, use the original hosted account or API key. Retry with the same session and allocation options, or run disconnect to check and end the pending session.
   If the connection record is malformed, unreadable, or unsafe, check the original account with the hosted broker and end any active session before repairing local state.
+  If the hosted broker cannot confirm that disconnect ended the session, the CLI keeps an active connection available. Retry disconnect under the owning account.
   To clear only a local hosted connection, run disconnect --forget --session <name>. The rental may continue until its deadline.
-  A hosted session behind a proxy front leases its device like connect proxy. Run open before commands that use the device: devices runs without it, and any other command before that lease exists fails with run open first. disconnect releases the lease before the session ends. After the session deadline, the next session command or disconnect removes the expired session; if the front cannot be reached then, its lease ends when its heartbeats stop.
+  A hosted session behind a proxy front leases its device like connect proxy. Run open before commands that use the device: devices runs without it, and any other command before that lease exists fails with run open first. disconnect attempts to release the lease after the hosted broker confirms the session ended. If the front is unreachable, the lease ends when its heartbeats stop. After the session deadline, the next session command or disconnect removes the expired session.
 
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:

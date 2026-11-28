@@ -690,17 +690,15 @@ test.each(['ios', 'android'] as const)(
       return new Response(null, { status: 503 });
     });
     expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBe(1);
-    expect(duringDelete).toEqual({ stops: 1, credentialPresent: false, phase: 'closing' });
-    expect(readCloudConnection(location)).toMatchObject({ phase: 'closing', id: hostedDevice.id });
-    await expect(bind()).rejects.toMatchObject({
-      details: { reason: 'cloud_connection_changed' },
+    expect(duringDelete).toEqual({ stops: 0, credentialPresent: true, phase: 'committed' });
+    expect(readCloudConnection(location)).toMatchObject({
+      phase: 'committed',
+      id: hostedDevice.id,
     });
-    expect(() => bindHostedDaemon(attached.host, attached.daemonStateDir!)).toThrow(
-      expect.objectContaining({
-        details: expect.objectContaining({ reason: 'cloud_connection_changed' }),
-      }),
-    );
+    await expect(bind()).resolves.toMatchObject({ daemonStateDir: attached.daemonStateDir });
+    expect(() => bindHostedDaemon(attached.host, attached.daemonStateDir!)).not.toThrow();
     expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+    expect(stop).toHaveBeenCalledOnce();
     expect(readCloudConnection(location)).toBeNull();
     expect(mock.mock.calls.filter(([, init]) => init.method === 'DELETE')).toHaveLength(2);
   },
@@ -797,25 +795,69 @@ test('a conflicting active hosted lease keeps its authoritative id', async () =>
   expect(allocations[0]).toEqual(expect.any(String));
 });
 
-test('disconnect reports both unconfirmed local retirement and broker release failure', async () => {
+test('a DELETE 404 preserves the Limrun attachment until a confirmed broker release', async () => {
   const env = limrunEnv('current');
   const location = locationOf(env);
   const broker = stubCloudApi();
   broker.mockResolvedValueOnce(Response.json(limrunLease('ios'), { status: 201 }));
   expect((await runCliCapture(args('ios'), { env })).code).toBeNull();
   writeHostedDaemonRegistration(location);
-  stop.mockRejectedValueOnce(new Error('private retirement failure'));
+  const attachment = cloudAttachmentPath(location);
+  const readSnapshot = () =>
+    runCliCapture(['snapshot', '--json'], {
+      env,
+      sendToDaemon: async ({ command, meta }) =>
+        command === 'lease_allocate' || command === 'lease_heartbeat'
+          ? {
+              ok: true,
+              data: {
+                lease: {
+                  leaseId: meta?.leaseId,
+                  tenantId: meta?.tenantId,
+                  runId: meta?.runId,
+                  clientId: meta?.clientId,
+                  backend: 'ios-instance',
+                  leaseProvider: 'limrun',
+                },
+              },
+            }
+          : { ok: true, data: {} },
+    });
+  const before = await readSnapshot();
+  expect(before.code, before.stdout).toBeNull();
+  const activeLease = before.calls.find(({ command }) => command === 'snapshot')?.meta?.leaseId;
+  expect(activeLease).toEqual(expect.any(String));
+  const record = readCloudConnection(location)!;
 
-  broker.mockResolvedValueOnce(new Response(null, { status: 503 }));
-  const result = await runCliCapture(['disconnect', '--json'], { env });
+  broker.mockResolvedValueOnce(new Response(null, { status: 404 }));
+  const refused = await runCliCapture(['disconnect', '--json'], { env });
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe('cloud_session_not_found');
+  expect(stop).not.toHaveBeenCalled();
+  expect(fs.existsSync(attachment)).toBe(true);
+  expect(readCloudConnection(location)).toEqual(record);
 
-  expect(result.code).toBe(1);
-  expect(JSON.parse(result.stdout).error.details).toMatchObject({
-    reason: 'cloud_attachment_daemon_stop_unconfirmed',
-    brokerReleaseReason: 'COMMAND_FAILED',
+  const snapshot = await readSnapshot();
+  expect(snapshot.code, snapshot.stdout).toBeNull();
+  expect(snapshot.calls.find(({ command }) => command === 'snapshot')?.meta?.leaseId).toBe(
+    activeLease,
+  );
+
+  broker.mockImplementationOnce(async () => {
+    expect(stop).not.toHaveBeenCalled();
+    expect(fs.existsSync(attachment)).toBe(true);
+    return new Response(null, { status: 204 });
   });
-  expect(readCloudConnection(location)).toMatchObject({ phase: 'closing' });
-  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
+  const disconnected = await runCliCapture(['disconnect', '--json'], { env });
+  expect(disconnected.code, disconnected.stdout).toBeNull();
+  expect(stop).toHaveBeenCalledExactlyOnceWith(
+    expect.anything(),
+    expect.objectContaining({
+      paths: expect.objectContaining({ baseDir: cloudLimrunDaemonDir(location, record) }),
+    }),
+  );
+  expect(fs.existsSync(attachment)).toBe(false);
+  expect(readCloudConnection(location)).toBeNull();
+  expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE', 'DELETE']);
 });
 
 test('a stale materialization cannot overwrite the replacement cloud session', async () => {
