@@ -10,6 +10,7 @@ import type {
   KeyboardStatusResult,
 } from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type { ScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
@@ -246,7 +247,7 @@ class WebDriverInteractor implements Interactor {
 
   async scroll(
     direction: ScrollDirection,
-    options?: { amount?: number; pixels?: number; durationMs?: number },
+    options?: ScrollExecutionOptions,
   ): Promise<Record<string, unknown>> {
     this.requireSupport('scroll');
     const durationMs = options?.durationMs ?? 350;
@@ -258,22 +259,11 @@ class WebDriverInteractor implements Interactor {
       pixels: options?.pixels,
       referenceWidth: rect.width,
       referenceHeight: rect.height,
+      referenceOrigin: { x: rect.x, y: rect.y },
+      ...(options?.containerRect === undefined ? {} : { container: options.containerRect }),
     });
-    const absolutePlan = {
-      ...plan,
-      x1: plan.x1 + rect.x,
-      y1: plan.y1 + rect.y,
-      x2: plan.x2 + rect.x,
-      y2: plan.y2 + rect.y,
-    };
-    await this.swipe(
-      absolutePlan.x1,
-      absolutePlan.y1,
-      absolutePlan.x2,
-      absolutePlan.y2,
-      durationMs,
-    );
-    return { backend: 'webdriver', ...absolutePlan, distance: plan.pixels, durationMs };
+    await this.swipe(plan.x1, plan.y1, plan.x2, plan.y2, durationMs);
+    return { backend: 'webdriver', ...plan, distance: plan.pixels, durationMs };
   }
 
   async gestureViewport(): Promise<WebDriverWindowRect> {

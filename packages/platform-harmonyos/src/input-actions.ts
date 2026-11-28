@@ -1,6 +1,9 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
+import {
+  type ScrollContainerTarget,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
+} from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
@@ -52,7 +55,7 @@ export async function fillHarmony(
 export async function scrollHarmony(
   device: DeviceInfo,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number; durationMs?: number },
+  options?: { amount?: number; pixels?: number; durationMs?: number } & ScrollContainerTarget,
 ): Promise<Record<string, unknown>> {
   const viewport = await readHarmonyGestureViewport(device);
   const plan = buildScrollGesturePlan({
@@ -61,6 +64,8 @@ export async function scrollHarmony(
     pixels: options?.pixels,
     referenceWidth: viewport.width,
     referenceHeight: viewport.height,
+    referenceOrigin: { x: viewport.x, y: viewport.y },
+    ...(options?.containerRect === undefined ? {} : { container: options.containerRect }),
   });
   await runHarmonyShell(device, [
     'uitest',
