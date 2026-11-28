@@ -50,16 +50,13 @@ export async function connectCloudSession<T>(options: {
 }): Promise<T> {
   const { location, request, access, pending, attach } = options;
   const record = prepareCloudConnection(location.session, request, access.cloudBaseUrl, pending);
-  if (!pending) record.accountBinding = hostedCloudAccountBinding(access);
+  if (pending) await recoverPendingAccount(access, record);
+  else record.accountBinding = hostedCloudAccountBinding(access);
   writeCloudConnection(location, record);
   removeCloudAttachment(location);
   let attaching = false;
   try {
-    const session = await createCloudSession(
-      access,
-      request,
-      cloudAttempt(location, record, access),
-    );
+    const session = await createCloudSession(access, request, cloudAttempt(location, record));
     const binding = { ...session.binding, generation: record.generation };
     record.deadlineAt = session.binding.deadlineAt;
     writeCloudConnection(location, record);
@@ -114,7 +111,7 @@ async function confirmsRejectedAllocation(
   }
   try {
     const found = await lookupCloudSession(access, record.generation);
-    return !found?.active;
+    return found?.active === false;
   } catch {
     return false;
   }
@@ -127,6 +124,39 @@ function sameHostedAccount(record: CloudConnectionRecord, access: HostedCloudAcc
   );
 }
 
+async function recoverPendingAccount(
+  access: HostedCloudAccess,
+  record: CloudConnectionRecord,
+): Promise<void> {
+  requireMatchingAccount(access, record);
+  if (record.accountBinding !== undefined) return;
+  const found = await lookupRecordedAllocation(access, record);
+  record.id = found.id;
+  record.accountBinding = hostedCloudAccountBinding(access);
+}
+
+function requireMatchingAccount(access: HostedCloudAccess, record: CloudConnectionRecord): void {
+  if (record.accountBinding !== undefined && !sameHostedAccount(record, access)) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialMismatch.reason);
+  }
+}
+
+async function lookupRecordedAllocation(access: HostedCloudAccess, record: CloudConnectionRecord) {
+  const found = await lookupCloudSession(access, record.generation).catch((error: unknown) => {
+    if (
+      record.accountBinding !== undefined &&
+      !(error instanceof AppError && error.details?.status === 404)
+    ) {
+      throw error;
+    }
+    return undefined;
+  });
+  if (!found || (record.id !== undefined && record.id !== found.id)) {
+    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.allocationUnconfirmed.reason);
+  }
+  return found;
+}
+
 function invalidCreatedSession(error: unknown) {
   const details = error instanceof AppError ? error.details : undefined;
   return (
@@ -136,18 +166,11 @@ function invalidCreatedSession(error: unknown) {
   );
 }
 
-function cloudAttempt(
-  location: ConnectionLocation,
-  record: CloudConnectionRecord,
-  access: HostedCloudAccess,
-) {
+function cloudAttempt(location: ConnectionLocation, record: CloudConnectionRecord) {
   return {
     key: record.generation,
     observeId: (id: string) => {
       if (record.id === id) return;
-      if (record.accountBinding && !sameHostedAccount(record, access)) {
-        throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialMismatch.reason);
-      }
       if (record.id) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.idChanged.reason);
       record.id = id;
       writeCloudConnection(location, record);
@@ -282,15 +305,32 @@ async function cloudSessionIdForRelease(
   bindingId: string | undefined,
 ): Promise<string | undefined> {
   const id = record?.id ?? bindingId;
-  if (id || !record) return id;
-  if (!sameHostedAccount(record, access)) {
-    throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.credentialMismatch.reason);
-  }
-  const found = await lookupCloudSession(access, record.generation);
-  if (!found?.active) return undefined;
+  if (!record) return id;
+  requireMatchingAccount(access, record);
+  if (id && record.accountBinding !== undefined) return id;
+  const found = await lookupRecordedAllocation(access, record);
+  if (!found.active) return undefined;
+  record.accountBinding ??= hostedCloudAccountBinding(access);
   record.id = found.id;
   writeCloudConnection(location, record);
   return found.id;
+}
+
+export async function forgetCloudConnection(options: {
+  location: ConnectionLocation;
+  state: RemoteConnectionState | null;
+  record: CloudConnectionRecord | null;
+  host: HostEnvironment;
+}): Promise<void> {
+  const { location, state, record, host } = options;
+  const binding = cloudBindingForTeardown(location, state, record);
+  if (binding?.transport !== 'agent-device-daemon') {
+    await stopHostedLimrunDaemon(location, (record ?? binding)?.generation, host);
+  }
+  await stopMetroCleanup(binding ? state?.metro : undefined);
+  removeCloudAttachment(location);
+  removeCloudState(location, state, record);
+  removeCloudConnection(location);
 }
 
 function removeCloudState(

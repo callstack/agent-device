@@ -2570,9 +2570,9 @@ Use `--needs <capability,...>` to require every listed capability. For example, 
 
 Use `--device <model>` to pick a catalog device model, such as `iphone`, `ipad`, or `pixel-9`. Use `--os <version>` to pick an OS version, such as `"iOS 26"` or `26`. A bare major version takes the platform name from `--platform`. If no provider offers that device and OS pair, connect reports that the device is unavailable.
 
-If connect times out, retry with the same session name, API origin, and allocation options. Use the original hosted account if you signed in interactively, or the original API key. Run `disconnect` with that credential before changing allocation options. It checks whether the original request rented a device and ends the rental if it is still active. Disconnect can interrupt device commands still running in that session. If a direct replacement fails provider verification, the existing rental remains available. If ending the rental fails, the CLI blocks device commands until `disconnect` succeeds. If the CLI reports a malformed or unsafe connection record, verify the allocation with the hosted broker under the original account. End any active session there before repairing local state.
+If connect times out, retry with the same session name, API origin, and allocation options. Use the original hosted account if you signed in interactively, or the original API key. Run `disconnect` with that credential before changing allocation options. It checks whether the original request rented a device and ends the rental if it is still active. Disconnect can interrupt device commands still running in that session. If a direct replacement fails provider verification, the existing rental remains available. If ending the rental fails, the CLI blocks device commands until `disconnect` succeeds. If the CLI reports a malformed, unreadable, or unsafe connection record, verify the allocation with the hosted broker under the original account. End any active session there before repairing local state.
 
-Use `AGENT_DEVICE_CLOUD_BASE_URL` for a custom cloud session API endpoint. Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing. If you use an API key with a custom origin, set `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN` to that origin for both commands. If ending the cloud session fails, run `disconnect` again in the same session.
+Use `AGENT_DEVICE_CLOUD_BASE_URL` for a custom cloud session API endpoint. Cloud API and device endpoints require TLS. Loopback endpoints may use plaintext for local testing. If you use an API key with a custom origin, set `AGENT_DEVICE_CLOUD_API_KEY_ORIGIN` to that origin for both commands. If ending the cloud session fails, run `disconnect` again in the same session. A lookup that returns 404 leaves the local record in place.
 
 A compatible [Limrun plugin](/docs/limrun) enables its scoped attachment transport. The CLI only offers that transport when the installed plugin supports hosted attachments. The attachment uses an isolated local daemon with the instance credentials for its platform. If a live viewer URL contains the instance credential, the CLI omits it. `disconnect` blocks new commands, stops that daemon, and releases the hosted lease. If the local daemon cannot be stopped, the CLI still releases the hosted lease. Run `disconnect` again to finish the local cleanup.
 
@@ -2700,16 +2700,19 @@ Exact behavior: `agent-device help connect`.
 Clear remote connection state and release leases.
 
 ```bash
-agent-device disconnect [--shutdown]
+agent-device disconnect [--shutdown] [--forget]
 ```
 
 | Option | What it does |
 | --- | --- |
+| `--forget` | Disconnect: clear the named hosted connection locally. The rental may continue until its deadline |
 | `--shutdown` | close, disconnect: also shut down the session device where supported; a Limrun instance agent-device created is deleted with its data, an attached one keeps running. close also releases a lease or attachment kept on close |
 
 Exact behavior: `agent-device help disconnect`.
 
 <!-- /generated -->
+
+If the original account is unavailable or the hosted broker cannot confirm the allocation, first check the original account and end any active rental. To clear the local hosted connection, run `agent-device disconnect --forget --session <name>`. This acts locally. A rental may continue on the hosted broker until its deadline.
 
 To disconnect a legacy cloud profile, set `AGENT_DEVICE_DAEMON_BASE_URL` to its saved daemon URL. Provide that daemon's token with `--daemon-auth-token` or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, then run `agent-device disconnect --session <name>`. If the daemon cannot confirm release or absence of the saved lease, the CLI keeps the connection so you can retry.
 

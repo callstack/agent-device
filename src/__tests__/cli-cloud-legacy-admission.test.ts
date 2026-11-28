@@ -83,8 +83,10 @@ test('connection commands refuse lock contention before and during allocation', 
         env,
       },
     );
-  const fetchMock = vi.fn(
-    async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
+  const fetchMock = vi.fn(async (_url: URL, init: RequestInit) =>
+    init.method === 'GET'
+      ? Response.json({ id, state: 'running' })
+      : new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   const acquire = hostFiles.acquireProcessLock;
@@ -116,7 +118,7 @@ test('connection commands refuse lock contention before and during allocation', 
       expect(readCloudConnection(location)).toEqual(pending);
     });
     expect((await disconnect()).code).toBeNull();
-    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['DELETE']);
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['GET', 'DELETE']);
     expect(readCloudConnection(location)).toBeNull();
   } finally {
     acquireSpy.mockRestore();
@@ -139,12 +141,13 @@ test('disconnect waits for the lock on a committed cloud session', async () => {
     origin,
     null,
   );
-  writeCloudConnection(location, {
-    ...record,
-    phase: 'committed',
-    id: '00000000-0000-4000-8000-000000000001',
-  });
-  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+  const id = '00000000-0000-4000-8000-000000000001';
+  writeCloudConnection(location, { ...record, phase: 'committed', id });
+  const fetchMock = vi.fn(async (_url: URL, init: RequestInit) =>
+    init.method === 'GET'
+      ? Response.json({ id, state: 'running' })
+      : new Response(null, { status: 204 }),
+  );
   vi.stubGlobal('fetch', fetchMock);
   let observedContention!: () => void;
   const contention = new Promise<void>((resolve) => {
@@ -169,7 +172,7 @@ test('disconnect waits for the lock on a committed cloud session', async () => {
       return { result };
     });
     expect(JSON.parse((await disconnect.result).stdout).data.released).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['GET', 'DELETE']);
     expect(readCloudConnection(location)).toBeNull();
   } finally {
     acquireSpy.mockRestore();
@@ -305,8 +308,10 @@ test('a pending hosted session takes teardown precedence over a legacy profile',
   );
   record.id = '00000000-0000-4000-8000-000000000001';
   writeCloudConnection(location, record);
-  const fetchMock = vi.fn(
-    async (_url: URL, _init: RequestInit) => new Response(null, { status: 204 }),
+  const fetchMock = vi.fn(async (_url: URL, init: RequestInit) =>
+    init.method === 'GET'
+      ? Response.json({ id: record.id, state: 'running' })
+      : new Response(null, { status: 204 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   try {
@@ -322,6 +327,7 @@ test('a pending hosted session takes teardown precedence over a legacy profile',
     expect(disconnected.code, disconnected.stdout).toBeNull();
     expect(disconnected.calls).toEqual([]);
     expect(fetchMock.mock.calls.map(([url, init]) => [url.pathname, init.method])).toEqual([
+      ['/v1/sessions', 'GET'],
       [`/v1/sessions/${record.id}`, 'DELETE'],
     ]);
     expect(readCloudConnection(location)).toBeNull();

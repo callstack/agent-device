@@ -265,6 +265,7 @@ function summarizeProviderScenarioFlagExclusions() {
       owner: 'connection/runtime/request policy tests',
       keys: [
         'force',
+        'forget',
         'noLogin',
         'sessionLock',
         'vendor',

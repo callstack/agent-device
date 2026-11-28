@@ -648,6 +648,9 @@ These reasons can come from more than one command.
 | --- | --- |
 | `cloud_attachment_unavailable` | The saved session attachment is missing, invalid, or for a different transport. |
 | `cloud_credential_store_unsafe` | A cloud credential directory or file is unsafe to reuse. |
+| `cloud_connection_record_malformed` | The saved cloud connection record does not have a valid format. |
+| `cloud_connection_credential_mismatch` | The current credential does not match the account that started the allocation. |
+| `cloud_connection_allocation_unconfirmed` | The cloud cannot confirm the allocation for this record and credential. |
 | `cloud_connection_record_unreadable` | The saved cloud connection record cannot be read safely. |
 | `cloud_connection_session_mismatch` | The saved cloud connection belongs to another named session. |
 | `cloud_connect_pending_conflict` | A pending cloud request must finish or end before its options change. |

@@ -55,7 +55,7 @@ test('the hosted auth gate accepts a padded cloud provider with a spend cap', as
 });
 
 test.each([404, 405])(
-  'reports budget_cap_unsupported on HTTP %i and clears the intent after an absent lookup',
+  'reports budget_cap_unsupported on HTTP %i and preserves the intent after a lookup 404',
   async (status) => {
     const env = cloudEnv();
     const fetchMock = stubCloudApi();
@@ -71,7 +71,12 @@ test.each([404, 405])(
       ['POST', '/v1/sessions/bounded'],
       ['GET', '/v1/sessions'],
     ]);
-    expect(readCloudConnection(locationOf(env))).toBeNull();
+    const key = postKey(fetchMock.mock.calls[0]![1]);
+    expect(fetchMock.mock.calls[1]![0].searchParams.get('idempotencyKey')).toBe(key);
+    expect(readCloudConnection(locationOf(env))).toMatchObject({
+      phase: 'pending',
+      generation: key,
+    });
     expect(readRemoteConnectionState(locationOf(env))).toBeNull();
   },
 );
@@ -94,7 +99,7 @@ test.each([
   { status: 404, body: null },
   { status: 405, body: null },
   { status: 400, body: { error: 'app_source_unsupported' } },
-])('preload refusal $status clears the intent after an absent lookup', async ({ status, body }) => {
+])('preload refusal $status preserves the intent after a lookup 404', async ({ status, body }) => {
   const env = cloudEnv();
   const fetchMock = stubCloudApi();
   fetchMock
@@ -109,7 +114,9 @@ test.each([
     ['POST', '/v1/sessions/preloaded'],
     ['GET', '/v1/sessions'],
   ]);
-  expect(readCloudConnection(locationOf(env))).toBeNull();
+  const key = postKey(fetchMock.mock.calls[0]![1]);
+  expect(fetchMock.mock.calls[1]![0].searchParams.get('idempotencyKey')).toBe(key);
+  expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'pending', generation: key });
   expect(readRemoteConnectionState(locationOf(env))).toBeNull();
 });
 
@@ -130,7 +137,7 @@ test.each([
     body: { error: 'budget_exceeded', maxUsdMicros: '100000', minimumUsdMicros: '200000' },
   },
 ])(
-  'money rejection $status preserves its details after an absent lookup clears the intent',
+  'money rejection $status preserves its details and pending intent after a lookup 404',
   async (rejection) => {
     const env = cloudEnv();
     const fetchMock = stubCloudApi();
@@ -147,7 +154,12 @@ test.each([
       ...Object.fromEntries(Object.entries(rejection.body).filter(([key]) => key !== 'error')),
     });
     expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
-    expect(readCloudConnection(locationOf(env))).toBeNull();
+    const key = postKey(fetchMock.mock.calls[0]![1]);
+    expect(fetchMock.mock.calls[1]![0].searchParams.get('idempotencyKey')).toBe(key);
+    expect(readCloudConnection(locationOf(env))).toMatchObject({
+      phase: 'pending',
+      generation: key,
+    });
   },
 );
 

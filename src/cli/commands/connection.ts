@@ -15,6 +15,7 @@ import {
 } from '../connection/cloud-connection-record.ts';
 import {
   connectCloudSession,
+  forgetCloudConnection,
   releaseCloudConnection,
   type CloudConnectionRelease,
 } from '../connection/cloud-connect.ts';
@@ -568,6 +569,10 @@ export const disconnectCommand: ClientCommandHandler = async ({
   host,
   claimedConnection,
 }) => {
+  if (flags.forget && flags.session === undefined) throw remoteSessionRequiredError(undefined);
+  if (flags.forget && flags.shutdown) {
+    throw new AppError('INVALID_ARGS', 'Use disconnect --forget separately from --shutdown.');
+  }
   const stateDir = resolveConnectionStateDir(flags, host);
   const location = { stateDir, session: flags.session ?? 'default' };
   return await withConnectionLock(
@@ -576,6 +581,9 @@ export const disconnectCommand: ClientCommandHandler = async ({
     async () => {
       const record = readCloudConnection(location);
       const current = readRemoteConnectionState(location);
+      if (flags.forget) {
+        return await disconnectForget({ location, state: current, record, host }, flags);
+      }
       const state =
         record || current?.cloudSession || claimedConnection?.cloudSession
           ? current
@@ -607,6 +615,22 @@ export const disconnectCommand: ClientCommandHandler = async ({
     () => refuseContendedConnection(location, 'disconnect', claimedConnection),
   );
 };
+
+async function disconnectForget(connection: CloudConnection, flags: CliFlags): Promise<boolean> {
+  const { record, state, location } = connection;
+  if (!record && !state?.cloudSession) {
+    await writeNoRemoteConnectionOutput(flags, location.session);
+    return true;
+  }
+  await forgetCloudConnection(connection);
+  writeStderr('Warning: A rental may still exist on the hosted broker until its deadline.\n');
+  await writeCommandOutput(
+    flags,
+    { connected: false, session: location.session, released: false, forgotten: true },
+    () => `Cleared local hosted connection "${location.session}".`,
+  );
+  return true;
+}
 
 async function disconnectLegacyCloud(
   flags: CliFlags,

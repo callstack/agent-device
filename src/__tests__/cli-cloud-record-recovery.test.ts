@@ -1,10 +1,16 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { writeCliSession } from '../cli/auth-session.ts';
-import { readCloudConnection } from '../cli/connection/cloud-connection-record.ts';
+import {
+  prepareCloudConnection,
+  readCloudConnection,
+  writeCloudConnection,
+} from '../cli/connection/cloud-connection-record.ts';
+import { readCloudSessionRequest } from '../cli/connection/cloud-session-api.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
   cloudEnv,
   connectArgs,
+  hostedDevice,
   locationOf,
   postKey,
   stubCloudApi,
@@ -16,110 +22,208 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('a timed-out allocation survives a 429 retry and disconnect under another credential', async () => {
+async function timeOutAllocation(
+  env: Record<string, string | undefined>,
+  fetchMock: ReturnType<typeof stubCloudApi>,
+) {
+  timeOutNextCreate(fetchMock);
+  const result = await runCliCapture(connectArgs, { env });
+  expect(JSON.parse(result.stdout).error.details.reason).toBe('cloud_session_connect_timeout');
+  vi.restoreAllMocks();
+}
+
+test('refuses a retry from another account before it requests an allocation', async () => {
   const env = cloudEnv();
   const location = locationOf(env);
   const fetchMock = stubCloudApi();
-  timeOutNextCreate(fetchMock);
-  const timedOut = await runCliCapture(connectArgs, { env });
-  expect(JSON.parse(timedOut.stdout).error.details.reason).toBe('cloud_session_connect_timeout');
-  const generation = readCloudConnection(location)?.generation;
-  expect(generation).toBe(postKey(fetchMock.mock.calls[0]![1]));
-  expect(JSON.stringify(readCloudConnection(location))).not.toContain(
-    env.AGENT_DEVICE_CLOUD_API_KEY,
-  );
-  vi.restoreAllMocks();
+  await timeOutAllocation(env, fetchMock);
+  const pending = readCloudConnection(location);
+  expect(pending?.generation).toBe(postKey(fetchMock.mock.calls[0]![1]));
+  expect(JSON.stringify(pending)).not.toContain(env.AGENT_DEVICE_CLOUD_API_KEY);
 
   const other = { ...env, AGENT_DEVICE_CLOUD_API_KEY: 'other-account-api-key' };
-  fetchMock.mockResolvedValueOnce(Response.json({ error: 'concurrency_limit' }, { status: 429 }));
   const refused = await runCliCapture(connectArgs, { env: other });
+  expect(JSON.parse(refused.stdout).error).toMatchObject({
+    details: { reason: 'cloud_connection_credential_mismatch' },
+    hint: expect.stringContaining('disconnect --forget'),
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(readCloudConnection(location)).toEqual(pending);
+});
+
+test('a binding mismatch keeps a known session ID and sends no broker DELETE', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const fetchMock = stubCloudApi();
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+
+  const other = { ...env, AGENT_DEVICE_CLOUD_API_KEY: 'other-account-api-key' };
+  const refused = await runCliCapture(['disconnect', '--json'], { env: other });
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe(
+    'cloud_connection_credential_mismatch',
+  );
+  expect(readCloudConnection(location)?.id).toBe(hostedDevice.id);
+  expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST']);
+
+  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+  expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'DELETE']);
+  expect(readCloudConnection(location)).toBeNull();
+});
+
+test('a 429 retry under the original credential keeps the pending generation', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const fetchMock = stubCloudApi();
+  await timeOutAllocation(env, fetchMock);
+  const pending = readCloudConnection(location);
+
+  fetchMock.mockResolvedValueOnce(Response.json({ error: 'concurrency_limit' }, { status: 429 }));
+  const refused = await runCliCapture(connectArgs, { env });
   expect(JSON.parse(refused.stdout).error.details).toMatchObject({
     status: 429,
     reason: 'concurrency_limit',
   });
-  expect(postKey(fetchMock.mock.calls[1]![1])).toBe(generation);
-  expect(readCloudConnection(location)).toMatchObject({ phase: 'pending', generation });
-
-  const refusedDisconnect = await runCliCapture(['disconnect', '--json'], { env: other });
-  expect(JSON.parse(refusedDisconnect.stdout).error.details.reason).toBe(
-    'cloud_connection_credential_mismatch',
-  );
-  expect(readCloudConnection(location)?.generation).toBe(generation);
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-
-  fetchMock.mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
-  const disconnected = await runCliCapture(['disconnect', '--json'], { env });
-  expect(disconnected.code, disconnected.stdout).toBeNull();
-  expect(readCloudConnection(location)).toBeNull();
-  expect(fetchMock.mock.calls[2]?.[0].searchParams.get('idempotencyKey')).toBe(generation);
-});
-
-test('an ingress 404 cannot resolve a refused allocation under the original credential', async () => {
-  const env = cloudEnv();
-  const location = locationOf(env);
-  const fetchMock = stubCloudApi();
-  timeOutNextCreate(fetchMock);
-  const timedOut = await runCliCapture(connectArgs, { env });
-  expect(JSON.parse(timedOut.stdout).error.details.reason).toBe('cloud_session_connect_timeout');
-  const pending = readCloudConnection(location);
-  vi.restoreAllMocks();
-
-  fetchMock
-    .mockResolvedValueOnce(Response.json({ error: 'no_vendor_matches' }, { status: 422 }))
-    .mockResolvedValueOnce(new Response('<h1>Not Found</h1>', { status: 404 }));
-  const refused = await runCliCapture(connectArgs, { env });
-  expect(JSON.parse(refused.stdout).error.details.reason).toBe('no_vendor_matches');
+  expect(fetchMock.mock.calls.map(([, init]) => postKey(init))).toEqual([
+    pending?.generation,
+    pending?.generation,
+  ]);
   expect(readCloudConnection(location)).toEqual(pending);
-  expect(fetchMock.mock.calls[2]?.[0].searchParams.get('idempotencyKey')).toBe(pending?.generation);
 });
 
 test.each([
-  { accountId: 'original-account', clears: true },
-  { accountId: undefined, clears: false },
-])(
-  'a login with account identity $accountId recovers across token rotation ($clears)',
-  async ({ accountId, clears }) => {
+  ['broker-shaped', () => Response.json({ error: 'not_found' }, { status: 404 })],
+  ['ingress', () => new Response('<h1>Not Found</h1>', { status: 404 })],
+] as const)('a %s lookup 404 cannot resolve a refused allocation', async (_kind, missing) => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const fetchMock = stubCloudApi();
+  await timeOutAllocation(env, fetchMock);
+  const pending = readCloudConnection(location);
+
+  fetchMock
+    .mockResolvedValueOnce(Response.json({ error: 'no_vendor_matches' }, { status: 422 }))
+    .mockResolvedValueOnce(missing())
+    .mockResolvedValueOnce(missing());
+  const refused = await runCliCapture(connectArgs, { env });
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe('no_vendor_matches');
+  expect(readCloudConnection(location)).toEqual(pending);
+
+  const disconnect = await runCliCapture(['disconnect', '--json'], { env });
+  expect(JSON.parse(disconnect.stdout).error.details.reason).toBe(
+    'cloud_connection_allocation_unconfirmed',
+  );
+  expect(readCloudConnection(location)?.generation).toBe(pending?.generation);
+  expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual([
+    'POST',
+    'POST',
+    'GET',
+    'GET',
+  ]);
+  for (const [url] of fetchMock.mock.calls.slice(2)) {
+    expect(url.searchParams.get('idempotencyKey')).toBe(pending?.generation);
+  }
+});
+
+function writeLegacyPending(env: ReturnType<typeof cloudEnv>, id?: string) {
+  const location = locationOf(env);
+  const record = prepareCloudConnection(
+    location.session,
+    readCloudSessionRequest({ platform: 'ios', json: false, help: false, version: false }),
+    env.AGENT_DEVICE_CLOUD_BASE_URL,
+    null,
+  );
+  writeCloudConnection(location, { ...record, id });
+  return record;
+}
+
+test('an unbound legacy allocation can resume after a positive lookup of its key', async () => {
+  const env = cloudEnv();
+  const record = writeLegacyPending(env);
+  const fetchMock = stubCloudApi();
+  const result = await runCliCapture(connectArgs, { env });
+
+  expect(result.code, result.stdout).toBeNull();
+  expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['GET', 'POST']);
+  expect(fetchMock.mock.calls[0]![0].searchParams.get('idempotencyKey')).toBe(record.generation);
+  expect(postKey(fetchMock.mock.calls[1]![1])).toBe(record.generation);
+  expect(readCloudConnection(locationOf(env))).toMatchObject({
+    phase: 'committed',
+    generation: record.generation,
+    id: hostedDevice.id,
+    accountBinding: expect.stringMatching(/^api-key:/),
+  });
+});
+
+test.each([undefined, hostedDevice.id])(
+  'an unbound legacy allocation with ID %s needs proof or an explicit local forget',
+  async (id) => {
     const env = cloudEnv();
     const location = locationOf(env);
-    const loginEnv = { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined };
-    writeCliSession({
-      stateDir: location.stateDir,
-      session: {
-        version: 2,
-        id: 'fixture-login',
-        accountId,
-        cloudBaseUrl: env.AGENT_DEVICE_CLOUD_BASE_URL,
-        refreshCredential: 'login-refresh-credential',
-        createdAt: new Date().toISOString(),
-      },
-    });
+    const record = writeLegacyPending(env, id);
     const fetchMock = stubCloudApi();
-    fetchMock.mockResolvedValueOnce(Response.json({ accessToken: 'first-access-token' }));
-    timeOutNextCreate(fetchMock);
-    const timedOut = await runCliCapture(connectArgs, { env: loginEnv });
-    expect(JSON.parse(timedOut.stdout).error.details.reason).toBe('cloud_session_connect_timeout');
-    const pending = readCloudConnection(location);
-    expect(pending?.generation).toBe(postKey(fetchMock.mock.calls[1]![1]));
-    expect(JSON.stringify(pending)).not.toContain('first-access-token');
-    vi.restoreAllMocks();
-
-    fetchMock.mockResolvedValueOnce(Response.json({ accessToken: 'rotated-access-token' }));
-    if (clears) {
+    for (const args of [connectArgs, ['disconnect', '--json']]) {
       fetchMock.mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
+      const blocked = await runCliCapture(args, { env });
+      expect(JSON.parse(blocked.stdout).error).toMatchObject({
+        details: { reason: 'cloud_connection_allocation_unconfirmed' },
+        hint: expect.stringContaining('disconnect --forget'),
+      });
+      expect(readCloudConnection(location)).toMatchObject({ generation: record.generation });
+      expect(readCloudConnection(location)?.accountBinding).toBeUndefined();
+      expect(readCloudConnection(location)?.id).toBe(id);
     }
-    const result = await runCliCapture(['disconnect', '--json'], { env: loginEnv });
-    if (clears) {
-      expect(result.code, result.stdout).toBeNull();
-      expect(readCloudConnection(location)).toBeNull();
-      const [url, init] = fetchMock.mock.calls[3]!;
-      expect(url.searchParams.get('idempotencyKey')).toBe(pending?.generation);
-      expect(new Headers(init.headers).get('Authorization')).toBe('Bearer rotated-access-token');
-    } else {
-      expect(JSON.parse(result.stdout).error.details.reason).toBe(
-        'cloud_connection_credential_mismatch',
-      );
-      expect(readCloudConnection(location)?.generation).toBe(pending?.generation);
-      expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'POST', 'POST']);
-    }
+
+    const forgotten = await runCliCapture(
+      ['disconnect', '--forget', '--session', location.session, '--json'],
+      { env },
+    );
+    expect(JSON.parse(forgotten.stdout).data).toMatchObject({ forgotten: true, released: false });
+    expect(forgotten.stderr).toContain(
+      'A rental may still exist on the hosted broker until its deadline.',
+    );
+    expect(readCloudConnection(location)).toBeNull();
+    expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['GET', 'GET']);
   },
 );
+
+test.each([
+  { accountId: 'original-account', label: 'bound' },
+  { accountId: undefined, label: 'unbound' },
+])('disconnect verifies a $label login across access token rotation', async ({ accountId }) => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  const loginEnv = { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined };
+  writeCliSession({
+    stateDir: location.stateDir,
+    session: {
+      version: 2,
+      id: 'fixture-login',
+      accountId,
+      cloudBaseUrl: env.AGENT_DEVICE_CLOUD_BASE_URL,
+      refreshCredential: 'login-refresh-credential',
+      createdAt: new Date().toISOString(),
+    },
+  });
+  const fetchMock = stubCloudApi();
+  fetchMock.mockResolvedValueOnce(Response.json({ accessToken: 'first-access-token' }));
+  await timeOutAllocation(loginEnv, fetchMock);
+  const pending = readCloudConnection(location);
+  expect(pending?.generation).toBe(postKey(fetchMock.mock.calls[1]![1]));
+  expect(pending?.accountBinding).toBe(accountId ? `account:${accountId}` : undefined);
+  expect(JSON.stringify(pending)).not.toContain('first-access-token');
+
+  fetchMock.mockResolvedValueOnce(Response.json({ accessToken: 'rotated-access-token' }));
+  const result = await runCliCapture(['disconnect', '--json'], { env: loginEnv });
+  expect(result.code, result.stdout).toBeNull();
+  expect(readCloudConnection(location)).toBeNull();
+  const [url, init] = fetchMock.mock.calls[3]!;
+  expect(url.searchParams.get('idempotencyKey')).toBe(pending?.generation);
+  expect(new Headers(init.headers).get('Authorization')).toBe('Bearer rotated-access-token');
+  expect(fetchMock.mock.calls.map(([, call]) => call.method)).toEqual([
+    'POST',
+    'POST',
+    'POST',
+    'GET',
+    'DELETE',
+  ]);
+});

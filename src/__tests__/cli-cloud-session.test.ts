@@ -357,7 +357,14 @@ test.each([
         status,
       }),
     );
-    expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+    const result = await runCliCapture(['disconnect', '--json'], { env });
+    if (status === 404) {
+      expect(JSON.parse(result.stdout).error.details.reason).toBe(
+        'cloud_connection_allocation_unconfirmed',
+      );
+    } else {
+      expect(result.code, result.stdout).toBeNull();
+    }
     const [, first] = fetchMock.mock.calls[0]!;
     const [lookup, recovery] = fetchMock.mock.calls[1]!;
     expect(lookup.searchParams.get('idempotencyKey')).toBe(postKey(first));
@@ -365,7 +372,11 @@ test.each([
     expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(
       deletes ? ['POST', 'GET', 'DELETE'] : ['POST', 'GET'],
     );
-    expect(readCloudConnection(location)).toBeNull();
+    if (status === 404) {
+      expect(readCloudConnection(location)?.generation).toBe(postKey(first));
+    } else {
+      expect(readCloudConnection(location)).toBeNull();
+    }
   },
 );
 
@@ -391,7 +402,7 @@ test.each([
       ),
     );
     if (clears) {
-      fetchMock.mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
+      fetchMock.mockResolvedValueOnce(Response.json({ id: hostedDevice.id, state: 'settled' }));
     }
     const refused = await runCliCapture(connectArgs, { env });
     expect(JSON.parse(refused.stdout).error).toMatchObject({
@@ -958,7 +969,13 @@ test('an invalid ID cannot replace an attempt key or enter a DELETE URL', async 
   expect(readCloudConnection(locationOf(env))).toMatchObject({ phase: 'pending' });
   expect(readCloudConnection(locationOf(env))?.id).toBeUndefined();
   fetchMock.mockResolvedValueOnce(Response.json({ error: 'not_found' }, { status: 404 }));
-  expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+  const result = await runCliCapture(['disconnect', '--json'], { env });
+  expect(JSON.parse(result.stdout).error.details.reason).toBe(
+    'cloud_connection_allocation_unconfirmed',
+  );
+  expect(readCloudConnection(locationOf(env))?.generation).toBe(
+    postKey(fetchMock.mock.calls[0]![1]),
+  );
   expect(fetchMock.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
 });
 

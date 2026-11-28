@@ -159,7 +159,8 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       description: 'Disconnect remote daemon state, stop owned Metro companion, and release lease',
     },
     listUsageOverride: 'disconnect',
-    allowedFlags: ['shutdown'],
+    allowedFlags: ['shutdown', 'forget'],
+    explicitOnlyFlags: ['forget'],
     supportedFlags: ['remoteConfig', 'stateDir', 'session', 'daemonAuthToken'],
   },
   mcp: {

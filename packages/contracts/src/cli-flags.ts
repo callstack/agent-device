@@ -54,6 +54,7 @@ export type CliFlags = CloudProviderProfileFields &
     provider?: string;
     providerSessionId?: string;
     force?: boolean;
+    forget?: boolean;
     clean?: boolean;
     noLogin?: boolean;
     vendor?: string;

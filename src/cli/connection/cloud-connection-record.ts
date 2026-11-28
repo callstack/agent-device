@@ -23,8 +23,12 @@ import { parseCloudAttachment, type CloudAttachment } from './cloud-attachment-s
 export const CLOUD_CONNECTION_REASONS = {
   // A cloud credential directory or file is unsafe to reuse.
   credentialStoreUnsafe: { reason: 'cloud_credential_store_unsafe' },
+  // The saved cloud connection record does not have a valid format.
   recordMalformed: { reason: 'cloud_connection_record_malformed' },
+  // The current credential does not match the account that started the allocation.
   credentialMismatch: { reason: 'cloud_connection_credential_mismatch' },
+  // The cloud cannot confirm the allocation for this record and credential.
+  allocationUnconfirmed: { reason: 'cloud_connection_allocation_unconfirmed' },
   // The saved cloud connection record cannot be read safely.
   recordUnreadable: { reason: 'cloud_connection_record_unreadable' },
   // The saved cloud connection belongs to another named session.
@@ -234,7 +238,7 @@ export function readCloudConnection(location: ConnectionLocation): CloudConnecti
     assertCloudRecordSession(location, record);
     return record;
   } catch (error) {
-    if (error instanceof AppError && error.details?.reason) throw error;
+    if (error instanceof AppError) throw error;
     if (error instanceof SyntaxError) {
       throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.recordMalformed.reason);
     }
@@ -530,7 +534,9 @@ function cloudConnectionRecoveryHint(
     case CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason:
       return 'Verify the allocation with the hosted broker under the original account. End any active session there before repairing the local record or credential store.';
     case CLOUD_CONNECTION_REASONS.credentialMismatch.reason:
-      return 'Retry with the original hosted account or API key. If the credential is unavailable, verify and end the original session with the hosted broker before repairing local state.';
+      return 'Sign back in to the owning hosted account or use the original API key. To clear local state only, run agent-device disconnect --forget --session <name>. The rental may continue until its deadline.';
+    case CLOUD_CONNECTION_REASONS.allocationUnconfirmed.reason:
+      return 'Check the allocation with the hosted broker under the original account and retry. To clear local state only, run agent-device disconnect --forget --session <name>. The rental may continue until its deadline.';
     default:
       return 'Run agent-device disconnect in this session to recover it, then reconnect.';
   }
