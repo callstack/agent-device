@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   isIosFamily,
   isMacOs,
@@ -286,7 +285,7 @@ export async function sampleAppleFramePerf(
     );
   }
 
-  const { resolveIosDevicePerfTarget } = await import('./perf-target.ts');
+  const { readIosDeviceProcessName, resolveIosDevicePerfTarget } = await import('./perf-target.ts');
   const processes = await resolveIosDevicePerfTarget(device, appBundleId);
   const capture = await captureIosDeviceFramePerf(device, appBundleId, processes);
   return parseAppleFramePerfSample({
@@ -295,7 +294,7 @@ export async function sampleAppleFramePerf(
     displayInfoXml: capture.displayInfoXml,
     processIds: processes.map((processInfo) => processInfo.pid),
     processNames: uniqueStrings(
-      processes.map((processInfo) => path.basename(fileURLToPath(processInfo.executable))),
+      processes.map((processInfo) => readIosDeviceProcessName(processInfo.executable)),
     ),
     windowStartedAt: capture.windowStartedAt,
     windowEndedAt: capture.windowEndedAt,
@@ -481,7 +480,7 @@ async function sampleIosDeviceMemoryPerf(
   device: DeviceInfo,
   appBundleId: string,
 ): Promise<AppleMemoryPerfSample> {
-  const { resolveIosDevicePerfTarget } = await import('./perf-target.ts');
+  const { readIosDeviceProcessName, resolveIosDevicePerfTarget } = await import('./perf-target.ts');
   const processes = await resolveIosDevicePerfTarget(device, appBundleId);
   const capture = await captureIosDevicePerfTable(device, appBundleId);
   const snapshot = summarizeIosDeviceMemorySnapshot(
@@ -489,6 +488,7 @@ async function sampleIosDeviceMemoryPerf(
     processes,
     appBundleId,
     device,
+    readIosDeviceProcessName,
   );
   if (snapshot.residentMemoryBytes === null) {
     throw new AppError('COMMAND_FAILED', `Incomplete Activity Monitor sample for ${appBundleId}`, {
@@ -539,17 +539,21 @@ function summarizeIosDeviceMemorySnapshot(
   processes: IosDeviceProcessInfo[],
   appBundleId: string,
   device: DeviceInfo,
+  readProcessName: (executableUrl: string) => string,
 ): {
   residentMemoryBytes: number | null;
   matchedProcesses: string[];
 } {
   const processIds = new Set(processes.map((processInfo) => processInfo.pid));
   const processNames = new Set(
-    processes.map((processInfo) => path.basename(fileURLToPath(processInfo.executable))),
+    processes.map((processInfo) => readProcessName(processInfo.executable)),
   );
-  const matchedSamples = samples.filter(
-    (sample) => processIds.has(sample.pid) || processNames.has(sample.processName),
-  );
+  // Prefer exact CoreDevice PIDs so another installed build sharing the binary name is not swept in.
+  const pidMatchedSamples = samples.filter((sample) => processIds.has(sample.pid));
+  const matchedSamples =
+    pidMatchedSamples.length > 0
+      ? pidMatchedSamples
+      : samples.filter((sample) => processNames.has(sample.processName));
   if (matchedSamples.length === 0) {
     throw new AppError('COMMAND_FAILED', `No Activity Monitor sample found for ${appBundleId}`, {
       appBundleId,

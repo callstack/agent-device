@@ -30,21 +30,30 @@ import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  emptyRunResult,
   hostPs,
   iosSimulatorAppContainer,
   isSimulatorPs,
   macosBundleLookup,
+  makeActivityMonitorCaptureXml,
+  makeActivityMonitorRow,
+  mockBackgroundXctrace,
   mockHostCommands,
+  mockIosDeviceApps,
+  mockIosDeviceBundleHandlers,
+  mockIosDeviceProcesses,
+  mockXcrunCommands,
+  readOutputPath,
   simulatorPs,
   simulatorPsUnavailable,
   writeIosSimulatorApp,
   writeMacosAppBundle,
   type MockRunCmdResult,
+  type XcrunMockHandler,
 } from './perf.fixtures.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);
-type XcrunMockHandler = (args: readonly string[]) => Promise<MockRunCmdResult | null>;
 
 const IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',
@@ -700,53 +709,59 @@ test('writeAppleXctracePerfReport writes compact weighted CPU evidence', async (
   }
 });
 
-function mockXcrunCommands(handlers: XcrunMockHandler[]): void {
-  mockRunCmd.mockImplementation(async (cmd, args) => {
-    if (cmd !== 'xcrun') throw new Error(`unexpected command: ${cmd} ${args.join(' ')}`);
-    for (const handler of handlers) {
-      const result = await handler(args);
-      if (result) return result;
-    }
-    throw new Error(`unexpected xcrun args: ${args.join(' ')}`);
-  });
-}
-
-async function mockIosDeviceApps(args: readonly string[]): Promise<MockRunCmdResult | null> {
-  if (!matchesDevicectlInfo(args, 'apps')) return null;
-  await writeJsonOutput(args, {
-    result: {
-      apps: [
+test('sampleAppleMemoryPerf excludes iOS .appex extensions and isolates matching app pid', async () => {
+  const xml = [
+    '<?xml version="1.0"?>',
+    '<trace-query-result><node><schema name="activity-monitor-process-live">',
+    '<col><mnemonic>start</mnemonic></col>',
+    '<col><mnemonic>process</mnemonic></col>',
+    '<col><mnemonic>cpu-total</mnemonic></col>',
+    '<col><mnemonic>memory-real</mnemonic></col>',
+    '<col><mnemonic>pid</mnemonic></col>',
+    '</schema>',
+    makeActivityMonitorRow('App', 10089, 10_000_000, 6_291_456),
+    makeActivityMonitorRow('LiveActivityExtension', 10844, 5_000_000, 2_097_152),
+    makeActivityMonitorRow('App', 10870, 20_000_000, 8_388_608),
+    '</node></trace-query-result>',
+  ].join('');
+  mockXcrunCommands([
+    ...mockIosDeviceBundleHandlers(
+      [
         {
-          bundleIdentifier: 'com.example.device',
-          name: 'Example Device App',
-          url: 'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/',
+          bundleIdentifier: 'com.example.app',
+          name: 'App Prod',
+          url: 'file:///private/var/containers/Bundle/Application/PROD-1/App.app/',
+        },
+        {
+          bundleIdentifier: 'com.example.app-dev',
+          name: 'App Dev',
+          url: 'file:///private/var/containers/Bundle/Application/DEV-1/App.app/',
         },
       ],
-    },
-  });
-  return emptyRunResult();
-}
-
-async function mockIosDeviceProcesses(args: readonly string[]): Promise<MockRunCmdResult | null> {
-  if (!matchesDevicectlInfo(args, 'processes')) return null;
-  await writeJsonOutput(args, {
-    result: {
-      runningProcesses: [
+      [
         {
-          executable:
-            'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/ExampleDeviceApp',
-          processIdentifier: 4001,
+          executable: 'file:///private/var/containers/Bundle/Application/PROD-1/App.app/App',
+          processIdentifier: 10089,
         },
         {
           executable:
-            'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/ExampleDeviceHelper',
-          processIdentifier: 4002,
+            'file:///private/var/containers/Bundle/Application/DEV-1/App.app/PlugIns/LiveActivityExtension.appex/LiveActivityExtension',
+          processIdentifier: 10844,
+        },
+        {
+          executable: 'file:///private/var/containers/Bundle/Application/DEV-1/App.app/App',
+          processIdentifier: 10870,
         },
       ],
-    },
-  });
-  return emptyRunResult();
-}
+    ),
+    mockXctraceRecord(() => {}),
+    mockSequentialExports([xml]),
+  ]);
+
+  const memory = await sampleAppleMemoryPerf(IOS_DEVICE, 'com.example.app-dev');
+  assert.equal(memory.residentMemoryKb, 8192);
+  assert.deepEqual(memory.matchedProcesses, ['App']);
+});
 
 function mockXctraceRecord(onRecord: () => void): XcrunMockHandler {
   return async (args) => {
@@ -827,40 +842,11 @@ function readFrameTableXml(xpath: string): string {
   return makeAppleHitchesXml();
 }
 
-function matchesDevicectlInfo(args: readonly string[], subject: 'apps' | 'processes'): boolean {
-  return (
-    args[0] === 'devicectl' && args[1] === 'device' && args[2] === 'info' && args[3] === subject
-  );
-}
-
-async function writeJsonOutput(args: readonly string[], data: unknown): Promise<void> {
-  await fs.writeFile(readOutputPath(args, '--json-output'), JSON.stringify(data), 'utf8');
-}
-
-function readOutputPath(args: readonly string[], flag = '--output'): string {
-  return args[args.indexOf(flag) + 1]!;
-}
-
-function emptyRunResult(): MockRunCmdResult {
-  return { stdout: '', stderr: '', exitCode: 0 };
-}
-
 async function fileExists(filePath: string): Promise<boolean> {
   return await fs
     .stat(filePath)
     .then((stat) => stat.isFile())
     .catch(() => false);
-}
-
-function mockBackgroundXctrace(result?: MockRunCmdResult): ReturnType<typeof runCmdBackground> {
-  const child = {
-    kill: vi.fn((_signal?: NodeJS.Signals) => true),
-    pid: 1234,
-  };
-  return {
-    child: child as unknown as ReturnType<typeof runCmdBackground>['child'],
-    wait: result ? Promise.resolve(result) : new Promise<MockRunCmdResult>(() => {}),
-  };
 }
 
 function makeTraceTocXml(): string {
@@ -875,43 +861,6 @@ function makeTraceTocXml(): string {
     '</data>',
     '</run>',
     '</trace-toc>',
-  ].join('');
-}
-
-function makeActivityMonitorCaptureXml(): string {
-  return [
-    '<?xml version="1.0"?>',
-    '<trace-query-result>',
-    '<node xpath="//trace-toc[1]/run[1]/data[1]/table[7]">',
-    '<schema name="activity-monitor-process-live">',
-    '<col><mnemonic>start</mnemonic></col>',
-    '<col><mnemonic>process</mnemonic></col>',
-    '<col><mnemonic>cpu-total</mnemonic></col>',
-    '<col><mnemonic>memory-real</mnemonic></col>',
-    '<col><mnemonic>pid</mnemonic></col>',
-    '</schema>',
-    makeActivityMonitorRow('ExampleDeviceApp', 4001, 100_000_000, 8_388_608),
-    makeActivityMonitorRow('OtherApp', 5001, 75_000_000, 4_194_304),
-    '</node>',
-    '</trace-query-result>',
-  ].join('');
-}
-
-function makeActivityMonitorRow(
-  processName: string,
-  pid: number,
-  cpuTimeNs: number,
-  memoryBytes: number,
-): string {
-  return [
-    '<row>',
-    `<start-time fmt="00:00.123">${pid === 4001 ? 123 : 124}</start-time>`,
-    `<process fmt="${processName} (${pid})"><pid fmt="${pid}">${pid}</pid></process>`,
-    `<duration-on-core fmt="100.00 ms">${cpuTimeNs}</duration-on-core>`,
-    `<size-in-bytes fmt="8.00 MiB">${memoryBytes}</size-in-bytes>`,
-    `<pid fmt="${pid}">${pid}</pid>`,
-    pid === 4001 ? '<process ref="background-process"/>' : '',
-    '</row>',
   ].join('');
 }
 

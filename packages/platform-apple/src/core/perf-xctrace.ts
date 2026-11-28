@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   isIosFamily,
   isApplePlatform,
@@ -344,14 +343,18 @@ async function resolveAppleXctracePerfTarget(
       hint: 'Android native profiling belongs to the Android perf rollout and is not implemented under Apple xctrace.',
     });
   }
-  const { readAppleProcessSamples, resolveAppleExecutable, resolveIosDevicePerfTarget } =
-    await import('./perf-target.ts');
+  const {
+    readAppleProcessSamples,
+    readIosDeviceProcessName,
+    resolveAppleExecutable,
+    resolveIosDevicePerfTarget,
+  } = await import('./perf-target.ts');
   if (isIosFamily(device) && device.kind === 'device') {
     const processes = await resolveIosDevicePerfTarget(device, appBundleId);
     return {
       pids: processes.map((processInfo) => processInfo.pid),
       processNames: uniqueStrings(
-        processes.map((processInfo) => path.basename(fileURLToPath(processInfo.executable))),
+        processes.map((processInfo) => readIosDeviceProcessName(processInfo.executable)),
       ),
     };
   }

@@ -78,8 +78,12 @@ export async function resolveIosDevicePerfTarget(
   const { appBundleUrl, processes } = await resolveIosPhysicalDeviceControl(
     device,
   ).resolveAppProcesses(device, appBundleId);
-  const appBundlePath = fileURLToPath(appBundleUrl);
-  if (processes.length === 0) {
+  const appBundlePath = decodeIosDeviceFileUrl(appBundleUrl);
+  // CoreDevice returns PlugIns/*.appex extensions under appBundleUrl; perf targets main bundle binaries only.
+  const mainAppProcesses = processes.filter((processInfo) =>
+    isIosMainAppBundleProcess(processInfo, appBundleUrl),
+  );
+  if (mainAppProcesses.length === 0) {
     throw new AppError('COMMAND_FAILED', `No running process found for ${appBundleId}`, {
       appBundleId,
       deviceId: device.id,
@@ -88,7 +92,45 @@ export async function resolveIosDevicePerfTarget(
     });
   }
 
-  return processes;
+  return mainAppProcesses;
+}
+
+export function readIosDeviceProcessName(executableUrl: string): string {
+  const executablePath = decodeIosDeviceFileUrl(executableUrl);
+  const separatorIndex = Math.max(
+    executablePath.lastIndexOf('/'),
+    executablePath.lastIndexOf('\\'),
+  );
+  return separatorIndex >= 0 ? executablePath.slice(separatorIndex + 1) : executablePath;
+}
+
+function decodeIosDeviceFileUrl(fileUrl: string): string {
+  try {
+    return fileURLToPath(fileUrl);
+  } catch (error) {
+    const parsed = new URL(fileUrl);
+    if (
+      parsed.protocol === 'file:' &&
+      parsed.hostname === '' &&
+      parsed.pathname.startsWith('/') &&
+      !/^\/[A-Za-z]:\//.test(parsed.pathname) &&
+      !/%2f/i.test(parsed.pathname)
+    ) {
+      return decodeURIComponent(parsed.pathname);
+    }
+    throw error;
+  }
+}
+
+function isIosMainAppBundleProcess(
+  processInfo: IosDeviceProcessInfo,
+  appBundleUrl: string,
+): boolean {
+  const normalizedBundleUrl = appBundleUrl.replace(/\/+$/, '');
+  const bundlePrefix = `${normalizedBundleUrl}/`;
+  if (!processInfo.executable.startsWith(bundlePrefix)) return false;
+  const relativePath = processInfo.executable.slice(bundlePrefix.length);
+  return relativePath.length > 0 && !relativePath.includes('/');
 }
 
 async function resolveMacOsBundlePath(appBundleId: string): Promise<string> {
