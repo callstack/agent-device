@@ -1,9 +1,12 @@
+import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { runCliCapture } from './cli-capture.ts';
+import { cloudAttachmentPath } from '../cli/connection/cloud-connection-record.ts';
 import {
   cloudEnv,
   connectArgs,
   hostedDevice,
+  locationOf,
   proxyFrontDevice,
   stubCloudApi,
   withLeaseAllocation,
@@ -98,4 +101,29 @@ test('disconnect sends no lease release for a daemon attachment without the prox
   });
   expect(disconnected.code).toBeNull();
   expect(disconnected.calls).toEqual([]);
+});
+
+test('a failed proxy-front lease release still ends disconnect and removes the attachment', async () => {
+  const env = cloudEnv();
+  stubCloudApi(proxyFrontDevice);
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  expect(
+    (
+      await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+        env,
+        sendToDaemon: withLeaseAllocation(),
+      })
+    ).code,
+  ).toBeNull();
+
+  const disconnected = await runCliCapture(['disconnect', '--json'], {
+    env,
+    sendToDaemon: async () => ({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', message: 'the proxy front is unreachable' },
+    }),
+  });
+  expect(disconnected.code, disconnected.stderr || disconnected.stdout).toBeNull();
+  expect(JSON.parse(disconnected.stdout).data.leaseReleaseError).toContain('unreachable');
+  expect(fs.existsSync(cloudAttachmentPath(locationOf(env)))).toBe(false);
 });

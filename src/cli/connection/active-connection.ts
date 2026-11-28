@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { resolveRemoteAuthForCli } from '../auth-session.ts';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -20,10 +21,7 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 
 export async function resolveCloudAdmission(options: {
-  /**
-   * Ends the lease of an expired proxy front, through the hosted daemon that issued it. Without it,
-   * an expired proxy front keeps its attachment for a later sweep.
-   */
+  /** Ends the lease of an expired proxy front, through the hosted daemon that issued it. */
   releaseProxyFrontLease?: (
     state: RemoteConnectionState,
     attachment: ProxyFrontAttachment,
@@ -47,9 +45,18 @@ export async function resolveCloudAdmission(options: {
     },
     async (location, attachment) => {
       const release = options.releaseProxyFrontLease;
-      if (!release) throw cloudConnectionUnavailable(CLOUD_CONNECTION_REASONS.expired.reason);
       const state = readRemoteConnectionState(location);
-      if (state) await release(state, attachment);
+      if (!release || !state) return;
+      try {
+        await release(state, attachment);
+      } catch (error) {
+        // The attachment is removed either way; the front ends the lease when heartbeats stop.
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'proxy_front_lease_release_failed',
+          data: { session: location.session, message: errorMessage(error) },
+        });
+      }
     },
   );
   if (command === 'connect' || command === 'connection' || command === 'disconnect') return;

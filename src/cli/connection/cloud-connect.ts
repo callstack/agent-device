@@ -6,7 +6,7 @@ import {
   type CloudSessionBinding,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
 import {
   createCloudSession,
   deleteCloudSession,
@@ -119,20 +119,32 @@ function markCloudConnectionClosing(
   writeCloudConnection(location, record);
 }
 
+export type CloudConnectionRelease = {
+  cloudSessionId?: string;
+  /** Set when a proxy front did not confirm its lease release. Its lease ends by TTL instead. */
+  leaseReleaseError?: string;
+};
+
 export async function releaseCloudConnection(options: {
   client: AgentDeviceClient;
   location: ConnectionLocation;
   state: RemoteConnectionState | null;
   record: CloudConnectionRecord | null;
   host: HostEnvironment;
-}): Promise<string | undefined> {
+}): Promise<CloudConnectionRelease> {
   const { client, location, state, record, host } = options;
   const binding = cloudBindingForTeardown(location, state, record);
-  // Before the attachment is removed: the lease release needs its token. A failure keeps the
-  // connection, so a retry of disconnect can still reach the lease.
+  // The lease release needs the attachment token, so it runs before the attachment is removed. A
+  // failed release does not stop teardown: the attachment and its token are removed either way,
+  // and a proxy front ends a lease whose heartbeats stop once its TTL passes.
   const proxyFront = readProxyFrontAttachment(location);
+  let leaseReleaseError: string | undefined;
   if (proxyFront && state) {
-    await releaseProxyFrontConnectionLease(client, state, proxyFront);
+    try {
+      await releaseProxyFrontConnectionLease(client, state, proxyFront);
+    } catch (error) {
+      leaseReleaseError = errorMessage(error);
+    }
   }
   markCloudConnectionClosing(location, record);
   removeCloudAttachment(location);
@@ -162,7 +174,7 @@ export async function releaseCloudConnection(options: {
   }
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudState(location, state, record);
-  return releasedId ?? record?.id;
+  return { cloudSessionId: releasedId ?? record?.id, leaseReleaseError };
 }
 
 async function releaseBrokerSession(options: {

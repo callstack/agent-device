@@ -402,10 +402,9 @@ export async function cleanExpiredCloudAttachments(
         return;
       }
       if (proxyFront && current.phase !== 'pending') {
-        await releaseExpiredProxyFront(location, proxyFront).then(
-          () => removeCloudAttachment(location),
-          () => undefined,
-        );
+        // The attachment goes either way: a failed release ends by the front's lease TTL.
+        await releaseExpiredProxyFront(location, proxyFront).catch(() => undefined);
+        removeCloudAttachment(location);
       } else if (current.phase === 'pending' || kind === 'agent-device-daemon') {
         removeCloudAttachment(location);
       } else {

@@ -626,13 +626,25 @@ async function disconnectCloud(
   client: ConnectionCommandParams['client'],
 ): Promise<boolean> {
   if (flags.session === undefined) throw remoteSessionRequiredError(undefined);
-  const id = await releaseCloudConnection({ ...connection, client });
+  const { cloudSessionId, leaseReleaseError } = await releaseCloudConnection({
+    ...connection,
+    client,
+  });
   removeCloudConnection(connection.location);
   const { session } = connection.location;
   await writeCommandOutput(
     flags,
-    { connected: false, session, cloudSessionId: id, released: true },
-    () => `Ended cloud session "${session}".`,
+    {
+      connected: false,
+      session,
+      cloudSessionId,
+      released: true,
+      ...(leaseReleaseError ? { leaseReleaseError } : {}),
+    },
+    () =>
+      leaseReleaseError
+        ? `Ended cloud session "${session}". Warning: the proxy front did not confirm its lease release (${leaseReleaseError}); the lease ends when its heartbeats stop.`
+        : `Ended cloud session "${session}".`,
   );
   return true;
 }

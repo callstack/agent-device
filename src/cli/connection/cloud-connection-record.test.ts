@@ -76,7 +76,7 @@ test('an expired proxy front is released with its attachment before the attachme
   expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
 });
 
-test('a failed proxy-front release keeps the expired attachment for a later sweep', async () => {
+test('an expired proxy-front attachment is removed even when its release fails', async () => {
   const location = expiredProxyFrontLocation();
   await cleanExpiredCloudAttachments(
     location.stateDir,
@@ -85,5 +85,5 @@ test('a failed proxy-front release keeps the expired attachment for a later swee
       throw new Error('the front did not confirm the release');
     },
   );
-  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(true);
+  expect(fs.existsSync(cloudAttachmentPath(location))).toBe(false);
 });
