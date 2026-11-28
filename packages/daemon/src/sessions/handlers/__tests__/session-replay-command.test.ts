@@ -179,7 +179,10 @@ test('replay test handler releases an unheld suite request lease in finally when
       if (nestedReq.command === 'open' && nestedReq.session) {
         sessionStore.publish(
           nestedReq.session,
-          makeIosSession(nestedReq.session, { appBundleId: 'com.example.app' }),
+          makeIosSession(nestedReq.session, {
+            appBundleId: 'com.example.app',
+            lease: { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId },
+          }),
         );
       }
       return { ok: true, data: {} };
@@ -207,12 +210,12 @@ test('replay test handler releases an unheld suite request lease in finally when
   const response = await handleReplayTestCommand(params);
 
   expect(response).toMatchObject({ ok: true, data: { total: 1, passed: 0, failed: 1 } });
-  expect(releaseCalls).toEqual([lease.leaseId]);
-  expect(endedLeases).toEqual([{ leaseId: lease.leaseId, outcome: 'released' }]);
-  expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  expect(releaseCalls).toEqual([]);
+  expect(endedLeases).toEqual([]);
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
 });
 
-test('replay test handler releases an unheld suite request lease in finally if splitReplayCommandRequest rejects (#5129)', async () => {
+test('replay test handler preserves an unused suite request lease in finally if splitReplayCommandRequest rejects (#5129)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-handler-throw-before-');
   const leaseRegistry = new LeaseRegistry();
   const releaseCalls: string[] = [];
@@ -295,7 +298,7 @@ test('replay test handler releases an unheld suite request lease in finally if s
       platformResourceCleanup: platformResourceCleanupFixture(),
     }),
   ).rejects.toThrow('simulated suite setup throw');
-  expect(releaseCalls).toEqual([lease.leaseId]);
-  expect(endedLeases).toEqual([{ leaseId: lease.leaseId, outcome: 'released' }]);
-  expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  expect(releaseCalls).toEqual([]);
+  expect(endedLeases).toEqual([]);
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
 });

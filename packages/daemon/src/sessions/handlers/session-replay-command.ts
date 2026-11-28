@@ -143,6 +143,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       suiteHostSession: sessionName,
     },
   };
+  let suiteRetainedLease = false;
   try {
     return await runReplayTestCommand({
       ...splitReplayCommandRequest(suiteRequest),
@@ -165,17 +166,22 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
           bindDevice,
           platformServices,
           platformResourceCleanup,
+          onRetainedSuiteLease: () => {
+            suiteRetainedLease = true;
+          },
         }),
       ...(video ? { video } : {}),
     });
   } finally {
-    await releaseUnheldSuiteRequestLease({
-      req,
-      sessionName,
-      sessionStore,
-      leaseRegistry,
-      leaseLifecycleProvider,
-    });
+    if (suiteRetainedLease) {
+      await releaseUnheldSuiteRequestLease({
+        req,
+        sessionName,
+        sessionStore,
+        leaseRegistry,
+        leaseLifecycleProvider,
+      });
+    }
   }
 };
 
@@ -330,6 +336,7 @@ type ReplayTestSessionCleanupParams = Readonly<{
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup: PlatformResourceCleanup;
+  onRetainedSuiteLease: () => void;
 }>;
 
 async function releaseUnheldSuiteRequestLease(params: {
@@ -361,8 +368,12 @@ async function releaseUnheldSuiteRequestLease(params: {
 
 async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
   const { req, sessionName, logPath, sessionStore } = params;
-  if (!sessionStore.get(sessionName)) return;
+  const closingSession = sessionStore.get(sessionName);
+  if (!closingSession) return;
   const suiteLeaseId = req.internal?.admittedLease?.leaseId;
+  if (suiteLeaseId && closingSession.lease?.leaseId === suiteLeaseId) {
+    params.onRetainedSuiteLease();
+  }
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
     req: onDelegatingLedger(

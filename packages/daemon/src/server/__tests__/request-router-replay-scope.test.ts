@@ -29,6 +29,7 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
   };
 });
 
+import { isIosFamily } from '@agent-device/kernel/device';
 import {
   IOS_SIMULATOR,
   mkdtempForTestSync,
@@ -38,6 +39,7 @@ import {
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import * as hostProcess from '@agent-device/host-kit/process';
 import {
@@ -426,7 +428,7 @@ test('test still refuses DEVICE_IN_USE when another session holds the device (#5
   }
 });
 
-test('two-script test with a request lease and no open ends the lease once and reports endedLeases once (#5129)', async () => {
+test('two-script test with a request lease and no open preserves the unused request lease (#5129)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-test-request-lease-end-');
   fs.writeFileSync(path.join(root, '01-first.ad'), 'context platform=ios\nwait 1\n');
   fs.writeFileSync(path.join(root, '02-second.ad'), 'context platform=ios\nwait 1\n');
@@ -441,6 +443,7 @@ test('two-script test with a request lease and no open ends the lease once and r
     deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
   });
   const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
 
   try {
     const handler = createRequestHandler({
@@ -458,6 +461,7 @@ test('two-script test with a request lease and no open ends the lease once and r
       },
       deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
       trackDownloadableArtifact: () => 'artifact-id',
     });
 
@@ -492,10 +496,11 @@ test('two-script test with a request lease and no open ends the lease once and r
         total: 2,
         passed: 2,
         failed: 0,
-        endedLeases: [{ leaseId: lease.leaseId, outcome: 'released' }],
       }),
     });
-    expect(releaseCalls).toEqual([lease.leaseId]);
+    if (!response.ok) return;
+    expect(response.data?.endedLeases).toBeUndefined();
+    expect(releaseCalls).toEqual([]);
     expect(
       leaseRegistry.getLease({
         leaseId: lease.leaseId,
@@ -506,7 +511,7 @@ test('two-script test with a request lease and no open ends the lease once and r
         leaseProvider: lease.leaseProvider,
         deviceKey: lease.deviceKey,
       }),
-    ).toBeUndefined();
+    ).toBeDefined();
     expect(sessionStore.listRefs()).toHaveLength(0);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -531,6 +536,7 @@ test('two-script test with wait then open ends the unheld request lease once wit
     deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
   });
   const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
 
   try {
     const handler = createRequestHandler({
@@ -548,6 +554,7 @@ test('two-script test with wait then open ends the unheld request lease once wit
       },
       deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
       trackDownloadableArtifact: () => 'artifact-id',
     });
 
@@ -613,6 +620,7 @@ test('two-script test with a request-only lease and two open scripts ends the le
     deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
   });
   const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
 
   try {
     const handler = createRequestHandler({
@@ -630,6 +638,7 @@ test('two-script test with a request-only lease and two open scripts ends the le
       },
       deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
       trackDownloadableArtifact: () => 'artifact-id',
     });
 
@@ -680,6 +689,24 @@ test('two-script test with a request-only lease and two open scripts ends the le
       }),
     ).toBeUndefined();
     expect(sessionStore.listRefs()).toHaveLength(0);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledTimes(2);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        device: expect.objectContaining({ id: IOS_SIMULATOR.id }),
+        leaseWillEnd: true,
+      }),
+    );
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        device: expect.objectContaining({ id: IOS_SIMULATOR.id }),
+        leaseWillEnd: true,
+      }),
+    );
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(1, false);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(2, false);
+    expect(sessionStore.listRetainedExecutionHosts(lease.leaseId)).toEqual([]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -700,6 +727,7 @@ test('suite attempt cleanup keeps a shared provider lease active when an outer s
     deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
   });
   const releaseCalls: string[] = [];
+  const platformResourceCleanup = iosSimulatorRetentionCleanupFixture();
 
   try {
     const handler = createRequestHandler({
@@ -717,6 +745,7 @@ test('suite attempt cleanup keeps a shared provider lease active when an outer s
       },
       deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup,
       trackDownloadableArtifact: () => 'artifact-id',
     });
 
@@ -775,10 +804,24 @@ test('suite attempt cleanup keeps a shared provider lease active when an outer s
       }),
     ).toBeDefined();
     expect(sessionStore.listRefs()).toHaveLength(1);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledTimes(2);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(1, true);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveNthReturnedWith(2, true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+function iosSimulatorRetentionCleanupFixture() {
+  return platformResourceCleanupFixture({
+    retainExecutionHostAfterClose: (params) =>
+      isIosFamily(params.device) &&
+      params.device.kind === 'simulator' &&
+      !params.shutdownRequested &&
+      !params.hasScreenRecording &&
+      !params.leaseWillEnd,
+  });
+}
 
 function requestPlatformProvidersFake(): {
   providers: RequestPlatformProviders;

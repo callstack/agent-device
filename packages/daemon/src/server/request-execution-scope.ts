@@ -115,15 +115,20 @@ import {
   type RequestDispatchLedger,
 } from '../core/request-dispatch-ledger.ts';
 
+function throwDaemonErrorResponse(error: {
+  code: AppError['code'];
+  message: string;
+  details?: Record<string, unknown>;
+}): never {
+  throw new AppError(error.code, error.message, error.details);
+}
+
 async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): Promise<DeviceInfo> {
   const { resolveForegroundOpenRequest } =
     await import('../sessions/session-lifecycle/internal/session-open.ts');
   const foreground = await resolveForegroundOpenRequest({ req, hasExistingSession: false });
   if (foreground.type === 'response') {
-    if (!foreground.response.ok) {
-      const { code, message, details } = foreground.response.error;
-      throw new AppError(code, message, details);
-    }
+    if (!foreground.response.ok) throwDaemonErrorResponse(foreground.response.error);
     throw new AppError('INVALID_ARGS', 'Invalid open target');
   }
   const openReq = foreground.type === 'resolved' ? foreground.req : req;
@@ -146,22 +151,20 @@ async function resolveBoundedClaimDevice(
     await import('../resources/session-device-resolution.ts');
   if (req.command !== 'open') {
     const guard = requireSessionOrExplicitSelector(req.command, session, req.flags);
-    if (guard && !guard.ok) {
-      const { code, message, details } = guard.error;
-      throw new AppError(code, message, details);
-    }
+    if (guard && !guard.ok) throwDaemonErrorResponse(guard.error);
   }
   if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
   if (req.command === 'install_source' && session) return session.device;
-  const params = {
+  const selectionParams = {
     session,
     req,
     env,
     platformServices,
     androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
   };
-  if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
-  return await resolveCommandDevice(params);
+  return req.command === 'boot'
+    ? (await resolveBootCommandSelection(selectionParams)).device
+    : await resolveCommandDevice(selectionParams);
 }
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
@@ -222,6 +225,27 @@ type LockedRequestScopeResult =
   | { type: 'scope'; scope: LockedRequestScope }
   | { type: 'response'; response: DaemonResponse };
 
+function resolveScopedExecutionRequest(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): DaemonRequest {
+  const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(req));
+  // A nested batch or replay step arrives with the identity of the request that spawned it, and its
+  // own name is already the store key.
+  const webSession =
+    req.internal?.webSession ??
+    deriveWebSessionIdentity(req.session, tenantScopedReq, resolveSessionScope(tenantScopedReq));
+  const suiteHost = tenantScopedReq.internal?.suiteHostSession;
+  return applyRequestCommandDefaults({
+    ...tenantScopedReq,
+    internal: {
+      ...tenantScopedReq.internal,
+      webSession,
+      suiteHostSession: suiteHost && sessionStore.get(suiteHost) ? suiteHost : undefined,
+    },
+  });
+}
+
 export async function createRequestExecutionScope(params: {
   host: HostEnvironment;
   req: DaemonRequest;
@@ -241,25 +265,7 @@ export async function createRequestExecutionScope(params: {
   const { sessionStore, leaseRegistry } = params;
   // Bound here, before this request takes a lock.
   const queueLeaseEnd = bindOutsideRequestLocks(params.endSessionsForLease);
-  const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
-  // A nested batch or replay step arrives with the identity of the request that spawned it, and its
-  // own name is already the store key.
-  const webSession =
-    params.req.internal?.webSession ??
-    deriveWebSessionIdentity(
-      params.req.session,
-      tenantScopedReq,
-      resolveSessionScope(tenantScopedReq),
-    );
-  const suiteHostSession = tenantScopedReq.internal?.suiteHostSession;
-  const coveredHostSession =
-    suiteHostSession && sessionStore.get(suiteHostSession) !== undefined
-      ? suiteHostSession
-      : undefined;
-  let scopedReq = applyRequestCommandDefaults({
-    ...tenantScopedReq,
-    internal: { ...tenantScopedReq.internal, webSession, suiteHostSession: coveredHostSession },
-  });
+  let scopedReq = resolveScopedExecutionRequest(params.req, sessionStore);
 
   const command = scopedReq.command;
   const startedAtMs = Date.now();
@@ -303,12 +309,7 @@ export async function createRequestExecutionScope(params: {
   });
   const shouldRecordRequestEvents = shouldRecordEventForRequest(scopedReq);
   if (shouldRecordRequestEvents) {
-    sessionStore.recordEvent(
-      sessionName,
-      buildRequestStartedEvent({
-        req: scopedReq,
-      }),
-    );
+    sessionStore.recordEvent(sessionName, buildRequestStartedEvent({ req: scopedReq }));
   }
   try {
     const devicePin = scopedReq.meta?.devicePin;
@@ -425,8 +426,7 @@ export async function createRequestExecutionScope(params: {
                   platformServices: scope.platformServices,
                 });
                 if (resolution.type === 'response' && !resolution.response.ok) {
-                  const { code, message, details } = resolution.response.error;
-                  throw new AppError(code, message, details);
+                  throwDaemonErrorResponse(resolution.response.error);
                 }
               },
               closeWouldReleaseProviderLease: async () => {
@@ -540,7 +540,7 @@ export async function createRequestExecutionScope(params: {
       // operation from this request can still run.
       [Symbol.asyncDispose]: disposeBindings,
     };
-    requestScopeFinalizers.set(scope, (response) => {
+    const finalizeRequest = (response: DaemonResponse): DaemonResponse => {
       if (shouldRecordRequestEvents) {
         sessionStore.recordEvent(
           sessionName,
@@ -552,7 +552,8 @@ export async function createRequestExecutionScope(params: {
         );
       }
       return response;
-    });
+    };
+    requestScopeFinalizers.set(scope, finalizeRequest);
     return scope;
   } catch (error) {
     if (shouldRecordRequestEvents) {

@@ -134,19 +134,25 @@ async function prepareRepairClose(params: {
   };
 }
 
-function isSuiteAttemptSharedLease(params: {
+function resolveSuiteAttemptLeaseRetention(params: {
   req: DaemonRequest;
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
-}): boolean {
+}): { leaseRetainedByOtherSession: boolean; skipProviderLeaseRelease: boolean } {
   const { req, session, sessionName, sessionStore } = params;
-  if (req.internal?.cleanupIntent !== 'suite-owned-test-session' || !session.lease) return false;
+  if (req.internal?.cleanupIntent !== 'suite-owned-test-session' || !session.lease) {
+    return { leaseRetainedByOtherSession: false, skipProviderLeaseRelease: false };
+  }
   const leaseId = session.lease.leaseId;
-  if (req.internal?.suiteLeaseId === leaseId) return true;
-  return sessionStore
+  const leaseRetainedByOtherSession = sessionStore
     .listRefs()
     .some((other) => other.address !== sessionName && other.session.lease?.leaseId === leaseId);
+  // A suite request lease outlives individual attempts so later scripts reuse it until suite end,
+  // but without an outer live session each attempt still stops its runner host when !retainOnClose.
+  const skipProviderLeaseRelease =
+    leaseRetainedByOtherSession || req.internal?.suiteLeaseId === leaseId;
+  return { leaseRetainedByOtherSession, skipProviderLeaseRelease };
 }
 
 async function releaseProviderLeaseForClose(params: {
@@ -451,12 +457,13 @@ async function runCloseTeardownAndRelease(params: {
   } = params;
   const { address: sessionName } = ref;
   const initialSession = sessionStore.requireCurrent(ref);
-  const leaseRetainedBySuite = isSuiteAttemptSharedLease({
-    req,
-    session: initialSession,
-    sessionName,
-    sessionStore,
-  });
+  const { leaseRetainedByOtherSession, skipProviderLeaseRelease } =
+    resolveSuiteAttemptLeaseRetention({
+      req,
+      session: initialSession,
+      sessionName,
+      sessionStore,
+    });
   const cleanupFailures: SessionCleanupFailure[] = [];
   const {
     platformCloseError,
@@ -474,7 +481,7 @@ async function runCloseTeardownAndRelease(params: {
     clearRuntimeHints,
     cleanupFailures,
     repairArmed: params.repairArmed,
-    leaseRetainedBySuite,
+    leaseRetainedBySuite: leaseRetainedByOtherSession,
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
     platformResourceCleanup: params.platformResourceCleanup,
@@ -501,7 +508,7 @@ async function runCloseTeardownAndRelease(params: {
       throw claimBlockingError;
     }
   }
-  const leaseRelease = leaseRetainedBySuite
+  const leaseRelease = skipProviderLeaseRelease
     ? {}
     : await releaseProviderLeaseForClose({
         req,

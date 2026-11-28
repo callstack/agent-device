@@ -49,7 +49,7 @@ This applies to every request that can close a session:
 - `close`.
 - A `batch` close step.
 - The `close` of a `replay` or `test` script.
-- The session cleanup that `test` runs after each script, unless another live session still holds its lease; a lease carried by the `test` request that no session holds after the last attempt ends once at the end of `test`.
+- The session cleanup that `test` runs after each script, unless another live session still holds its lease; when cleanup retained that session's lease for later scripts, it ends once at the end of `test` if no live session holds it.
 
 Nested requests record on the ledger of the outermost request, so a step reply never repeats the report.
 If a close finds its lease already inactive, it reports that lease as ended.
