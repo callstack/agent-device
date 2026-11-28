@@ -15,9 +15,8 @@ export function measurePluginSizes(root, planPath) {
     try {
       return measurePlugin(root, plugin, deadline);
     } catch (error) {
-      throw new Error(`Could not measure plugin ${plugin.name}: ${error.message}`, {
-        cause: error,
-      });
+      process.stderr.write(`Could not measure plugin ${plugin.name}: ${error.message}\n`);
+      return { name: plugin.name, unavailable: true };
     }
   });
 }
@@ -63,7 +62,9 @@ export function formatPluginSizes(plugins, basePlugins = []) {
     const before = base.get(name);
     const after = current.get(name);
     const metrics = ['installedBytes', 'unpackedBytes', 'tarballBytes'];
-    const cells = metrics.map((metric) => formatPluginMetric(before?.[metric], after?.[metric]));
+    const cells = metrics.map((metric) =>
+      formatPluginMetric(pluginMetric(before, metric), pluginMetric(after, metric)),
+    );
     return `| \`${name}\` | ${cells.join(' | ')} |`;
   });
   return `### Affected plugins
@@ -75,7 +76,15 @@ ${rows.join('\n')}
 `;
 }
 
+function pluginMetric(plugin, metric) {
+  return plugin?.unavailable ? 'unavailable' : plugin?.[metric];
+}
+
 function formatPluginMetric(base, current) {
+  if (base === 'unavailable' || current === 'unavailable') {
+    const display = (value) => (typeof value === 'number' ? formatBytes(value) : (value ?? '-'));
+    return `${display(base)} → ${display(current)}`;
+  }
   if (current === undefined) return `${formatBytes(base)} → removed`;
   if (base === undefined) return `${formatBytes(current)} (new)`;
   return `${formatBytes(base)} → ${formatBytes(current)} (${formatDiff(base, current)})`;

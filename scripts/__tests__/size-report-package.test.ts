@@ -667,11 +667,52 @@ test('Markdown compares measured plugins and labels added and removed packages',
   );
 });
 
+test('exhausted plugin budget keeps the core report and identifies unmeasured sizes', async () => {
+  const cwd = await mkdtempForTest('size-plugin-budget-');
+  const plan = join(cwd, 'plan.json');
+  await writeFile(plan, JSON.stringify([{ name: '@agent-device/one', directory: 'packages/one' }]));
+  const modulePath = join(import.meta.dirname, '../size-report-plugins.mjs');
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `const { measurePluginSizes } = await import(process.argv[1]);
+     let time = 0;
+     performance.now = () => (time += 120_000);
+     console.log(JSON.stringify(measurePluginSizes(process.cwd(), process.argv[2])));`,
+      modulePath,
+      plan,
+    ],
+    { cwd },
+  );
+  assert.match(stderr, /@agent-device\/one: Plugin measurement budget exhausted/);
+  const unmeasured = JSON.parse(stdout);
+  const core = {
+    npmPack: { tarballBytes: 100, unpackedBytes: 300 },
+    cleanInstalled: { totalBytes: 350 },
+  };
+  const before = {
+    ...core,
+    plugins: [
+      { name: '@agent-device/one', installedBytes: 60, unpackedBytes: 30, tarballBytes: 10 },
+    ],
+  };
+  const after = { ...core, plugins: unmeasured };
+  const markdown = formatMarkdown(after, before);
+  assert.match(markdown, /\| Package \(download\) \| 100 B \| 100 B \| 0 B \|/);
+  assert.match(
+    markdown,
+    /\| `@agent-device\/one` \| 60 B → unavailable \| 30 B → unavailable \| 10 B → unavailable \|/,
+  );
+  assert.match(formatMarkdown(before, after), /\| `@agent-device\/one` \| unavailable → 60 B \|/);
+});
+
 const one = {
   directory: 'packages/one',
   manifest: {
     name: '@agent-device/one',
-    'agent-device': {},
+    exports: { './agent-device': './dist/agent-device.mjs' },
     devDependencies: { '@agent-device/build-piece': 'workspace:*' },
   },
 };
@@ -704,6 +745,25 @@ test('plugin plan follows changed build inputs without selecting unrelated plugi
     base: [oneEntry, twoEntry],
     head: [oneEntry, twoEntry],
   });
+});
+
+test('plugin plan selects published v2-only providers by their export', async () => {
+  const providers = await Promise.all(
+    ['tizen', 'webos'].map(async (provider) => {
+      const directory = `packages/provider-${provider}`;
+      const manifest = JSON.parse(
+        await readFile(join(import.meta.dirname, '../..', directory, 'package.json'), 'utf8'),
+      );
+      return { directory, manifest };
+    }),
+  );
+  for (const { directory, manifest } of providers) {
+    const entry = { directory, name: manifest.name };
+    assert.deepEqual(planPluginSizes(providers, providers, [`${directory}/src/index.ts`]), {
+      base: [entry],
+      head: [entry],
+    });
+  }
 });
 
 test('plugin plan follows a changed lockfile importer', () => {

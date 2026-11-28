@@ -27,9 +27,11 @@ function workspaceAt(ref) {
 }
 
 function isPublishedPlugin({ manifest }) {
-  return (
-    manifest.private !== true && Boolean(manifest.agentDevicePlugin ?? manifest['agent-device'])
-  );
+  if (manifest.private === true) return false;
+  const exports = manifest.exports;
+  const hasPluginExport =
+    exports !== null && typeof exports === 'object' && Object.hasOwn(exports, './agent-device');
+  return hasPluginExport || manifest.agentDevicePlugin !== undefined;
 }
 
 function workspaceClosure(plugin, byName) {
