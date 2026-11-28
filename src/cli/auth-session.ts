@@ -12,17 +12,8 @@ import {
 } from './cli-session-format.ts';
 
 // The transport loads when a request is made, so a command that reads no cloud auth stays off it.
-// Login, poll and refresh all send through here, so `baseUrl` is judged here before each request.
-const postCloudAuthJson = async <T>({
-  env,
-  ...request
-}: Parameters<typeof import('./cloud-auth-request.ts').postCloudAuthJson>[0] & {
-  env: EnvMap;
-}): Promise<T> => {
-  const admission = await import('@agent-device/host-kit/credential-admission');
-  admission.admitCredentialDestination(request.baseUrl, env);
-  return (await import('./cloud-auth-request.ts')).postCloudAuthJson<T>(request);
-};
+const postCloudAuthJson: typeof import('./cloud-auth-request.ts').postCloudAuthJson = async (o) =>
+  (await import('./cloud-auth-request.ts')).postCloudAuthJson(o);
 const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
 const DEVICE_AUTH_START_PATH = '/api/control-plane/device-auth/start';
 const DEVICE_AUTH_POLL_PATH = '/api/control-plane/device-auth/poll';
@@ -254,10 +245,10 @@ export async function loginWithDeviceAuth(options: {
     throw buildNonInteractiveLoginError(options.commandLabel ?? 'agent-device connect', env);
   }
   const cloudBaseUrl = resolveCloudBaseUrl(env);
+  (await import('./cloud-auth-request.ts')).admitCloudUrl(cloudBaseUrl, env);
   const start = await postCloudAuthJson<DeviceAuthStartResponse>({
     baseUrl: cloudBaseUrl,
     pathName: DEVICE_AUTH_START_PATH,
-    env,
     body: {
       client: 'agent-device',
       tenant: options.flags.tenant,
@@ -288,7 +279,6 @@ export async function loginWithDeviceAuth(options: {
 
   const approved = await pollDeviceAuth({
     cloudBaseUrl,
-    env,
     deviceCode: start.deviceCode,
     expiresIn: start.expiresIn,
     interval: start.interval,
@@ -337,7 +327,6 @@ export async function loginWithDeviceAuth(options: {
           stateDir: options.stateDir,
           session,
           flags: options.flags,
-          env,
           io: options.io,
         });
       } catch (error) {
@@ -563,7 +552,8 @@ async function resolveCliSessionAccess(options: {
       const session = readExchangeableCliSession(stateDir);
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
       assertStoredSessionOrigin(session, env);
-      return await exchangeCliSessionAccess({ stateDir, session, flags, env, io });
+      (await import('./cloud-auth-request.ts')).admitCloudUrl(session.cloudBaseUrl, env);
+      return await exchangeCliSessionAccess({ stateDir, session, flags, io });
     },
     { io },
   );
@@ -604,10 +594,9 @@ async function exchangeCliSessionAccess(options: {
   stateDir: string;
   session: CliSessionRecord;
   flags: CliFlags;
-  env: EnvMap;
   io?: AuthIo;
 }): Promise<{ accessToken: string; expiresAt?: string; session: CliSessionRecord }> {
-  const { env, flags, io, stateDir } = options;
+  const { flags, io, stateDir } = options;
   // The file is what a store compares against: the last record this command saw there, and
   // `null` once a write would land on a session it did not write. `asked` is what the cloud
   // accepts for this session now, which stays ahead of the file when a save failed. `saved` is
@@ -623,7 +612,7 @@ async function exchangeCliSessionAccess(options: {
   for (let exchange = 1; ; exchange += 1) {
     let refreshed;
     try {
-      refreshed = await refreshAgentToken({ session: asked, flags, env, io });
+      refreshed = await refreshAgentToken({ session: asked, flags, io });
     } catch (error) {
       // Only the first exchange is required. A token already read from the cloud stays usable by
       // the daemon that accepted it, so a transient failure of the optional exchange that asks
@@ -726,7 +715,6 @@ function storeRotatedCredential(options: {
 async function refreshAgentToken(options: {
   session: CliSessionRecord;
   flags: CliFlags;
-  env: EnvMap;
   io?: AuthIo;
 }): Promise<{
   accessToken: string;
@@ -738,7 +726,6 @@ async function refreshAgentToken(options: {
   const response = await postCloudAuthJson<CliSessionRefreshResponse>({
     baseUrl: resolveCloudBaseUrl({}, options.session.cloudBaseUrl),
     pathName: CLI_SESSION_REFRESH_PATH,
-    env: options.env,
     body: {
       refreshCredential: options.session.refreshCredential,
       // This CLI stores a replacement credential from the response, so the cloud may rotate it.
@@ -804,7 +791,6 @@ function isCliSessionRevoked(error: unknown): boolean {
 
 async function pollDeviceAuth(options: {
   cloudBaseUrl: string;
-  env: EnvMap;
   deviceCode: string;
   expiresIn: number | undefined;
   interval: number | undefined;
@@ -824,7 +810,6 @@ async function pollDeviceAuth(options: {
     const response = await postCloudAuthJson<DeviceAuthPollResponse>({
       baseUrl: options.cloudBaseUrl,
       pathName: DEVICE_AUTH_POLL_PATH,
-      env: options.env,
       body: { deviceCode: options.deviceCode },
       fetchImpl: options.fetchImpl,
     });

@@ -572,12 +572,13 @@ test.each([
       JSON.stringify({ name: 'metro-transport-test', dependencies: { 'react-native': '0' } }),
     );
     const stderr = beginStderrCapture();
-    const atBridgeSend: string[] = [];
+    const atBridgeSend: Array<{ authorization: string | null; stderr: string }> = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
+      vi.fn(async (url: string, init?: RequestInit) => {
         if (url.endsWith('/status')) return new Response('packager-status:running');
-        atBridgeSend.push(stderr.read());
+        const authorization = new Headers(init?.headers).get('authorization');
+        atBridgeSend.push({ authorization, stderr: stderr.read() });
         return new Response('{}', { status: 401 });
       }),
     );
@@ -603,7 +604,8 @@ test.each([
     }
 
     assert.equal(atBridgeSend.length, 1);
-    assert.match(atBridgeSend[0]!, expected);
-    assert.doesNotMatch(atBridgeSend[0]!, /shared-token/);
+    assert.equal(atBridgeSend[0]!.authorization, 'Bearer shared-token');
+    assert.match(atBridgeSend[0]!.stderr, expected);
+    assert.doesNotMatch(atBridgeSend[0]!.stderr, /shared-token/);
   },
 );

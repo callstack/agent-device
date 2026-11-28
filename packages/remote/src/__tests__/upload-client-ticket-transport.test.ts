@@ -5,17 +5,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import { uploadArtifact } from '../upload-client.ts';
 
 const INSECURE_TICKET = 'http://ticket.invalid/upload/direct/t?signature=secret';
 
-/** A daemon whose preflights answer `ticketUrls` in turn, and which resets every direct PUT. */
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/**
+ * A daemon whose preflights answer `ticketUrls` in turn, and which resets every direct PUT.
+ * `sentTo` lists the host of every upload request the client opened; those are `node:http` requests.
+ */
 async function uploadAgainstTickets(ticketUrls: (origin: string) => string[]): Promise<{
   uploadId: string;
   requests: string[];
+  sentTo: unknown[];
 }> {
+  const send = vi.spyOn(http, 'request');
   const localPath = path.join(mkdtempForTestSync('agent-device-upload-ticket-'), 'app.apk');
   fs.writeFileSync(localPath, 'apk-bytes');
   const requests: string[] = [];
@@ -42,7 +51,8 @@ async function uploadAgainstTickets(ticketUrls: (origin: string) => string[]): P
       token: 'daemon-token',
       env: {},
     });
-    return { uploadId, requests };
+    const sentTo = send.mock.calls.map(([target]) => (target as http.RequestOptions).host);
+    return { uploadId, requests, sentTo };
   } finally {
     await closeLoopbackServer(server);
   }
@@ -52,7 +62,8 @@ test('an insecure ticket is dropped unsent and the upload takes the legacy route
   const result = await uploadAgainstTickets(() => [INSECURE_TICKET]);
 
   assert.equal(result.uploadId, 'legacy-upload');
-  // An attempt at the ticket would fail and ask for a fresh one before the legacy upload.
+  // Only the legacy upload opened a request: nothing went to the ticket host.
+  assert.deepEqual(result.sentTo, ['127.0.0.1']);
   assert.deepEqual(result.requests, ['POST /upload/preflight', 'POST /upload']);
 });
 
@@ -69,4 +80,6 @@ test('an insecure ticket from the retry preflight is dropped too', async () => {
     'POST /upload/preflight',
     'POST /upload',
   ]);
+  // The first ticket and the legacy upload; the retry ticket's host got nothing.
+  assert.deepEqual(result.sentTo, ['127.0.0.1', '127.0.0.1']);
 });

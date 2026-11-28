@@ -33,13 +33,13 @@ When a hook is configured, it must attest a `tenantId` on every request it wants
 
 ## Remote access
 
-The supported remote setup keeps every agent-device listener on `127.0.0.1` and reaches it through an encrypted channel:
+The supported remote setup keeps the daemon and proxy HTTP listeners on `127.0.0.1` and reaches them through an encrypted channel:
 
 - Run `agent-device proxy` on the device host. It binds to `127.0.0.1` by default.
 - Expose it through a TLS tunnel such as cloudflared, ngrok, or Tailscale Serve, and start the proxy with `--public-origin` set to the tunnel's HTTPS origin. Or forward it over SSH with `ssh -L`.
 - Connect from the agent machine with the `https://` tunnel URL, or with the forwarded `http://127.0.0.1` URL, and the daemon auth token.
 
-In this setup the token and your device traffic travel only inside TLS or SSH. See [Remote proxy setup](./remote-proxy.md) for the commands.
+In this setup the token and your device traffic travel between the two machines only inside TLS or SSH. See [Remote proxy setup](./remote-proxy.md) for the commands.
 
 Before agent-device sends a credential to a plain `http://` URL whose host is not loopback (`localhost`, `127.0.0.0/8`, or `::1`), agent-device 0.21.x warns on stderr, once per process for each origin. agent-device 0.22 refuses instead: it fails before it opens a connection, with reason `insecure_credential_transport`. This applies to the remote daemon URL, the cloud URL, the Metro bridge URL, and the upstream URL of [`@agent-device/proxy`](https://www.npmjs.com/package/@agent-device/proxy) with its default transport. Upload tickets are already refused: if a ticket points to plain HTTP, for example because `--public-origin` is missing, the client does not use it and uploads through the daemon URL instead.
 
