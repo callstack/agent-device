@@ -114,11 +114,9 @@ async function listIosDeviceProcesses(device: DeviceInfo): Promise<IosDeviceProc
 }
 
 export async function terminateIosDeviceApp(device: DeviceInfo, bundleId: string): Promise<void> {
-  const { appBundleUrl, processes } = await resolveIosDeviceAppProcesses(device, bundleId);
-  // Extensions share the app bundle URL, but closing the app targets its shallowest main process.
-  const processInfo = processes.sort(
-    (left, right) => processPathDepth(left, appBundleUrl) - processPathDepth(right, appBundleUrl),
-  )[0];
+  const {
+    processes: [processInfo],
+  } = await resolveIosDeviceAppProcesses(device, bundleId);
   // No match means the installed app is already closed.
   if (!processInfo) return;
 
@@ -165,8 +163,11 @@ export async function resolveIosDeviceAppProcesses(
 
   const appBundleUrl = app.url.replace(/\/+$/, '');
   // CoreDevice reports app URLs and process executables in the same file-URL form.
-  const processes = (await listIosDeviceProcesses(device)).filter((processInfo) =>
-    processInfo.executable.startsWith(`${appBundleUrl}/`),
+  // The app executable sits directly in the bundle; nested ones (PlugIns/*.appex) are extensions.
+  const bundlePrefix = `${appBundleUrl}/`;
+  const processes = (await listIosDeviceProcesses(device)).filter(
+    ({ executable }) =>
+      executable.startsWith(bundlePrefix) && !executable.slice(bundlePrefix.length).includes('/'),
   );
   return { appBundleUrl, processes };
 }
@@ -286,10 +287,6 @@ async function runIosDevicectlJsonCommand(
 
 async function readJsonFile(jsonPath: string): Promise<unknown> {
   return JSON.parse(await readHostTextFile(jsonPath));
-}
-
-function processPathDepth(processInfo: IosDeviceProcessInfo, appBundleUrl: string): number {
-  return processInfo.executable.slice(appBundleUrl.length + 1).split('/').length;
 }
 
 function isIosDeviceProcessesPayload(payload: unknown): payload is IosDeviceProcessesPayload {
