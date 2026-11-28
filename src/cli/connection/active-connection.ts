@@ -140,7 +140,7 @@ async function usesCloudSessionAuth(
   host: HostEnvironment,
   location: ConnectionLocation,
 ): Promise<boolean> {
-  if (command === 'disconnect') return hasNamedCloudConnection(location);
+  if (command === 'disconnect') return flags.forget || hasNamedCloudConnection(location);
   if (command !== 'connect') return false;
   const { selectCloudSessionPath } = await import('./connect-provider-adapters.ts');
   try {

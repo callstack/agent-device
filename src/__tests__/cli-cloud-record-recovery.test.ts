@@ -1,6 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { writeCliSession } from '../cli/auth-session.ts';
 import {
+  cloudConnectionDir,
   prepareCloudConnection,
   readCloudConnection,
   writeCloudConnection,
@@ -135,6 +138,54 @@ function writeLegacyPending(env: ReturnType<typeof cloudEnv>, id?: string) {
   writeCloudConnection(location, { ...record, id });
   return record;
 }
+
+test.each([
+  { kind: 'malformed', reason: 'cloud_connection_record_malformed' },
+  { kind: 'unreadable', reason: 'cloud_connection_record_unreadable' },
+])('forget clears the $kind record without opening it', async ({ kind, reason }) => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  writeLegacyPending(env);
+  const file = path.join(cloudConnectionDir(location), 'record.json');
+  if (kind === 'malformed') fs.writeFileSync(file, '{');
+  const openSync = fs.openSync;
+  const open = vi.spyOn(fs, 'openSync').mockImplementation((...args) => {
+    if (kind === 'unreadable' && args[0] === file) {
+      throw Object.assign(new Error('fixture cannot open the record'), { code: 'EACCES' });
+    }
+    return openSync(...args);
+  });
+  const fetchMock = stubCloudApi();
+
+  const refused = await runCliCapture(['disconnect', '--json'], { env });
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe(reason);
+  open.mockClear();
+  const forgotten = await runCliCapture(
+    ['disconnect', '--forget', '--session', location.session, '--json'],
+    { env },
+  );
+  expect(forgotten.code, forgotten.stdout).toBeNull();
+  expect(JSON.parse(forgotten.stdout).data).toMatchObject({ forgotten: true, released: false });
+  expect(open.mock.calls.some(([fileToOpen]) => fileToOpen === file)).toBe(false);
+  expect(fs.existsSync(file)).toBe(false);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test.skipIf(process.platform === 'win32')('forget refuses an unsafe record file', async () => {
+  const env = cloudEnv();
+  const location = locationOf(env);
+  writeLegacyPending(env);
+  const file = path.join(cloudConnectionDir(location), 'record.json');
+  fs.chmodSync(file, 0o644);
+  const fetchMock = stubCloudApi();
+  const refused = await runCliCapture(
+    ['disconnect', '--forget', '--session', location.session, '--json'],
+    { env },
+  );
+  expect(JSON.parse(refused.stdout).error.details.reason).toBe('cloud_credential_store_unsafe');
+  expect(fs.existsSync(file)).toBe(true);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
 
 test('an unbound legacy allocation can resume after a positive lookup of its key', async () => {
   const env = cloudEnv();

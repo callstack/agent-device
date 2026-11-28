@@ -410,7 +410,9 @@ async function resolveRunContextOrExit(
           module.releaseExpiredProxyFrontLease(base.host, state, attachment),
         ),
       command: base.command,
-      usesSessions: runsOnRemoteConnection(base.command),
+      usesSessions:
+        runsOnRemoteConnection(base.command) &&
+        !(base.command === 'disconnect' && effectiveFlags.forget),
       stateDir: daemonPaths.baseDir,
       host: base.host,
       session: effectiveFlags.session ?? flags.session,

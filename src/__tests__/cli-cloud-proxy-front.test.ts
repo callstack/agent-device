@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture } from './cli-capture.ts';
-import { cloudAttachmentPath } from '../cli/connection/cloud-connection-record.ts';
+import {
+  cloudAttachmentPath,
+  readCloudConnection,
+} from '../cli/connection/cloud-connection-record.ts';
 import {
   cloudEnv,
   connectArgs,
@@ -191,6 +195,52 @@ test('disconnect releases a proxy-front lease with the attachment token before t
   expect(releasedBeforeDelete).toBe(true);
   expect(fetchMock.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(true);
 });
+
+test.each([false, true])(
+  'forget attempts proxy-front release even when it fails (%s)',
+  async (fails) => {
+    const env = cloudEnv();
+    const location = locationOf(env);
+    const attachment = cloudAttachmentPath(location);
+    const broker = stubCloudApi(proxyFrontDevice);
+    const front = withLeaseAllocation();
+    expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+    const opened = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+      env,
+      sendToDaemon: front,
+    });
+    expect(opened.code).toBeNull();
+
+    let attachmentWasPresent = false;
+    const forgotten = await runCliCapture(
+      ['disconnect', '--forget', '--session', location.session, '--json'],
+      {
+        env: { ...env, AGENT_DEVICE_CLOUD_API_KEY: undefined },
+        sendToDaemon: async (request) => {
+          attachmentWasPresent = fs.existsSync(attachment);
+          if (fails)
+            return {
+              ok: false,
+              error: { code: 'COMMAND_FAILED', message: 'fixture release failure' },
+            };
+          return await front(request);
+        },
+      },
+    );
+    expect(forgotten.code, forgotten.stdout).toBeNull();
+    expect(forgotten.calls.map(({ command }) => command)).toEqual(['lease_release']);
+    expect(forgotten.calls[0]?.meta?.leaseId).toBe(opened.calls[0]?.meta?.leaseId);
+    expect(forgotten.transportOptions[0]?.authToken).toBe(hostedDevice.attach.daemonAuthToken);
+    expect(forgotten.stderr).toContain(
+      'A rental may still exist on the hosted broker until its deadline.',
+    );
+    expect(attachmentWasPresent).toBe(true);
+    expect(readCloudConnection(location)).toBeNull();
+    expect(readRemoteConnectionState(location)).toBeNull();
+    expect(fs.existsSync(attachment)).toBe(false);
+    expect(broker.mock.calls.map(([, init]) => init.method)).toEqual(['POST']);
+  },
+);
 
 test('disconnect sends no lease release for a daemon attachment without the proxy-front field', async () => {
   const env = cloudEnv();

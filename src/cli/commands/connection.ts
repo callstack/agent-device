@@ -579,11 +579,12 @@ export const disconnectCommand: ClientCommandHandler = async ({
     stateDir,
     location.session,
     async () => {
+      if (flags.forget) {
+        const state = readRemoteConnectionState(location);
+        return await disconnectForget({ client, location, state, host }, flags);
+      }
       const record = readCloudConnection(location);
       const current = readRemoteConnectionState(location);
-      if (flags.forget) {
-        return await disconnectForget({ location, state: current, record, host }, flags);
-      }
       const state =
         record || current?.cloudSession || claimedConnection?.cloudSession
           ? current
@@ -612,17 +613,21 @@ export const disconnectCommand: ClientCommandHandler = async ({
       }
       return await disconnectProvider(flags, client, stateDir, state);
     },
-    () => refuseContendedConnection(location, 'disconnect', claimedConnection),
+    flags.forget
+      ? undefined
+      : () => refuseContendedConnection(location, 'disconnect', claimedConnection),
   );
 };
 
-async function disconnectForget(connection: CloudConnection, flags: CliFlags): Promise<boolean> {
-  const { record, state, location } = connection;
-  if (!record && !state?.cloudSession) {
+async function disconnectForget(
+  connection: Parameters<typeof forgetCloudConnection>[0],
+  flags: CliFlags,
+): Promise<boolean> {
+  const { location } = connection;
+  if (!(await forgetCloudConnection(connection))) {
     await writeNoRemoteConnectionOutput(flags, location.session);
     return true;
   }
-  await forgetCloudConnection(connection);
   writeStderr('Warning: A rental may still exist on the hosted broker until its deadline.\n');
   await writeCommandOutput(
     flags,

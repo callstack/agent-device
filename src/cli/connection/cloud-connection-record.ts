@@ -199,10 +199,22 @@ export function readCloudCredentialJson(file: string): unknown {
   }
 }
 
-function readRecordFile(file: string): CloudConnectionRecord | undefined {
+function hasPrivateCloudFile(file: string): boolean {
   const status = lstatIfPresent(file);
-  if (!status) return undefined;
+  if (!status) return false;
   assertOwnedEntry(status, status.isFile(), 0o077);
+  return true;
+}
+
+export function hasPrivateCloudConnectionFiles(location: ConnectionLocation): boolean {
+  if (!admitCloudCredentialDirectory(location)) return false;
+  const hasRecord = hasPrivateCloudFile(recordPath(location));
+  const hasAttachment = hasPrivateCloudFile(cloudAttachmentPath(location));
+  return hasRecord || hasAttachment;
+}
+
+function readRecordFile(file: string): CloudConnectionRecord | undefined {
+  if (!hasPrivateCloudFile(file)) return undefined;
   const value = readCloudCredentialJson(file);
   if (value === undefined) return undefined;
   const record = asCloudRecord(value);
@@ -534,6 +546,7 @@ function cloudConnectionRecoveryHint(
   switch (reason) {
     case CLOUD_CONNECTION_REASONS.recordMalformed.reason:
     case CLOUD_CONNECTION_REASONS.recordUnreadable.reason:
+      return `Verify the allocation with the hosted broker under the original account and end any active session there. ${CLOUD_CONNECTION_FORGET_HINT}`;
     case CLOUD_CONNECTION_REASONS.credentialStoreUnsafe.reason:
       return 'Verify the allocation with the hosted broker under the original account. End any active session there before repairing the local record or credential store.';
     case CLOUD_CONNECTION_REASONS.credentialMismatch.reason:

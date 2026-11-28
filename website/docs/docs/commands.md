@@ -2712,7 +2712,7 @@ Exact behavior: `agent-device help disconnect`.
 
 <!-- /generated -->
 
-If the original account is unavailable or the hosted broker cannot confirm the allocation, first check the original account and end any active rental. To clear the local hosted connection, run `agent-device disconnect --forget --session <name>`. This acts locally. A rental may continue on the hosted broker until its deadline.
+If the original account is unavailable or the hosted broker cannot confirm the allocation, first check the original account and end any active rental. To clear the local hosted connection, run `agent-device disconnect --forget --session <name>`. The CLI also tries to release a proxy-front device lease if it can read the saved attachment credentials. A rental may continue on the hosted broker until its deadline.
 
 To disconnect a legacy cloud profile, set `AGENT_DEVICE_DAEMON_BASE_URL` to its saved daemon URL. Provide that daemon's token with `--daemon-auth-token` or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, then run `agent-device disconnect --session <name>`. If the daemon cannot confirm release or absence of the saved lease, the CLI keeps the connection so you can retry.
 

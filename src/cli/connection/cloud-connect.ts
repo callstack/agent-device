@@ -21,6 +21,7 @@ import {
   cloudConnectionUnavailable,
   CLOUD_CONNECTION_FORGET_HINT,
   CLOUD_CONNECTION_REASONS,
+  hasPrivateCloudConnectionFiles,
   prepareCloudConnection,
   readProxyFrontAttachment,
   removeCloudAttachment,
@@ -333,20 +334,25 @@ function cloudBindingForTeardown(
 }
 
 export async function forgetCloudConnection(options: {
+  client: AgentDeviceClient;
   location: ConnectionLocation;
   state: RemoteConnectionState | null;
-  record: CloudConnectionRecord | null;
   host: HostEnvironment;
-}): Promise<void> {
-  const { location, state, record, host } = options;
-  const binding = cloudBindingForTeardown(location, state, record);
-  if (binding?.transport !== 'agent-device-daemon') {
-    await stopHostedLimrunDaemon(location, (record ?? binding)?.generation, host);
+}): Promise<boolean> {
+  const { client, location, state, host } = options;
+  const hasFiles = hasPrivateCloudConnectionFiles(location);
+  const binding = cloudBindingForTeardown(location, state, null);
+  if (!hasFiles && !binding) return false;
+  if (binding?.transport === 'agent-device-daemon') {
+    await releaseProxyFrontTeardownLease(client, location, state);
+  } else {
+    await stopHostedLimrunDaemon(location, binding?.generation, host);
   }
   await stopMetroCleanup(binding ? state?.metro : undefined);
   removeCloudAttachment(location);
-  removeCloudState(location, state, record);
+  removeCloudState(location, state, null);
   removeCloudConnection(location);
+  return true;
 }
 
 function removeCloudState(
