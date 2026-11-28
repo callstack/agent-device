@@ -308,12 +308,8 @@ async function releaseBrokerSession(target: VerifiedBrokerRelease | undefined) {
               'Could not confirm that the hosted broker ended the session.',
             );
       const retry = failure.details?.hint ?? 'Retry agent-device disconnect.';
-      throw new AppError(
-        failure.code,
-        failure.message,
-        { ...failure.details, hint: `${retry} ${CLOUD_CONNECTION_FORGET_HINT}` },
-        error,
-      );
+      failure.details = { ...failure.details, hint: `${retry} ${CLOUD_CONNECTION_FORGET_HINT}` };
+      throw failure;
     }
   }
   return target?.id;

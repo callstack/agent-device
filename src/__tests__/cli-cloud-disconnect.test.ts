@@ -50,6 +50,7 @@ test.each([
   expect(error.hint).toMatch(/retry.*disconnect --forget/i);
   if (reply?.status === 404) {
     expect(error.details).toMatchObject({ reason: 'cloud_session_not_found', status: 404 });
+    expect(error.cause).toBeUndefined();
   }
   expect(readCloudConnection(location)).toEqual(record);
   expect(readRemoteConnectionState(location)).toEqual(connection);
