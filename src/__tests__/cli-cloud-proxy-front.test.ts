@@ -48,14 +48,11 @@ test('a proxy-front command after open carries the lease scope the front refuses
   stubCloudApi(proxyFrontDevice);
   expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
   const served = withLeaseAllocation();
-  expect(
-    (
-      await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
-        env,
-        sendToDaemon: served,
-      })
-    ).code,
-  ).toBeNull();
+  const opened = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+    env,
+    sendToDaemon: served,
+  });
+  expect(opened.code).toBeNull();
 
   const snapshot = await runCliCapture(['snapshot', '-i', '--json'], {
     env,
@@ -67,6 +64,9 @@ test('a proxy-front command after open carries the lease scope the front refuses
   expect(sent?.meta?.tenantId).toBeTypeOf('string');
   expect(sent?.meta?.runId).toBeTypeOf('string');
   expect(sent?.meta?.leaseId).toBeTypeOf('string');
+  const openCall = opened.calls.find((call) => call.command === 'open');
+  expect(sent?.meta?.clientId).toBe(openCall?.meta?.clientId);
+  expect(sent?.meta?.deviceKey).toBe(openCall?.meta?.deviceKey);
 
   const closed = await runCliCapture(['close', '--json'], { env, sendToDaemon: served });
   expect(closed.code, closed.stderr || closed.stdout).toBeNull();

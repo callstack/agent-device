@@ -113,7 +113,12 @@ export function withLeaseAllocation(
       const { tenantId, runId, clientId } = req.meta ?? {};
       // The client names the lease when its connection is a proxy; the front mints one otherwise.
       const leaseId = typeof req.meta?.leaseId === 'string' ? req.meta.leaseId : mintLeaseId();
-      const reused = activeLeases.has(leaseId);
+      const held = activeLeases.get(leaseId);
+      // A renewal names the scope the lease was allocated under; it never replaces that scope.
+      if (held && !sameScope(held, { tenantId, runId, clientId, deviceKey })) {
+        return { ok: false, error: { code: 'INVALID_ARGS', message: 'Lease scope mismatch.' } };
+      }
+      const reused = held !== undefined;
       activeLeases.set(leaseId, { tenantId, runId, clientId, deviceKey });
       return {
         ok: true,
@@ -137,6 +142,11 @@ export function withLeaseAllocation(
       if (typeof leaseId !== 'string' || !activeLeases.has(leaseId)) {
         return { ok: true, data: { released: false, absent: true } };
       }
+      const held = activeLeases.get(leaseId);
+      const meta = req.meta ?? {};
+      if (held && !sameScope(held, scopeOf(meta))) {
+        return { ok: false, error: { code: 'INVALID_ARGS', message: 'Lease scope mismatch.' } };
+      }
       activeLeases.delete(leaseId);
       return { ok: true, data: { released: true } };
     }
@@ -153,19 +163,32 @@ function refuseWithoutLeaseMeta(
 ): DaemonResponse | undefined {
   const meta = req.meta ?? {};
   const lease = typeof meta.leaseId === 'string' ? activeLeases.get(meta.leaseId) : undefined;
-  const scopeMatches =
-    lease !== undefined &&
+  const complete =
     typeof meta.tenantId === 'string' &&
     typeof meta.runId === 'string' &&
-    typeof meta.clientId === 'string' &&
-    meta.tenantId === lease.tenantId &&
-    meta.runId === lease.runId &&
-    meta.clientId === lease.clientId &&
-    meta.deviceKey === lease.deviceKey;
-  if (scopeMatches) return undefined;
+    typeof meta.clientId === 'string';
+  if (lease !== undefined && complete && sameScope(lease, scopeOf(meta))) return undefined;
   const message =
     req.command === 'open'
       ? 'Proxy open requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.'
       : `Proxy ${req.command} requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.`;
   return { ok: false, error: { code: 'INVALID_ARGS', message } };
+}
+
+function scopeOf(meta: Record<string, unknown>): ActiveLease {
+  return {
+    tenantId: meta.tenantId,
+    runId: meta.runId,
+    clientId: meta.clientId,
+    deviceKey: meta.deviceKey as string,
+  };
+}
+
+function sameScope(a: ActiveLease, b: ActiveLease): boolean {
+  return (
+    a.tenantId === b.tenantId &&
+    a.runId === b.runId &&
+    a.clientId === b.clientId &&
+    a.deviceKey === b.deviceKey
+  );
 }
