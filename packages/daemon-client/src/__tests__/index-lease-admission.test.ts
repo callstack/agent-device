@@ -1,7 +1,12 @@
 import http from 'node:http';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  closeLoopbackServer,
+  createTestHostEnvironment,
+  listenOnLoopback,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/daemon-http';
 import { LeaseAdmissionUnsupportedError } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createEnsuredDaemonTransport } from '../index.ts';
@@ -31,7 +36,7 @@ async function sendAdmissionChecked(
   });
   const root = mkdtempForTestSync('lease-admission-');
   try {
-    const result = await createEnsuredDaemonTransport()(
+    const result = await createEnsuredDaemonTransport({ host: createTestHostEnvironment() })(
       {
         command: 'snapshot',
         session: 'remote',
