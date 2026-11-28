@@ -126,6 +126,32 @@ export type CloudConnectionRelease = {
   leaseReleaseError?: string;
 };
 
+/** Returns the release failure to report, if any. A front without state has no lease id to release. */
+async function releaseProxyFrontTeardownLease(
+  client: AgentDeviceClient,
+  location: ConnectionLocation,
+  state: RemoteConnectionState | null,
+): Promise<string | undefined> {
+  const proxyFront = readProxyFrontAttachment(location);
+  if (!proxyFront) return undefined;
+  if (!state) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'proxy_front_attachment_without_state',
+      data: { session: location.session },
+    });
+    return undefined;
+  }
+  try {
+    const release = await releaseProxyFrontConnectionLease(client, state, proxyFront);
+    return state.leaseId && !release.released && !release.absent
+      ? 'the proxy front did not confirm the lease release'
+      : undefined;
+  } catch (error) {
+    return errorMessage(error);
+  }
+}
+
 export async function releaseCloudConnection(options: {
   client: AgentDeviceClient;
   location: ConnectionLocation;
@@ -138,26 +164,7 @@ export async function releaseCloudConnection(options: {
   // The lease release needs the attachment token, so it runs before the attachment is removed. A
   // failed release does not stop teardown: the attachment and its token are removed either way,
   // and a proxy front ends a lease whose heartbeats stop once its TTL passes.
-  const proxyFront = readProxyFrontAttachment(location);
-  let leaseReleaseError: string | undefined;
-  if (proxyFront && !state) {
-    // Without state there is no lease id, so the front's lease cannot be released from here.
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'proxy_front_attachment_without_state',
-      data: { session: location.session },
-    });
-  }
-  if (proxyFront && state) {
-    try {
-      const release = await releaseProxyFrontConnectionLease(client, state, proxyFront);
-      if (state.leaseId && !release.released && !release.absent) {
-        leaseReleaseError = 'the proxy front did not confirm the lease release';
-      }
-    } catch (error) {
-      leaseReleaseError = errorMessage(error);
-    }
-  }
+  const leaseReleaseError = await releaseProxyFrontTeardownLease(client, location, state);
   markCloudConnectionClosing(location, record);
   removeCloudAttachment(location);
   const daemonGeneration =
