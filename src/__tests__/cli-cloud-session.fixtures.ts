@@ -82,9 +82,18 @@ function mintLeaseId(): string {
   return randomBytes(16).toString('hex');
 }
 
+type ActiveLease = {
+  tenantId: unknown;
+  runId: unknown;
+  clientId: unknown;
+  deviceKey: string;
+};
+
 /**
  * Answers the proxy lease RPCs a proxy front serves: the allocate names the device, a lease id the
- * front already holds is reused, and a release ends it. Every other request goes to `inner`.
+ * front already holds is reused, and a release ends it. Every other request goes to `inner`, except
+ * that a command the front does not serve is refused unless it carries the lease metadata of an
+ * active lease, as the real front does.
  */
 export function withLeaseAllocation(
   inner?: (req: CapturedDaemonRequest) => Promise<DaemonResponse> | DaemonResponse,
@@ -98,39 +107,116 @@ export function withLeaseAllocation(
       device,
     } as unknown as DeviceInfo),
   );
-  const activeLeaseIds = new Set<string>();
+  const activeLeases = new Map<string, ActiveLease>();
+  // Leases that a `close` ended. The real front answers a release of one with `released: false`
+  // and no `absent`, because its end is still pending.
+  const endedByClose = new Set<string>();
   return async (req: CapturedDaemonRequest): Promise<DaemonResponse> => {
     if (req.command === 'lease_allocate' || req.command === 'lease_heartbeat') {
-      const { tenantId, runId, clientId } = req.meta ?? {};
-      // The client names the lease when its connection is a proxy; the front mints one otherwise.
-      const leaseId = typeof req.meta?.leaseId === 'string' ? req.meta.leaseId : mintLeaseId();
-      const reused = activeLeaseIds.has(leaseId);
-      activeLeaseIds.add(leaseId);
-      return {
-        ok: true,
-        data: {
-          lease: {
-            leaseId,
-            tenantId,
-            runId,
-            backend: 'ios-instance',
-            leaseProvider: 'proxy',
-            deviceKey,
-            clientId,
-            device,
-          },
-          reused,
-        },
-      };
+      return allocateOrRenew(req, activeLeases, device, deviceKey);
     }
-    if (req.command === 'lease_release') {
-      const leaseId = req.meta?.leaseId;
-      if (typeof leaseId !== 'string' || !activeLeaseIds.has(leaseId)) {
-        return { ok: true, data: { released: false, absent: true } };
+    if (req.command === 'lease_release') return releaseLease(req, activeLeases, endedByClose);
+    const refusal = refuseWithoutLeaseMeta(req, activeLeases);
+    if (refusal) return refusal;
+    if (req.command === 'close' && typeof req.meta?.leaseId === 'string') {
+      // The live front ends the lease and names it in the reply as ended.
+      const leaseId = req.meta.leaseId;
+      if (activeLeases.delete(leaseId)) {
+        endedByClose.add(leaseId);
+        return { ok: true, data: { endedLeases: [{ leaseId, outcome: 'released' }] } };
       }
-      activeLeaseIds.delete(leaseId);
-      return { ok: true, data: { released: true } };
     }
     return inner ? await inner(req) : { ok: true, data: {} };
   };
+}
+
+const SCOPE_MISMATCH: DaemonResponse = {
+  ok: false,
+  error: { code: 'INVALID_ARGS', message: 'Lease scope mismatch.' },
+};
+
+/** A renewal names the scope the lease was allocated under; it never replaces that scope. */
+function allocateOrRenew(
+  req: CapturedDaemonRequest,
+  activeLeases: Map<string, ActiveLease>,
+  device: Record<string, unknown>,
+  deviceKey: string,
+): DaemonResponse {
+  const { tenantId, runId, clientId } = req.meta ?? {};
+  // The client names the lease when its connection is a proxy; the front mints one otherwise.
+  const leaseId = typeof req.meta?.leaseId === 'string' ? req.meta.leaseId : mintLeaseId();
+  const held = activeLeases.get(leaseId);
+  if (held && !sameScope(held, { tenantId, runId, clientId, deviceKey })) return SCOPE_MISMATCH;
+  activeLeases.set(leaseId, { tenantId, runId, clientId, deviceKey });
+  return {
+    ok: true,
+    data: {
+      lease: {
+        leaseId,
+        tenantId,
+        runId,
+        backend: 'ios-instance',
+        leaseProvider: 'proxy',
+        deviceKey,
+        clientId,
+        device,
+      },
+      reused: held !== undefined,
+    },
+  };
+}
+
+function releaseLease(
+  req: CapturedDaemonRequest,
+  activeLeases: Map<string, ActiveLease>,
+  endedByClose: ReadonlySet<string>,
+): DaemonResponse {
+  const leaseId = req.meta?.leaseId;
+  const held = typeof leaseId === 'string' ? activeLeases.get(leaseId) : undefined;
+  if (typeof leaseId === 'string' && endedByClose.has(leaseId)) {
+    return { ok: true, data: { released: false } };
+  }
+  if (typeof leaseId !== 'string' || held === undefined) {
+    return { ok: true, data: { released: false, absent: true } };
+  }
+  if (!sameScope(held, scopeOf(req.meta ?? {}))) return SCOPE_MISMATCH;
+  activeLeases.delete(leaseId);
+  return { ok: true, data: { released: true } };
+}
+
+/** Mirrors the real proxy front: a command must name an active lease with its scope, or it is refused. */
+function refuseWithoutLeaseMeta(
+  req: CapturedDaemonRequest,
+  activeLeases: ReadonlyMap<string, ActiveLease>,
+): DaemonResponse | undefined {
+  const meta = req.meta ?? {};
+  const lease = typeof meta.leaseId === 'string' ? activeLeases.get(meta.leaseId) : undefined;
+  const complete =
+    typeof meta.tenantId === 'string' &&
+    typeof meta.runId === 'string' &&
+    typeof meta.clientId === 'string';
+  if (lease !== undefined && complete && sameScope(lease, scopeOf(meta))) return undefined;
+  const message =
+    req.command === 'open'
+      ? 'Proxy open requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.'
+      : `Proxy ${req.command} requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.`;
+  return { ok: false, error: { code: 'INVALID_ARGS', message } };
+}
+
+function scopeOf(meta: Record<string, unknown>): ActiveLease {
+  return {
+    tenantId: meta.tenantId,
+    runId: meta.runId,
+    clientId: meta.clientId,
+    deviceKey: meta.deviceKey as string,
+  };
+}
+
+function sameScope(a: ActiveLease, b: ActiveLease): boolean {
+  return (
+    a.tenantId === b.tenantId &&
+    a.runId === b.runId &&
+    a.clientId === b.clientId &&
+    a.deviceKey === b.deviceKey
+  );
 }

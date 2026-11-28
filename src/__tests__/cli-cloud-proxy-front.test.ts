@@ -33,10 +33,74 @@ test('a proxy-front attachment allocates its lease before open and sends that le
   expect(allocate?.meta?.leaseProvider).toBe('proxy');
   expect(typeof allocate?.meta?.leaseId).toBe('string');
   expect(open?.meta?.leaseId).toBe(allocate?.meta?.leaseId);
+  expect(open?.meta?.tenantId).toBe(allocate?.meta?.tenantId);
+  expect(open?.meta?.runId).toBe(allocate?.meta?.runId);
+  expect(open?.meta?.clientId).toBe(allocate?.meta?.clientId);
+  expect(open?.meta?.deviceKey).toBeTypeOf('string');
   expect(opened.transportOptions[0]).toMatchObject({
     authToken: hostedDevice.attach.daemonAuthToken,
   });
   expect((await runCliCapture(['disconnect', '--json'], { env })).code).toBeNull();
+});
+
+test('a proxy-front command after open carries the lease scope the front refuses without', async () => {
+  const env = cloudEnv();
+  stubCloudApi(proxyFrontDevice);
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const served = withLeaseAllocation();
+  const opened = await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+    env,
+    sendToDaemon: served,
+  });
+  expect(opened.code).toBeNull();
+
+  const snapshot = await runCliCapture(['snapshot', '-i', '--json'], {
+    env,
+    sendToDaemon: served,
+  });
+  expect(snapshot.code, snapshot.stderr || snapshot.stdout).toBeNull();
+  const sent = snapshot.calls.find((call) => call.command === 'snapshot');
+  expect(snapshot.calls.map(({ command }) => command)).toEqual(['lease_heartbeat', 'snapshot']);
+  expect(sent?.meta?.tenantId).toBeTypeOf('string');
+  expect(sent?.meta?.runId).toBeTypeOf('string');
+  expect(sent?.meta?.leaseId).toBeTypeOf('string');
+  const openCall = opened.calls.find((call) => call.command === 'open');
+  expect(sent?.meta?.clientId).toBe(openCall?.meta?.clientId);
+  expect(sent?.meta?.deviceKey).toBe(openCall?.meta?.deviceKey);
+
+  const closed = await runCliCapture(['close', '--json'], { env, sendToDaemon: served });
+  expect(closed.code, closed.stderr || closed.stdout).toBeNull();
+  const [close] = closed.calls;
+  expect(close?.command).toBe('close');
+  expect(close?.meta?.leaseId).toBe(sent?.meta?.leaseId);
+  expect(
+    (await runCliCapture(['disconnect', '--json'], { env, sendToDaemon: served })).code,
+  ).toBeNull();
+});
+
+test('disconnect after close ends cleanly: the lease close ended is not released again', async () => {
+  const env = cloudEnv();
+  stubCloudApi(proxyFrontDevice);
+  expect((await runCliCapture(connectArgs, { env })).code).toBeNull();
+  const served = withLeaseAllocation();
+  expect(
+    (
+      await runCliCapture(['open', 'com.apple.Preferences', '--json'], {
+        env,
+        sendToDaemon: served,
+      })
+    ).code,
+  ).toBeNull();
+  const closed = await runCliCapture(['close', '--json'], { env, sendToDaemon: served });
+  expect(closed.code, closed.stderr || closed.stdout).toBeNull();
+
+  const disconnected = await runCliCapture(['disconnect', '--json'], {
+    env,
+    sendToDaemon: served,
+  });
+  expect(disconnected.code, disconnected.stderr || disconnected.stdout).toBeNull();
+  expect(JSON.parse(disconnected.stdout).data.leaseReleaseError).toBeUndefined();
+  expect(disconnected.calls.map(({ command }) => command)).not.toContain('lease_release');
 });
 
 test('a proxy-front attachment refuses a command before open, and a daemon attachment does not', async () => {

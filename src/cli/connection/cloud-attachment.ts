@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import type { DaemonTransport } from '@agent-device/daemon-client';
 import type { CliFlags } from '@agent-device/contracts/command';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -147,6 +148,8 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
     };
   }
   const proxyFront = attachment.leasing === 'proxy-front';
+  // A proxy front keeps the lease scope its connection holds, so every command names the same lease.
+  const leaseScope = proxyFront ? proxyFrontLeaseScope(options) : undefined;
   return {
     host: { ...options.host, env },
     token: attachment.daemonAuthToken,
@@ -157,12 +160,31 @@ function bindAttachmentFlags(options: CloudAttachmentOptions): {
       daemonBaseUrl: attachment.daemonBaseUrl,
       daemonAuthToken: attachment.daemonAuthToken,
       daemonTransport: 'http',
-      tenant: undefined,
-      runId: undefined,
+      tenant: leaseScope?.tenant,
+      runId: leaseScope?.runId,
       sessionIsolation: undefined,
-      leaseId: undefined,
-      leaseBackend: undefined,
+      leaseId: leaseScope?.leaseId,
+      leaseBackend: leaseScope?.leaseBackend,
     },
+  };
+}
+
+/**
+ * The stored connection's lease scope. Before the connection is stored, the tenant and run come
+ * from the connection defaults the invocation carries.
+ */
+function proxyFrontLeaseScope(options: CloudAttachmentOptions): {
+  tenant: string | undefined;
+  runId: string | undefined;
+  leaseId: string | undefined;
+  leaseBackend: CliFlags['leaseBackend'];
+} {
+  const stored = readRemoteConnectionState(options.location);
+  return {
+    tenant: stored?.tenant ?? options.flags.tenant,
+    runId: stored?.runId ?? options.flags.runId,
+    leaseId: stored?.leaseId,
+    leaseBackend: stored?.leaseBackend,
   };
 }
 

@@ -236,6 +236,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           replayTestReporterRuntime,
           commandProgress,
           cloudGeneration: ctx.cloudSession?.generation,
+          cloudLocation: { stateDir: ctx.daemonPaths.baseDir, session: ctx.sessionName },
           transport,
         });
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
@@ -866,17 +867,24 @@ type CliDaemonTransportSetup = {
   commandProgress: CommandProgressState;
   transport: CliDaemonTransport;
   cloudGeneration?: string;
+  cloudLocation?: { stateDir: string; session: string };
 };
 
 function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
-  const { flags, host, cloudGeneration } = options;
+  const { flags, host, command, cloudGeneration, cloudLocation } = options;
   const send = createCliProgressTransport(options);
-  if (!flags.remoteConfig || options.command === 'connect' || options.command === 'disconnect')
-    return send;
+  if (!flags.remoteConfig && cloudGeneration === undefined) return send;
   return async (req, context) => {
     const response = await send(req, context);
-    const { forgetEndedConnectionLease } = await import('./cli/connection/ended-lease.ts');
-    await forgetEndedConnectionLease(flags, response, host, cloudGeneration);
+    const { applyEndedLeaseReplies } = await import('./cli/connection/ended-lease.ts');
+    await applyEndedLeaseReplies({
+      response,
+      flags,
+      host,
+      command,
+      cloudGeneration,
+      cloudLocation,
+    });
     return response;
   };
 }
