@@ -110,12 +110,14 @@ When lease release cannot be confirmed, `error.details.releaseStatus` is `unknow
 | `insufficient_balance` | The account balance cannot cover the cost to start the session. |
 | `cloud_transport_unsupported` | The cloud session uses an attachment transport this CLI cannot drive. |
 | `cloud_session_invalid` | The cloud API returned an invalid session response. |
+| `cloud_session_not_found` | The hosted broker could not find the session for the current credential. |
 
 ### `disconnect`
 
 | Reason | Meaning |
 | --- | --- |
 | `connection_busy` | A connection operation is in progress for the session. |
+| `cloud_session_not_found` | The hosted broker could not find the session for the current credential. |
 
 ### `events`
 
@@ -673,6 +675,7 @@ These reasons can come from more than one command.
 | `insufficient_balance` | The account balance cannot cover the cost to start the session. |
 | `cloud_transport_unsupported` | The cloud session uses an attachment transport this CLI cannot drive. |
 | `cloud_session_invalid` | The cloud API returned an invalid session response. |
+| `cloud_session_not_found` | The hosted broker could not find the session for the current credential. |
 
 ### Command flags
 

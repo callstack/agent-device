@@ -8,6 +8,7 @@ import {
   type CloudAllocationProgress,
 } from './cloud-connect-progress.ts';
 import { parseCloudEndpoint } from '../cloud-origin.ts';
+import { CLOUD_CONNECTION_FORGET_HINT } from './cloud-connection-record.ts';
 import {
   isCredentialEndpoint,
   parseCloudAttachment,
@@ -45,6 +46,8 @@ const CLOUD_SESSION_API_REASONS = {
   transportUnsupported: { reason: 'cloud_transport_unsupported', commands: ['connect'] },
   // The cloud API returned an invalid session response.
   invalidSession: { reason: 'cloud_session_invalid', commands: ['connect'] },
+  // The hosted broker could not find the session for the current credential.
+  sessionNotFound: { reason: 'cloud_session_not_found', commands: ['disconnect', 'connect'] },
 } as const satisfies ReasonTable<'cloud sessions'>;
 
 type CloudAccess = { cloudBaseUrl: string; accessToken: string };
@@ -639,6 +642,14 @@ export async function deleteCloudSession(access: CloudAccess, id: string): Promi
     headers: { authorization: `Bearer ${access.accessToken}` },
     signal: AbortSignal.timeout(30_000),
   });
+  if (response.status === 404) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new AppError('COMMAND_FAILED', 'The hosted broker could not find the session.', {
+      reason: CLOUD_SESSION_API_REASONS.sessionNotFound.reason,
+      status: response.status,
+      hint: `Check the session under the owning account and retry agent-device disconnect. ${CLOUD_CONNECTION_FORGET_HINT}`,
+    });
+  }
   if (response.status === 409 && (await cloudSessionIsTerminal(access, id))) {
     await response.body?.cancel();
     return;
