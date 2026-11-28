@@ -558,7 +558,7 @@ test('prepareMetroRuntime retries malformed retryable bridge responses after com
   }
 });
 
-test('a redirected bridge request reaches another origin without the bearer token', async () => {
+test('a redirected bridge request fails without reaching the other origin', async () => {
   const projectRoot = mkdtempForTestSync('agent-device-metro-redirect-');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(
@@ -596,10 +596,7 @@ test('a redirected bridge request reaches another origin without the bearer toke
       ),
     );
 
-    assert.deepEqual(received, [
-      ['/api/metro/bridge', 'Bearer shared-token'],
-      ['/moved', undefined],
-    ]);
+    assert.deepEqual(received, [['/api/metro/bridge', 'Bearer shared-token']]);
   } finally {
     await closeLoopbackServer(bridge);
     await closeLoopbackServer(other);

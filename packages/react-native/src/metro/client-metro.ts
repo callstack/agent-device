@@ -459,6 +459,7 @@ async function configureMetroBridge(input: ProxyBridgeRequestOptions): Promise<M
   try {
     response = await fetch(`${input.baseUrl}/api/metro/bridge`, {
       method: 'POST',
+      redirect: 'manual',
       headers: createProxyHeaders(input.baseUrl, input.bearerToken),
       body: JSON.stringify({
         ...input.scope,

@@ -26,7 +26,7 @@ These paths never send a credential over plain http to a host that is not loopba
 - Loopback means `127.0.0.0/8`, `::1`, or `localhost`. Such traffic stays on this machine. If you relay a loopback port to another machine, the relay must encrypt it.
 - A redirect never takes a token or key to another origin:
   - Cloud sign-in follows redirects only on the same origin.
-  - Cloud profile requests, and Metro host bridge setup and companion registration, use the standard `fetch` redirect handling. It drops `Authorization` on another origin. The request body, which names the tenant, run, lease, and Metro URLs, can still follow a bridge redirect there.
+  - Cloud profile requests, Metro host bridge setup, and companion registration follow no redirect. A redirect fails the request.
   - A Limrun download follows redirects on the same origin, and from https to https without its headers.
   - The proxy follows no upstream redirect. It relays the redirect status without `Location`.
 - The Metro companion opens the host bridge's socket, and every WebSocket the bridge relays to your dev server, only over `wss`, or `ws` to loopback. A dev server on a LAN `http` address gets no relayed WebSocket. A relayed HTTP request with an `Authorization` or `Cookie` header follows the same rule. The companion follows no redirect from your dev server; it returns the redirect to the bridge.

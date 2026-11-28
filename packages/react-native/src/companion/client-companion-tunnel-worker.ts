@@ -95,6 +95,7 @@ async function registerCompanion(
       method: 'POST',
       headers: createHeaders(options.serverBaseUrl, options.bearerToken),
       body: JSON.stringify(buildCompanionPayload(options)),
+      redirect: 'manual',
       signal: AbortSignal.timeout(COMPANION_REGISTER_TIMEOUT_MS),
     });
   } catch (error) {
@@ -169,8 +170,7 @@ function clampRetryDelay(delayMs: number): number {
 
 /**
  * The URL a bearer request goes to. The base must be a destination on its own: appending a path can
- * give a host to a base without one (`https://` becomes `https://api/...`). The request keeps
- * `fetch`'s redirect handling, which drops `authorization` on another origin.
+ * give a host to a base without one (`https://` becomes `https://api/...`).
  */
 function bearerDestination(serverBaseUrl: string, path: string): URL {
   assertSecureCredentialTransport(serverBaseUrl, BRIDGE_URL_SUBJECT);
@@ -202,6 +202,7 @@ async function unregisterCompanion(options: CompanionTunnelWorkerOptions): Promi
       method: 'POST',
       headers: createHeaders(options.serverBaseUrl, options.bearerToken),
       body: JSON.stringify(buildCompanionPayload(options)),
+      redirect: 'manual',
       signal: AbortSignal.timeout(2_000),
     });
   } catch (error) {

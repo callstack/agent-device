@@ -77,9 +77,9 @@ async function fetchConnectionProfile(options: {
     new URL(CONNECTION_PROFILE_PATH, options.cloudBaseUrl),
     'Cloud base URL',
   );
-  // `fetch` drops `authorization` on a redirect to another origin.
   const response = await fetchImpl(profileUrl, {
     method: 'GET',
+    redirect: 'manual',
     headers: { authorization: `Bearer ${options.accessToken}` },
     signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
   });

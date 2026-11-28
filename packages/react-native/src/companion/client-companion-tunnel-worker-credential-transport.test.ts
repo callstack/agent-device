@@ -295,7 +295,7 @@ test('a relayed socket never opens over plain ws off loopback', async () => {
   assert.deepEqual(sink.connections, []);
 });
 
-test('a redirected registration reaches another origin without the bearer token', async () => {
+test('a redirected registration fails without reaching the other origin', async () => {
   const received: Array<string | undefined> = [];
   const other = http.createServer((req, res) => {
     received.push(req.headers.authorization);
@@ -312,5 +312,5 @@ test('a redirected registration reaches another origin without the bearer token'
   await startWorker(bridge.origin).done;
 
   assert.deepEqual(bridge.received, [registered]);
-  assert.deepEqual(received, [undefined]);
+  assert.deepEqual(received, []);
 });
