@@ -18,7 +18,7 @@ import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import type { SessionTeardown } from '../../sessions/lease-lifecycle.ts';
-import { createLeaseSessionEnd } from '../request-execution-scope.ts';
+import { createLeaseSessionEnd } from '../lease-session-end.ts';
 
 bindTestCommandHost();
 

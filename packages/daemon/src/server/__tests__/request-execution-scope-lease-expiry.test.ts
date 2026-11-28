@@ -18,8 +18,8 @@ import {
 } from '../../__tests__/support/device-claim-store.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { createLeaseSessionEnd } from '../lease-session-end.ts';
 import {
-  createLeaseSessionEnd,
   createRequestExecutionScope,
   getLeaseRegistryExecutionLocks,
 } from '../request-execution-scope.ts';

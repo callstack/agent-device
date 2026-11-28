@@ -19,8 +19,8 @@ vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
   }
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
-vi.mock('../request-execution-scope.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../request-execution-scope.ts')>();
+vi.mock('../lease-session-end.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lease-session-end.ts')>();
   return {
     ...actual,
     createLeaseSessionEnd: () => ({
