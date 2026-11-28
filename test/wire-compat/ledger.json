@@ -176,9 +176,9 @@
     "packages/remote/src/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "packages/remote/src/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
     "packages/remote/src/upload-client.ts#requestUploadControl": "sha256:5689da0c0cd18d0293e5bb05ddc0d8a07d1bca9ab1d94f8ca185b03bc5b8d758",
-    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:6976942601980c80ef069a0e1cbd7058840d0384e9e87c48f5dfd8d1c774703c",
+    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:3080e4ac4e0d6f46345a3588a88c81152ac74628dd6c03328161188d383a97ff",
     "packages/remote/src/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
-    "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:cc5d33f38e047cf3be4bd412b64958c7495eb9a45e58eefadaa00eefa0cb6b53",
+    "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:405c614f566f1385ac8ef7eebdc064fe93914241aefd46ca5b855f889c4eca83",
     "packages/remote/src/upload-client.ts#uploadDirectArtifact": "sha256:93a36a9d3dea88064569517f3cdc34f27b33df6bf5f0c0ecc9efc29b47f24b77",
     "packages/remote/src/upload-client.ts#uploadLegacyArtifact": "sha256:1546c696134b47bfaaaffcf95deb176cccdce243818b658ae0494dafb57fafb6",
     "packages/remote/src/upload-stream.ts#MAX_UPLOAD_REDIRECTS": "sha256:12ff46dfe33a1dce95bdb79c90c17a3ba4f3919e7dc4b3a1b04590fff430f79f",
@@ -484,8 +484,8 @@
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#tryDirectUploadWithResume",
-      "digest": "sha256:cc5d33f38e047cf3be4bd412b64958c7495eb9a45e58eefadaa00eefa0cb6b53",
-      "rationale": "#4441 ends the direct-upload sequence when a transfer phase's own budget expires, instead of re-preflighting for a fresh ticket or falling back, because a second attempt would be permission that budget already refused. Preflight, ticket PUT and finalize requests are unchanged in route, method, headers and body, so a protocol-2 daemon parses everything it parsed before; it just receives no further legs once the caller's aggregate has expired. Its signal is now required, because the preparation aggregate is always the one passed down, and it is read directly; no request changes."
+      "digest": "sha256:405c614f566f1385ac8ef7eebdc064fe93914241aefd46ca5b855f889c4eca83",
+      "rationale": "#4441 ends the direct-upload sequence when a transfer phase's own budget expires, instead of re-preflighting for a fresh ticket or falling back, because a second attempt would be permission that budget already refused. Preflight, ticket PUT and finalize requests are unchanged in route, method, headers and body, so a protocol-2 daemon parses everything it parsed before; it just receives no further legs once the caller's aggregate has expired. Its signal is now required, because the preparation aggregate is always the one passed down, and it is read directly; no request changes. The client environment is now passed through to the retry preflight, which judges the ticket URL locally; no request changes."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#uploadLegacyArtifact",
@@ -554,8 +554,8 @@
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
-      "digest": "sha256:6976942601980c80ef069a0e1cbd7058840d0384e9e87c48f5dfd8d1c774703c",
-      "rationale": "#4441 preserves the 30-second control-request ceiling but reports its typed phase timeout instead of retrying or falling back after expiry. The shared Fetch/JSON owner retains route, method, authentication, request body, redirect refusal and successful response parsing, so protocol-2 peers parse the same messages; only the local timeout outcome stops subsequent upload legs."
+      "digest": "sha256:3080e4ac4e0d6f46345a3588a88c81152ac74628dd6c03328161188d383a97ff",
+      "rationale": "#4441 preserves the 30-second control-request ceiling but reports its typed phase timeout instead of retrying or falling back after expiry. The shared Fetch/JSON owner retains route, method, authentication, request body, redirect refusal and successful response parsing, so protocol-2 peers parse the same messages; only the local timeout outcome stops subsequent upload legs. The client now also drops a direct-upload ticket whose URL is plain http to a host that is not loopback, unless the operator's environment overrides it, and takes the legacy upload route a released daemon already serves when it hands out no usable ticket. The preflight request and response shapes are unchanged."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
