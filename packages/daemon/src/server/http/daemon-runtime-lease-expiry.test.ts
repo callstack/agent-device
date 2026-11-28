@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 
@@ -41,8 +42,12 @@ vi.mock('../request-execution-scope.ts', async (importOriginal) => {
 });
 
 import { SessionStore } from '../../core/session-store.ts';
-import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import {
+  applicationLifecycleResourceFixture,
+  daemonRuntimeDepsFixture,
+} from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
+import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 afterEach(() => {
@@ -154,6 +159,69 @@ test('a lease that expires after shutdown is refused and reported, not sent to i
       `expected a refusal row in the daemon log, got ${JSON.stringify(rows.map((r) => r.phase))}`,
     );
   } finally {
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a late provider confirmation retires the lease record when close retains registration', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-daemon-retained-registration-');
+  const expiredRecord = path.join(stateDir, 'expired-provider-leases.json');
+  const provider = Promise.withResolvers<void>();
+  const recoverExpiredLease = vi.fn(() => provider.promise);
+  try {
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture({
+        recoverExpiredLease,
+        recoverableProviderIds: ['limrun'],
+        deviceRuntimeGateway: Object.freeze({
+          ...lifecycleDeviceRuntimeGateway,
+          applicationLifecycle: applicationLifecycleResourceFixture(),
+          shutdown: async () => {
+            throw new Error('platform owner could not close');
+          },
+        }),
+      }),
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
+        },
+      }),
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+    assert.ok(runtime);
+    const [registry] = leaseProbe.registries;
+    assert.ok(registry);
+    const lease = registry.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'limrun',
+      ttlMs: 10,
+    });
+    await vi.advanceTimersByTimeAsync(11);
+    registry.consumeExpiredLease(lease.leaseId);
+    assert.equal(recoverExpiredLease.mock.calls.length, 1);
+
+    const closing = runtime.close();
+    await vi.runAllTimersAsync();
+    const report = await closing;
+    assert.equal(report.platformOwners, 'failed');
+    assert.deepEqual(report.providerReleases.unknown, [lease.leaseId]);
+    assert.ok(fs.existsSync(path.join(stateDir, 'daemon.lock')));
+    assert.ok(fs.existsSync(expiredRecord));
+
+    provider.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(fs.existsSync(expiredRecord), false);
+    assert.equal(recoverExpiredLease.mock.calls.length, 1);
+  } finally {
+    provider.resolve();
     vi.useRealTimers();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

@@ -295,10 +295,10 @@ test.each(['before handoff', 'after handoff'] as const)(
         } finally {
           remove.mockRestore();
         }
-        releaser.finishPersistence();
+        releaser.finishPersistence({ retainRegistration: false });
         expect(fs.existsSync(recordPath)).toBe(false);
       } else {
-        releaser.finishPersistence();
+        releaser.finishPersistence({ retainRegistration: false });
         const inheritedRecord = fs.readFileSync(recordPath, 'utf8');
         release.resolve();
         await expect(admitted).resolves.toEqual({ status: 'released' });

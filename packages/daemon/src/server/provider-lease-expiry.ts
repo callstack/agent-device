@@ -95,8 +95,8 @@ export type ExpiredProviderLeaseReleaser = {
     released: DeviceLease[];
   }>;
   shutdown: () => void;
-  /** Makes the final pending retirement write and stops all disk writes before registration handoff. */
-  finishPersistence: () => void;
+  /** Retries retirement and stops disk writes if this close releases registration. */
+  finishPersistence: (options: { retainRegistration: boolean }) => void;
 };
 
 export function createExpiredProviderLeaseReleaser(options: {
@@ -456,11 +456,11 @@ export function createExpiredProviderLeaseReleaser(options: {
       return result;
     },
     shutdown,
-    finishPersistence: () => {
+    finishPersistence: ({ retainRegistration }) => {
       if (persistenceClosed) return;
       shutdown();
       if (retirementWrite !== 'clean') persistPendingLeases();
-      persistenceClosed = true;
+      persistenceClosed = !retainRegistration;
     },
   };
 }
