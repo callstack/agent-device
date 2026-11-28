@@ -112,7 +112,7 @@ export function mockXcrunCommands(handlers: XcrunMockHandler[]): void {
 export function mockIosDeviceBundleHandlers(
   apps: Array<{ bundleIdentifier: string; name: string; url: string }>,
   runningProcesses: Array<{ executable: string; processIdentifier: number }>,
-): XcrunMockHandler[] {
+): [XcrunMockHandler, XcrunMockHandler] {
   return [
     async (args) => {
       if (!matchesDevicectlInfo(args, 'apps')) return null;
@@ -127,44 +127,27 @@ export function mockIosDeviceBundleHandlers(
   ];
 }
 
-export async function mockIosDeviceApps(args: readonly string[]): Promise<MockRunCmdResult | null> {
-  if (!matchesDevicectlInfo(args, 'apps')) return null;
-  await writeJsonOutput(args, {
-    result: {
-      apps: [
-        {
-          bundleIdentifier: 'com.example.device',
-          name: 'Example Device App',
-          url: 'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/',
-        },
-      ],
+export const [mockIosDeviceApps, mockIosDeviceProcesses] = mockIosDeviceBundleHandlers(
+  [
+    {
+      bundleIdentifier: 'com.example.device',
+      name: 'Example Device App',
+      url: 'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/',
     },
-  });
-  return emptyRunResult();
-}
-
-export async function mockIosDeviceProcesses(
-  args: readonly string[],
-): Promise<MockRunCmdResult | null> {
-  if (!matchesDevicectlInfo(args, 'processes')) return null;
-  await writeJsonOutput(args, {
-    result: {
-      runningProcesses: [
-        {
-          executable:
-            'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/ExampleDeviceApp',
-          processIdentifier: 4001,
-        },
-        {
-          executable:
-            'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/ExampleDeviceHelper',
-          processIdentifier: 4002,
-        },
-      ],
+  ],
+  [
+    {
+      executable:
+        'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/ExampleDeviceApp',
+      processIdentifier: 4001,
     },
-  });
-  return emptyRunResult();
-}
+    {
+      executable:
+        'file:///private/var/containers/Bundle/Application/ABC123/ExampleDevice.app/ExampleDeviceHelper',
+      processIdentifier: 4002,
+    },
+  ],
+);
 
 export function mockBackgroundXctrace(
   result?: MockRunCmdResult,

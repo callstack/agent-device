@@ -2,6 +2,14 @@ import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 
+vi.mock('node:url', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:url')>();
+  return {
+    ...actual,
+    fileURLToPath: vi.fn(actual.fileURLToPath),
+  };
+});
+
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return {
@@ -10,11 +18,17 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   };
 });
 
+import { fileURLToPath } from 'node:url';
 import { runCmd } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseApplePsOutput, resolveIosDevicePerfTarget } from '../perf-target.ts';
+import {
+  parseApplePsOutput,
+  readIosDeviceProcessName,
+  resolveIosDevicePerfTarget,
+} from '../perf-target.ts';
 
+const mockFileURLToPath = vi.mocked(fileURLToPath);
 const mockRunCmd = vi.mocked(runCmd);
 
 const IOS_DEVICE: DeviceInfo = {
@@ -25,8 +39,12 @@ const IOS_DEVICE: DeviceInfo = {
   booted: true,
 };
 
+const originalFileURLToPath = mockFileURLToPath.getMockImplementation()!;
+
 beforeEach(() => {
   mockRunCmd.mockReset();
+  mockFileURLToPath.mockReset();
+  mockFileURLToPath.mockImplementation(originalFileURLToPath);
 });
 
 test('parseApplePsOutput reads pid cpu rss and command columns', () => {
@@ -77,8 +95,17 @@ test('resolveIosDevicePerfTarget excludes app extensions while keeping main app 
         processIdentifier: 10845,
       },
       {
+        executable:
+          'file:///private/var/containers/Bundle/Application/DEV-1/App.app/Frameworks/SomeFramework.framework/SomeFramework',
+        processIdentifier: 10846,
+      },
+      {
         executable: 'file:///private/var/containers/Bundle/Application/DEV-1/App.app/App',
         processIdentifier: 10870,
+      },
+      {
+        executable: 'file:///private/var/containers/Bundle/Application/DEV-1/App.app/AppHelper',
+        processIdentifier: 10871,
       },
     ],
   );
@@ -89,7 +116,37 @@ test('resolveIosDevicePerfTarget excludes app extensions while keeping main app 
       pid: 10870,
       executable: 'file:///private/var/containers/Bundle/Application/DEV-1/App.app/App',
     },
+    {
+      pid: 10871,
+      executable: 'file:///private/var/containers/Bundle/Application/DEV-1/App.app/AppHelper',
+    },
   ]);
+});
+
+test('decodeIosDeviceFileUrl fallback decodes POSIX CoreDevice URLs when fileURLToPath fails and rethrows encoded slashes', () => {
+  const thrown = new TypeError('File URL path must be absolute');
+  mockFileURLToPath.mockImplementationOnce(() => {
+    throw thrown;
+  });
+
+  assert.equal(
+    readIosDeviceProcessName(
+      'file:///private/var/containers/Bundle/Application/DEV%201/App.app/My%20Helper',
+    ),
+    'My Helper',
+  );
+
+  mockFileURLToPath.mockImplementationOnce(() => {
+    throw thrown;
+  });
+
+  assert.throws(
+    () =>
+      readIosDeviceProcessName(
+        'file:///private/var/containers/Bundle/Application/DEV%2F1/App.app/App',
+      ),
+    (error: unknown) => error === thrown,
+  );
 });
 
 test('resolveIosDevicePerfTarget fails when only extension processes are running', async () => {
