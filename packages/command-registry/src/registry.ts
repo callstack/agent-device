@@ -712,6 +712,23 @@ const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<
   CommandDescriptor & { standaloneCommandProjection: StandaloneCommandProjection | undefined }
 > = new Map(commandDescriptors.map((descriptor) => [descriptor.name, descriptor]));
 
+const DAEMON_COMMAND_BY_SERVED_PUBLIC_COMMAND: ReadonlyMap<string, string> = new Map(
+  (commandDescriptors as readonly CommandDescriptor[]).flatMap(({ name, catalog }) =>
+    catalog.group === 'internal' && catalog.servesPublicCommand
+      ? [[catalog.servesPublicCommand, name] as const]
+      : [],
+  ),
+);
+
+/**
+ * The name the daemon runs a command under: the internal command that declares it serves this public
+ * command (`install-from-source` runs as `install_source`), or else the name itself. Daemon traits
+ * are declared under this name.
+ */
+export function resolveDaemonCommandName(command: string): string {
+  return DAEMON_COMMAND_BY_SERVED_PUBLIC_COMMAND.get(command) ?? command;
+}
+
 /**
  * Whether the daemon admits this command's request against the lease it names (ADR 0007). A name
  * outside the registry, or a command exempt from lease admission, never meets lease admission.

@@ -32,34 +32,43 @@ const LEASE_SCOPE = {
   deviceKey: 'android:mobile:emulator-9999',
 } as const;
 
-test('a lease the daemon dropped is reallocated through the proxy without a heartbeat', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  await withProxiedDaemon(async ({ baseUrl, project, stateDir, upstream, cli }) => {
-    const client = createAgentDeviceClient({
-      daemonBaseUrl: baseUrl,
-      daemonAuthToken: 'client-secret',
-      daemonTransport: 'http',
+test.for<[string, string[], string | undefined]>([
+  ['snapshot', ['snapshot'], LEASE_SCOPE.leaseProvider],
+  // A `proxy` provider connection reallocates an install by spec, and this daemon has no device to
+  // grant. The URL is a loopback port with no listener, so a download never leaves the host.
+  ['install_source', ['install-from-source', 'http://127.0.0.1:1/app.apk'], undefined],
+])(
+  'a dropped lease is reallocated for %s through the proxy without a heartbeat',
+  async ([command, argv, leaseProvider], t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    await withProxiedDaemon(async ({ baseUrl, project, stateDir, upstream, cli }) => {
+      const client = createAgentDeviceClient({
+        daemonBaseUrl: baseUrl,
+        daemonAuthToken: 'client-secret',
+        daemonTransport: 'http',
+      });
+      const scope = { ...LEASE_SCOPE, leaseProvider };
+      const lease = await client.leases.allocate({ ...scope, leaseId: 'b'.repeat(32) });
+      writeConnection(stateDir, project, baseUrl, lease.leaseId, leaseProvider);
+      await client.leases.release({ ...scope, leaseId: lease.leaseId });
+      upstream.length = 0;
+
+      const result = await cli(argv);
+
+      const reallocated = readRemoteConnectionState({ stateDir, session: 'agent' })?.leaseId;
+      assert.ok(reallocated && reallocated !== lease.leaseId, result.stdout);
+      // The setup above already cached `/health` for this endpoint in this process, so only RPCs show.
+      assert.deepEqual(
+        upstream.filter((route) => route.startsWith('/rpc')),
+        [`/rpc ${command}`, '/rpc agent_device.lease.allocate', `/rpc ${command}`],
+      );
+      // The resent command passed admission: whatever it answered, it was not the lease refusal.
+      if (result.code !== null) {
+        assert.notEqual(JSON.parse(result.stdout).error.details?.reason, 'LEASE_NOT_FOUND');
+      }
     });
-    const lease = await client.leases.allocate({ ...LEASE_SCOPE, leaseId: 'b'.repeat(32) });
-    writeConnection(stateDir, project, baseUrl, lease.leaseId);
-    await client.leases.release({ ...LEASE_SCOPE, leaseId: lease.leaseId });
-    upstream.length = 0;
-
-    const result = await cli(['snapshot']);
-
-    const reallocated = readRemoteConnectionState({ stateDir, session: 'agent' })?.leaseId;
-    assert.ok(reallocated && reallocated !== lease.leaseId, result.stdout);
-    // The setup above already cached `/health` for this endpoint in this process, so only RPCs show.
-    assert.deepEqual(
-      upstream.filter((route) => route.startsWith('/rpc')),
-      ['/rpc snapshot', '/rpc agent_device.lease.allocate', '/rpc snapshot'],
-    );
-    // The resent command passed admission: whatever it answered, it was not the lease refusal.
-    if (result.code !== null) {
-      assert.notEqual(JSON.parse(result.stdout).error.details?.reason, 'LEASE_NOT_FOUND');
-    }
-  });
-});
+  },
+);
 
 // A reused lease on the connection does not move a command that checks no lease off the checked route.
 test('a checked connection sends a command that checks no lease as its one checked request', async (t) => {
@@ -149,7 +158,13 @@ async function describe(request: Request): Promise<string> {
   return `${route} ${body.method === 'agent_device.command' ? body.params?.command : body.method}`;
 }
 
-function writeConnection(stateDir: string, project: string, baseUrl: string, leaseId: string) {
+function writeConnection(
+  stateDir: string,
+  project: string,
+  baseUrl: string,
+  leaseId: string,
+  leaseProvider: string | undefined,
+) {
   const remoteConfigPath = path.join(project, 'agent.remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
   const now = new Date().toISOString();
@@ -165,7 +180,7 @@ function writeConnection(stateDir: string, project: string, baseUrl: string, lea
       runId: LEASE_SCOPE.runId,
       leaseId,
       leaseBackend: LEASE_SCOPE.leaseBackend,
-      leaseProvider: LEASE_SCOPE.leaseProvider,
+      leaseProvider,
       clientId: LEASE_SCOPE.clientId,
       deviceKey: LEASE_SCOPE.deviceKey,
       platform: 'android',

@@ -24,8 +24,9 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { LeaseLedger } from './connection-lease-transaction.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { resolveDaemonCommandName } from '@agent-device/command-registry/registry';
 
-const proxyLeaseAllocatingCommands: ReadonlySet<string> = new Set([
+const proxyLeaseAllocatingDaemonCommands: ReadonlySet<string> = new Set([
   PUBLIC_COMMANDS.open,
   PUBLIC_COMMANDS.install,
   PUBLIC_COMMANDS.reinstall,
@@ -62,7 +63,7 @@ export async function resolveProxyLeaseState(options: {
   flags: CliFlags;
   leaseBackend?: LeaseBackend;
 }): Promise<ResolvedLeaseState> {
-  if (!proxyLeaseAllocatingCommands.has(options.command)) {
+  if (!proxyLeaseAllocatingDaemonCommands.has(resolveDaemonCommandName(options.command))) {
     if (options.state.leaseId && options.state.deviceKey) return { state: options.state };
     throw new AppError(
       'INVALID_ARGS',
