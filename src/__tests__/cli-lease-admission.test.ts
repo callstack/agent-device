@@ -15,7 +15,11 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { prepareMetroRuntime } from '@agent-device/react-native';
-import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
+import {
+  runCliCapture,
+  type CapturedDaemonRequest,
+  type CliCaptureOptions,
+} from './cli-capture.ts';
 import { metroPrepareResult } from './remote-connection.fixtures.ts';
 
 vi.mock('@agent-device/react-native', async (importOriginal) => ({
@@ -119,13 +123,17 @@ function admissionRefusal(dispatched?: DispatchDisclosure): AppError {
   });
 }
 
-async function run(ws: Workspace, argv: string[], daemon: Daemon) {
+async function run(
+  ws: Workspace,
+  argv: string[],
+  sendToDaemon: NonNullable<CliCaptureOptions['sendToDaemon']>,
+) {
   return await runCliCapture(
     [...argv, '--session', 'agent', '--state-dir', ws.stateDir, '--json'],
     {
       cwd: ws.project,
       env: { HOME: ws.home },
-      sendToDaemon: transportTo(daemon),
+      sendToDaemon,
     },
   );
 }
@@ -145,7 +153,7 @@ test.each([
   ['a proxy open on the stored device', ['open', 'com.example'], 'open'],
 ])('%s reaches a lease-admission daemon without a heartbeat', async (_name, argv, command) => {
   const ws = workspace();
-  const result = await run(ws, argv, { leaseAdmission: true });
+  const result = await run(ws, argv, transportTo({ leaseAdmission: true }));
 
   assert.equal(result.code, null, result.stdout);
   assert.deepEqual(commandsOf(result), [command]);
@@ -159,7 +167,7 @@ test.each([
 
 test('a daemon without lease admission gets the heartbeat, then the command once more', async () => {
   const ws = workspace();
-  const result = await run(ws, ['snapshot'], { leaseAdmission: false });
+  const result = await run(ws, ['snapshot'], transportTo({ leaseAdmission: false }));
 
   assert.equal(result.code, null, result.stdout);
   assert.deepEqual(commandsOf(result), ['snapshot', 'lease_heartbeat', 'snapshot']);
@@ -169,25 +177,38 @@ test('a daemon without lease admission gets the heartbeat, then the command once
   fs.rmSync(ws.root, { recursive: true, force: true });
 });
 
-test('a lease refused at admission is reallocated and the command is sent once more', async () => {
-  const ws = workspace();
-  const result = await run(ws, ['snapshot'], {
-    leaseAdmission: true,
-    refusal: () => admissionRefusal('no'),
-  });
+test.each([
+  ['succeeds', false],
+  ['is refused again and not sent a third time', true],
+])(
+  'a lease refused at admission is reallocated and the resent command %s',
+  async (_name, refusedAgain) => {
+    const ws = workspace();
+    const admits = transportTo({ leaseAdmission: true });
+    const result = await run(ws, ['snapshot'], async (req) => {
+      const refused = refusedAgain || scopeOf(req, 'leaseId') === STORED_LEASE;
+      if (refused && req.command !== 'lease_allocate') throw admissionRefusal('no');
+      return await admits(req);
+    });
 
-  assert.equal(result.code, null, result.stdout);
-  assert.deepEqual(commandsOf(result), ['snapshot', 'lease_allocate', 'snapshot']);
-  const allocated = scopeOf(result.calls[1], 'leaseId');
-  assert.notEqual(allocated, STORED_LEASE);
-  assert.equal(scopeOf(result.calls[2], 'leaseId'), allocated);
-  assert.equal(
-    readRemoteConnectionState({ stateDir: ws.stateDir, session: 'agent' })?.leaseId,
-    allocated,
-  );
+    assert.equal(result.code, refusedAgain ? 1 : null, result.stdout);
+    assert.deepEqual(commandsOf(result), ['snapshot', 'lease_allocate', 'snapshot']);
+    const allocated = scopeOf(result.calls[1], 'leaseId');
+    assert.notEqual(allocated, STORED_LEASE);
+    assert.equal(scopeOf(result.calls[2], 'leaseId'), allocated);
+    assert.equal(
+      readRemoteConnectionState({ stateDir: ws.stateDir, session: 'agent' })?.leaseId,
+      allocated,
+    );
+    if (refusedAgain) {
+      const details = JSON.parse(result.stdout).error.details;
+      assert.equal(details.reason, 'LEASE_NOT_FOUND');
+      assert.equal(details.dispatched, 'no');
+    }
 
-  fs.rmSync(ws.root, { recursive: true, force: true });
-});
+    fs.rmSync(ws.root, { recursive: true, force: true });
+  },
+);
 
 test.each([
   ['an inactive-lease refusal without dispatch disclosure', () => admissionRefusal(), {}],
@@ -222,7 +243,7 @@ test.each([
   ],
 ])('%s is never resent', async (_name, refusal, expected) => {
   const ws = workspace();
-  const result = await run(ws, ['snapshot'], { leaseAdmission: true, refusal });
+  const result = await run(ws, ['snapshot'], transportTo({ leaseAdmission: true, refusal }));
 
   assert.equal(result.code, 1, result.stdout);
   assert.deepEqual(commandsOf(result), ['snapshot']);
@@ -236,35 +257,16 @@ test.each([
 // A `close` ends the connection's session, so no lease is rented or renewed for it.
 test('a close refused for an inactive lease allocates nothing and is not resent', async () => {
   const ws = workspace();
-  const result = await run(ws, ['close'], { leaseAdmission: true, refusal: admissionRefusal });
+  const result = await run(
+    ws,
+    ['close'],
+    transportTo({ leaseAdmission: true, refusal: admissionRefusal }),
+  );
 
   assert.equal(result.code, 1, result.stdout);
   assert.deepEqual(commandsOf(result), ['close']);
   assert.deepEqual(markedOf(result), [false]);
   assert.equal(scopeOf(result.calls[0], 'leaseId'), STORED_LEASE);
-
-  fs.rmSync(ws.root, { recursive: true, force: true });
-});
-
-test('a resent command refused again is not sent a third time', async () => {
-  const ws = workspace();
-  const result = await runCliCapture(
-    ['snapshot', '--session', 'agent', '--state-dir', ws.stateDir, '--json'],
-    {
-      cwd: ws.project,
-      env: { HOME: ws.home },
-      sendToDaemon: async (req) => {
-        if (req.command === 'lease_allocate') return leaseAnswer(req);
-        throw admissionRefusal('no');
-      },
-    },
-  );
-
-  assert.equal(result.code, 1, result.stdout);
-  assert.deepEqual(commandsOf(result), ['snapshot', 'lease_allocate', 'snapshot']);
-  const details = JSON.parse(result.stdout).error.details;
-  assert.equal(details.reason, 'LEASE_NOT_FOUND');
-  assert.equal(details.dispatched, 'no');
 
   fs.rmSync(ws.root, { recursive: true, force: true });
 });
@@ -307,7 +309,7 @@ test.each<[string, string[], Partial<RemoteConnectionState>]>([
   ['a test run, which reads its scripts from paths', ['test', 'flow.ad'], {}],
 ])('%s keeps the heartbeat on a lease-admission daemon', async (_name, argv, connection) => {
   const ws = workspace(connection);
-  const result = await run(ws, argv, { leaseAdmission: true });
+  const result = await run(ws, argv, transportTo({ leaseAdmission: true }));
 
   assert.equal(commandsOf(result)[0], 'lease_heartbeat', result.stdout);
   assert.equal(markedOf(result).includes(true), false);
@@ -324,25 +326,18 @@ test('an open that prepares Metro replaces an ended lease before the bridge setu
     events.push(`prepare ${input.bridgeScope?.leaseId}`);
     return metroPrepareResult();
   });
-  const result = await runCliCapture(
-    ['open', 'com.example', '--session', 'agent', '--state-dir', ws.stateDir, '--json'],
-    {
-      cwd: ws.project,
-      env: { HOME: ws.home },
-      sendToDaemon: async (req) => {
-        events.push(`${req.command} ${scopeOf(req, 'leaseId')}`);
-        if (req.command === 'lease_heartbeat') throw admissionRefusal();
-        // The by-spec allocation names no device; the lease answer does.
-        if (req.command === 'lease_allocate') {
-          return leaseAnswer({
-            ...req,
-            meta: { ...req.meta, deviceKey: 'android:mobile:emulator-5554' },
-          });
-        }
-        return { ok: true, data: { session: req.session } };
-      },
-    },
-  );
+  const result = await run(ws, ['open', 'com.example'], async (req) => {
+    events.push(`${req.command} ${scopeOf(req, 'leaseId')}`);
+    if (req.command === 'lease_heartbeat') throw admissionRefusal();
+    // The by-spec allocation names no device; the lease answer does.
+    if (req.command === 'lease_allocate') {
+      return leaseAnswer({
+        ...req,
+        meta: { ...req.meta, deviceKey: 'android:mobile:emulator-5554' },
+      });
+    }
+    return { ok: true, data: { session: req.session } };
+  });
 
   assert.equal(result.code, null, result.stdout);
   const live = readRemoteConnectionState({ stateDir: ws.stateDir, session: 'agent' })?.leaseId;
@@ -361,18 +356,9 @@ test('a lease scope refusal arrives before fill --text-stdin reads the pipe', as
   const pipe = Readable.from(['piped-secret']);
   const stdin = vi.spyOn(process, 'stdin', 'get').mockReturnValue(pipe as typeof process.stdin);
   const ws = workspace();
-  const result = await runCliCapture(
-    ['fill', '@e3', '--text-stdin', '--session', 'agent', '--state-dir', ws.stateDir, '--json'],
-    {
-      cwd: ws.project,
-      env: { HOME: ws.home },
-      sendToDaemon: async () => {
-        throw new AppError('UNAUTHORIZED', 'Lease scope mismatch', {
-          reason: 'LEASE_SCOPE_MISMATCH',
-        });
-      },
-    },
-  );
+  const result = await run(ws, ['fill', '@e3', '--text-stdin'], async () => {
+    throw new AppError('UNAUTHORIZED', 'Lease scope mismatch', { reason: 'LEASE_SCOPE_MISMATCH' });
+  });
   stdin.mockRestore();
 
   assert.equal(result.code, 1, result.stdout);

@@ -3,11 +3,13 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/daemon-http';
-import { sendToDaemon } from '../index.ts';
+import { LeaseAdmissionUnsupportedError } from '@agent-device/daemon-contracts/daemon-resolution';
+import { createEnsuredDaemonTransport } from '../index.ts';
 
 // A request whose reused lease no heartbeat checked reads `lease-admission` from the `/health` gate
 // it already passes, so it costs `/health` and `/rpc` and nothing more. Without the capability it is
-// refused before the send, so the caller can fall back to its heartbeat.
+// refused before the send. The CLI falls back to its heartbeat on that refusal's class alone, so
+// these requests go through the CLI's transport.
 
 const LEASE_ADMISSION = ['script-artifacts', 'lease-admission'];
 
@@ -29,7 +31,7 @@ async function sendAdmissionChecked(
   });
   const root = mkdtempForTestSync('lease-admission-');
   try {
-    const result = await sendToDaemon(
+    const result = await createEnsuredDaemonTransport()(
       {
         command: 'snapshot',
         session: 'remote',
@@ -88,6 +90,7 @@ test.each([
 ])('a $name is refused before the send', async ({ health }) => {
   const { result, routes } = await sendAdmissionChecked(() => health);
 
+  expect(result).toBeInstanceOf(LeaseAdmissionUnsupportedError);
   expect(result).toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: { reason: 'lease_admission_unsupported', daemonRequestSent: false, dispatched: 'no' },
@@ -116,6 +119,7 @@ test.each([
     },
   );
 
+  expect(result).toBeInstanceOf(LeaseAdmissionUnsupportedError);
   expect(result).toMatchObject({
     details: { reason: 'lease_admission_unsupported', daemonRequestSent: false, dispatched: 'no' },
   });
