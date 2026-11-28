@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import { buildOpenResult } from '../session-open-surface.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
@@ -91,13 +91,14 @@ test('buildOpenResult reports an answered launch confirmation and omits one that
   const base = IOS_OPEN_RESULT_BASE;
 
   assert.equal(
-    buildOpenResult({ ...base, launchConfirmation: { launchConfirmation: 'accepted' } })
+    buildOpenResult({ ...base, outcome: { timing: {}, launchConfirmation: 'accepted' } })
       .launchConfirmation,
     'accepted',
   );
   const unanswered = buildOpenResult({
     ...base,
-    launchConfirmation: {
+    outcome: {
+      timing: {},
       launchConfirmation: 'unanswered',
       launchConfirmationReason: 'alert-unrecognized',
     },
@@ -106,4 +107,31 @@ test('buildOpenResult reports an answered launch confirmation and omits one that
   assert.equal(unanswered.launchConfirmationReason, 'alert-unrecognized');
   assert.equal('launchConfirmation' in buildOpenResult(base), false);
   assert.equal('launchConfirmationReason' in buildOpenResult(base), false);
+});
+
+test('buildOpenResult orders the claim, runtime hint cleanup, and launch confirmation warnings', () => {
+  const replacedRuntimeHintsWarning = 'The earlier runtime hints could not be removed.';
+  const result = buildOpenResult({
+    ...IOS_OPEN_RESULT_BASE,
+    tookOverDeviceClaim: {
+      session: 'previous',
+      workspace: '/tmp/previous',
+      stateDir: '/tmp/previous-state',
+      bootedAtMs: 1,
+    },
+    replacedRuntimeHintsWarning,
+    outcome: {
+      timing: {},
+      launchConfirmation: 'unanswered',
+      launchConfirmationReason: 'url-owner-unresolved',
+    },
+  });
+
+  expect(result.warnings).toEqual([
+    expect.stringContaining('Took the device from session "previous" in workspace "/tmp/previous"'),
+    replacedRuntimeHintsWarning,
+    expect.stringContaining(
+      "the installed app that owns the launch URL's scheme could not be resolved",
+    ),
+  ]);
 });
