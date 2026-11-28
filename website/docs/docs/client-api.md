@@ -95,7 +95,7 @@ stdout/stderr. The option mirrors `open --launch-console` and is not valid for U
 or contacting the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
 
 `client.sessions.artifacts({ provider, providerSessionId })` mirrors `artifacts --provider ... --provider-session ...` and returns provider-hosted `cloudArtifacts`.
-Use it for BrowserStack, AWS Device Farm, or TestMu AI session videos/logs after a cloud session has stopped; `client.sessions.close()` returns the ID as `closed.provider?.providerSessionId`. Omit `providerSessionId` when an embedding host has registered a provider runtime that can infer the active lease. Limrun does not expose provider artifacts through this command.
+Use it for BrowserStack, AWS Device Farm, Sauce Labs, or TestMu AI session videos/logs after a cloud session has stopped; `client.sessions.close()` returns the ID as `closed.provider?.providerSessionId`. Omit `providerSessionId` when an embedding host has registered a provider runtime that can infer the active lease. Limrun does not expose provider artifacts through this command.
 
 ```ts
 const result = await client.sessions.artifacts({
@@ -186,7 +186,7 @@ A client can also pin one instance on its own with `daemonBinding: { token, pid,
 
 ## Device cloud sessions
 
-You drive Limrun, BrowserStack, AWS Device Farm, and TestMu AI devices with the same typed client methods. Use the CLI `connect` flow to persist connection state locally. Pass provider settings in the client config when your Node.js integration already owns credentials and provider selectors.
+You drive Limrun, BrowserStack, AWS Device Farm, Sauce Labs, and TestMu AI devices with the same typed client methods. Use the CLI `connect` flow to persist connection state locally. Pass provider settings in the client config when your Node.js integration already owns credentials and provider selectors.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -218,7 +218,7 @@ failing: `selection.reason` is then `newest-bootable-local`, and the result name
 const booted = await client.devices.boot({ platform: 'ios', pick: 'newest' });
 ```
 
-To fetch provider-hosted video and log URLs after close, pass `closed.provider?.providerSessionId` to [`client.sessions.artifacts()`](#basic-usage). See the [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [TestMu AI](/docs/testmu), and [Limrun](/docs/limrun) guides for provider-specific setup.
+To fetch provider-hosted video and log URLs after close, pass `closed.provider?.providerSessionId` to [`client.sessions.artifacts()`](#basic-usage). See the [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [Sauce Labs](/docs/saucelabs), [TestMu AI](/docs/testmu), and [Limrun](/docs/limrun) guides for provider-specific setup.
 
 ## Web sessions
 

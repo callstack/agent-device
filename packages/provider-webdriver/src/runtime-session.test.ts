@@ -133,6 +133,148 @@ test('cloud artifact lookup does not accept a provider session id without its le
   }
 });
 
+/** A hub that rents `session-1`, reports `capabilities`, and records each request method. */
+function stubHub(capabilities: Record<string, unknown>): string[] {
+  const methods: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    const method = init?.method ?? new Request(input as RequestInfo).method;
+    methods.push(method);
+    return method === 'DELETE'
+      ? jsonResponse({ value: null })
+      : jsonResponse({ sessionId: 'session-1', capabilities });
+  };
+  return methods;
+}
+
+// A hub whose job lives in a per-session data center binds its lookup at preparation; the lookup
+// after release must still reach that data center, with the inputs the active path passes.
+test('a released lease lists artifacts through its prepared lookup, under the provider job id', async () => {
+  stubHub({ jobUuid: 'job-1' });
+  const lookups: unknown[] = [];
+  const runtime = makeRuntime({
+    listArtifacts: async ({ provider }) => {
+      lookups.push('runtime');
+      return { provider, status: 'ready', cloudArtifacts: [] };
+    },
+    prepareSession: async ({ base }) => ({
+      ...base,
+      describeCreatedSession: (capabilities) => ({
+        providerSessionId: String(capabilities.jobUuid),
+      }),
+      listArtifacts: async ({ provider, providerSessionId, webDriverSessionId }) => {
+        lookups.push({ providerSessionId, webDriverSessionId });
+        return { provider, providerSessionId, status: 'ready', cloudArtifacts: [] };
+      },
+    }),
+  });
+  const lease = makeLease();
+
+  try {
+    await runtime.leaseLifecycle.allocate!(lease);
+    const released = await runtime.leaseLifecycle.release!(lease);
+    assert.equal(released?.providerSessionId, 'job-1');
+    lookups.length = 0;
+    const result = await runtime.cloudArtifacts?.listCloudArtifacts?.({
+      provider: 'webdriver-test',
+      leaseId: lease.leaseId,
+    });
+    assert.equal(result?.providerSessionId, 'job-1');
+    assert.deepEqual(lookups, [{ providerSessionId: 'job-1', webDriverSessionId: 'session-1' }]);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+// BrowserStack and AWS Device Farm bind no per-session lookup; theirs stays the runtime-wide one.
+test('a released lease without a prepared lookup lists artifacts through the runtime lookup', async () => {
+  stubHub({});
+  const lookups: unknown[] = [];
+  const runtime = makeRuntime({
+    listArtifacts: async ({ provider, providerSessionId }) => {
+      lookups.push(providerSessionId);
+      return { provider, providerSessionId, status: 'ready', cloudArtifacts: [] };
+    },
+  });
+  const lease = makeLease();
+
+  try {
+    await runtime.leaseLifecycle.allocate!(lease);
+    await runtime.leaseLifecycle.release!(lease);
+    lookups.length = 0;
+    const result = await runtime.cloudArtifacts?.listCloudArtifacts?.({
+      provider: 'webdriver-test',
+      leaseId: lease.leaseId,
+    });
+    assert.equal(result?.providerSessionId, 'session-1');
+    assert.deepEqual(lookups, ['session-1']);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('the created session reports the allocated model under the requested name, and an empty provider id falls back', async () => {
+  stubHub({ platformVersion: '15' });
+  const runtime = makeRuntime({
+    prepareSession: async ({ base }) => ({
+      ...base,
+      deviceName: 'Pixel.*',
+      describeCreatedSession: () => ({ providerSessionId: ' ', model: 'Pixel 8 (Pixel_8_15)' }),
+    }),
+  });
+  const lease = makeLease();
+
+  try {
+    const allocated = await runtime.leaseLifecycle.allocate!(lease);
+    assert.equal(allocated?.providerSessionId, 'session-1');
+    const [device] =
+      (await runtime.deviceInventoryProvider({
+        leaseProvider: 'webdriver-test',
+        leaseId: lease.leaseId,
+      } as never)) ?? [];
+    // Commands select the device by the name they asked for, so the name stays the selector.
+    assert.equal(device?.name, 'Pixel.*');
+    assert.equal(device?.model, 'Pixel 8 (Pixel_8_15)');
+    assert.equal(device?.osVersion, '15');
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+// The hub already rented the session when the provider fails to read it, so the allocation itself must
+// end it; no entry ever holds it for a release or a shutdown to find.
+test('a failure after the hub created the session deletes it, runs cleanup, and keeps the error', async () => {
+  const methods = stubHub({});
+  let cleanups = 0;
+  const runtime = makeRuntime({
+    prepareSession: async ({ base }) => ({
+      ...base,
+      describeCreatedSession: () => {
+        throw new AppError('COMMAND_FAILED', 'unreadable create answer');
+      },
+      cleanup: async () => {
+        cleanups += 1;
+        return undefined;
+      },
+    }),
+  });
+
+  try {
+    await assert.rejects(
+      () => runtime.leaseLifecycle.allocate!(makeLease()),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.message, 'unreadable create answer');
+        assert.equal(error.details?.cleanupError, undefined);
+        return true;
+      },
+    );
+    assert.deepEqual(methods, ['POST', 'DELETE']);
+    assert.equal(cleanups, 1);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
 function makeRuntime(overrides: Partial<CloudWebDriverRuntimeOptions> = {}) {
   return createCloudWebDriverRuntime({
     clientVersion: 'test',

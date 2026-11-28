@@ -22,6 +22,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `alert-window-expired` | A press went out but the confirm window never settled whether the alert is gone. |
 | `alert-wait-window-too-long` | `alert wait` was given a longer window than it can honour; the command refuses it before running and never shortens it. `details.maxWaitWindowMs` names the limit. |
 
+### `artifacts`
+
+| Reason | Meaning |
+| --- | --- |
+| `saucelabs_region_unknown` | `SAUCE_REGION` names a data center Sauce Labs does not run. |
+| `saucelabs_job_not_found` | The region's real-device job API has no job with the provider session id. |
+
 ### `audit`
 
 | Reason | Meaning |
@@ -70,12 +77,23 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
+| `saucelabs_job_not_found` | The region's real-device job API has no job with the provider session id. |
 | `android_test_ime_restore_incomplete` | The IME could not be restored, so the device may still send test-helper text. |
 
 ### `connect`
 
 | Reason | Meaning |
 | --- | --- |
+| `saucelabs_region_unknown` | `SAUCE_REGION` names a data center Sauce Labs does not run. |
+| `saucelabs_app_reference_invalid` | `--provider-app` uses the `storage:` scheme outside the file-id or `filename=` grammar. |
+| `saucelabs_app_url_insecure` | `--provider-app` is a URL that is not HTTPS. |
+| `saucelabs_device_not_found` | The region's real-device catalog lists no device that matches `--device` and `--provider-os-version`. |
+| `saucelabs_app_not_found` | The region's app storage holds no upload with the `storage:` file id. |
+| `saucelabs_app_platform_mismatch` | The `storage:` upload is an app for the other platform. |
+| `saucelabs_app_kind_unsupported` | The `storage:` upload is not an Android or iOS app, such as a test bundle. |
+| `saucelabs_app_simulator_build` | The `storage:` upload is an iOS simulator build, which a real device cannot install. |
+| `saucelabs_no_resign_app_ios_only` | `--provider-no-resign-app` was set for an Android session; only iOS apps are re-signed. |
+| `saucelabs_job_not_found` | The region's real-device job API has no job with the provider session id. |
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
@@ -207,6 +225,10 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `launch-arg-not-a-plain-word` | A HarmonyOS --launch-args entry is not a nonempty plain word of letters, digits, and _@%+=:,./-. |
 | `open-not-foreground` | The launch was refused (a locked screen) or the poll answered without the app. |
 | `open-foreground-probe-unreadable` | The poll's every read failed, so the foreground question stayed unanswered. |
+| `saucelabs_region_unknown` | `SAUCE_REGION` names a data center Sauce Labs does not run. |
+| `saucelabs_app_reference_invalid` | `--provider-app` uses the `storage:` scheme outside the file-id or `filename=` grammar. |
+| `saucelabs_app_url_insecure` | `--provider-app` is a URL that is not HTTPS. |
+| `saucelabs_no_resign_app_ios_only` | `--provider-no-resign-app` was set for an Android session; only iOS apps are re-signed. |
 | `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
 | `foreground_app_ambiguous` | `open --foreground` found no single running app to bring forward on the selected simulator. |
 

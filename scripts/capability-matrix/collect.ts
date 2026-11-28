@@ -20,6 +20,7 @@ import { BUNDLED_CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdri
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 import type { RunHostCommand } from '@agent-device/provider-webdriver';
+import saucelabsPlugin from '@agent-device/saucelabs';
 import testmuPlugin from '@agent-device/testmu';
 import revylPlugin from '@agent-device/revyl';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
@@ -117,16 +118,24 @@ const CLOUD_WEBDRIVER_PLUGIN_PROVIDERS: Readonly<Record<string, string>> = {
   [CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm]: 'aws-device-farm',
 };
 
+const PLUGIN_PACKAGE_FACTORIES: Readonly<
+  Record<string, () => ReturnType<typeof testmuPlugin> | ReturnType<typeof saucelabsPlugin>>
+> = {
+  testmu: testmuPlugin,
+  saucelabs: saucelabsPlugin,
+};
+
 /** The provider's WebDriver options, from the bundled registration or the plugin package. */
 async function cloudWebDriverOptions(
   plugin: string,
   runHostCommand: RunHostCommand,
 ): Promise<Record<string, unknown>> {
-  if (plugin === 'testmu') {
+  const pluginFactory = PLUGIN_PACKAGE_FACTORIES[plugin];
+  if (pluginFactory) {
     // The package's default export is the plugin factory; the WebDriver is what its setup() builds.
-    const plugin_ = testmuPlugin();
+    const plugin_ = pluginFactory();
     if (!plugin_.setup)
-      throw new Error('The TestMu plugin exposes no setup() to build a WebDriver from.');
+      throw new Error(`The ${plugin} plugin exposes no setup() to build a WebDriver from.`);
     const created = (await plugin_.setup({
       env: PROVIDER_ENV,
       clientVersion: '0.0.0',

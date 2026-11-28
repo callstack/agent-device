@@ -111,6 +111,7 @@ export default defineConfig({
           'device-clouds',
           'browserstack',
           'aws-device-farm',
+          'saucelabs',
           'testmu',
           'limrun',
           'revyl',

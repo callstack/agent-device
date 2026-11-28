@@ -31,6 +31,7 @@ const API_DOC_PATHS = [
   'aws-device-farm.md',
   'browserstack.md',
   'limrun.md',
+  'saucelabs.md',
   'testmu.md',
 ].map((page) => path.join(repoRoot, 'website/docs/docs', page));
 const EXAMPLES_SDK_TSCONFIG = path.join(repoRoot, 'examples/sdk/tsconfig.json');

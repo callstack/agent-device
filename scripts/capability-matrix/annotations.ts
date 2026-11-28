@@ -725,7 +725,7 @@ export const SCOPE_ROWS: readonly ScopeRow[] = [
     label: 'Hosted device providers',
     commands: ['connect', 'artifacts'],
     scope:
-      'BrowserStack, AWS Device Farm, TestMu AI, Limrun, and Revyl appear as their own columns above. Provider artifact lookup after `close` works for the three WebDriver providers; Limrun and Revyl keep no artifacts.',
+      'BrowserStack, AWS Device Farm, TestMu AI, Sauce Labs, Limrun, and Revyl appear as their own columns above. Provider artifact lookup after `close` works for the four WebDriver providers; Limrun and Revyl keep no artifacts.',
     link: docs('device-clouds', 'compare-providers'),
   },
   {

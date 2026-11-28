@@ -1,0 +1,99 @@
+{
+  "value": {
+    "capabilities": {
+      "platformName": "Android",
+      "sauce:options": {
+        "name": "run-1",
+        "build": "run-1",
+        "sessionCreationTimeout": 100000.0,
+        "sessionCreationRetry": 0.0,
+        "appiumVersion": "latest"
+      },
+      "sauce:chromeOptions": {
+        "androidDevToolsPort": 22314.0
+      },
+      "newCommandTimeout": 90.0,
+      "appActivity": "com.example.app.MainActivity",
+      "deviceName": "DEVICE0001",
+      "automationName": "UiAutomator2",
+      "appPackage": "com.example.app",
+      "adbPort": 17114.0,
+      "systemPort": 21114.0,
+      "chromedriverChromeMappingFile": "/root/.testobject_devices/work/chromedrivers/chromedriver-mapping.json",
+      "remoteAppsCacheLimit": 0.0,
+      "adbHost": "10.0.0.10",
+      "chromedriverExecutableDir": "/root/.testobject_devices/work/chromedrivers",
+      "remoteAdbHost": "10.0.0.10",
+      "flutterSystemPort": 22614.0,
+      "suppressKillServer": true,
+      "chromedriverPorts": [[3300.0, 3310.0]],
+      "uiautomator2ServerInstallTimeout": 60000.0,
+      "platform": "LINUX",
+      "webStorageEnabled": false,
+      "takesScreenshot": true,
+      "javascriptEnabled": true,
+      "databaseEnabled": false,
+      "networkConnectionEnabled": true,
+      "locationContextEnabled": false,
+      "warnings": {},
+      "desired": {
+        "platformName": "Android",
+        "sauce:options": {
+          "name": "run-1",
+          "build": "run-1",
+          "sessionCreationTimeout": 100000.0,
+          "sessionCreationRetry": 0.0,
+          "appiumVersion": "latest"
+        },
+        "sauce:chromeOptions": {
+          "androidDevToolsPort": 22314.0
+        },
+        "newCommandTimeout": 90.0,
+        "appActivity": "com.example.app.MainActivity",
+        "deviceName": "Google_Pixel_8_15_real",
+        "automationName": "UiAutomator2",
+        "appPackage": "com.example.app",
+        "adbPort": 17114.0,
+        "systemPort": 21114.0,
+        "chromedriverChromeMappingFile": "/root/.testobject_devices/work/chromedrivers/chromedriver-mapping.json",
+        "remoteAppsCacheLimit": 0.0,
+        "adbHost": "10.0.0.10",
+        "chromedriverExecutableDir": "/root/.testobject_devices/work/chromedrivers",
+        "remoteAdbHost": "10.0.0.10",
+        "flutterSystemPort": 22614.0,
+        "suppressKillServer": true,
+        "chromedriverPorts": [[3300.0, 3310.0]],
+        "uiautomator2ServerInstallTimeout": 60000.0
+      },
+      "deviceUDID": "DEVICE0001",
+      "pixelRatio": "2.625",
+      "statBarHeight": 132.0,
+      "viewportRect": {
+        "left": 0.0,
+        "top": 132.0,
+        "width": 1080.0,
+        "height": 2268.0
+      },
+      "deviceApiLevel": 35.0,
+      "platformVersion": "15",
+      "deviceManufacturer": "Google",
+      "deviceModel": "Pixel 8",
+      "deviceScreenSize": "1080x2400",
+      "deviceScreenDensity": 420.0,
+      "testobject_user_id": "sauce-user",
+      "deviceContextId": "22222222-3333-4444-8555-666666666666",
+      "testobject_test_report_api_url": "https://api.eu-central-1.saucelabs.com/v1/rdc/jobs/0123456789abcdef0123456789abcdef",
+      "jobUuid": "0123456789abcdef0123456789abcdef",
+      "testobject_test_report_url": "https://app.eu-central-1.saucelabs.com/tests/0123456789abcdef0123456789abcdef",
+      "appiumData": {
+        "appiumVersion": "latest",
+        "automationName": "UiAutomator2"
+      },
+      "testobject_device_name": "Google Pixel 8",
+      "testobject_device": "Google_Pixel_8_15_real",
+      "testobject_device_session_id": "33333333-4444-4555-8666-777777777777",
+      "usedCachedDevice": false
+    },
+    "sessionId": "11111111-2222-4333-8444-555555555555"
+  }
+}

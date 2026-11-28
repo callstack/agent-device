@@ -253,6 +253,8 @@ export function createProviderWire(): ProviderWire {
 export const PROVIDER_ENV: Readonly<Record<string, string>> = {
   BROWSERSTACK_USERNAME: 'provider-user',
   BROWSERSTACK_ACCESS_KEY: 'provider-key',
+  SAUCE_USERNAME: 'provider-user',
+  SAUCE_ACCESS_KEY: 'provider-key',
   LT_USERNAME: 'provider-user',
   LT_ACCESS_KEY: 'provider-key',
   AWS_REGION: 'us-west-2',
