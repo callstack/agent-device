@@ -3,6 +3,15 @@
 export type SizeReport = Readonly<{
   npmPack: Readonly<{ tarballBytes: number; unpackedBytes: number }>;
   cleanInstalled: Readonly<{ totalBytes: number }>;
+  plugins?: readonly (
+    | Readonly<{
+        name: string;
+        unpackedBytes: number;
+        tarballBytes: number;
+        installedBytes: number;
+      }>
+    | Readonly<{ name: string; unavailable: true }>
+  )[];
   startup?: Readonly<{
     runs: number;
     benchmarks: readonly Readonly<{ name: string; medianMs: number }>[];

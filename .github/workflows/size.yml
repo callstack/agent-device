@@ -35,6 +35,13 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
+      - name: Select affected plugins
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node scripts/size-report-plugin-plan.mjs "$BASE_SHA" "$HEAD_SHA" /tmp/agent-device-plugin-size-plan
+
       - name: Preserve report scripts
         run: |
           mkdir -p /tmp/agent-device-size-report
@@ -65,6 +72,7 @@ jobs:
           fi
           node /tmp/agent-device-size-report/size-report.mjs \
             --startup-runs 7 \
+            --plugins /tmp/agent-device-plugin-size-plan/base.json \
             --json /tmp/agent-device-size-base.json
 
       # Save immediately: the job-end dist belongs to the PR head, not the base.
@@ -83,6 +91,7 @@ jobs:
           pnpm size \
             --compare /tmp/agent-device-size-base.json \
             --startup-runs 7 \
+            --plugins /tmp/agent-device-plugin-size-plan/head.json \
             --json .tmp/size-report.json \
             --markdown .tmp/size-report.md
           cp /tmp/agent-device-size-base.json .tmp/size-report-base.json

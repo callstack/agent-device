@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { formatMarkdown } from '../size-report.mjs';
+import { planPluginSizes } from '../size-report-plugin-plan.mjs';
 import {
   assertBundledLicenseNotices,
   assertPublishPackageContents,
@@ -625,10 +626,225 @@ test('Markdown emphasizes total install size and startup without duplicate break
   assert.match(markdown, /\| Package \(download\) \| 90 B \| 100 B \| \+10 B \|/);
   assert.match(markdown, /\| CLI --help \| 25.0 ms \| 20.0 ms \| -5.0 ms \|/);
   assert.doesNotMatch(markdown, /JS raw|JS gzip|npm bundled|components|Top.*chunks|packed files/);
+  assert.doesNotMatch(markdown, /Affected plugins/);
   assert.match(
     formatMarkdown(current, null),
     /\| Installed \(including dependencies\) \| - \| 350 B \| - \|/,
   );
+});
+
+test('Markdown compares measured plugins and labels added and removed packages', () => {
+  const core = {
+    npmPack: { tarballBytes: 100, unpackedBytes: 300 },
+    cleanInstalled: { totalBytes: 350 },
+  };
+  const plugin = {
+    name: '@agent-device/one',
+    installedBytes: 60,
+    unpackedBytes: 30,
+    tarballBytes: 10,
+  };
+  const markdown = formatMarkdown(
+    {
+      ...core,
+      plugins: [
+        { ...plugin, installedBytes: 65 },
+        { ...plugin, name: '@agent-device/new' },
+      ],
+    },
+    { ...core, plugins: [plugin, { ...plugin, name: '@agent-device/old' }] },
+  );
+  assert.match(
+    markdown,
+    /\| `@agent-device\/one` \| 60 B → 65 B \(\+5 B\) \| 30 B → 30 B \(0 B\) \| 10 B → 10 B \(0 B\) \|/,
+  );
+  assert.match(markdown, /\| `@agent-device\/new` \| 60 B \(new\)/);
+  assert.match(markdown, /\| `@agent-device\/old` \| 60 B → removed/);
+  assert.doesNotMatch(formatMarkdown(core, { ...core, plugins: [plugin] }), /Affected plugins/);
+  assert.match(
+    formatMarkdown({ ...core, plugins: [] }, { ...core, plugins: [plugin] }),
+    /\| `@agent-device\/one` \| 60 B → removed/,
+  );
+});
+
+test('exhausted plugin budget keeps the core report and identifies unmeasured sizes', async () => {
+  const cwd = await mkdtempForTest('size-plugin-budget-');
+  const plan = join(cwd, 'plan.json');
+  await writeFile(plan, JSON.stringify([{ name: '@agent-device/one', directory: 'packages/one' }]));
+  const modulePath = join(import.meta.dirname, '../size-report-plugins.mjs');
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `const { measurePluginSizes } = await import(process.argv[1]);
+     let time = 0;
+     performance.now = () => (time += 120_000);
+     console.log(JSON.stringify(measurePluginSizes(process.cwd(), process.argv[2])));`,
+      modulePath,
+      plan,
+    ],
+    { cwd },
+  );
+  assert.match(stderr, /@agent-device\/one: Plugin measurement budget exhausted/);
+  const unmeasured = JSON.parse(stdout);
+  const core = {
+    npmPack: { tarballBytes: 100, unpackedBytes: 300 },
+    cleanInstalled: { totalBytes: 350 },
+  };
+  const before = {
+    ...core,
+    plugins: [
+      { name: '@agent-device/one', installedBytes: 60, unpackedBytes: 30, tarballBytes: 10 },
+    ],
+  };
+  const after = { ...core, plugins: unmeasured };
+  const markdown = formatMarkdown(after, before);
+  assert.match(markdown, /\| Package \(download\) \| 100 B \| 100 B \| 0 B \|/);
+  assert.match(
+    markdown,
+    /\| `@agent-device\/one` \| 60 B → unavailable \| 30 B → unavailable \| 10 B → unavailable \|/,
+  );
+  assert.match(formatMarkdown(before, after), /\| `@agent-device\/one` \| unavailable → 60 B \|/);
+});
+
+const one = {
+  directory: 'packages/one',
+  manifest: {
+    name: '@agent-device/one',
+    exports: { './agent-device': './dist/agent-device.mjs' },
+    devDependencies: { '@agent-device/build-piece': 'workspace:*' },
+  },
+};
+const two = {
+  directory: 'packages/two',
+  manifest: { name: '@agent-device/two', agentDevicePlugin: {} },
+};
+const buildPiece = {
+  directory: 'packages/build-piece',
+  manifest: { name: '@agent-device/build-piece', private: true },
+};
+const workspace = [one, two, buildPiece];
+const oneEntry = { directory: one.directory, name: one.manifest.name };
+const twoEntry = { directory: two.directory, name: two.manifest.name };
+
+test('plugin plan follows changed build inputs without selecting unrelated plugins', () => {
+  assert.deepEqual(
+    planPluginSizes(workspace, workspace, ['src/cli.ts', 'packages/one/src/only.test.ts']),
+    { base: [], head: [] },
+  );
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['packages/build-piece/src/index.ts']), {
+    base: [oneEntry],
+    head: [oneEntry],
+  });
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['bundler/two/build.mjs']), {
+    base: [twoEntry],
+    head: [twoEntry],
+  });
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['tsconfig.lib.json']), {
+    base: [oneEntry, twoEntry],
+    head: [oneEntry, twoEntry],
+  });
+});
+
+test('plugin plan selects published v2-only providers by their export', async () => {
+  const providers = await Promise.all(
+    ['tizen', 'webos'].map(async (provider) => {
+      const directory = `packages/provider-${provider}`;
+      const manifest = JSON.parse(
+        await readFile(join(import.meta.dirname, '../..', directory, 'package.json'), 'utf8'),
+      );
+      return { directory, manifest };
+    }),
+  );
+  for (const { directory, manifest } of providers) {
+    const entry = { directory, name: manifest.name };
+    assert.deepEqual(planPluginSizes(providers, providers, [`${directory}/src/index.ts`]), {
+      base: [entry],
+      head: [entry],
+    });
+  }
+});
+
+test('plugin plan follows a changed lockfile importer', () => {
+  const base = { importers: { 'packages/one': {}, 'packages/two': {} } };
+  const head = {
+    importers: {
+      ...base.importers,
+      'packages/two': {
+        dependencies: { 'external-lib': { specifier: '^1.0.0', version: '1.0.0' } },
+      },
+    },
+  };
+  assert.deepEqual(planPluginSizes(workspace, workspace, ['pnpm-lock.yaml'], { base, head }), {
+    base: [twoEntry],
+    head: [twoEntry],
+  });
+});
+
+test('plugin plans measure added and removed plugins only where they exist', () => {
+  const other = [two, buildPiece];
+  assert.deepEqual(planPluginSizes(other, workspace, ['packages/one/package.json']), {
+    base: [],
+    head: [oneEntry],
+  });
+  assert.deepEqual(planPluginSizes(workspace, other, ['packages/one/package.json']), {
+    base: [oneEntry],
+    head: [],
+  });
+});
+
+test('plugin selection ignores upstream-only changes in a diverged checkout', async () => {
+  const cwd = await mkdtempForTest('size-plugin-merge-base-');
+  const git = async (...args: string[]) =>
+    (
+      await execFileAsync(
+        'git',
+        [
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@example.com',
+          '-c',
+          'commit.gpgsign=false',
+          '-c',
+          'core.hooksPath=/dev/null',
+          ...args,
+        ],
+        { cwd },
+      )
+    ).stdout.trim();
+  await git('init', '-q');
+  for (const { directory, manifest } of workspace) {
+    await mkdir(join(cwd, directory), { recursive: true });
+    await writeFile(join(cwd, directory, 'package.json'), JSON.stringify(manifest));
+  }
+  const lock = join(cwd, 'pnpm-lock.yaml');
+  await writeFile(lock, 'settings: {excludeLinksFromLockfile: false}\n');
+  await git('add', '.');
+  await git('commit', '-qm', 'fork point');
+  const fork = await git('rev-parse', 'HEAD');
+  await git('mv', two.directory, 'packages/moved-two');
+  await writeFile(lock, 'settings: {excludeLinksFromLockfile: true}\n');
+  await git('commit', '-qam', 'upstream only');
+  const base = await git('rev-parse', 'HEAD');
+  await git('checkout', '-q', '--detach', fork);
+  await writeFile(
+    lock,
+    'settings: {excludeLinksFromLockfile: false}\nimporters: {packages/two: {}}\n',
+  );
+  await git('commit', '-qam', 'PR change');
+
+  const output = join(cwd, 'plan');
+  await execFileAsync(
+    process.execPath,
+    [join(import.meta.dirname, '../size-report-plugin-plan.mjs'), base, 'HEAD', output],
+    { cwd },
+  );
+  assert.deepEqual(JSON.parse(await readFile(join(output, 'base.json'), 'utf8')), [
+    { ...twoEntry, directory: 'packages/moved-two' },
+  ]);
+  assert.deepEqual(JSON.parse(await readFile(join(output, 'head.json'), 'utf8')), [twoEntry]);
 });
 
 test('base measurement uses the measured revision package asset policy', async () => {

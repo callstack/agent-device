@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { assertSnapshotBridgeAssets, SNAPSHOT_BRIDGE_ASSET_PATHS } from './size-report-package.mjs';
 
-export function measureCleanInstalledPackage(tarballPath, packageName) {
+export function measureCleanInstalledPackage(tarballPath, packageName, timeout = 5 * 60_000) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-size-install-'));
   const consumerDir = path.join(workDir, 'consumer');
   const npmCache = path.join(workDir, 'npm-cache');
@@ -27,7 +27,7 @@ export function measureCleanInstalledPackage(tarballPath, packageName) {
         cwd: consumerDir,
         env: { ...process.env, npm_config_cache: npmCache },
         stdio: ['ignore', 'ignore', 'inherit'],
-        timeout: 5 * 60 * 1000,
+        timeout,
       },
     );
     const packageDir = path.join(consumerDir, 'node_modules', packageName);
