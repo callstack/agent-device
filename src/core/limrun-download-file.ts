@@ -73,7 +73,7 @@ async function fetchDownload(
   let target = url;
   let sent: LimrunFileDownload['headers'] | undefined = headers;
   for (let followed = 0; ; followed += 1) {
-    const response = await fetch(target, { headers: sent, signal, redirect: 'manual' });
+    const response = await fetch(target.href, { headers: sent, signal, redirect: 'manual' });
     const next = followed < MAX_DOWNLOAD_REDIRECTS ? redirectTarget(response, target) : undefined;
     if (!next) return response;
     await response.body?.cancel().catch(() => undefined);
